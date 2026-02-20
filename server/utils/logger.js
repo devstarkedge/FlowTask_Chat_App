@@ -1,5 +1,11 @@
 import winston from 'winston';
+import fs from 'fs';
 import env from '../config/environment.js';
+
+// Ensure logs directory exists for production file transport
+if (env.IS_PRODUCTION) {
+  try { fs.mkdirSync('logs', { recursive: true }); } catch { /* ignore */ }
+}
 
 const { combine, timestamp, errors, json, printf, colorize } = winston.format;
 

@@ -43,16 +43,27 @@ class EventProcessor {
         eventVersion,
       });
 
-      // Dispatch to registered handlers via event bus
-      eventBus.dispatch(eventName, {
+      // Dispatch to registered handlers via event bus (await all handlers)
+      const dispatchResult = await eventBus.dispatch(eventName, {
         deliveryId,
         eventName,
         eventVersion,
-        data: payload.data || payload,
-        timestamp: payload.timestamp,
+        data: payload?.data || payload,
+        timestamp: payload?.timestamp,
       });
 
-      // 3. Mark as completed
+      // Check if any handlers failed
+      const failures = dispatchResult.settled.filter((r) => r.status === 'rejected');
+      if (failures.length > 0) {
+        logger.warn('Some event handlers failed', {
+          deliveryId,
+          eventName,
+          failedCount: failures.length,
+          totalCount: dispatchResult.settled.length,
+        });
+      }
+
+      // 3. Mark as completed (now safe — all handlers have settled)
       await ProcessedEvent.markCompleted(deliveryId);
 
       return { status: 'processed', statusCode: 200 };

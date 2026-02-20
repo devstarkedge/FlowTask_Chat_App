@@ -69,15 +69,17 @@ class EventBus extends EventEmitter {
   }
 
   /**
-   * Emit an event to all registered handlers.
+   * Emit an event to all registered handlers and await their results.
+   * Returns a Promise that resolves when all handlers have settled.
    * @param {string} eventName
    * @param {object} payload
+   * @returns {Promise<{settled: PromiseSettledResult[]}>}
    */
-  dispatch(eventName, payload) {
+  async dispatch(eventName, payload) {
     const handlerCount = this.listenerCount(eventName);
     if (handlerCount === 0) {
       logger.warn(`No handlers registered for event: ${eventName}`);
-      return;
+      return { settled: [] };
     }
 
     logger.info(`Dispatching event`, {
@@ -86,7 +88,19 @@ class EventBus extends EventEmitter {
       deliveryId: payload?.deliveryId,
     });
 
-    this.emit(eventName, payload);
+    // Collect handler promises — handlers are wrapped async functions
+    const handlerPromises = [];
+    const listeners = this.listeners(eventName);
+    for (const listener of listeners) {
+      handlerPromises.push(listener(payload));
+    }
+
+    const settled = await Promise.allSettled(handlerPromises);
+    const failures = settled.filter((r) => r.status === 'rejected');
+    if (failures.length > 0) {
+      logger.warn(`${failures.length}/${settled.length} handlers failed for ${eventName}`);
+    }
+    return { settled };
   }
 
   /**

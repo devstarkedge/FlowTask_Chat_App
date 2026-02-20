@@ -230,32 +230,8 @@ export function registerTaskEventHandlers() {
     );
   });
 
-  // ─── task.comment_added ────────────────────────────────────────────────
-  eventBus.register(FLOWTASK_EVENTS.TASK_COMMENT_ADDED, async (payload) => {
-    const { comment, card, boardId, userId } = payload;
-
-    if (!comment || !card || !boardId) return;
-
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId);
-    if (!channel) return;
-
-    const user = userId ? await userRepository.findByFlowTaskId(userId) : null;
-    const commentText = typeof comment === 'string'
-      ? comment
-      : comment.text || comment.content || '';
-
-    if (!commentText) return;
-
-    const preview = commentText.length > 300
-      ? commentText.substring(0, 300) + '...'
-      : commentText;
-
-    await messageService.sendSystemMessage(
-      channel._id,
-      `💬 ${user?.name || 'Someone'} commented on **${card.title}**: "${preview}"`,
-      { entityType: 'task', entityId: card._id },
-    );
-  });
+  // NOTE: TASK_COMMENT_ADDED removed — consolidated into TASK_COMMENTED above
+  // to avoid duplicate messages from the same webhook event.
 
   // ─── time_entry_added ──────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TIME_ENTRY_ADDED, async (payload) => {

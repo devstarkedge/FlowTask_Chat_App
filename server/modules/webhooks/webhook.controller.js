@@ -19,7 +19,8 @@ import logger from '../../utils/logger.js';
 export const handleFlowTaskWebhook = [
   webhookVerifier,
   asyncHandler(async (req, res) => {
-    const { eventName, deliveryId, payload } = req.webhook;
+    const { eventName, deliveryId, eventVersion } = req.webhook;
+    const payload = req.body; // Webhook body — req.webhook only has headers/metadata
 
     logger.info('Webhook received', { eventName, deliveryId });
 
@@ -27,6 +28,7 @@ export const handleFlowTaskWebhook = [
     const result = await eventProcessor.process({
       eventName,
       deliveryId,
+      eventVersion,
       payload,
     });
 

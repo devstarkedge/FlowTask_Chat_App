@@ -82,7 +82,7 @@ export async function initializeSocket(httpServer, corsOptions) {
 
       // Attach user to socket
       socket.chatUser = chatUser;
-      socket.flowTaskUserId = decoded.id;
+      // flowTaskUserId is set inside Strategy 2 try-block when applicable
 
       next();
     } catch (error) {

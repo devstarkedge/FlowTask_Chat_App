@@ -21,6 +21,7 @@ import readReceiptRoutes, { channelReadRouter } from './modules/readReceipts/rea
 import webhookRoutes from './modules/webhooks/webhook.routes.js';
 import botRoutes from './modules/bot/bot.routes.js';
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
+import eventBus from './services/eventBus.js';
 import channelService from './modules/channels/channel.service.js';
 import { startDeadlineWarningCron, stopDeadlineWarningCron } from './modules/bot/deadlineWarning.js';
 
@@ -83,6 +84,7 @@ app.get('/api/chat/health', (_req, res) => {
     uptime: Math.floor(process.uptime()),
     connections: getConnectionCount(),
     database: dbConnected ? 'connected' : 'disconnected',
+    eventBus: eventBus.getStatus(),
     memory: {
       rss: Math.round(process.memoryUsage().rss / 1024 / 1024),
       heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
@@ -157,6 +159,18 @@ async function startServer() {
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 async function shutdown(signal) {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
+
+  // Close Socket.IO first (clean disconnect for clients)
+  const { getIO } = await import('./sockets/socketManager.js');
+  try {
+    const io = getIO();
+    if (io) {
+      io.close();
+      logger.info('Socket.IO server closed');
+    }
+  } catch {
+    // Socket may not be initialized
+  }
 
   // Stop accepting new connections
   httpServer.close(async () => {

@@ -18,9 +18,10 @@ import logger from '../../utils/logger.js';
  * This is the ONLY module allowed to make HTTP calls to FlowTask.
  */
 
-// ─── Cache ───────────────────────────────────────────────────────────────────
+// ─── Cache (bounded LRU) ─────────────────────────────────────────────────────
 const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MAX_CACHE_SIZE = 500;       // Prevent unbounded memory growth
 
 function getCached(key) {
   const entry = cache.get(key);
@@ -29,10 +30,18 @@ function getCached(key) {
     cache.delete(key);
     return null;
   }
+  // Move to end for LRU ordering (Map preserves insertion order)
+  cache.delete(key);
+  cache.set(key, entry);
   return entry.data;
 }
 
 function setCache(key, data) {
+  // Evict oldest entry if at capacity
+  if (cache.size >= MAX_CACHE_SIZE) {
+    const oldestKey = cache.keys().next().value;
+    cache.delete(oldestKey);
+  }
   cache.set(key, { data, timestamp: Date.now() });
 }
 

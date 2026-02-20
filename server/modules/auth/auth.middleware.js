@@ -1,5 +1,5 @@
-import jwt from 'jsonwebtoken';
 import env from '../../config/environment.js';
+import tokenService from './token.service.js';
 import userRepository from '../users/user.repository.js';
 import logger from '../../utils/logger.js';
 import { UnauthorizedError, ForbiddenError } from '../../middleware/errorHandler.js';
@@ -7,15 +7,15 @@ import { UnauthorizedError, ForbiddenError } from '../../middleware/errorHandler
 /**
  * Auth Middleware — JWT verification and RBAC for Express routes.
  *
- * Mirrors FlowTask's auth middleware pattern:
- *  - protect: verifies JWT, attaches req.user (ChatUser) and req.flowTaskToken
- *  - authorize: role-based access control (admin always passes)
- *  - requireChannelAccess: checks channel membership
+ * Dual-auth strategy:
+ *  - First tries to verify as a Chat-issued access token (JWT_SECRET)
+ *  - Falls back to FlowTask token (FLOWTASK_JWT_SECRET) when FlowTask is enabled
+ *  - Looks up user by _id (native) or flowTaskUserId (FlowTask)
  */
 
 /**
  * JWT verification middleware.
- * Extracts Bearer token, verifies with shared JWT_SECRET,
+ * Extracts Bearer token, verifies with dual-strategy,
  * looks up ChatUser, attaches to req.user.
  */
 export async function protect(req, res, next) {
@@ -32,27 +32,35 @@ export async function protect(req, res, next) {
       throw new UnauthorizedError('No authentication token provided');
     }
 
-    // Verify JWT (same secret as FlowTask)
-    let decoded;
+    let chatUser = null;
+
+    // Strategy 1: Try as Chat-issued access token
     try {
-      decoded = jwt.verify(token, env.JWT_SECRET);
-    } catch (error) {
-      if (error.name === 'TokenExpiredError') {
-        throw new UnauthorizedError('Token expired');
+      const decoded = tokenService.verifyAccessToken(token);
+      if (decoded?.id && decoded.type === 'access') {
+        chatUser = await userRepository.findById(decoded.id);
       }
-      throw new UnauthorizedError('Invalid token');
+    } catch {
+      // Not a Chat-issued token — continue to FlowTask fallback
     }
 
-    if (!decoded?.id) {
-      throw new UnauthorizedError('Invalid token payload');
+    // Strategy 2: Try as FlowTask-issued token (if enabled and Strategy 1 failed)
+    if (!chatUser && env.FLOWTASK_ENABLED) {
+      try {
+        const decoded = tokenService.verifyFlowTaskToken(token);
+        if (decoded?.id) {
+          chatUser = await userRepository.findByFlowTaskId(decoded.id);
+          // Store FlowTask-specific info
+          req.flowTaskToken = token;
+          req.flowTaskUserId = decoded.id;
+        }
+      } catch {
+        // Not a valid FlowTask token either
+      }
     }
 
-    // Look up ChatUser
-    const chatUser = await userRepository.findByFlowTaskId(decoded.id);
     if (!chatUser) {
-      throw new UnauthorizedError(
-        'User not synced to chat. Call POST /api/chat/auth/sync first.',
-      );
+      throw new UnauthorizedError('Invalid or expired token');
     }
 
     if (!chatUser.isActive) {
@@ -61,8 +69,6 @@ export async function protect(req, res, next) {
 
     // Attach to request
     req.user = chatUser;
-    req.flowTaskToken = token;
-    req.flowTaskUserId = decoded.id;
 
     next();
   } catch (error) {

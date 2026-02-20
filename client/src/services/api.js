@@ -2,34 +2,104 @@ import axios from 'axios'
 import { useAuthStore } from '../stores/authStore'
 
 const api = axios.create({
-  baseURL: '/api/chat',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/chat',
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 })
 
 // Attach JWT to every request
 api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token
+  const token = useAuthStore.getState().accessToken
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
 })
 
-// Handle auth errors globally
+// Handle auth errors globally — try refresh before logging out
+let isRefreshing = false
+let failedQueue = []
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach((p) => {
+    if (error) p.reject(error)
+    else p.resolve(token)
+  })
+  failedQueue = []
+}
+
 api.interceptors.response.use(
   (res) => res,
-  (error) => {
-    if (error.response?.status === 401) {
-      useAuthStore.getState().logout()
+  async (error) => {
+    const originalRequest = error.config
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      const refreshToken = useAuthStore.getState().refreshToken
+      if (!refreshToken) {
+        useAuthStore.getState().logout()
+        return Promise.reject(error)
+      }
+
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        }).then((token) => {
+          originalRequest.headers.Authorization = `Bearer ${token}`
+          return api(originalRequest)
+        }).catch((err) => Promise.reject(err))
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      try {
+        const { data } = await axios.post(
+          `${api.defaults.baseURL}/auth/refresh`,
+          { refreshToken },
+          { headers: { 'Content-Type': 'application/json' } },
+        )
+
+        const { accessToken: newAccess, refreshToken: newRefresh } = data.data
+        useAuthStore.getState().setTokens(newAccess, newRefresh)
+
+        originalRequest.headers.Authorization = `Bearer ${newAccess}`
+        processQueue(null, newAccess)
+        return api(originalRequest)
+      } catch (refreshError) {
+        processQueue(refreshError, null)
+        useAuthStore.getState().logout()
+        return Promise.reject(refreshError)
+      } finally {
+        isRefreshing = false
+      }
     }
+
     return Promise.reject(error)
   },
 )
 
 // ─── Auth ────────────────────────────────────────────────────────────────
 export const authAPI = {
+  // Native auth
+  register: (data) => api.post('/auth/register', data),
+  login: (data) => api.post('/auth/login', data),
+
+  // FlowTask SSO
+  loginFlowTask: (token) => api.post('/auth/login/flowtask', { token }),
   sync: () => api.post('/auth/sync'),
+
+  // Token management
+  refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken }),
+  logout: (refreshToken) => api.post('/auth/logout', { refreshToken }),
+
+  // Email verification
+  resendVerification: (email) => api.post('/auth/resend-verification', { email }),
+
+  // Password reset
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
+
+  // Profile
   me: () => api.get('/auth/me'),
   updatePreferences: (prefs) => api.put('/auth/preferences', prefs),
 }

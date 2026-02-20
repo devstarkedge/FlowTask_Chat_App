@@ -2,9 +2,12 @@ import ChatUser from './ChatUser.model.js';
 
 /**
  * User Repository — data access layer for ChatUser documents.
+ * Supports both native (email/password) and FlowTask SSO users.
  */
 
 class UserRepository {
+  // ─── Generic ─────────────────────────────────────────────────────────
+
   /**
    * Create a new ChatUser.
    * @param {object} data
@@ -23,6 +26,130 @@ class UserRepository {
   async findById(id) {
     return ChatUser.findById(id).exec();
   }
+
+  // ─── Native Auth ─────────────────────────────────────────────────────
+
+  /**
+   * Create a native (email/password) user.
+   * @param {{ name: string, email: string, password: string }} data
+   * @returns {Promise<ChatUser>}
+   */
+  async createNativeUser({ name, email, password }) {
+    const user = new ChatUser({
+      authProvider: 'native',
+      name,
+      email,
+      password,
+      role: 'employee',
+    });
+    return user.save();
+  }
+
+  /**
+   * Find user by email — includes password for login verification.
+   * @param {string} email
+   * @returns {Promise<ChatUser|null>}
+   */
+  async findByEmail(email) {
+    return ChatUser.findOne({ email: email.toLowerCase() })
+      .select('+password +loginAttempts +lockUntil')
+      .exec();
+  }
+
+  /**
+   * Find by email (without sensitive fields).
+   * @param {string} email
+   * @returns {Promise<ChatUser|null>}
+   */
+  async findByEmailPublic(email) {
+    return ChatUser.findOne({ email: email.toLowerCase() }).exec();
+  }
+
+  /**
+   * Find user by verification token.
+   * @param {string} token
+   * @returns {Promise<ChatUser|null>}
+   */
+  async findByVerificationToken(token) {
+    return ChatUser.findOne({
+      verificationToken: token,
+      verificationExpiry: { $gt: new Date() },
+    }).select('+verificationToken +verificationExpiry').exec();
+  }
+
+  /**
+   * Mark user email as verified, clear verification token.
+   * @param {string} userId
+   * @returns {Promise<ChatUser|null>}
+   */
+  async verifyEmail(userId) {
+    return ChatUser.findByIdAndUpdate(userId, {
+      $set: { emailVerified: true },
+      $unset: { verificationToken: 1, verificationExpiry: 1 },
+    }, { new: true }).exec();
+  }
+
+  /**
+   * Find user by password reset token.
+   * @param {string} token
+   * @returns {Promise<ChatUser|null>}
+   */
+  async findByResetToken(token) {
+    return ChatUser.findOne({
+      passwordResetToken: token,
+      passwordResetExpiry: { $gt: new Date() },
+    }).select('+passwordResetToken +passwordResetExpiry +password').exec();
+  }
+
+  // ─── Refresh Tokens ──────────────────────────────────────────────────
+
+  /**
+   * Add a hashed refresh token to the user's token list.
+   * @param {string} userId
+   * @param {{ tokenHash: string, expiresAt: Date, userAgent: string }} tokenData
+   * @returns {Promise<ChatUser|null>}
+   */
+  async addRefreshToken(userId, tokenData) {
+    return ChatUser.findByIdAndUpdate(userId, {
+      $push: { refreshTokens: tokenData },
+    }, { new: true }).exec();
+  }
+
+  /**
+   * Remove a specific refresh token by hash.
+   * @param {string} userId
+   * @param {string} tokenHash
+   * @returns {Promise<ChatUser|null>}
+   */
+  async removeRefreshToken(userId, tokenHash) {
+    return ChatUser.findByIdAndUpdate(userId, {
+      $pull: { refreshTokens: { tokenHash } },
+    }, { new: true }).exec();
+  }
+
+  /**
+   * Clear all refresh tokens (full logout from all devices).
+   * @param {string} userId
+   * @returns {Promise<ChatUser|null>}
+   */
+  async clearAllRefreshTokens(userId) {
+    return ChatUser.findByIdAndUpdate(userId, {
+      $set: { refreshTokens: [] },
+    }, { new: true }).exec();
+  }
+
+  /**
+   * Remove expired refresh tokens for a user.
+   * @param {string} userId
+   * @returns {Promise<void>}
+   */
+  async pruneExpiredRefreshTokens(userId) {
+    await ChatUser.findByIdAndUpdate(userId, {
+      $pull: { refreshTokens: { expiresAt: { $lt: new Date() } } },
+    });
+  }
+
+  // ─── FlowTask ────────────────────────────────────────────────────────
 
   /**
    * Find user by FlowTask user ID.
@@ -51,6 +178,7 @@ class UserRepository {
       { flowTaskUserId: _id.toString() },
       {
         $set: {
+          authProvider: 'flowtask',
           name,
           email,
           role: role?.toLowerCase() || 'employee',
@@ -58,6 +186,7 @@ class UserRepository {
           teamId: team ? (typeof team === 'object' ? team._id || team : team).toString() : null,
           avatar: avatar || null,
           isActive: true,
+          emailVerified: true, // FlowTask users are pre-verified
         },
         $setOnInsert: {
           flowTaskUserId: _id.toString(),

@@ -29,10 +29,10 @@ const SOCKET_EVENTS = {
 }
 
 export function connectSocket() {
-  const token = useAuthStore.getState().token
+  const token = useAuthStore.getState().accessToken
   if (!token || socket?.connected) return
 
-  socket = io(window.location.origin, {
+  socket = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
     auth: { token },
     transports: ['websocket', 'polling'],
     reconnection: true,

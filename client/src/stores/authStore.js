@@ -2,32 +2,89 @@ import { create } from 'zustand'
 import { authAPI } from '../services/api'
 import { connectSocket, disconnectSocket } from '../services/socket'
 
+const FLOWTASK_ENABLED = import.meta.env.VITE_FLOWTASK_ENABLED !== 'false'
+
 export const useAuthStore = create((set, get) => ({
-  token: localStorage.getItem('flowtask_token') || null,
+  accessToken: localStorage.getItem('chat_access_token') || null,
+  refreshToken: localStorage.getItem('chat_refresh_token') || null,
   user: null,
   isLoading: false,
   error: null,
+  flowtaskEnabled: FLOWTASK_ENABLED,
 
-  setToken: (token) => {
-    localStorage.setItem('flowtask_token', token)
-    set({ token })
+  // ─── Token management ─────────────────────────────────────────────
+  setTokens: (accessToken, refreshToken) => {
+    localStorage.setItem('chat_access_token', accessToken)
+    if (refreshToken) localStorage.setItem('chat_refresh_token', refreshToken)
+    set({ accessToken, refreshToken: refreshToken || get().refreshToken })
   },
 
-  syncUser: async () => {
+  // Alias for backward compat — used by api interceptor
+  get token() {
+    return get().accessToken
+  },
+
+  // ─── Native Registration ──────────────────────────────────────────
+  register: async ({ name, email, password }) => {
     set({ isLoading: true, error: null })
     try {
-      const { data } = await authAPI.sync()
-      set({
-        user: data.data.user,
-        isLoading: false,
-      })
-      // Connect socket after successful sync
-      connectSocket()
-      return data.data
+      const { data } = await authAPI.register({ name, email, password })
+      set({ isLoading: false })
+      return data
     } catch (error) {
-      const msg = error.response?.data?.error?.message || 'Failed to sync'
+      const msg = error.response?.data?.error?.message || 'Registration failed'
       set({ isLoading: false, error: msg })
-      // If unauthorized, clear token
+      throw error
+    }
+  },
+
+  // ─── Native Login ─────────────────────────────────────────────────
+  loginNative: async ({ email, password }) => {
+    set({ isLoading: true, error: null })
+    try {
+      const { data } = await authAPI.login({ email, password })
+      const { user, accessToken, refreshToken } = data.data
+      localStorage.setItem('chat_access_token', accessToken)
+      localStorage.setItem('chat_refresh_token', refreshToken)
+      set({ accessToken, refreshToken, user, isLoading: false })
+      connectSocket()
+      return data
+    } catch (error) {
+      const msg = error.response?.data?.error?.message || 'Login failed'
+      set({ isLoading: false, error: msg })
+      throw error
+    }
+  },
+
+  // ─── FlowTask SSO Login ──────────────────────────────────────────
+  loginFlowTask: async (token) => {
+    set({ isLoading: true, error: null })
+    try {
+      const { data } = await authAPI.loginFlowTask(token)
+      const { user, accessToken, refreshToken } = data.data
+      localStorage.setItem('chat_access_token', accessToken)
+      localStorage.setItem('chat_refresh_token', refreshToken)
+      set({ accessToken, refreshToken, user, isLoading: false })
+      connectSocket()
+      return data
+    } catch (error) {
+      const msg = error.response?.data?.error?.message || 'FlowTask login failed'
+      set({ isLoading: false, error: msg })
+      throw error
+    }
+  },
+
+  // ─── Fetch Current User ───────────────────────────────────────────
+  fetchUser: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const { data } = await authAPI.me()
+      set({ user: data.data.user, isLoading: false })
+      connectSocket()
+      return data.data.user
+    } catch (error) {
+      const msg = error.response?.data?.error?.message || 'Failed to fetch user'
+      set({ isLoading: false, error: msg })
       if (error.response?.status === 401) {
         get().logout()
       }
@@ -35,26 +92,49 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  login: async (token) => {
-    localStorage.setItem('flowtask_token', token)
-    set({ token, isLoading: true })
+  // ─── Logout ───────────────────────────────────────────────────────
+  logout: () => {
+    const refreshToken = get().refreshToken
+    // Fire-and-forget server logout
+    if (refreshToken) {
+      authAPI.logout(refreshToken).catch(() => {})
+    }
+    localStorage.removeItem('chat_access_token')
+    localStorage.removeItem('chat_refresh_token')
+    // Also clear legacy token if exists
+    localStorage.removeItem('flowtask_token')
+    disconnectSocket()
+    set({ accessToken: null, refreshToken: null, user: null, error: null })
+  },
+
+  // ─── Password Reset ──────────────────────────────────────────────
+  forgotPassword: async (email) => {
+    set({ isLoading: true, error: null })
     try {
-      const { data } = await authAPI.sync()
-      set({ user: data.data.user, isLoading: false })
-      connectSocket()
-      return data.data
+      const { data } = await authAPI.forgotPassword(email)
+      set({ isLoading: false })
+      return data
     } catch (error) {
-      set({ isLoading: false, error: 'Login failed' })
+      const msg = error.response?.data?.error?.message || 'Request failed'
+      set({ isLoading: false, error: msg })
       throw error
     }
   },
 
-  logout: () => {
-    localStorage.removeItem('flowtask_token')
-    disconnectSocket()
-    set({ token: null, user: null, error: null })
+  resetPassword: async ({ token, newPassword }) => {
+    set({ isLoading: true, error: null })
+    try {
+      const { data } = await authAPI.resetPassword({ token, newPassword })
+      set({ isLoading: false })
+      return data
+    } catch (error) {
+      const msg = error.response?.data?.error?.message || 'Reset failed'
+      set({ isLoading: false, error: msg })
+      throw error
+    }
   },
 
+  // ─── Preferences ─────────────────────────────────────────────────
   updatePreferences: async (prefs) => {
     try {
       const { data } = await authAPI.updatePreferences(prefs)
@@ -63,4 +143,6 @@ export const useAuthStore = create((set, get) => ({
       console.error('Failed to update preferences:', error)
     }
   },
+
+  clearError: () => set({ error: null }),
 }))

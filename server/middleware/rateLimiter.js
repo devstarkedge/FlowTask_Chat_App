@@ -24,3 +24,23 @@ export function createRateLimiter({ windowMs, max }) {
     },
   });
 }
+
+// ─── Pre-built Auth Rate Limiters ────────────────────────────────────────────
+
+/** Strict limiter for login/register — 5 attempts per 15 minutes per IP. */
+export const authLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+});
+
+/** Less strict limiter for token refresh — 30 per minute per IP. */
+export const refreshLimiter = createRateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,
+});
+
+/** Password reset limiter — 3 per 15 minutes per IP. */
+export const passwordResetLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+});

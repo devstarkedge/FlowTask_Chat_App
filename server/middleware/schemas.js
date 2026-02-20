@@ -98,8 +98,48 @@ export const updateThreadTitleSchema = z.object({
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
+export const registerSchema = z.object({
+  name: z.string().min(2, 'Name must be 2-50 characters').max(50),
+  email: z.string().email('Invalid email address'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(128)
+    .regex(/[a-z]/, 'Password must contain a lowercase letter')
+    .regex(/[A-Z]/, 'Password must contain an uppercase letter')
+    .regex(/[0-9]/, 'Password must contain a number'),
+});
+
+export const loginSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+export const loginFlowTaskSchema = z.object({
+  token: z.string().min(1, 'FlowTask token is required'),
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email('Invalid email address'),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, 'Reset token is required'),
+  newPassword: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(128)
+    .regex(/[a-z]/, 'Password must contain a lowercase letter')
+    .regex(/[A-Z]/, 'Password must contain an uppercase letter')
+    .regex(/[0-9]/, 'Password must contain a number'),
+});
+
+export const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token is required'),
+});
+
 export const updatePreferencesSchema = z.object({
-  theme: z.enum(['dark', 'light']).optional(),
+  theme: z.enum(['dark', 'light', 'system']).optional(),
   notificationSound: z.boolean().optional(),
   desktopNotifications: z.boolean().optional(),
   sidebarCollapsed: z.boolean().optional(),

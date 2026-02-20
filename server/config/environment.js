@@ -5,12 +5,20 @@ dotenv.config();
  * Centralized environment configuration with validation.
  * Fails fast on missing required variables to prevent runtime surprises.
  */
+
+const FLOWTASK_ENABLED = process.env.FLOWTASK_ENABLED !== 'false';
+
+// ─── Required Variables ──────────────────────────────────────────────────────
 const required = [
   'MONGO_URI',
   'JWT_SECRET',
-  'FLOWTASK_API_URL',
-  'FLOWTASK_WEBHOOK_SECRET',
+  'JWT_REFRESH_SECRET',
 ];
+
+// FlowTask-specific requirements (only when enabled)
+if (FLOWTASK_ENABLED) {
+  required.push('FLOWTASK_API_URL', 'FLOWTASK_WEBHOOK_SECRET', 'FLOWTASK_JWT_SECRET');
+}
 
 const missing = required.filter((key) => !process.env[key]);
 if (missing.length > 0) {
@@ -18,24 +26,46 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+// ─── Parse CORS origins ─────────────────────────────────────────────────────
+function parseCorsOrigins(raw) {
+  if (!raw) return 'http://localhost:5174';
+  const origins = raw.split(',').map((o) => o.trim()).filter(Boolean);
+  return origins.length === 1 ? origins[0] : origins;
+}
+
+// ─── Build Config ────────────────────────────────────────────────────────────
 const env = Object.freeze({
-  // Server
+  // Application
+  APP_NAME: process.env.APP_NAME || 'FlowTask Chat',
   PORT: parseInt(process.env.PORT, 10) || 3200,
   NODE_ENV: process.env.NODE_ENV || 'development',
   IS_PRODUCTION: process.env.NODE_ENV === 'production',
+  BASE_URL: process.env.BASE_URL || 'http://localhost:3200',
 
   // Database
   MONGO_URI: process.env.MONGO_URI,
 
-  // FlowTask Integration
-  FLOWTASK_API_URL: process.env.FLOWTASK_API_URL,
-  FLOWTASK_WEBHOOK_SECRET: process.env.FLOWTASK_WEBHOOK_SECRET,
-
-  // Auth — MUST match FlowTask's JWT_SECRET
+  // Auth — Native Chat tokens
   JWT_SECRET: process.env.JWT_SECRET,
+  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET,
+  JWT_EXPIRY: process.env.JWT_EXPIRY || '15m',
+  REFRESH_TOKEN_EXPIRY: process.env.REFRESH_TOKEN_EXPIRY || '7d',
+
+  // FlowTask Integration
+  FLOWTASK_ENABLED,
+  FLOWTASK_API_URL: process.env.FLOWTASK_API_URL || '',
+  FLOWTASK_WEBHOOK_SECRET: process.env.FLOWTASK_WEBHOOK_SECRET || '',
+  FLOWTASK_JWT_SECRET: process.env.FLOWTASK_JWT_SECRET || '',
 
   // CORS
-  CORS_ORIGINS: process.env.CORS_ORIGIN || 'http://localhost:5174',
+  CORS_ORIGINS: parseCorsOrigins(process.env.CORS_ORIGINS),
+
+  // Email
+  SMTP_HOST: process.env.SMTP_HOST || '',
+  SMTP_PORT: parseInt(process.env.SMTP_PORT, 10) || 587,
+  SMTP_USER: process.env.SMTP_USER || '',
+  SMTP_PASS: process.env.SMTP_PASS || '',
+  SMTP_FROM: process.env.SMTP_FROM || 'noreply@flowchat.local',
 
   // Logging
   LOG_LEVEL: process.env.LOG_LEVEL || 'info',
@@ -43,6 +73,12 @@ const env = Object.freeze({
   // Uploads
   UPLOAD_DIR: process.env.UPLOAD_DIR || './uploads',
   MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE, 10) || 10 * 1024 * 1024, // 10MB
+
+  // Redis (optional)
+  REDIS_URL: process.env.REDIS_URL || '',
+
+  // Proxy
+  TRUST_PROXY: parseInt(process.env.TRUST_PROXY, 10) || 0,
 });
 
 export default env;

@@ -1,48 +1,381 @@
-import jwt from 'jsonwebtoken';
 import env from '../../config/environment.js';
 import userRepository from '../users/user.repository.js';
 import flowTaskService from '../flowtask/flowtask.service.js';
+import tokenService from './token.service.js';
+import emailService from './email.service.js';
 import logger from '../../utils/logger.js';
-import { UnauthorizedError, ForbiddenError } from '../../middleware/errorHandler.js';
+import { UnauthorizedError, ForbiddenError, ValidationError, NotFoundError } from '../../middleware/errorHandler.js';
 
 /**
- * Auth Service — handles authentication and user synchronization between FlowTask and Chat.
+ * Auth Service — handles dual authentication:
+ *  1. Native: email/password registration & login (Chat-issued JWTs)
+ *  2. FlowTask: SSO via FlowTask JWT tokens
  *
- * Key principle: FlowTask JWT is the single source of auth truth.
- * Chat server verifies the SAME JWT (shared JWT_SECRET) and maintains
- * a local ChatUser record for chat-specific data.
+ * Also manages refresh token rotation, email verification, and password resets.
  */
 
 class AuthService {
+  // ═══════════════════════════════════════════════════════════════════════
+  // NATIVE AUTH
+  // ═══════════════════════════════════════════════════════════════════════
+
   /**
-   * Verify a FlowTask JWT and return the decoded payload.
-   * @param {string} token
-   * @returns {object} Decoded token payload { id, iat, exp }
-   * @throws {UnauthorizedError} If token is invalid or expired
+   * Register a new native user.
+   * @param {{ name: string, email: string, password: string }} data
+   * @returns {Promise<{ chatUser: object, message: string }>}
    */
-  verifyToken(token) {
+  async register({ name, email, password }) {
+    // Check for existing user
+    const existing = await userRepository.findByEmailPublic(email);
+    if (existing) {
+      throw new ValidationError('An account with this email already exists');
+    }
+
+    // Create user
+    const chatUser = await userRepository.createNativeUser({ name, email, password });
+
+    // Generate verification token
+    const verificationToken = tokenService.generateRandomToken();
+    chatUser.verificationToken = verificationToken;
+    chatUser.verificationExpiry = tokenService.tokenExpiry(24); // 24 hours
+    await chatUser.save();
+
+    // Send verification email (async, don't block registration)
+    emailService.sendVerificationEmail(email, name, verificationToken).catch((err) => {
+      logger.error('Failed to send verification email', { email, error: err.message });
+    });
+
+    logger.info('New native user registered', { userId: chatUser._id, email });
+
+    return {
+      chatUser,
+      message: 'Registration successful. Please check your email to verify your account.',
+    };
+  }
+
+  /**
+   * Login a native user with email and password.
+   * @param {{ email: string, password: string, userAgent?: string }} data
+   * @returns {Promise<{ chatUser: object, accessToken: string, refreshToken: string }>}
+   */
+  async loginNative({ email, password, userAgent = '' }) {
+    // Find user with password field
+    const user = await userRepository.findByEmail(email);
+    if (!user) {
+      throw new UnauthorizedError('Invalid email or password');
+    }
+
+    // Check account is active
+    if (!user.isActive) {
+      throw new UnauthorizedError('Account is deactivated');
+    }
+
+    // Check lockout
+    if (user.isLocked()) {
+      throw new UnauthorizedError('Account is temporarily locked due to too many failed attempts. Please try again later.');
+    }
+
+    // Check auth provider
+    if (user.authProvider !== 'native') {
+      throw new UnauthorizedError('This account uses FlowTask SSO. Please log in via FlowTask.');
+    }
+
+    // Verify password
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      await user.incrementLoginAttempts();
+      throw new UnauthorizedError('Invalid email or password');
+    }
+
+    // Reset login attempts on success
+    await user.resetLoginAttempts();
+
+    // Check email verification (allow login but flag it)
+    const emailWarning = !user.emailVerified
+      ? 'Please verify your email address.'
+      : undefined;
+
+    // Issue tokens
+    const accessToken = tokenService.issueAccessToken({ id: user._id.toString(), role: user.role });
+    const refreshToken = tokenService.issueRefreshToken({ id: user._id.toString() });
+
+    // Store hashed refresh token
+    await userRepository.addRefreshToken(user._id, {
+      tokenHash: tokenService.hashToken(refreshToken),
+      expiresAt: tokenService.refreshTokenExpiryDate(),
+      userAgent,
+    });
+
+    // Prune expired tokens
+    await userRepository.pruneExpiredRefreshTokens(user._id);
+
+    logger.info('Native user logged in', { userId: user._id, email });
+
+    return {
+      chatUser: user,
+      accessToken,
+      refreshToken,
+      emailWarning,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // FLOWTASK SSO AUTH
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /**
+   * Login/sync a FlowTask user via their FlowTask JWT.
+   * Verifies the token with FLOWTASK_JWT_SECRET, fetches user from FlowTask API,
+   * upserts ChatUser, and issues Chat-specific tokens.
+   *
+   * @param {{ token: string, userAgent?: string }} data
+   * @returns {Promise<{ chatUser: object, accessToken: string, refreshToken: string }>}
+   */
+  async loginFlowTask({ token, userAgent = '' }) {
+    if (!env.FLOWTASK_ENABLED) {
+      throw new UnauthorizedError('FlowTask integration is disabled');
+    }
+
+    // 1. Verify FlowTask token
+    let decoded;
     try {
-      return jwt.verify(token, env.JWT_SECRET);
+      decoded = tokenService.verifyFlowTaskToken(token);
+    } catch (error) {
+      if (error.name === 'TokenExpiredError') {
+        throw new UnauthorizedError('FlowTask token expired');
+      }
+      throw new UnauthorizedError('Invalid FlowTask token');
+    }
+
+    // 2. Fetch fresh user data from FlowTask
+    let flowTaskUser;
+    try {
+      flowTaskUser = await flowTaskService.getCurrentUser(token);
+    } catch (error) {
+      logger.error('Failed to fetch FlowTask user during login', {
+        flowTaskUserId: decoded.id,
+        error: error.message,
+      });
+      throw new UnauthorizedError('Failed to verify user with FlowTask');
+    }
+
+    // 3. Check if user is active in FlowTask
+    if (!flowTaskUser.isActive) {
+      throw new UnauthorizedError('FlowTask account is deactivated');
+    }
+
+    // 4. Upsert ChatUser
+    const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser);
+
+    // 5. Issue Chat tokens
+    const accessToken = tokenService.issueAccessToken({ id: chatUser._id.toString(), role: chatUser.role });
+    const refreshToken = tokenService.issueRefreshToken({ id: chatUser._id.toString() });
+
+    // 6. Store hashed refresh token
+    await userRepository.addRefreshToken(chatUser._id, {
+      tokenHash: tokenService.hashToken(refreshToken),
+      expiresAt: tokenService.refreshTokenExpiryDate(),
+      userAgent,
+    });
+
+    logger.info('FlowTask user logged in', {
+      chatUserId: chatUser._id,
+      flowTaskUserId: chatUser.flowTaskUserId,
+      name: chatUser.name,
+    });
+
+    return { chatUser, accessToken, refreshToken };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // TOKEN REFRESH
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /**
+   * Refresh an access token using a valid refresh token.
+   * Implements token rotation: old refresh token is revoked, new one issued.
+   *
+   * @param {{ refreshToken: string, userAgent?: string }} data
+   * @returns {Promise<{ accessToken: string, refreshToken: string }>}
+   */
+  async refreshAccessToken({ refreshToken, userAgent = '' }) {
+    // Verify the refresh token
+    let decoded;
+    try {
+      decoded = tokenService.verifyRefreshToken(refreshToken);
+    } catch {
+      throw new UnauthorizedError('Invalid or expired refresh token');
+    }
+
+    // Find user
+    const user = await userRepository.findById(decoded.id);
+    if (!user || !user.isActive) {
+      throw new UnauthorizedError('User not found or deactivated');
+    }
+
+    // Check that this refresh token exists in the user's stored tokens
+    const tokenHash = tokenService.hashToken(refreshToken);
+    const storedToken = user.refreshTokens.find((t) => t.tokenHash === tokenHash);
+    if (!storedToken) {
+      // Possible token reuse attack — clear all refresh tokens for safety
+      logger.warn('Refresh token reuse detected, clearing all tokens', { userId: user._id });
+      await userRepository.clearAllRefreshTokens(user._id);
+      throw new UnauthorizedError('Refresh token has been revoked');
+    }
+
+    // Rotate: remove old token
+    await userRepository.removeRefreshToken(user._id, tokenHash);
+
+    // Issue new token pair
+    const newAccessToken = tokenService.issueAccessToken({ id: user._id.toString(), role: user.role });
+    const newRefreshToken = tokenService.issueRefreshToken({ id: user._id.toString() });
+
+    // Store new hashed refresh token
+    await userRepository.addRefreshToken(user._id, {
+      tokenHash: tokenService.hashToken(newRefreshToken),
+      expiresAt: tokenService.refreshTokenExpiryDate(),
+      userAgent,
+    });
+
+    return { accessToken: newAccessToken, refreshToken: newRefreshToken };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // LOGOUT
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /**
+   * Logout: revoke a specific refresh token.
+   * @param {string} userId
+   * @param {string} refreshToken
+   */
+  async logout(userId, refreshToken) {
+    if (refreshToken) {
+      const tokenHash = tokenService.hashToken(refreshToken);
+      await userRepository.removeRefreshToken(userId, tokenHash);
+    }
+    logger.info('User logged out', { userId });
+  }
+
+  /**
+   * Logout from all devices: revoke all refresh tokens.
+   * @param {string} userId
+   */
+  async logoutAll(userId) {
+    await userRepository.clearAllRefreshTokens(userId);
+    logger.info('User logged out from all devices', { userId });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // EMAIL VERIFICATION
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /**
+   * Verify a user's email using the verification token.
+   * @param {string} token
+   * @returns {Promise<{ chatUser: object }>}
+   */
+  async verifyEmail(token) {
+    const user = await userRepository.findByVerificationToken(token);
+    if (!user) {
+      throw new ValidationError('Invalid or expired verification token');
+    }
+
+    const chatUser = await userRepository.verifyEmail(user._id);
+    logger.info('Email verified', { userId: user._id, email: user.email });
+    return { chatUser };
+  }
+
+  /**
+   * Resend verification email.
+   * @param {string} email
+   */
+  async resendVerification(email) {
+    const user = await userRepository.findByEmailPublic(email);
+    if (!user) {
+      // Don't reveal whether the email exists
+      return;
+    }
+    if (user.emailVerified) return;
+    if (user.authProvider !== 'native') return;
+
+    const verificationToken = tokenService.generateRandomToken();
+    user.verificationToken = verificationToken;
+    user.verificationExpiry = tokenService.tokenExpiry(24);
+    await user.save();
+
+    await emailService.sendVerificationEmail(email, user.name, verificationToken);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // PASSWORD RESET
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /**
+   * Request a password reset. Sends reset link to email.
+   * Always returns success to prevent email enumeration.
+   * @param {string} email
+   */
+  async requestPasswordReset(email) {
+    const user = await userRepository.findByEmailPublic(email);
+
+    // Don't reveal whether the email exists
+    if (!user || user.authProvider !== 'native') return;
+
+    const resetToken = tokenService.generateRandomToken();
+    user.passwordResetToken = resetToken;
+    user.passwordResetExpiry = tokenService.tokenExpiry(1); // 1 hour
+    await user.save();
+
+    await emailService.sendPasswordResetEmail(email, user.name, resetToken);
+    logger.info('Password reset requested', { email });
+  }
+
+  /**
+   * Reset password using a valid reset token.
+   * @param {{ token: string, newPassword: string }} data
+   */
+  async resetPassword({ token, newPassword }) {
+    const user = await userRepository.findByResetToken(token);
+    if (!user) {
+      throw new ValidationError('Invalid or expired reset token');
+    }
+
+    user.password = newPassword;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpiry = undefined;
+    await user.save();
+
+    // Revoke all refresh tokens (force re-login everywhere)
+    await userRepository.clearAllRefreshTokens(user._id);
+
+    logger.info('Password reset completed', { userId: user._id });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // LEGACY COMPATIBILITY
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /**
+   * Sync (or create) a ChatUser from FlowTask. (Legacy — used by syncUser controller)
+   * @param {string} token - FlowTask JWT
+   * @returns {Promise<{chatUser: object}>}
+   */
+  async syncFlowTaskUser(token) {
+    if (!env.FLOWTASK_ENABLED) {
+      throw new UnauthorizedError('FlowTask integration is disabled');
+    }
+
+    let decoded;
+    try {
+      decoded = tokenService.verifyFlowTaskToken(token);
     } catch (error) {
       if (error.name === 'TokenExpiredError') {
         throw new UnauthorizedError('Token expired');
       }
       throw new UnauthorizedError('Invalid token');
     }
-  }
 
-  /**
-   * Sync (or create) a ChatUser from FlowTask.
-   * Called on first connection and periodically to keep data fresh.
-   *
-   * @param {string} token - FlowTask JWT
-   * @returns {Promise<{chatUser: object, channels: object[]}>}
-   */
-  async syncUser(token) {
-    // 1. Verify token locally
-    const decoded = this.verifyToken(token);
-
-    // 2. Fetch fresh user data from FlowTask
     let flowTaskUser;
     try {
       flowTaskUser = await flowTaskService.getCurrentUser(token);
@@ -54,19 +387,16 @@ class AuthService {
       throw new UnauthorizedError('Failed to verify user with FlowTask');
     }
 
-    // 3. Check if user is active and verified in FlowTask
     if (!flowTaskUser.isActive) {
       throw new UnauthorizedError('FlowTask account is deactivated');
     }
 
-    // 4. Upsert ChatUser
     const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser);
 
-    logger.info('User synced', {
+    logger.info('FlowTask user synced', {
       chatUserId: chatUser._id,
       flowTaskUserId: chatUser.flowTaskUserId,
       name: chatUser.name,
-      role: chatUser.role,
     });
 
     return { chatUser };
@@ -74,51 +404,37 @@ class AuthService {
 
   /**
    * Get or create a ChatUser from a FlowTask user ID.
-   * Used when processing webhook events where we have a user ID but no token.
-   *
+   * Used when processing webhook events.
    * @param {string} flowTaskUserId
-   * @returns {Promise<object|null>} ChatUser or null if not found
+   * @returns {Promise<object|null>}
    */
   async getOrCreateChatUser(flowTaskUserId) {
-    let chatUser = await userRepository.findByFlowTaskId(flowTaskUserId);
-    return chatUser;
+    return userRepository.findByFlowTaskId(flowTaskUserId);
   }
 
   /**
    * Validate that a user has one of the required roles.
-   * Admin role always passes (matching FlowTask's authorize pattern).
-   *
    * @param {object} user - ChatUser document
    * @param {string[]} requiredRoles
-   * @throws {ForbiddenError} If user doesn't have required role
+   * @throws {ForbiddenError}
    */
   validateRole(user, requiredRoles) {
-    if (!user) {
-      throw new UnauthorizedError('User not found');
-    }
-
-    // Admin always passes
+    if (!user) throw new UnauthorizedError('User not found');
     if (user.role === 'admin') return;
-
     const normalizedRoles = requiredRoles.map((r) => r.toLowerCase());
     if (!normalizedRoles.includes(user.role)) {
-      throw new ForbiddenError(
-        `Required role: ${requiredRoles.join(' or ')}. Current role: ${user.role}`,
-      );
+      throw new ForbiddenError(`Required role: ${requiredRoles.join(' or ')}. Current role: ${user.role}`);
     }
   }
 
   /**
-   * Verify that a user belongs to a specific department.
-   * Used for department isolation checks.
-   *
+   * Check department membership.
    * @param {object} user - ChatUser document
    * @param {string} departmentId
    * @returns {boolean}
    */
   isUserInDepartment(user, departmentId) {
     if (!user || !departmentId) return false;
-    // Admin has access to all departments
     if (user.role === 'admin') return true;
     return user.departmentIds.includes(departmentId);
   }

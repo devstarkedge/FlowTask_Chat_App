@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import http from 'node:http';
 import path from 'node:path';
 import express from 'express';
@@ -28,6 +27,11 @@ import { startDeadlineWarningCron, stopDeadlineWarningCron } from './modules/bot
 // ─── Express App ─────────────────────────────────────────────────────────────
 const app = express();
 const httpServer = http.createServer(app);
+
+// ─── Trust Proxy (required behind nginx / load balancers) ────────────────────
+if (env.TRUST_PROXY) {
+  app.set('trust proxy', env.TRUST_PROXY);
+}
 
 // ─── CORS ────────────────────────────────────────────────────────────────────
 const corsOptions = {
@@ -95,7 +99,9 @@ app.use('/api/chat/channels/:channelId', channelThreadRouter);
 app.use('/api/chat/channels/:channelId', channelReadRouter);
 app.use('/api/chat/messages', messageRoutes);
 app.use('/api/chat/threads', threadRoutes);
-app.use('/api/chat/webhooks', webhookRoutes);
+if (env.FLOWTASK_ENABLED) {
+  app.use('/api/chat/webhooks', webhookRoutes);
+}
 app.use('/api/chat/bot', botRoutes);
 app.use('/api/chat', readReceiptRoutes);
 
@@ -119,8 +125,10 @@ async function startServer() {
     // 1. Connect to MongoDB
     await connectDatabase();
 
-    // 2. Register webhook event handlers
-    registerAllEventHandlers();
+    // 2. Register webhook event handlers (only when FlowTask is enabled)
+    if (env.FLOWTASK_ENABLED) {
+      registerAllEventHandlers();
+    }
 
     // 3. Initialize Socket.IO
     await initializeSocket(httpServer, corsOptions);
@@ -136,7 +144,8 @@ async function startServer() {
       logger.info(`💬 FlowTask Chat server running`, {
         port: env.PORT,
         env: env.NODE_ENV,
-        flowtaskApi: env.FLOWTASK_API_URL,
+        flowtaskEnabled: env.FLOWTASK_ENABLED,
+        flowtaskApi: env.FLOWTASK_ENABLED ? env.FLOWTASK_API_URL : 'disabled',
       });
     });
   } catch (error) {

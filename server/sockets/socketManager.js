@@ -1,5 +1,5 @@
-import jwt from 'jsonwebtoken';
 import env from '../config/environment.js';
+import tokenService from '../modules/auth/token.service.js';
 import userRepository from '../modules/users/user.repository.js';
 import channelRepository from '../modules/channels/channel.repository.js';
 import logger from '../utils/logger.js';
@@ -46,17 +46,34 @@ export async function initializeSocket(httpServer, corsOptions) {
         return next(new Error('Authentication token required'));
       }
 
-      // Verify JWT (same secret as FlowTask)
-      const decoded = jwt.verify(token, env.JWT_SECRET);
-      if (!decoded?.id) {
-        return next(new Error('Invalid token payload'));
+      // Dual-auth token verification
+      let chatUser = null;
+
+      // Strategy 1: Try as Chat-issued access token
+      try {
+        const decoded = tokenService.verifyAccessToken(token);
+        if (decoded?.id && decoded.type === 'access') {
+          chatUser = await userRepository.findById(decoded.id);
+        }
+      } catch {
+        // Not a Chat-issued token
       }
 
-      // Find or sync ChatUser
-      let chatUser = await userRepository.findByFlowTaskId(decoded.id);
+      // Strategy 2: Try as FlowTask token (if enabled)
+      if (!chatUser && env.FLOWTASK_ENABLED) {
+        try {
+          const decoded = tokenService.verifyFlowTaskToken(token);
+          if (decoded?.id) {
+            chatUser = await userRepository.findByFlowTaskId(decoded.id);
+            socket.flowTaskUserId = decoded.id;
+          }
+        } catch {
+          // Not a valid FlowTask token either
+        }
+      }
+
       if (!chatUser) {
-        // User hasn't been synced yet — reject until auth/sync is called
-        return next(new Error('User not synced to chat. Call POST /api/chat/auth/sync first.'));
+        return next(new Error('Invalid or expired token'));
       }
 
       if (!chatUser.isActive) {

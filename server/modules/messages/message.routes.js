@@ -1,0 +1,76 @@
+import { Router } from 'express';
+import {
+  getMessages,
+  sendMessage,
+  getMessage,
+  editMessage,
+  deleteMessage,
+  addReaction,
+  removeReaction,
+  pinMessage,
+  unpinMessage,
+  getPinnedMessages,
+  searchMessages,
+  uploadFiles,
+} from './message.controller.js';
+import { protect, requireChannelAccess, requireMessageAccess } from '../auth/auth.middleware.js';
+import { uploadFiles as uploadMiddleware, handleMulterError } from '../../middleware/upload.js';
+import { validate } from '../../middleware/validate.js';
+import {
+  sendMessageSchema,
+  editMessageSchema,
+  reactionSchema,
+  searchMessagesSchema,
+} from '../../middleware/schemas.js';
+
+const router = Router();
+
+/**
+ * Message Routes — all protected
+ *
+ * Channel-scoped:
+ *   GET  /api/chat/channels/:channelId/messages  — Get messages (cursor pagination)
+ *   POST /api/chat/channels/:channelId/messages  — Send message
+ *   GET  /api/chat/channels/:channelId/pins      — Get pinned messages
+ *
+ * Message-scoped:
+ *   GET    /api/chat/messages/search            — Search messages
+ *   GET    /api/chat/messages/:id               — Get single message
+ *   PUT    /api/chat/messages/:id               — Edit message
+ *   DELETE /api/chat/messages/:id               — Soft-delete message
+ *   POST   /api/chat/messages/:id/reactions     — Add reaction
+ *   DELETE /api/chat/messages/:id/reactions/:emoji — Remove reaction
+ *   POST   /api/chat/messages/:id/pin           — Pin message
+ *   DELETE /api/chat/messages/:id/pin           — Unpin message
+ */
+
+// All routes require authentication
+router.use(protect);
+
+// ─── Channel-scoped message routes ───────────────────────────────────────────
+// These are mounted under /api/chat/channels/:channelId in the main router
+// but we export them separately to be mounted by the channel router or index
+
+// ─── Message-scoped routes (mounted under /api/chat/messages) ────────────────
+router.get('/search', validate({ query: searchMessagesSchema }), searchMessages);
+router.get('/:id', requireMessageAccess(), getMessage);
+router.put('/:id', requireMessageAccess(), validate({ body: editMessageSchema }), editMessage);
+router.delete('/:id', requireMessageAccess(), deleteMessage);
+router.post('/:id/reactions', requireMessageAccess(), validate({ body: reactionSchema }), addReaction);
+router.delete('/:id/reactions/:emoji', requireMessageAccess(), removeReaction);
+router.post('/:id/pin', requireMessageAccess(), pinMessage);
+router.delete('/:id/pin', requireMessageAccess(), unpinMessage);
+
+export default router;
+
+/**
+ * Channel-scoped message routes.
+ * To be mounted on the channel router: /api/chat/channels/:channelId
+ */
+export const channelMessageRouter = Router({ mergeParams: true });
+channelMessageRouter.use(protect);
+channelMessageRouter.use(requireChannelAccess());
+channelMessageRouter.get('/messages', getMessages);
+channelMessageRouter.post('/messages', validate({ body: sendMessageSchema }), sendMessage);
+channelMessageRouter.post('/upload', uploadMiddleware, handleMulterError, uploadFiles);
+channelMessageRouter.get('/pins', getPinnedMessages);

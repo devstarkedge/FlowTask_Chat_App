@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #1a1d21;
+  --bg-secondary: #222529;
+  --bg-sidebar: #19171d;
+  --bg-hover: #2c2d30;
+  --bg-active: #1164a3;
+  --bg-input: #222529;
+  --text-primary: #d1d2d3;
+  --text-secondary: #ababad;
+  --text-muted: #868789;
+  --text-link: #1d9bd1;
+  --text-white: #ffffff;
+  --border-primary: #393b3d;
+  --border-secondary: #2c2d30;
+  --accent-primary: #1264a3;
+  --accent-green: #007a5a;
+  --accent-red: #e01e5a;
+  --accent-yellow: #ecb22e;
+  --scrollbar-thumb: #393b3d;
+  --sidebar-width: 260px;
+  --thread-panel-width: 400px;
+  --header-height: 50px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; width: 100%; overflow: hidden; }
+body {
+  font-family: 'Lato', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.46;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+
+@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.animate-slide-in { animation: slideIn 0.2s ease-out; }
+
+.message-content strong { color: var(--text-white); font-weight: 700; }
+.message-content code { background: var(--bg-hover); padding: 2px 4px; border-radius: 3px; font-size: 13px; }
+.message-content a { color: var(--text-link); text-decoration: none; }
+.message-content a:hover { text-decoration: underline; }

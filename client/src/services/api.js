@@ -102,6 +102,7 @@ export const authAPI = {
   // Profile
   me: () => api.get('/auth/me'),
   updatePreferences: (prefs) => api.put('/auth/preferences', prefs),
+  searchUsers: (q) => api.get('/auth/users/search', { params: { q } }),
 }
 
 // ─── Channels ────────────────────────────────────────────────────────────

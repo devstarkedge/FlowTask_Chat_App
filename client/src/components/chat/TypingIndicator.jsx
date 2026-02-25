@@ -1,33 +1,44 @@
+import { useMemo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
+import { useAuthStore } from '../../stores/authStore'
+
+const EMPTY = {}
 
 export default function TypingIndicator({ channelId }) {
-  const typing = useChatStore((s) => s.typingByChannel[channelId])
+  const typingMap = useChatStore((s) => s.typingByChannel?.[channelId] ?? EMPTY)
+  const userId = useAuthStore((s) => s.user?._id)
 
-  if (!typing) return null
+  // Filter out self
+  const typers = useMemo(() => {
+    return Object.entries(typingMap)
+      .filter(([id]) => id !== userId)
+      .map(([, name]) => name)
+  }, [typingMap, userId])
 
-  const names = Object.values(typing)
-  if (names.length === 0) return null
+  if (typers.length === 0) return null
 
-  let text
-  if (names.length === 1) {
-    text = `${names[0]} is typing`
-  } else if (names.length === 2) {
-    text = `${names[0]} and ${names[1]} are typing`
-  } else {
-    text = `${names[0]} and ${names.length - 1} others are typing`
-  }
+  const text =
+    typers.length === 1
+      ? `${typers[0]} is typing`
+      : typers.length === 2
+        ? `${typers[0]} and ${typers[1]} are typing`
+        : `${typers[0]} and ${typers.length - 1} others are typing`
 
   return (
-    <div className="flex items-center gap-2 py-1 px-1">
-      <div className="flex gap-1">
-        <span className="w-1.5 h-1.5 rounded-full animate-bounce"
-          style={{ background: 'var(--text-muted)', animationDelay: '0ms' }} />
-        <span className="w-1.5 h-1.5 rounded-full animate-bounce"
-          style={{ background: 'var(--text-muted)', animationDelay: '150ms' }} />
-        <span className="w-1.5 h-1.5 rounded-full animate-bounce"
-          style={{ background: 'var(--text-muted)', animationDelay: '300ms' }} />
+    <div
+      className="px-5 py-1 animate-fade-in"
+      style={{ minHeight: 24 }}
+    >
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <span className="typing-dot" />
+          <span className="typing-dot" />
+          <span className="typing-dot" />
+        </div>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>
+          {text}
+        </span>
       </div>
-      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{text}</span>
     </div>
   )
 }

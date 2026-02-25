@@ -12,6 +12,7 @@ import {
   resetPassword,
   getMe,
   updatePreferences,
+  searchUsers,
 } from './auth.controller.js';
 import { protect } from './auth.middleware.js';
 import { authLimiter, refreshLimiter, passwordResetLimiter } from '../../middleware/rateLimiter.js';
@@ -66,5 +67,8 @@ router.post('/reset-password', passwordResetLimiter, validate({ body: resetPassw
 router.get('/me', protect, getMe);
 router.put('/preferences', protect, updatePreferences);
 router.post('/logout', protect, logout);
+
+// User search (protected)
+router.get('/users/search', protect, searchUsers);
 
 export default router;

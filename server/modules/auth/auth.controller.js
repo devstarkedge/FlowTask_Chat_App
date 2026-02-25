@@ -283,6 +283,22 @@ export const getMe = asyncHandler(async (req, res) => {
  * PUT /api/chat/auth/preferences
  * Update chat preferences.
  */
+/**
+ * GET /api/chat/auth/users/search?q=...
+ * Search users by name or email.
+ */
+export const searchUsers = asyncHandler(async (req, res) => {
+  const { default: userRepository } = await import('../users/user.repository.js');
+  const { q } = req.query;
+  if (!q || q.trim().length < 2) {
+    return res.status(200).json({ success: true, data: { users: [] } });
+  }
+  const users = await userRepository.search(q.trim(), 20);
+  // Filter out the requesting user
+  const filtered = users.filter((u) => u._id.toString() !== req.user._id.toString());
+  res.status(200).json({ success: true, data: { users: filtered } });
+});
+
 export const updatePreferences = asyncHandler(async (req, res) => {
   const { default: userRepository } = await import('../users/user.repository.js');
 

@@ -1,26 +1,29 @@
-import { X, Users, Hash, Lock, Clock, User } from 'lucide-react'
+import { X, Users, Hash, Lock, Settings, UserPlus, LogOut, Shield } from 'lucide-react'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
+import { useAuthStore } from '../../stores/authStore'
 import { Avatar } from './MemberAvatarGroup'
 
-export default function ChannelInfoPanel({ channel }) {
+export default function ChannelInfoPanel({ channel, onOpenProfile }) {
   const { membersByChannel, isMembersLoading, setShowInfoPanel } = useChannelStore()
   const { onlineUsers } = useChatStore()
+  const { user } = useAuthStore()
 
   if (!channel) return null
 
   const members = membersByChannel[channel._id] || []
   const onlineMembers = members.filter((m) => m.onlineStatus === 'online')
   const offlineMembers = members.filter((m) => m.onlineStatus !== 'online')
+  const isOwner = channel.createdBy === user?._id
 
   return (
     <div
-      className="flex flex-col h-full animate-slide-in"
+      className="flex flex-col h-full animate-slide-in-right"
       style={{
-        width: 'var(--info-panel-width, 340px)',
-        minWidth: 'var(--info-panel-width, 340px)',
+        width: 'var(--profile-panel-width)',
+        minWidth: 'var(--profile-panel-width)',
         borderLeft: '1px solid var(--border-primary)',
-        background: 'var(--bg-primary)',
+        background: 'var(--bg-secondary)',
       }}
     >
       {/* Header */}
@@ -28,24 +31,26 @@ export default function ChannelInfoPanel({ channel }) {
         className="flex items-center justify-between px-4 shrink-0"
         style={{
           height: 'var(--header-height)',
-          borderBottom: '1px solid var(--border-primary)',
+          borderBottom: '1px solid var(--border-secondary)',
         }}
       >
         <div className="flex items-center gap-2">
-          <Hash size={16} style={{ color: 'var(--text-white)' }} />
+          <Hash size={14} style={{ color: 'var(--text-muted)' }} />
           <span
             className="font-bold text-sm truncate"
-            style={{ color: 'var(--text-white)', maxWidth: 220 }}
+            style={{ color: 'var(--text-white)', maxWidth: 200 }}
           >
             {channel.name}
           </span>
         </div>
         <button
           onClick={() => setShowInfoPanel(false)}
-          className="p-1 rounded hover:opacity-80 cursor-pointer"
-          style={{ color: 'var(--text-muted)' }}
+          className="p-1.5 rounded-md cursor-pointer transition-colors"
+          style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
         >
-          <X size={18} />
+          <X size={16} />
         </button>
       </div>
 
@@ -53,30 +58,56 @@ export default function ChannelInfoPanel({ channel }) {
       <div className="flex-1 overflow-y-auto">
         {/* Channel Info Section */}
         <div className="px-4 py-4" style={{ borderBottom: '1px solid var(--border-secondary)' }}>
+          {/* Channel Icon */}
+          <div
+            className="w-14 h-14 rounded-xl flex items-center justify-center mb-3"
+            style={{ background: 'var(--bg-hover)' }}
+          >
+            <Hash size={24} style={{ color: 'var(--text-muted)' }} />
+          </div>
+
+          <h3 className="text-lg font-bold mb-1" style={{ color: 'var(--text-white)' }}>
+            {channel.name}
+          </h3>
+
           {channel.description && (
+            <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              {channel.description}
+            </p>
+          )}
+
+          {channel.topic && (
             <div className="mb-3">
-              <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>
-                Description
+              <p
+                className="text-[10px] font-semibold uppercase tracking-wider mb-1"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                Topic
               </p>
               <p className="text-sm" style={{ color: 'var(--text-primary)' }}>
-                {channel.description}
+                {channel.topic}
               </p>
             </div>
           )}
 
-          <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-muted)' }}>
-            <span className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+            <span className="flex items-center gap-1.5">
               <Users size={12} />
               {members.length} members
             </span>
             {channel.visibility === 'private' && (
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1.5">
                 <Lock size={12} />
                 Private
               </span>
             )}
             {channel.type && (
-              <span className="capitalize">{channel.type} channel</span>
+              <span
+                className="px-2 py-0.5 rounded-full text-[10px] font-medium uppercase"
+                style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)' }}
+              >
+                {channel.type}
+              </span>
             )}
           </div>
         </div>
@@ -84,7 +115,10 @@ export default function ChannelInfoPanel({ channel }) {
         {/* Members Section */}
         <div className="px-4 py-3">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+            <p
+              className="text-[11px] font-semibold uppercase tracking-wider"
+              style={{ color: 'var(--text-muted)' }}
+            >
               Members — {members.length}
             </p>
             {isMembersLoading && (
@@ -98,12 +132,19 @@ export default function ChannelInfoPanel({ channel }) {
           {/* Online Members */}
           {onlineMembers.length > 0 && (
             <div className="mb-3">
-              <p className="text-[11px] font-medium uppercase tracking-wider mb-2" style={{ color: '#44b700' }}>
+              <p
+                className="text-[10px] font-medium uppercase tracking-wider mb-2"
+                style={{ color: 'var(--status-online)' }}
+              >
                 Online — {onlineMembers.length}
               </p>
               <div className="flex flex-col gap-0.5">
                 {onlineMembers.map((member) => (
-                  <MemberRow key={member._id || member.flowTaskUserId} member={member} />
+                  <MemberRow
+                    key={member._id || member.flowTaskUserId}
+                    member={member}
+                    onOpenProfile={onOpenProfile}
+                  />
                 ))}
               </div>
             </div>
@@ -113,22 +154,32 @@ export default function ChannelInfoPanel({ channel }) {
           {offlineMembers.length > 0 && (
             <div>
               {onlineMembers.length > 0 && (
-                <p className="text-[11px] font-medium uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>
+                <p
+                  className="text-[10px] font-medium uppercase tracking-wider mb-2"
+                  style={{ color: 'var(--text-muted)' }}
+                >
                   Offline — {offlineMembers.length}
                 </p>
               )}
               <div className="flex flex-col gap-0.5">
                 {offlineMembers.map((member) => (
-                  <MemberRow key={member._id || member.flowTaskUserId} member={member} />
+                  <MemberRow
+                    key={member._id || member.flowTaskUserId}
+                    member={member}
+                    onOpenProfile={onOpenProfile}
+                  />
                 ))}
               </div>
             </div>
           )}
 
           {members.length === 0 && !isMembersLoading && (
-            <p className="text-sm py-4 text-center" style={{ color: 'var(--text-muted)' }}>
-              No members found
-            </p>
+            <div className="text-center py-6">
+              <Users size={24} style={{ color: 'var(--text-muted)', margin: '0 auto 8px' }} />
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                No members found
+              </p>
+            </div>
           )}
         </div>
       </div>
@@ -136,12 +187,15 @@ export default function ChannelInfoPanel({ channel }) {
   )
 }
 
-function MemberRow({ member }) {
+function MemberRow({ member, onOpenProfile }) {
   const isOnline = member.onlineStatus === 'online'
+  const isAway = member.onlineStatus === 'away'
 
   return (
-    <div
-      className="flex items-center gap-2.5 px-2 py-1.5 rounded-md transition-colors cursor-default"
+    <button
+      onClick={() => onOpenProfile?.(member)}
+      className="flex items-center gap-2.5 px-2 py-1.5 rounded-md transition-colors w-full text-left cursor-pointer"
+      style={{ background: 'transparent', border: 'none' }}
       onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
@@ -152,23 +206,28 @@ function MemberRow({ member }) {
           {member.name}
         </p>
         <p className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>
-          {member.role || member.email}
-          {member.source?.length > 0 && (
-            <span className="ml-1 opacity-60">
-              · {member.source.join(', ')}
-            </span>
-          )}
+          {member.role
+            ? member.role.charAt(0).toUpperCase() + member.role.slice(1)
+            : member.email}
         </p>
       </div>
 
       {member.channelRole === 'owner' && (
         <span
-          className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-          style={{ background: 'var(--bg-hover)', color: 'var(--accent-yellow)' }}
+          className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
+          style={{ background: 'rgba(236,178,46,0.15)', color: 'var(--accent-yellow)' }}
         >
           Owner
         </span>
       )}
-    </div>
+      {member.channelRole === 'admin' && (
+        <span
+          className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
+          style={{ background: 'rgba(124,58,237,0.15)', color: 'var(--accent-purple)' }}
+        >
+          Admin
+        </span>
+      )}
+    </button>
   )
 }

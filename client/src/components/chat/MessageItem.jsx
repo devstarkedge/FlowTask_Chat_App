@@ -5,12 +5,19 @@ import { format } from 'date-fns'
 import {
   Smile, MessageSquare, MoreHorizontal, Edit, Trash2, Pin,
   FileText, Download, Image as ImageIcon, File, FileArchive, FileCode,
+  Film, Music,
 } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
+import EmojiPicker from './EmojiPicker'
 
-/* ── Attachment helpers ───────────────────────────────────────────────── */
 function isImage(mimeType) {
   return mimeType?.startsWith('image/')
+}
+function isVideo(mimeType) {
+  return mimeType?.startsWith('video/')
+}
+function isAudio(mimeType) {
+  return mimeType?.startsWith('audio/')
 }
 
 function formatFileSize(bytes) {
@@ -24,18 +31,18 @@ function formatFileSize(bytes) {
 
 function fileIcon(mimeType) {
   if (mimeType?.startsWith('image/')) return ImageIcon
+  if (mimeType?.startsWith('video/')) return Film
+  if (mimeType?.startsWith('audio/')) return Music
   if (mimeType?.includes('pdf') || mimeType?.includes('document') || mimeType?.includes('word'))
     return FileText
   if (mimeType?.includes('zip') || mimeType?.includes('rar') || mimeType?.includes('tar') || mimeType?.includes('gzip'))
     return FileArchive
-  if (mimeType?.includes('json') || mimeType?.includes('javascript') || mimeType?.includes('xml') || mimeType?.includes('yaml'))
+  if (mimeType?.includes('json') || mimeType?.includes('javascript') || mimeType?.includes('xml'))
     return FileCode
   return File
 }
 
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '👀', '🚀']
-
-export default function MessageItem({ message, isGrouped, onOpenThread }) {
+export default function MessageItem({ message, compact, onOpenThread, onOpenProfile, onOpenFilePreview }) {
   const { user } = useAuthStore()
   const { addReaction, removeReaction, editMessage, deleteMessage } = useChatStore()
   const [showActions, setShowActions] = useState(false)
@@ -44,8 +51,9 @@ export default function MessageItem({ message, isGrouped, onOpenThread }) {
   const [showReactionPicker, setShowReactionPicker] = useState(false)
 
   const isOwn = message.authorId?._id === user?._id || message.authorId === user?._id
-  const isSystem = message.contentType === 'system' || !message.authorId
+  const isSystem = message.contentType === 'system' && !message.activityMeta
   const authorName = message.authorId?.name || 'FlowTask Bot'
+  const authorData = typeof message.authorId === 'object' ? message.authorId : null
   const time = format(new Date(message.createdAt), 'h:mm a')
 
   const handleEdit = () => {
@@ -67,10 +75,10 @@ export default function MessageItem({ message, isGrouped, onOpenThread }) {
     setShowReactionPicker(false)
   }
 
-  // System messages
+  // System messages (plain separator style)
   if (isSystem) {
     return (
-      <div className="flex items-center gap-3 py-2 px-5 my-1">
+      <div className="flex items-center gap-3 py-2 px-5 my-1 animate-fade-in">
         <div className="flex-1 h-px" style={{ background: 'var(--border-secondary)' }} />
         <p className="text-xs italic px-2" style={{ color: 'var(--text-muted)' }}>
           {message.content}
@@ -83,22 +91,30 @@ export default function MessageItem({ message, isGrouped, onOpenThread }) {
   return (
     <div
       className="relative group"
-      style={{ background: showActions ? 'var(--bg-hover)' : 'transparent' }}
+      style={{
+        background: showActions ? 'var(--bg-hover)' : 'transparent',
+        transition: 'background var(--transition-fast)',
+      }}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => { setShowActions(false); setShowReactionPicker(false) }}
     >
-      <div className={`flex gap-2.5 px-5 ${isGrouped ? 'py-0.5' : 'pt-2 pb-0.5'}`}>
-        {/* Avatar */}
-        {!isGrouped ? (
-          <Avatar
-            member={{
-              name: authorName,
-              avatar: message.authorId?.avatar,
-              onlineStatus: 'offline',
-            }}
-            size={36}
-            showStatus={false}
-          />
+      <div className={`flex gap-2.5 px-5 ${compact ? 'py-0.5' : 'pt-2 pb-0.5'}`}>
+        {/* Avatar / Time gutter */}
+        {!compact ? (
+          <div
+            className="cursor-pointer"
+            onClick={() => onOpenProfile?.(authorData)}
+          >
+            <Avatar
+              member={{
+                name: authorName,
+                avatar: authorData?.avatar,
+                onlineStatus: 'offline',
+              }}
+              size={36}
+              showStatus={false}
+            />
+          </div>
         ) : (
           <div className="w-9 shrink-0 flex items-center justify-center">
             <span
@@ -112,14 +128,31 @@ export default function MessageItem({ message, isGrouped, onOpenThread }) {
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          {!isGrouped && (
+          {!compact && (
             <div className="flex items-baseline gap-2 mb-0.5">
               <span
                 className="font-bold text-sm cursor-pointer hover:underline"
                 style={{ color: 'var(--text-white)' }}
+                onClick={() => onOpenProfile?.(authorData)}
               >
                 {authorName}
               </span>
+              {message.contentType === 'bot' && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '1px 5px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--accent-primary)',
+                    color: 'white',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}
+                >
+                  BOT
+                </span>
+              )}
               <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                 {time}
               </span>
@@ -127,6 +160,9 @@ export default function MessageItem({ message, isGrouped, onOpenThread }) {
                 <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
                   (edited)
                 </span>
+              )}
+              {message.isPinned && (
+                <Pin size={11} style={{ color: 'var(--accent-yellow)' }} />
               )}
             </div>
           )}
@@ -140,12 +176,8 @@ export default function MessageItem({ message, isGrouped, onOpenThread }) {
                   if (e.key === 'Enter') handleEdit()
                   if (e.key === 'Escape') setIsEditing(false)
                 }}
-                className="w-full px-3 py-1.5 rounded-md text-sm outline-none"
-                style={{
-                  background: 'var(--bg-input)',
-                  border: '1px solid var(--accent-primary)',
-                  color: 'var(--text-primary)',
-                }}
+                className="input-field"
+                style={{ fontSize: 14, padding: '6px 10px' }}
                 autoFocus
               />
               <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
@@ -166,13 +198,11 @@ export default function MessageItem({ message, isGrouped, onOpenThread }) {
             <div className="flex flex-wrap gap-2 mt-2">
               {message.attachments.map((att, idx) =>
                 isImage(att.mimeType) ? (
-                  <a
+                  <div
                     key={att._id || idx}
-                    href={att.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block rounded-lg overflow-hidden border transition-opacity hover:opacity-90"
+                    className="rounded-lg overflow-hidden cursor-pointer transition-opacity hover:opacity-90"
                     style={{ border: '1px solid var(--border-primary)', maxWidth: 320 }}
+                    onClick={() => onOpenFilePreview?.(att, message.attachments)}
                   >
                     <img
                       src={att.thumbnailUrl || att.url}
@@ -187,34 +217,46 @@ export default function MessageItem({ message, isGrouped, onOpenThread }) {
                       <span className="truncate flex-1">{att.originalName}</span>
                       <span>{formatFileSize(att.fileSize)}</span>
                     </div>
-                  </a>
-                ) : (
-                  <a
+                  </div>
+                ) : isVideo(att.mimeType) ? (
+                  <div
                     key={att._id || idx}
-                    href={att.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download={att.originalName}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors"
-                    style={{
-                      background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border-primary)',
-                      color: 'var(--text-primary)',
-                      minWidth: 200,
-                      maxWidth: 320,
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                    className="file-card"
+                    onClick={() => onOpenFilePreview?.(att, message.attachments)}
                   >
-                    {(() => { const FIcon = fileIcon(att.mimeType); return <FIcon size={28} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} /> })()}
+                    <Film size={24} style={{ color: 'var(--accent-purple)', flexShrink: 0 }} />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{att.originalName}</p>
-                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                        {formatFileSize(att.fileSize)}
-                      </p>
+                      <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{att.originalName}</p>
+                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{formatFileSize(att.fileSize)}</p>
                     </div>
-                    <Download size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                  </a>
+                    <Download size={14} style={{ color: 'var(--text-muted)' }} />
+                  </div>
+                ) : isAudio(att.mimeType) ? (
+                  <div
+                    key={att._id || idx}
+                    className="file-card"
+                    onClick={() => onOpenFilePreview?.(att, message.attachments)}
+                  >
+                    <Music size={24} style={{ color: 'var(--accent-green)', flexShrink: 0 }} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{att.originalName}</p>
+                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{formatFileSize(att.fileSize)}</p>
+                    </div>
+                    <Download size={14} style={{ color: 'var(--text-muted)' }} />
+                  </div>
+                ) : (
+                  <div
+                    key={att._id || idx}
+                    className="file-card"
+                    onClick={() => onOpenFilePreview?.(att, message.attachments)}
+                  >
+                    {(() => { const FIcon = fileIcon(att.mimeType); return <FIcon size={24} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} /> })()}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{att.originalName}</p>
+                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{formatFileSize(att.fileSize)}</p>
+                    </div>
+                    <Download size={14} style={{ color: 'var(--text-muted)' }} />
+                  </div>
                 ),
               )}
             </div>
@@ -227,12 +269,12 @@ export default function MessageItem({ message, isGrouped, onOpenThread }) {
                 <button
                   key={reaction.emoji}
                   onClick={() => handleReaction(reaction.emoji)}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer transition-colors"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer transition-all"
                   style={{
                     background: reaction.users?.includes(user?._id)
                       ? 'rgba(18, 100, 163, 0.3)'
                       : 'var(--bg-hover)',
-                    border: `1px solid ${reaction.users?.includes(user?._id) ? 'var(--accent-primary)' : 'var(--border-primary)'}`,
+                    border: `1px solid ${reaction.users?.includes(user?._id) ? 'var(--accent-primary)' : 'var(--border-secondary)'}`,
                     color: 'var(--text-primary)',
                   }}
                 >
@@ -246,11 +288,8 @@ export default function MessageItem({ message, isGrouped, onOpenThread }) {
           {message.replyCount > 0 && (
             <button
               onClick={() => onOpenThread?.({ rootMessageId: message._id, channelId: message.channelId })}
-              className="flex items-center gap-1.5 mt-1.5 text-xs cursor-pointer hover:underline py-1 px-2 rounded-md transition-colors"
-              style={{
-                color: 'var(--text-link)',
-                background: 'transparent',
-              }}
+              className="flex items-center gap-1.5 mt-1.5 text-xs cursor-pointer py-1 px-2 rounded-md transition-colors"
+              style={{ color: 'var(--text-link)', background: 'transparent', border: 'none' }}
               onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
@@ -266,10 +305,11 @@ export default function MessageItem({ message, isGrouped, onOpenThread }) {
       {/* Action Bar (hover) */}
       {showActions && !isEditing && (
         <div
-          className="absolute -top-3.5 right-5 flex items-center gap-0.5 px-1 py-0.5 rounded-lg shadow-lg z-10"
+          className="absolute -top-3.5 right-5 flex items-center gap-0.5 px-1 py-0.5 rounded-lg z-10 animate-fade-in-scale"
           style={{
             background: 'var(--bg-secondary)',
             border: '1px solid var(--border-primary)',
+            boxShadow: 'var(--shadow-md)',
           }}
         >
           <ActionButton
@@ -300,24 +340,14 @@ export default function MessageItem({ message, isGrouped, onOpenThread }) {
         </div>
       )}
 
-      {/* Reaction Picker */}
+      {/* Reaction Picker (extended with EmojiPicker) */}
       {showReactionPicker && (
-        <div
-          className="absolute -top-11 right-5 flex gap-1 px-2 py-1.5 rounded-lg shadow-lg z-20"
-          style={{
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-primary)',
-          }}
-        >
-          {QUICK_REACTIONS.map((emoji) => (
-            <button
-              key={emoji}
-              onClick={() => handleReaction(emoji)}
-              className="text-lg p-1 rounded hover:scale-125 transition-transform cursor-pointer"
-            >
-              {emoji}
-            </button>
-          ))}
+        <div className="absolute -top-3 right-5 z-20" style={{ position: 'absolute' }}>
+          <EmojiPicker
+            onSelect={(emoji) => handleReaction(emoji)}
+            onClose={() => setShowReactionPicker(false)}
+            position="top"
+          />
         </div>
       )}
     </div>
@@ -328,7 +358,7 @@ function ActionButton({ icon: Icon, title, onClick, danger }) {
   return (
     <button
       className="p-1.5 rounded-md cursor-pointer transition-colors"
-      style={{ color: danger ? 'var(--accent-red)' : 'var(--text-muted)' }}
+      style={{ color: danger ? 'var(--accent-red)' : 'var(--text-muted)', background: 'transparent', border: 'none' }}
       onClick={onClick}
       title={title}
       onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}

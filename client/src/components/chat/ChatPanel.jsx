@@ -5,8 +5,9 @@ import { joinChannel, leaveChannel } from '../../services/socket'
 import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import ChatHeader from './ChatHeader'
+import TypingIndicator from './TypingIndicator'
 
-export default function ChatPanel({ channelId, onOpenThread, onToggleSearch }) {
+export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onOpenProfile, onOpenFilePreview, onOpenMobileSidebar }) {
   const channel = useChannelStore((s) => s.channels.find((c) => c._id === channelId))
   const { fetchMessages, messagesByChannel } = useChatStore()
   const prevChannelRef = useRef(null)
@@ -14,14 +15,12 @@ export default function ChatPanel({ channelId, onOpenThread, onToggleSearch }) {
   useEffect(() => {
     if (!channelId) return
 
-    // Leave previous channel room, join new
     if (prevChannelRef.current && prevChannelRef.current !== channelId) {
       leaveChannel(prevChannelRef.current)
     }
     joinChannel(channelId)
     prevChannelRef.current = channelId
 
-    // Fetch messages
     fetchMessages(channelId)
 
     return () => {
@@ -33,13 +32,21 @@ export default function ChatPanel({ channelId, onOpenThread, onToggleSearch }) {
 
   return (
     <div className="flex-1 flex flex-col min-w-0" style={{ background: 'var(--bg-primary)' }}>
-      <ChatHeader channel={channel} onToggleSearch={onToggleSearch} />
+      <ChatHeader
+        channel={channel}
+        onToggleSearch={onToggleSearch}
+        onOpenMobileSidebar={onOpenMobileSidebar}
+      />
 
       <MessageList
         messages={messages}
         channelId={channelId}
         onOpenThread={onOpenThread}
+        onOpenProfile={onOpenProfile}
+        onOpenFilePreview={onOpenFilePreview}
       />
+
+      <TypingIndicator channelId={channelId} />
 
       <MessageInput channelId={channelId} />
     </div>

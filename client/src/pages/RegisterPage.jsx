@@ -1,78 +1,68 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
-import { MessageCircle, Eye, EyeOff } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Eye, EyeOff, MessageCircle, ArrowRight, Check } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 export default function RegisterPage() {
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
-  const [loading, setLoading] = useState(false)
-
-  const { register } = useAuthStore()
+  const { register, isLoading, error, clearError } = useAuthStore()
   const navigate = useNavigate()
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' })
+  const [showPassword, setShowPassword] = useState(false)
+  const [success, setSuccess] = useState(false)
+
+  const updateField = (field) => (e) => {
+    setForm((f) => ({ ...f, [field]: e.target.value }))
+    clearError()
+  }
+
+  const passwordChecks = [
+    { label: 'At least 8 characters', ok: form.password.length >= 8 },
+    { label: 'Contains uppercase', ok: /[A-Z]/.test(form.password) },
+    { label: 'Contains number', ok: /\d/.test(form.password) },
+    { label: 'Passwords match', ok: form.password && form.confirmPassword && form.password === form.confirmPassword },
+  ]
+  const allChecks = passwordChecks.every((c) => c.ok)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setError('')
-
-    if (!name.trim() || !email.trim() || !password) {
-      setError('All fields are required')
+    clearError()
+    if (!allChecks) {
+      toast.error('Please fix password requirements')
       return
     }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match')
-      return
-    }
-
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters')
-      return
-    }
-
-    setLoading(true)
     try {
-      await register({ name: name.trim(), email: email.trim(), password })
+      await register({ name: form.name, email: form.email, password: form.password })
       setSuccess(true)
-    } catch (err) {
-      setError(err.response?.data?.error?.message || 'Registration failed')
-    } finally {
-      setLoading(false)
+      toast.success('Account created! Check your email.')
+    } catch {
+      // error is set in store
     }
-  }
-
-  const inputStyle = {
-    background: 'var(--bg-input)',
-    border: '1px solid var(--border-primary)',
-    color: 'var(--text-primary)',
   }
 
   if (success) {
     return (
-      <div className="h-full flex items-center justify-center"
-        style={{ background: 'linear-gradient(135deg, var(--bg-sidebar) 0%, var(--bg-primary) 100%)' }}>
-        <div className="w-full max-w-md p-8 rounded-xl text-center"
-          style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
-          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-            style={{ background: 'rgba(34,197,94,0.15)' }}>
-            <span className="text-3xl">✉️</span>
+      <div className="h-full flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+        <div className="text-center max-w-md animate-fade-in-up">
+          <div
+            className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center"
+            style={{ background: 'rgba(0, 122, 90, 0.15)' }}
+          >
+            <Check size={32} style={{ color: 'var(--accent-green)' }} />
           </div>
-          <h2 className="text-xl font-bold mb-2" style={{ color: 'var(--text-white)' }}>
-            Check Your Email
+          <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-white)' }}>
+            Account Created!
           </h2>
-          <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
-            We've sent a verification link to <strong style={{ color: 'var(--text-primary)' }}>{email}</strong>.
-            Please verify your email to activate your account.
+          <p className="mb-6" style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
+            We've sent a verification email to <strong style={{ color: 'var(--text-white)' }}>{form.email}</strong>.
+            Please verify your email to sign in.
           </p>
-          <Link to="/login"
-            className="inline-block px-6 py-2.5 rounded-lg font-medium text-white"
-            style={{ background: 'var(--accent-primary)' }}>
-            Go to Login
+          <Link
+            to="/login"
+            className="btn-primary"
+            style={{ padding: '10px 24px', fontSize: 15, textDecoration: 'none' }}
+          >
+            Go to Sign In
           </Link>
         </div>
       </div>
@@ -80,120 +70,167 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="h-full flex items-center justify-center"
-      style={{ background: 'linear-gradient(135deg, var(--bg-sidebar) 0%, var(--bg-primary) 100%)' }}>
-      <div className="w-full max-w-md p-8 rounded-xl"
-        style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
-
-        {/* Header */}
-        <div className="flex flex-col items-center mb-6">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-            style={{ background: 'var(--accent-primary)' }}>
-            <MessageCircle size={32} color="white" />
+    <div className="h-full flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+      <div className="w-full max-w-md p-6 animate-fade-in-up">
+        {/* Logo */}
+        <div className="flex items-center gap-3 mb-8 justify-center">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ background: 'var(--accent-primary)' }}
+          >
+            <MessageCircle size={22} color="white" />
           </div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-white)' }}>
-            Create Account
-          </h1>
-          <p className="mt-1 text-center text-sm" style={{ color: 'var(--text-secondary)' }}>
-            Join FlowTask Chat
-          </p>
+          <span className="text-xl font-bold" style={{ color: 'var(--text-white)' }}>
+            FlowTask Chat
+          </span>
         </div>
+
+        <h2 className="text-2xl font-bold mb-1 text-center" style={{ color: 'var(--text-white)' }}>
+          Create your account
+        </h2>
+        <p className="mb-6 text-center" style={{ color: 'var(--text-muted)', fontSize: 14 }}>
+          Join your team on FlowTask Chat
+        </p>
 
         {/* Error */}
         {error && (
-          <div className="mb-4 p-3 rounded-lg text-sm"
-            style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--accent-red)', border: '1px solid rgba(239,68,68,0.3)' }}>
+          <div
+            className="mb-4 px-4 py-3 rounded-lg text-sm animate-fade-in"
+            style={{
+              background: 'rgba(224, 30, 90, 0.1)',
+              border: '1px solid rgba(224, 30, 90, 0.3)',
+              color: 'var(--accent-red)',
+            }}
+          >
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1.5"
-              style={{ color: 'var(--text-secondary)' }}>
-              Full Name
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+              Full name
             </label>
             <input
               type="text"
-              value={name}
-              onChange={(e) => { setName(e.target.value); setError('') }}
+              value={form.name}
+              onChange={updateField('name')}
               placeholder="John Doe"
-              className="w-full px-4 py-2.5 rounded-lg outline-none text-sm"
-              style={inputStyle}
-              autoFocus
+              className="input-field"
+              maxLength={30}
+              required
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1.5"
-              style={{ color: 'var(--text-secondary)' }}>
-              Email
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+              Email address
             </label>
             <input
               type="email"
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); setError('') }}
-              placeholder="you@example.com"
-              className="w-full px-4 py-2.5 rounded-lg outline-none text-sm"
-              style={inputStyle}
+              value={form.email}
+              onChange={updateField('email')}
+              placeholder="you@company.com"
+              className="input-field"
+              required
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1.5"
-              style={{ color: 'var(--text-secondary)' }}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
               Password
             </label>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setError('') }}
-                placeholder="Min 8 chars, uppercase, lowercase, number"
-                className="w-full px-4 py-2.5 rounded-lg outline-none text-sm pr-10"
-                style={inputStyle}
+                value={form.password}
+                onChange={updateField('password')}
+                placeholder="Create a strong password"
+                className="input-field"
+                style={{ paddingRight: 40 }}
+                required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
-                style={{ color: 'var(--text-muted)' }}>
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded cursor-pointer"
+                style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1.5"
-              style={{ color: 'var(--text-secondary)' }}>
-              Confirm Password
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+              Confirm password
             </label>
             <input
               type="password"
-              value={confirmPassword}
-              onChange={(e) => { setConfirmPassword(e.target.value); setError('') }}
-              placeholder="Re-enter your password"
-              className="w-full px-4 py-2.5 rounded-lg outline-none text-sm"
-              style={inputStyle}
+              value={form.confirmPassword}
+              onChange={updateField('confirmPassword')}
+              placeholder="Confirm your password"
+              className="input-field"
+              required
             />
           </div>
 
+          {/* Password strength checks */}
+          {form.password && (
+            <div className="mb-4 animate-fade-in">
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {passwordChecks.map((check) => (
+                  <div key={check.label} className="flex items-center gap-1.5">
+                    <div
+                      className="w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                      style={{
+                        background: check.ok ? 'var(--accent-green)' : 'var(--bg-hover)',
+                        transition: 'background var(--transition-fast)',
+                      }}
+                    >
+                      {check.ok && <Check size={9} color="white" />}
+                    </div>
+                    <span
+                      className="text-[11px]"
+                      style={{ color: check.ok ? 'var(--accent-green)' : 'var(--text-muted)' }}
+                    >
+                      {check.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={loading}
-            className="w-full py-2.5 rounded-lg font-medium transition-opacity text-white cursor-pointer disabled:opacity-50 mt-1"
-            style={{ background: 'var(--accent-primary)' }}>
-            {loading ? 'Creating Account...' : 'Create Account'}
+            disabled={isLoading || !allChecks}
+            className="btn-primary w-full"
+            style={{ padding: '10px 16px', fontSize: 15 }}
+          >
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
+                  style={{ borderColor: 'white', borderTopColor: 'transparent' }}
+                />
+                Creating account...
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                Create account
+                <ArrowRight size={16} />
+              </div>
+            )}
           </button>
-
-          <p className="text-sm text-center mt-1" style={{ color: 'var(--text-secondary)' }}>
-            Already have an account?{' '}
-            <Link to="/login" className="font-medium hover:underline"
-              style={{ color: 'var(--accent-primary)' }}>
-              Sign in
-            </Link>
-          </p>
         </form>
+
+        <p className="mt-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+          Already have an account?{' '}
+          <Link to="/login" className="font-medium hover:underline" style={{ color: 'var(--text-link)' }}>
+            Sign in
+          </Link>
+        </p>
       </div>
     </div>
   )

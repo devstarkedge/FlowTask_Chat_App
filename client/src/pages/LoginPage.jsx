@@ -1,231 +1,344 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams, Link } from 'react-router-dom'
+import { useState } from 'react'
 import { useAuthStore } from '../stores/authStore'
-import { MessageCircle, Eye, EyeOff } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Eye, EyeOff, MessageCircle, ArrowRight, Zap, Shield, Users } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 export default function LoginPage() {
-  const [activeTab, setActiveTab] = useState('native')
+  const { loginNative, loginFlowTask, isLoading, error, clearError, flowtaskEnabled } = useAuthStore()
+  const [activeTab, setActiveTab] = useState(flowtaskEnabled ? 'flowtask' : 'native')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [flowtaskToken, setFlowtaskToken] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [flowTaskToken, setFlowTaskToken] = useState('')
-  const [error, setError] = useState('')
-  const [successMsg, setSuccessMsg] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  const { loginNative, loginFlowTask, flowtaskEnabled } = useAuthStore()
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-
-  useEffect(() => {
-    if (searchParams.get('verified') === 'true') {
-      setSuccessMsg('Email verified successfully! You can now log in.')
-    }
-  }, [searchParams])
 
   const handleNativeLogin = async (e) => {
     e.preventDefault()
-    if (!email.trim() || !password.trim()) {
-      setError('Please enter email and password')
-      return
-    }
-    setLoading(true)
-    setError('')
+    clearError()
     try {
-      await loginNative({ email: email.trim(), password })
-      navigate('/chat')
-    } catch (err) {
-      setError(err.response?.data?.error?.message || 'Login failed')
-    } finally {
-      setLoading(false)
+      await loginNative({ email, password })
+      toast.success('Welcome back!')
+    } catch {
+      // error handled in store
     }
   }
 
   const handleFlowTaskLogin = async (e) => {
     e.preventDefault()
-    if (!flowTaskToken.trim()) {
-      setError('Please enter your FlowTask token')
+    clearError()
+    if (!flowtaskToken.trim()) {
+      toast.error('Please enter your FlowTask token')
       return
     }
-    setLoading(true)
-    setError('')
     try {
-      await loginFlowTask(flowTaskToken.trim())
-      navigate('/chat')
-    } catch (err) {
-      setError(err.response?.data?.error?.message || 'FlowTask authentication failed')
-    } finally {
-      setLoading(false)
+      await loginFlowTask(flowtaskToken.trim())
+      toast.success('FlowTask login successful!')
+    } catch {
+      // error handled in store
     }
   }
 
-  const inputStyle = (hasError) => ({
-    background: 'var(--bg-input)',
-    border: `1px solid ${hasError ? 'var(--accent-red)' : 'var(--border-primary)'}`,
-    color: 'var(--text-primary)',
-  })
-
   return (
-    <div className="h-full flex items-center justify-center"
-      style={{ background: 'linear-gradient(135deg, var(--bg-sidebar) 0%, var(--bg-primary) 100%)' }}>
-      <div className="w-full max-w-md p-8 rounded-xl"
-        style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
-
-        {/* Header */}
-        <div className="flex flex-col items-center mb-6">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-            style={{ background: 'var(--accent-primary)' }}>
-            <MessageCircle size={32} color="white" />
+    <div
+      className="h-full flex"
+      style={{ background: 'var(--bg-primary)' }}
+    >
+      {/* Left Panel — Branding */}
+      <div
+        className="hidden lg:flex flex-col justify-between p-10"
+        style={{
+          width: '45%',
+          background: 'linear-gradient(135deg, #0f1922 0%, #0d2137 50%, #1a1d21 100%)',
+          borderRight: '1px solid var(--border-secondary)',
+        }}
+      >
+        <div>
+          {/* Logo */}
+          <div className="flex items-center gap-3 mb-12">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: 'var(--accent-primary)' }}
+            >
+              <MessageCircle size={22} color="white" />
+            </div>
+            <span
+              className="text-xl font-bold"
+              style={{ color: 'var(--text-white)' }}
+            >
+              FlowTask Chat
+            </span>
           </div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-white)' }}>
-            FlowTask Chat
+
+          {/* Headline */}
+          <h1
+            className="text-4xl font-bold leading-tight mb-4"
+            style={{ color: 'var(--text-white)' }}
+          >
+            Enterprise
+            <br />
+            Communication
+            <br />
+            <span style={{ color: 'var(--accent-primary)' }}>Reimagined.</span>
           </h1>
-          <p className="mt-1 text-center text-sm" style={{ color: 'var(--text-secondary)' }}>
-            Sign in to your account
+
+          <p
+            className="text-lg leading-relaxed mb-10"
+            style={{ color: 'var(--text-secondary)', maxWidth: 400 }}
+          >
+            Real-time messaging platform built for teams that use FlowTask.
+            Project-aware channels, instant notifications, and seamless integration.
           </p>
+
+          {/* Features */}
+          <div className="flex flex-col gap-4">
+            <FeatureItem
+              icon={Zap}
+              title="Real-Time Messaging"
+              desc="Instant delivery with WebSocket technology"
+            />
+            <FeatureItem
+              icon={Shield}
+              title="Enterprise Security"
+              desc="JWT auth, RBAC, and HMAC verification"
+            />
+            <FeatureItem
+              icon={Users}
+              title="Project Channels"
+              desc="Auto-created from FlowTask projects"
+            />
+          </div>
         </div>
 
-        {/* Success Message */}
-        {successMsg && (
-          <div className="mb-4 p-3 rounded-lg text-sm"
-            style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}>
-            {successMsg}
-          </div>
-        )}
+        <p style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+          © {new Date().getFullYear()} FlowTask Chat · Enterprise Edition
+        </p>
+      </div>
 
-        {/* Tabs (only show if FlowTask enabled) */}
-        {flowtaskEnabled && (
-          <div className="flex mb-6 rounded-lg overflow-hidden"
-            style={{ background: 'var(--bg-input)', border: '1px solid var(--border-primary)' }}>
-            <button
-              onClick={() => { setActiveTab('native'); setError('') }}
-              className="flex-1 py-2.5 text-sm font-medium transition-colors cursor-pointer"
-              style={{
-                background: activeTab === 'native' ? 'var(--accent-primary)' : 'transparent',
-                color: activeTab === 'native' ? 'white' : 'var(--text-secondary)',
-              }}>
-              Chat Account
-            </button>
-            <button
-              onClick={() => { setActiveTab('flowtask'); setError('') }}
-              className="flex-1 py-2.5 text-sm font-medium transition-colors cursor-pointer"
-              style={{
-                background: activeTab === 'flowtask' ? 'var(--accent-primary)' : 'transparent',
-                color: activeTab === 'flowtask' ? 'white' : 'var(--text-secondary)',
-              }}>
-              FlowTask SSO
-            </button>
+      {/* Right Panel — Login Form */}
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="w-full max-w-md animate-fade-in-up">
+          {/* Mobile Logo */}
+          <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: 'var(--accent-primary)' }}
+            >
+              <MessageCircle size={22} color="white" />
+            </div>
+            <span className="text-xl font-bold" style={{ color: 'var(--text-white)' }}>
+              FlowTask Chat
+            </span>
           </div>
-        )}
 
-        {/* Error */}
-        {error && (
-          <div className="mb-4 p-3 rounded-lg text-sm"
-            style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--accent-red)', border: '1px solid rgba(239,68,68,0.3)' }}>
-            {error}
-          </div>
-        )}
+          <h2
+            className="text-2xl font-bold mb-1"
+            style={{ color: 'var(--text-white)' }}
+          >
+            Welcome back
+          </h2>
+          <p className="mb-6" style={{ color: 'var(--text-muted)', fontSize: 14 }}>
+            Sign in to continue to your workspace
+          </p>
 
-        {/* Native Login Form */}
-        {activeTab === 'native' && (
-          <form onSubmit={handleNativeLogin} className="flex flex-col gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5"
-                style={{ color: 'var(--text-secondary)' }}>
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); setError('') }}
-                placeholder="you@example.com"
-                className="w-full px-4 py-2.5 rounded-lg outline-none transition-colors text-sm"
-                style={inputStyle(false)}
-                autoFocus
+          {/* Auth Method Tabs */}
+          {flowtaskEnabled && (
+            <div
+              className="flex rounded-lg p-1 mb-6"
+              style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)' }}
+            >
+              <TabButton
+                active={activeTab === 'flowtask'}
+                onClick={() => { setActiveTab('flowtask'); clearError() }}
+                label="FlowTask SSO"
+              />
+              <TabButton
+                active={activeTab === 'native'}
+                onClick={() => { setActiveTab('native'); clearError() }}
+                label="Email & Password"
               />
             </div>
+          )}
 
-            <div>
-              <label className="block text-sm font-medium mb-1.5"
-                style={{ color: 'var(--text-secondary)' }}>
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError('') }}
-                  placeholder="Enter your password"
-                  className="w-full px-4 py-2.5 rounded-lg outline-none transition-colors text-sm pr-10"
-                  style={inputStyle(false)}
+          {/* Error */}
+          {error && (
+            <div
+              className="mb-4 px-4 py-3 rounded-lg text-sm animate-fade-in"
+              style={{
+                background: 'rgba(224, 30, 90, 0.1)',
+                border: '1px solid rgba(224, 30, 90, 0.3)',
+                color: 'var(--accent-red)',
+              }}
+            >
+              {error}
+            </div>
+          )}
+
+          {/* FlowTask SSO Tab */}
+          {activeTab === 'flowtask' && (
+            <form onSubmit={handleFlowTaskLogin} className="animate-fade-in">
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  FlowTask JWT Token
+                </label>
+                <textarea
+                  value={flowtaskToken}
+                  onChange={(e) => setFlowtaskToken(e.target.value)}
+                  placeholder="Paste your FlowTask JWT token here..."
+                  rows={3}
+                  className="input-field"
+                  style={{ resize: 'none', fontFamily: 'monospace', fontSize: 12 }}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
-                  style={{ color: 'var(--text-muted)' }}>
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
+                <p className="mt-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                  Get your token from FlowTask → Settings → API Access
+                </p>
               </div>
-            </div>
 
-            <div className="flex justify-end">
-              <Link to="/forgot-password" className="text-sm hover:underline"
-                style={{ color: 'var(--accent-primary)' }}>
-                Forgot password?
-              </Link>
-            </div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="btn-primary w-full"
+                style={{ padding: '10px 16px', fontSize: 15 }}
+              >
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
+                      style={{ borderColor: 'white', borderTopColor: 'transparent' }}
+                    />
+                    Authenticating...
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    Sign in with FlowTask
+                    <ArrowRight size={16} />
+                  </div>
+                )}
+              </button>
+            </form>
+          )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 rounded-lg font-medium transition-opacity text-white cursor-pointer disabled:opacity-50"
-              style={{ background: 'var(--accent-primary)' }}>
-              {loading ? 'Signing in...' : 'Sign In'}
-            </button>
+          {/* Native Login Tab */}
+          {activeTab === 'native' && (
+            <form onSubmit={handleNativeLogin} className="animate-fade-in">
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  Email address
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  className="input-field"
+                  required
+                  autoComplete="email"
+                />
+              </div>
 
-            <p className="text-sm text-center mt-1" style={{ color: 'var(--text-secondary)' }}>
-              Don't have an account?{' '}
-              <Link to="/register" className="font-medium hover:underline"
-                style={{ color: 'var(--accent-primary)' }}>
-                Create one
-              </Link>
-            </p>
-          </form>
-        )}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                    Password
+                  </label>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs hover:underline"
+                    style={{ color: 'var(--text-link)' }}
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="input-field"
+                    style={{ paddingRight: 40 }}
+                    required
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded cursor-pointer"
+                    style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
 
-        {/* FlowTask SSO Form */}
-        {activeTab === 'flowtask' && flowtaskEnabled && (
-          <form onSubmit={handleFlowTaskLogin} className="flex flex-col gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5"
-                style={{ color: 'var(--text-secondary)' }}>
-                FlowTask Token
-              </label>
-              <input
-                type="password"
-                value={flowTaskToken}
-                onChange={(e) => { setFlowTaskToken(e.target.value); setError('') }}
-                placeholder="eyJhbGciOiJIUzI1NiIs..."
-                className="w-full px-4 py-2.5 rounded-lg outline-none transition-colors text-sm"
-                style={inputStyle(false)}
-                autoFocus
-              />
-            </div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="btn-primary w-full"
+                style={{ padding: '10px 16px', fontSize: 15 }}
+              >
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
+                      style={{ borderColor: 'white', borderTopColor: 'transparent' }}
+                    />
+                    Signing in...
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    Sign in
+                    <ArrowRight size={16} />
+                  </div>
+                )}
+              </button>
+            </form>
+          )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 rounded-lg font-medium transition-opacity text-white cursor-pointer disabled:opacity-50"
-              style={{ background: 'var(--accent-primary)' }}>
-              {loading ? 'Connecting...' : 'Connect via FlowTask'}
-            </button>
+          {/* Register Link */}
+          <p className="mt-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+            Don't have an account?{' '}
+            <Link
+              to="/register"
+              className="font-medium hover:underline"
+              style={{ color: 'var(--text-link)' }}
+            >
+              Create account
+            </Link>
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-            <p className="text-xs text-center mt-2" style={{ color: 'var(--text-muted)' }}>
-              Get your token from FlowTask settings or use the FlowTask login API
-            </p>
-          </form>
-        )}
+function TabButton({ active, onClick, label }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex-1 py-2 rounded-md text-sm font-medium transition-all cursor-pointer"
+      style={{
+        background: active ? 'var(--accent-primary)' : 'transparent',
+        color: active ? 'white' : 'var(--text-muted)',
+        border: 'none',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
+function FeatureItem({ icon: Icon, title, desc }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div
+        className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+        style={{ background: 'rgba(18, 100, 163, 0.15)' }}
+      >
+        <Icon size={18} style={{ color: 'var(--accent-primary)' }} />
+      </div>
+      <div>
+        <p className="text-sm font-semibold" style={{ color: 'var(--text-white)' }}>{title}</p>
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{desc}</p>
       </div>
     </div>
   )

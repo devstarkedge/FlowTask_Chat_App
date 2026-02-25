@@ -1,12 +1,8 @@
 import { useState } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
-import { X, Hash, Lock, Globe } from 'lucide-react'
+import { X, Hash, Lock, Globe, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-/**
- * CreateChannelModal — modal form for creating custom channels.
- * Supports name, description, visibility (public/private).
- */
 export default function CreateChannelModal({ onClose }) {
   const { createChannel } = useChannelStore()
   const [name, setName] = useState('')
@@ -38,29 +34,40 @@ export default function CreateChannelModal({ onClose }) {
     }
   }
 
+  const slugPreview = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .slice(0, 80)
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.6)' }}
+      className="modal-overlay"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div
-        className="rounded-xl shadow-2xl w-full max-w-md mx-4"
-        style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}
-      >
+      <div className="modal-content w-full max-w-md mx-4">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border-secondary)' }}>
-          <h2 className="text-lg font-bold" style={{ color: 'var(--text-white)' }}>
-            Create a channel
-          </h2>
+        <div
+          className="flex items-center justify-between px-5 py-4"
+          style={{ borderBottom: '1px solid var(--border-secondary)' }}
+        >
+          <div>
+            <h2 className="text-lg font-bold" style={{ color: 'var(--text-white)' }}>
+              Create a channel
+            </h2>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+              Channels are where your team communicates
+            </p>
+          </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md cursor-pointer transition-colors"
-            style={{ color: 'var(--text-muted)' }}
+            className="p-1.5 rounded-md cursor-pointer transition-colors"
+            style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
             onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
@@ -68,10 +75,20 @@ export default function CreateChannelModal({ onClose }) {
         <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
           {/* Channel Name */}
           <div>
-            <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+            <label
+              className="block text-xs font-semibold mb-1.5 uppercase tracking-wide"
+              style={{ color: 'var(--text-secondary)' }}
+            >
               Channel Name
             </label>
-            <div className="flex items-center gap-2 rounded-md px-3 py-2" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-primary)' }}>
+            <div
+              className="flex items-center gap-2 rounded-md px-3 py-2"
+              style={{
+                background: 'var(--bg-input)',
+                border: '1px solid var(--border-primary)',
+                transition: 'border-color var(--transition-fast)',
+              }}
+            >
               <Hash size={16} style={{ color: 'var(--text-muted)' }} />
               <input
                 type="text"
@@ -84,15 +101,25 @@ export default function CreateChannelModal({ onClose }) {
                 style={{ color: 'var(--text-primary)' }}
               />
             </div>
-            <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
-              {name.length}/80 characters
-            </p>
+            <div className="flex items-center justify-between mt-1">
+              {slugPreview && (
+                <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                  Slug: <span style={{ color: 'var(--text-secondary)' }}>#{slugPreview}</span>
+                </p>
+              )}
+              <p className="text-[11px] ml-auto" style={{ color: 'var(--text-muted)' }}>
+                {name.length}/80
+              </p>
+            </div>
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>
-              Description <span className="font-normal">(optional)</span>
+            <label
+              className="block text-xs font-semibold mb-1.5 uppercase tracking-wide"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              Description <span className="font-normal opacity-60">(optional)</span>
             </label>
             <textarea
               value={description}
@@ -100,60 +127,36 @@ export default function CreateChannelModal({ onClose }) {
               placeholder="What is this channel about?"
               maxLength={500}
               rows={2}
-              className="w-full bg-transparent border-none outline-none text-sm rounded-md px-3 py-2 resize-none"
-              style={{ background: 'var(--bg-input)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
+              className="input-field resize-none"
+              style={{ fontSize: 13 }}
             />
           </div>
 
           {/* Visibility */}
           <div>
-            <label className="block text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-wide"
+              style={{ color: 'var(--text-secondary)' }}
+            >
               Visibility
             </label>
             <div className="space-y-2">
-              <label
-                className="flex items-center gap-3 px-3 py-2.5 rounded-md cursor-pointer transition-colors"
-                style={{
-                  background: visibility === 'public' ? 'var(--bg-active)' : 'transparent',
-                  border: visibility === 'public' ? '1px solid var(--accent-primary)' : '1px solid transparent',
-                }}
-              >
-                <input
-                  type="radio"
-                  name="visibility"
-                  value="public"
-                  checked={visibility === 'public'}
-                  onChange={(e) => setVisibility(e.target.value)}
-                  className="hidden"
-                />
-                <Globe size={18} style={{ color: visibility === 'public' ? 'var(--accent-primary)' : 'var(--text-muted)' }} />
-                <div>
-                  <p className="text-sm font-medium" style={{ color: 'var(--text-white)' }}>Public</p>
-                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Anyone in the workspace can view and join</p>
-                </div>
-              </label>
-
-              <label
-                className="flex items-center gap-3 px-3 py-2.5 rounded-md cursor-pointer transition-colors"
-                style={{
-                  background: visibility === 'private' ? 'var(--bg-active)' : 'transparent',
-                  border: visibility === 'private' ? '1px solid var(--accent-primary)' : '1px solid transparent',
-                }}
-              >
-                <input
-                  type="radio"
-                  name="visibility"
-                  value="private"
-                  checked={visibility === 'private'}
-                  onChange={(e) => setVisibility(e.target.value)}
-                  className="hidden"
-                />
-                <Lock size={18} style={{ color: visibility === 'private' ? 'var(--accent-primary)' : 'var(--text-muted)' }} />
-                <div>
-                  <p className="text-sm font-medium" style={{ color: 'var(--text-white)' }}>Private</p>
-                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Only invited members can access</p>
-                </div>
-              </label>
+              <VisibilityOption
+                icon={Globe}
+                label="Public"
+                description="Anyone in the workspace can view and join"
+                value="public"
+                selected={visibility === 'public'}
+                onSelect={setVisibility}
+              />
+              <VisibilityOption
+                icon={Lock}
+                label="Private"
+                description="Only invited members can access"
+                value="private"
+                selected={visibility === 'private'}
+                onSelect={setVisibility}
+              />
             </div>
           </div>
 
@@ -162,22 +165,67 @@ export default function CreateChannelModal({ onClose }) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-md text-sm font-medium cursor-pointer transition-colors"
-              style={{ color: 'var(--text-secondary)', background: 'var(--bg-hover)' }}
+              className="btn-ghost"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!name.trim() || name.trim().length < 2 || isSubmitting}
-              className="px-4 py-2 rounded-md text-sm font-bold cursor-pointer transition-colors disabled:opacity-40"
-              style={{ background: 'var(--accent-green)', color: 'white' }}
+              className="btn-primary"
             >
-              {isSubmitting ? 'Creating...' : 'Create Channel'}
+              {isSubmitting ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 size={14} className="animate-spin" />
+                  Creating...
+                </div>
+              ) : (
+                'Create Channel'
+              )}
             </button>
           </div>
         </form>
       </div>
     </div>
+  )
+}
+
+function VisibilityOption({ icon: Icon, label, description, value, selected, onSelect }) {
+  return (
+    <label
+      className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all"
+      style={{
+        background: selected ? 'rgba(18,100,163,0.1)' : 'transparent',
+        border: `1px solid ${selected ? 'var(--accent-primary)' : 'var(--border-secondary)'}`,
+      }}
+    >
+      <input
+        type="radio"
+        name="visibility"
+        value={value}
+        checked={selected}
+        onChange={() => onSelect(value)}
+        className="hidden"
+      />
+      <div
+        className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
+        style={{
+          background: selected ? 'rgba(18,100,163,0.15)' : 'var(--bg-hover)',
+        }}
+      >
+        <Icon
+          size={16}
+          style={{ color: selected ? 'var(--accent-primary)' : 'var(--text-muted)' }}
+        />
+      </div>
+      <div>
+        <p className="text-sm font-medium" style={{ color: 'var(--text-white)' }}>
+          {label}
+        </p>
+        <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          {description}
+        </p>
+      </div>
+    </label>
   )
 }

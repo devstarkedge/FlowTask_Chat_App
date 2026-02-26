@@ -138,6 +138,8 @@ export const messageAPI = {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 60000,
   }),
+  // Direct Cloudinary upload support
+  getUploadSignature: (channelId) => api.post(`/channels/${channelId}/upload/sign`),
 }
 
 // ─── Threads ─────────────────────────────────────────────────────────────

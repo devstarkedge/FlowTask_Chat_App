@@ -95,6 +95,11 @@ const messageSchema = new Schema({
     ref: 'ChatUser',
     required: true,
   },
+  // Denormalized sender snapshot — avoids populate on reads
+  senderSnapshot: {
+    name: { type: String },
+    avatar: { type: String, default: null },
+  },
   content: {
     type: String,
     maxlength: 10000,

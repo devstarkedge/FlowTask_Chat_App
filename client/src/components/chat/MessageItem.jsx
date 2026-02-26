@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, memo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { useAuthStore } from '../../stores/authStore'
 import { format } from 'date-fns'
@@ -42,18 +42,36 @@ function fileIcon(mimeType) {
   return File
 }
 
-export default function MessageItem({ message, compact, onOpenThread, onOpenProfile, onOpenFilePreview }) {
+const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, onOpenProfile, onOpenFilePreview }) {
   const { user } = useAuthStore()
-  const { addReaction, removeReaction, editMessage, deleteMessage } = useChatStore()
+  const { addReaction, removeReaction, editMessage, deleteMessage, retryMessage } = useChatStore()
   const [showActions, setShowActions] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(message.content)
   const [showReactionPicker, setShowReactionPicker] = useState(false)
+  const messageRef = useRef(null)
+
+  // Close action bar + reaction picker when clicking outside the message
+  useEffect(() => {
+    if (!showReactionPicker) return
+    const handleClickOutside = (e) => {
+      if (messageRef.current && !messageRef.current.contains(e.target)) {
+        setShowReactionPicker(false)
+        setShowActions(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showReactionPicker])
 
   const isOwn = message.authorId?._id === user?._id || message.authorId === user?._id
   const isSystem = message.contentType === 'system' && !message.activityMeta
-  const authorName = message.authorId?.name || 'FlowTask Bot'
-  const authorData = typeof message.authorId === 'object' ? message.authorId : null
+  const isPending = message.pending === true
+  const isFailed = message.failed === true
+  // Prefer senderSnapshot for display (denormalized), fall back to populated authorId
+  const authorName = message.senderSnapshot?.name || message.authorId?.name || 'FlowTask Bot'
+  const authorAvatar = message.senderSnapshot?.avatar || (typeof message.authorId === 'object' ? message.authorId?.avatar : null)
+  const authorData = typeof message.authorId === 'object' ? message.authorId : { _id: message.authorId, name: authorName, avatar: authorAvatar }
   const time = format(new Date(message.createdAt), 'h:mm a')
 
   const handleEdit = () => {
@@ -65,7 +83,7 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
 
   const handleReaction = (emoji) => {
     const existing = message.reactions?.find(
-      (r) => r.emoji === emoji && r.users?.includes(user?._id),
+      (r) => r.emoji === emoji && (r.users?.includes(user?._id) || r.userIds?.some(id => id?.toString() === user?._id)),
     )
     if (existing) {
       removeReaction(message._id, emoji)
@@ -94,13 +112,20 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
 
   return (
     <div
+      ref={messageRef}
       className="relative group"
       style={{
         background: showActions ? 'var(--bg-hover)' : 'transparent',
         transition: 'background var(--transition-fast)',
+        opacity: isPending ? 0.6 : isFailed ? 0.5 : 1,
       }}
       onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => { setShowActions(false); setShowReactionPicker(false) }}
+      onMouseLeave={() => {
+        // Don't close the action bar if the reaction picker is open
+        if (!showReactionPicker) {
+          setShowActions(false)
+        }
+      }}
     >
       <div className={`flex gap-2.5 px-5 ${compact ? 'py-0.5' : 'pt-2 pb-0.5'}`}>
         {/* Avatar / Time gutter */}
@@ -112,7 +137,7 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
             <Avatar
               member={{
                 name: authorName,
-                avatar: authorData?.avatar,
+                avatar: authorAvatar,
                 onlineStatus: 'offline',
               }}
               size={36}
@@ -188,6 +213,12 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
                 Enter to save · Escape to cancel
               </p>
             </div>
+          ) : message.htmlContent && message.htmlContent !== message.content ? (
+            <div
+              className="message-content text-[15px] leading-relaxed"
+              style={{ color: 'var(--text-primary)' }}
+              dangerouslySetInnerHTML={{ __html: message.htmlContent }}
+            />
           ) : (
             <div
               className="message-content text-[15px] leading-relaxed"
@@ -195,6 +226,29 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
             >
               {message.content}
             </div>
+          )}
+
+          {/* Failed message indicator */}
+          {isFailed && (
+            <div className="flex items-center gap-2 mt-1">
+              <span style={{ fontSize: 12, color: 'var(--accent-red)' }}>Failed to send</span>
+              <button
+                onClick={() => retryMessage(message._id, message.channelId)}
+                className="text-xs cursor-pointer px-2 py-0.5 rounded"
+                style={{
+                  color: 'var(--text-link)',
+                  background: 'transparent',
+                  border: '1px solid var(--border-secondary)',
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {/* Pending indicator */}
+          {isPending && !isFailed && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'inline-block' }}>Sending...</span>
           )}
 
           {/* Attachments */}
@@ -269,22 +323,25 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
           {/* Reactions */}
           {message.reactions?.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
-              {message.reactions.map((reaction) => (
+              {message.reactions.map((reaction) => {
+                const hasReacted = reaction.users?.includes(user?._id) || reaction.userIds?.some(id => id?.toString() === user?._id)
+                return (
                 <button
                   key={reaction.emoji}
                   onClick={() => handleReaction(reaction.emoji)}
                   className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer transition-all"
                   style={{
-                    background: reaction.users?.includes(user?._id)
+                    background: hasReacted
                       ? 'rgba(18, 100, 163, 0.3)'
                       : 'var(--bg-hover)',
-                    border: `1px solid ${reaction.users?.includes(user?._id) ? 'var(--accent-primary)' : 'var(--border-secondary)'}`,
+                    border: `1px solid ${hasReacted ? 'var(--accent-primary)' : 'var(--border-secondary)'}`,
                     color: 'var(--text-primary)',
                   }}
                 >
-                  {reaction.emoji} {reaction.users?.length || 0}
+                  {reaction.emoji} {reaction.users?.length || reaction.count || 0}
                 </button>
-              ))}
+                )
+              })}
             </div>
           )}
 
@@ -307,7 +364,7 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
       </div>
 
       {/* Action Bar (hover) */}
-      {showActions && !isEditing && (
+      {(showActions || showReactionPicker) && !isEditing && !isPending && !isFailed && (
         <div
           className="absolute -top-3.5 right-5 flex items-center gap-0.5 px-1 py-0.5 rounded-lg z-10 animate-fade-in-scale"
           style={{
@@ -327,19 +384,20 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
             onClick={() => onOpenThread?.({ rootMessageId: message._id, channelId: message.channelId })}
           />
           {isOwn && (
-            <ActionButton
-              icon={Edit}
-              title="Edit"
-              onClick={() => { setEditContent(message.content); setIsEditing(true) }}
-            />
-          )}
-          {isOwn && (
-            <ActionButton
-              icon={Trash2}
-              title="Delete"
-              danger
-              onClick={() => deleteMessage(message._id, message.channelId)}
-            />
+            <>
+              <div style={{ width: 1, height: 16, background: 'var(--border-secondary)', margin: '0 2px' }} />
+              <ActionButton
+                icon={Edit}
+                title="Edit"
+                onClick={() => { setEditContent(message.content); setIsEditing(true) }}
+              />
+              <ActionButton
+                icon={Trash2}
+                title="Delete"
+                danger
+                onClick={() => deleteMessage(message._id, message.channelId)}
+              />
+            </>
           )}
         </div>
       )}
@@ -348,15 +406,33 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
       {showReactionPicker && (
         <div className="absolute -top-3 right-5 z-20" style={{ position: 'absolute' }}>
           <EmojiPicker
-            onSelect={(emoji) => handleReaction(emoji)}
-            onClose={() => setShowReactionPicker(false)}
+            onSelect={(emoji) => {
+              handleReaction(emoji)
+              setShowActions(false)
+            }}
+            onClose={() => {
+              setShowReactionPicker(false)
+              setShowActions(false)
+            }}
             position="top"
           />
         </div>
       )}
     </div>
   )
-}
+}, (prev, next) => {
+  return prev.message._id === next.message._id
+    && prev.message.content === next.message.content
+    && prev.message.reactions === next.message.reactions
+    && prev.message.isEdited === next.message.isEdited
+    && prev.message.isPinned === next.message.isPinned
+    && prev.message.replyCount === next.message.replyCount
+    && prev.message.pending === next.message.pending
+    && prev.message.failed === next.message.failed
+    && prev.compact === next.compact
+})
+
+export default MessageItem
 
 function ActionButton({ icon: Icon, title, onClick, danger }) {
   return (

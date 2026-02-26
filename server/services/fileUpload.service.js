@@ -4,6 +4,7 @@ import fs from 'fs';
 import FileAsset from '../modules/files/FileAsset.model.js';
 import env from '../config/environment.js';
 import logger from '../utils/logger.js';
+import { logUploadFailure } from '../utils/performanceLogger.js';
 
 cloudinary.config({
   cloud_name: env.CLOUDINARY_CLOUD_NAME,
@@ -12,7 +13,7 @@ cloudinary.config({
 });
 
 logger.info('[Cloudinary] Config:', {
-  cloud_name: env.CLOUDINARY_NAME ? 'SET' : 'MISSING',
+  cloud_name: env.CLOUDINARY_CLOUD_NAME ? 'SET' : 'MISSING',
   api_key: env.CLOUDINARY_API_KEY ? 'SET' : 'MISSING',
   has_secret: !!env.CLOUDINARY_API_SECRET
 });
@@ -99,6 +100,7 @@ class FileUploadService {
         await this.handleUpload(job.assetId, job.file);
       } catch (error) {
         logger.error(`[FileUploadService] Upload failed for asset ${job.assetId}:`, error);
+        logUploadFailure(job.assetId?.toString(), error);
       }
     }
 

@@ -38,6 +38,7 @@ export const sendMessageSchema = z.object({
     })
     .optional(),
   threadId: z.string().optional(),
+  tempId: z.string().max(100).optional(),
 }).refine(
   (data) => data.content || (data.attachments && data.attachments.length > 0) || (data.fileReferences && data.fileReferences.length > 0),
   { message: 'Message must have content or attachments' },

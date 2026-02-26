@@ -1,15 +1,21 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import { messageAPI, botAPI } from '../services/api'
+import { messageAPI, threadAPI, botAPI } from '../services/api'
+import { useAuthStore } from './authStore'
 import toast from 'react-hot-toast'
 
-export const useChatStore = create(
-  persist(
-    (set, get) => ({
+export const useChatStore = create((set, get) => ({
   // Messages keyed by channelId
   messagesByChannel: {},
   hasMore: {},
   isLoadingMessages: false,
+
+  // Thread replies keyed by rootMessageId
+  threadRepliesByRoot: {},
+  threadHasMore: {},
+  isLoadingThread: false,
+
+  // Debounce guard for pagination fetches
+  _fetchingChannels: new Set(),
 
   // Typing indicators keyed by channelId → { userId: name }
   typingByChannel: {},
@@ -22,6 +28,12 @@ export const useChatStore = create(
 
   // ─── Messages ────────────────────────────────────────────────────────
   fetchMessages: async (channelId, options = {}) => {
+    // Debounce guard: prevent duplicate fetches for the same channel
+    const fetchKey = `${channelId}-${options.cursor || 'initial'}`
+    const fetching = get()._fetchingChannels
+    if (fetching.has(fetchKey)) return
+    fetching.add(fetchKey)
+
     set({ isLoadingMessages: true })
     try {
       const { data } = await messageAPI.list(channelId, options)
@@ -32,7 +44,6 @@ export const useChatStore = create(
         const existingMessages = state.messagesByChannel[channelId] || []
         
         // Defensive fix: Ensure incoming messages are always Oldest -> Newest
-        // (Bypasses the need for backend restart if message.repository hasn't reloaded)
         const sortedIncoming = [...messages].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
         
         let merged
@@ -63,25 +74,94 @@ export const useChatStore = create(
     } catch (error) {
       set({ isLoadingMessages: false })
       console.error('Failed to fetch messages:', error)
+    } finally {
+      fetching.delete(fetchKey)
     }
   },
 
+  /**
+   * Send a message with optimistic UI.
+   * Flow: generate tempId → show instantly → send to server → reconcile on ACK
+   */
   sendMessage: async (channelId, content, options = {}) => {
     try {
-      // Check if it's a slash command
+      // Check if it's a slash command (not optimistic)
       if (content.trim().startsWith('/flowtask')) {
         const command = content.trim().replace(/^\/flowtask\s*/i, '')
         const { data } = await botAPI.command(command, channelId)
-        // Bot response is returned via system message
         return data.data
       }
 
+      const user = useAuthStore.getState().user
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const isThreadReply = !!options.threadId
+
+      // Create optimistic message to show immediately
+      const optimisticMessage = {
+        _id: tempId,
+        channelId,
+        content,
+        htmlContent: options.htmlContent || content,
+        contentType: 'text',
+        authorId: user,
+        senderSnapshot: { name: user?.name || 'You', avatar: user?.avatar || null },
+        attachments: [],
+        fileReferences: [],
+        mentions: [],
+        reactions: [],
+        replyCount: 0,
+        isEdited: false,
+        isPinned: false,
+        isDeleted: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        pending: true,
+        failed: false,
+        threadId: options.threadId || null,
+      }
+
+      // Show optimistic message immediately — thread replies go to thread store
+      if (isThreadReply) {
+        get().addThreadReply(options.threadId, optimisticMessage)
+      } else {
+        get().addMessage(optimisticMessage)
+      }
+
+      // Send to server with tempId for ACK reconciliation
       const { data } = await messageAPI.send(channelId, {
         content,
+        htmlContent: options.htmlContent || undefined,
+        tempId,
         ...options,
       })
-      return data.data.message
+
+      // Server ACK will arrive via socket and reconcile via reconcileMessage()
+      // But if ACK hasn't arrived yet, reconcile from HTTP response
+      const serverMessage = data.data.message
+      if (isThreadReply) {
+        get().reconcileThreadReply(options.threadId, tempId, serverMessage)
+        // Increment reply count on root message in main chat
+        get().incrementReplyCount(options.threadId, channelId)
+      } else {
+        get().reconcileMessage(tempId, serverMessage)
+      }
+
+      return serverMessage
     } catch (error) {
+      // Mark the optimistic message as failed
+      if (options.threadId) {
+        const threadReplies = get().threadRepliesByRoot[options.threadId] || []
+        const failedMsg = threadReplies.find(m => m.pending && m._id?.startsWith('temp-'))
+        if (failedMsg) {
+          get().markThreadReplyFailed(failedMsg._id, options.threadId)
+        }
+      } else {
+        const tempMessages = (get().messagesByChannel[channelId] || [])
+        const failedMsg = tempMessages.find(m => m.pending && m._id?.startsWith('temp-'))
+        if (failedMsg) {
+          get().markMessageFailed(failedMsg._id, channelId)
+        }
+      }
       toast.error('Failed to send message')
       throw error
     }
@@ -132,6 +212,80 @@ export const useChatStore = create(
     })
   },
 
+  /**
+   * Reconcile an optimistic (temp) message with the server-confirmed message.
+   * Replaces tempId with real _id and clears pending state.
+   */
+  reconcileMessage: (tempId, serverMessage) => {
+    if (!tempId || !serverMessage) return
+
+    set((state) => {
+      const channelId = serverMessage.channelId
+      const existing = state.messagesByChannel[channelId] || []
+
+      // Check if already reconciled (edge case: both HTTP response and socket ACK arrive)
+      if (existing.some(m => m._id === serverMessage._id)) {
+        // Just remove the temp message
+        return {
+          messagesByChannel: {
+            ...state.messagesByChannel,
+            [channelId]: existing.filter(m => m._id !== tempId),
+          },
+        }
+      }
+
+      // Replace temp message with server message
+      return {
+        messagesByChannel: {
+          ...state.messagesByChannel,
+          [channelId]: existing.map(m =>
+            m._id === tempId
+              ? { ...serverMessage, pending: false, failed: false }
+              : m,
+          ),
+        },
+      }
+    })
+  },
+
+  /**
+   * Mark a pending message as failed. User can retry later.
+   */
+  markMessageFailed: (tempId, channelId) => {
+    set((state) => {
+      const existing = state.messagesByChannel[channelId] || []
+      return {
+        messagesByChannel: {
+          ...state.messagesByChannel,
+          [channelId]: existing.map(m =>
+            m._id === tempId ? { ...m, pending: false, failed: true } : m,
+          ),
+        },
+      }
+    })
+  },
+
+  /**
+   * Retry sending a failed message.
+   */
+  retryMessage: async (tempId, channelId) => {
+    const messages = get().messagesByChannel[channelId] || []
+    const failedMsg = messages.find(m => m._id === tempId && m.failed)
+    if (!failedMsg) return
+
+    // Remove the failed message
+    get().removeMessage(tempId, channelId)
+
+    // Resend
+    try {
+      await get().sendMessage(channelId, failedMsg.content, {
+        threadId: failedMsg.threadId,
+      })
+    } catch {
+      // Error already handled in sendMessage
+    }
+  },
+
   updateMessage: (message) => {
     set((state) => {
       const channelId = message.channelId
@@ -155,6 +309,117 @@ export const useChatStore = create(
           [channelId]: existing.filter((m) => m._id !== messageId),
         },
       }
+    })
+  },
+
+  // ─── Thread Replies ─────────────────────────────────────────────────
+  fetchThreadReplies: async (rootMessageId, options = {}) => {
+    set({ isLoadingThread: true })
+    try {
+      const { data } = await threadAPI.replies(rootMessageId, options)
+      const items = data.data.items || data.data.messages || []
+      const hasMore = data.data.hasMore ?? false
+
+      set((state) => {
+        const existing = state.threadRepliesByRoot[rootMessageId] || []
+        let merged
+        if (options.cursor) {
+          const existingIds = new Set(existing.map(m => m._id))
+          const unique = items.filter(m => !existingIds.has(m._id))
+          merged = [...existing, ...unique]
+        } else {
+          const freshIds = new Set(items.map(m => m._id))
+          const pendingOnly = existing.filter(m => !freshIds.has(m._id) && m.pending)
+          merged = [...items, ...pendingOnly]
+        }
+        merged.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+
+        return {
+          threadRepliesByRoot: {
+            ...state.threadRepliesByRoot,
+            [rootMessageId]: merged,
+          },
+          threadHasMore: { ...state.threadHasMore, [rootMessageId]: hasMore },
+          isLoadingThread: false,
+        }
+      })
+    } catch (error) {
+      set({ isLoadingThread: false })
+      console.error('Failed to fetch thread replies:', error)
+    }
+  },
+
+  addThreadReply: (rootMessageId, reply) => {
+    set((state) => {
+      const existing = state.threadRepliesByRoot[rootMessageId] || []
+      if (existing.some(m => m._id === reply._id)) return state
+      return {
+        threadRepliesByRoot: {
+          ...state.threadRepliesByRoot,
+          [rootMessageId]: [...existing, reply],
+        },
+      }
+    })
+  },
+
+  reconcileThreadReply: (rootMessageId, tempId, serverReply) => {
+    if (!tempId || !serverReply) return
+    set((state) => {
+      const existing = state.threadRepliesByRoot[rootMessageId] || []
+      if (existing.some(m => m._id === serverReply._id)) {
+        return {
+          threadRepliesByRoot: {
+            ...state.threadRepliesByRoot,
+            [rootMessageId]: existing.filter(m => m._id !== tempId),
+          },
+        }
+      }
+      return {
+        threadRepliesByRoot: {
+          ...state.threadRepliesByRoot,
+          [rootMessageId]: existing.map(m =>
+            m._id === tempId ? { ...serverReply, pending: false, failed: false } : m,
+          ),
+        },
+      }
+    })
+  },
+
+  markThreadReplyFailed: (tempId, rootMessageId) => {
+    set((state) => {
+      const existing = state.threadRepliesByRoot[rootMessageId] || []
+      return {
+        threadRepliesByRoot: {
+          ...state.threadRepliesByRoot,
+          [rootMessageId]: existing.map(m =>
+            m._id === tempId ? { ...m, pending: false, failed: true } : m,
+          ),
+        },
+      }
+    })
+  },
+
+  incrementReplyCount: (rootMessageId, channelId) => {
+    set((state) => {
+      const existing = state.messagesByChannel[channelId] || []
+      return {
+        messagesByChannel: {
+          ...state.messagesByChannel,
+          [channelId]: existing.map(m =>
+            m._id === rootMessageId
+              ? { ...m, replyCount: (m.replyCount || 0) + 1 }
+              : m,
+          ),
+        },
+      }
+    })
+  },
+
+  clearThreadReplies: (rootMessageId) => {
+    set((state) => {
+      const newThreadReplies = { ...state.threadRepliesByRoot }
+      delete newThreadReplies[rootMessageId]
+      return { threadRepliesByRoot: newThreadReplies }
     })
   },
 
@@ -184,11 +449,13 @@ export const useChatStore = create(
           const reactions = [...(m.reactions || [])]
           const existing = reactions.find((r) => r.emoji === emoji)
           if (existing) {
-            if (!existing.users.includes(userId)) {
-              existing.users = [...existing.users, userId]
+            if (!existing.users?.includes(userId) && !existing.userIds?.some(id => id?.toString() === userId)) {
+              existing.users = [...(existing.users || []), userId]
+              existing.userIds = [...(existing.userIds || []), userId]
+              existing.count = (existing.count || 0) + 1
             }
           } else {
-            reactions.push({ emoji, users: [userId] })
+            reactions.push({ emoji, users: [userId], userIds: [userId], count: 1 })
           }
           return { ...m, reactions }
         })
@@ -206,9 +473,14 @@ export const useChatStore = create(
           const reactions = (m.reactions || [])
             .map((r) => {
               if (r.emoji !== emoji) return r
-              return { ...r, users: r.users.filter((u) => u !== userId) }
+              return {
+                ...r,
+                users: (r.users || []).filter((u) => u !== userId),
+                userIds: (r.userIds || []).filter((u) => u?.toString() !== userId),
+                count: Math.max(0, (r.count || 1) - 1),
+              }
             })
-            .filter((r) => r.users.length > 0)
+            .filter((r) => (r.users?.length > 0 || r.count > 0))
           return { ...m, reactions }
         })
       }
@@ -268,10 +540,4 @@ export const useChatStore = create(
   },
 
   clearNotifications: () => set({ notifications: [] }),
-}),
-{
-  name: 'flowtask-chat-storage',
-  partialize: (state) => ({ messagesByChannel: state.messagesByChannel }),
-}
-)
-)
+}))

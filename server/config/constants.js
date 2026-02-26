@@ -108,10 +108,16 @@ export const SYSTEM_CHANNELS = Object.freeze({
 // ─── Socket Events (emitted by chat server) ──────────────────────────────────
 export const SOCKET_EVENTS = Object.freeze({
   // Messages
-  MESSAGE_NEW: 'message:new',
-  MESSAGE_UPDATED: 'message:updated',
-  MESSAGE_DELETED: 'message:deleted',
-  MESSAGE_REACTION: 'message:reaction',
+  MESSAGE_CREATE: 'message:create',
+  MESSAGE_UPDATE: 'message:update',
+  MESSAGE_DELETE: 'message:delete',
+  MESSAGE_ACK: 'message:ack',
+  MESSAGE_PINNED: 'message:pinned',
+  MESSAGE_UNPINNED: 'message:unpinned',
+
+  // Reactions
+  REACTION_ADD: 'reaction:add',
+  REACTION_REMOVE: 'reaction:remove',
 
   // Threads
   THREAD_CREATED: 'thread:created',

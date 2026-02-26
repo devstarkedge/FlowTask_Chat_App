@@ -9,7 +9,7 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
   const { isLoadingMessages, hasMore, fetchMessages } = useChatStore()
   const virtuosoRef = useRef(null)
 
-  // Load more on scroll to top
+  // Load more on scroll to top — with debounce protection
   const loadMore = useCallback(() => {
     if (!hasMore[channelId] || isLoadingMessages || messages.length === 0) return
     const oldest = messages[0]
@@ -99,6 +99,7 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
         startReached={loadMore}
         followOutput={(isAtBottom) => (isAtBottom ? 'smooth' : false)}
         alignToBottom={true}
+        increaseViewportBy={{ top: 400, bottom: 200 }}
         components={{
           Header: () => (
             isLoadingMessages && messages.length > 0 ? (

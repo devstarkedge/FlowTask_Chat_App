@@ -5,6 +5,8 @@ import userRepository from '../users/user.repository.js';
 import { emitToChannel, emitToUser } from '../../sockets/socketManager.js';
 import { sanitizeHtml, stripHtml, truncate, extractMentions } from '../../utils/sanitize.js';
 import { parsePagination, buildCursorFilter, cursorPaginationResponse } from '../../utils/pagination.js';
+import { messageSocketPayload, reactionSocketPayload, deleteSocketPayload } from '../../utils/socketPayload.js';
+import { logMessageLatency, logDeliveryFailure } from '../../utils/performanceLogger.js';
 import logger from '../../utils/logger.js';
 import {
   SOCKET_EVENTS,
@@ -24,6 +26,12 @@ import FileReference from '../files/FileReference.model.js';
  *
  * Spec §6: Messages are chat-OWNED data. Content max 10,000 chars.
  * Reactions limited to ALLOWED_REACTIONS set.
+ *
+ * Enterprise optimizations:
+ *  - Sender denormalization (senderSnapshot) for fast reads
+ *  - Message ACK system with tempId reconciliation
+ *  - Minimal socket payloads via socketPayload utility
+ *  - Performance monitoring via performanceLogger
  */
 
 class MessageService {
@@ -31,8 +39,12 @@ class MessageService {
 
   /**
    * Send a new message to a channel.
+   * Supports optimistic UI via tempId — client generates a temporary ID,
+   * server includes it in the ACK so the client can reconcile.
    */
-  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId }) {
+  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, tempId }) {
+    const startTime = performance.now();
+
     // Validate channel exists and is not archived
     const channel = await channelRepository.findById(channelId);
     if (!channel) throw new NotFoundError('Channel not found');
@@ -49,6 +61,12 @@ class MessageService {
     // Extract mentions
     const mentions = extractMentions(sanitizedContent);
 
+    // Fetch sender data for snapshot denormalization
+    const sender = await userRepository.findById(authorId);
+    const senderSnapshot = sender
+      ? { name: sender.name, avatar: sender.avatar || null }
+      : { name: 'Unknown User', avatar: null };
+
     // Build message data
     const messageData = {
       channelId,
@@ -58,6 +76,7 @@ class MessageService {
       contentType: contentType || MESSAGE_CONTENT_TYPES.TEXT,
       mentions,
       attachments: attachments || [],
+      senderSnapshot,
     };
 
     if (flowTaskRef) {
@@ -117,10 +136,29 @@ class MessageService {
         });
     }
 
-    // Emit to channel (real-time)
-    emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_NEW, {
-      message: populated,
-    });
+    // Build minimal socket payload
+    const socketPayload = messageSocketPayload(populated, { tempId: tempId || null });
+
+    // Emit to channel (real-time) — use MESSAGE_CREATE
+    try {
+      emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, {
+        message: socketPayload,
+      });
+    } catch (err) {
+      logDeliveryFailure(message._id, err);
+    }
+
+    // Emit ACK to the sender specifically (for optimistic UI reconciliation)
+    if (tempId) {
+      try {
+        emitToUser(authorId.toString(), SOCKET_EVENTS.MESSAGE_ACK, {
+          tempId,
+          message: socketPayload,
+        });
+      } catch (err) {
+        logDeliveryFailure(message._id, err);
+      }
+    }
 
     // Update unread counts for other members
     this._incrementUnreadForChannel(channelId, authorId).catch(() => {});
@@ -128,11 +166,15 @@ class MessageService {
     // Notify mentioned users
     this._notifyMentions(mentions, populated, channel).catch(() => {});
 
+    // Log performance
+    logMessageLatency(startTime, message._id.toString(), channelId.toString());
+
     logger.debug('Message sent', {
       messageId: message._id,
       channelId,
       authorId,
       threadId: threadId || null,
+      tempId: tempId || null,
     });
 
     return populated;
@@ -148,6 +190,7 @@ class MessageService {
       content,
       htmlContent: content,
       contentType: MESSAGE_CONTENT_TYPES.SYSTEM,
+      senderSnapshot: { name: 'System', avatar: null },
     };
 
     if (flowTaskRef) {
@@ -159,7 +202,8 @@ class MessageService {
     const preview = truncate(stripHtml(content), 100);
     channelRepository.updateLastMessage(channelId, preview, new Date()).catch(() => {});
 
-    emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_NEW, { message });
+    const socketPayload = messageSocketPayload(message);
+    emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload });
 
     return message;
   }
@@ -170,12 +214,12 @@ class MessageService {
    * Get messages for a channel with cursor-based pagination.
    */
   async getChannelMessages(channelId, query = {}) {
-    const { limit, cursor, direction } = parsePagination(query);
-    const cursorFilter = cursor ? buildCursorFilter(cursor, direction) : {};
+    const { limit, cursor } = parsePagination(query);
+    const direction = query.direction || 'before';
 
     const messages = await messageRepository.getChannelMessages(
       channelId,
-      { limit, cursorFilter },
+      { limit, cursor, direction },
     );
 
     return cursorPaginationResponse(messages, limit, '_id');
@@ -241,9 +285,10 @@ class MessageService {
     });
 
     const populated = await messageRepository.findById(messageId);
+    const socketPayload = messageSocketPayload(populated);
 
-    emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_UPDATED, {
-      message: populated,
+    emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_UPDATE, {
+      message: socketPayload,
     });
 
     return populated;
@@ -263,10 +308,9 @@ class MessageService {
 
     await messageRepository.softDelete(messageId);
 
-    emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_DELETED, {
-      messageId,
-      channelId: message.channelId,
-    });
+    emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_DELETE,
+      deleteSocketPayload({ messageId, channelId: message.channelId }),
+    );
 
     return { messageId };
   }
@@ -282,12 +326,9 @@ class MessageService {
 
     const updated = await messageRepository.addReaction(messageId, userId, emoji);
 
-    emitToChannel(message.channelId.toString(), SOCKET_EVENTS.REACTION_ADDED, {
-      messageId,
-      channelId: message.channelId,
-      userId,
-      emoji,
-    });
+    emitToChannel(message.channelId.toString(), SOCKET_EVENTS.REACTION_ADD,
+      reactionSocketPayload({ messageId, channelId: message.channelId, userId, emoji }),
+    );
 
     return updated;
   }
@@ -301,12 +342,9 @@ class MessageService {
 
     const updated = await messageRepository.removeReaction(messageId, userId, emoji);
 
-    emitToChannel(message.channelId.toString(), SOCKET_EVENTS.REACTION_REMOVED, {
-      messageId,
-      channelId: message.channelId,
-      userId,
-      emoji,
-    });
+    emitToChannel(message.channelId.toString(), SOCKET_EVENTS.REACTION_REMOVE,
+      reactionSocketPayload({ messageId, channelId: message.channelId, userId, emoji }),
+    );
 
     return updated;
   }
@@ -411,7 +449,7 @@ class MessageService {
             channelId: channel._id,
             channelName: channel.name,
             messageId: message._id,
-            authorName: message.authorId?.name || 'System',
+            authorName: message.senderSnapshot?.name || message.authorId?.name || 'System',
             preview: truncate(stripHtml(message.content), 100),
           });
         }

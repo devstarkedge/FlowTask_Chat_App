@@ -24,7 +24,7 @@ export const getMessages = asyncHandler(async (req, res) => {
  * Send a message to a channel.
  */
 export const sendMessage = asyncHandler(async (req, res) => {
-  const { content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId } = req.body;
+  const { content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, tempId } = req.body;
 
   const message = await messageService.sendMessage({
     channelId: req.params.channelId,
@@ -36,6 +36,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
     fileReferences,
     flowTaskRef,
     threadId,
+    tempId,
   });
 
   res.status(201).json({ success: true, data: { message } });

@@ -3,6 +3,7 @@ import tokenService from '../modules/auth/token.service.js';
 import userRepository from '../modules/users/user.repository.js';
 import channelRepository from '../modules/channels/channel.repository.js';
 import logger from '../utils/logger.js';
+import { logSocketReconnect } from '../utils/performanceLogger.js';
 import { SOCKET_EVENTS } from '../config/constants.js';
 
 /**
@@ -13,9 +14,18 @@ import { SOCKET_EVENTS } from '../config/constants.js';
  *   channel-{channelId}        — per-channel messages
  *   department-{departmentId}  — department-scoped events
  *   typing-{channelId}         — ephemeral typing indicators
+ *
+ * Enterprise optimizations:
+ *   - Scoped presence broadcast (only to user's channels, not global)
+ *   - Server-side typing throttle (max 1 emit per 2s per user/channel)
+ *   - Socket reconnect logging for monitoring
  */
 
 let io = null;
+
+// Server-side typing throttle state: Map<`${userId}-${channelId}`, lastEmitTimestamp>
+const typingThrottleMap = new Map();
+const TYPING_THROTTLE_MS = 2000;
 
 /**
  * Initialize Socket.IO with the HTTP server.
@@ -119,10 +129,12 @@ export async function initializeSocket(httpServer, corsOptions) {
     }
 
     // Channel rooms (all channels user belongs to)
+    let userChannelIds = [];
     try {
       const channels = await channelRepository.findByMember(userId);
       for (const channel of channels) {
         socket.join(`channel-${channel._id}`);
+        userChannelIds.push(channel._id.toString());
       }
     } catch (error) {
       logger.error('Failed to join channel rooms', {
@@ -131,13 +143,16 @@ export async function initializeSocket(httpServer, corsOptions) {
       });
     }
 
-    // Broadcast presence
-    io.emit(SOCKET_EVENTS.USER_ONLINE, {
+    // Broadcast presence — SCOPED to user's channels only (not global io.emit)
+    const presencePayload = {
       userId,
       flowTaskUserId: user.flowTaskUserId,
       name: user.name,
       avatar: user.avatar,
-    });
+    };
+    for (const channelId of userChannelIds) {
+      io.to(`channel-${channelId}`).emit(SOCKET_EVENTS.USER_ONLINE, presencePayload);
+    }
 
     // ─── Client Events ───────────────────────────────────────────────
 
@@ -176,8 +191,17 @@ export async function initializeSocket(httpServer, corsOptions) {
       socket.leave(`channel-${channelId}`);
     });
 
-    // Typing indicators (ephemeral, no persistence)
+    // Typing indicators — server-side throttled (max 1 emit per 2s per user/channel)
     socket.on('typing:start', ({ channelId }) => {
+      const throttleKey = `${userId}-${channelId}`;
+      const now = Date.now();
+      const lastEmit = typingThrottleMap.get(throttleKey) || 0;
+
+      if (now - lastEmit < TYPING_THROTTLE_MS) {
+        return; // Skip — throttled
+      }
+      typingThrottleMap.set(throttleKey, now);
+
       socket.to(`channel-${channelId}`).emit(SOCKET_EVENTS.TYPING_START, {
         channelId,
         userId,
@@ -186,6 +210,9 @@ export async function initializeSocket(httpServer, corsOptions) {
     });
 
     socket.on('typing:stop', ({ channelId }) => {
+      const throttleKey = `${userId}-${channelId}`;
+      typingThrottleMap.delete(throttleKey);
+
       socket.to(`channel-${channelId}`).emit(SOCKET_EVENTS.TYPING_STOP, {
         channelId,
         userId,
@@ -195,19 +222,34 @@ export async function initializeSocket(httpServer, corsOptions) {
     // ─── Disconnection ───────────────────────────────────────────────
     socket.on('disconnect', async (reason) => {
       logger.info('Socket disconnected', { userId, socketId: socket.id, reason });
+      logSocketReconnect(userId, socket.id, reason);
 
       const updatedUser = await userRepository.removeSocketId(userId, socket.id);
 
       // Only broadcast offline if all sockets are gone (multi-tab support)
+      // Scoped to user's channels instead of global broadcast
       if (updatedUser && updatedUser.socketIds.length === 0) {
-        io.emit(SOCKET_EVENTS.USER_OFFLINE, {
+        const offlinePayload = {
           userId,
           flowTaskUserId: user.flowTaskUserId,
           lastSeenAt: updatedUser.lastSeenAt,
-        });
+        };
+        for (const channelId of userChannelIds) {
+          io.to(`channel-${channelId}`).emit(SOCKET_EVENTS.USER_OFFLINE, offlinePayload);
+        }
       }
     });
   });
+
+  // Periodically clean up stale typing throttle entries (every 30s)
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, timestamp] of typingThrottleMap.entries()) {
+      if (now - timestamp > 10000) {
+        typingThrottleMap.delete(key);
+      }
+    }
+  }, 30000);
 
   logger.info('Socket.IO initialized');
   return io;

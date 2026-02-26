@@ -2,28 +2,44 @@ import { io } from 'socket.io-client'
 import { useAuthStore } from '../stores/authStore'
 import { useChatStore } from '../stores/chatStore'
 import { useChannelStore } from '../stores/channelStore'
+import { throttle } from '../utils/throttle'
 
 let socket = null
 
 const SOCKET_EVENTS = {
-  MESSAGE_NEW: 'message:new',
-  MESSAGE_UPDATED: 'message:updated',
-  MESSAGE_DELETED: 'message:deleted',
+  // Messages (renamed to enterprise standard)
+  MESSAGE_CREATE: 'message:create',
+  MESSAGE_UPDATE: 'message:update',
+  MESSAGE_DELETE: 'message:delete',
+  MESSAGE_ACK: 'message:ack',
   MESSAGE_PINNED: 'message:pinned',
   MESSAGE_UNPINNED: 'message:unpinned',
-  REACTION_ADDED: 'reaction:added',
-  REACTION_REMOVED: 'reaction:removed',
+
+  // Reactions
+  REACTION_ADD: 'reaction:add',
+  REACTION_REMOVE: 'reaction:remove',
+
+  // Typing
   TYPING_START: 'typing:start',
   TYPING_STOP: 'typing:stop',
-  USER_ONLINE: 'user:online',
-  USER_OFFLINE: 'user:offline',
+
+  // Presence
+  USER_ONLINE: 'presence:online',
+  USER_OFFLINE: 'presence:offline',
+
+  // Channels
   CHANNEL_ADDED: 'channel:added',
   CHANNEL_REMOVED: 'channel:removed',
   CHANNEL_UPDATED: 'channel:updated',
   MEMBER_JOINED: 'channel:member_joined',
   MEMBER_LEFT: 'channel:member_left',
+  CHANNEL_MEMBERS_UPDATED: 'channel:members:updated',
+
+  // Threads
   THREAD_CREATED: 'thread:created',
   THREAD_UPDATED: 'thread:updated',
+
+  // Other
   NOTIFICATION: 'notification',
   UNREAD_UPDATED: 'unread:updated',
 }
@@ -38,6 +54,7 @@ export function connectSocket() {
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
   })
 
   socket.on('connect', () => {
@@ -48,29 +65,59 @@ export function connectSocket() {
     console.log('[Socket] Disconnected:', reason)
   })
 
+  socket.on('reconnect', (attempt) => {
+    console.log('[Socket] Reconnected after', attempt, 'attempts')
+  })
+
   socket.on('connect_error', (err) => {
     console.error('[Socket] Connection error:', err.message)
   })
 
   // ─── Message Events ──────────────────────────────────────────────────
-  socket.on(SOCKET_EVENTS.MESSAGE_NEW, ({ message }) => {
-    useChatStore.getState().addMessage(message)
+  socket.on(SOCKET_EVENTS.MESSAGE_CREATE, ({ message }) => {
+    const currentUserId = useAuthStore.getState().user?._id
+    // Skip if this is our own message (handled via optimistic UI + ACK)
+    if (message.tempId && message.authorId === currentUserId) return
+
+    if (message.threadId) {
+      // Thread reply — route to thread store + update reply count in main chat
+      // We need to figure out the rootMessageId. The server stores threadId as the Thread doc _id,
+      // but the thread was created with rootMessageId = the parent message _id.
+      // For socket events, we use threadId to key the thread replies.
+      const rootMessageId = message.threadId
+      useChatStore.getState().addThreadReply(rootMessageId, message)
+      // Increment reply count on root message in main channel
+      if (message.channelId) {
+        useChatStore.getState().incrementReplyCount(rootMessageId, message.channelId)
+      }
+    } else {
+      useChatStore.getState().addMessage(message)
+    }
   })
 
-  socket.on(SOCKET_EVENTS.MESSAGE_UPDATED, ({ message }) => {
+  socket.on(SOCKET_EVENTS.MESSAGE_ACK, ({ tempId, message }) => {
+    // Reconcile optimistic message with server-confirmed message
+    if (message.threadId) {
+      useChatStore.getState().reconcileThreadReply(message.threadId, tempId, message)
+    } else {
+      useChatStore.getState().reconcileMessage(tempId, message)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.MESSAGE_UPDATE, ({ message }) => {
     useChatStore.getState().updateMessage(message)
   })
 
-  socket.on(SOCKET_EVENTS.MESSAGE_DELETED, ({ messageId, channelId }) => {
+  socket.on(SOCKET_EVENTS.MESSAGE_DELETE, ({ messageId, channelId }) => {
     useChatStore.getState().removeMessage(messageId, channelId)
   })
 
   // ─── Reaction Events ────────────────────────────────────────────────
-  socket.on(SOCKET_EVENTS.REACTION_ADDED, ({ messageId, userId, emoji }) => {
+  socket.on(SOCKET_EVENTS.REACTION_ADD, ({ messageId, userId, emoji }) => {
     useChatStore.getState().addReactionLocal(messageId, userId, emoji)
   })
 
-  socket.on(SOCKET_EVENTS.REACTION_REMOVED, ({ messageId, userId, emoji }) => {
+  socket.on(SOCKET_EVENTS.REACTION_REMOVE, ({ messageId, userId, emoji }) => {
     useChatStore.getState().removeReactionLocal(messageId, userId, emoji)
   })
 
@@ -98,7 +145,6 @@ export function connectSocket() {
 
   // ─── Member Events ──────────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.MEMBER_JOINED, ({ channelId }) => {
-    // Re-fetch members when a member joins the active channel
     const activeId = useChannelStore.getState().activeChannelId
     if (channelId === activeId) {
       useChannelStore.getState().fetchMembers(channelId)
@@ -112,7 +158,7 @@ export function connectSocket() {
     }
   })
 
-  socket.on('channel:members:updated', ({ channelId }) => {
+  socket.on(SOCKET_EVENTS.CHANNEL_MEMBERS_UPDATED, ({ channelId }) => {
     const activeId = useChannelStore.getState().activeChannelId
     if (channelId === activeId) {
       useChannelStore.getState().fetchMembers(channelId)
@@ -148,11 +194,26 @@ export function disconnectSocket() {
   }
 }
 
+// ─── Throttled typing emission (max 1 per 2 seconds) ────────────────────────
+const _throttledTypingEmitters = new Map()
+
 export function emitTypingStart(channelId) {
-  socket?.emit('typing:start', { channelId })
+  if (!_throttledTypingEmitters.has(channelId)) {
+    _throttledTypingEmitters.set(
+      channelId,
+      throttle(() => {
+        socket?.emit('typing:start', { channelId })
+      }, 2000),
+    )
+  }
+  _throttledTypingEmitters.get(channelId)()
 }
 
 export function emitTypingStop(channelId) {
+  // Cancel any pending throttled typing start
+  const throttled = _throttledTypingEmitters.get(channelId)
+  if (throttled) throttled.cancel()
+
   socket?.emit('typing:stop', { channelId })
 }
 

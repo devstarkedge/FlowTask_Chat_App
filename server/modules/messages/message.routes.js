@@ -68,6 +68,7 @@ export default router;
  * To be mounted on the channel router: /api/chat/channels/:channelId
  */
 import { uploadLimiter } from '../../middleware/rateLimiter.js';
+import { getUploadSignature } from '../files/cloudinarySign.controller.js';
 
 export const channelMessageRouter = Router({ mergeParams: true });
 channelMessageRouter.use(protect);
@@ -75,4 +76,6 @@ channelMessageRouter.use(requireChannelAccess());
 channelMessageRouter.get('/messages', getMessages);
 channelMessageRouter.post('/messages', validate({ body: sendMessageSchema }), sendMessage);
 channelMessageRouter.post('/upload', uploadLimiter, uploadMiddleware, handleMulterError, uploadFiles);
+channelMessageRouter.post('/upload/sign', getUploadSignature);
 channelMessageRouter.get('/pins', getPinnedMessages);
+

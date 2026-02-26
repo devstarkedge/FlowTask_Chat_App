@@ -1,21 +1,262 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo, memo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
+import { useChannelStore } from '../../stores/channelStore'
+import { useDraftStore } from '../../stores/draftStore'
 import { messageAPI } from '../../services/api'
 import { emitTypingStart, emitTypingStop } from '../../services/socket'
-import { Send, Paperclip, Smile, Bold, Italic, Code, X, FileText, Image } from 'lucide-react'
+import {
+  Send, Paperclip, Smile, Bold, Italic, Underline, Strikethrough,
+  Code, Braces, List, ListOrdered, Quote, Link, X, FileText, Image,
+  Loader2, Plus, AtSign, Hash, ChevronDown
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import EmojiPicker from './EmojiPicker'
+import MentionDropdown from './MentionDropdown'
+
+// ─── Rich Text Editor Helpers ────────────────────────────────────────────────
+
+function execCmd(command, value = null) {
+  document.execCommand(command, false, value)
+}
+
+function saveSelection() {
+  const sel = window.getSelection()
+  if (sel && sel.rangeCount > 0) {
+    return sel.getRangeAt(0).cloneRange()
+  }
+  return null
+}
+
+function restoreSelection(range) {
+  if (!range) return
+  const sel = window.getSelection()
+  sel.removeAllRanges()
+  sel.addRange(range)
+}
+
+function insertHtmlAtCaret(html) {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return
+  const range = sel.getRangeAt(0)
+  range.deleteContents()
+  const temp = document.createElement('div')
+  temp.innerHTML = html
+  const frag = document.createDocumentFragment()
+  let lastNode
+  while (temp.firstChild) {
+    lastNode = frag.appendChild(temp.firstChild)
+  }
+  range.insertNode(frag)
+  if (lastNode) {
+    const newRange = document.createRange()
+    newRange.setStartAfter(lastNode)
+    newRange.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(newRange)
+  }
+}
+
+function getEditorContent(editorEl) {
+  if (!editorEl) return { html: '', text: '' }
+  const html = editorEl.innerHTML || ''
+  const text = editorEl.textContent || ''
+  // Check if the content is just whitespace or empty tags
+  const cleaned = text.trim()
+  if (!cleaned && !html.includes('<img')) {
+    return { html: '', text: '' }
+  }
+  return { html, text: cleaned }
+}
+
+function isEditorEmpty(editorEl) {
+  if (!editorEl) return true
+  const text = (editorEl.textContent || '').trim()
+  return !text && !editorEl.querySelector('img')
+}
+
+// ─── Toolbar Button (memoized) ───────────────────────────────────────────────
+
+const ToolbarButton = memo(function ToolbarButton({ icon: Icon, title, onClick, disabled, active, size = 15 }) {
+  return (
+    <button
+      onMouseDown={(e) => {
+        e.preventDefault() // Prevent blur on editor
+        if (!disabled) onClick?.()
+      }}
+      title={title}
+      disabled={disabled}
+      className="slack-toolbar-btn"
+      data-active={active || undefined}
+      aria-label={title}
+    >
+      <Icon size={size} />
+    </button>
+  )
+})
+
+// ─── Link Insert Modal ───────────────────────────────────────────────────────
+
+function LinkModal({ onInsert, onClose }) {
+  const [url, setUrl] = useState('')
+  const [text, setText] = useState('')
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (url && url !== 'https://') {
+      onInsert(url, text || url)
+    }
+    onClose()
+  }
+
+  return (
+    <div
+      className="animate-fade-in-scale"
+      style={{
+        position: 'absolute',
+        bottom: '100%',
+        left: 0,
+        zIndex: 70,
+        width: 300,
+        padding: 12,
+        background: 'var(--bg-modal)',
+        border: '1px solid var(--border-primary)',
+        borderRadius: 'var(--radius-lg)',
+        boxShadow: 'var(--shadow-lg)',
+        marginBottom: 4,
+      }}
+    >
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: 8 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 3 }}>
+            URL
+          </label>
+          <input
+            ref={inputRef}
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            className="input-field"
+            style={{ fontSize: 13, padding: '6px 10px' }}
+            placeholder="https://example.com"
+          />
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 3 }}>
+            Text (optional)
+          </label>
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="input-field"
+            style={{ fontSize: 13, padding: '6px 10px' }}
+            placeholder="Link text"
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-ghost"
+            style={{ padding: '5px 12px', fontSize: 12 }}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="btn-primary"
+            style={{ padding: '5px 12px', fontSize: 12 }}
+          >
+            Insert
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function MessageInput({ channelId, threadId, placeholder }) {
-  const [content, setContent] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [pendingFiles, setPendingFiles] = useState([])
+  const [uploadingFiles, setUploadingFiles] = useState([])
   const [isUploading, setIsUploading] = useState(false)
   const [showEmoji, setShowEmoji] = useState(false)
+  const [showLinkModal, setShowLinkModal] = useState(false)
+  const [isFocused, setIsFocused] = useState(false)
+  const [showToolbar, setShowToolbar] = useState(true)
+  const [hasContent, setHasContent] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
+
+  // Mention state
+  const [mentionType, setMentionType] = useState(null) // 'user' | 'channel' | null
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [mentionTriggerPos, setMentionTriggerPos] = useState(null)
+
   const { sendMessage } = useChatStore()
-  const inputRef = useRef(null)
+  const { setDraft, getDraft, clearDraft } = useDraftStore()
+
+  const editorRef = useRef(null)
   const fileInputRef = useRef(null)
+  const containerRef = useRef(null)
   const typingTimeoutRef = useRef(null)
+  const savedRangeRef = useRef(null)
+  const draftTimerRef = useRef(null)
+  const lastChannelRef = useRef(channelId)
+
+  // ─── Draft Persistence ───────────────────────────────────────────────────
+
+  // Save draft on channel switch (leaving current channel)
+  useEffect(() => {
+    if (lastChannelRef.current && lastChannelRef.current !== channelId) {
+      // Save draft for the channel we're leaving
+      const editor = editorRef.current
+      if (editor) {
+        const { html, text } = getEditorContent(editor)
+        if (text) {
+          setDraft(lastChannelRef.current, html, text)
+        } else {
+          clearDraft(lastChannelRef.current)
+        }
+      }
+    }
+    lastChannelRef.current = channelId
+  }, [channelId, setDraft, clearDraft])
+
+  // Restore draft when channel changes
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    const draft = getDraft(channelId)
+    if (draft?.html) {
+      editor.innerHTML = draft.html
+      setHasContent(true)
+    } else {
+      editor.innerHTML = ''
+      setHasContent(false)
+    }
+    // Focus editor
+    requestAnimationFrame(() => editor.focus())
+  }, [channelId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debounced draft save on content change
+  const saveDraftDebounced = useCallback(() => {
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+    draftTimerRef.current = setTimeout(() => {
+      const editor = editorRef.current
+      if (!editor) return
+      const { html, text } = getEditorContent(editor)
+      if (text) {
+        setDraft(channelId, html, text)
+      }
+    }, 800)
+  }, [channelId, setDraft])
+
+  // ─── Typing ──────────────────────────────────────────────────────────────
 
   const handleTyping = useCallback(() => {
     emitTypingStart(channelId)
@@ -25,19 +266,44 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     }, 3000)
   }, [channelId])
 
+  // ─── File Processing ─────────────────────────────────────────────────────
+
   const processFiles = async (files) => {
     if (files.length === 0) return
-    if (pendingFiles.length + files.length > 10) {
+    if (pendingFiles.length + uploadingFiles.length + files.length > 10) {
       toast.error('Maximum 10 files per message')
       return
     }
+
+    const localPreviews = files.map((f, idx) => ({
+      localId: `uploading-${Date.now()}-${idx}`,
+      file: f,
+      preview: f.type?.startsWith('image/') ? URL.createObjectURL(f) : null,
+      name: f.name,
+      size: f.size,
+      mimeType: f.type,
+      uploading: true,
+    }))
+
+    setUploadingFiles((prev) => [...prev, ...localPreviews])
     setIsUploading(true)
+
     try {
       const formData = new FormData()
       files.forEach((f) => formData.append('files', f))
       const { data } = await messageAPI.uploadFiles(channelId, formData)
+
+      localPreviews.forEach(({ preview }) => { if (preview) URL.revokeObjectURL(preview) })
+
+      setUploadingFiles((prev) =>
+        prev.filter((f) => !localPreviews.some((lp) => lp.localId === f.localId))
+      )
       setPendingFiles((prev) => [...prev, ...data.data.files])
     } catch (error) {
+      localPreviews.forEach(({ preview }) => { if (preview) URL.revokeObjectURL(preview) })
+      setUploadingFiles((prev) =>
+        prev.filter((f) => !localPreviews.some((lp) => lp.localId === f.localId))
+      )
       toast.error(error.response?.data?.error?.message || 'Upload failed')
     } finally {
       setIsUploading(false)
@@ -50,259 +316,623 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     processFiles(files)
   }
 
+  const removePendingFile = (index) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const removeUploadingFile = (localId) => {
+    setUploadingFiles((prev) => {
+      const removed = prev.find((f) => f.localId === localId)
+      if (removed?.preview) URL.revokeObjectURL(removed.preview)
+      return prev.filter((f) => f.localId !== localId)
+    })
+  }
+
+  // ─── Drag & Drop ─────────────────────────────────────────────────────────
+
   const handleDragOver = (e) => {
     e.preventDefault()
     e.stopPropagation()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
   }
 
   const handleDrop = (e) => {
     e.preventDefault()
     e.stopPropagation()
+    setIsDragOver(false)
     const files = Array.from(e.dataTransfer.files || [])
     processFiles(files)
   }
 
-  const removePendingFile = (index) => {
-    setPendingFiles((prev) => prev.filter((_, i) => i !== index))
-  }
+  // ─── Submit ───────────────────────────────────────────────────────────────
 
   const handleSubmit = async (e) => {
     e?.preventDefault()
-    const trimmed = content.trim()
-    if (!trimmed && pendingFiles.length === 0) return
-    if (isSending) return
+    const editor = editorRef.current
+    if (!editor) return
+
+    const { html, text } = getEditorContent(editor)
+    if (!text && pendingFiles.length === 0) return
+    if (isSending || isUploading) return
 
     setIsSending(true)
     try {
       const fileReferences = pendingFiles.map((f) => f._id)
-      await sendMessage(channelId, trimmed || ' ', {
+      await sendMessage(channelId, text || ' ', {
         threadId,
+        htmlContent: html || undefined,
         fileReferences: fileReferences.length > 0 ? fileReferences : undefined,
       })
-      setContent('')
+
+      // Clear editor
+      editor.innerHTML = ''
+      setHasContent(false)
       setPendingFiles([])
+      clearDraft(channelId)
+
       emitTypingStop(channelId)
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     } catch {
       // Error handled in store
     } finally {
       setIsSending(false)
-      inputRef.current?.focus()
+      requestAnimationFrame(() => editorRef.current?.focus())
     }
   }
 
+  // ─── Paste Handler (images + plain text formatting) ───────────────────────
+
+  const handlePaste = (e) => {
+    const clipboardData = e.clipboardData
+    if (!clipboardData) return
+
+    // Check for pasted files (images)
+    const files = []
+    for (const item of clipboardData.items) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile()
+        if (file) files.push(file)
+      }
+    }
+    if (files.length > 0) {
+      e.preventDefault()
+      processFiles(files)
+      return
+    }
+
+    // For text paste, paste as plain text to avoid external formatting
+    const text = clipboardData.getData('text/plain')
+    if (text) {
+      e.preventDefault()
+      execCmd('insertText', text)
+    }
+  }
+
+  // ─── Mention Detection ────────────────────────────────────────────────────
+
+  const detectMention = useCallback(() => {
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return
+
+    const range = sel.getRangeAt(0)
+    const textNode = range.startContainer
+    if (textNode.nodeType !== Node.TEXT_NODE) {
+      setMentionType(null)
+      return
+    }
+
+    const text = textNode.textContent
+    const cursorPos = range.startOffset
+
+    // Look backwards from cursor for @ or #
+    let triggerIndex = -1
+    let triggerChar = null
+    for (let i = cursorPos - 1; i >= 0; i--) {
+      const ch = text[i]
+      if (ch === '@' || ch === '#') {
+        // Check that it's either at the start or preceded by a space
+        if (i === 0 || text[i - 1] === ' ' || text[i - 1] === '\n' || text[i - 1] === '\u00a0') {
+          triggerIndex = i
+          triggerChar = ch
+        }
+        break
+      }
+      if (ch === ' ' || ch === '\n') break
+    }
+
+    if (triggerIndex >= 0 && triggerChar) {
+      const query = text.substring(triggerIndex + 1, cursorPos)
+      setMentionType(triggerChar === '@' ? 'user' : 'channel')
+      setMentionQuery(query)
+      setMentionTriggerPos(triggerIndex)
+    } else {
+      setMentionType(null)
+    }
+  }, [])
+
+  // ─── Mention Selection ────────────────────────────────────────────────────
+
+  const handleMentionSelect = useCallback((item) => {
+    const editor = editorRef.current
+    if (!editor) return
+
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return
+
+    const range = sel.getRangeAt(0)
+    const textNode = range.startContainer
+    if (textNode.nodeType !== Node.TEXT_NODE) return
+
+    const text = textNode.textContent
+    const cursorPos = range.startOffset
+
+    // Find the trigger character position
+    let triggerIndex = -1
+    const triggerChar = mentionType === 'user' ? '@' : '#'
+    for (let i = cursorPos - 1; i >= 0; i--) {
+      if (text[i] === triggerChar) {
+        triggerIndex = i
+        break
+      }
+    }
+    if (triggerIndex < 0) return
+
+    // Replace the trigger + query with a mention span
+    const before = text.substring(0, triggerIndex)
+    const after = text.substring(cursorPos)
+
+    // Create the mention element
+    const mentionLabel = mentionType === 'user' ? `@${item.name}` : `#${item.name}`
+
+    // Replace text content
+    textNode.textContent = before
+    const mentionSpan = document.createElement('span')
+    mentionSpan.className = 'mention-tag'
+    mentionSpan.contentEditable = 'false'
+    mentionSpan.dataset.mentionId = item.id
+    mentionSpan.dataset.mentionType = mentionType
+    mentionSpan.textContent = mentionLabel
+
+    const afterNode = document.createTextNode('\u00a0' + after)
+
+    const parent = textNode.parentNode
+    parent.insertBefore(mentionSpan, textNode.nextSibling)
+    parent.insertBefore(afterNode, mentionSpan.nextSibling)
+
+    // Place cursor after the mention
+    const newRange = document.createRange()
+    newRange.setStart(afterNode, 1)
+    newRange.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(newRange)
+
+    setMentionType(null)
+    setMentionQuery('')
+    updateHasContent()
+  }, [mentionType])
+
+  // ─── Input Event Handler ──────────────────────────────────────────────────
+
+  const updateHasContent = useCallback(() => {
+    const editor = editorRef.current
+    const empty = isEditorEmpty(editor)
+    setHasContent(!empty || pendingFiles.length > 0)
+  }, [pendingFiles.length])
+
+  const handleInput = useCallback(() => {
+    updateHasContent()
+    handleTyping()
+    saveDraftDebounced()
+    detectMention()
+  }, [updateHasContent, handleTyping, saveDraftDebounced, detectMention])
+
+  // ─── Key Down Handler ─────────────────────────────────────────────────────
+
   const handleKeyDown = (e) => {
+    // If mention dropdown is open, let it handle keys
+    if (mentionType) {
+      if (['ArrowUp', 'ArrowDown', 'Tab'].includes(e.key)) return
+      if (e.key === 'Enter') return
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setMentionType(null)
+        return
+      }
+    }
+
+    // Enter to send (without Shift)
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSubmit()
+      return
+    }
+
+    // Ctrl/Cmd shortcuts
+    if (e.ctrlKey || e.metaKey) {
+      switch (e.key.toLowerCase()) {
+        case 'b':
+          e.preventDefault()
+          execCmd('bold')
+          break
+        case 'i':
+          e.preventDefault()
+          execCmd('italic')
+          break
+        case 'u':
+          e.preventDefault()
+          execCmd('underline')
+          break
+        default:
+          break
+      }
+    }
+
+    // Escape to close popups
+    if (e.key === 'Escape') {
+      if (showEmoji) setShowEmoji(false)
+      if (showLinkModal) setShowLinkModal(false)
     }
   }
 
-  const wrapSelection = (wrapper) => {
-    const textarea = inputRef.current
-    if (!textarea) return
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const text = content
-    const selected = text.substring(start, end)
+  // ─── Formatting Actions ───────────────────────────────────────────────────
+
+  const formatBold = () => { editorRef.current?.focus(); execCmd('bold') }
+  const formatItalic = () => { editorRef.current?.focus(); execCmd('italic') }
+  const formatUnderline = () => { editorRef.current?.focus(); execCmd('underline') }
+  const formatStrikethrough = () => { editorRef.current?.focus(); execCmd('strikeThrough') }
+
+  const formatInlineCode = () => {
+    const editor = editorRef.current
+    if (!editor) return
+    editor.focus()
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return
+    const range = sel.getRangeAt(0)
+    const selected = range.toString()
     if (selected) {
-      const newText = text.substring(0, start) + wrapper + selected + wrapper + text.substring(end)
-      setContent(newText)
-      requestAnimationFrame(() => {
-        textarea.selectionStart = start + wrapper.length
-        textarea.selectionEnd = end + wrapper.length
-        textarea.focus()
-      })
+      const code = document.createElement('code')
+      code.textContent = selected
+      range.deleteContents()
+      range.insertNode(code)
+      // Move cursor after code
+      const newRange = document.createRange()
+      newRange.setStartAfter(code)
+      newRange.collapse(true)
+      sel.removeAllRanges()
+      sel.addRange(newRange)
     } else {
-      const newText = text.substring(0, start) + wrapper + wrapper + text.substring(end)
-      setContent(newText)
-      requestAnimationFrame(() => {
-        textarea.selectionStart = start + wrapper.length
-        textarea.selectionEnd = start + wrapper.length
-        textarea.focus()
-      })
+      const code = document.createElement('code')
+      code.innerHTML = '&ZeroWidthSpace;'
+      range.insertNode(code)
+      const newRange = document.createRange()
+      newRange.selectNodeContents(code)
+      sel.removeAllRanges()
+      sel.addRange(newRange)
     }
   }
+
+  const formatCodeBlock = () => {
+    const editor = editorRef.current
+    if (!editor) return
+    editor.focus()
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return
+    const range = sel.getRangeAt(0)
+    const selected = range.toString()
+    const pre = document.createElement('pre')
+    const code = document.createElement('code')
+    code.textContent = selected || '\n'
+    pre.appendChild(code)
+    range.deleteContents()
+    range.insertNode(pre)
+    // Insert a br after to allow typing after the block
+    const br = document.createElement('br')
+    pre.parentNode.insertBefore(br, pre.nextSibling)
+    const newRange = document.createRange()
+    newRange.selectNodeContents(code)
+    if (selected) {
+      newRange.collapse(false)
+    }
+    sel.removeAllRanges()
+    sel.addRange(newRange)
+  }
+
+  const formatBulletList = () => { editorRef.current?.focus(); execCmd('insertUnorderedList') }
+  const formatNumberedList = () => { editorRef.current?.focus(); execCmd('insertOrderedList') }
+
+  const formatQuote = () => {
+    const editor = editorRef.current
+    if (!editor) return
+    editor.focus()
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return
+    const range = sel.getRangeAt(0)
+    const selected = range.toString()
+    const bq = document.createElement('blockquote')
+    bq.textContent = selected || ''
+    range.deleteContents()
+    range.insertNode(bq)
+    const br = document.createElement('br')
+    bq.parentNode.insertBefore(br, bq.nextSibling)
+    const newRange = document.createRange()
+    newRange.selectNodeContents(bq)
+    newRange.collapse(false)
+    sel.removeAllRanges()
+    sel.addRange(newRange)
+  }
+
+  const handleLinkInsert = (url, text) => {
+    const editor = editorRef.current
+    if (!editor) return
+    editor.focus()
+    restoreSelection(savedRangeRef.current)
+    const linkHtml = `<a href="${url}" target="_blank" rel="noopener noreferrer">${text || url}</a>`
+    insertHtmlAtCaret(linkHtml)
+    updateHasContent()
+  }
+
+  // ─── Emoji Insert ─────────────────────────────────────────────────────────
 
   const insertEmoji = (emoji) => {
-    const textarea = inputRef.current
-    if (textarea) {
-      const start = textarea.selectionStart
-      const newText = content.substring(0, start) + emoji + content.substring(textarea.selectionEnd)
-      setContent(newText)
-      setShowEmoji(false)
-      requestAnimationFrame(() => {
-        textarea.selectionStart = start + emoji.length
-        textarea.selectionEnd = start + emoji.length
-        textarea.focus()
-      })
-    } else {
-      setContent((prev) => prev + emoji)
-      setShowEmoji(false)
+    const editor = editorRef.current
+    if (editor) {
+      editor.focus()
+      restoreSelection(savedRangeRef.current)
+      insertHtmlAtCaret(emoji)
+      updateHasContent()
     }
+    setShowEmoji(false)
   }
 
-  return (
-    <div className="px-4 pb-4" onDragOver={handleDragOver} onDrop={handleDrop}>
-      <div
-        className="rounded-lg overflow-visible"
-        style={{
-          border: '1px solid var(--border-primary)',
-          background: 'var(--bg-input)',
-          position: 'relative',
-          transition: 'border-color var(--transition-fast)',
-        }}
-      >
-        {/* Pending Files Preview */}
-        {pendingFiles.length > 0 && (
-          <div
-            className="flex flex-wrap gap-2 px-3 py-2"
-            style={{ borderBottom: '1px solid var(--border-secondary)' }}
-          >
-            {pendingFiles.map((file, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs animate-fade-in"
-                style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)' }}
-              >
-                {file.mimeType?.startsWith('image/') ? (
-                  <Image size={12} />
-                ) : (
-                  <FileText size={12} />
-                )}
-                <span className="max-w-28 truncate">{file.originalName}</span>
-                <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>
-                  {formatFileSize(file.fileSize)}
-                </span>
-                <button
-                  onClick={() => removePendingFile(index)}
-                  className="p-0.5 rounded cursor-pointer transition-colors"
-                  style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-red)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+  // Save selection before opening emoji/link modal
+  const handleEmojiToggle = () => {
+    savedRangeRef.current = saveSelection()
+    setShowEmoji(!showEmoji)
+    setShowLinkModal(false)
+  }
 
-        {/* Upload progress */}
-        {isUploading && (
-          <div
-            className="px-3 py-2 flex items-center gap-2"
-            style={{ borderBottom: '1px solid var(--border-secondary)' }}
-          >
-            <div
-              className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
-              style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }}
-            />
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Uploading files...</span>
+  const handleLinkToggle = () => {
+    savedRangeRef.current = saveSelection()
+    setShowLinkModal(!showLinkModal)
+    setShowEmoji(false)
+  }
+
+  // ─── Auto focus ───────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    requestAnimationFrame(() => editorRef.current?.focus())
+  }, [channelId])
+
+  // Update hasContent when files change
+  useEffect(() => {
+    updateHasContent()
+  }, [pendingFiles.length, uploadingFiles.length, updateHasContent])
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+
+  const isDisabled = (!hasContent && pendingFiles.length === 0) || isSending || isUploading
+  const allPreviewFiles = [
+    ...uploadingFiles,
+    ...pendingFiles.map((f, i) => ({ ...f, isPending: true, idx: i })),
+  ]
+
+  return (
+    <div
+      className="slack-composer-wrapper"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <div
+        ref={containerRef}
+        className={`slack-composer ${isFocused ? 'focused' : ''} ${isDragOver ? 'drag-over' : ''}`}
+      >
+        {/* Drag overlay */}
+        {isDragOver && (
+          <div className="slack-composer-drag-overlay">
+            <Paperclip size={24} />
+            <span>Drop files to upload</span>
           </div>
         )}
 
         {/* Formatting Toolbar */}
-        <div
-          className="flex items-center gap-0.5 px-3 py-1.5"
-          style={{ borderBottom: '1px solid var(--border-secondary)' }}
-        >
-          <ToolbarButton icon={Bold} title="Bold (Ctrl+B)" onClick={() => wrapSelection('**')} />
-          <ToolbarButton icon={Italic} title="Italic (Ctrl+I)" onClick={() => wrapSelection('_')} />
-          <ToolbarButton icon={Code} title="Code" onClick={() => wrapSelection('`')} />
-          <div className="flex-1" />
-          <div className="relative">
-            <ToolbarButton
-              icon={Smile}
-              title="Emoji"
-              onClick={() => setShowEmoji(!showEmoji)}
-              active={showEmoji}
-            />
-            {showEmoji && (
-              <EmojiPicker
-                onSelect={insertEmoji}
-                onClose={() => setShowEmoji(false)}
-                position="top"
-              />
-            )}
+        {showToolbar && (
+          <div className="slack-formatting-toolbar">
+            <div className="slack-toolbar-group">
+              <ToolbarButton icon={Bold} title="Bold (Ctrl+B)" onClick={formatBold} />
+              <ToolbarButton icon={Italic} title="Italic (Ctrl+I)" onClick={formatItalic} />
+              <ToolbarButton icon={Underline} title="Underline (Ctrl+U)" onClick={formatUnderline} />
+              <ToolbarButton icon={Strikethrough} title="Strikethrough" onClick={formatStrikethrough} />
+            </div>
+            <div className="slack-toolbar-divider" />
+            <div className="slack-toolbar-group">
+              <ToolbarButton icon={Link} title="Insert link" onClick={handleLinkToggle} active={showLinkModal} />
+            </div>
+            <div className="slack-toolbar-divider" />
+            <div className="slack-toolbar-group">
+              <ToolbarButton icon={List} title="Bullet list" onClick={formatBulletList} />
+              <ToolbarButton icon={ListOrdered} title="Numbered list" onClick={formatNumberedList} />
+            </div>
+            <div className="slack-toolbar-divider" />
+            <div className="slack-toolbar-group">
+              <ToolbarButton icon={Quote} title="Quote" onClick={formatQuote} />
+              <ToolbarButton icon={Code} title="Inline code" onClick={formatInlineCode} />
+              <ToolbarButton icon={Braces} title="Code block" onClick={formatCodeBlock} />
+            </div>
           </div>
-          <ToolbarButton
-            icon={Paperclip}
-            title="Attach file"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-          />
-        </div>
+        )}
 
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={handleFileSelect}
-          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.md,.zip,.rar,.gz,.json,.xml"
+        {/* Link Modal */}
+        {showLinkModal && (
+          <div style={{ position: 'relative' }}>
+            <LinkModal
+              onInsert={handleLinkInsert}
+              onClose={() => setShowLinkModal(false)}
+            />
+          </div>
+        )}
+
+        {/* Rich Text Editor (contentEditable) */}
+        <div
+          ref={editorRef}
+          className="slack-rich-editor"
+          contentEditable
+          suppressContentEditableWarning
+          role="textbox"
+          aria-multiline="true"
+          aria-label={placeholder || 'Type a message...'}
+          data-placeholder={placeholder || 'Type a message...'}
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          onPaste={handlePaste}
         />
 
-        {/* Input Area */}
-        <div className="flex items-end gap-2 px-3 py-2">
-          <textarea
-            ref={inputRef}
-            value={content}
-            onChange={(e) => { setContent(e.target.value); handleTyping() }}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder || 'Type a message...'}
-            rows={1}
-            className="flex-1 bg-transparent border-none outline-none resize-none text-sm"
-            style={{ color: 'var(--text-primary)', maxHeight: '120px', minHeight: '24px' }}
-            onInput={(e) => {
-              e.target.style.height = '24px'
-              e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
-            }}
+        {/* Mention Dropdown */}
+        {mentionType && (
+          <MentionDropdown
+            type={mentionType}
+            query={mentionQuery}
+            channelId={channelId}
+            position={{ bottom: '100%', left: 0 }}
+            onSelect={handleMentionSelect}
+            onClose={() => setMentionType(null)}
           />
+        )}
+
+        {/* Attachment Previews */}
+        {allPreviewFiles.length > 0 && (
+          <div className="slack-attachment-previews">
+            {allPreviewFiles.map((file) => {
+              const isImg = file.mimeType?.startsWith('image/')
+              const thumbSrc = file.preview || file.thumbnailUrl || file.secureUrl || file.url
+              const name = file.name || file.originalName || 'File'
+              const size = file.size || file.fileSize
+              const key = file.localId || file._id || file.idx
+
+              return (
+                <div key={key} className="slack-file-preview">
+                  {isImg && thumbSrc ? (
+                    <div className="slack-file-preview-thumb">
+                      <img src={thumbSrc} alt={name} loading="lazy" />
+                    </div>
+                  ) : (
+                    <div className="slack-file-preview-icon">
+                      <FileText size={18} />
+                    </div>
+                  )}
+                  <div className="slack-file-preview-info">
+                    <p className="slack-file-preview-name">{name}</p>
+                    {size && <p className="slack-file-preview-size">{formatFileSize(size)}</p>}
+                  </div>
+                  {file.uploading && (
+                    <div className="slack-file-preview-loading">
+                      <div className="slack-spinner" />
+                    </div>
+                  )}
+                  {!file.uploading && (
+                    <button
+                      onClick={() => file.isPending ? removePendingFile(file.idx) : removeUploadingFile(file.localId)}
+                      className="slack-file-preview-remove"
+                      aria-label="Remove file"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Bottom Action Bar */}
+        <div className="slack-action-bar">
+          {/* Left side — tools */}
+          <div className="slack-action-bar-left">
+            <ToolbarButton
+              icon={Plus}
+              title="Attach file"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              size={18}
+            />
+            <div className="slack-toolbar-divider" />
+            <ToolbarButton
+              icon={showToolbar ? ChevronDown : Bold}
+              title={showToolbar ? 'Hide formatting' : 'Show formatting'}
+              onClick={() => setShowToolbar(!showToolbar)}
+              active={showToolbar}
+              size={16}
+            />
+            <div className="relative">
+              <ToolbarButton
+                icon={Smile}
+                title="Emoji"
+                onClick={handleEmojiToggle}
+                active={showEmoji}
+                size={18}
+              />
+              {showEmoji && (
+                <EmojiPicker
+                  onSelect={insertEmoji}
+                  onClose={() => setShowEmoji(false)}
+                  position="top"
+                />
+              )}
+            </div>
+            <ToolbarButton
+              icon={AtSign}
+              title="Mention someone"
+              onClick={() => {
+                const editor = editorRef.current
+                if (editor) {
+                  editor.focus()
+                  insertHtmlAtCaret('@')
+                  handleInput()
+                }
+              }}
+              size={18}
+            />
+          </div>
+
+          {/* Right side — send */}
           <button
             onClick={handleSubmit}
-            disabled={(!content.trim() && pendingFiles.length === 0) || isSending}
-            className="p-1.5 rounded-lg transition-all shrink-0 cursor-pointer"
-            style={{
-              background: (content.trim() || pendingFiles.length > 0)
-                ? 'var(--accent-green)' : 'transparent',
-              color: (content.trim() || pendingFiles.length > 0)
-                ? 'white' : 'var(--text-muted)',
-              opacity: (!content.trim() && pendingFiles.length === 0) ? 0.3 : 1,
-              border: 'none',
-            }}
+            disabled={isDisabled}
+            className="slack-send-btn"
+            data-has-content={hasContent || pendingFiles.length > 0 || undefined}
+            aria-label="Send message"
           >
-            <Send size={18} />
+            {isSending ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Send size={16} />
+            )}
           </button>
         </div>
       </div>
 
-      <p className="text-[11px] mt-1 px-1" style={{ color: 'var(--text-muted)' }}>
-        <strong>Enter</strong> to send · <strong>Shift+Enter</strong> for new line · Type <strong>/flowtask help</strong> for commands
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFileSelect}
+        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.md,.zip,.rar,.gz,.json,.xml"
+      />
+
+      <p className="slack-composer-hint">
+        <strong>Enter</strong> to send · <strong>Shift+Enter</strong> for new line · <strong>Ctrl+B</strong> bold · <strong>Ctrl+I</strong> italic
       </p>
     </div>
-  )
-}
-
-function ToolbarButton({ icon: Icon, title, onClick, disabled, active }) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      disabled={disabled}
-      className="p-1.5 rounded-md cursor-pointer transition-colors"
-      style={{
-        color: active ? 'var(--accent-primary)' : 'var(--text-muted)',
-        background: active ? 'var(--bg-hover)' : 'transparent',
-        border: 'none',
-        opacity: disabled ? 0.3 : 1,
-      }}
-      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = 'var(--bg-hover)' }}
-      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent' }}
-    >
-      <Icon size={14} />
-    </button>
   )
 }
 

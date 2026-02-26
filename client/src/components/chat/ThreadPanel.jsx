@@ -1,45 +1,53 @@
-import { useEffect, useState, useRef } from 'react'
-import { threadAPI } from '../../services/api'
+import { useEffect, useRef, useCallback } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import MessageItem from './MessageItem'
 import MessageInput from './MessageInput'
 import { X, MessageSquare } from 'lucide-react'
 
 export default function ThreadPanel({ thread, onClose }) {
-  const [threadData, setThreadData] = useState(null)
-  const [replies, setReplies] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-  const { messagesByChannel } = useChatStore()
+  const {
+    threadRepliesByRoot,
+    threadHasMore,
+    isLoadingThread,
+    fetchThreadReplies,
+    clearThreadReplies,
+    messagesByChannel,
+  } = useChatStore()
+
+  const replies = threadRepliesByRoot[thread.rootMessageId] || []
+  const hasMore = threadHasMore[thread.rootMessageId] ?? false
   const bottomRef = useRef(null)
+  const prevReplyCountRef = useRef(replies.length)
 
+  // Fetch thread replies on mount / when rootMessageId changes
   useEffect(() => {
-    loadThread()
-  }, [thread.rootMessageId])
+    fetchThreadReplies(thread.rootMessageId)
+    return () => {
+      // Optional: clear thread replies when closing to save memory
+      // clearThreadReplies(thread.rootMessageId)
+    }
+  }, [thread.rootMessageId, fetchThreadReplies])
 
+  // Auto-scroll to bottom when new replies arrive
   useEffect(() => {
-    if (replies.length > 0) {
+    if (replies.length > prevReplyCountRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
+    prevReplyCountRef.current = replies.length
   }, [replies.length])
 
-  const loadThread = async () => {
-    setIsLoading(true)
-    try {
-      const { data } = await threadAPI.get(thread.rootMessageId)
-      setThreadData(data.data.thread)
-
-      const { data: repliesData } = await threadAPI.replies(thread.rootMessageId)
-      setReplies(repliesData.data.messages || [])
-    } catch (error) {
-      console.error('Failed to load thread:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  // Load more (older) replies via cursor
+  const loadMoreReplies = useCallback(async () => {
+    if (!hasMore || isLoadingThread || replies.length === 0) return
+    const cursor = replies[replies.length - 1]?._id
+    fetchThreadReplies(thread.rootMessageId, { cursor, limit: 30 })
+  }, [hasMore, isLoadingThread, replies, thread.rootMessageId, fetchThreadReplies])
 
   const rootMessage = messagesByChannel[thread.channelId]?.find(
     (m) => m._id === thread.rootMessageId
   )
+
+  const replyCount = replies.filter(r => !r.pending).length
 
   return (
     <div
@@ -64,12 +72,12 @@ export default function ThreadPanel({ thread, onClose }) {
           <span className="font-bold text-sm" style={{ color: 'var(--text-white)' }}>
             Thread
           </span>
-          {threadData?.replyCount > 0 && (
+          {replyCount > 0 && (
             <span
               className="badge badge-muted"
               style={{ fontSize: 10 }}
             >
-              {threadData.replyCount}
+              {replyCount}
             </span>
           )}
         </div>
@@ -86,7 +94,7 @@ export default function ThreadPanel({ thread, onClose }) {
 
       {/* Thread Content */}
       <div className="flex-1 overflow-y-auto">
-        {isLoading ? (
+        {isLoadingThread && replies.length === 0 ? (
           <div style={{ padding: '16px 20px' }}>
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} style={{ display: 'flex', gap: 10, padding: '8px 0' }} className="animate-fade-in">
@@ -104,13 +112,15 @@ export default function ThreadPanel({ thread, onClose }) {
           </div>
         ) : (
           <>
-            {/* Root Message */}
+            {/* Root Message — highlighted with accent border */}
             {rootMessage && (
               <div
                 style={{
                   borderBottom: '1px solid var(--border-secondary)',
+                  borderLeft: '3px solid var(--accent-primary)',
                   padding: '4px 0 8px',
                   marginBottom: 4,
+                  background: 'var(--bg-secondary)',
                 }}
               >
                 <MessageItem message={rootMessage} compact={false} />
@@ -137,7 +147,7 @@ export default function ThreadPanel({ thread, onClose }) {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
+                  {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
                 </span>
                 <div style={{ flex: 1, height: 1, background: 'var(--border-secondary)' }} />
               </div>
@@ -148,7 +158,26 @@ export default function ThreadPanel({ thread, onClose }) {
               <MessageItem key={reply._id} message={reply} compact={false} />
             ))}
 
-            {replies.length === 0 && !isLoading && (
+            {/* Load more replies */}
+            {hasMore && (
+              <div className="text-center py-3">
+                <button
+                  onClick={loadMoreReplies}
+                  disabled={isLoadingThread}
+                  className="text-xs cursor-pointer px-4 py-1.5 rounded-md transition-colors"
+                  style={{
+                    color: 'var(--text-link)',
+                    background: 'var(--bg-hover)',
+                    border: '1px solid var(--border-secondary)',
+                    opacity: isLoadingThread ? 0.5 : 1,
+                  }}
+                >
+                  {isLoadingThread ? 'Loading...' : 'Load more replies'}
+                </button>
+              </div>
+            )}
+
+            {replies.length === 0 && !isLoadingThread && (
               <div className="text-center py-8 animate-fade-in">
                 <MessageSquare
                   size={28}

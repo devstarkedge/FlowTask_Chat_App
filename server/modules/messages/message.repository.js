@@ -29,6 +29,10 @@ class MessageRepository {
     const query = Message.findById(id);
     if (populate) {
       query.populate('authorId', 'name email avatar flowTaskUserId onlineStatus');
+      query.populate({
+        path: 'fileReferences',
+        populate: { path: 'fileId' }
+      });
     }
     return query.exec();
   }
@@ -44,7 +48,7 @@ class MessageRepository {
    * @param {'before'|'after'} [options.direction='before'] - Load before or after cursor
    * @returns {Promise<Message[]>}
    */
-  async getChannelMessages(channelId, { cursor = null, limit = 50, direction = 'before' } = {}) {
+  async getChannelMessages(channelId, { cursor = null, limit = 80, direction = 'before' } = {}) {
     const filter = { channelId, isDeleted: false };
 
     if (cursor) {
@@ -61,10 +65,15 @@ class MessageRepository {
       .sort({ createdAt: sortOrder })
       .limit(limit)
       .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate({
+        path: 'fileReferences',
+        populate: { path: 'fileId' }
+      })
       .lean();
 
-    // If loading "after", reverse so newest is last (UI order)
-    if (direction === 'after') {
+    // If loading "before" (older messages), we queried newest-first to get the 
+    // immediately preceding messages. We must reverse to restore chronological order.
+    if (direction === 'before') {
       messages.reverse();
     }
 
@@ -92,6 +101,10 @@ class MessageRepository {
       .sort({ createdAt: 1 })
       .limit(limit)
       .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate({
+        path: 'fileReferences',
+        populate: { path: 'fileId' }
+      })
       .lean();
   }
 
@@ -104,6 +117,10 @@ class MessageRepository {
   async update(messageId, updates) {
     return Message.findByIdAndUpdate(messageId, updates, { new: true })
       .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate({
+        path: 'fileReferences',
+        populate: { path: 'fileId' }
+      })
       .exec();
   }
 
@@ -164,6 +181,10 @@ class MessageRepository {
     return Message.find({ channelId, isPinned: true, isDeleted: false })
       .sort({ pinnedAt: -1 })
       .populate('authorId', 'name email avatar flowTaskUserId')
+      .populate({
+        path: 'fileReferences',
+        populate: { path: 'fileId' }
+      })
       .lean();
   }
 
@@ -257,6 +278,10 @@ class MessageRepository {
       .sort({ score: { $meta: 'textScore' } })
       .limit(limit)
       .populate('authorId', 'name email avatar flowTaskUserId')
+      .populate({
+        path: 'fileReferences',
+        populate: { path: 'fileId' }
+      })
       .populate('channelId', 'name slug type')
       .lean();
   }

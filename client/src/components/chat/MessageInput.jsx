@@ -25,8 +25,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     }, 3000)
   }, [channelId])
 
-  const handleFileSelect = async (e) => {
-    const files = Array.from(e.target.files || [])
+  const processFiles = async (files) => {
     if (files.length === 0) return
     if (pendingFiles.length + files.length > 10) {
       toast.error('Maximum 10 files per message')
@@ -46,6 +45,23 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     }
   }
 
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files || [])
+    processFiles(files)
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const files = Array.from(e.dataTransfer.files || [])
+    processFiles(files)
+  }
+
   const removePendingFile = (index) => {
     setPendingFiles((prev) => prev.filter((_, i) => i !== index))
   }
@@ -58,18 +74,10 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
     setIsSending(true)
     try {
-      const attachments = pendingFiles.map((f) => ({
-        fileName: f.fileName,
-        originalName: f.originalName,
-        mimeType: f.mimeType,
-        fileSize: f.fileSize,
-        url: f.url,
-        thumbnailUrl: f.thumbnailUrl,
-        source: f.source || 'chat_upload',
-      }))
+      const fileReferences = pendingFiles.map((f) => f._id)
       await sendMessage(channelId, trimmed || ' ', {
         threadId,
-        attachments: attachments.length > 0 ? attachments : undefined,
+        fileReferences: fileReferences.length > 0 ? fileReferences : undefined,
       })
       setContent('')
       setPendingFiles([])
@@ -135,7 +143,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   }
 
   return (
-    <div className="px-4 pb-4">
+    <div className="px-4 pb-4" onDragOver={handleDragOver} onDrop={handleDrop}>
       <div
         className="rounded-lg overflow-visible"
         style={{

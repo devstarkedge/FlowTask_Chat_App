@@ -75,6 +75,10 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
     setShowReactionPicker(false)
   }
 
+  const derivedAttachments = message.fileReferences?.length > 0
+    ? message.fileReferences.map(ref => ref.fileId ? { ...ref.fileId, url: ref.fileId.secureUrl || ref.fileId.url } : null).filter(Boolean)
+    : message.attachments || []
+
   // System messages (plain separator style)
   if (isSystem) {
     return (
@@ -194,15 +198,15 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
           )}
 
           {/* Attachments */}
-          {message.attachments?.length > 0 && (
+          {derivedAttachments.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
-              {message.attachments.map((att, idx) =>
+              {derivedAttachments.map((att, idx) =>
                 isImage(att.mimeType) ? (
                   <div
                     key={att._id || idx}
                     className="rounded-lg overflow-hidden cursor-pointer transition-opacity hover:opacity-90"
                     style={{ border: '1px solid var(--border-primary)', maxWidth: 320 }}
-                    onClick={() => onOpenFilePreview?.(att, message.attachments)}
+                    onClick={() => onOpenFilePreview?.(att, derivedAttachments)}
                   >
                     <img
                       src={att.thumbnailUrl || att.url}
@@ -222,7 +226,7 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
                   <div
                     key={att._id || idx}
                     className="file-card"
-                    onClick={() => onOpenFilePreview?.(att, message.attachments)}
+                    onClick={() => onOpenFilePreview?.(att, derivedAttachments)}
                   >
                     <Film size={24} style={{ color: 'var(--accent-purple)', flexShrink: 0 }} />
                     <div className="min-w-0 flex-1">
@@ -235,7 +239,7 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
                   <div
                     key={att._id || idx}
                     className="file-card"
-                    onClick={() => onOpenFilePreview?.(att, message.attachments)}
+                    onClick={() => onOpenFilePreview?.(att, derivedAttachments)}
                   >
                     <Music size={24} style={{ color: 'var(--accent-green)', flexShrink: 0 }} />
                     <div className="min-w-0 flex-1">
@@ -248,7 +252,7 @@ export default function MessageItem({ message, compact, onOpenThread, onOpenProf
                   <div
                     key={att._id || idx}
                     className="file-card"
-                    onClick={() => onOpenFilePreview?.(att, message.attachments)}
+                    onClick={() => onOpenFilePreview?.(att, derivedAttachments)}
                   >
                     {(() => { const FIcon = fileIcon(att.mimeType); return <FIcon size={24} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} /> })()}
                     <div className="min-w-0 flex-1">

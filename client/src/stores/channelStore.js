@@ -1,7 +1,10 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { channelAPI, readReceiptAPI } from '../services/api'
 
-export const useChannelStore = create((set, get) => ({
+export const useChannelStore = create(
+  persist(
+    (set, get) => ({
   channels: [],
   activeChannelId: null,
   unreads: {},
@@ -137,4 +140,10 @@ export const useChannelStore = create((set, get) => ({
     })
     return channel
   },
-}))
+}),
+{
+  name: 'flowtask-channel-storage',
+  partialize: (state) => ({ activeChannelId: state.activeChannelId }),
+}
+)
+)

@@ -24,6 +24,7 @@ import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js
 import eventBus from './services/eventBus.js';
 import channelService from './modules/channels/channel.service.js';
 import { startDeadlineWarningCron, stopDeadlineWarningCron } from './modules/bot/deadlineWarning.js';
+import fileCleanupService from './services/fileCleanup.service.js';
 
 // ─── Express App ─────────────────────────────────────────────────────────────
 const app = express();
@@ -141,7 +142,10 @@ async function startServer() {
     // 5. Start deadline warning cron
     startDeadlineWarningCron();
 
-    // 6. Start HTTP server
+    // 6. Start file cleanup service
+    fileCleanupService.init();
+
+    // 7. Start HTTP server
     httpServer.listen(env.PORT, () => {
       logger.info(`💬 FlowTask Chat server running`, {
         port: env.PORT,

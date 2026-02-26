@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ALLOWED_REACTIONS, CHANNEL_VISIBILITY } from '../config/constants.js';
+import { CHANNEL_VISIBILITY } from '../config/constants.js';
 
 /**
  * Zod validation schemas for all API endpoints.
@@ -30,6 +30,7 @@ export const sendMessageSchema = z.object({
     )
     .max(10)
     .optional(),
+  fileReferences: z.array(objectId).max(10).optional(),
   flowTaskRef: z
     .object({
       entityType: z.string(),
@@ -38,7 +39,7 @@ export const sendMessageSchema = z.object({
     .optional(),
   threadId: z.string().optional(),
 }).refine(
-  (data) => data.content || (data.attachments && data.attachments.length > 0),
+  (data) => data.content || (data.attachments && data.attachments.length > 0) || (data.fileReferences && data.fileReferences.length > 0),
   { message: 'Message must have content or attachments' },
 );
 
@@ -47,10 +48,7 @@ export const editMessageSchema = z.object({
 });
 
 export const reactionSchema = z.object({
-  emoji: z.string().refine(
-    (val) => ALLOWED_REACTIONS.includes(val),
-    { message: `Allowed reactions: ${ALLOWED_REACTIONS.join(', ')}` },
-  ),
+  emoji: z.string().min(1, 'Emoji is required').max(10), // Limit length since some emojis use multiple codepoints
 });
 
 export const searchMessagesSchema = z.object({

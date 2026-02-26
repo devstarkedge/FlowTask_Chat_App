@@ -67,10 +67,12 @@ export default router;
  * Channel-scoped message routes.
  * To be mounted on the channel router: /api/chat/channels/:channelId
  */
+import { uploadLimiter } from '../../middleware/rateLimiter.js';
+
 export const channelMessageRouter = Router({ mergeParams: true });
 channelMessageRouter.use(protect);
 channelMessageRouter.use(requireChannelAccess());
 channelMessageRouter.get('/messages', getMessages);
 channelMessageRouter.post('/messages', validate({ body: sendMessageSchema }), sendMessage);
-channelMessageRouter.post('/upload', uploadMiddleware, handleMulterError, uploadFiles);
+channelMessageRouter.post('/upload', uploadLimiter, uploadMiddleware, handleMulterError, uploadFiles);
 channelMessageRouter.get('/pins', getPinnedMessages);

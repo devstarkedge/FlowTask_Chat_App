@@ -1,8 +1,11 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { messageAPI, botAPI } from '../services/api'
 import toast from 'react-hot-toast'
 
-export const useChatStore = create((set, get) => ({
+export const useChatStore = create(
+  persist(
+    (set, get) => ({
   // Messages keyed by channelId
   messagesByChannel: {},
   hasMore: {},
@@ -22,19 +25,41 @@ export const useChatStore = create((set, get) => ({
     set({ isLoadingMessages: true })
     try {
       const { data } = await messageAPI.list(channelId, options)
-      const messages = data.data.messages || []
+      const messages = data.data.items || []
       const hasMore = data.data.hasMore ?? false
 
-      set((state) => ({
-        messagesByChannel: {
-          ...state.messagesByChannel,
-          [channelId]: options.cursor
-            ? [...messages, ...(state.messagesByChannel[channelId] || [])]
-            : messages,
-        },
-        hasMore: { ...state.hasMore, [channelId]: hasMore },
-        isLoadingMessages: false,
-      }))
+      set((state) => {
+        const existingMessages = state.messagesByChannel[channelId] || []
+        
+        // Defensive fix: Ensure incoming messages are always Oldest -> Newest
+        // (Bypasses the need for backend restart if message.repository hasn't reloaded)
+        const sortedIncoming = [...messages].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+        
+        let merged
+        if (options.cursor) {
+          // Loading older messages: prepend new ones, but filter out duplicates
+          const existingIds = new Set(existingMessages.map(m => m._id))
+          const uniqueNew = sortedIncoming.filter(m => !existingIds.has(m._id))
+          merged = [...uniqueNew, ...existingMessages]
+        } else {
+          // Initial load: prefer fresh messages, keep existing ones that aren't in fresh (e.g. pending local ones)
+          const freshIds = new Set(sortedIncoming.map(m => m._id))
+          const uniqueExisting = existingMessages.filter(m => !freshIds.has(m._id) && m.pending)
+          merged = [...sortedIncoming, ...uniqueExisting]
+        }
+
+        // Final safety check: enforce strict chronological order
+        merged.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+
+        return {
+          messagesByChannel: {
+            ...state.messagesByChannel,
+            [channelId]: merged,
+          },
+          hasMore: { ...state.hasMore, [channelId]: hasMore },
+          isLoadingMessages: false,
+        }
+      })
     } catch (error) {
       set({ isLoadingMessages: false })
       console.error('Failed to fetch messages:', error)
@@ -243,4 +268,10 @@ export const useChatStore = create((set, get) => ({
   },
 
   clearNotifications: () => set({ notifications: [] }),
-}))
+}),
+{
+  name: 'flowtask-chat-storage',
+  partialize: (state) => ({ messagesByChannel: state.messagesByChannel }),
+}
+)
+)

@@ -1,142 +1,161 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useMemo, useCallback } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import MessageItem from './MessageItem'
 import ActivityMessage from './ActivityMessage'
 import { MessageCircle } from 'lucide-react'
+import { Virtuoso } from 'react-virtuoso'
 
 export default function MessageList({ messages, channelId, onOpenThread, onOpenProfile, onOpenFilePreview }) {
   const { isLoadingMessages, hasMore, fetchMessages } = useChatStore()
-  const bottomRef = useRef(null)
-  const listRef = useRef(null)
-  const prevLengthRef = useRef(0)
-
-  // Auto-scroll on new messages
-  useEffect(() => {
-    if (messages.length > prevLengthRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
-    prevLengthRef.current = messages.length
-  }, [messages.length])
-
-  // Scroll to bottom on channel change
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'instant' })
-    prevLengthRef.current = 0
-  }, [channelId])
+  const virtuosoRef = useRef(null)
 
   // Load more on scroll to top
-  const handleScroll = useCallback(() => {
-    if (!listRef.current || !hasMore[channelId]) return
-    if (listRef.current.scrollTop < 100 && !isLoadingMessages) {
-      const oldest = messages[0]
-      if (oldest) {
-        fetchMessages(channelId, { cursor: oldest._id, limit: 50 })
-      }
+  const loadMore = useCallback(() => {
+    if (!hasMore[channelId] || isLoadingMessages || messages.length === 0) return
+    const oldest = messages[0]
+    if (oldest) {
+      fetchMessages(channelId, { cursor: oldest._id, limit: 80 })
     }
   }, [channelId, hasMore, isLoadingMessages, messages, fetchMessages])
+
+  // Scroll to bottom when channel changes
+  useEffect(() => {
+    if (messages.length > 0) {
+      setTimeout(() => {
+        virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'auto' })
+      }, 50)
+    }
+  }, [channelId])
 
   // Check if message is activity/system type
   const isActivityMessage = (msg) => {
     return msg.contentType === 'activity' || msg.contentType === 'system' || msg.contentType === 'bot'
   }
 
-  // Group messages by date
-  const groupedMessages = groupByDate(messages)
+  // Flatten messages with date separators for virtualization
+  const flattenedItems = useMemo(() => {
+    const flattened = []
+    let currentDate = null
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i]
+      const d = new Date(msg.createdAt)
+      const label = formatDateLabel(d)
+
+      if (label !== currentDate) {
+        currentDate = label
+        flattened.push({ isDateSeparator: true, date: label, _id: `date-${label}` })
+      }
+
+      // Add compact property dynamically ahead of time
+      const prevMsg = i > 0 ? messages[i - 1] : null
+      const isCompact = prevMsg
+        && prevMsg.authorId === msg.authorId
+        && !isActivityMessage(msg)
+        && !isActivityMessage(prevMsg)
+        && (new Date(msg.createdAt) - new Date(prevMsg.createdAt)) < 300000 // 5 min
+
+      flattened.push({ ...msg, isCompact })
+    }
+    return flattened
+  }, [messages])
+
+  // Track initial load vs pagination load (show skeleton on initial load only)
+  const isInitialLoad = isLoadingMessages && messages.length === 0
+
+  if (isInitialLoad) {
+    return (
+      <div className="flex-1 overflow-hidden" style={{ padding: '16px 20px' }}>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <MessageSkeleton key={i} />
+        ))}
+      </div>
+    )
+  }
+
+  if (!isLoadingMessages && messages.length === 0) {
+    return (
+      <div className="flex-1 overflow-hidden">
+        <EmptyState />
+      </div>
+    )
+  }
 
   return (
-    <div
-      ref={listRef}
-      onScroll={handleScroll}
-      className="flex-1 overflow-y-auto"
-      style={{ padding: '8px 0' }}
-    >
-      {/* Skeleton Loader */}
-      {isLoadingMessages && messages.length === 0 && (
-        <div style={{ padding: '16px 20px' }}>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <MessageSkeleton key={i} />
-          ))}
-        </div>
-      )}
-
-      {/* Load more indicator */}
-      {isLoadingMessages && messages.length > 0 && (
-        <div style={{ padding: '8px 20px', textAlign: 'center' }}>
-          <div
-            className="skeleton"
-            style={{ width: 120, height: 20, margin: '0 auto', borderRadius: 10 }}
-          />
-        </div>
-      )}
-
-      {/* Empty State */}
-      {!isLoadingMessages && messages.length === 0 && (
-        <EmptyState />
-      )}
-
-      {/* Messages grouped by date */}
-      {groupedMessages.map(({ date, items }) => (
-        <div key={date}>
-          {/* Date Separator */}
-          <div
-            className="animate-fade-in"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              padding: '12px 20px 4px',
-              gap: 12,
-            }}
-          >
-            <div style={{ flex: 1, height: 1, background: 'var(--border-secondary)' }} />
-            <span
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: 'var(--text-muted)',
-                padding: '2px 10px',
-                background: 'var(--bg-secondary)',
-                borderRadius: 'var(--radius-full)',
-                border: '1px solid var(--border-secondary)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {date}
-            </span>
-            <div style={{ flex: 1, height: 1, background: 'var(--border-secondary)' }} />
-          </div>
-
-          {items.map((msg, idx) => {
-            // Determine if this message should show author info
-            const prevMsg = idx > 0 ? items[idx - 1] : null
-            const isCompact = prevMsg
-              && prevMsg.authorId === msg.authorId
-              && !isActivityMessage(msg)
-              && !isActivityMessage(prevMsg)
-              && (new Date(msg.createdAt) - new Date(prevMsg.createdAt)) < 300000 // 5 min
-
-            if (isActivityMessage(msg)) {
-              return (
-                <div key={msg._id} style={{ padding: '2px 20px' }}>
-                  <ActivityMessage message={msg} />
-                </div>
-              )
-            }
-
+    <div className="flex-1 overflow-hidden relative">
+      <Virtuoso
+        ref={virtuosoRef}
+        data={flattenedItems}
+        className="w-full h-full"
+        firstItemIndex={1000000 - flattenedItems.length}
+        initialTopMostItemIndex={flattenedItems.length - 1}
+        startReached={loadMore}
+        followOutput={(isAtBottom) => (isAtBottom ? 'smooth' : false)}
+        alignToBottom={true}
+        components={{
+          Header: () => (
+            isLoadingMessages && messages.length > 0 ? (
+              <div style={{ padding: '8px 20px', textAlign: 'center' }}>
+                <div
+                  className="skeleton"
+                  style={{ width: 120, height: 20, margin: '0 auto', borderRadius: 10 }}
+                />
+              </div>
+            ) : null
+          ),
+          Footer: () => <div style={{ height: 16 }} />
+        }}
+        itemContent={(index, item) => {
+          if (item.isDateSeparator) {
             return (
-              <MessageItem
-                key={msg._id}
-                message={msg}
-                compact={isCompact}
-                onOpenThread={onOpenThread}
-                onOpenProfile={onOpenProfile}
-                onOpenFilePreview={onOpenFilePreview}
-              />
+              <div
+                className="animate-fade-in"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '12px 20px 4px',
+                  gap: 12,
+                }}
+              >
+                <div style={{ flex: 1, height: 1, background: 'var(--border-secondary)' }} />
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--text-muted)',
+                    padding: '2px 10px',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: 'var(--radius-full)',
+                    border: '1px solid var(--border-secondary)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {item.date}
+                </span>
+                <div style={{ flex: 1, height: 1, background: 'var(--border-secondary)' }} />
+              </div>
             )
-          })}
-        </div>
-      ))}
+          }
 
-      <div ref={bottomRef} />
+          if (isActivityMessage(item)) {
+            return (
+              <div style={{ padding: '2px 20px' }}>
+                <ActivityMessage message={item} />
+              </div>
+            )
+          }
+
+          return (
+            <MessageItem
+              message={item}
+              compact={item.isCompact}
+              onOpenThread={onOpenThread}
+              onOpenProfile={onOpenProfile}
+              onOpenFilePreview={onOpenFilePreview}
+            />
+          )
+        }}
+      />
     </div>
   )
 }
@@ -190,25 +209,7 @@ function EmptyState() {
   )
 }
 
-function groupByDate(messages) {
-  const groups = []
-  let currentDate = null
-  let currentGroup = null
 
-  for (const msg of messages) {
-    const d = new Date(msg.createdAt)
-    const label = formatDateLabel(d)
-
-    if (label !== currentDate) {
-      currentDate = label
-      currentGroup = { date: label, items: [] }
-      groups.push(currentGroup)
-    }
-    currentGroup.items.push(msg)
-  }
-
-  return groups
-}
 
 function formatDateLabel(date) {
   const now = new Date()

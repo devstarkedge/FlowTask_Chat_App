@@ -9,7 +9,6 @@ import logger from '../../utils/logger.js';
 import {
   SOCKET_EVENTS,
   MESSAGE_CONTENT_TYPES,
-  ALLOWED_REACTIONS,
   MENTION_TYPES,
 } from '../../config/constants.js';
 import {
@@ -17,6 +16,7 @@ import {
   NotFoundError,
   ForbiddenError,
 } from '../../middleware/errorHandler.js';
+import FileReference from '../files/FileReference.model.js';
 
 /**
  * Message Service — business logic for sending, editing, deleting messages,
@@ -32,7 +32,7 @@ class MessageService {
   /**
    * Send a new message to a channel.
    */
-  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, flowTaskRef, threadId }) {
+  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId }) {
     // Validate channel exists and is not archived
     const channel = await channelRepository.findById(channelId);
     if (!channel) throw new NotFoundError('Channel not found');
@@ -42,7 +42,7 @@ class MessageService {
     const sanitizedContent = content ? sanitizeHtml(content) : '';
     const sanitizedHtml = htmlContent ? sanitizeHtml(htmlContent) : sanitizedContent;
 
-    if (!sanitizedContent && (!attachments || attachments.length === 0)) {
+    if (!sanitizedContent && (!attachments || attachments.length === 0) && (!fileReferences || fileReferences.length === 0)) {
       throw new ValidationError('Message must have content or attachments');
     }
 
@@ -71,12 +71,24 @@ class MessageService {
     // Persist
     const message = await messageRepository.create(messageData);
 
-    // Populate author for emission
+    if (fileReferences && fileReferences.length > 0) {
+      const refsToCreate = fileReferences.map((fileId) => ({
+        fileId,
+        channelId,
+        messageId: message._id,
+        threadId: threadId || null,
+        referencedBy: authorId,
+        contextType: threadId ? 'thread' : 'channel',
+      }));
+      await FileReference.insertMany(refsToCreate);
+    }
+
+    // Populate author and fileReferences for emission
     const populated = await messageRepository.findById(message._id);
 
     // Update channel's last message
     const preview = truncate(stripHtml(sanitizedContent), 100);
-    channelRepository.updateLastMessage(channelId, message._id, preview).catch((err) => {
+    channelRepository.updateLastMessage(channelId, preview, new Date()).catch((err) => {
       logger.error('Failed to update last message', { channelId, error: err.message });
     });
 
@@ -133,7 +145,7 @@ class MessageService {
     const message = await messageRepository.create(messageData);
 
     const preview = truncate(stripHtml(content), 100);
-    channelRepository.updateLastMessage(channelId, message._id, preview).catch(() => {});
+    channelRepository.updateLastMessage(channelId, preview, new Date()).catch(() => {});
 
     emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_NEW, { message });
 
@@ -190,7 +202,8 @@ class MessageService {
     const message = await messageRepository.findById(messageId);
     if (!message) throw new NotFoundError('Message not found');
 
-    if (message.authorId?.toString() !== userId.toString()) {
+    const authorIdStr = message.authorId?._id?.toString() || message.authorId?.toString();
+    if (authorIdStr !== userId.toString()) {
       throw new ForbiddenError('Can only edit your own messages');
     }
 
@@ -231,7 +244,8 @@ class MessageService {
     const message = await messageRepository.findById(messageId);
     if (!message) throw new NotFoundError('Message not found');
 
-    if (message.authorId?.toString() !== userId.toString() && !isAdmin) {
+    const authorIdStr = message.authorId?._id?.toString() || message.authorId?.toString();
+    if (authorIdStr !== userId.toString() && !isAdmin) {
       throw new ForbiddenError('Can only delete your own messages');
     }
 
@@ -251,12 +265,6 @@ class MessageService {
    * Add a reaction to a message.
    */
   async addReaction(messageId, userId, emoji) {
-    if (!ALLOWED_REACTIONS.includes(emoji)) {
-      throw new ValidationError(
-        `Invalid reaction. Allowed: ${ALLOWED_REACTIONS.join(', ')}`,
-      );
-    }
-
     const message = await messageRepository.findById(messageId);
     if (!message) throw new NotFoundError('Message not found');
 

@@ -1,0 +1,56 @@
+import mongoose from 'mongoose';
+
+const { Schema, model } = mongoose;
+
+/**
+ * FileReference — Links a FileAsset to its usage context (Message, Thread, etc.).
+ * Allows a single file to be reused across different messages without duplicating storage.
+ */
+const fileReferenceSchema = new Schema({
+  fileId: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'FileAsset', 
+    required: true, 
+    index: true 
+  },
+  channelId: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'Channel', 
+    index: true 
+  },
+  messageId: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'Message', 
+    index: true,
+    sparse: true
+  },
+  threadId: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'Thread', 
+    index: true,
+    sparse: true
+  },
+  referencedBy: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'ChatUser', 
+    required: true 
+  },
+  contextType: { 
+    type: String, 
+    enum: ['channel', 'dm', 'thread'], 
+    required: true 
+  },
+}, {
+  timestamps: true,
+});
+
+// To easily lookup references for a file
+fileReferenceSchema.index({ fileId: 1, createdAt: -1 });
+
+// Prevent exact duplicate references linking same file to same message
+fileReferenceSchema.index({ messageId: 1, fileId: 1 }, { unique: true, sparse: true });
+fileReferenceSchema.index({ threadId: 1, fileId: 1 }, { unique: true, sparse: true });
+
+const FileReference = model('FileReference', fileReferenceSchema);
+
+export default FileReference;

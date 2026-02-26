@@ -1,5 +1,5 @@
 import messageService from './message.service.js';
-import ChatUpload from './ChatUpload.model.js';
+import fileUploadService from '../../services/fileUpload.service.js';
 import asyncHandler from '../../middleware/asyncHandler.js';
 
 /**
@@ -24,7 +24,7 @@ export const getMessages = asyncHandler(async (req, res) => {
  * Send a message to a channel.
  */
 export const sendMessage = asyncHandler(async (req, res) => {
-  const { content, htmlContent, contentType, attachments, flowTaskRef, threadId } = req.body;
+  const { content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId } = req.body;
 
   const message = await messageService.sendMessage({
     channelId: req.params.channelId,
@@ -33,6 +33,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
     htmlContent,
     contentType,
     attachments,
+    fileReferences,
     flowTaskRef,
     threadId,
   });
@@ -154,29 +155,18 @@ export const uploadFiles = asyncHandler(async (req, res) => {
   const uploads = [];
 
   for (const file of req.files) {
-    const fileUrl = `/api/chat/uploads/${file.filename}`;
-
-    const upload = await ChatUpload.create({
-      channelId: req.params.channelId,
-      uploadedBy: req.user._id,
-      fileName: file.filename,
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      fileSize: file.size,
-      url: fileUrl,
-      thumbnailUrl: file.mimetype.startsWith('image/') ? fileUrl : null,
-      storageKey: file.filename,
-    });
+    const asset = await fileUploadService.queueUpload(file, req.user._id);
 
     uploads.push({
-      _id: upload._id,
-      fileName: file.filename,
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      fileSize: file.size,
-      url: fileUrl,
-      thumbnailUrl: upload.thumbnailUrl,
-      source: 'chat_upload',
+      _id: asset._id, // This is now a FileAsset _id
+      fileName: asset.originalName,
+      originalName: asset.originalName,
+      mimeType: asset.mimeType,
+      fileSize: asset.fileSize,
+      url: asset.secureUrl || '/placeholder-loading',
+      thumbnailUrl: asset.thumbnailUrl,
+      status: asset.status,
+      source: 'chat_upload', // Keeping source for legacy frontend if needed
     });
   }
 

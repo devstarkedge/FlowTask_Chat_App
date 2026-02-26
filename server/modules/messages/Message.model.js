@@ -2,7 +2,6 @@ import mongoose from 'mongoose';
 import {
   MESSAGE_CONTENT_TYPES,
   ATTACHMENT_SOURCES,
-  ALLOWED_REACTIONS,
   MENTION_TYPES,
 } from '../../config/constants.js';
 
@@ -49,10 +48,6 @@ const reactionSchema = new Schema({
   emoji: {
     type: String,
     required: true,
-    validate: {
-      validator: (v) => ALLOWED_REACTIONS.includes(v),
-      message: (props) => `${props.value} is not an allowed reaction emoji`,
-    },
   },
   userIds: [{
     type: Schema.Types.ObjectId,
@@ -219,6 +214,12 @@ messageSchema.virtual('author', {
   localField: 'authorId',
   foreignField: '_id',
   justOne: true,
+});
+
+messageSchema.virtual('fileReferences', {
+  ref: 'FileReference',
+  localField: '_id',
+  foreignField: 'messageId',
 });
 
 // ─── Instance Methods ────────────────────────────────────────────────────────

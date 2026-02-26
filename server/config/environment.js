@@ -79,6 +79,11 @@ const env = Object.freeze({
 
   // Proxy
   TRUST_PROXY: parseInt(process.env.TRUST_PROXY, 10) || 0,
+
+  // Cloudinary
+  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_NAME || '',
+  CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
+  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
 });
 
 export default env;

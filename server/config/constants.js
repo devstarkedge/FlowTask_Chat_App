@@ -185,11 +185,6 @@ export const BOT = Object.freeze({
   DEADLINE_WARNING_HOURS: 24,              // Warn for tasks due within 24h
 });
 
-// ─── Allowed Reaction Emojis ─────────────────────────────────────────────────
-export const ALLOWED_REACTIONS = Object.freeze([
-  '👍', '👎', '❤️', '😂', '😮', '😢', '🎉', '🚀', '👀', '✅',
-]);
-
 // ─── Channel Name Constraints ────────────────────────────────────────────────
 export const CHANNEL_NAME = Object.freeze({
   MAX_LENGTH: 80,

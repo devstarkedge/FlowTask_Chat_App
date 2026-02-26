@@ -177,7 +177,6 @@ const chatUserSchema = new Schema({
 });
 
 // ─── Indexes ─────────────────────────────────────────────────────────────────
-chatUserSchema.index({ email: 1 }, { unique: true });
 chatUserSchema.index({ departmentIds: 1 });
 chatUserSchema.index({ role: 1, isActive: 1 });
 chatUserSchema.index({ onlineStatus: 1 });

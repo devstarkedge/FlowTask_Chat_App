@@ -70,7 +70,21 @@ class ThreadService {
    */
   async getThreadById(threadId) {
     const thread = await threadRepository.findById(threadId);
-    if (!thread) throw new NotFoundError('Thread not found');
+    if (!thread) {
+      // Check if it's a valid root message
+      const rootMessage = await messageRepository.findById(threadId);
+      if (rootMessage) {
+        return {
+          _id: rootMessage._id,
+          rootMessageId: rootMessage._id,
+          channelId: rootMessage.channelId,
+          replyCount: rootMessage.replyCount || 0,
+          participantIds: rootMessage.authorId ? [rootMessage.authorId] : [],
+          createdAt: rootMessage.createdAt,
+        };
+      }
+      throw new NotFoundError('Thread not found');
+    }
     return thread;
   }
 
@@ -102,11 +116,21 @@ class ThreadService {
   /**
    * Get replies in a thread (delegates to message service).
    */
-  async getThreadReplies(threadId, query = {}) {
+  async getThreadReplies(threadIdOrRootId, query = {}) {
+    // First resolve the actual thread to ensure we have the correct identifiers
+    const thread = await threadRepository.findById(threadIdOrRootId);
     const { limit, cursor } = parsePagination(query);
+
+    // If no Thread document exists, it means no one has replied yet. 
+    // Return an empty list instead of throwing an error.
+    if (!thread) {
+      return cursorPaginationResponse([], limit, '_id');
+    }
+
     const cursorFilter = cursor ? buildCursorFilter(cursor, 'after') : {};
 
-    const messages = await messageRepository.getThreadReplies(threadId, {
+    // message.repository.js 'getThreadReplies' expects the thread ID which matches Message.threadId.
+    const messages = await messageRepository.getThreadReplies(thread._id, {
       limit,
       cursorFilter,
     });

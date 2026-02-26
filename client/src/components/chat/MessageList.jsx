@@ -49,8 +49,14 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
 
       // Add compact property dynamically ahead of time
       const prevMsg = i > 0 ? messages[i - 1] : null
+      
+      const prevAuthorId = prevMsg?.authorId?._id || prevMsg?.authorId
+      const currentAuthorId = msg.authorId?._id || msg.authorId
+
       const isCompact = prevMsg
-        && prevMsg.authorId === msg.authorId
+        && prevAuthorId
+        && currentAuthorId
+        && prevAuthorId.toString() === currentAuthorId.toString()
         && !isActivityMessage(msg)
         && !isActivityMessage(prevMsg)
         && (new Date(msg.createdAt) - new Date(prevMsg.createdAt)) < 300000 // 5 min
@@ -86,6 +92,7 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
       <Virtuoso
         ref={virtuosoRef}
         data={flattenedItems}
+        computeItemKey={(index, item) => item._id || index}
         className="w-full h-full"
         firstItemIndex={1000000 - flattenedItems.length}
         initialTopMostItemIndex={flattenedItems.length - 1}

@@ -64,8 +64,20 @@ class MessageService {
       messageData.flowTaskRef = flowTaskRef;
     }
 
+    let actualThreadId = null;
+
     if (threadId) {
-      messageData.threadId = threadId;
+      let thread = await threadRepository.findById(threadId);
+      if (!thread) {
+        // Create the thread if this is the first reply to a message
+        thread = await threadRepository.create({
+          channelId,
+          rootMessageId: threadId,
+          participantIds: [],
+        });
+      }
+      actualThreadId = thread._id;
+      messageData.threadId = actualThreadId;
     }
 
     // Persist
@@ -76,9 +88,9 @@ class MessageService {
         fileId,
         channelId,
         messageId: message._id,
-        threadId: threadId || null,
+        threadId: actualThreadId || null,
         referencedBy: authorId,
-        contextType: threadId ? 'thread' : 'channel',
+        contextType: actualThreadId ? 'thread' : 'channel',
       }));
       await FileReference.insertMany(refsToCreate);
     }
@@ -93,15 +105,15 @@ class MessageService {
     });
 
     // If this is a thread reply, update thread stats
-    if (threadId) {
-      threadRepository.onReply(threadId, authorId)
+    if (actualThreadId) {
+      threadRepository.onReply(actualThreadId, authorId)
         .then((thread) => {
           if (thread?.rootMessageId) {
             return messageRepository.incrementReplyCount(thread.rootMessageId);
           }
         })
         .catch((err) => {
-          logger.error('Failed to update thread on reply', { threadId, error: err.message });
+          logger.error('Failed to update thread on reply', { threadId: actualThreadId, error: err.message });
         });
     }
 

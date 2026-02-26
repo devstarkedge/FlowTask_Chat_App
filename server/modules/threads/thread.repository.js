@@ -23,12 +23,26 @@ class ThreadRepository {
    * @returns {Promise<Thread|null>}
    */
   async findById(id, { populate = false } = {}) {
-    const query = Thread.findById(id);
+    let query = Thread.findById(id);
     if (populate) {
       query.populate('participantIds', 'name email avatar flowTaskUserId');
       query.populate('rootMessageId');
     }
-    return query.exec();
+    
+    let thread = await query.exec();
+    
+    // Fallback: If not found by _id, check if it's actually a rootMessageId
+    // This supports the frontend passing the message ID to open a thread
+    if (!thread) {
+      query = Thread.findOne({ rootMessageId: id });
+      if (populate) {
+        query.populate('participantIds', 'name email avatar flowTaskUserId');
+        query.populate('rootMessageId');
+      }
+      thread = await query.exec();
+    }
+    
+    return thread;
   }
 
   /**

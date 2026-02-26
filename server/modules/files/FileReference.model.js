@@ -48,8 +48,16 @@ const fileReferenceSchema = new Schema({
 fileReferenceSchema.index({ fileId: 1, createdAt: -1 });
 
 // Prevent exact duplicate references linking same file to same message
-fileReferenceSchema.index({ messageId: 1, fileId: 1 }, { unique: true, sparse: true });
-fileReferenceSchema.index({ threadId: 1, fileId: 1 }, { unique: true, sparse: true });
+// Using partialFilterExpression instead of sparse so null values are completely ignored by the unique constraint
+fileReferenceSchema.index(
+  { messageId: 1, fileId: 1 },
+  { unique: true, partialFilterExpression: { messageId: { $type: 'objectId' } } }
+);
+
+fileReferenceSchema.index(
+  { threadId: 1, fileId: 1 },
+  { unique: true, partialFilterExpression: { threadId: { $type: 'objectId' } } }
+);
 
 const FileReference = model('FileReference', fileReferenceSchema);
 

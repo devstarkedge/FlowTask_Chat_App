@@ -69,7 +69,6 @@ const fileAssetSchema = new Schema({
   timestamps: true,
 });
 
-fileAssetSchema.index({ checksumHash: 1 });
 fileAssetSchema.index({ uploadedBy: 1, createdAt: -1 });
 
 const FileAsset = model('FileAsset', fileAssetSchema);

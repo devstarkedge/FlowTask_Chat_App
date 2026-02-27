@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
+import { useChatStore } from '../../stores/chatStore'
 import Sidebar from './Sidebar'
 import ChatPanel from '../chat/ChatPanel'
 import ThreadPanel from '../chat/ThreadPanel'
@@ -10,8 +11,9 @@ import FilePreviewModal from '../chat/FilePreviewModal'
 
 export default function ChatLayout() {
   const { fetchChannels, activeChannelId, channels, showInfoPanel } = useChannelStore()
-  const [showThread, setShowThread] = useState(false)
-  const [activeThread, setActiveThread] = useState(null)
+  const activeThread = useChatStore(s => s.activeThread)
+  const openThreadAction = useChatStore(s => s.openThread)
+  const closeThread = useChatStore(s => s.closeThread)
   const [showSearch, setShowSearch] = useState(false)
   const [profileUser, setProfileUser] = useState(null)
   const [previewFile, setPreviewFile] = useState(null)
@@ -28,19 +30,13 @@ export default function ChatLayout() {
   }, [activeChannelId])
 
   const openThread = (thread) => {
-    setActiveThread(thread)
-    setShowThread(true)
+    openThreadAction(thread)
     setProfileUser(null)
-  }
-
-  const closeThread = () => {
-    setShowThread(false)
-    setActiveThread(null)
   }
 
   const openProfile = (user) => {
     setProfileUser(user)
-    setShowThread(false)
+    closeThread()
     useChannelStore.getState().setShowInfoPanel(false)
   }
 
@@ -88,12 +84,12 @@ export default function ChatLayout() {
       </div>
 
       {/* Thread Panel */}
-      {showThread && activeThread && (
+      {activeThread && (
         <ThreadPanel thread={activeThread} onClose={closeThread} />
       )}
 
       {/* Channel Info Panel */}
-      {showInfoPanel && activeChannel && !showThread && !showSearch && !profileUser && (
+      {showInfoPanel && activeChannel && !activeThread && !showSearch && !profileUser && (
         <ChannelInfoPanel channel={activeChannel} onOpenProfile={openProfile} />
       )}
 

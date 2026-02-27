@@ -49,7 +49,7 @@ class MessageRepository {
    * @returns {Promise<Message[]>}
    */
   async getChannelMessages(channelId, { cursor = null, limit = 80, direction = 'before' } = {}) {
-    const filter = { channelId, isDeleted: false };
+    const filter = { channelId, isDeleted: false, threadId: null };
 
     if (cursor) {
       if (direction === 'before') {

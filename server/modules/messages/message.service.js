@@ -84,9 +84,10 @@ class MessageService {
     }
 
     let actualThreadId = null;
+    let thread = null;
 
     if (threadId) {
-      let thread = await threadRepository.findById(threadId);
+      thread = await threadRepository.findById(threadId);
       if (!thread) {
         // Create the thread if this is the first reply to a message
         thread = await threadRepository.create({
@@ -139,11 +140,22 @@ class MessageService {
     // Build minimal socket payload
     const socketPayload = messageSocketPayload(populated, { tempId: tempId || null });
 
-    // Emit to channel (real-time) — use MESSAGE_CREATE
+    // Emit to channel (real-time)
     try {
-      emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, {
-        message: socketPayload,
-      });
+      if (actualThreadId) {
+        // Thread reply → dedicated event (not injected into main chat)
+        const resolvedRootMessageId = (thread?.rootMessageId || threadId).toString();
+        emitToChannel(channelId.toString(), SOCKET_EVENTS.THREAD_REPLY, {
+          message: socketPayload,
+          threadId: actualThreadId.toString(),
+          rootMessageId: resolvedRootMessageId,
+        });
+      } else {
+        // Main message → standard event
+        emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, {
+          message: socketPayload,
+        });
+      }
     } catch (err) {
       logDeliveryFailure(message._id, err);
     }
@@ -151,10 +163,16 @@ class MessageService {
     // Emit ACK to the sender specifically (for optimistic UI reconciliation)
     if (tempId) {
       try {
-        emitToUser(authorId.toString(), SOCKET_EVENTS.MESSAGE_ACK, {
+        const ackPayload = {
           tempId,
           message: socketPayload,
-        });
+        };
+        // Include rootMessageId for thread replies so frontend can reconcile
+        // against the correct threadRepliesByRoot store key
+        if (actualThreadId && thread) {
+          ackPayload.rootMessageId = (thread.rootMessageId || threadId).toString();
+        }
+        emitToUser(authorId.toString(), SOCKET_EVENTS.MESSAGE_ACK, ackPayload);
       } catch (err) {
         logDeliveryFailure(message._id, err);
       }

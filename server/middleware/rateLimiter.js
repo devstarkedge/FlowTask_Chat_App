@@ -45,8 +45,8 @@ export const passwordResetLimiter = createRateLimiter({
   max: 3,
 });
 
-/** File upload limiter — 20 per minute per user/IP. */
+/** File upload limiter — 50 per minute per user/IP. */
 export const uploadLimiter = createRateLimiter({
   windowMs: 60 * 1000, // 1 minute
-  max: 20,
+  max: 50,
 });

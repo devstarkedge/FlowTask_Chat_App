@@ -26,6 +26,19 @@ export const useChatStore = create((set, get) => ({
   // Notifications
   notifications: [],
 
+  // Active thread (persisted to sessionStorage for refresh survival)
+  activeThread: JSON.parse(sessionStorage.getItem('chat_activeThread') || 'null'),
+
+  openThread: (thread) => {
+    set({ activeThread: thread })
+    try { sessionStorage.setItem('chat_activeThread', JSON.stringify(thread)) } catch {}
+  },
+
+  closeThread: () => {
+    set({ activeThread: null })
+    sessionStorage.removeItem('chat_activeThread')
+  },
+
   // ─── Messages ────────────────────────────────────────────────────────
   fetchMessages: async (channelId, options = {}) => {
     // Debounce guard: prevent duplicate fetches for the same channel
@@ -199,6 +212,8 @@ export const useChatStore = create((set, get) => ({
   // ─── Real-time message handlers ─────────────────────────────────────
   addMessage: (message) => {
     set((state) => {
+      // Never add thread replies to main chat timeline
+      if (message.threadId) return state
       const channelId = message.channelId
       const existing = state.messagesByChannel[channelId] || []
       // Avoid duplicates

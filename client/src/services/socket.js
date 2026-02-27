@@ -38,6 +38,7 @@ const SOCKET_EVENTS = {
   // Threads
   THREAD_CREATED: 'thread:created',
   THREAD_UPDATED: 'thread:updated',
+  THREAD_REPLY: 'thread:reply',
 
   // Other
   NOTIFICATION: 'notification',
@@ -79,26 +80,35 @@ export function connectSocket() {
     // Skip if this is our own message (handled via optimistic UI + ACK)
     if (message.tempId && message.authorId === currentUserId) return
 
-    if (message.threadId) {
-      // Thread reply — route to thread store + update reply count in main chat
-      // We need to figure out the rootMessageId. The server stores threadId as the Thread doc _id,
-      // but the thread was created with rootMessageId = the parent message _id.
-      // For socket events, we use threadId to key the thread replies.
-      const rootMessageId = message.threadId
-      useChatStore.getState().addThreadReply(rootMessageId, message)
+    // Safety guard: never add thread replies to main chat via MESSAGE_CREATE
+    if (message.threadId) return
+
+    useChatStore.getState().addMessage(message)
+  })
+
+  // ─── Thread Reply Events ──────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.THREAD_REPLY, ({ message, rootMessageId }) => {
+    const currentUserId = useAuthStore.getState().user?._id
+    // Skip if this is our own message (handled via optimistic UI + ACK)
+    if (message.tempId && message.authorId === currentUserId) return
+
+    const resolvedRootId = rootMessageId || message.threadId
+    if (resolvedRootId) {
+      useChatStore.getState().addThreadReply(resolvedRootId, message)
       // Increment reply count on root message in main channel
       if (message.channelId) {
-        useChatStore.getState().incrementReplyCount(rootMessageId, message.channelId)
+        useChatStore.getState().incrementReplyCount(resolvedRootId, message.channelId)
       }
-    } else {
-      useChatStore.getState().addMessage(message)
     }
   })
 
-  socket.on(SOCKET_EVENTS.MESSAGE_ACK, ({ tempId, message }) => {
+  socket.on(SOCKET_EVENTS.MESSAGE_ACK, ({ tempId, message, rootMessageId }) => {
     // Reconcile optimistic message with server-confirmed message
     if (message.threadId) {
-      useChatStore.getState().reconcileThreadReply(message.threadId, tempId, message)
+      // Use rootMessageId from ACK payload (matches threadRepliesByRoot store key)
+      // Fallback to message.threadId only if rootMessageId not provided
+      const resolvedRootId = rootMessageId || message.threadId
+      useChatStore.getState().reconcileThreadReply(resolvedRootId, tempId, message)
     } else {
       useChatStore.getState().reconcileMessage(tempId, message)
     }

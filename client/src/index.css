@@ -1015,10 +1015,20 @@ body {
   margin: 4px 0;
 }
 
-.slack-rich-editor ul,
+.slack-rich-editor ul {
+  padding-left: 20px;
+  margin: 4px 0;
+  list-style-type: disc;
+}
+
 .slack-rich-editor ol {
   padding-left: 20px;
   margin: 4px 0;
+  list-style-type: decimal;
+}
+
+.slack-rich-editor li {
+  margin-bottom: 2px;
 }
 
 .slack-rich-editor a {

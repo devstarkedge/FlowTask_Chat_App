@@ -71,7 +71,7 @@ const channelSchema = new Schema({
     type: String,
     enum: Object.values(CHANNEL_TYPES),
     required: true,
-    index: true,
+    // index: removed — covered by compound { type: 1, isArchived: 1 }
   },
   // Reference to the FlowTask entity this channel represents.
   // Null for DM and system channels without a direct entity mapping.
@@ -103,7 +103,7 @@ const channelSchema = new Schema({
   isArchived: {
     type: Boolean,
     default: false,
-    index: true,
+    // index: removed — covered by compound { type: 1, isArchived: 1 }
   },
   archivedAt: {
     type: Date,
@@ -126,7 +126,7 @@ const channelSchema = new Schema({
   lastMessageAt: {
     type: Date,
     default: null,
-    index: true,
+    // index: removed — covered by compound { members.userId: 1, lastMessageAt: -1 }
   },
   lastMessagePreview: {
     type: String,

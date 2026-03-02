@@ -19,12 +19,25 @@ let cronJob = null;
 
 export function startDeadlineWarningCron() {
   cronJob = cron.schedule(BOT.DEADLINE_CHECK_CRON, async () => {
-    logger.info('Running deadline warning check...');
+    const startTime = performance.now();
+    logger.info('Running deadline warning check');
 
     try {
       await checkDeadlines();
+      const durationMs = Math.round(performance.now() - startTime);
+      logger.info('Deadline warning check complete', {
+        metric: 'cron_execution',
+        job: 'deadline_warning',
+        durationMs,
+      });
     } catch (error) {
-      logger.error('Deadline warning cron failed', { error: error.message });
+      const durationMs = Math.round(performance.now() - startTime);
+      logger.error('Deadline warning cron failed', {
+        metric: 'cron_execution',
+        job: 'deadline_warning',
+        error: error.message,
+        durationMs,
+      });
     }
   });
 

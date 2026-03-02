@@ -79,7 +79,7 @@ const messageSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'Channel',
     required: true,
-    index: true,
+    // index: removed — covered by compound { channelId: 1, createdAt: -1 }
   },
   // If this message is a thread reply, threadId points to the Thread document.
   // Root messages have threadId = null.
@@ -87,8 +87,7 @@ const messageSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'Thread',
     default: null,
-    index: true,
-    sparse: true,
+    // index: removed — covered by compound { threadId: 1, createdAt: 1 }
   },
   authorId: {
     type: Schema.Types.ObjectId,

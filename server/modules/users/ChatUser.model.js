@@ -101,7 +101,7 @@ const chatUserSchema = new Schema({
   isActive: {
     type: Boolean,
     default: true,
-    index: true,
+    // index: removed — covered by compound { role: 1, isActive: 1 }
   },
 
   // ─── Password (native auth only, excluded from queries by default) ────

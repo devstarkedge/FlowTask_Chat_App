@@ -7,10 +7,10 @@ import compression from 'compression';
 import morgan from 'morgan';
 
 import env from './config/environment.js';
-import { connectDatabase, disconnectDatabase, isDatabaseConnected } from './config/database.js';
+import { connectDatabase, disconnectDatabase, isDatabaseConnected, getDatabaseHealth, stopHealthCheck } from './config/database.js';
 import logger from './utils/logger.js';
 import { errorHandler, NotFoundError } from './middleware/errorHandler.js';
-import { initializeSocket, getConnectionCount } from './sockets/socketManager.js';
+import { initializeSocket, getConnectionCount, cleanupSocketResources } from './sockets/socketManager.js';
 
 // ─── Route Imports ───────────────────────────────────────────────────────────
 import authRoutes from './modules/auth/auth.routes.js';
@@ -25,6 +25,7 @@ import eventBus from './services/eventBus.js';
 import channelService from './modules/channels/channel.service.js';
 import { startDeadlineWarningCron, stopDeadlineWarningCron } from './modules/bot/deadlineWarning.js';
 import fileCleanupService from './services/fileCleanup.service.js';
+import fileUploadService from './services/fileUpload.service.js';
 
 // ─── Express App ─────────────────────────────────────────────────────────────
 const app = express();
@@ -76,19 +77,22 @@ if (env.NODE_ENV !== 'test') {
 
 // ─── Health Check ────────────────────────────────────────────────────────────
 app.get('/api/chat/health', (_req, res) => {
-  const dbConnected = isDatabaseConnected();
-  const status = dbConnected ? 'ok' : 'degraded';
+  const dbHealth = getDatabaseHealth();
+  const status = dbHealth.connected ? 'ok' : 'degraded';
+  const memUsage = process.memoryUsage();
 
-  res.status(dbConnected ? 200 : 503).json({
+  res.status(dbHealth.connected ? 200 : 503).json({
     status,
     service: 'flowtask-chat',
     uptime: Math.floor(process.uptime()),
     connections: getConnectionCount(),
-    database: dbConnected ? 'connected' : 'disconnected',
+    database: dbHealth,
     eventBus: eventBus.getStatus(),
     memory: {
-      rss: Math.round(process.memoryUsage().rss / 1024 / 1024),
-      heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+      rss: Math.round(memUsage.rss / 1024 / 1024),
+      heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+      external: Math.round(memUsage.external / 1024 / 1024),
     },
     timestamp: new Date().toISOString(),
   });
@@ -123,6 +127,8 @@ app.all('/api/chat/*', (req, _res, next) => {
 app.use(errorHandler);
 
 // ─── Start Server ────────────────────────────────────────────────────────────
+let memoryMonitorTimer = null;
+
 async function startServer() {
   try {
     // 1. Connect to MongoDB
@@ -145,9 +151,29 @@ async function startServer() {
     // 6. Start file cleanup service
     fileCleanupService.init();
 
-    // 7. Start HTTP server
+    // 6b. Recover uploads that were interrupted by last shutdown
+    await fileUploadService.recoverStuckUploads();
+
+    // 7. Start memory usage monitor
+    memoryMonitorTimer = setInterval(() => {
+      const mem = process.memoryUsage();
+      const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
+      const rssMB = Math.round(mem.rss / 1024 / 1024);
+
+      if (heapUsedMB > 400 || rssMB > 512) {
+        logger.warn('High memory usage detected', {
+          metric: 'memory_warning',
+          heapUsedMB,
+          rssMB,
+          heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
+          externalMB: Math.round(mem.external / 1024 / 1024),
+        });
+      }
+    }, 60000); // Check every 60s
+
+    // 8. Start HTTP server
     httpServer.listen(env.PORT, () => {
-      logger.info(`💬 FlowTask Chat server running`, {
+      logger.info(`FlowTask Chat server running`, {
         port: env.PORT,
         env: env.NODE_ENV,
         flowtaskEnabled: env.FLOWTASK_ENABLED,
@@ -164,7 +190,13 @@ async function startServer() {
 async function shutdown(signal) {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
 
-  // Close Socket.IO first (clean disconnect for clients)
+  // 1. Stop memory monitor
+  if (memoryMonitorTimer) {
+    clearInterval(memoryMonitorTimer);
+    memoryMonitorTimer = null;
+  }
+
+  // 2. Close Socket.IO first (clean disconnect for clients)
   const { getIO } = await import('./sockets/socketManager.js');
   try {
     const io = getIO();
@@ -172,18 +204,25 @@ async function shutdown(signal) {
       io.close();
       logger.info('Socket.IO server closed');
     }
+    // Clean up socket-related intervals
+    cleanupSocketResources();
   } catch {
     // Socket may not be initialized
   }
 
-  // Stop accepting new connections
+  // 3. Stop cron jobs
+  stopDeadlineWarningCron();
+
+  // 4. Stop DB health check
+  stopHealthCheck();
+
+  // 5. Stop accepting new connections, wait for in-flight to drain
   httpServer.close(async () => {
     logger.info('HTTP server closed');
 
     try {
-      stopDeadlineWarningCron();
       await disconnectDatabase();
-      logger.info('Database disconnected');
+      logger.info('Graceful shutdown complete');
     } catch (error) {
       logger.error('Error during database disconnect', { error: error.message });
     }

@@ -10,8 +10,8 @@ const fileReferenceSchema = new Schema({
   fileId: { 
     type: Schema.Types.ObjectId, 
     ref: 'FileAsset', 
-    required: true, 
-    index: true 
+    required: true,
+    // index: removed — covered by compound { fileId: 1, createdAt: -1 }
   },
   channelId: { 
     type: Schema.Types.ObjectId, 
@@ -20,14 +20,14 @@ const fileReferenceSchema = new Schema({
   },
   messageId: { 
     type: Schema.Types.ObjectId, 
-    ref: 'Message', 
-    index: true,
+    ref: 'Message',
+    // index: removed — covered by compound { messageId: 1, fileId: 1 }
     sparse: true
   },
   threadId: { 
     type: Schema.Types.ObjectId, 
-    ref: 'Thread', 
-    index: true,
+    ref: 'Thread',
+    // index: removed — covered by compound { threadId: 1, fileId: 1 }
     sparse: true
   },
   referencedBy: { 

@@ -74,20 +74,23 @@ function isEditorEmpty(editorEl) {
   return !text && !editorEl.querySelector('img')
 }
 
-// ─── Toolbar Button (memoized) ───────────────────────────────────────────────
-
 const ToolbarButton = memo(function ToolbarButton({ icon: Icon, title, onClick, disabled, active, size = 15 }) {
   return (
     <button
+      type="button"
       onMouseDown={(e) => {
         e.preventDefault() // Prevent blur on editor
-        if (!disabled) onClick?.()
+      }}
+      onClick={(e) => {
+        e.preventDefault()
+        if (!disabled) onClick?.(e)
       }}
       title={title}
       disabled={disabled}
-      className="slack-toolbar-btn"
+      className={`slack-toolbar-btn ${active ? 'active' : ''}`}
       data-active={active || undefined}
       aria-label={title}
+      aria-pressed={active}
     >
       <Icon size={size} />
     </button>
@@ -191,6 +194,15 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   const [showToolbar, setShowToolbar] = useState(true)
   const [hasContent, setHasContent] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
+  const [formatState, setFormatState] = useState({
+    bold: false,
+    italic: false,
+    underline: false,
+    strikeThrough: false,
+    insertUnorderedList: false,
+    insertOrderedList: false,
+    blockquote: false,
+  })
 
   // Mention state
   const [mentionType, setMentionType] = useState(null) // 'user' | 'channel' | null
@@ -375,6 +387,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       setHasContent(false)
       setPendingFiles([])
       clearDraft(channelId)
+      if (typeof checkFormatting === 'function') checkFormatting()
 
       emitTypingStop(channelId)
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
@@ -525,12 +538,43 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     setHasContent(!empty || pendingFiles.length > 0)
   }, [pendingFiles.length])
 
+  const checkFormatting = useCallback(() => {
+    if (!editorRef.current) return
+    try {
+      let isQuote = false
+      const sel = window.getSelection()
+      if (sel && sel.rangeCount > 0) {
+        let node = sel.getRangeAt(0).startContainer
+        while (node && node !== editorRef.current) {
+          if (node.nodeName === 'BLOCKQUOTE') {
+            isQuote = true
+            break
+          }
+          node = node.parentNode
+        }
+      }
+
+      setFormatState({
+        bold: document.queryCommandState('bold'),
+        italic: document.queryCommandState('italic'),
+        underline: document.queryCommandState('underline'),
+        strikeThrough: document.queryCommandState('strikeThrough'),
+        insertUnorderedList: document.queryCommandState('insertUnorderedList'),
+        insertOrderedList: document.queryCommandState('insertOrderedList'),
+        blockquote: isQuote,
+      })
+    } catch {
+      // Ignore if disconnected or unsupported
+    }
+  }, [])
+
   const handleInput = useCallback(() => {
     updateHasContent()
     handleTyping()
     saveDraftDebounced()
     detectMention()
-  }, [updateHasContent, handleTyping, saveDraftDebounced, detectMention])
+    checkFormatting()
+  }, [updateHasContent, handleTyping, saveDraftDebounced, detectMention, checkFormatting])
 
   // ─── Key Down Handler ─────────────────────────────────────────────────────
 
@@ -542,6 +586,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       if (e.key === 'Escape') {
         e.preventDefault()
         setMentionType(null)
+        checkFormatting()
         return
       }
     }
@@ -555,19 +600,24 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
     // Ctrl/Cmd shortcuts
     if (e.ctrlKey || e.metaKey) {
+      if (e.shiftKey && e.key.toLowerCase() === 'x') {
+        e.preventDefault()
+        formatStrikethrough()
+        return
+      }
       switch (e.key.toLowerCase()) {
         case 'b':
           e.preventDefault()
-          execCmd('bold')
-          break
+          formatBold()
+          return
         case 'i':
           e.preventDefault()
-          execCmd('italic')
-          break
+          formatItalic()
+          return
         case 'u':
           e.preventDefault()
-          execCmd('underline')
-          break
+          formatUnderline()
+          return
         default:
           break
       }
@@ -582,14 +632,25 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
   // ─── Formatting Actions ───────────────────────────────────────────────────
 
-  const formatBold = () => { editorRef.current?.focus(); execCmd('bold') }
-  const formatItalic = () => { editorRef.current?.focus(); execCmd('italic') }
-  const formatUnderline = () => { editorRef.current?.focus(); execCmd('underline') }
-  const formatStrikethrough = () => { editorRef.current?.focus(); execCmd('strikeThrough') }
+  const formatCommand = useCallback((command) => {
+    editorRef.current?.focus()
+    execCmd(command)
+    checkFormatting()
+    handleInput()
+  }, [checkFormatting, handleInput])
 
-  const formatInlineCode = () => {
+  const formatBold = useCallback(() => formatCommand('bold'), [formatCommand])
+  const formatItalic = useCallback(() => formatCommand('italic'), [formatCommand])
+  const formatUnderline = useCallback(() => formatCommand('underline'), [formatCommand])
+  const formatStrikethrough = useCallback(() => formatCommand('strikeThrough'), [formatCommand])
+  const formatBulletList = useCallback(() => formatCommand('insertUnorderedList'), [formatCommand])
+  const formatNumberedList = useCallback(() => formatCommand('insertOrderedList'), [formatCommand])
+
+  const formatInlineCode = useCallback(() => {
     const editor = editorRef.current
     if (!editor) return
+
+    // Quick command shortcut if empty selection
     editor.focus()
     const sel = window.getSelection()
     if (!sel || sel.rangeCount === 0) return
@@ -615,15 +676,24 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       sel.removeAllRanges()
       sel.addRange(newRange)
     }
-  }
+    handleInput()
+  }, [handleInput])
 
-  const formatCodeBlock = () => {
+  const formatCodeBlock = useCallback(() => {
     const editor = editorRef.current
     if (!editor) return
     editor.focus()
     const sel = window.getSelection()
     if (!sel || sel.rangeCount === 0) return
     const range = sel.getRangeAt(0)
+    
+    // Prevent nesting PRE tags
+    let node = range.startContainer
+    while (node && node !== editor) {
+      if (node.nodeName === 'PRE') return
+      node = node.parentNode
+    }
+
     const selected = range.toString()
     const pre = document.createElement('pre')
     const code = document.createElement('code')
@@ -641,67 +711,71 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     }
     sel.removeAllRanges()
     sel.addRange(newRange)
-  }
+    handleInput()
+  }, [handleInput])
 
-  const formatBulletList = () => { editorRef.current?.focus(); execCmd('insertUnorderedList') }
-  const formatNumberedList = () => { editorRef.current?.focus(); execCmd('insertOrderedList') }
-
-  const formatQuote = () => {
+  const formatQuote = useCallback(() => {
     const editor = editorRef.current
     if (!editor) return
     editor.focus()
+    let isQuote = false
     const sel = window.getSelection()
-    if (!sel || sel.rangeCount === 0) return
-    const range = sel.getRangeAt(0)
-    const selected = range.toString()
-    const bq = document.createElement('blockquote')
-    bq.textContent = selected || ''
-    range.deleteContents()
-    range.insertNode(bq)
-    const br = document.createElement('br')
-    bq.parentNode.insertBefore(br, bq.nextSibling)
-    const newRange = document.createRange()
-    newRange.selectNodeContents(bq)
-    newRange.collapse(false)
-    sel.removeAllRanges()
-    sel.addRange(newRange)
-  }
+    if (sel && sel.rangeCount > 0) {
+      let node = sel.getRangeAt(0).startContainer
+      while (node && node !== editor) {
+        if (node.nodeName === 'BLOCKQUOTE') {
+          isQuote = true
+          break
+        }
+        node = node.parentNode
+      }
+    }
 
-  const handleLinkInsert = (url, text) => {
+    if (isQuote) {
+      execCmd('formatBlock', 'DIV')
+    } else {
+      execCmd('formatBlock', 'BLOCKQUOTE')
+    }
+    
+    checkFormatting()
+    handleInput()
+  }, [checkFormatting, handleInput])
+
+  const handleLinkInsert = useCallback((url, text) => {
     const editor = editorRef.current
     if (!editor) return
     editor.focus()
     restoreSelection(savedRangeRef.current)
     const linkHtml = `<a href="${url}" target="_blank" rel="noopener noreferrer">${text || url}</a>`
     insertHtmlAtCaret(linkHtml)
-    updateHasContent()
-  }
+    handleInput()
+  }, [handleInput])
 
   // ─── Emoji Insert ─────────────────────────────────────────────────────────
 
-  const insertEmoji = (emoji) => {
+  const insertEmoji = useCallback((emoji) => {
     const editor = editorRef.current
     if (editor) {
       editor.focus()
       restoreSelection(savedRangeRef.current)
       insertHtmlAtCaret(emoji)
-      updateHasContent()
+      handleInput()
     }
     setShowEmoji(false)
-  }
+  }, [handleInput])
 
   // Save selection before opening emoji/link modal
-  const handleEmojiToggle = () => {
+  const handleEmojiToggle = useCallback(() => {
     savedRangeRef.current = saveSelection()
-    setShowEmoji(!showEmoji)
+    setShowEmoji((prev) => !prev)
     setShowLinkModal(false)
-  }
+  }, [])
 
-  const handleLinkToggle = () => {
+  const handleLinkToggle = useCallback(() => {
     savedRangeRef.current = saveSelection()
-    setShowLinkModal(!showLinkModal)
+    setShowLinkModal((prev) => !prev)
     setShowEmoji(false)
-  }
+  }, [])
 
   // ─── Auto focus ───────────────────────────────────────────────────────────
 
@@ -745,10 +819,10 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
         {showToolbar && (
           <div className="slack-formatting-toolbar">
             <div className="slack-toolbar-group">
-              <ToolbarButton icon={Bold} title="Bold (Ctrl+B)" onClick={formatBold} />
-              <ToolbarButton icon={Italic} title="Italic (Ctrl+I)" onClick={formatItalic} />
-              <ToolbarButton icon={Underline} title="Underline (Ctrl+U)" onClick={formatUnderline} />
-              <ToolbarButton icon={Strikethrough} title="Strikethrough" onClick={formatStrikethrough} />
+              <ToolbarButton icon={Bold} title="Bold (Ctrl+B)" onClick={formatBold} active={formatState.bold} />
+              <ToolbarButton icon={Italic} title="Italic (Ctrl+I)" onClick={formatItalic} active={formatState.italic} />
+              <ToolbarButton icon={Underline} title="Underline (Ctrl+U)" onClick={formatUnderline} active={formatState.underline} />
+              <ToolbarButton icon={Strikethrough} title="Strikethrough (Ctrl+Shift+X)" onClick={formatStrikethrough} active={formatState.strikeThrough} />
             </div>
             <div className="slack-toolbar-divider" />
             <div className="slack-toolbar-group">
@@ -756,12 +830,12 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
             </div>
             <div className="slack-toolbar-divider" />
             <div className="slack-toolbar-group">
-              <ToolbarButton icon={List} title="Bullet list" onClick={formatBulletList} />
-              <ToolbarButton icon={ListOrdered} title="Numbered list" onClick={formatNumberedList} />
+              <ToolbarButton icon={List} title="Bullet list" onClick={formatBulletList} active={formatState.insertUnorderedList} />
+              <ToolbarButton icon={ListOrdered} title="Numbered list" onClick={formatNumberedList} active={formatState.insertOrderedList} />
             </div>
             <div className="slack-toolbar-divider" />
             <div className="slack-toolbar-group">
-              <ToolbarButton icon={Quote} title="Quote" onClick={formatQuote} />
+              <ToolbarButton icon={Quote} title="Quote" onClick={formatQuote} active={formatState.blockquote} />
               <ToolbarButton icon={Code} title="Inline code" onClick={formatInlineCode} />
               <ToolbarButton icon={Braces} title="Code block" onClick={formatCodeBlock} />
             </div>
@@ -790,7 +864,9 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
           data-placeholder={placeholder || 'Type a message...'}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
-          onFocus={() => setIsFocused(true)}
+          onKeyUp={checkFormatting}
+          onMouseUp={checkFormatting}
+          onFocus={() => { setIsFocused(true); checkFormatting(); }}
           onBlur={() => setIsFocused(false)}
           onPaste={handlePaste}
         />

@@ -340,6 +340,19 @@ class UserRepository {
       flowTaskUserId: { $in: flowTaskUserIds },
     }).exec();
   }
+
+  /**
+   * Clear all socket IDs and set all users offline.
+   * Called on server startup to recover from crashes that left stale socket state.
+   * @returns {Promise<{modifiedCount: number}>}
+   */
+  async clearAllSocketIds() {
+    const result = await ChatUser.updateMany(
+      { $or: [{ socketIds: { $ne: [] } }, { onlineStatus: { $ne: 'offline' } }] },
+      { $set: { socketIds: [], onlineStatus: 'offline', lastSeenAt: new Date() } },
+    );
+    return { modifiedCount: result.modifiedCount };
+  }
 }
 
 export default new UserRepository();

@@ -3,6 +3,22 @@ import { messageAPI, threadAPI, botAPI } from '../services/api'
 import { useAuthStore } from './authStore'
 import toast from 'react-hot-toast'
 
+// ─── LRU Message Cache ─────────────────────────────────────────────────────
+// Prevent unbounded memory growth by evicting least-recently-used channels.
+const MAX_CACHED_CHANNELS = 10
+const channelAccessOrder = [] // Most-recently-accessed at end
+
+function touchChannel(channelId) {
+  const idx = channelAccessOrder.indexOf(channelId)
+  if (idx !== -1) channelAccessOrder.splice(idx, 1)
+  channelAccessOrder.push(channelId)
+}
+
+function getChannelsToEvict() {
+  if (channelAccessOrder.length <= MAX_CACHED_CHANNELS) return []
+  return channelAccessOrder.splice(0, channelAccessOrder.length - MAX_CACHED_CHANNELS)
+}
+
 export const useChatStore = create((set, get) => ({
   // Messages keyed by channelId
   messagesByChannel: {},
@@ -47,6 +63,9 @@ export const useChatStore = create((set, get) => ({
     if (fetching.has(fetchKey)) return
     fetching.add(fetchKey)
 
+    // LRU tracking
+    touchChannel(channelId)
+
     set({ isLoadingMessages: true })
     try {
       const { data } = await messageAPI.list(channelId, options)
@@ -75,11 +94,19 @@ export const useChatStore = create((set, get) => ({
         // Final safety check: enforce strict chronological order
         merged.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
 
+        const newMessagesByChannel = {
+          ...state.messagesByChannel,
+          [channelId]: merged,
+        }
+
+        // Evict LRU channels to keep memory bounded
+        const toEvict = getChannelsToEvict()
+        for (const evictId of toEvict) {
+          delete newMessagesByChannel[evictId]
+        }
+
         return {
-          messagesByChannel: {
-            ...state.messagesByChannel,
-            [channelId]: merged,
-          },
+          messagesByChannel: newMessagesByChannel,
           hasMore: { ...state.hasMore, [channelId]: hasMore },
           isLoadingMessages: false,
         }
@@ -455,11 +482,13 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  addReactionLocal: (messageId, userId, emoji) => {
+  addReactionLocal: (messageId, userId, emoji, channelId) => {
     set((state) => {
       const newState = { ...state.messagesByChannel }
-      for (const channelId of Object.keys(newState)) {
-        newState[channelId] = newState[channelId].map((m) => {
+      // If channelId is provided, only scan that channel (O(messages) vs O(channels×messages))
+      const channelsToScan = channelId && newState[channelId] ? [channelId] : Object.keys(newState)
+      for (const cid of channelsToScan) {
+        newState[cid] = newState[cid].map((m) => {
           if (m._id !== messageId) return m
           const reactions = [...(m.reactions || [])]
           const existing = reactions.find((r) => r.emoji === emoji)
@@ -479,11 +508,12 @@ export const useChatStore = create((set, get) => ({
     })
   },
 
-  removeReactionLocal: (messageId, userId, emoji) => {
+  removeReactionLocal: (messageId, userId, emoji, channelId) => {
     set((state) => {
       const newState = { ...state.messagesByChannel }
-      for (const channelId of Object.keys(newState)) {
-        newState[channelId] = newState[channelId].map((m) => {
+      const channelsToScan = channelId && newState[channelId] ? [channelId] : Object.keys(newState)
+      for (const cid of channelsToScan) {
+        newState[cid] = newState[cid].map((m) => {
           if (m._id !== messageId) return m
           const reactions = (m.reactions || [])
             .map((r) => {

@@ -68,10 +68,21 @@ export function connectSocket() {
 
   socket.on('reconnect', (attempt) => {
     console.log('[Socket] Reconnected after', attempt, 'attempts')
+    // Re-sync channels & unreads after reconnect to cover any missed events
+    try {
+      useChannelStore.getState().fetchChannels()
+    } catch (err) {
+      console.error('[Socket] Failed to re-sync after reconnect:', err.message)
+    }
   })
 
   socket.on('connect_error', (err) => {
     console.error('[Socket] Connection error:', err.message)
+    // If it's an auth error, the token may be expired — disconnect cleanly
+    if (err.message?.includes('auth') || err.message?.includes('token') || err.message?.includes('unauthorized')) {
+      console.warn('[Socket] Auth error detected, disconnecting')
+      socket.disconnect()
+    }
   })
 
   // ─── Message Events ──────────────────────────────────────────────────
@@ -123,12 +134,12 @@ export function connectSocket() {
   })
 
   // ─── Reaction Events ────────────────────────────────────────────────
-  socket.on(SOCKET_EVENTS.REACTION_ADD, ({ messageId, userId, emoji }) => {
-    useChatStore.getState().addReactionLocal(messageId, userId, emoji)
+  socket.on(SOCKET_EVENTS.REACTION_ADD, ({ messageId, userId, emoji, channelId }) => {
+    useChatStore.getState().addReactionLocal(messageId, userId, emoji, channelId)
   })
 
-  socket.on(SOCKET_EVENTS.REACTION_REMOVE, ({ messageId, userId, emoji }) => {
-    useChatStore.getState().removeReactionLocal(messageId, userId, emoji)
+  socket.on(SOCKET_EVENTS.REACTION_REMOVE, ({ messageId, userId, emoji, channelId }) => {
+    useChatStore.getState().removeReactionLocal(messageId, userId, emoji, channelId)
   })
 
   // ─── Typing Events ──────────────────────────────────────────────────

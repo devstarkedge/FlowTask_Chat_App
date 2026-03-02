@@ -9,23 +9,58 @@ import { SOCKET_EVENTS } from '../config/constants.js';
 /**
  * Socket.IO Manager — handles WebSocket connections, authentication, and room management.
  *
- * Room topology matches FlowTask's pattern (spec §2.2):
- *   user-{chatUserId}          — personal notifications
+ * Room topology:
+ *   user-{chatUserId}          — personal notifications (all tabs)
  *   channel-{channelId}        — per-channel messages
  *   department-{departmentId}  — department-scoped events
- *   typing-{channelId}         — ephemeral typing indicators
  *
- * Enterprise optimizations:
+ * Enterprise features:
  *   - Scoped presence broadcast (only to user's channels, not global)
  *   - Server-side typing throttle (max 1 emit per 2s per user/channel)
+ *   - Per-socket event rate limiting (prevents abuse)
+ *   - Stale socket cleanup on server start (crash recovery)
+ *   - Proper error handling in joinChannelRoom
+ *   - Fresh channel list on disconnect (no stale closure)
  *   - Socket reconnect logging for monitoring
+ *   - Redis adapter ready (conditional on REDIS_URL)
  */
 
 let io = null;
 
-// Server-side typing throttle state: Map<`${userId}-${channelId}`, lastEmitTimestamp>
+// ─── Typing Throttle ─────────────────────────────────────────────────────────
 const typingThrottleMap = new Map();
 const TYPING_THROTTLE_MS = 2000;
+
+// ─── Socket Rate Limiting ────────────────────────────────────────────────────
+const socketRateLimits = new Map(); // Map<socketId, { count, windowStart }>
+const RATE_LIMIT_WINDOW_MS = 60000;  // 1 minute
+const RATE_LIMIT_MAX_EVENTS = 100;   // Max events per window per socket
+
+// ─── Interval Tracking (for cleanup on shutdown) ─────────────────────────────
+let throttleCleanupTimer = null;
+let rateLimitCleanupTimer = null;
+
+/**
+ * Check if a socket has exceeded its event rate limit.
+ * @param {string} socketId
+ * @returns {boolean} true if rate limited
+ */
+function isSocketRateLimited(socketId) {
+  const now = Date.now();
+  let entry = socketRateLimits.get(socketId);
+
+  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+    entry = { count: 0, windowStart: now };
+    socketRateLimits.set(socketId, entry);
+  }
+
+  entry.count++;
+
+  if (entry.count > RATE_LIMIT_MAX_EVENTS) {
+    return true;
+  }
+  return false;
+}
 
 /**
  * Initialize Socket.IO with the HTTP server.
@@ -47,10 +82,50 @@ export async function initializeSocket(httpServer, corsOptions) {
     },
   });
 
+  // ─── Redis Adapter (optional — enables horizontal scaling) ───────────
+  if (env.REDIS_URL) {
+    try {
+      const { createAdapter } = await import('@socket.io/redis-adapter');
+      const { createClient } = await import('redis');
+
+      const pubClient = createClient({ url: env.REDIS_URL });
+      const subClient = pubClient.duplicate();
+
+      await Promise.all([pubClient.connect(), subClient.connect()]);
+      io.adapter(createAdapter(pubClient, subClient));
+
+      logger.info('Socket.IO Redis adapter initialized', {
+        metric: 'socket_lifecycle',
+        event: 'redis_adapter_connected',
+      });
+    } catch (error) {
+      logger.warn('Redis adapter failed, falling back to in-memory adapter', {
+        metric: 'socket_lifecycle',
+        event: 'redis_adapter_failed',
+        error: error.message,
+      });
+      // Continue with default in-memory adapter
+    }
+  }
+
+  // ─── Stale Socket Cleanup (crash recovery) ─────────────────────────
+  try {
+    const result = await userRepository.clearAllSocketIds();
+    if (result.modifiedCount > 0) {
+      logger.info('Cleared stale socket state from previous session', {
+        metric: 'socket_lifecycle',
+        event: 'stale_cleanup',
+        usersReset: result.modifiedCount,
+      });
+    }
+  } catch (error) {
+    logger.error('Failed to clear stale socket IDs', { error: error.message });
+  }
+
   // ─── Authentication Middleware ──────────────────────────────────────────
   io.use(async (socket, next) => {
     try {
-      const { token, userId } = socket.handshake.auth;
+      const { token } = socket.handshake.auth;
 
       if (!token) {
         return next(new Error('Authentication token required'));
@@ -92,8 +167,6 @@ export async function initializeSocket(httpServer, corsOptions) {
 
       // Attach user to socket
       socket.chatUser = chatUser;
-      // flowTaskUserId is set inside Strategy 2 try-block when applicable
-
       next();
     } catch (error) {
       logger.warn('Socket authentication failed', {
@@ -110,6 +183,8 @@ export async function initializeSocket(httpServer, corsOptions) {
     const userId = user._id.toString();
 
     logger.info('Socket connected', {
+      metric: 'socket_lifecycle',
+      event: 'connected',
       userId,
       flowTaskUserId: user.flowTaskUserId,
       name: user.name,
@@ -129,12 +204,12 @@ export async function initializeSocket(httpServer, corsOptions) {
     }
 
     // Channel rooms (all channels user belongs to)
-    let userChannelIds = [];
+    let initialChannelIds = [];
     try {
       const channels = await channelRepository.findByMember(userId);
       for (const channel of channels) {
         socket.join(`channel-${channel._id}`);
-        userChannelIds.push(channel._id.toString());
+        initialChannelIds.push(channel._id.toString());
       }
     } catch (error) {
       logger.error('Failed to join channel rooms', {
@@ -150,14 +225,19 @@ export async function initializeSocket(httpServer, corsOptions) {
       name: user.name,
       avatar: user.avatar,
     };
-    for (const channelId of userChannelIds) {
+    for (const channelId of initialChannelIds) {
       io.to(`channel-${channelId}`).emit(SOCKET_EVENTS.USER_ONLINE, presencePayload);
     }
 
-    // ─── Client Events ───────────────────────────────────────────────
+    // ─── Client Events (with rate limiting) ──────────────────────────
 
-    // Join a specific channel room (on channel open) — with membership verification
+    // Join a specific channel room — with membership verification
     socket.on('channel:join', async (channelId) => {
+      if (isSocketRateLimited(socket.id)) {
+        socket.emit('error', { message: 'Rate limited. Please slow down.' });
+        return;
+      }
+
       try {
         // Admin bypasses membership check
         if (user.role === 'admin') {
@@ -186,13 +266,16 @@ export async function initializeSocket(httpServer, corsOptions) {
       }
     });
 
-    // Leave a channel room (on channel close)
+    // Leave a channel room
     socket.on('channel:leave', (channelId) => {
+      if (isSocketRateLimited(socket.id)) return;
       socket.leave(`channel-${channelId}`);
     });
 
     // Typing indicators — server-side throttled (max 1 emit per 2s per user/channel)
     socket.on('typing:start', ({ channelId }) => {
+      if (isSocketRateLimited(socket.id)) return;
+
       const throttleKey = `${userId}-${channelId}`;
       const now = Date.now();
       const lastEmit = typingThrottleMap.get(throttleKey) || 0;
@@ -210,6 +293,8 @@ export async function initializeSocket(httpServer, corsOptions) {
     });
 
     socket.on('typing:stop', ({ channelId }) => {
+      if (isSocketRateLimited(socket.id)) return;
+
       const throttleKey = `${userId}-${channelId}`;
       typingThrottleMap.delete(throttleKey);
 
@@ -221,28 +306,48 @@ export async function initializeSocket(httpServer, corsOptions) {
 
     // ─── Disconnection ───────────────────────────────────────────────
     socket.on('disconnect', async (reason) => {
-      logger.info('Socket disconnected', { userId, socketId: socket.id, reason });
+      logger.info('Socket disconnected', {
+        metric: 'socket_lifecycle',
+        event: 'disconnected',
+        userId,
+        socketId: socket.id,
+        reason,
+      });
       logSocketReconnect(userId, socket.id, reason);
+
+      // Clean up rate limit entry
+      socketRateLimits.delete(socket.id);
 
       const updatedUser = await userRepository.removeSocketId(userId, socket.id);
 
       // Only broadcast offline if all sockets are gone (multi-tab support)
-      // Scoped to user's channels instead of global broadcast
       if (updatedUser && updatedUser.socketIds.length === 0) {
+        // Re-fetch current channel list instead of using stale closure
+        // This ensures offline is broadcast to channels joined mid-session
+        let currentChannelIds = initialChannelIds;
+        try {
+          const currentChannels = await channelRepository.findByMember(userId);
+          currentChannelIds = currentChannels.map((c) => c._id.toString());
+        } catch {
+          // Fall back to initial channel list if query fails
+        }
+
         const offlinePayload = {
           userId,
           flowTaskUserId: user.flowTaskUserId,
           lastSeenAt: updatedUser.lastSeenAt,
         };
-        for (const channelId of userChannelIds) {
+        for (const channelId of currentChannelIds) {
           io.to(`channel-${channelId}`).emit(SOCKET_EVENTS.USER_OFFLINE, offlinePayload);
         }
       }
     });
   });
 
-  // Periodically clean up stale typing throttle entries (every 30s)
-  setInterval(() => {
+  // ─── Periodic Cleanup Intervals ────────────────────────────────────────
+
+  // Clean stale typing throttle entries every 30s
+  throttleCleanupTimer = setInterval(() => {
     const now = Date.now();
     for (const [key, timestamp] of typingThrottleMap.entries()) {
       if (now - timestamp > 10000) {
@@ -251,7 +356,22 @@ export async function initializeSocket(httpServer, corsOptions) {
     }
   }, 30000);
 
-  logger.info('Socket.IO initialized');
+  // Clean stale rate limit entries every 60s
+  rateLimitCleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [socketId, entry] of socketRateLimits.entries()) {
+      if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS * 2) {
+        socketRateLimits.delete(socketId);
+      }
+    }
+  }, 60000);
+
+  logger.info('Socket.IO initialized', {
+    metric: 'socket_lifecycle',
+    event: 'initialized',
+    redisAdapter: !!env.REDIS_URL,
+  });
+
   return io;
 }
 
@@ -290,17 +410,24 @@ export function emitToAll(event, data) {
 }
 
 /**
- * Make a specific socket join a channel room.
+ * Make a specific user's sockets join a channel room.
+ * Used when adding members to channels programmatically.
  */
-export function joinChannelRoom(userId, channelId) {
+export async function joinChannelRoom(userId, channelId) {
   if (!io) return;
-  const room = `user-${userId}`;
-  const sockets = io.in(room).fetchSockets();
-  sockets.then((socketList) => {
+  try {
+    const room = `user-${userId}`;
+    const socketList = await io.in(room).fetchSockets();
     for (const socket of socketList) {
       socket.join(`channel-${channelId}`);
     }
-  });
+  } catch (error) {
+    logger.error('Failed to join channel room programmatically', {
+      userId,
+      channelId,
+      error: error.message,
+    });
+  }
 }
 
 /**
@@ -316,4 +443,26 @@ export function getIO() {
 export function getConnectionCount() {
   if (!io) return 0;
   return io.engine?.clientsCount || 0;
+}
+
+/**
+ * Clean up socket-related resources (intervals, maps).
+ * Called during graceful shutdown.
+ */
+export function cleanupSocketResources() {
+  if (throttleCleanupTimer) {
+    clearInterval(throttleCleanupTimer);
+    throttleCleanupTimer = null;
+  }
+  if (rateLimitCleanupTimer) {
+    clearInterval(rateLimitCleanupTimer);
+    rateLimitCleanupTimer = null;
+  }
+  typingThrottleMap.clear();
+  socketRateLimits.clear();
+
+  logger.info('Socket resources cleaned up', {
+    metric: 'socket_lifecycle',
+    event: 'resources_cleaned',
+  });
 }

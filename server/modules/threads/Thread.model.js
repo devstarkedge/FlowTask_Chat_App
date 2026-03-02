@@ -26,7 +26,7 @@ const threadSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'Channel',
     required: true,
-    index: true,
+    // index: removed — covered by compound { channelId: 1, lastReplyAt: -1 }
   },
   rootMessageId: {
     type: Schema.Types.ObjectId,

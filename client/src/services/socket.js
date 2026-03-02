@@ -168,6 +168,15 @@ export function connectSocket() {
     useChatStore.getState().updateMessageStatus(channelId, messageId, messageIds, status, { deliveredAt, seenAt })
   })
 
+  // ─── Pin Events ─────────────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.MESSAGE_PINNED, (payload) => {
+    useChatStore.getState().handleMessagePinned(payload)
+  })
+
+  socket.on(SOCKET_EVENTS.MESSAGE_UNPINNED, (payload) => {
+    useChatStore.getState().handleMessageUnpinned(payload)
+  })
+
   // ─── Reaction Events ────────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.REACTION_ADD, ({ messageId, userId, emoji, channelId }) => {
     useChatStore.getState().addReactionLocal(messageId, userId, emoji, channelId)

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
+import ErrorBoundary from '../ErrorBoundary'
 import Sidebar from './Sidebar'
 import ChatPanel from '../chat/ChatPanel'
 import ThreadPanel from '../chat/ThreadPanel'
@@ -8,6 +9,10 @@ import ChannelInfoPanel from '../chat/ChannelInfoPanel'
 import SearchPanel from '../chat/SearchPanel'
 import ProfileSidePanel from '../chat/ProfileSidePanel'
 import FilePreviewModal from '../chat/FilePreviewModal'
+import PinnedMessagesPanel from '../chat/PinnedMessagesPanel'
+import AllThreadsPanel from '../chat/AllThreadsPanel'
+import KeyboardShortcutsModal from '../chat/KeyboardShortcutsModal'
+import { useKeyboardShortcuts } from '../../utils/keyboardShortcuts'
 
 export default function ChatLayout() {
   const { fetchChannels, activeChannelId, channels, showInfoPanel } = useChannelStore()
@@ -15,10 +20,28 @@ export default function ChatLayout() {
   const openThreadAction = useChatStore(s => s.openThread)
   const closeThread = useChatStore(s => s.closeThread)
   const [showSearch, setShowSearch] = useState(false)
+  const [showPins, setShowPins] = useState(false)
+  const [showAllThreads, setShowAllThreads] = useState(false)
   const [profileUser, setProfileUser] = useState(null)
   const [previewFile, setPreviewFile] = useState(null)
   const [previewFiles, setPreviewFiles] = useState([])
   const [showMobileSidebar, setShowMobileSidebar] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+
+  // Keyboard shortcuts
+  const shortcutHandlers = useMemo(() => ({
+    toggleSearch: () => { setShowSearch((s) => !s); setShowPins(false); setShowAllThreads(false) },
+    toggleThreads: () => { setShowAllThreads((s) => !s); setShowSearch(false); setShowPins(false); closeThread(); setProfileUser(null) },
+    showShortcuts: () => setShowShortcuts((s) => !s),
+    escape: () => {
+      if (showShortcuts) setShowShortcuts(false)
+      else if (showSearch) setShowSearch(false)
+      else if (showPins) setShowPins(false)
+      else if (showAllThreads) setShowAllThreads(false)
+      else if (profileUser) setProfileUser(null)
+    },
+  }), [showShortcuts, showSearch, showPins, showAllThreads, profileUser, closeThread])
+  useKeyboardShortcuts(shortcutHandlers)
 
   useEffect(() => {
     fetchChannels()
@@ -32,6 +55,7 @@ export default function ChatLayout() {
   const openThread = (thread) => {
     openThreadAction(thread)
     setProfileUser(null)
+    setShowAllThreads(false)
   }
 
   const openProfile = (user) => {
@@ -51,7 +75,15 @@ export default function ChatLayout() {
     <div className="h-full flex" style={{ background: 'var(--bg-primary)' }}>
       {/* Desktop Sidebar */}
       <div className="hide-on-mobile">
-        <Sidebar />
+        <ErrorBoundary name="Sidebar" compact>
+          <Sidebar onToggleAllThreads={() => {
+            setShowAllThreads((s) => !s)
+            setShowSearch(false)
+            setShowPins(false)
+            setProfileUser(null)
+            closeThread()
+          }} />
+        </ErrorBoundary>
       </div>
 
       {/* Mobile Sidebar Overlay */}
@@ -62,54 +94,84 @@ export default function ChatLayout() {
             onClick={() => setShowMobileSidebar(false)}
           />
           <div className="sidebar-mobile">
-            <Sidebar onClose={() => setShowMobileSidebar(false)} />
+            <ErrorBoundary name="Sidebar" compact>
+              <Sidebar onClose={() => setShowMobileSidebar(false)} />
+            </ErrorBoundary>
           </div>
         </>
       )}
 
       {/* Main Chat Area */}
       <div className="flex-1 flex min-w-0">
-        {activeChannelId ? (
-          <ChatPanel
-            channelId={activeChannelId}
-            onOpenThread={openThread}
-            onToggleSearch={() => setShowSearch((s) => !s)}
-            onOpenProfile={openProfile}
-            onOpenFilePreview={openFilePreview}
-            onOpenMobileSidebar={() => setShowMobileSidebar(true)}
-          />
-        ) : (
-          <WelcomeScreen onOpenMobileSidebar={() => setShowMobileSidebar(true)} />
-        )}
+        <ErrorBoundary name="Chat">
+          {activeChannelId ? (
+            <ChatPanel
+              channelId={activeChannelId}
+              onOpenThread={openThread}
+              onToggleSearch={() => { setShowSearch((s) => !s); setShowPins(false) }}
+              onTogglePins={() => { setShowPins((s) => !s); setShowSearch(false) }}
+              onOpenProfile={openProfile}
+              onOpenFilePreview={openFilePreview}
+              onOpenMobileSidebar={() => setShowMobileSidebar(true)}
+            />
+          ) : (
+            <WelcomeScreen onOpenMobileSidebar={() => setShowMobileSidebar(true)} />
+          )}
+        </ErrorBoundary>
       </div>
 
       {/* Thread Panel */}
       {activeThread && (
-        <ThreadPanel thread={activeThread} onClose={closeThread} />
+        <ErrorBoundary name="Thread Panel">
+          <ThreadPanel thread={activeThread} onClose={closeThread} />
+        </ErrorBoundary>
       )}
 
       {/* Channel Info Panel */}
-      {showInfoPanel && activeChannel && !activeThread && !showSearch && !profileUser && (
-        <ChannelInfoPanel channel={activeChannel} onOpenProfile={openProfile} />
+      {showInfoPanel && activeChannel && !activeThread && !showSearch && !showPins && !profileUser && (
+        <ErrorBoundary name="Channel Info" compact>
+          <ChannelInfoPanel channel={activeChannel} onOpenProfile={openProfile} />
+        </ErrorBoundary>
+      )}
+
+      {/* Pinned Messages Panel */}
+      {showPins && activeChannelId && !activeThread && (
+        <ErrorBoundary name="Pinned Messages" compact>
+          <PinnedMessagesPanel channelId={activeChannelId} onClose={() => setShowPins(false)} />
+        </ErrorBoundary>
+      )}
+
+      {/* All Threads Panel */}
+      {showAllThreads && !activeThread && (
+        <ErrorBoundary name="All Threads" compact>
+          <AllThreadsPanel
+            onClose={() => setShowAllThreads(false)}
+            onOpenThread={openThread}
+          />
+        </ErrorBoundary>
       )}
 
       {/* Profile Side Panel */}
       {profileUser && (
-        <ProfileSidePanel user={profileUser} onClose={() => setProfileUser(null)} />
+        <ErrorBoundary name="Profile" compact>
+          <ProfileSidePanel user={profileUser} onClose={() => setProfileUser(null)} />
+        </ErrorBoundary>
       )}
 
       {/* Search Panel */}
       {showSearch && (
-        <SearchPanel
-          channelId={activeChannelId}
-          onClose={() => setShowSearch(false)}
-          onJumpToMessage={(msg) => {
-            if (msg.channelId !== activeChannelId) {
-              useChannelStore.getState().setActiveChannel(msg.channelId)
-            }
-            setShowSearch(false)
-          }}
-        />
+        <ErrorBoundary name="Search" compact>
+          <SearchPanel
+            channelId={activeChannelId}
+            onClose={() => setShowSearch(false)}
+            onJumpToMessage={(msg) => {
+              if (msg.channelId !== activeChannelId) {
+                useChannelStore.getState().setActiveChannel(msg.channelId)
+              }
+              setShowSearch(false)
+            }}
+          />
+        </ErrorBoundary>
       )}
 
       {/* File Preview Modal */}
@@ -119,6 +181,11 @@ export default function ChatLayout() {
           files={previewFiles}
           onClose={() => { setPreviewFile(null); setPreviewFiles([]) }}
         />
+      )}
+
+      {/* Keyboard Shortcuts Modal */}
+      {showShortcuts && (
+        <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
       )}
     </div>
   )

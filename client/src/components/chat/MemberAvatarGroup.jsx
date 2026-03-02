@@ -16,10 +16,11 @@ function getColor(name) {
 
 function Avatar({ member, size = 28, showStatus = false, tooltipPosition = 'bottom' }) {
   const [showTooltip, setShowTooltip] = useState(false)
-  const isOnline = member.onlineStatus === 'online'
-  const isAway = member.onlineStatus === 'away'
-  const bgColor = getColor(member.name)
-  const initials = (member.name || '?')[0].toUpperCase()
+  const safeMember = member || {}
+  const isOnline = safeMember.onlineStatus === 'online'
+  const isAway = safeMember.onlineStatus === 'away'
+  const bgColor = getColor(safeMember.name)
+  const initials = (safeMember.name || '?')[0].toUpperCase()
   const statusSize = Math.max(8, size * 0.3)
 
   return (
@@ -28,10 +29,10 @@ function Avatar({ member, size = 28, showStatus = false, tooltipPosition = 'bott
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >
-      {member.avatar ? (
+      {safeMember.avatar ? (
         <img
-          src={member.avatar}
-          alt={member.name}
+          src={safeMember.avatar}
+          alt={safeMember.name || 'User avatar'}
           className="rounded-md object-cover"
           style={{ width: size, height: size }}
         />
@@ -75,9 +76,9 @@ function Avatar({ member, size = 28, showStatus = false, tooltipPosition = 'bott
               : { bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 6 }),
           }}
         >
-          <p className="font-semibold">{member.name}</p>
-          {member.role && (
-            <p style={{ color: 'var(--text-muted)', marginTop: 1 }}>{member.role}</p>
+          <p className="font-semibold">{safeMember.name || 'Unknown'}</p>
+          {safeMember.role && (
+            <p style={{ color: 'var(--text-muted)', marginTop: 1 }}>{safeMember.role}</p>
           )}
           <p style={{ color: isOnline ? '#44b700' : isAway ? '#ffa726' : 'var(--text-muted)', marginTop: 1 }}>
             {isOnline ? '● Online' : isAway ? '● Away' : '○ Offline'}

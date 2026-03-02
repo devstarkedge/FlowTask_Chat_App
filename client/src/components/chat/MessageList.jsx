@@ -1,5 +1,6 @@
 import { useEffect, useRef, useMemo, useCallback } from 'react'
 import { useChatStore } from '../../stores/chatStore'
+import { useChannelStore } from '../../stores/channelStore'
 import MessageItem from './MessageItem'
 import ActivityMessage from './ActivityMessage'
 import { MessageCircle } from 'lucide-react'
@@ -7,6 +8,8 @@ import { Virtuoso } from 'react-virtuoso'
 
 export default function MessageList({ messages, channelId, onOpenThread, onOpenProfile, onOpenFilePreview, isDMChannel }) {
   const { isLoadingMessages, hasMore, fetchMessages } = useChatStore()
+  const lastReadByChannel = useChannelStore((s) => s.lastReadByChannel)
+  const lastReadMessageId = lastReadByChannel[channelId]
   const virtuosoRef = useRef(null)
 
   // Load more on scroll to top — with debounce protection
@@ -32,10 +35,20 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
     return msg.contentType === 'activity' || msg.contentType === 'system' || msg.contentType === 'bot'
   }
 
-  // Flatten messages with date separators for virtualization
+  // Flatten messages with date separators and unread marker for virtualization
   const flattenedItems = useMemo(() => {
     const flattened = []
     let currentDate = null
+    let insertedUnreadMarker = false
+
+    const lastReadIndex = lastReadMessageId
+      ? messages.findIndex((m) => m._id === lastReadMessageId)
+      : -1
+
+    if (lastReadMessageId && messages.length > 0 && lastReadIndex === -1) {
+      flattened.push({ isUnreadSeparator: true, _id: 'unread-separator' })
+      insertedUnreadMarker = true
+    }
 
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i]
@@ -45,6 +58,19 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
       if (label !== currentDate) {
         currentDate = label
         flattened.push({ isDateSeparator: true, date: label, _id: `date-${label}` })
+      }
+
+      // Insert unread separator after the last-read message
+      // Only insert if there are messages after the last read one
+      if (
+        !insertedUnreadMarker &&
+        lastReadMessageId &&
+        i > 0 &&
+        messages[i - 1]._id === lastReadMessageId &&
+        msg._id !== lastReadMessageId
+      ) {
+        flattened.push({ isUnreadSeparator: true, _id: 'unread-separator' })
+        insertedUnreadMarker = true
       }
 
       // Add compact property dynamically ahead of time
@@ -64,7 +90,7 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
       flattened.push({ ...msg, isCompact })
     }
     return flattened
-  }, [messages])
+  }, [messages, lastReadMessageId])
 
   // Track initial load vs pagination load (show skeleton on initial load only)
   const isInitialLoad = isLoadingMessages && messages.length === 0
@@ -88,7 +114,7 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
   }
 
   return (
-    <div className="flex-1 overflow-hidden relative">
+    <div className="flex-1 overflow-hidden relative" role="log" aria-label="Message list" aria-live="polite">
       <Virtuoso
         ref={virtuosoRef}
         data={flattenedItems}
@@ -149,6 +175,35 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
             return (
               <div style={{ padding: '2px 20px' }}>
                 <ActivityMessage message={item} />
+              </div>
+            )
+          }
+
+          if (item.isUnreadSeparator) {
+            return (
+              <div
+                className="animate-fade-in"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '8px 20px 4px',
+                  gap: 12,
+                }}
+              >
+                <div style={{ flex: 1, height: 1, background: 'var(--status-error)' }} />
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: 'var(--status-error)',
+                    whiteSpace: 'nowrap',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}
+                >
+                  New
+                </span>
+                <div style={{ flex: 1, height: 1, background: 'var(--status-error)' }} />
               </div>
             )
           }

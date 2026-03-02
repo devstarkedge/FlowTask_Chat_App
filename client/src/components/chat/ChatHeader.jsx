@@ -1,6 +1,8 @@
-import { Hash, Lock, Users, MessageCircle, Search, Info, Menu } from 'lucide-react'
+import { useMemo } from 'react'
+import { Hash, Lock, Users, MessageCircle, Search, Info, Menu, Pin } from 'lucide-react'
 import MemberAvatarGroup from './MemberAvatarGroup'
 import { useChannelStore } from '../../stores/channelStore'
+import { useChatStore } from '../../stores/chatStore'
 
 const TYPE_ICONS = {
   project: Hash,
@@ -10,8 +12,11 @@ const TYPE_ICONS = {
   system: Hash,
 }
 
-export default function ChatHeader({ channel, onToggleSearch, onOpenMobileSidebar }) {
+const EMPTY_PINS = []
+
+export default function ChatHeader({ channel, onToggleSearch, onOpenMobileSidebar, onTogglePins }) {
   const { membersByChannel, toggleInfoPanel } = useChannelStore()
+  const pinnedMessages = useChatStore((s) => s.pinnedMessagesByChannel[channel?._id]) ?? EMPTY_PINS
 
   if (!channel) return null
 
@@ -87,6 +92,7 @@ export default function ChatHeader({ channel, onToggleSearch, onOpenMobileSideba
         {!isDM && (
           <HeaderBtn icon={Users} title="Members" label={members.length > 0 ? String(members.length) : undefined} onClick={toggleInfoPanel} />
         )}
+        <HeaderBtn icon={Pin} title="Pinned messages" label={pinnedMessages.length > 0 ? String(pinnedMessages.length) : undefined} onClick={onTogglePins} />
         <HeaderBtn icon={Search} title="Search" onClick={onToggleSearch} />
         <HeaderBtn icon={Info} title="Channel details" onClick={toggleInfoPanel} className="hide-mobile" />
       </div>

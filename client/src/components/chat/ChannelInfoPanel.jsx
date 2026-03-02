@@ -1,20 +1,41 @@
-import { X, Users, Hash, Lock, Settings, UserPlus, LogOut, Shield } from 'lucide-react'
+import { useState } from 'react'
+import { X, Users, Hash, Lock, Settings, UserPlus, LogOut, Shield, Trash2 } from 'lucide-react'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
 import { useAuthStore } from '../../stores/authStore'
 import { Avatar } from './MemberAvatarGroup'
+import EditChannelModal from './EditChannelModal'
+import AddMemberModal from './AddMemberModal'
 
 export default function ChannelInfoPanel({ channel, onOpenProfile }) {
-  const { membersByChannel, isMembersLoading, setShowInfoPanel } = useChannelStore()
+  const { membersByChannel, isMembersLoading, setShowInfoPanel, addMember, removeMember, leaveChannel } = useChannelStore()
   const { onlineUsers } = useChatStore()
   const { user } = useAuthStore()
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showAddMember, setShowAddMember] = useState(false)
+  const [confirmLeave, setConfirmLeave] = useState(false)
 
   if (!channel) return null
 
   const members = membersByChannel[channel._id] || []
   const onlineMembers = members.filter((m) => m.onlineStatus === 'online')
   const offlineMembers = members.filter((m) => m.onlineStatus !== 'online')
-  const isOwner = channel.createdBy === user?._id
+
+  // Check if current user is owner or admin for this channel
+  const myMembership = members.find((m) => m._id === user?._id)
+  const isOwner = myMembership?.channelRole === 'owner' || channel.createdBy === user?._id
+  const isAdmin = isOwner || myMembership?.channelRole === 'admin' || user?.role === 'admin'
+  const isDM = channel.type === 'dm'
+  const isSystem = channel.type === 'system'
+
+  const handleRemoveMember = async (memberId) => {
+    await removeMember(channel._id, memberId)
+  }
+
+  const handleLeave = async () => {
+    await leaveChannel(channel._id)
+    setShowInfoPanel(false)
+  }
 
   return (
     <div
@@ -110,6 +131,70 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
               </span>
             )}
           </div>
+
+          {/* Channel Action Buttons */}
+          {!isDM && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {isAdmin && (
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors"
+                  style={{
+                    color: 'var(--text-secondary)',
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border-secondary)',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+                >
+                  <Settings size={12} />
+                  Edit
+                </button>
+              )}
+              {!isSystem && (
+                <button
+                  onClick={() => setConfirmLeave(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors"
+                  style={{
+                    color: 'var(--accent-red)',
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border-secondary)',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+                >
+                  <LogOut size={12} />
+                  Leave
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Leave Confirmation */}
+          {confirmLeave && (
+            <div
+              className="mt-3 p-3 rounded-lg"
+              style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-secondary)' }}
+            >
+              <p className="text-sm mb-2" style={{ color: 'var(--text-primary)' }}>
+                Leave <strong>#{channel.name}</strong>?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleLeave}
+                  className="btn-danger px-3 py-1.5 text-xs"
+                >
+                  Leave Channel
+                </button>
+                <button
+                  onClick={() => setConfirmLeave(false)}
+                  className="btn-ghost px-3 py-1.5 text-xs"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Members Section */}
@@ -121,12 +206,26 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
             >
               Members — {members.length}
             </p>
-            {isMembersLoading && (
-              <div
-                className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
-                style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }}
-              />
-            )}
+            <div className="flex items-center gap-1">
+              {isAdmin && !isDM && (
+                <button
+                  onClick={() => setShowAddMember(true)}
+                  className="p-1 rounded-md cursor-pointer transition-colors"
+                  title="Add Member"
+                  style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <UserPlus size={14} />
+                </button>
+              )}
+              {isMembersLoading && (
+                <div
+                  className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
+                  style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }}
+                />
+              )}
+            </div>
           </div>
 
           {/* Online Members */}
@@ -144,6 +243,8 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                     key={member._id || member.flowTaskUserId}
                     member={member}
                     onOpenProfile={onOpenProfile}
+                    canRemove={isAdmin && member._id !== user?._id && !isDM && !isSystem}
+                    onRemove={() => handleRemoveMember(member._id)}
                   />
                 ))}
               </div>
@@ -167,6 +268,8 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                     key={member._id || member.flowTaskUserId}
                     member={member}
                     onOpenProfile={onOpenProfile}
+                    canRemove={isAdmin && member._id !== user?._id && !isDM && !isSystem}
+                    onRemove={() => handleRemoveMember(member._id)}
                   />
                 ))}
               </div>
@@ -183,51 +286,108 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
           )}
         </div>
       </div>
+
+      {/* Modals */}
+      {showEditModal && (
+        <EditChannelModal
+          channel={channel}
+          onClose={() => setShowEditModal(false)}
+        />
+      )}
+      {showAddMember && (
+        <AddMemberModal
+          channel={channel}
+          onClose={() => setShowAddMember(false)}
+        />
+      )}
     </div>
   )
 }
 
-function MemberRow({ member, onOpenProfile }) {
-  const isOnline = member.onlineStatus === 'online'
-  const isAway = member.onlineStatus === 'away'
+function MemberRow({ member, onOpenProfile, canRemove, onRemove }) {
+  const [confirmRemove, setConfirmRemove] = useState(false)
 
   return (
-    <button
-      onClick={() => onOpenProfile?.(member)}
-      className="flex items-center gap-2.5 px-2 py-1.5 rounded-md transition-colors w-full text-left cursor-pointer"
-      style={{ background: 'transparent', border: 'none' }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-    >
-      <Avatar member={member} size={32} showStatus={true} />
+    <div className="group relative">
+      <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors"
+        style={{ background: 'transparent' }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+      >
+        <button
+          onClick={() => onOpenProfile?.(member)}
+          className="flex items-center gap-2.5 w-full text-left cursor-pointer"
+          style={{ background: 'transparent', border: 'none' }}
+        >
+          <Avatar member={member} size={32} showStatus={true} />
 
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate" style={{ color: 'var(--text-white)' }}>
-          {member.name}
-        </p>
-        <p className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>
-          {member.role
-            ? member.role.charAt(0).toUpperCase() + member.role.slice(1)
-            : member.email}
-        </p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate" style={{ color: 'var(--text-white)' }}>
+              {member.name}
+            </p>
+            <p className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>
+              {member.role
+                ? member.role.charAt(0).toUpperCase() + member.role.slice(1)
+                : member.email}
+            </p>
+          </div>
+
+          {member.channelRole === 'owner' && (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
+              style={{ background: 'rgba(236,178,46,0.15)', color: 'var(--accent-yellow)' }}
+            >
+              Owner
+            </span>
+          )}
+          {member.channelRole === 'admin' && (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
+              style={{ background: 'rgba(124,58,237,0.15)', color: 'var(--accent-purple)' }}
+            >
+              Admin
+            </span>
+          )}
+        </button>
+
+        {canRemove && member.channelRole !== 'owner' && (
+          <button
+            onClick={() => setConfirmRemove(true)}
+            className="opacity-0 group-hover:opacity-100 p-1 rounded transition-all shrink-0 cursor-pointer"
+            style={{ color: 'var(--text-muted)' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--status-error)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+            title="Remove member"
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
 
-      {member.channelRole === 'owner' && (
-        <span
-          className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
-          style={{ background: 'rgba(236,178,46,0.15)', color: 'var(--accent-yellow)' }}
+      {confirmRemove && (
+        <div
+          className="mx-2 mb-1 p-2 rounded-md flex items-center gap-2"
+          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}
         >
-          Owner
-        </span>
+          <p className="text-xs flex-1" style={{ color: 'var(--text-secondary)' }}>
+            Remove <strong>{member.name}</strong>?
+          </p>
+          <button
+            onClick={() => { onRemove?.(); setConfirmRemove(false) }}
+            className="text-xs px-2 py-0.5 rounded font-medium cursor-pointer"
+            style={{ background: 'var(--status-error)', color: 'white' }}
+          >
+            Remove
+          </button>
+          <button
+            onClick={() => setConfirmRemove(false)}
+            className="text-xs px-2 py-0.5 rounded cursor-pointer"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            Cancel
+          </button>
+        </div>
       )}
-      {member.channelRole === 'admin' && (
-        <span
-          className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
-          style={{ background: 'rgba(124,58,237,0.15)', color: 'var(--accent-purple)' }}
-        >
-          Admin
-        </span>
-      )}
-    </button>
+    </div>
   )
 }

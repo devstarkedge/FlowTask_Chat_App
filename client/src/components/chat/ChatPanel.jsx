@@ -8,7 +8,7 @@ import ChatHeader from './ChatHeader'
 import TypingIndicator from './TypingIndicator'
 import { Wifi, WifiOff, Loader2 } from 'lucide-react'
 
-export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onOpenProfile, onOpenFilePreview, onOpenMobileSidebar }) {
+export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onTogglePins, onOpenProfile, onOpenFilePreview, onOpenMobileSidebar }) {
   const channel = useChannelStore((s) => s.channels.find((c) => c._id === channelId))
   const { fetchMessages, messagesByChannel } = useChatStore()
   const connectionStatus = useChatStore((s) => s.connectionStatus)
@@ -38,6 +38,7 @@ export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onO
       <ChatHeader
         channel={channel}
         onToggleSearch={onToggleSearch}
+        onTogglePins={onTogglePins}
         onOpenMobileSidebar={onOpenMobileSidebar}
       />
 

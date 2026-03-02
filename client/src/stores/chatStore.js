@@ -25,6 +25,14 @@ export const useChatStore = create((set, get) => ({
   hasMore: {},
   isLoadingMessages: false,
 
+  // Pinned messages keyed by channelId
+  pinnedMessagesByChannel: {},
+  isLoadingPins: false,
+
+  // All threads for the current user
+  allThreads: [],
+  allThreadsLoading: false,
+
   // Thread replies keyed by rootMessageId
   threadRepliesByRoot: {},
   threadHasMore: {},
@@ -633,6 +641,130 @@ export const useChatStore = create((set, get) => ({
   },
 
   clearNotifications: () => set({ notifications: [] }),
+
+  // ─── Pinned Messages ───────────────────────────────────────────────
+  fetchPinnedMessages: async (channelId) => {
+    set({ isLoadingPins: true })
+    try {
+      const { data } = await messageAPI.getPinned(channelId)
+      const pins = data.data?.items || data.data?.messages || data.data || []
+      set((state) => ({
+        pinnedMessagesByChannel: {
+          ...state.pinnedMessagesByChannel,
+          [channelId]: Array.isArray(pins) ? pins : [],
+        },
+        isLoadingPins: false,
+      }))
+    } catch (error) {
+      set({ isLoadingPins: false })
+      console.error('Failed to fetch pinned messages:', error)
+    }
+  },
+
+  pinMessage: async (messageId) => {
+    try {
+      await messageAPI.pin(messageId)
+      // Optimistic: update isPinned in message list
+      set((state) => {
+        const newState = { ...state.messagesByChannel }
+        for (const cid of Object.keys(newState)) {
+          newState[cid] = newState[cid].map((m) =>
+            m._id === messageId ? { ...m, isPinned: true } : m,
+          )
+        }
+        return { messagesByChannel: newState }
+      })
+      toast.success('Message pinned')
+    } catch (error) {
+      toast.error('Failed to pin message')
+    }
+  },
+
+  unpinMessage: async (messageId) => {
+    try {
+      await messageAPI.unpin(messageId)
+      set((state) => {
+        const newState = { ...state.messagesByChannel }
+        for (const cid of Object.keys(newState)) {
+          newState[cid] = newState[cid].map((m) =>
+            m._id === messageId ? { ...m, isPinned: false } : m,
+          )
+        }
+        // Remove from pinned cache
+        const newPins = { ...state.pinnedMessagesByChannel }
+        for (const cid of Object.keys(newPins)) {
+          newPins[cid] = (newPins[cid] || []).filter((m) => m._id !== messageId)
+        }
+        return { messagesByChannel: newState, pinnedMessagesByChannel: newPins }
+      })
+      toast.success('Message unpinned')
+    } catch (error) {
+      toast.error('Failed to unpin message')
+    }
+  },
+
+  // Handle pin socket events
+  handleMessagePinned: (payload) => {
+    set((state) => {
+      const message = payload?.message || payload
+      const messageId = message?._id || payload?.messageId
+      const cid = message?.channelId || payload?.channelId
+      if (!messageId || !cid) return state
+
+      const newMsgs = { ...state.messagesByChannel }
+      if (newMsgs[cid]) {
+        newMsgs[cid] = newMsgs[cid].map((m) =>
+          m._id === messageId ? { ...m, isPinned: true } : m,
+        )
+      }
+      // Add to pinned cache if loaded
+      const newPins = { ...state.pinnedMessagesByChannel }
+      if (newPins[cid]) {
+        if (!newPins[cid].some((m) => m._id === messageId)) {
+          const cachedMessage = newMsgs[cid]?.find((m) => m._id === messageId)
+          const pinEntry = cachedMessage || (message?._id ? message : null)
+          if (pinEntry) {
+            newPins[cid] = [{ ...pinEntry, isPinned: true }, ...newPins[cid]]
+          }
+        }
+      }
+      return { messagesByChannel: newMsgs, pinnedMessagesByChannel: newPins }
+    })
+  },
+
+  handleMessageUnpinned: (payload) => {
+    set((state) => {
+      const message = payload?.message || payload
+      const messageId = message?._id || payload?.messageId
+      const cid = message?.channelId || payload?.channelId
+      if (!messageId || !cid) return state
+
+      const newMsgs = { ...state.messagesByChannel }
+      if (newMsgs[cid]) {
+        newMsgs[cid] = newMsgs[cid].map((m) =>
+          m._id === messageId ? { ...m, isPinned: false } : m,
+        )
+      }
+      const newPins = { ...state.pinnedMessagesByChannel }
+      if (newPins[cid]) {
+        newPins[cid] = newPins[cid].filter((m) => m._id !== messageId)
+      }
+      return { messagesByChannel: newMsgs, pinnedMessagesByChannel: newPins }
+    })
+  },
+
+  // ─── All Threads ────────────────────────────────────────────────────
+  fetchAllThreads: async () => {
+    set({ allThreadsLoading: true })
+    try {
+      const { data } = await threadAPI.myThreads()
+      const threads = data.data?.items || data.data?.threads || data.data || []
+      set({ allThreads: Array.isArray(threads) ? threads : [], allThreadsLoading: false })
+    } catch (error) {
+      set({ allThreadsLoading: false })
+      console.error('Failed to fetch threads:', error)
+    }
+  },
 
   // ─── Connection Status ──────────────────────────────────────────────
   setConnectionStatus: (status) => set({ connectionStatus: status }),

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { channelAPI, readReceiptAPI } from '../services/api'
+import toast from 'react-hot-toast'
 
 export const useChannelStore = create(
   persist(
@@ -33,10 +34,15 @@ export const useChannelStore = create(
     try {
       const { data } = await readReceiptAPI.getUnread()
       const unreads = {}
+      const lastReadByChannel = {}
       for (const item of data.data.unreads) {
-        unreads[item.channelId || item._id] = item.unreadCount || 0
+        const cid = item.channelId || item._id
+        unreads[cid] = item.unreadCount || 0
+        if (item.lastReadMessageId) {
+          lastReadByChannel[cid] = item.lastReadMessageId
+        }
       }
-      set({ unreads })
+      set({ unreads, lastReadByChannel })
     } catch (error) {
       console.error('Failed to fetch unreads:', error)
     }
@@ -150,6 +156,78 @@ export const useChannelStore = create(
     get().setActiveChannel(channel._id)
     return channel
   },
+
+  // ─── Channel Management ─────────────────────────────────────────────
+  editChannel: async (channelId, data) => {
+    try {
+      const { data: res } = await channelAPI.update(channelId, data)
+      const updated = res.data.channel
+      set((state) => ({
+        channels: state.channels.map((c) =>
+          c._id === channelId ? { ...c, ...updated } : c,
+        ),
+      }))
+      toast.success('Channel updated')
+      return updated
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update channel')
+      throw error
+    }
+  },
+
+  archiveChannel: async (channelId) => {
+    try {
+      await channelAPI.archive(channelId)
+      set((state) => ({
+        channels: state.channels.filter((c) => c._id !== channelId),
+        activeChannelId: state.activeChannelId === channelId ? null : state.activeChannelId,
+      }))
+      toast.success('Channel archived')
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to archive channel')
+      throw error
+    }
+  },
+
+  addMember: async (channelId, userId) => {
+    try {
+      await channelAPI.addMember(channelId, userId)
+      // Refresh members list
+      get().fetchMembers(channelId)
+      toast.success('Member added')
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to add member')
+      throw error
+    }
+  },
+
+  removeMember: async (channelId, userId) => {
+    try {
+      await channelAPI.removeMember(channelId, userId)
+      get().fetchMembers(channelId)
+      toast.success('Member removed')
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to remove member')
+      throw error
+    }
+  },
+
+  leaveChannel: async (channelId) => {
+    try {
+      await channelAPI.leave(channelId)
+      set((state) => ({
+        channels: state.channels.filter((c) => c._id !== channelId),
+        activeChannelId: state.activeChannelId === channelId ? null : state.activeChannelId,
+      }))
+      toast.success('Left channel')
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to leave channel')
+      throw error
+    }
+  },
+
+  // ─── Unread with lastReadMessageId ──────────────────────────────────
+  lastReadByChannel: {},
 }),
 {
   name: 'flowtask-channel-storage',

@@ -5,11 +5,13 @@ import { useChatStore } from '../../stores/chatStore'
 import { useThemeStore } from '../../stores/themeStore'
 import {
   Hash, Lock, MessageCircle, Users, ChevronDown, ChevronRight,
-  Plus, Search, LogOut, Volume2, Sun, Moon, X,
+  Plus, Search, LogOut, Volume2, Sun, Moon, X, MessageSquareText, Settings,
 } from 'lucide-react'
 import { Avatar } from '../chat/MemberAvatarGroup'
 import CreateChannelModal from '../chat/CreateChannelModal'
 import UserPickerModal from '../chat/UserPickerModal'
+import PreferencesModal from '../chat/PreferencesModal'
+import SetStatusModal from '../chat/SetStatusModal'
 import { formatDistanceToNowStrict } from 'date-fns'
 
 const CHANNEL_ICONS = {
@@ -20,7 +22,7 @@ const CHANNEL_ICONS = {
   system: Volume2,
 }
 
-export default function Sidebar({ onClose }) {
+export default function Sidebar({ onClose, onToggleAllThreads }) {
   const { channels, activeChannelId, setActiveChannel, unreads } = useChannelStore()
   const { user, logout } = useAuthStore()
   const { onlineUsers } = useChatStore()
@@ -34,6 +36,8 @@ export default function Sidebar({ onClose }) {
   const [showSearch, setShowSearch] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [showUserPicker, setShowUserPicker] = useState(false)
+  const [showPreferences, setShowPreferences] = useState(false)
+  const [showStatusModal, setShowStatusModal] = useState(false)
 
   const toggleSection = (section) => {
     setExpandedSections((s) => ({ ...s, [section]: !s[section] }));
@@ -85,8 +89,9 @@ export default function Sidebar({ onClose }) {
   }
 
   return (
-    <div
+    <nav
       className="flex flex-col h-full select-none"
+      aria-label="Channels sidebar"
       style={{
         width: 'var(--sidebar-width)',
         minWidth: 'var(--sidebar-width)',
@@ -190,6 +195,24 @@ export default function Sidebar({ onClose }) {
         )}
       </div>
 
+      {/* Quick Nav */}
+      <div className="px-3 pb-1">
+        <button
+          onClick={() => onToggleAllThreads?.()}
+          className="flex items-center gap-2.5 w-full px-3 py-1.5 rounded-lg text-[13px] cursor-pointer transition-colors"
+          style={{
+            color: 'var(--text-secondary)',
+            background: 'transparent',
+            border: 'none',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+        >
+          <MessageSquareText size={15} style={{ opacity: 0.6 }} />
+          <span>Threads</span>
+        </button>
+      </div>
+
       {/* Channel List */}
       <div className="flex-1 overflow-y-auto px-2 py-2">
         {systemChannels.length > 0 && (
@@ -251,14 +274,37 @@ export default function Sidebar({ onClose }) {
           <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-white)' }}>
             {user?.name || 'User'}
           </p>
-          <div className="flex items-center gap-1.5">
-            <span
-              className="w-1.5 h-1.5 rounded-full inline-block"
-              style={{ background: 'var(--status-online)' }}
-            />
-            <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Active</p>
-          </div>
+          <button
+            onClick={() => setShowStatusModal(true)}
+            className="flex items-center gap-1.5 cursor-pointer w-full text-left"
+            style={{ background: 'transparent', border: 'none', padding: 0 }}
+          >
+            {user?.customStatus?.emoji || user?.customStatus?.text ? (
+              <span className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>
+                {user.customStatus.emoji && <span className="mr-0.5">{user.customStatus.emoji}</span>}
+                {user.customStatus.text || 'Update status'}
+              </span>
+            ) : (
+              <>
+                <span
+                  className="w-1.5 h-1.5 rounded-full inline-block"
+                  style={{ background: 'var(--status-online)' }}
+                />
+                <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Set a status</p>
+              </>
+            )}
+          </button>
         </div>
+        <button
+          onClick={() => setShowPreferences(true)}
+          className="p-1.5 rounded-md cursor-pointer transition-colors"
+          title="Preferences"
+          style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+        >
+          <Settings size={16} />
+        </button>
         <button
           onClick={logout}
           className="p-1.5 rounded-md cursor-pointer transition-colors"
@@ -284,7 +330,15 @@ export default function Sidebar({ onClose }) {
           }}
         />
       )}
-    </div>
+
+      {showPreferences && (
+        <PreferencesModal onClose={() => setShowPreferences(false)} />
+      )}
+
+      {showStatusModal && (
+        <SetStatusModal onClose={() => setShowStatusModal(false)} />
+      )}
+    </nav>
   )
 }
 

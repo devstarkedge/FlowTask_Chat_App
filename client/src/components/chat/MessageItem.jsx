@@ -5,10 +5,12 @@ import { format } from 'date-fns'
 import {
   Smile, MessageSquare, MoreHorizontal, Edit, Trash2, Pin,
   FileText, Download, Image as ImageIcon, File, FileArchive, FileCode,
-  Film, Music, Check, CheckCheck,
+  Film, Music, Check, CheckCheck, Copy,
 } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
 import EmojiPicker from './EmojiPicker'
+import { sanitizeHtml } from '../../utils/sanitize'
+import toast from 'react-hot-toast'
 
 function isImage(mimeType) {
   return mimeType?.startsWith('image/')
@@ -46,7 +48,7 @@ const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000 // 10 minutes
 
 const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, onOpenProfile, onOpenFilePreview, isDMChannel }) {
   const { user } = useAuthStore()
-  const { addReaction, removeReaction, editMessage, deleteMessage, retryMessage } = useChatStore()
+  const { addReaction, removeReaction, editMessage, deleteMessage, retryMessage, pinMessage, unpinMessage } = useChatStore()
   const [showActions, setShowActions] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(message.content)
@@ -282,7 +284,7 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
             <div
               className="message-content text-[15px] leading-relaxed"
               style={{ color: 'var(--text-primary)' }}
-              dangerouslySetInnerHTML={{ __html: message.htmlContent }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(message.htmlContent) }}
             />
           ) : (
             <div
@@ -390,10 +392,17 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
             <div className="flex flex-wrap gap-1 mt-1.5">
               {message.reactions.map((reaction) => {
                 const hasReacted = reaction.users?.includes(user?._id) || reaction.userIds?.some(id => id?.toString() === user?._id)
+                const count = reaction.users?.length || reaction.count || 0
+                const tooltipParts = []
+                if (hasReacted) tooltipParts.push('You')
+                if (count > 1 && hasReacted) tooltipParts.push(`and ${count - 1} other${count - 1 > 1 ? 's' : ''}`)
+                else if (count > 0 && !hasReacted) tooltipParts.push(`${count} ${count === 1 ? 'person' : 'people'}`)
+                const tooltip = `${reaction.emoji} ${tooltipParts.join(' ')} reacted`
                 return (
                 <button
                   key={reaction.emoji}
                   onClick={() => handleReaction(reaction.emoji)}
+                  title={tooltip}
                   className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer transition-all"
                   style={{
                     background: hasReacted
@@ -403,7 +412,7 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
                     color: 'var(--text-primary)',
                   }}
                 >
-                  {reaction.emoji} {reaction.users?.length || reaction.count || 0}
+                  {reaction.emoji} {count}
                 </button>
                 )
               })}
@@ -447,6 +456,49 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
             icon={MessageSquare}
             title="Reply in thread"
             onClick={() => onOpenThread?.({ rootMessageId: message._id, channelId: message.channelId })}
+          />
+          <ActionButton
+            icon={Pin}
+            title={message.isPinned ? 'Unpin message' : 'Pin message'}
+            onClick={() => message.isPinned ? unpinMessage(message._id) : pinMessage(message._id)}
+          />
+          <ActionButton
+            icon={Copy}
+            title="Copy text"
+            onClick={async () => {
+              const textToCopy = message.content || ''
+
+              const fallbackCopy = () => {
+                try {
+                  const textarea = document.createElement('textarea')
+                  textarea.value = textToCopy
+                  textarea.setAttribute('readonly', '')
+                  textarea.style.position = 'fixed'
+                  textarea.style.opacity = '0'
+                  document.body.appendChild(textarea)
+                  textarea.select()
+                  const ok = document.execCommand('copy')
+                  document.body.removeChild(textarea)
+                  return ok
+                } catch {
+                  return false
+                }
+              }
+
+              try {
+                if (!navigator?.clipboard?.writeText) {
+                  throw new Error('Clipboard API unavailable')
+                }
+                await navigator.clipboard.writeText(textToCopy)
+                toast.success('Copied to clipboard', { duration: 1500 })
+              } catch {
+                if (fallbackCopy()) {
+                  toast.success('Copied to clipboard', { duration: 1500 })
+                } else {
+                  toast.error('Copy failed')
+                }
+              }
+            }}
           />
           {isOwn && (
             <>

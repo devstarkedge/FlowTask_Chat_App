@@ -1,4 +1,4 @@
-import ReadReceipt from './ReadReceipt.model.js';
+import readReceiptRepository from './readReceipt.repository.js';
 import { emitToUser } from '../../sockets/socketManager.js';
 import logger from '../../utils/logger.js';
 import { SOCKET_EVENTS } from '../../config/constants.js';
@@ -6,6 +6,7 @@ import messageService from '../messages/message.service.js';
 
 /**
  * Read Receipt Service — manages unread counts and read state per user per channel.
+ * Delegates all data access to readReceiptRepository (Model → Repository → Service pattern).
  */
 
 class ReadReceiptService {
@@ -14,7 +15,7 @@ class ReadReceiptService {
    * For DM channels, also marks messages as seen (delivery status).
    */
   async markAsRead(userId, channelId, lastReadMessageId) {
-    const receipt = await ReadReceipt.markChannelAsRead(
+    const receipt = await readReceiptRepository.markChannelAsRead(
       userId,
       channelId,
       lastReadMessageId,
@@ -37,9 +38,10 @@ class ReadReceiptService {
 
   /**
    * Get unread counts for all channels a user belongs to.
+   * Includes lastReadMessageId for unread separator rendering.
    */
   async getUnreadCounts(userId) {
-    return ReadReceipt.getUnreadCounts(userId);
+    return readReceiptRepository.getUnreadCounts(userId);
   }
 
   /**
@@ -47,7 +49,28 @@ class ReadReceiptService {
    * Called internally when a new message is posted.
    */
   async incrementUnread(channelId, userIds, hasMention = false) {
-    return ReadReceipt.incrementUnread(channelId, userIds, hasMention);
+    return readReceiptRepository.incrementUnread(channelId, userIds, hasMention);
+  }
+
+  /**
+   * Get the read receipt for a specific user in a channel.
+   */
+  async getReceipt(userId, channelId) {
+    return readReceiptRepository.findByUserAndChannel(userId, channelId);
+  }
+
+  /**
+   * Ensure a read receipt exists when a user joins a channel.
+   */
+  async ensureReceiptExists(userId, channelId) {
+    return readReceiptRepository.ensureExists(userId, channelId);
+  }
+
+  /**
+   * Clean up read receipts when a user leaves a channel.
+   */
+  async removeReceipt(userId, channelId) {
+    return readReceiptRepository.removeByUserAndChannel(userId, channelId);
   }
 }
 

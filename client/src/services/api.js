@@ -167,4 +167,14 @@ export const botAPI = {
   command: (command, channelId) => api.post('/bot/command', { command, channelId }),
 }
 
+// ─── Users ───────────────────────────────────────────────────────────────
+export const userAPI = {
+  getProfile: (id) => api.get(`/users/${id}`),
+  search: (q) => api.get('/users/search', { params: { q } }),
+  getOnline: () => api.get('/users/online'),
+  setCustomStatus: (status) => api.put('/users/status', status),
+  clearCustomStatus: () => api.delete('/users/status'),
+  setPresence: (status) => api.put('/users/presence', { status }),
+}
+
 export default api

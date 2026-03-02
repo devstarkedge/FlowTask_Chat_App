@@ -2,6 +2,9 @@ import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
 import { Hash, User } from 'lucide-react'
 
+const EMPTY_MEMBERS = []
+const EMPTY_CHANNELS = []
+
 const MentionDropdown = memo(function MentionDropdown({
   type,        // 'user' or 'channel'
   query,       // search string after @ or #
@@ -12,8 +15,8 @@ const MentionDropdown = memo(function MentionDropdown({
 }) {
   const [activeIndex, setActiveIndex] = useState(0)
   const listRef = useRef(null)
-  const members = useChannelStore((s) => s.membersByChannel[channelId] || [])
-  const channels = useChannelStore((s) => s.channels)
+  const members = useChannelStore((s) => s.membersByChannel[channelId]) ?? EMPTY_MEMBERS
+  const channels = useChannelStore((s) => s.channels) ?? EMPTY_CHANNELS
 
   const items = type === 'user'
     ? members

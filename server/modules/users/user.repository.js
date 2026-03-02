@@ -353,6 +353,33 @@ class UserRepository {
     );
     return { modifiedCount: result.modifiedCount };
   }
+
+  /**
+   * Set custom status for a user.
+   * @param {string} userId
+   * @param {{ emoji?: string, text?: string, expiresAt?: Date }} status
+   * @returns {Promise<ChatUser|null>}
+   */
+  async setCustomStatus(userId, status) {
+    return ChatUser.findByIdAndUpdate(
+      userId,
+      { $set: { customStatus: status } },
+      { new: true },
+    ).exec();
+  }
+
+  /**
+   * Clear custom status for a user.
+   * @param {string} userId
+   * @returns {Promise<ChatUser|null>}
+   */
+  async clearCustomStatus(userId) {
+    return ChatUser.findByIdAndUpdate(
+      userId,
+      { $set: { customStatus: { emoji: null, text: null, expiresAt: null } } },
+      { new: true },
+    ).exec();
+  }
 }
 
 export default new UserRepository();

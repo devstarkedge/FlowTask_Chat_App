@@ -163,6 +163,14 @@ const chatUserSchema = new Schema({
     type: Date,
     default: null,
   },
+
+  // ─── Custom Status ("In a meeting", "On vacation", etc.) ──────────
+  customStatus: {
+    emoji: { type: String, default: null, maxlength: 10 },
+    text: { type: String, default: null, maxlength: 100 },
+    expiresAt: { type: Date, default: null },
+  },
+
   chatPreferences: {
     type: chatPreferencesSchema,
     default: () => ({}),

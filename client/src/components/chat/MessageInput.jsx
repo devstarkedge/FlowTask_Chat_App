@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, memo } from 'react'
+import { useState, useRef, useCallback, useEffect, memo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useDraftStore } from '../../stores/draftStore'
@@ -6,73 +6,15 @@ import { messageAPI } from '../../services/api'
 import { emitTypingStart, emitTypingStop } from '../../services/socket'
 import {
   Send, Paperclip, Smile, Bold, Italic, Underline, Strikethrough,
-  Code, Braces, List, ListOrdered, Quote, Link, X, FileText, Image,
-  Loader2, Plus, AtSign, Hash, ChevronDown
+  Code, Braces, List, ListOrdered, Quote, Link, X, FileText,
+  Loader2, Plus, AtSign, ChevronDown
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import EmojiPicker from './EmojiPicker'
 import MentionDropdown from './MentionDropdown'
+import RichTextEditor from './RichTextEditor'
 
-// ─── Rich Text Editor Helpers ────────────────────────────────────────────────
-
-function execCmd(command, value = null) {
-  document.execCommand(command, false, value)
-}
-
-function saveSelection() {
-  const sel = window.getSelection()
-  if (sel && sel.rangeCount > 0) {
-    return sel.getRangeAt(0).cloneRange()
-  }
-  return null
-}
-
-function restoreSelection(range) {
-  if (!range) return
-  const sel = window.getSelection()
-  sel.removeAllRanges()
-  sel.addRange(range)
-}
-
-function insertHtmlAtCaret(html) {
-  const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0) return
-  const range = sel.getRangeAt(0)
-  range.deleteContents()
-  const temp = document.createElement('div')
-  temp.innerHTML = html
-  const frag = document.createDocumentFragment()
-  let lastNode
-  while (temp.firstChild) {
-    lastNode = frag.appendChild(temp.firstChild)
-  }
-  range.insertNode(frag)
-  if (lastNode) {
-    const newRange = document.createRange()
-    newRange.setStartAfter(lastNode)
-    newRange.collapse(true)
-    sel.removeAllRanges()
-    sel.addRange(newRange)
-  }
-}
-
-function getEditorContent(editorEl) {
-  if (!editorEl) return { html: '', text: '' }
-  const html = editorEl.innerHTML || ''
-  const text = editorEl.textContent || ''
-  // Check if the content is just whitespace or empty tags
-  const cleaned = text.trim()
-  if (!cleaned && !html.includes('<img')) {
-    return { html: '', text: '' }
-  }
-  return { html, text: cleaned }
-}
-
-function isEditorEmpty(editorEl) {
-  if (!editorEl) return true
-  const text = (editorEl.textContent || '').trim()
-  return !text && !editorEl.querySelector('img')
-}
+// ─── Toolbar Button ──────────────────────────────────────────────────────────
 
 const ToolbarButton = memo(function ToolbarButton({ icon: Icon, title, onClick, disabled, active, size = 15 }) {
   return (
@@ -195,19 +137,13 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   const [hasContent, setHasContent] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
   const [formatState, setFormatState] = useState({
-    bold: false,
-    italic: false,
-    underline: false,
-    strikeThrough: false,
-    insertUnorderedList: false,
-    insertOrderedList: false,
-    blockquote: false,
+    bold: false, italic: false, underline: false, strike: false,
+    bulletList: false, orderedList: false, blockquote: false, code: false, codeBlock: false,
   })
 
   // Mention state
   const [mentionType, setMentionType] = useState(null) // 'user' | 'channel' | null
   const [mentionQuery, setMentionQuery] = useState('')
-  const [mentionTriggerPos, setMentionTriggerPos] = useState(null)
 
   const { sendMessage } = useChatStore()
   const { setDraft, getDraft, clearDraft } = useDraftStore()
@@ -216,20 +152,36 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   const fileInputRef = useRef(null)
   const containerRef = useRef(null)
   const typingTimeoutRef = useRef(null)
-  const savedRangeRef = useRef(null)
   const draftTimerRef = useRef(null)
   const lastChannelRef = useRef(channelId)
+
+  // ─── Format State Sync ───────────────────────────────────────────────────
+
+  const syncFormatState = useCallback(() => {
+    const ed = editorRef.current
+    if (!ed) return
+    setFormatState({
+      bold: ed.isActive('bold'),
+      italic: ed.isActive('italic'),
+      underline: ed.isActive('underline'),
+      strike: ed.isActive('strike'),
+      bulletList: ed.isActive('bulletList'),
+      orderedList: ed.isActive('orderedList'),
+      blockquote: ed.isActive('blockquote'),
+      code: ed.isActive('code'),
+      codeBlock: ed.isActive('codeBlock'),
+    })
+  }, [])
 
   // ─── Draft Persistence ───────────────────────────────────────────────────
 
   // Save draft on channel switch (leaving current channel)
   useEffect(() => {
     if (lastChannelRef.current && lastChannelRef.current !== channelId) {
-      // Save draft for the channel we're leaving
-      const editor = editorRef.current
-      if (editor) {
-        const { html, text } = getEditorContent(editor)
-        if (text) {
+      const ed = editorRef.current
+      if (ed) {
+        const { html, text } = ed.getContent()
+        if (text.trim()) {
           setDraft(lastChannelRef.current, html, text)
         } else {
           clearDraft(lastChannelRef.current)
@@ -241,28 +193,27 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
   // Restore draft when channel changes
   useEffect(() => {
-    const editor = editorRef.current
-    if (!editor) return
+    const ed = editorRef.current
+    if (!ed) return
     const draft = getDraft(channelId)
     if (draft?.html) {
-      editor.innerHTML = draft.html
+      ed.setContent(draft.html)
       setHasContent(true)
     } else {
-      editor.innerHTML = ''
+      ed.clear()
       setHasContent(false)
     }
-    // Focus editor
-    requestAnimationFrame(() => editor.focus())
+    requestAnimationFrame(() => ed.focus())
   }, [channelId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced draft save on content change
   const saveDraftDebounced = useCallback(() => {
     if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
     draftTimerRef.current = setTimeout(() => {
-      const editor = editorRef.current
-      if (!editor) return
-      const { html, text } = getEditorContent(editor)
-      if (text) {
+      const ed = editorRef.current
+      if (!ed) return
+      const { html, text } = ed.getContent()
+      if (text.trim()) {
         setDraft(channelId, html, text)
       }
     }, 800)
@@ -277,6 +228,58 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       emitTypingStop(channelId)
     }, 3000)
   }, [channelId])
+
+  // ─── Mention Detection ────────────────────────────────────────────────────
+
+  const detectMention = useCallback(() => {
+    const ed = editorRef.current
+    if (!ed) return
+
+    const textBefore = ed.getTextBeforeCursor()
+    if (!textBefore) {
+      setMentionType(null)
+      return
+    }
+
+    // Look backwards for @ or # trigger
+    const match = textBefore.match(/([@#])([^\s@#]*)$/)
+    if (match) {
+      const triggerChar = match[1]
+      const query = match[2]
+      setMentionType(triggerChar === '@' ? 'user' : 'channel')
+      setMentionQuery(query)
+    } else {
+      setMentionType(null)
+    }
+  }, [])
+
+  // ─── Mention Selection ────────────────────────────────────────────────────
+
+  const handleMentionSelect = useCallback((item) => {
+    const ed = editorRef.current
+    if (!ed) return
+
+    const tiptap = ed.getEditor()
+    if (!tiptap) return
+
+    // Delete the trigger character + query text
+    const textBefore = ed.getTextBeforeCursor()
+    const match = textBefore.match(/([@#])([^\s@#]*)$/)
+    if (match) {
+      const deleteCount = match[0].length
+      const { from } = tiptap.state.selection
+      tiptap
+        .chain()
+        .focus()
+        .deleteRange({ from: from - deleteCount, to: from })
+        .run()
+    }
+
+    // Insert mention node
+    ed.insertMention(item.id, item.name, mentionType === 'user' ? 'user' : 'channel')
+    setMentionType(null)
+    setMentionQuery('')
+  }, [mentionType])
 
   // ─── File Processing ─────────────────────────────────────────────────────
 
@@ -364,30 +367,28 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
   // ─── Submit ───────────────────────────────────────────────────────────────
 
-  const handleSubmit = async (e) => {
-    e?.preventDefault()
-    const editor = editorRef.current
-    if (!editor) return
+  const handleSubmit = useCallback(async () => {
+    const ed = editorRef.current
+    if (!ed) return
 
-    const { html, text } = getEditorContent(editor)
-    if (!text && pendingFiles.length === 0) return
+    const { html, text } = ed.getContent()
+    if (!text.trim() && pendingFiles.length === 0) return
     if (isSending || isUploading) return
 
     setIsSending(true)
     try {
       const fileReferences = pendingFiles.map((f) => f._id)
-      await sendMessage(channelId, text || ' ', {
+      await sendMessage(channelId, text.trim() || ' ', {
         threadId,
         htmlContent: html || undefined,
         fileReferences: fileReferences.length > 0 ? fileReferences : undefined,
       })
 
       // Clear editor
-      editor.innerHTML = ''
+      ed.clear()
       setHasContent(false)
       setPendingFiles([])
       clearDraft(channelId)
-      if (typeof checkFormatting === 'function') checkFormatting()
 
       emitTypingStop(channelId)
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
@@ -397,15 +398,14 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       setIsSending(false)
       requestAnimationFrame(() => editorRef.current?.focus())
     }
-  }
+  }, [channelId, threadId, pendingFiles, isSending, isUploading, sendMessage, clearDraft])
 
-  // ─── Paste Handler (images + plain text formatting) ───────────────────────
+  // ─── Paste Handler (images) ───────────────────────────────────────────────
 
-  const handlePaste = (e) => {
+  const handlePaste = useCallback((e) => {
     const clipboardData = e.clipboardData
     if (!clipboardData) return
 
-    // Check for pasted files (images)
     const files = []
     for (const item of clipboardData.items) {
       if (item.kind === 'file') {
@@ -416,363 +416,99 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     if (files.length > 0) {
       e.preventDefault()
       processFiles(files)
-      return
     }
+    // Text paste is handled natively by TipTap (plain text)
+  }, [pendingFiles.length, uploadingFiles.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // For text paste, paste as plain text to avoid external formatting
-    const text = clipboardData.getData('text/plain')
-    if (text) {
-      e.preventDefault()
-      execCmd('insertText', text)
-    }
-  }
-
-  // ─── Mention Detection ────────────────────────────────────────────────────
-
-  const detectMention = useCallback(() => {
-    const sel = window.getSelection()
-    if (!sel || sel.rangeCount === 0) return
-
-    const range = sel.getRangeAt(0)
-    const textNode = range.startContainer
-    if (textNode.nodeType !== Node.TEXT_NODE) {
-      setMentionType(null)
-      return
-    }
-
-    const text = textNode.textContent
-    const cursorPos = range.startOffset
-
-    // Look backwards from cursor for @ or #
-    let triggerIndex = -1
-    let triggerChar = null
-    for (let i = cursorPos - 1; i >= 0; i--) {
-      const ch = text[i]
-      if (ch === '@' || ch === '#') {
-        // Check that it's either at the start or preceded by a space
-        if (i === 0 || text[i - 1] === ' ' || text[i - 1] === '\n' || text[i - 1] === '\u00a0') {
-          triggerIndex = i
-          triggerChar = ch
+  // Attach paste listener to the editor DOM once it's mounted
+  useEffect(() => {
+    // Small delay to ensure TipTap editor view is mounted
+    const timer = setTimeout(() => {
+      try {
+        const ed = editorRef.current?.getEditor?.()
+        const dom = ed?.view?.dom
+        if (dom) {
+          dom.addEventListener('paste', handlePaste)
+          return // cleanup handled below
         }
-        break
+      } catch {
+        // Editor view not ready yet — safe to ignore
       }
-      if (ch === ' ' || ch === '\n') break
+    }, 50)
+    return () => {
+      clearTimeout(timer)
+      try {
+        const ed = editorRef.current?.getEditor?.()
+        const dom = ed?.view?.dom
+        if (dom) dom.removeEventListener('paste', handlePaste)
+      } catch { /* noop */ }
     }
+  }, [handlePaste, channelId])
 
-    if (triggerIndex >= 0 && triggerChar) {
-      const query = text.substring(triggerIndex + 1, cursorPos)
-      setMentionType(triggerChar === '@' ? 'user' : 'channel')
-      setMentionQuery(query)
-      setMentionTriggerPos(triggerIndex)
-    } else {
-      setMentionType(null)
-    }
-  }, [])
+  // ─── Editor Input Callback ───────────────────────────────────────────────
 
-  // ─── Mention Selection ────────────────────────────────────────────────────
-
-  const handleMentionSelect = useCallback((item) => {
-    const editor = editorRef.current
-    if (!editor) return
-
-    const sel = window.getSelection()
-    if (!sel || sel.rangeCount === 0) return
-
-    const range = sel.getRangeAt(0)
-    const textNode = range.startContainer
-    if (textNode.nodeType !== Node.TEXT_NODE) return
-
-    const text = textNode.textContent
-    const cursorPos = range.startOffset
-
-    // Find the trigger character position
-    let triggerIndex = -1
-    const triggerChar = mentionType === 'user' ? '@' : '#'
-    for (let i = cursorPos - 1; i >= 0; i--) {
-      if (text[i] === triggerChar) {
-        triggerIndex = i
-        break
-      }
-    }
-    if (triggerIndex < 0) return
-
-    // Replace the trigger + query with a mention span
-    const before = text.substring(0, triggerIndex)
-    const after = text.substring(cursorPos)
-
-    // Create the mention element
-    const mentionLabel = mentionType === 'user' ? `@${item.name}` : `#${item.name}`
-
-    // Replace text content
-    textNode.textContent = before
-    const mentionSpan = document.createElement('span')
-    mentionSpan.className = 'mention-tag'
-    mentionSpan.contentEditable = 'false'
-    mentionSpan.dataset.mentionId = item.id
-    mentionSpan.dataset.mentionType = mentionType
-    mentionSpan.textContent = mentionLabel
-
-    const afterNode = document.createTextNode('\u00a0' + after)
-
-    const parent = textNode.parentNode
-    parent.insertBefore(mentionSpan, textNode.nextSibling)
-    parent.insertBefore(afterNode, mentionSpan.nextSibling)
-
-    // Place cursor after the mention
-    const newRange = document.createRange()
-    newRange.setStart(afterNode, 1)
-    newRange.collapse(true)
-    sel.removeAllRanges()
-    sel.addRange(newRange)
-
-    setMentionType(null)
-    setMentionQuery('')
-    updateHasContent()
-  }, [mentionType])
-
-  // ─── Input Event Handler ──────────────────────────────────────────────────
-
-  const updateHasContent = useCallback(() => {
-    const editor = editorRef.current
-    const empty = isEditorEmpty(editor)
-    setHasContent(!empty || pendingFiles.length > 0)
-  }, [pendingFiles.length])
-
-  const checkFormatting = useCallback(() => {
-    if (!editorRef.current) return
-    try {
-      let isQuote = false
-      const sel = window.getSelection()
-      if (sel && sel.rangeCount > 0) {
-        let node = sel.getRangeAt(0).startContainer
-        while (node && node !== editorRef.current) {
-          if (node.nodeName === 'BLOCKQUOTE') {
-            isQuote = true
-            break
-          }
-          node = node.parentNode
-        }
-      }
-
-      setFormatState({
-        bold: document.queryCommandState('bold'),
-        italic: document.queryCommandState('italic'),
-        underline: document.queryCommandState('underline'),
-        strikeThrough: document.queryCommandState('strikeThrough'),
-        insertUnorderedList: document.queryCommandState('insertUnorderedList'),
-        insertOrderedList: document.queryCommandState('insertOrderedList'),
-        blockquote: isQuote,
-      })
-    } catch {
-      // Ignore if disconnected or unsupported
-    }
-  }, [])
-
-  const handleInput = useCallback(() => {
-    updateHasContent()
+  const handleEditorInput = useCallback(({ text, isEmpty }) => {
+    setHasContent(!isEmpty || pendingFiles.length > 0)
     handleTyping()
     saveDraftDebounced()
     detectMention()
-    checkFormatting()
-  }, [updateHasContent, handleTyping, saveDraftDebounced, detectMention, checkFormatting])
+    syncFormatState()
+  }, [pendingFiles.length, handleTyping, saveDraftDebounced, detectMention, syncFormatState])
 
-  // ─── Key Down Handler ─────────────────────────────────────────────────────
+  // ─── Key Down for mention dropdown interception ───────────────────────────
 
-  const handleKeyDown = (e) => {
-    // If mention dropdown is open, let it handle keys
+  const handleKeyDown = useCallback((event) => {
+    // If mention dropdown is open, let it handle navigation keys
     if (mentionType) {
-      if (['ArrowUp', 'ArrowDown', 'Tab'].includes(e.key)) return
-      if (e.key === 'Enter') return
-      if (e.key === 'Escape') {
-        e.preventDefault()
+      if (['ArrowUp', 'ArrowDown', 'Tab', 'Enter'].includes(event.key)) {
+        // MentionDropdown captures these via document listener
+        return false // let it propagate
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
         setMentionType(null)
-        checkFormatting()
-        return
-      }
-    }
-
-    // Enter to send (without Shift)
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSubmit()
-      return
-    }
-
-    // Ctrl/Cmd shortcuts
-    if (e.ctrlKey || e.metaKey) {
-      if (e.shiftKey && e.key.toLowerCase() === 'x') {
-        e.preventDefault()
-        formatStrikethrough()
-        return
-      }
-      switch (e.key.toLowerCase()) {
-        case 'b':
-          e.preventDefault()
-          formatBold()
-          return
-        case 'i':
-          e.preventDefault()
-          formatItalic()
-          return
-        case 'u':
-          e.preventDefault()
-          formatUnderline()
-          return
-        default:
-          break
+        return true
       }
     }
 
     // Escape to close popups
-    if (e.key === 'Escape') {
-      if (showEmoji) setShowEmoji(false)
-      if (showLinkModal) setShowLinkModal(false)
+    if (event.key === 'Escape') {
+      if (showEmoji) { setShowEmoji(false); return true }
+      if (showLinkModal) { setShowLinkModal(false); return true }
     }
-  }
+
+    return false
+  }, [mentionType, showEmoji, showLinkModal])
 
   // ─── Formatting Actions ───────────────────────────────────────────────────
 
-  const formatCommand = useCallback((command) => {
-    editorRef.current?.focus()
-    execCmd(command)
-    checkFormatting()
-    handleInput()
-  }, [checkFormatting, handleInput])
-
-  const formatBold = useCallback(() => formatCommand('bold'), [formatCommand])
-  const formatItalic = useCallback(() => formatCommand('italic'), [formatCommand])
-  const formatUnderline = useCallback(() => formatCommand('underline'), [formatCommand])
-  const formatStrikethrough = useCallback(() => formatCommand('strikeThrough'), [formatCommand])
-  const formatBulletList = useCallback(() => formatCommand('insertUnorderedList'), [formatCommand])
-  const formatNumberedList = useCallback(() => formatCommand('insertOrderedList'), [formatCommand])
-
-  const formatInlineCode = useCallback(() => {
-    const editor = editorRef.current
-    if (!editor) return
-
-    // Quick command shortcut if empty selection
-    editor.focus()
-    const sel = window.getSelection()
-    if (!sel || sel.rangeCount === 0) return
-    const range = sel.getRangeAt(0)
-    const selected = range.toString()
-    if (selected) {
-      const code = document.createElement('code')
-      code.textContent = selected
-      range.deleteContents()
-      range.insertNode(code)
-      // Move cursor after code
-      const newRange = document.createRange()
-      newRange.setStartAfter(code)
-      newRange.collapse(true)
-      sel.removeAllRanges()
-      sel.addRange(newRange)
-    } else {
-      const code = document.createElement('code')
-      code.innerHTML = '&ZeroWidthSpace;'
-      range.insertNode(code)
-      const newRange = document.createRange()
-      newRange.selectNodeContents(code)
-      sel.removeAllRanges()
-      sel.addRange(newRange)
-    }
-    handleInput()
-  }, [handleInput])
-
-  const formatCodeBlock = useCallback(() => {
-    const editor = editorRef.current
-    if (!editor) return
-    editor.focus()
-    const sel = window.getSelection()
-    if (!sel || sel.rangeCount === 0) return
-    const range = sel.getRangeAt(0)
-    
-    // Prevent nesting PRE tags
-    let node = range.startContainer
-    while (node && node !== editor) {
-      if (node.nodeName === 'PRE') return
-      node = node.parentNode
-    }
-
-    const selected = range.toString()
-    const pre = document.createElement('pre')
-    const code = document.createElement('code')
-    code.textContent = selected || '\n'
-    pre.appendChild(code)
-    range.deleteContents()
-    range.insertNode(pre)
-    // Insert a br after to allow typing after the block
-    const br = document.createElement('br')
-    pre.parentNode.insertBefore(br, pre.nextSibling)
-    const newRange = document.createRange()
-    newRange.selectNodeContents(code)
-    if (selected) {
-      newRange.collapse(false)
-    }
-    sel.removeAllRanges()
-    sel.addRange(newRange)
-    handleInput()
-  }, [handleInput])
-
-  const formatQuote = useCallback(() => {
-    const editor = editorRef.current
-    if (!editor) return
-    editor.focus()
-    let isQuote = false
-    const sel = window.getSelection()
-    if (sel && sel.rangeCount > 0) {
-      let node = sel.getRangeAt(0).startContainer
-      while (node && node !== editor) {
-        if (node.nodeName === 'BLOCKQUOTE') {
-          isQuote = true
-          break
-        }
-        node = node.parentNode
-      }
-    }
-
-    if (isQuote) {
-      execCmd('formatBlock', 'DIV')
-    } else {
-      execCmd('formatBlock', 'BLOCKQUOTE')
-    }
-    
-    checkFormatting()
-    handleInput()
-  }, [checkFormatting, handleInput])
+  const formatBold = useCallback(() => { editorRef.current?.toggleBold(); syncFormatState() }, [syncFormatState])
+  const formatItalic = useCallback(() => { editorRef.current?.toggleItalic(); syncFormatState() }, [syncFormatState])
+  const formatUnderline = useCallback(() => { editorRef.current?.toggleUnderline(); syncFormatState() }, [syncFormatState])
+  const formatStrikethrough = useCallback(() => { editorRef.current?.toggleStrike(); syncFormatState() }, [syncFormatState])
+  const formatBulletList = useCallback(() => { editorRef.current?.toggleBulletList(); syncFormatState() }, [syncFormatState])
+  const formatNumberedList = useCallback(() => { editorRef.current?.toggleOrderedList(); syncFormatState() }, [syncFormatState])
+  const formatQuote = useCallback(() => { editorRef.current?.toggleBlockquote(); syncFormatState() }, [syncFormatState])
+  const formatInlineCode = useCallback(() => { editorRef.current?.toggleCode(); syncFormatState() }, [syncFormatState])
+  const formatCodeBlock = useCallback(() => { editorRef.current?.toggleCodeBlock(); syncFormatState() }, [syncFormatState])
 
   const handleLinkInsert = useCallback((url, text) => {
-    const editor = editorRef.current
-    if (!editor) return
-    editor.focus()
-    restoreSelection(savedRangeRef.current)
-    const linkHtml = `<a href="${url}" target="_blank" rel="noopener noreferrer">${text || url}</a>`
-    insertHtmlAtCaret(linkHtml)
-    handleInput()
-  }, [handleInput])
+    editorRef.current?.insertLink(url, text)
+  }, [])
 
   // ─── Emoji Insert ─────────────────────────────────────────────────────────
 
   const insertEmoji = useCallback((emoji) => {
-    const editor = editorRef.current
-    if (editor) {
-      editor.focus()
-      restoreSelection(savedRangeRef.current)
-      insertHtmlAtCaret(emoji)
-      handleInput()
-    }
+    editorRef.current?.insertEmoji(emoji)
     setShowEmoji(false)
-  }, [handleInput])
+  }, [])
 
-  // Save selection before opening emoji/link modal
   const handleEmojiToggle = useCallback(() => {
-    savedRangeRef.current = saveSelection()
     setShowEmoji((prev) => !prev)
     setShowLinkModal(false)
   }, [])
 
   const handleLinkToggle = useCallback(() => {
-    savedRangeRef.current = saveSelection()
     setShowLinkModal((prev) => !prev)
     setShowEmoji(false)
   }, [])
@@ -785,8 +521,10 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
   // Update hasContent when files change
   useEffect(() => {
-    updateHasContent()
-  }, [pendingFiles.length, uploadingFiles.length, updateHasContent])
+    const ed = editorRef.current
+    const isEmpty = ed?.isEmpty() ?? true
+    setHasContent(!isEmpty || pendingFiles.length > 0 || uploadingFiles.length > 0)
+  }, [pendingFiles.length, uploadingFiles.length])
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -822,7 +560,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
               <ToolbarButton icon={Bold} title="Bold (Ctrl+B)" onClick={formatBold} active={formatState.bold} />
               <ToolbarButton icon={Italic} title="Italic (Ctrl+I)" onClick={formatItalic} active={formatState.italic} />
               <ToolbarButton icon={Underline} title="Underline (Ctrl+U)" onClick={formatUnderline} active={formatState.underline} />
-              <ToolbarButton icon={Strikethrough} title="Strikethrough (Ctrl+Shift+X)" onClick={formatStrikethrough} active={formatState.strikeThrough} />
+              <ToolbarButton icon={Strikethrough} title="Strikethrough (Ctrl+Shift+X)" onClick={formatStrikethrough} active={formatState.strike} />
             </div>
             <div className="slack-toolbar-divider" />
             <div className="slack-toolbar-group">
@@ -830,14 +568,14 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
             </div>
             <div className="slack-toolbar-divider" />
             <div className="slack-toolbar-group">
-              <ToolbarButton icon={List} title="Bullet list" onClick={formatBulletList} active={formatState.insertUnorderedList} />
-              <ToolbarButton icon={ListOrdered} title="Numbered list" onClick={formatNumberedList} active={formatState.insertOrderedList} />
+              <ToolbarButton icon={List} title="Bullet list" onClick={formatBulletList} active={formatState.bulletList} />
+              <ToolbarButton icon={ListOrdered} title="Numbered list" onClick={formatNumberedList} active={formatState.orderedList} />
             </div>
             <div className="slack-toolbar-divider" />
             <div className="slack-toolbar-group">
               <ToolbarButton icon={Quote} title="Quote" onClick={formatQuote} active={formatState.blockquote} />
-              <ToolbarButton icon={Code} title="Inline code" onClick={formatInlineCode} />
-              <ToolbarButton icon={Braces} title="Code block" onClick={formatCodeBlock} />
+              <ToolbarButton icon={Code} title="Inline code" onClick={formatInlineCode} active={formatState.code} />
+              <ToolbarButton icon={Braces} title="Code block" onClick={formatCodeBlock} active={formatState.codeBlock} />
             </div>
           </div>
         )}
@@ -852,23 +590,15 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
           </div>
         )}
 
-        {/* Rich Text Editor (contentEditable) */}
-        <div
+        {/* TipTap Rich Text Editor */}
+        <RichTextEditor
           ref={editorRef}
-          className="slack-rich-editor"
-          contentEditable
-          suppressContentEditableWarning
-          role="textbox"
-          aria-multiline="true"
-          aria-label={placeholder || 'Type a message...'}
-          data-placeholder={placeholder || 'Type a message...'}
-          onInput={handleInput}
-          onKeyDown={handleKeyDown}
-          onKeyUp={checkFormatting}
-          onMouseUp={checkFormatting}
-          onFocus={() => { setIsFocused(true); checkFormatting(); }}
+          placeholder={placeholder || 'Type a message...'}
+          onSubmit={handleSubmit}
+          onInput={handleEditorInput}
+          onFocus={() => { setIsFocused(true); syncFormatState() }}
           onBlur={() => setIsFocused(false)}
-          onPaste={handlePaste}
+          onKeyDown={handleKeyDown}
         />
 
         {/* Mention Dropdown */}
@@ -967,12 +697,8 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
               icon={AtSign}
               title="Mention someone"
               onClick={() => {
-                const editor = editorRef.current
-                if (editor) {
-                  editor.focus()
-                  insertHtmlAtCaret('@')
-                  handleInput()
-                }
+                editorRef.current?.insertText('@')
+                detectMention()
               }}
               size={18}
             />

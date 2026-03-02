@@ -42,6 +42,9 @@ export const useChatStore = create((set, get) => ({
   // Notifications
   notifications: [],
 
+  // Connection status for reconnect indicator
+  connectionStatus: 'disconnected', // 'connected' | 'connecting' | 'disconnected'
+
   // Active thread (persisted to sessionStorage for refresh survival)
   activeThread: JSON.parse(sessionStorage.getItem('chat_activeThread') || 'null'),
 
@@ -230,7 +233,8 @@ export const useChatStore = create((set, get) => ({
   deleteMessage: async (messageId, channelId) => {
     try {
       await messageAPI.delete(messageId)
-      get().removeMessage(messageId, channelId)
+      // Use soft delete locally to show tombstone
+      get().softDeleteMessage(messageId, channelId)
     } catch (error) {
       toast.error('Failed to delete message')
     }
@@ -349,6 +353,50 @@ export const useChatStore = create((set, get) => ({
         messagesByChannel: {
           ...state.messagesByChannel,
           [channelId]: existing.filter((m) => m._id !== messageId),
+        },
+      }
+    })
+  },
+
+  /**
+   * Soft-delete a message: mark as deleted but keep in timeline (tombstone UI).
+   */
+  softDeleteMessage: (messageId, channelId) => {
+    set((state) => {
+      if (!channelId) return state
+      const existing = state.messagesByChannel[channelId] || []
+      return {
+        messagesByChannel: {
+          ...state.messagesByChannel,
+          [channelId]: existing.map((m) =>
+            m._id === messageId
+              ? { ...m, isDeleted: true, content: '', htmlContent: '', deletedAt: new Date().toISOString() }
+              : m
+          ),
+        },
+      }
+    })
+  },
+
+  /**
+   * Update message delivery status (DM-only: sent → delivered → seen).
+   */
+  updateMessageStatus: (channelId, messageId, messageIds, status, timestamps = {}) => {
+    set((state) => {
+      if (!channelId) return state
+      const existing = state.messagesByChannel[channelId] || []
+      const idsToUpdate = messageIds || (messageId ? [messageId] : [])
+      if (idsToUpdate.length === 0) return state
+
+      const idSet = new Set(idsToUpdate)
+      return {
+        messagesByChannel: {
+          ...state.messagesByChannel,
+          [channelId]: existing.map((m) =>
+            idSet.has(m._id)
+              ? { ...m, status, ...timestamps }
+              : m
+          ),
         },
       }
     })
@@ -585,4 +633,7 @@ export const useChatStore = create((set, get) => ({
   },
 
   clearNotifications: () => set({ notifications: [] }),
+
+  // ─── Connection Status ──────────────────────────────────────────────
+  setConnectionStatus: (status) => set({ connectionStatus: status }),
 }))

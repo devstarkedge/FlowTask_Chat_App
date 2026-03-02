@@ -937,8 +937,9 @@ body {
   cursor: not-allowed;
 }
 
-/* ─── Rich Editor (contentEditable) ───────────────────────────────────────── */
+/* ─── Rich Editor (TipTap / ProseMirror) ──────────────────────────────────── */
 
+/* TipTap wraps content in .tiptap which gets our .slack-rich-editor class via editorProps */
 .slack-rich-editor {
   min-height: 40px;
   max-height: 200px;
@@ -951,10 +952,18 @@ body {
   outline: none;
   word-wrap: break-word;
   white-space: pre-wrap;
-  -webkit-user-modify: read-write-plaintext-only;
-  -webkit-user-modify: read-write;
 }
 
+/* ProseMirror placeholder (TipTap Placeholder extension) */
+.slack-rich-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--text-muted);
+  pointer-events: none;
+  height: 0;
+}
+
+/* Legacy contentEditable placeholder (fallback) */
 .slack-rich-editor:empty::before {
   content: attr(data-placeholder);
   color: var(--text-muted);

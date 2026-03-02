@@ -14,6 +14,7 @@ const SOCKET_EVENTS = {
   MESSAGE_ACK: 'message:ack',
   MESSAGE_PINNED: 'message:pinned',
   MESSAGE_UNPINNED: 'message:unpinned',
+  MESSAGE_STATUS: 'message:status',
 
   // Reactions
   REACTION_ADD: 'reaction:add',
@@ -60,17 +61,41 @@ export function connectSocket() {
 
   socket.on('connect', () => {
     console.log('[Socket] Connected:', socket.id)
+    useChatStore.getState().setConnectionStatus('connected')
   })
 
   socket.on('disconnect', (reason) => {
     console.log('[Socket] Disconnected:', reason)
+    useChatStore.getState().setConnectionStatus('disconnected')
+  })
+
+  socket.on('reconnect_attempt', (attempt) => {
+    console.log('[Socket] Reconnecting... attempt', attempt)
+    useChatStore.getState().setConnectionStatus('connecting')
   })
 
   socket.on('reconnect', (attempt) => {
     console.log('[Socket] Reconnected after', attempt, 'attempts')
-    // Re-sync channels & unreads after reconnect to cover any missed events
+    useChatStore.getState().setConnectionStatus('connected')
+    // Re-sync channels, unreads, rejoin rooms, and fill message gaps
     try {
-      useChannelStore.getState().fetchChannels()
+      const channelStore = useChannelStore.getState()
+      channelStore.fetchChannels().then(() => {
+        // Rejoin all channel rooms
+        const channels = useChannelStore.getState().channels
+        for (const ch of channels) {
+          socket.emit('channel:join', ch._id)
+        }
+        // Rejoin active channel and sync missed messages
+        const activeChannelId = channelStore.activeChannelId
+        if (activeChannelId) {
+          socket.emit('channel:join', activeChannelId)
+          // Fetch fresh messages to fill any gap
+          useChatStore.getState().fetchMessages(activeChannelId)
+        }
+        // Refresh unreads
+        channelStore.fetchUnreads()
+      })
     } catch (err) {
       console.error('[Socket] Failed to re-sync after reconnect:', err.message)
     }
@@ -129,8 +154,18 @@ export function connectSocket() {
     useChatStore.getState().updateMessage(message)
   })
 
-  socket.on(SOCKET_EVENTS.MESSAGE_DELETE, ({ messageId, channelId }) => {
-    useChatStore.getState().removeMessage(messageId, channelId)
+  socket.on(SOCKET_EVENTS.MESSAGE_DELETE, ({ messageId, channelId, isDeleted }) => {
+    if (isDeleted) {
+      // Soft delete — render tombstone UI
+      useChatStore.getState().softDeleteMessage(messageId, channelId)
+    } else {
+      useChatStore.getState().removeMessage(messageId, channelId)
+    }
+  })
+
+  // ─── Message Delivery Status Events ──────────────────────────────────────
+  socket.on(SOCKET_EVENTS.MESSAGE_STATUS, ({ messageId, messageIds, channelId, status, deliveredAt, seenAt }) => {
+    useChatStore.getState().updateMessageStatus(channelId, messageId, messageIds, status, { deliveredAt, seenAt })
   })
 
   // ─── Reaction Events ────────────────────────────────────────────────
@@ -202,6 +237,11 @@ export function connectSocket() {
 
   // ─── Notification Events ────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.NOTIFICATION, (data) => {
+    // Suppress notification if user is actively viewing the channel
+    const activeChannelId = useChannelStore.getState().activeChannelId
+    if (data.channelId && data.channelId === activeChannelId && document.hasFocus()) {
+      return
+    }
     useChatStore.getState().addNotification(data)
   })
 

@@ -145,6 +145,12 @@ export const SOCKET_EVENTS = Object.freeze({
   // Read Receipts
   READ_RECEIPT_UPDATED: 'readReceipt:updated',
 
+  // Message Delivery Status
+  MESSAGE_STATUS: 'message:status',
+
+  // Unread
+  UNREAD_UPDATED: 'unread:updated',
+
   // Notifications
   NOTIFICATION: 'notification',
 });
@@ -190,6 +196,9 @@ export const BOT = Object.freeze({
   DEADLINE_CHECK_CRON: '0 9 * * *',       // Daily at 9 AM
   DEADLINE_WARNING_HOURS: 24,              // Warn for tasks due within 24h
 });
+
+// ─── Message Edit Window ─────────────────────────────────────────────────────
+export const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
 // ─── Channel Name Constraints ────────────────────────────────────────────────
 export const CHANNEL_NAME = Object.freeze({

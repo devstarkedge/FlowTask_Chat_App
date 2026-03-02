@@ -135,6 +135,25 @@ const messageSchema = new Schema({
     type: [reactionSchema],
     default: [],
   },
+  // ─── Delivery Status (DM-only) ───
+  status: {
+    type: String,
+    enum: ['sending', 'sent', 'delivered', 'seen'],
+    default: 'sent',
+  },
+  deliveredAt: {
+    type: Date,
+    default: null,
+  },
+  seenAt: {
+    type: Date,
+    default: null,
+  },
+  readBy: [{
+    userId: { type: Schema.Types.ObjectId, ref: 'ChatUser' },
+    readAt: { type: Date, default: Date.now },
+  }],
+
   // Denormalized reply count (for root messages that start threads)
   replyCount: {
     type: Number,
@@ -206,6 +225,8 @@ messageSchema.index(
 );
 // Full-text search
 messageSchema.index({ content: 'text' });
+// Delivery status lookup for DM channels
+messageSchema.index({ channelId: 1, status: 1 }, { sparse: true });
 // Partial index for active (non-deleted) messages
 messageSchema.index(
   { channelId: 1, createdAt: -1, isDeleted: 1 },

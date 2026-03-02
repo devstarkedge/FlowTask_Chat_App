@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useChatStore } from '../../stores/chatStore'
@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { Avatar } from '../chat/MemberAvatarGroup'
 import CreateChannelModal from '../chat/CreateChannelModal'
+import UserPickerModal from '../chat/UserPickerModal'
+import { formatDistanceToNowStrict } from 'date-fns'
 
 const CHANNEL_ICONS = {
   project: Hash,
@@ -31,13 +33,24 @@ export default function Sidebar({ onClose }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
+  const [showUserPicker, setShowUserPicker] = useState(false)
 
   const toggleSection = (section) => {
-    setExpandedSections((s) => ({ ...s, [section]: !s[section] }))
+    setExpandedSections((s) => ({ ...s, [section]: !s[section] }));
   }
 
   const projectChannels = channels.filter((c) => c.type === 'project' && !c.isArchived)
-  const dmChannels = channels.filter((c) => c.type === 'dm' && !c.isArchived)
+  // Enrich DM channels with dmRecipientId for online indicator
+  const dmChannels = useMemo(() => {
+    return channels
+      .filter((c) => c.type === 'dm' && !c.isArchived)
+      .map((c) => {
+        if (c.dmRecipientId) return c
+        const currentFlowTaskId = user?.flowTaskUserId || user?._id
+        const recipientId = c.dmParticipants?.find((p) => p !== currentFlowTaskId) || null
+        return { ...c, dmRecipientId: recipientId }
+      })
+  }, [channels, user])
   const systemChannels = channels.filter((c) => c.type === 'system' && !c.isArchived)
   const deptChannels = channels.filter(
     (c) => (c.type === 'department' || c.type === 'team') && !c.isArchived,
@@ -50,12 +63,18 @@ export default function Sidebar({ onClose }) {
     )
   }
 
-  const sortChannels = (list) => {
+  const sortChannels = (list, isDMSort = false) => {
     return [...list].sort((a, b) => {
       const aUnread = unreads[a._id] || 0
       const bUnread = unreads[b._id] || 0
       if (aUnread > 0 && bUnread === 0) return -1
       if (aUnread === 0 && bUnread > 0) return 1
+      // DMs: sort by most recent message, then name
+      if (isDMSort) {
+        const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0
+        const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0
+        if (aTime !== bTime) return bTime - aTime
+      }
       return (a.name || '').localeCompare(b.name || '')
     })
   }
@@ -201,13 +220,14 @@ export default function Sidebar({ onClose }) {
 
         <ChannelSection
           title="Direct Messages"
-          channels={sortChannels(filteredChannels(dmChannels))}
+          channels={sortChannels(filteredChannels(dmChannels), true)}
           expanded={expandedSections.dms}
           onToggle={() => toggleSection('dms')}
           activeId={activeChannelId}
           unreads={unreads}
           onSelect={handleSelectChannel}
           showAdd
+          onAdd={() => setShowUserPicker(true)}
           isDM
           onlineUsers={onlineUsers}
         />
@@ -253,6 +273,16 @@ export default function Sidebar({ onClose }) {
 
       {showCreateChannel && (
         <CreateChannelModal onClose={() => setShowCreateChannel(false)} />
+      )}
+
+      {showUserPicker && (
+        <UserPickerModal
+          onClose={() => setShowUserPicker(false)}
+          onSelect={(channelId) => {
+            setShowUserPicker(false)
+            handleSelectChannel(channelId)
+          }}
+        />
       )}
     </div>
   )
@@ -357,7 +387,27 @@ function ChannelItem({ channel, isActive, unread, onClick, isDM, onlineUsers }) 
         <Icon size={15} style={{ opacity: isActive ? 1 : 0.5, flexShrink: 0 }} />
       )}
 
-      <span className="truncate text-[13px] flex-1">{channel.name}</span>
+      <div className="flex-1 min-w-0">
+        <span className="truncate text-[13px] block">{channel.name}</span>
+        {isDM && channel.lastMessagePreview && (
+          <div className="flex items-center gap-1.5">
+            <span
+              className="truncate text-[11px] flex-1"
+              style={{ color: 'var(--text-muted)', fontWeight: 400, lineHeight: '16px' }}
+            >
+              {channel.lastMessagePreview}
+            </span>
+            {channel.lastMessageAt && (
+              <span
+                className="text-[10px] shrink-0"
+                style={{ color: 'var(--text-muted)', fontWeight: 400 }}
+              >
+                {formatDistanceToNowStrict(new Date(channel.lastMessageAt), { addSuffix: false })}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
 
       {unread > 0 && (
         <span className="badge badge-red" style={{ fontSize: 10, minWidth: 16, height: 16 }}>

@@ -5,7 +5,7 @@ import { format } from 'date-fns'
 import {
   Smile, MessageSquare, MoreHorizontal, Edit, Trash2, Pin,
   FileText, Download, Image as ImageIcon, File, FileArchive, FileCode,
-  Film, Music,
+  Film, Music, Check, CheckCheck,
 } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
 import EmojiPicker from './EmojiPicker'
@@ -42,7 +42,9 @@ function fileIcon(mimeType) {
   return File
 }
 
-const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, onOpenProfile, onOpenFilePreview }) {
+const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000 // 10 minutes
+
+const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, onOpenProfile, onOpenFilePreview, isDMChannel }) {
   const { user } = useAuthStore()
   const { addReaction, removeReaction, editMessage, deleteMessage, retryMessage } = useChatStore()
   const [showActions, setShowActions] = useState(false)
@@ -68,6 +70,8 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
   const isSystem = message.contentType === 'system' && !message.activityMeta
   const isPending = message.pending === true
   const isFailed = message.failed === true
+  const isDeleted = message.isDeleted === true
+  const canEdit = isOwn && !isDeleted && (Date.now() - new Date(message.createdAt).getTime()) < MESSAGE_EDIT_WINDOW_MS
   // Prefer senderSnapshot for display (denormalized), fall back to populated authorId
   const authorName = message.senderSnapshot?.name || message.authorId?.name || 'FlowTask Bot'
   const authorAvatar = message.senderSnapshot?.avatar || (typeof message.authorId === 'object' ? message.authorId?.avatar : null)
@@ -107,6 +111,66 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
         </p>
         <div className="flex-1 h-px" style={{ background: 'var(--border-secondary)' }} />
       </div>
+    )
+  }
+
+  // Deleted message tombstone
+  if (isDeleted) {
+    return (
+      <div className="relative group" style={{ opacity: 0.6 }}>
+        <div className={`flex gap-2.5 px-5 ${compact ? 'py-0.5' : 'pt-2 pb-0.5'}`}>
+          {!compact ? (
+            <Avatar
+              member={{ name: authorName, avatar: authorAvatar, onlineStatus: 'offline' }}
+              size={36}
+              showStatus={false}
+            />
+          ) : (
+            <div className="w-9 shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            {!compact && (
+              <div className="flex items-baseline gap-2 mb-0.5">
+                <span className="font-bold text-sm" style={{ color: 'var(--text-white)' }}>
+                  {authorName}
+                </span>
+                <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                  {time}
+                </span>
+              </div>
+            )}
+            <p className="text-[15px] italic" style={{ color: 'var(--text-muted)' }}>
+              This message was deleted
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Delivery status indicator for DM messages
+  const renderDeliveryStatus = () => {
+    if (!isDMChannel || !isOwn || isPending || isFailed) return null
+    const status = message.status || 'sent'
+    if (status === 'seen') {
+      return (
+        <span title="Seen" className="inline-flex items-center ml-1">
+          <CheckCheck size={13} style={{ color: 'var(--accent-primary)' }} />
+        </span>
+      )
+    }
+    if (status === 'delivered') {
+      return (
+        <span title="Delivered" className="inline-flex items-center ml-1">
+          <CheckCheck size={13} style={{ color: 'var(--text-muted)' }} />
+        </span>
+      )
+    }
+    // sent
+    return (
+      <span title="Sent" className="inline-flex items-center ml-1">
+        <Check size={13} style={{ color: 'var(--text-muted)' }} />
+      </span>
     )
   }
 
@@ -193,6 +257,7 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
               {message.isPinned && (
                 <Pin size={11} style={{ color: 'var(--accent-yellow)' }} />
               )}
+              {renderDeliveryStatus()}
             </div>
           )}
 
@@ -386,11 +451,13 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
           {isOwn && (
             <>
               <div style={{ width: 1, height: 16, background: 'var(--border-secondary)', margin: '0 2px' }} />
-              <ActionButton
-                icon={Edit}
-                title="Edit"
-                onClick={() => { setEditContent(message.content); setIsEditing(true) }}
-              />
+              {canEdit && (
+                <ActionButton
+                  icon={Edit}
+                  title="Edit"
+                  onClick={() => { setEditContent(message.content); setIsEditing(true) }}
+                />
+              )}
               <ActionButton
                 icon={Trash2}
                 title="Delete"
@@ -426,10 +493,13 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
     && prev.message.reactions === next.message.reactions
     && prev.message.isEdited === next.message.isEdited
     && prev.message.isPinned === next.message.isPinned
+    && prev.message.isDeleted === next.message.isDeleted
+    && prev.message.status === next.message.status
     && prev.message.replyCount === next.message.replyCount
     && prev.message.pending === next.message.pending
     && prev.message.failed === next.message.failed
     && prev.compact === next.compact
+    && prev.isDMChannel === next.isDMChannel
 })
 
 export default MessageItem

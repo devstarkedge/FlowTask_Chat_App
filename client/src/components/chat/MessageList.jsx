@@ -5,7 +5,7 @@ import ActivityMessage from './ActivityMessage'
 import { MessageCircle } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
 
-export default function MessageList({ messages, channelId, onOpenThread, onOpenProfile, onOpenFilePreview }) {
+export default function MessageList({ messages, channelId, onOpenThread, onOpenProfile, onOpenFilePreview, isDMChannel }) {
   const { isLoadingMessages, hasMore, fetchMessages } = useChatStore()
   const virtuosoRef = useRef(null)
 
@@ -160,6 +160,7 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
               onOpenThread={onOpenThread}
               onOpenProfile={onOpenProfile}
               onOpenFilePreview={onOpenFilePreview}
+              isDMChannel={isDMChannel}
             />
           )
         }}

@@ -132,12 +132,22 @@ export const useChannelStore = create(
   },
 
   createDM: async (targetUserId) => {
+    // Deduplication guard: check if DM already exists locally
+    const existing = get().channels.find(
+      (c) => c.type === 'dm' && c.dmParticipants?.includes(targetUserId)
+    )
+    if (existing) {
+      get().setActiveChannel(existing._id)
+      return existing
+    }
+
     const { data: res } = await channelAPI.createDM(targetUserId)
     const channel = res.data.channel
     set((state) => {
       if (state.channels.some((c) => c._id === channel._id)) return state
       return { channels: [...state.channels, channel] }
     })
+    get().setActiveChannel(channel._id)
     return channel
   },
 }),

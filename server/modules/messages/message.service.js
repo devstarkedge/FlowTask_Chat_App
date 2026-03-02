@@ -12,6 +12,8 @@ import {
   SOCKET_EVENTS,
   MESSAGE_CONTENT_TYPES,
   MENTION_TYPES,
+  CHANNEL_TYPES,
+  MESSAGE_EDIT_WINDOW_MS,
 } from '../../config/constants.js';
 import {
   ValidationError,
@@ -181,6 +183,11 @@ class MessageService {
     // Update unread counts for other members
     this._incrementUnreadForChannel(channelId, authorId).catch(() => {});
 
+    // DM delivery status: if recipient is online, mark as delivered
+    if (channel.type === CHANNEL_TYPES.DM) {
+      this._updateDeliveryStatus(message, channel, authorId).catch(() => {});
+    }
+
     // Notify mentioned users
     this._notifyMentions(mentions, populated, channel).catch(() => {});
 
@@ -285,6 +292,12 @@ class MessageService {
       throw new ForbiddenError('Cannot edit a deleted message');
     }
 
+    // Enforce edit time window
+    const messageAge = Date.now() - new Date(message.createdAt).getTime();
+    if (messageAge > MESSAGE_EDIT_WINDOW_MS) {
+      throw new ForbiddenError('Edit window expired. Messages can only be edited within 10 minutes.');
+    }
+
     const sanitizedContent = sanitizeHtml(newContent);
     if (!sanitizedContent) {
       throw new ValidationError('Content cannot be empty');
@@ -326,9 +339,12 @@ class MessageService {
 
     await messageRepository.softDelete(messageId);
 
-    emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_DELETE,
-      deleteSocketPayload({ messageId, channelId: message.channelId }),
-    );
+    // Emit soft-delete event with isDeleted flag so clients render tombstone
+    emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_DELETE, {
+      messageId: messageId.toString(),
+      channelId: message.channelId.toString(),
+      isDeleted: true,
+    });
 
     return { messageId };
   }
@@ -432,6 +448,107 @@ class MessageService {
   }
 
   // ──────────────────── Internal Helpers ────────────────────────────────────
+
+  /**
+   * Update delivery status for DM messages.
+   * If recipient is online, mark as delivered immediately.
+   * @private
+   */
+  async _updateDeliveryStatus(message, channel, senderUserId) {
+    try {
+      const recipientParticipantId = channel.dmParticipants?.find(
+        (p) => p !== senderUserId.toString()
+      );
+      if (!recipientParticipantId) return;
+
+      // Find the ChatUser for the recipient (could be by flowTaskUserId)
+      let recipient = await userRepository.findByFlowTaskId(recipientParticipantId);
+      if (!recipient) {
+        recipient = await userRepository.findById(recipientParticipantId);
+      }
+      if (!recipient) return;
+
+      // Check if recipient is online (has active sockets)
+      if (recipient.socketIds && recipient.socketIds.length > 0) {
+        const now = new Date();
+        await messageRepository.update(message._id, {
+          status: 'delivered',
+          deliveredAt: now,
+        });
+
+        // Notify the sender about delivery
+        emitToUser(senderUserId.toString(), SOCKET_EVENTS.MESSAGE_STATUS, {
+          messageId: message._id.toString(),
+          channelId: channel._id.toString(),
+          status: 'delivered',
+          deliveredAt: now,
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to update delivery status', {
+        messageId: message._id,
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Mark messages as seen in a DM channel.
+   * Called when a user opens/views a DM conversation.
+   */
+  async markDMMessagesAsSeen(channelId, userId) {
+    try {
+      const channel = await channelRepository.findById(channelId);
+      if (!channel || channel.type !== CHANNEL_TYPES.DM) return;
+
+      // Find undelivered/unseen messages NOT from this user
+      const Message = (await import('./Message.model.js')).default;
+      const now = new Date();
+      const result = await Message.updateMany(
+        {
+          channelId,
+          authorId: { $ne: userId },
+          status: { $in: ['sent', 'delivered'] },
+          isDeleted: false,
+        },
+        {
+          $set: { status: 'seen', seenAt: now },
+          $addToSet: { readBy: { userId, readAt: now } },
+        }
+      );
+
+      if (result.modifiedCount > 0) {
+        // Find sender(s) to notify about seen status
+        const unseenMessages = await Message.find({
+          channelId,
+          authorId: { $ne: userId },
+          status: 'seen',
+          seenAt: now,
+        }).select('_id authorId').lean();
+
+        // Group by author and notify each
+        const authorIds = [...new Set(unseenMessages.map(m => m.authorId.toString()))];
+        for (const authorId of authorIds) {
+          const messageIds = unseenMessages
+            .filter(m => m.authorId.toString() === authorId)
+            .map(m => m._id.toString());
+
+          emitToUser(authorId, SOCKET_EVENTS.MESSAGE_STATUS, {
+            channelId: channelId.toString(),
+            messageIds,
+            status: 'seen',
+            seenAt: now,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to mark DM messages as seen', {
+        channelId,
+        userId,
+        error: error.message,
+      });
+    }
+  }
 
   /**
    * Increment unread counts for all channel members except the sender.

@@ -21,9 +21,11 @@ import readReceiptRoutes, { channelReadRouter } from './modules/readReceipts/rea
 import webhookRoutes from './modules/webhooks/webhook.routes.js';
 import botRoutes from './modules/bot/bot.routes.js';
 import userRoutes from './modules/users/user.routes.js';
+import workspaceRoutes from './modules/workspaces/workspace.routes.js';
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
 import eventBus from './services/eventBus.js';
 import channelService from './modules/channels/channel.service.js';
+import workspaceService from './modules/workspaces/workspace.service.js';
 import { startDeadlineWarningCron, stopDeadlineWarningCron } from './modules/bot/deadlineWarning.js';
 import fileCleanupService from './services/fileCleanup.service.js';
 import fileUploadService from './services/fileUpload.service.js';
@@ -42,7 +44,7 @@ const corsOptions = {
   origin: env.CORS_ORIGINS,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Workspace-Id'],
   exposedHeaders: ['X-Total-Count', 'X-Page', 'X-Has-More'],
   maxAge: 86400,
 };
@@ -101,6 +103,7 @@ app.get('/api/chat/health', (_req, res) => {
 
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/chat/auth', authRoutes);
+app.use('/api/chat/workspaces', workspaceRoutes);
 app.use('/api/chat/channels', channelRoutes);
 app.use('/api/chat/channels/:channelId', channelMessageRouter);
 app.use('/api/chat/channels/:channelId', channelThreadRouter);
@@ -144,19 +147,23 @@ async function startServer() {
     // 3. Initialize Socket.IO
     await initializeSocket(httpServer, corsOptions);
 
-    // 4. Bootstrap system channels
-    await channelService.bootstrapSystemChannels();
+    // 4. Ensure default workspace exists
+    const defaultWorkspace = await workspaceService.ensureDefaultWorkspace();
+    logger.info('Default workspace ready', { workspaceId: defaultWorkspace._id, slug: defaultWorkspace.slug });
 
-    // 5. Start deadline warning cron
+    // 5. Bootstrap system channels (for default workspace)
+    await channelService.bootstrapSystemChannels(defaultWorkspace._id.toString());
+
+    // 6. Start deadline warning cron
     startDeadlineWarningCron();
 
-    // 6. Start file cleanup service
+    // 7. Start file cleanup service
     fileCleanupService.init();
 
-    // 6b. Recover uploads that were interrupted by last shutdown
+    // 7b. Recover uploads that were interrupted by last shutdown
     await fileUploadService.recoverStuckUploads();
 
-    // 7. Start memory usage monitor
+    // 8. Start memory usage monitor
     memoryMonitorTimer = setInterval(() => {
       const mem = process.memoryUsage();
       const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
@@ -173,7 +180,7 @@ async function startServer() {
       }
     }, 60000); // Check every 60s
 
-    // 8. Start HTTP server
+    // 9. Start HTTP server
     httpServer.listen(env.PORT, () => {
       logger.info(`FlowTask Chat server running`, {
         port: env.PORT,

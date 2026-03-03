@@ -15,6 +15,7 @@ import {
   searchUsers,
 } from './auth.controller.js';
 import { protect } from './auth.middleware.js';
+import { resolveWorkspace, resolveDefaultWorkspace } from '../../middleware/workspaceContext.js';
 import { authLimiter, refreshLimiter, passwordResetLimiter } from '../../middleware/rateLimiter.js';
 import { validate } from '../../middleware/validate.js';
 import {
@@ -49,10 +50,10 @@ const router = Router();
  */
 
 // Public auth routes (rate-limited)
-router.post('/register', authLimiter, validate({ body: registerSchema }), register);
-router.post('/login', authLimiter, validate({ body: loginSchema }), login);
-router.post('/login/flowtask', authLimiter, validate({ body: loginFlowTaskSchema }), loginFlowTask);
-router.post('/sync', authLimiter, syncUser);
+router.post('/register', authLimiter, validate({ body: registerSchema }), resolveDefaultWorkspace, register);
+router.post('/login', authLimiter, validate({ body: loginSchema }), resolveDefaultWorkspace, login);
+router.post('/login/flowtask', authLimiter, validate({ body: loginFlowTaskSchema }), resolveDefaultWorkspace, loginFlowTask);
+router.post('/sync', authLimiter, resolveDefaultWorkspace, syncUser);
 router.post('/refresh', refreshLimiter, validate({ body: refreshTokenSchema }), refresh);
 
 // Email verification
@@ -64,11 +65,11 @@ router.post('/forgot-password', passwordResetLimiter, validate({ body: forgotPas
 router.post('/reset-password', passwordResetLimiter, validate({ body: resetPasswordSchema }), resetPassword);
 
 // Protected routes
-router.get('/me', protect, getMe);
-router.put('/preferences', protect, updatePreferences);
+router.get('/me', protect, resolveWorkspace, getMe);
+router.put('/preferences', protect, resolveWorkspace, updatePreferences);
 router.post('/logout', protect, logout);
 
 // User search (protected)
-router.get('/users/search', protect, searchUsers);
+router.get('/users/search', protect, resolveWorkspace, searchUsers);
 
 export default router;

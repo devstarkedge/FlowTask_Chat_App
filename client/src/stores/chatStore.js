@@ -768,4 +768,18 @@ export const useChatStore = create((set, get) => ({
 
   // ─── Connection Status ──────────────────────────────────────────────
   setConnectionStatus: (status) => set({ connectionStatus: status }),
+
+  // ─── Workspace Switch — Clear all cached data ──────────────────────
+  clearCache: () => set({
+    messagesByChannel: {},
+    hasMore: {},
+    pinnedMessagesByChannel: {},
+    allThreads: [],
+    threadRepliesByRoot: {},
+    threadHasMore: {},
+    typingByChannel: {},
+    onlineUsers: new Map(),
+    notifications: [],
+    activeThread: null,
+  }),
 }))

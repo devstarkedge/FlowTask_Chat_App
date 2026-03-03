@@ -10,7 +10,7 @@ import asyncHandler from '../../middleware/asyncHandler.js';
  * Get all channels for the authenticated user.
  */
 export const getChannels = asyncHandler(async (req, res) => {
-  const channels = await channelService.getChannelsForUser(req.user._id);
+  const channels = await channelService.getChannelsForUser(req.user._id, req.workspaceId);
 
   res.json({
     success: true,
@@ -61,6 +61,7 @@ export const createChannel = asyncHandler(async (req, res) => {
   const channel = await channelService.createCustomChannel(
     { name: name.trim(), description, visibility, memberIds },
     req.user._id,
+    req.workspaceId,
   );
 
   res.status(201).json({
@@ -116,6 +117,7 @@ export const createDM = asyncHandler(async (req, res) => {
   const channel = await channelService.getOrCreateDM(
     req.user._id,
     targetUserId,
+    req.workspaceId,
   );
 
   res.status(200).json({
@@ -188,6 +190,7 @@ export const searchChannels = asyncHandler(async (req, res) => {
   const channels = await channelService.searchChannels(
     req.query.q || '',
     req.user._id,
+    req.workspaceId,
   );
 
   res.json({

@@ -22,11 +22,19 @@ const flowTaskRefSchema = new Schema({
 }, { _id: false });
 
 const threadSchema = new Schema({
+  // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────
+  workspaceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Workspace',
+    required: true,
+    index: true,
+  },
+
   channelId: {
     type: Schema.Types.ObjectId,
     ref: 'Channel',
     required: true,
-    // index: removed — covered by compound { channelId: 1, lastReplyAt: -1 }
+    // index: removed — covered by compound { workspaceId: 1, channelId: 1, lastReplyAt: -1 }
   },
   rootMessageId: {
     type: Schema.Types.ObjectId,
@@ -94,16 +102,16 @@ const threadSchema = new Schema({
   toObject: { virtuals: true },
 });
 
-// ─── Indexes ─────────────────────────────────────────────────────────────────
-// Find thread by FlowTask task ID (idempotent thread creation)
+// ─── Indexes (all workspace-scoped) ──────────────────────────────────────────
+// Find thread by FlowTask task ID within workspace (idempotent thread creation)
 threadSchema.index(
-  { 'flowTaskRef.taskId': 1 },
+  { workspaceId: 1, 'flowTaskRef.taskId': 1 },
   { sparse: true, unique: true },
 );
-// Channel threads sorted by latest activity
-threadSchema.index({ channelId: 1, lastReplyAt: -1 });
-// User's threads
-threadSchema.index({ participantIds: 1 });
+// Channel threads sorted by latest activity within workspace
+threadSchema.index({ workspaceId: 1, channelId: 1, lastReplyAt: -1 });
+// User's threads within workspace
+threadSchema.index({ workspaceId: 1, participantIds: 1 });
 
 // ─── Instance Methods ────────────────────────────────────────────────────────
 threadSchema.methods.addParticipant = function (userId) {
@@ -129,8 +137,10 @@ threadSchema.methods.resolve = function (userId) {
 };
 
 // ─── Static Methods ──────────────────────────────────────────────────────────
-threadSchema.statics.findByTaskId = function (taskId) {
-  return this.findOne({ 'flowTaskRef.taskId': taskId });
+threadSchema.statics.findByTaskId = function (taskId, workspaceId) {
+  const filter = { 'flowTaskRef.taskId': taskId };
+  if (workspaceId) filter.workspaceId = workspaceId;
+  return this.findOne(filter);
 };
 
 const Thread = model('Thread', threadSchema);

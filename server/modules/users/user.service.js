@@ -113,23 +113,25 @@ class UserService {
 
   /**
    * Get all currently online users.
+   * @param {string} [workspaceId]
    * @returns {Promise<Array>}
    */
-  async getOnlineUsers() {
-    return userRepository.findOnline();
+  async getOnlineUsers(workspaceId) {
+    return userRepository.findOnline(workspaceId);
   }
 
   /**
    * Search users by name or email.
    * @param {string} query
    * @param {number} [limit=20]
+   * @param {string} [workspaceId]
    * @returns {Promise<Array>}
    */
-  async searchUsers(query, limit = 20) {
+  async searchUsers(query, limit = 20, workspaceId) {
     if (!query || query.trim().length < 1) {
       return [];
     }
-    return userRepository.search(query.trim(), limit);
+    return userRepository.search(query.trim(), limit, workspaceId);
   }
 }
 

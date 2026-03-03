@@ -44,7 +44,7 @@ class MessageService {
    * Supports optimistic UI via tempId — client generates a temporary ID,
    * server includes it in the ACK so the client can reconcile.
    */
-  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, tempId }) {
+  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, tempId, workspaceId }) {
     const startTime = performance.now();
 
     // Validate channel exists and is not archived
@@ -79,6 +79,7 @@ class MessageService {
       mentions,
       attachments: attachments || [],
       senderSnapshot,
+      ...(workspaceId && { workspaceId }),
     };
 
     if (flowTaskRef) {
@@ -113,6 +114,7 @@ class MessageService {
         threadId: actualThreadId || null,
         referencedBy: authorId,
         contextType: actualThreadId ? 'thread' : 'channel',
+        ...(workspaceId && { workspaceId }),
       }));
       await FileReference.insertMany(refsToCreate);
     }
@@ -208,7 +210,7 @@ class MessageService {
   /**
    * Send a system message (bot, event notification).
    */
-  async sendSystemMessage(channelId, content, flowTaskRef) {
+  async sendSystemMessage(channelId, content, flowTaskRef, workspaceId) {
     const messageData = {
       channelId,
       authorId: null,
@@ -216,6 +218,7 @@ class MessageService {
       htmlContent: content,
       contentType: MESSAGE_CONTENT_TYPES.SYSTEM,
       senderSnapshot: { name: 'System', avatar: null },
+      ...(workspaceId && { workspaceId }),
     };
 
     if (flowTaskRef) {

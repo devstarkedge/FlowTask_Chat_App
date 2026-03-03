@@ -1,9 +1,11 @@
 import Message from './Message.model.js';
+import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
 
 /**
  * Message Repository — data access layer for Message documents.
  * Encapsulates all Mongoose queries for messages.
  * Uses cursor-based pagination for real-time feed performance.
+ * All query methods accept an optional workspaceId for multi-tenant scoping.
  */
 
 class MessageRepository {
@@ -46,10 +48,11 @@ class MessageRepository {
    * @param {string|null} [options.cursor] - Message _id to paginate from
    * @param {number} [options.limit=50]
    * @param {'before'|'after'} [options.direction='before'] - Load before or after cursor
+   * @param {string} [options.workspaceId]
    * @returns {Promise<Message[]>}
    */
-  async getChannelMessages(channelId, { cursor = null, limit = 80, direction = 'before' } = {}) {
-    const filter = { channelId, isDeleted: false, threadId: null };
+  async getChannelMessages(channelId, { cursor = null, limit = 80, direction = 'before', workspaceId } = {}) {
+    const filter = injectWorkspaceFilter({ channelId, isDeleted: false, threadId: null }, workspaceId);
 
     if (cursor) {
       if (direction === 'before') {
@@ -175,10 +178,12 @@ class MessageRepository {
   /**
    * Get pinned messages for a channel.
    * @param {string} channelId
+   * @param {string} [workspaceId]
    * @returns {Promise<Message[]>}
    */
-  async getPinnedMessages(channelId) {
-    return Message.find({ channelId, isPinned: true, isDeleted: false })
+  async getPinnedMessages(channelId, workspaceId) {
+    const filter = injectWorkspaceFilter({ channelId, isPinned: true, isDeleted: false }, workspaceId);
+    return Message.find(filter)
       .sort({ pinnedAt: -1 })
       .populate('authorId', 'name email avatar flowTaskUserId')
       .populate({
@@ -264,13 +269,14 @@ class MessageRepository {
    * @param {object} options
    * @param {string} [options.channelId] - Scope to specific channel
    * @param {number} [options.limit=20]
+   * @param {string} [options.workspaceId]
    * @returns {Promise<Message[]>}
    */
-  async search(query, { channelId = null, channelIds = null, limit = 20 } = {}) {
-    const filter = {
+  async search(query, { channelId = null, channelIds = null, limit = 20, workspaceId } = {}) {
+    const filter = injectWorkspaceFilter({
       $text: { $search: query },
       isDeleted: false,
-    };
+    }, workspaceId);
     if (channelId) filter.channelId = channelId;
     else if (channelIds && channelIds.length > 0) filter.channelId = { $in: channelIds };
 

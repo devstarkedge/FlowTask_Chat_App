@@ -17,11 +17,18 @@ const { Schema, model } = mongoose;
  */
 
 const processedEventSchema = new Schema({
+  // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────────
+  workspaceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Workspace',
+    required: true,
+    index: true,
+  },
+
   deliveryId: {
     type: String,
     required: true,
-    unique: true,
-    index: true,
+    // unique per workspace — compound index below replaces global unique
   },
   eventName: {
     type: String,
@@ -60,6 +67,11 @@ const processedEventSchema = new Schema({
   timestamps: false, // Use receivedAt/processedAt instead
 });
 
+// ─── Indexes (workspace-scoped) ──────────────────────────────────────────────
+// Unique deliveryId per workspace (replaces global unique)
+processedEventSchema.index({ workspaceId: 1, deliveryId: 1 }, { unique: true });
+processedEventSchema.index({ workspaceId: 1, status: 1 });
+
 // ─── Static Methods ──────────────────────────────────────────────────────────
 
 /**
@@ -70,9 +82,11 @@ const processedEventSchema = new Schema({
  * @param {string} eventName
  * @returns {{ status: 'new'|'duplicate'|'retry', doc: object }}
  */
-processedEventSchema.statics.claimEvent = async function (deliveryId, eventName) {
+processedEventSchema.statics.claimEvent = async function (deliveryId, eventName, workspaceId) {
   // Try to find existing
-  const existing = await this.findOne({ deliveryId });
+  const filter = { deliveryId };
+  if (workspaceId) filter.workspaceId = workspaceId;
+  const existing = await this.findOne(filter);
 
   if (existing) {
     if (existing.status === EVENT_STATUS.COMPLETED) {
@@ -95,14 +109,17 @@ processedEventSchema.statics.claimEvent = async function (deliveryId, eventName)
     deliveryId,
     eventName,
     status: EVENT_STATUS.PROCESSING,
+    ...(workspaceId && { workspaceId }),
   });
 
   return { status: 'new', doc };
 };
 
-processedEventSchema.statics.markCompleted = function (deliveryId) {
+processedEventSchema.statics.markCompleted = function (deliveryId, workspaceId) {
+  const filter = { deliveryId };
+  if (workspaceId) filter.workspaceId = workspaceId;
   return this.findOneAndUpdate(
-    { deliveryId },
+    filter,
     {
       status: EVENT_STATUS.COMPLETED,
       processedAt: new Date(),
@@ -110,9 +127,11 @@ processedEventSchema.statics.markCompleted = function (deliveryId) {
   );
 };
 
-processedEventSchema.statics.markFailed = function (deliveryId, error) {
+processedEventSchema.statics.markFailed = function (deliveryId, error, workspaceId) {
+  const filter = { deliveryId };
+  if (workspaceId) filter.workspaceId = workspaceId;
   return this.findOneAndUpdate(
-    { deliveryId },
+    filter,
     {
       status: EVENT_STATUS.FAILED,
       lastError: typeof error === 'string' ? error : error?.message || 'Unknown error',

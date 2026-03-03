@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useAuthStore } from '../stores/authStore'
+import { useWorkspaceStore } from '../stores/workspaceStore'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/chat',
@@ -7,11 +8,15 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Attach JWT to every request
+// Attach JWT + Workspace header to every request
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
+  }
+  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+  if (workspaceId) {
+    config.headers['X-Workspace-Id'] = workspaceId
   }
   return config
 })
@@ -175,6 +180,23 @@ export const userAPI = {
   setCustomStatus: (status) => api.put('/users/status', status),
   clearCustomStatus: () => api.delete('/users/status'),
   setPresence: (status) => api.put('/users/presence', { status }),
+}
+
+// ─── Workspaces ──────────────────────────────────────────────────────────
+export const workspaceAPI = {
+  mine: () => api.get('/workspaces/mine'),
+  create: (data) => api.post('/workspaces', data),
+  get: (id) => api.get(`/workspaces/${id}`),
+  getBySlug: (slug) => api.get(`/workspaces/slug/${slug}`),
+  update: (id, data) => api.patch(`/workspaces/${id}`, data),
+  delete: (id) => api.delete(`/workspaces/${id}`),
+  getMembers: (id) => api.get(`/workspaces/${id}/members`),
+  inviteMember: (id, data) => api.post(`/workspaces/${id}/members`, data),
+  removeMember: (id, userId) => api.delete(`/workspaces/${id}/members/${userId}`),
+  updateMemberRole: (id, userId, data) => api.patch(`/workspaces/${id}/members/${userId}`, data),
+  leaveWorkspace: (id) => api.post(`/workspaces/${id}/leave`),
+  joinByInviteCode: (inviteCode) => api.post('/workspaces/join', { inviteCode }),
+  regenerateInviteCode: (id) => api.post(`/workspaces/${id}/invite-code`),
 }
 
 export default api

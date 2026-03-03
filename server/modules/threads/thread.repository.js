@@ -1,7 +1,9 @@
 import Thread from './Thread.model.js';
+import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
 
 /**
  * Thread Repository — data access layer for Thread documents.
+ * All query methods accept an optional workspaceId for multi-tenant scoping.
  */
 
 class ThreadRepository {
@@ -48,10 +50,11 @@ class ThreadRepository {
   /**
    * Find thread by FlowTask task ID (idempotent lookup).
    * @param {string} taskId
+   * @param {string} [workspaceId]
    * @returns {Promise<Thread|null>}
    */
-  async findByTaskId(taskId) {
-    return Thread.findByTaskId(taskId);
+  async findByTaskId(taskId, workspaceId) {
+    return Thread.findByTaskId(taskId, workspaceId);
   }
 
   /**
@@ -65,10 +68,11 @@ class ThreadRepository {
    * @param {string} params.taskId
    * @param {string} params.projectId
    * @param {string} [params.title]
+   * @param {string} [params.workspaceId]
    * @returns {Promise<{thread: Thread, created: boolean}>}
    */
-  async findOrCreateForTask({ channelId, rootMessageId, taskId, projectId, title = '' }) {
-    const existing = await Thread.findByTaskId(taskId);
+  async findOrCreateForTask({ channelId, rootMessageId, taskId, projectId, title = '', workspaceId }) {
+    const existing = await Thread.findByTaskId(taskId, workspaceId);
     if (existing) {
       return { thread: existing, created: false };
     }
@@ -78,6 +82,7 @@ class ThreadRepository {
       rootMessageId,
       flowTaskRef: { taskId, projectId },
       title,
+      ...(workspaceId && { workspaceId }),
     });
 
     return { thread, created: true };
@@ -89,10 +94,12 @@ class ThreadRepository {
    * @param {object} options
    * @param {number} [options.limit=20]
    * @param {number} [options.skip=0]
+   * @param {string} [options.workspaceId]
    * @returns {Promise<Thread[]>}
    */
-  async getChannelThreads(channelId, { limit = 20, skip = 0 } = {}) {
-    return Thread.find({ channelId })
+  async getChannelThreads(channelId, { limit = 20, skip = 0, workspaceId } = {}) {
+    const filter = injectWorkspaceFilter({ channelId }, workspaceId);
+    return Thread.find(filter)
       .sort({ lastReplyAt: -1, createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -163,10 +170,12 @@ class ThreadRepository {
    * Get user's threads across all channels.
    * @param {string} userId - ChatUser _id
    * @param {number} [limit=20]
+   * @param {string} [workspaceId]
    * @returns {Promise<Thread[]>}
    */
-  async getUserThreads(userId, limit = 20) {
-    return Thread.find({ participantIds: userId })
+  async getUserThreads(userId, limit = 20, workspaceId) {
+    const filter = injectWorkspaceFilter({ participantIds: userId }, workspaceId);
+    return Thread.find(filter)
       .sort({ lastReplyAt: -1 })
       .limit(limit)
       .populate('channelId', 'name slug type')

@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
+import { useWorkspaceStore } from '../../stores/workspaceStore'
 import ErrorBoundary from '../ErrorBoundary'
 import Sidebar from './Sidebar'
 import ChatPanel from '../chat/ChatPanel'
@@ -16,6 +17,7 @@ import { useKeyboardShortcuts } from '../../utils/keyboardShortcuts'
 
 export default function ChatLayout() {
   const { fetchChannels, activeChannelId, channels, showInfoPanel } = useChannelStore()
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const activeThread = useChatStore(s => s.activeThread)
   const openThreadAction = useChatStore(s => s.openThread)
   const closeThread = useChatStore(s => s.closeThread)
@@ -45,7 +47,7 @@ export default function ChatLayout() {
 
   useEffect(() => {
     fetchChannels()
-  }, [fetchChannels])
+  }, [fetchChannels, activeWorkspaceId])
 
   // Close mobile sidebar when channel is selected
   useEffect(() => {

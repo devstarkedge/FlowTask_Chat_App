@@ -37,6 +37,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
     flowTaskRef,
     threadId,
     tempId,
+    workspaceId: req.workspaceId,
   });
 
   res.status(201).json({ success: true, data: { message } });

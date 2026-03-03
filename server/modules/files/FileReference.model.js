@@ -7,6 +7,14 @@ const { Schema, model } = mongoose;
  * Allows a single file to be reused across different messages without duplicating storage.
  */
 const fileReferenceSchema = new Schema({
+  // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────────
+  workspaceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Workspace',
+    required: true,
+    index: true,
+  },
+
   fileId: { 
     type: Schema.Types.ObjectId, 
     ref: 'FileAsset', 
@@ -44,18 +52,18 @@ const fileReferenceSchema = new Schema({
   timestamps: true,
 });
 
-// To easily lookup references for a file
-fileReferenceSchema.index({ fileId: 1, createdAt: -1 });
+// Workspace-scoped indexes
+fileReferenceSchema.index({ workspaceId: 1, fileId: 1, createdAt: -1 });
+fileReferenceSchema.index({ workspaceId: 1, channelId: 1 });
 
-// Prevent exact duplicate references linking same file to same message
-// Using partialFilterExpression instead of sparse so null values are completely ignored by the unique constraint
+// Prevent exact duplicate references linking same file to same message within workspace
 fileReferenceSchema.index(
-  { messageId: 1, fileId: 1 },
+  { workspaceId: 1, messageId: 1, fileId: 1 },
   { unique: true, partialFilterExpression: { messageId: { $type: 'objectId' } } }
 );
 
 fileReferenceSchema.index(
-  { threadId: 1, fileId: 1 },
+  { workspaceId: 1, threadId: 1, fileId: 1 },
   { unique: true, partialFilterExpression: { threadId: { $type: 'objectId' } } }
 );
 

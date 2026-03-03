@@ -1,9 +1,11 @@
 import Channel from './Channel.model.js';
 import { CHANNEL_TYPES } from '../../config/constants.js';
+import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
 
 /**
  * Channel Repository — data access layer for Channel documents.
  * All database queries are encapsulated here to decouple business logic from Mongoose.
+ * All query methods accept an optional workspaceId for multi-tenant scoping.
  */
 
 class ChannelRepository {
@@ -36,20 +38,23 @@ class ChannelRepository {
   /**
    * Find channel by slug.
    * @param {string} slug
+   * @param {string} [workspaceId]
    * @returns {Promise<Channel|null>}
    */
-  async findBySlug(slug) {
-    return Channel.findOne({ slug }).exec();
+  async findBySlug(slug, workspaceId) {
+    const filter = injectWorkspaceFilter({ slug }, workspaceId);
+    return Channel.findOne(filter).exec();
   }
 
   /**
    * Find channel by FlowTask entity reference.
    * @param {string} entityType - 'board' | 'department' | 'team'
    * @param {string} entityId
+   * @param {string} [workspaceId]
    * @returns {Promise<Channel|null>}
    */
-  async findByFlowTaskRef(entityType, entityId) {
-    return Channel.findByFlowTaskRef(entityType, entityId);
+  async findByFlowTaskRef(entityType, entityId, workspaceId) {
+    return Channel.findByFlowTaskRef(entityType, entityId, workspaceId);
   }
 
   /**
@@ -57,19 +62,21 @@ class ChannelRepository {
    * @param {string} userId - ChatUser _id
    * @param {object} [options]
    * @param {boolean} [options.includeArchived=false]
+   * @param {string} [options.workspaceId]
    * @returns {Promise<Channel[]>}
    */
-  async findByMember(userId, { includeArchived = false } = {}) {
-    return Channel.findUserChannels(userId, includeArchived);
+  async findByMember(userId, { includeArchived = false, workspaceId } = {}) {
+    return Channel.findUserChannels(userId, includeArchived, workspaceId);
   }
 
   /**
    * Find a DM channel between participants.
    * @param {string[]} participantFlowTaskIds
+   * @param {string} [workspaceId]
    * @returns {Promise<Channel|null>}
    */
-  async findDMChannel(participantFlowTaskIds) {
-    return Channel.findDMChannel(participantFlowTaskIds);
+  async findDMChannel(participantFlowTaskIds, workspaceId) {
+    return Channel.findDMChannel(participantFlowTaskIds, workspaceId);
   }
 
   /**
@@ -160,18 +167,20 @@ class ChannelRepository {
    * @param {string} query
    * @param {string} userId - ChatUser _id (for visibility filtering)
    * @param {number} [limit=20]
+   * @param {string} [workspaceId]
    * @returns {Promise<Channel[]>}
    */
-  async search(query, userId, limit = 20) {
+  async search(query, userId, limit = 20, workspaceId) {
     const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    return Channel.find({
+    const filter = injectWorkspaceFilter({
       name: regex,
       isArchived: false,
       $or: [
         { visibility: 'public' },
         { 'members.userId': userId },
       ],
-    })
+    }, workspaceId);
+    return Channel.find(filter)
       .limit(limit)
       .select('name slug type visibility memberCount lastMessageAt')
       .sort({ memberCount: -1 })
@@ -180,28 +189,34 @@ class ChannelRepository {
 
   /**
    * Get all system channels.
+   * @param {string} [workspaceId]
    * @returns {Promise<Channel[]>}
    */
-  async findSystemChannels() {
-    return Channel.find({ type: CHANNEL_TYPES.SYSTEM }).exec();
+  async findSystemChannels(workspaceId) {
+    const filter = injectWorkspaceFilter({ type: CHANNEL_TYPES.SYSTEM }, workspaceId);
+    return Channel.find(filter).exec();
   }
 
   /**
    * Find channels by type (for cron jobs, etc.).
    * @param {string} type
+   * @param {string} [workspaceId]
    * @returns {Promise<Channel[]>}
    */
-  async findByType(type) {
-    return Channel.find({ type, isArchived: false }).exec();
+  async findByType(type, workspaceId) {
+    const filter = injectWorkspaceFilter({ type, isArchived: false }, workspaceId);
+    return Channel.find(filter).exec();
   }
 
   /**
    * Check if a slug is already taken.
    * @param {string} slug
+   * @param {string} [workspaceId]
    * @returns {Promise<boolean>}
    */
-  async slugExists(slug) {
-    const count = await Channel.countDocuments({ slug });
+  async slugExists(slug, workspaceId) {
+    const filter = injectWorkspaceFilter({ slug }, workspaceId);
+    const count = await Channel.countDocuments(filter);
     return count > 0;
   }
 

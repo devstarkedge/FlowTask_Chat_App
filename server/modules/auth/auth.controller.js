@@ -19,7 +19,7 @@ import env from '../../config/environment.js';
  */
 export const register = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
-  const { chatUser, message } = await authService.register({ name, email, password });
+  const { chatUser, message } = await authService.register({ name, email, password, workspaceId: req.workspaceId });
 
   res.status(201).json({
     success: true,
@@ -48,6 +48,7 @@ export const login = asyncHandler(async (req, res) => {
     email,
     password,
     userAgent,
+    workspaceId: req.workspaceId,
   });
 
   res.status(200).json({
@@ -76,10 +77,11 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
   const { chatUser, accessToken, refreshToken } = await authService.loginFlowTask({
     token,
     userAgent,
+    workspaceId: req.workspaceId,
   });
 
   // Auto-join public system channels
-  const systemChannels = await channelRepository.findSystemChannels();
+  const systemChannels = await channelRepository.findSystemChannels(req.workspaceId);
   for (const sc of systemChannels) {
     if (sc.visibility === 'public' && !sc.hasMember(chatUser._id)) {
       await channelService.addMember(sc._id, chatUser._id).catch(() => {});
@@ -88,11 +90,11 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
 
   // Sync project channels from FlowTask boards (if FlowTask token available)
   if (env.FLOWTASK_ENABLED) {
-    await channelService.syncProjectChannelsForUser(token, chatUser).catch(() => {});
+    await channelService.syncProjectChannelsForUser(token, chatUser, req.workspaceId).catch(() => {});
   }
 
   // Get user's channels for initial state
-  const channels = await channelRepository.findByMember(chatUser._id);
+  const channels = await channelRepository.findByMember(chatUser._id, { workspaceId: req.workspaceId });
 
   res.status(200).json({
     success: true,
@@ -124,10 +126,10 @@ export const syncUser = asyncHandler(async (req, res) => {
     return res.status(401).json({ success: false, error: { message: 'Token required' } });
   }
 
-  const { chatUser } = await authService.syncFlowTaskUser(token);
+  const { chatUser } = await authService.syncFlowTaskUser(token, req.workspaceId);
 
   // Auto-join public system channels
-  const systemChannels = await channelRepository.findSystemChannels();
+  const systemChannels = await channelRepository.findSystemChannels(req.workspaceId);
   for (const sc of systemChannels) {
     if (sc.visibility === 'public' && !sc.hasMember(chatUser._id)) {
       await channelService.addMember(sc._id, chatUser._id).catch(() => {});
@@ -136,10 +138,10 @@ export const syncUser = asyncHandler(async (req, res) => {
 
   // Sync project channels
   if (env.FLOWTASK_ENABLED) {
-    await channelService.syncProjectChannelsForUser(token, chatUser).catch(() => {});
+    await channelService.syncProjectChannelsForUser(token, chatUser, req.workspaceId).catch(() => {});
   }
 
-  const channels = await channelRepository.findByMember(chatUser._id);
+  const channels = await channelRepository.findByMember(chatUser._id, { workspaceId: req.workspaceId });
 
   res.status(200).json({
     success: true,
@@ -293,7 +295,7 @@ export const searchUsers = asyncHandler(async (req, res) => {
   if (!q || q.trim().length < 2) {
     return res.status(200).json({ success: true, data: { users: [] } });
   }
-  const users = await userRepository.search(q.trim(), 20);
+  const users = await userRepository.search(q.trim(), 20, req.workspaceId);
   // Filter out the requesting user
   const filtered = users.filter((u) => u._id.toString() !== req.user._id.toString());
   res.status(200).json({ success: true, data: { users: filtered } });

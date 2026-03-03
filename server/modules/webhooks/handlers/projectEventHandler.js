@@ -21,7 +21,7 @@ import { FLOWTASK_EVENTS, MESSAGE_CONTENT_TYPES } from '../../../config/constant
 export function registerProjectEventHandlers() {
   // ─── project.created ────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.PROJECT_CREATED, async (payload) => {
-    const { board, userId } = payload;
+    const { board, userId, _workspaceId: wsId } = payload;
 
     if (!board || !board._id) {
       logger.warn('project.created: missing board data', { payload });
@@ -29,7 +29,7 @@ export function registerProjectEventHandlers() {
     }
 
     // Create project channel
-    const channel = await channelService.createProjectChannel(board, userId);
+    const channel = await channelService.createProjectChannel(board, userId, wsId);
 
     // Sync board members if provided
     if (board.members?.length) {
@@ -38,7 +38,7 @@ export function registerProjectEventHandlers() {
         .filter(Boolean);
 
       if (memberIds.length > 0) {
-        await channelService.syncMembers(channel._id, memberIds);
+        await channelService.syncMembers(channel._id, memberIds, wsId);
       }
     }
 
@@ -47,6 +47,7 @@ export function registerProjectEventHandlers() {
       channel._id,
       `📋 Project channel created for **${board.title}**. All project members will be automatically added here.`,
       { entityType: 'board', entityId: board._id },
+      wsId,
     );
 
     logger.info('project.created handled', {
@@ -55,19 +56,19 @@ export function registerProjectEventHandlers() {
     });
 
     // Notify admin & managers channels
-    const creator = userId ? await userRepository.findByFlowTaskId(userId) : null;
+    const creator = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const creatorName = creator?.name || 'Someone';
     const deptName = typeof board.department === 'object' ? board.department?.name : null;
-    await botNotifier.onProjectCreated(board.title || board.name, creatorName, deptName);
+    await botNotifier.onProjectCreated(board.title || board.name, creatorName, deptName, wsId);
   });
 
   // ─── project.updated ────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.PROJECT_UPDATED, async (payload) => {
-    const { board, changes, userId } = payload;
+    const { board, changes, userId, _workspaceId: wsId } = payload;
 
     if (!board?._id) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', board._id);
+    const channel = await channelRepository.findByFlowTaskRef('board', board._id, wsId);
     if (!channel) {
       logger.warn('project.updated: no channel found for board', { boardId: board._id });
       return;
@@ -84,7 +85,7 @@ export function registerProjectEventHandlers() {
     }
 
     // Post update notification
-    const user = userId ? await userRepository.findByFlowTaskId(userId) : null;
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const userName = user?.name || 'Someone';
 
     const changeDetails = [];
@@ -97,24 +98,27 @@ export function registerProjectEventHandlers() {
         channel._id,
         `🔄 ${userName} updated project: ${changeDetails.join(', ')}`,
         { entityType: 'board', entityId: board._id },
+        wsId,
       );
     }
   });
 
   // ─── project.deleted ────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.PROJECT_DELETED, async (payload) => {
-    const { boardId, userId } = payload;
+    const { boardId, userId, _workspaceId: wsId } = payload;
 
     if (!boardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId);
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
     if (!channel) return;
 
     // Post notification before archiving
-    const user = userId ? await userRepository.findByFlowTaskId(userId) : null;
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     await messageService.sendSystemMessage(
       channel._id,
       `🗑️ Project was deleted by ${user?.name || 'an admin'}. This channel is now archived.`,
+      undefined,
+      wsId,
     );
 
     // Archive the channel
@@ -125,66 +129,72 @@ export function registerProjectEventHandlers() {
 
   // ─── project.member_added ──────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.PROJECT_MEMBER_ADDED, async (payload) => {
-    const { boardId, memberId, userId } = payload;
+    const { boardId, memberId, userId, _workspaceId: wsId } = payload;
 
     if (!boardId || !memberId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId);
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
     if (!channel) return;
 
-    await channelService.syncMembers(channel._id, [memberId]);
+    await channelService.syncMembers(channel._id, [memberId], wsId);
 
     // Post join message
-    const member = await userRepository.findByFlowTaskId(memberId);
-    const addedBy = userId ? await userRepository.findByFlowTaskId(userId) : null;
+    const member = await userRepository.findByFlowTaskId(memberId, wsId);
+    const addedBy = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
 
     if (member) {
       await messageService.sendSystemMessage(
         channel._id,
         `👤 ${member.name} was added to the project${addedBy ? ` by ${addedBy.name}` : ''}`,
+        undefined,
+        wsId,
       );
     }
   });
 
   // ─── project.member_removed ────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.PROJECT_MEMBER_REMOVED, async (payload) => {
-    const { boardId, memberId, userId } = payload;
+    const { boardId, memberId, userId, _workspaceId: wsId } = payload;
 
     if (!boardId || !memberId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId);
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
     if (!channel) return;
 
-    const member = await userRepository.findByFlowTaskId(memberId);
+    const member = await userRepository.findByFlowTaskId(memberId, wsId);
     if (member) {
       await channelService.removeMember(channel._id, member._id, 'system');
 
       await messageService.sendSystemMessage(
         channel._id,
         `👤 ${member.name} was removed from the project`,
+        undefined,
+        wsId,
       );
     }
   });
 
   // ─── project.member_assigned ───────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.PROJECT_MEMBER_ASSIGNED, async (payload) => {
-    const { boardId, memberId, role, userId } = payload;
+    const { boardId, memberId, role, userId, _workspaceId: wsId } = payload;
 
     if (!boardId || !memberId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId);
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
     if (!channel) return;
 
-    await channelService.syncMembers(channel._id, [memberId]);
+    await channelService.syncMembers(channel._id, [memberId], wsId);
 
-    const member = await userRepository.findByFlowTaskId(memberId);
-    const assignedBy = userId ? await userRepository.findByFlowTaskId(userId) : null;
+    const member = await userRepository.findByFlowTaskId(memberId, wsId);
+    const assignedBy = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
 
     if (member) {
       const roleLabel = role ? ` as **${role}**` : '';
       await messageService.sendSystemMessage(
         channel._id,
         `👤 ${member.name} was assigned to the project${roleLabel}${assignedBy ? ` by ${assignedBy.name}` : ''}`,
+        undefined,
+        wsId,
       );
     }
   });

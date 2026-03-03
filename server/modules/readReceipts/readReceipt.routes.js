@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { markAsRead, getUnreadCounts } from './readReceipt.controller.js';
 import { protect } from '../auth/auth.middleware.js';
+import { resolveWorkspace } from '../../middleware/workspaceContext.js';
 
 const router = Router();
 
@@ -12,6 +13,7 @@ const router = Router();
  */
 
 router.use(protect);
+router.use(resolveWorkspace);
 
 router.get('/unread', getUnreadCounts);
 
@@ -23,4 +25,5 @@ export default router;
  */
 export const channelReadRouter = Router({ mergeParams: true });
 channelReadRouter.use(protect);
+channelReadRouter.use(resolveWorkspace);
 channelReadRouter.post('/read', markAsRead);

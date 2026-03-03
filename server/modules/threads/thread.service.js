@@ -19,7 +19,7 @@ class ThreadService {
   /**
    * Create a thread from a root message.
    */
-  async createThread({ channelId, rootMessageId, authorId, title, flowTaskRef }) {
+  async createThread({ channelId, rootMessageId, authorId, title, flowTaskRef, workspaceId }) {
     // Validate root message exists
     const rootMessage = await messageRepository.findById(rootMessageId);
     if (!rootMessage) throw new NotFoundError('Root message not found');
@@ -38,6 +38,7 @@ class ThreadService {
       title: title ? sanitizeHtml(title) : undefined,
       participantIds: [authorId],
       flowTaskRef,
+      ...(workspaceId && { workspaceId }),
     };
 
     const thread = await threadRepository.create(threadData);
@@ -61,8 +62,8 @@ class ThreadService {
    * Find or create a thread for a FlowTask task.
    * Used by webhook handlers when a task event triggers a discussion.
    */
-  async getOrCreateForTask(channelId, taskId, projectId, rootMessageId) {
-    return threadRepository.findOrCreateForTask(channelId, taskId, projectId, rootMessageId);
+  async getOrCreateForTask(channelId, taskId, projectId, rootMessageId, workspaceId) {
+    return threadRepository.findOrCreateForTask(channelId, taskId, projectId, rootMessageId, workspaceId);
   }
 
   /**
@@ -91,8 +92,8 @@ class ThreadService {
   /**
    * Get a thread by FlowTask task ID.
    */
-  async getThreadByTaskId(taskId) {
-    const thread = await threadRepository.findByTaskId(taskId);
+  async getThreadByTaskId(taskId, workspaceId) {
+    const thread = await threadRepository.findByTaskId(taskId, workspaceId);
     if (!thread) throw new NotFoundError('Thread not found for this task');
     return thread;
   }
@@ -100,17 +101,17 @@ class ThreadService {
   /**
    * Get all threads in a channel.
    */
-  async getChannelThreads(channelId, query = {}) {
+  async getChannelThreads(channelId, query = {}, workspaceId) {
     const { limit } = parsePagination(query);
-    return threadRepository.getChannelThreads(channelId, { limit });
+    return threadRepository.getChannelThreads(channelId, { limit }, workspaceId);
   }
 
   /**
    * Get threads the user participates in.
    */
-  async getUserThreads(userId, query = {}) {
+  async getUserThreads(userId, query = {}, workspaceId) {
     const { limit } = parsePagination(query);
-    return threadRepository.getUserThreads(userId, { limit });
+    return threadRepository.getUserThreads(userId, { limit }, workspaceId);
   }
 
   /**

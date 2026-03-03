@@ -2,6 +2,7 @@ import { io } from 'socket.io-client'
 import { useAuthStore } from '../stores/authStore'
 import { useChatStore } from '../stores/chatStore'
 import { useChannelStore } from '../stores/channelStore'
+import { useWorkspaceStore } from '../stores/workspaceStore'
 import { throttle } from '../utils/throttle'
 
 let socket = null
@@ -48,10 +49,11 @@ const SOCKET_EVENTS = {
 
 export function connectSocket() {
   const token = useAuthStore.getState().accessToken
+  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
   if (!token || socket?.connected) return
 
   socket = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
-    auth: { token },
+    auth: { token, workspaceId },
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionAttempts: 10,
@@ -262,6 +264,15 @@ export function disconnectSocket() {
     socket.disconnect()
     socket = null
   }
+}
+
+/**
+ * Reconnect socket with a new workspace context.
+ * Used when switching workspaces — disconnects and reconnects with the new workspaceId.
+ */
+export function reconnectWithWorkspace() {
+  disconnectSocket()
+  connectSocket()
 }
 
 // ─── Throttled typing emission (max 1 per 2 seconds) ────────────────────────

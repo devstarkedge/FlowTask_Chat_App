@@ -14,11 +14,12 @@ class ReadReceiptService {
    * Mark a channel as read for a user (set unread to 0).
    * For DM channels, also marks messages as seen (delivery status).
    */
-  async markAsRead(userId, channelId, lastReadMessageId) {
+  async markAsRead(userId, channelId, lastReadMessageId, workspaceId) {
     const receipt = await readReceiptRepository.markChannelAsRead(
       userId,
       channelId,
       lastReadMessageId,
+      workspaceId,
     );
 
     // Emit updated unread count to the user
@@ -40,37 +41,37 @@ class ReadReceiptService {
    * Get unread counts for all channels a user belongs to.
    * Includes lastReadMessageId for unread separator rendering.
    */
-  async getUnreadCounts(userId) {
-    return readReceiptRepository.getUnreadCounts(userId);
+  async getUnreadCounts(userId, workspaceId) {
+    return readReceiptRepository.getUnreadCounts(userId, workspaceId);
   }
 
   /**
    * Increment unread count for a set of users on a channel.
    * Called internally when a new message is posted.
    */
-  async incrementUnread(channelId, userIds, hasMention = false) {
-    return readReceiptRepository.incrementUnread(channelId, userIds, hasMention);
+  async incrementUnread(channelId, userIds, hasMention = false, workspaceId) {
+    return readReceiptRepository.incrementUnread(channelId, userIds, hasMention, workspaceId);
   }
 
   /**
    * Get the read receipt for a specific user in a channel.
    */
-  async getReceipt(userId, channelId) {
-    return readReceiptRepository.findByUserAndChannel(userId, channelId);
+  async getReceipt(userId, channelId, workspaceId) {
+    return readReceiptRepository.findByUserAndChannel(userId, channelId, workspaceId);
   }
 
   /**
    * Ensure a read receipt exists when a user joins a channel.
    */
-  async ensureReceiptExists(userId, channelId) {
-    return readReceiptRepository.ensureExists(userId, channelId);
+  async ensureReceiptExists(userId, channelId, workspaceId) {
+    return readReceiptRepository.ensureExists(userId, channelId, workspaceId);
   }
 
   /**
    * Clean up read receipts when a user leaves a channel.
    */
-  async removeReceipt(userId, channelId) {
-    return readReceiptRepository.removeByUserAndChannel(userId, channelId);
+  async removeReceipt(userId, channelId, workspaceId) {
+    return readReceiptRepository.removeByUserAndChannel(userId, channelId, workspaceId);
   }
 }
 

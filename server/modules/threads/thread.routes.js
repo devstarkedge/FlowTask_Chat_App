@@ -11,6 +11,7 @@ import {
   updateThreadTitle,
 } from './thread.controller.js';
 import { protect } from '../auth/auth.middleware.js';
+import { resolveWorkspace } from '../../middleware/workspaceContext.js';
 
 const router = Router();
 
@@ -28,6 +29,7 @@ const router = Router();
  */
 
 router.use(protect);
+router.use(resolveWorkspace);
 
 router.post('/', createThread);
 router.get('/my', getMyThreads);
@@ -46,4 +48,5 @@ export default router;
  */
 export const channelThreadRouter = Router({ mergeParams: true });
 channelThreadRouter.use(protect);
+channelThreadRouter.use(resolveWorkspace);
 channelThreadRouter.get('/threads', getChannelThreads);

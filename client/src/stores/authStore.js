@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { authAPI } from '../services/api'
 import { connectSocket, disconnectSocket } from '../services/socket'
+import { useWorkspaceStore } from './workspaceStore'
 
 const FLOWTASK_ENABLED = import.meta.env.VITE_FLOWTASK_ENABLED !== 'false'
 
@@ -47,6 +48,8 @@ export const useAuthStore = create((set, get) => ({
       localStorage.setItem('chat_access_token', accessToken)
       localStorage.setItem('chat_refresh_token', refreshToken)
       set({ accessToken, refreshToken, user, isLoading: false })
+      // Initialize workspaces before connecting socket (socket needs workspaceId)
+      await useWorkspaceStore.getState().fetchWorkspaces()
       connectSocket()
       return data
     } catch (error) {
@@ -65,6 +68,7 @@ export const useAuthStore = create((set, get) => ({
       localStorage.setItem('chat_access_token', accessToken)
       localStorage.setItem('chat_refresh_token', refreshToken)
       set({ accessToken, refreshToken, user, isLoading: false })
+      await useWorkspaceStore.getState().fetchWorkspaces()
       connectSocket()
       return data
     } catch (error) {
@@ -80,6 +84,7 @@ export const useAuthStore = create((set, get) => ({
     try {
       const { data } = await authAPI.me()
       set({ user: data.data.user, isLoading: false })
+      await useWorkspaceStore.getState().fetchWorkspaces()
       connectSocket()
       return data.data.user
     } catch (error) {
@@ -104,6 +109,7 @@ export const useAuthStore = create((set, get) => ({
     // Also clear legacy token if exists
     localStorage.removeItem('flowtask_token')
     disconnectSocket()
+    useWorkspaceStore.getState().clearWorkspaceState()
     set({ accessToken: null, refreshToken: null, user: null, error: null })
   },
 

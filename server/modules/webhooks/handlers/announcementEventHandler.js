@@ -15,7 +15,7 @@ import { FLOWTASK_EVENTS, SYSTEM_CHANNELS } from '../../../config/constants.js';
 
 export function registerAnnouncementEventHandlers() {
   eventBus.register(FLOWTASK_EVENTS.ANNOUNCEMENT_CREATED, async (payload) => {
-    const { announcement, userId } = payload;
+    const { announcement, userId, _workspaceId: wsId } = payload;
 
     if (!announcement) {
       logger.warn('announcement.created: missing announcement data');
@@ -23,13 +23,13 @@ export function registerAnnouncementEventHandlers() {
     }
 
     // Find the announcements system channel
-    const channel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ANNOUNCEMENTS.slug);
+    const channel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ANNOUNCEMENTS.slug, wsId);
     if (!channel) {
       logger.warn('announcement.created: #announcements channel not found');
       return;
     }
 
-    const author = userId ? await userRepository.findByFlowTaskId(userId) : null;
+    const author = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const authorName = author?.name || 'Admin';
 
     const title = announcement.title || 'Announcement';
@@ -41,6 +41,7 @@ export function registerAnnouncementEventHandlers() {
       channel._id,
       msg,
       { entityType: 'announcement', entityId: announcement._id },
+      wsId,
     );
 
     logger.info('announcement.created handled', {
@@ -49,7 +50,7 @@ export function registerAnnouncementEventHandlers() {
     });
 
     // Also notify admin channel
-    await botNotifier.onAnnouncementCreated(title, authorName);
+    await botNotifier.onAnnouncementCreated(title, authorName, wsId);
   });
 
   logger.info('Announcement event handlers registered');

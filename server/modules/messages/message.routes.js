@@ -14,6 +14,7 @@ import {
   uploadFiles,
 } from './message.controller.js';
 import { protect, requireChannelAccess, requireMessageAccess } from '../auth/auth.middleware.js';
+import { resolveWorkspace } from '../../middleware/workspaceContext.js';
 import { uploadFiles as uploadMiddleware, handleMulterError } from '../../middleware/upload.js';
 import { validate } from '../../middleware/validate.js';
 import {
@@ -46,6 +47,7 @@ const router = Router();
 
 // All routes require authentication
 router.use(protect);
+router.use(resolveWorkspace);
 
 // ─── Channel-scoped message routes ───────────────────────────────────────────
 // These are mounted under /api/chat/channels/:channelId in the main router
@@ -72,6 +74,7 @@ import { getUploadSignature } from '../files/cloudinarySign.controller.js';
 
 export const channelMessageRouter = Router({ mergeParams: true });
 channelMessageRouter.use(protect);
+channelMessageRouter.use(resolveWorkspace);
 channelMessageRouter.use(requireChannelAccess());
 channelMessageRouter.get('/messages', getMessages);
 channelMessageRouter.post('/messages', validate({ body: sendMessageSchema }), sendMessage);

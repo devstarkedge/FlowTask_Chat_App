@@ -3,6 +3,7 @@ import tokenService from './token.service.js';
 import userRepository from '../users/user.repository.js';
 import logger from '../../utils/logger.js';
 import { UnauthorizedError, ForbiddenError } from '../../middleware/errorHandler.js';
+import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
 
 /**
  * Auth Middleware — JWT verification and RBAC for Express routes.
@@ -39,6 +40,10 @@ export async function protect(req, res, next) {
       const decoded = tokenService.verifyAccessToken(token);
       if (decoded?.id && decoded.type === 'access') {
         chatUser = await userRepository.findById(decoded.id);
+        // Carry workspaceId from JWT claim
+        if (chatUser && decoded.workspaceId) {
+          chatUser._workspaceId = decoded.workspaceId;
+        }
       }
     } catch {
       // Not a Chat-issued token — continue to FlowTask fallback
@@ -69,6 +74,16 @@ export async function protect(req, res, next) {
 
     // Attach to request
     req.user = chatUser;
+
+    // Resolve workspace context
+    // Priority: JWT claim > x-workspace-id header
+    const workspaceId =
+      chatUser._workspaceId ||
+      req.headers['x-workspace-id'];
+
+    if (workspaceId) {
+      req.user.workspaceId = workspaceId;
+    }
 
     next();
   } catch (error) {

@@ -55,7 +55,7 @@ export const setPresence = asyncHandler(async (req, res) => {
  * GET /users/online
  */
 export const getOnlineUsers = asyncHandler(async (req, res) => {
-  const users = await userService.getOnlineUsers();
+  const users = await userService.getOnlineUsers(req.workspaceId);
   res.json({ success: true, data: users });
 });
 
@@ -69,6 +69,6 @@ export const searchUsers = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, error: 'Query parameter "q" is required' });
   }
   const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
-  const users = await userService.searchUsers(q, parsedLimit);
+  const users = await userService.searchUsers(q, parsedLimit, req.workspaceId);
   res.json({ success: true, data: users });
 });

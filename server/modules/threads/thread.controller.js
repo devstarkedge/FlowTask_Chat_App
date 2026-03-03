@@ -25,6 +25,7 @@ export const createThread = asyncHandler(async (req, res) => {
     authorId: req.user._id,
     title,
     flowTaskRef,
+    workspaceId: req.workspaceId,
   });
 
   res.status(201).json({ success: true, data: { thread } });
@@ -53,7 +54,7 @@ export const getThreadReplies = asyncHandler(async (req, res) => {
  * Get thread by FlowTask task ID.
  */
 export const getThreadByTask = asyncHandler(async (req, res) => {
-  const thread = await threadService.getThreadByTaskId(req.params.taskId);
+  const thread = await threadService.getThreadByTaskId(req.params.taskId, req.workspaceId);
   res.json({ success: true, data: { thread } });
 });
 
@@ -65,6 +66,7 @@ export const getChannelThreads = asyncHandler(async (req, res) => {
   const threads = await threadService.getChannelThreads(
     req.params.channelId,
     req.query,
+    req.workspaceId,
   );
   res.json({ success: true, data: { threads } });
 });
@@ -74,7 +76,7 @@ export const getChannelThreads = asyncHandler(async (req, res) => {
  * Get threads the authenticated user participates in.
  */
 export const getMyThreads = asyncHandler(async (req, res) => {
-  const threads = await threadService.getUserThreads(req.user._id, req.query);
+  const threads = await threadService.getUserThreads(req.user._id, req.query, req.workspaceId);
   res.json({ success: true, data: { threads } });
 });
 

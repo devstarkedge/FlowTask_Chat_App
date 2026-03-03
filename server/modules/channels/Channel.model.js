@@ -55,6 +55,14 @@ const flowTaskRefSchema = new Schema({
 }, { _id: false });
 
 const channelSchema = new Schema({
+  // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────
+  workspaceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Workspace',
+    required: true,
+    index: true,
+  },
+
   name: {
     type: String,
     required: true,
@@ -63,7 +71,7 @@ const channelSchema = new Schema({
   slug: {
     type: String,
     required: true,
-    unique: true,
+    // unique per workspace — compound index below replaces global unique
     lowercase: true,
     maxlength: 80,
   },
@@ -147,18 +155,20 @@ const channelSchema = new Schema({
   toObject: { virtuals: true },
 });
 
-// ─── Compound Indexes ────────────────────────────────────────────────────────
-// Fast lookup by FlowTask entity (e.g., find channel for board X)
+// ─── Compound Indexes (all workspace-scoped) ────────────────────────────────
+// Workspace-scoped unique slug (replaces global unique)
+channelSchema.index({ workspaceId: 1, slug: 1 }, { unique: true });
+// Fast lookup by FlowTask entity within a workspace
 channelSchema.index(
-  { 'flowTaskRef.entityType': 1, 'flowTaskRef.entityId': 1 },
+  { workspaceId: 1, 'flowTaskRef.entityType': 1, 'flowTaskRef.entityId': 1 },
   { sparse: true, unique: true },
 );
-// User's channel list sorted by recent activity
-channelSchema.index({ 'members.userId': 1, lastMessageAt: -1 });
-// DM participant lookup
-channelSchema.index({ dmParticipants: 1 }, { sparse: true });
-// Type + archive filter
-channelSchema.index({ type: 1, isArchived: 1 });
+// User's channel list sorted by recent activity within workspace
+channelSchema.index({ workspaceId: 1, 'members.userId': 1, lastMessageAt: -1 });
+// DM participant lookup within workspace
+channelSchema.index({ workspaceId: 1, dmParticipants: 1 }, { sparse: true });
+// Type + archive filter within workspace
+channelSchema.index({ workspaceId: 1, type: 1, isArchived: 1 });
 
 // ─── Pre-save hooks ──────────────────────────────────────────────────────────
 channelSchema.pre('save', function (next) {
@@ -183,25 +193,30 @@ channelSchema.methods.isOwner = function (userId) {
 };
 
 // ─── Static Methods ──────────────────────────────────────────────────────────
-channelSchema.statics.findByFlowTaskRef = function (entityType, entityId) {
-  return this.findOne({
+channelSchema.statics.findByFlowTaskRef = function (entityType, entityId, workspaceId) {
+  const filter = {
     'flowTaskRef.entityType': entityType,
     'flowTaskRef.entityId': entityId,
-  });
+  };
+  if (workspaceId) filter.workspaceId = workspaceId;
+  return this.findOne(filter);
 };
 
-channelSchema.statics.findUserChannels = function (userId, includeArchived = false) {
+channelSchema.statics.findUserChannels = function (userId, includeArchived = false, workspaceId) {
   const filter = { 'members.userId': userId };
   if (!includeArchived) filter.isArchived = false;
+  if (workspaceId) filter.workspaceId = workspaceId;
   return this.find(filter).sort({ lastMessageAt: -1 });
 };
 
-channelSchema.statics.findDMChannel = function (participantIds) {
+channelSchema.statics.findDMChannel = function (participantIds, workspaceId) {
   const sorted = [...participantIds].sort();
-  return this.findOne({
+  const filter = {
     type: CHANNEL_TYPES.DM,
     dmParticipants: { $all: sorted, $size: sorted.length },
-  });
+  };
+  if (workspaceId) filter.workspaceId = workspaceId;
+  return this.findOne(filter);
 };
 
 const Channel = model('Channel', channelSchema);

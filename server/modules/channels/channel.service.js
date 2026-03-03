@@ -25,25 +25,25 @@ class ChannelService {
    * Create a project channel from a FlowTask project (board) event.
    * Called by webhook handler on project.created.
    */
-  async createProjectChannel(board, creatorFlowTaskId) {
+  async createProjectChannel(board, creatorFlowTaskId, workspaceId) {
     const boardId = board._id || board.id;
     const boardName = board.name || board.title;
     const deptName = typeof board.department === 'object'
       ? (board.department?.name || 'general')
       : 'general';
 
-    const existing = await channelRepository.findByFlowTaskRef('board', boardId);
+    const existing = await channelRepository.findByFlowTaskRef('board', boardId, workspaceId);
     if (existing) {
       logger.info('Project channel already exists', { boardId, slug: existing.slug });
       return existing;
     }
 
     const creator = creatorFlowTaskId
-      ? await userRepository.findByFlowTaskId(creatorFlowTaskId)
+      ? await userRepository.findByFlowTaskId(creatorFlowTaskId, workspaceId)
       : null;
 
     let slug = projectChannelSlug(deptName, boardName, boardId);
-    if (await channelRepository.slugExists(slug)) {
+    if (await channelRepository.slugExists(slug, workspaceId)) {
       slug = appendCollisionSuffix(slug, boardId);
     }
 
@@ -63,6 +63,7 @@ class ChannelService {
         : CHANNEL_VISIBILITY.PRIVATE,
       members,
       memberCount: members.length,
+      ...(workspaceId && { workspaceId }),
     });
 
     logger.info('Project channel created', {
@@ -77,12 +78,12 @@ class ChannelService {
   /**
    * Create or get a department channel.
    */
-  async getOrCreateDepartmentChannel(departmentId, departmentName) {
-    const existing = await channelRepository.findByFlowTaskRef('department', departmentId);
+  async getOrCreateDepartmentChannel(departmentId, departmentName, workspaceId) {
+    const existing = await channelRepository.findByFlowTaskRef('department', departmentId, workspaceId);
     if (existing) return existing;
 
     let slug = departmentChannelSlug(departmentName, departmentId);
-    if (await channelRepository.slugExists(slug)) {
+    if (await channelRepository.slugExists(slug, workspaceId)) {
       slug = appendCollisionSuffix(slug, departmentId);
     }
 
@@ -94,6 +95,7 @@ class ChannelService {
       visibility: CHANNEL_VISIBILITY.PRIVATE,
       members: [],
       memberCount: 0,
+      ...(workspaceId && { workspaceId }),
     });
 
     logger.info('Department channel created', {
@@ -108,12 +110,12 @@ class ChannelService {
   /**
    * Create or get a team channel.
    */
-  async getOrCreateTeamChannel(teamId, teamName) {
-    const existing = await channelRepository.findByFlowTaskRef('team', teamId);
+  async getOrCreateTeamChannel(teamId, teamName, workspaceId) {
+    const existing = await channelRepository.findByFlowTaskRef('team', teamId, workspaceId);
     if (existing) return existing;
 
     let slug = teamChannelSlug(teamName, teamId);
-    if (await channelRepository.slugExists(slug)) {
+    if (await channelRepository.slugExists(slug, workspaceId)) {
       slug = appendCollisionSuffix(slug, teamId);
     }
 
@@ -125,6 +127,7 @@ class ChannelService {
       visibility: CHANNEL_VISIBILITY.PRIVATE,
       members: [],
       memberCount: 0,
+      ...(workspaceId && { workspaceId }),
     });
 
     logger.info('Team channel created', { channelId: channel._id, slug, teamId });
@@ -134,10 +137,10 @@ class ChannelService {
   /**
    * Create or get a DM channel between two users.
    */
-  async getOrCreateDM(user1Id, user2Id) {
+  async getOrCreateDM(user1Id, user2Id, workspaceId) {
     const ids = [user1Id.toString(), user2Id.toString()].sort();
 
-    const existing = await channelRepository.findDMChannel(ids[0], ids[1]);
+    const existing = await channelRepository.findDMChannel(ids[0], ids[1], workspaceId);
     if (existing) return existing;
 
     const [user1, user2] = await Promise.all([
@@ -160,6 +163,7 @@ class ChannelService {
         { userId: ids[1], role: CHANNEL_MEMBER_ROLES.MEMBER },
       ],
       memberCount: 2,
+      ...(workspaceId && { workspaceId }),
     });
 
     // Auto-join both users to the channel room
@@ -177,9 +181,9 @@ class ChannelService {
   /**
    * Create a custom channel (user-initiated).
    */
-  async createCustomChannel(data, creatorId) {
+  async createCustomChannel(data, creatorId, workspaceId) {
     let slug = slugify(data.name);
-    if (await channelRepository.slugExists(slug)) {
+    if (await channelRepository.slugExists(slug, workspaceId)) {
       slug = appendCollisionSuffix(slug, Date.now().toString(36));
     }
 
@@ -202,6 +206,7 @@ class ChannelService {
       visibility: data.visibility || CHANNEL_VISIBILITY.PRIVATE,
       members,
       memberCount: members.length,
+      ...(workspaceId && { workspaceId }),
     });
 
     // Notify all added members
@@ -223,12 +228,12 @@ class ChannelService {
    * Ensure system channels exist on first boot.
    * Idempotent — safe to call on every startup.
    */
-  async bootstrapSystemChannels() {
+  async bootstrapSystemChannels(workspaceId) {
     const systemChannelConfigs = Object.values(SYSTEM_CHANNELS);
     let created = 0;
 
     for (const config of systemChannelConfigs) {
-      const existing = await channelRepository.findBySlug(config.slug);
+      const existing = await channelRepository.findBySlug(config.slug, workspaceId);
       if (existing) continue;
 
       await channelRepository.create({
@@ -241,6 +246,7 @@ class ChannelService {
           : CHANNEL_VISIBILITY.PRIVATE,
         members: [],
         memberCount: 0,
+        ...(workspaceId && { workspaceId }),
       });
 
       created++;
@@ -256,7 +262,7 @@ class ChannelService {
    * Sync all project channels for a user from FlowTask boards.
    * Called during login/sync to create channels for existing projects.
    */
-  async syncProjectChannelsForUser(token, chatUser) {
+  async syncProjectChannelsForUser(token, chatUser, workspaceId) {
     const flowTaskService = (await import('../flowtask/flowtask.service.js')).default;
 
     let boards;
@@ -288,6 +294,7 @@ class ChannelService {
         const channel = await this.createProjectChannel(
           board,
           chatUser.flowTaskUserId,
+          workspaceId,
         );
 
         // Ensure current user is a member
@@ -338,11 +345,11 @@ class ChannelService {
   /**
    * Get all channels for a user with unread counts.
    */
-  async getChannelsForUser(userId) {
-    const channels = await channelRepository.findByMember(userId);
+  async getChannelsForUser(userId, workspaceId) {
+    const channels = await channelRepository.findByMember(userId, { workspaceId });
 
     // Get system public channels the user might not be a member of yet
-    const systemChannels = await channelRepository.findSystemChannels();
+    const systemChannels = await channelRepository.findSystemChannels(workspaceId);
     const publicSystem = systemChannels.filter(
       (sc) =>
         sc.visibility === CHANNEL_VISIBILITY.PUBLIC &&
@@ -366,8 +373,8 @@ class ChannelService {
   /**
    * Get a single channel by slug.
    */
-  async getChannelBySlug(slug) {
-    const channel = await channelRepository.findBySlug(slug);
+  async getChannelBySlug(slug, workspaceId) {
+    const channel = await channelRepository.findBySlug(slug, workspaceId);
     if (!channel) {
       throw new NotFoundError('Channel not found');
     }
@@ -408,11 +415,11 @@ class ChannelService {
   /**
    * Add multiple members to a channel (bulk, for project sync).
    */
-  async syncMembers(channelId, flowTaskUserIds) {
+  async syncMembers(channelId, flowTaskUserIds, workspaceId) {
     const channel = await channelRepository.findById(channelId);
     if (!channel) throw new NotFoundError('Channel not found');
 
-    const chatUsers = await userRepository.findByFlowTaskIds(flowTaskUserIds);
+    const chatUsers = await userRepository.findByFlowTaskIds(flowTaskUserIds, workspaceId);
     const chatUserIds = chatUsers.map((u) => u._id);
 
     // Filter out existing members
@@ -523,8 +530,8 @@ class ChannelService {
   /**
    * Search channels by name.
    */
-  async searchChannels(query, userId) {
-    return channelRepository.search(query, userId);
+  async searchChannels(query, userId, workspaceId) {
+    return channelRepository.search(query, userId, 20, workspaceId);
   }
 
   // ──────────────────── Aggregated Members ──────────────────────────────────

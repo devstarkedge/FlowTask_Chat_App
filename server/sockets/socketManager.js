@@ -4,15 +4,15 @@ import userRepository from '../modules/users/user.repository.js';
 import channelRepository from '../modules/channels/channel.repository.js';
 import logger from '../utils/logger.js';
 import { logSocketReconnect } from '../utils/performanceLogger.js';
-import { SOCKET_EVENTS } from '../config/constants.js';
+import { SOCKET_EVENTS, buildRoomName } from '../config/constants.js';
 
 /**
  * Socket.IO Manager — handles WebSocket connections, authentication, and room management.
  *
  * Room topology:
- *   user-{chatUserId}          — personal notifications (all tabs)
- *   channel-{channelId}        — per-channel messages
- *   department-{departmentId}  — department-scoped events
+ *   ws:{workspaceId}:user:{chatUserId}     — personal notifications (all tabs)
+ *   ws:{workspaceId}:channel:{channelId}   — per-channel messages
+ *   ws:{workspaceId}:dept:{departmentId}   — department-scoped events
  *
  * Enterprise features:
  *   - Scoped presence broadcast (only to user's channels, not global)
@@ -133,12 +133,14 @@ export async function initializeSocket(httpServer, corsOptions) {
 
       // Dual-auth token verification
       let chatUser = null;
+      let workspaceId = null;
 
       // Strategy 1: Try as Chat-issued access token
       try {
         const decoded = tokenService.verifyAccessToken(token);
         if (decoded?.id && decoded.type === 'access') {
           chatUser = await userRepository.findById(decoded.id);
+          workspaceId = decoded.workspaceId || null;
         }
       } catch {
         // Not a Chat-issued token
@@ -167,6 +169,7 @@ export async function initializeSocket(httpServer, corsOptions) {
 
       // Attach user to socket
       socket.chatUser = chatUser;
+      socket.workspaceId = workspaceId || socket.handshake.auth.workspaceId || null;
       next();
     } catch (error) {
       logger.warn('Socket authentication failed', {
@@ -181,6 +184,7 @@ export async function initializeSocket(httpServer, corsOptions) {
   io.on('connection', async (socket) => {
     const user = socket.chatUser;
     const userId = user._id.toString();
+    const wsId = socket.workspaceId;
 
     logger.info('Socket connected', {
       metric: 'socket_lifecycle',
@@ -189,26 +193,30 @@ export async function initializeSocket(httpServer, corsOptions) {
       flowTaskUserId: user.flowTaskUserId,
       name: user.name,
       socketId: socket.id,
+      workspaceId: wsId,
     });
 
     // Register socket and set user online
     await userRepository.addSocketId(userId, socket.id);
 
     // ─── Auto-join rooms ─────────────────────────────────────────────
-    // Personal room
-    socket.join(`user-${userId}`);
+    // Personal room (workspace-scoped)
+    const userRoom = wsId ? buildRoomName(wsId, 'user', userId) : `user-${userId}`;
+    socket.join(userRoom);
 
     // Department rooms
     for (const deptId of user.departmentIds) {
-      socket.join(`department-${deptId}`);
+      const deptRoom = wsId ? buildRoomName(wsId, 'dept', deptId) : `department-${deptId}`;
+      socket.join(deptRoom);
     }
 
     // Channel rooms (all channels user belongs to)
     let initialChannelIds = [];
     try {
-      const channels = await channelRepository.findByMember(userId);
+      const channels = await channelRepository.findByMember(userId, { workspaceId: wsId });
       for (const channel of channels) {
-        socket.join(`channel-${channel._id}`);
+        const chRoom = wsId ? buildRoomName(wsId, 'channel', channel._id) : `channel-${channel._id}`;
+        socket.join(chRoom);
         initialChannelIds.push(channel._id.toString());
       }
     } catch (error) {
@@ -226,7 +234,8 @@ export async function initializeSocket(httpServer, corsOptions) {
       avatar: user.avatar,
     };
     for (const channelId of initialChannelIds) {
-      io.to(`channel-${channelId}`).emit(SOCKET_EVENTS.USER_ONLINE, presencePayload);
+      const chRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+      io.to(chRoom).emit(SOCKET_EVENTS.USER_ONLINE, presencePayload);
     }
 
     // ─── Client Events (with rate limiting) ──────────────────────────
@@ -241,7 +250,8 @@ export async function initializeSocket(httpServer, corsOptions) {
       try {
         // Admin bypasses membership check
         if (user.role === 'admin') {
-          socket.join(`channel-${channelId}`);
+          const joinRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+          socket.join(joinRoom);
           return;
         }
         const channel = await channelRepository.findById(channelId);
@@ -251,7 +261,8 @@ export async function initializeSocket(httpServer, corsOptions) {
         }
         // Public non-DM channels are accessible to all authenticated users
         if (channel.visibility === 'public' && channel.type !== 'dm') {
-          socket.join(`channel-${channelId}`);
+          const joinRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+          socket.join(joinRoom);
           return;
         }
         // Check membership
@@ -259,7 +270,8 @@ export async function initializeSocket(httpServer, corsOptions) {
           socket.emit('error', { message: 'Not a member of this channel' });
           return;
         }
-        socket.join(`channel-${channelId}`);
+        const joinRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+        socket.join(joinRoom);
       } catch (error) {
         logger.error('Socket channel:join failed', { userId, channelId, error: error.message });
         socket.emit('error', { message: 'Failed to join channel' });
@@ -269,7 +281,8 @@ export async function initializeSocket(httpServer, corsOptions) {
     // Leave a channel room
     socket.on('channel:leave', (channelId) => {
       if (isSocketRateLimited(socket.id)) return;
-      socket.leave(`channel-${channelId}`);
+      const leaveRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+      socket.leave(leaveRoom);
     });
 
     // Typing indicators — server-side throttled (max 1 emit per 2s per user/channel)
@@ -285,7 +298,8 @@ export async function initializeSocket(httpServer, corsOptions) {
       }
       typingThrottleMap.set(throttleKey, now);
 
-      socket.to(`channel-${channelId}`).emit(SOCKET_EVENTS.TYPING_START, {
+      const typingRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+      socket.to(typingRoom).emit(SOCKET_EVENTS.TYPING_START, {
         channelId,
         userId,
         name: user.name,
@@ -298,7 +312,8 @@ export async function initializeSocket(httpServer, corsOptions) {
       const throttleKey = `${userId}-${channelId}`;
       typingThrottleMap.delete(throttleKey);
 
-      socket.to(`channel-${channelId}`).emit(SOCKET_EVENTS.TYPING_STOP, {
+      const typingRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+      socket.to(typingRoom).emit(SOCKET_EVENTS.TYPING_STOP, {
         channelId,
         userId,
       });
@@ -326,7 +341,7 @@ export async function initializeSocket(httpServer, corsOptions) {
         // This ensures offline is broadcast to channels joined mid-session
         let currentChannelIds = initialChannelIds;
         try {
-          const currentChannels = await channelRepository.findByMember(userId);
+          const currentChannels = await channelRepository.findByMember(userId, { workspaceId: wsId });
           currentChannelIds = currentChannels.map((c) => c._id.toString());
         } catch {
           // Fall back to initial channel list if query fails
@@ -338,7 +353,8 @@ export async function initializeSocket(httpServer, corsOptions) {
           lastSeenAt: updatedUser.lastSeenAt,
         };
         for (const channelId of currentChannelIds) {
-          io.to(`channel-${channelId}`).emit(SOCKET_EVENTS.USER_OFFLINE, offlinePayload);
+          const chRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+          io.to(chRoom).emit(SOCKET_EVENTS.USER_OFFLINE, offlinePayload);
         }
       }
     });
@@ -379,26 +395,41 @@ export async function initializeSocket(httpServer, corsOptions) {
 
 /**
  * Emit event to a specific user (all their sockets/tabs).
+ * @param {string} userId
+ * @param {string} event
+ * @param {object} data
+ * @param {string} [workspaceId] - If provided, uses workspace-scoped room
  */
-export function emitToUser(userId, event, data) {
+export function emitToUser(userId, event, data, workspaceId) {
   if (!io) return;
-  io.to(`user-${userId}`).emit(event, data);
+  const room = workspaceId ? buildRoomName(workspaceId, 'user', userId) : `user-${userId}`;
+  io.to(room).emit(event, data);
 }
 
 /**
  * Emit event to a channel room.
+ * @param {string} channelId
+ * @param {string} event
+ * @param {object} data
+ * @param {string} [workspaceId] - If provided, uses workspace-scoped room
  */
-export function emitToChannel(channelId, event, data) {
+export function emitToChannel(channelId, event, data, workspaceId) {
   if (!io) return;
-  io.to(`channel-${channelId}`).emit(event, data);
+  const room = workspaceId ? buildRoomName(workspaceId, 'channel', channelId) : `channel-${channelId}`;
+  io.to(room).emit(event, data);
 }
 
 /**
  * Emit event to a department room.
+ * @param {string} departmentId
+ * @param {string} event
+ * @param {object} data
+ * @param {string} [workspaceId] - If provided, uses workspace-scoped room
  */
-export function emitToDepartment(departmentId, event, data) {
+export function emitToDepartment(departmentId, event, data, workspaceId) {
   if (!io) return;
-  io.to(`department-${departmentId}`).emit(event, data);
+  const room = workspaceId ? buildRoomName(workspaceId, 'dept', departmentId) : `department-${departmentId}`;
+  io.to(room).emit(event, data);
 }
 
 /**
@@ -412,14 +443,18 @@ export function emitToAll(event, data) {
 /**
  * Make a specific user's sockets join a channel room.
  * Used when adding members to channels programmatically.
+ * @param {string} userId
+ * @param {string} channelId
+ * @param {string} [workspaceId]
  */
-export async function joinChannelRoom(userId, channelId) {
+export async function joinChannelRoom(userId, channelId, workspaceId) {
   if (!io) return;
   try {
-    const room = `user-${userId}`;
-    const socketList = await io.in(room).fetchSockets();
+    const userRoom = workspaceId ? buildRoomName(workspaceId, 'user', userId) : `user-${userId}`;
+    const channelRoom = workspaceId ? buildRoomName(workspaceId, 'channel', channelId) : `channel-${channelId}`;
+    const socketList = await io.in(userRoom).fetchSockets();
     for (const socket of socketList) {
-      socket.join(`channel-${channelId}`);
+      socket.join(channelRoom);
     }
   } catch (error) {
     logger.error('Failed to join channel room programmatically', {

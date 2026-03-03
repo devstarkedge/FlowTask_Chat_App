@@ -54,6 +54,14 @@ const chatPreferencesSchema = new Schema({
 }, { _id: false });
 
 const chatUserSchema = new Schema({
+  // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────
+  workspaceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Workspace',
+    required: true,
+    index: true,
+  },
+
   // ─── Auth Provider ────────────────────────────────────────────────────
   authProvider: {
     type: String,
@@ -65,9 +73,8 @@ const chatUserSchema = new Schema({
   // ─── FlowTask-synced fields (only for FlowTask auth) ─────────────────
   flowTaskUserId: {
     type: String,
-    unique: true,
     sparse: true, // Allow null for native users
-    index: true,
+    // unique per workspace — compound index below replaces global unique
   },
 
   // ─── Identity ─────────────────────────────────────────────────────────
@@ -79,7 +86,7 @@ const chatUserSchema = new Schema({
   email: {
     type: String,
     required: true,
-    unique: true,
+    // unique per workspace — compound index below replaces global unique
     lowercase: true,
   },
   role: {
@@ -185,9 +192,14 @@ const chatUserSchema = new Schema({
 });
 
 // ─── Indexes ─────────────────────────────────────────────────────────────────
-chatUserSchema.index({ departmentIds: 1 });
-chatUserSchema.index({ role: 1, isActive: 1 });
-chatUserSchema.index({ onlineStatus: 1 });
+// Workspace-scoped unique email (replaces global unique)
+chatUserSchema.index({ workspaceId: 1, email: 1 }, { unique: true });
+// Workspace-scoped unique flowTaskUserId (replaces global unique)
+chatUserSchema.index({ workspaceId: 1, flowTaskUserId: 1 }, { unique: true, sparse: true });
+// Department lookup within workspace
+chatUserSchema.index({ workspaceId: 1, departmentIds: 1 });
+chatUserSchema.index({ workspaceId: 1, role: 1, isActive: 1 });
+chatUserSchema.index({ workspaceId: 1, onlineStatus: 1 });
 
 // ─── Pre-save: Hash password on change ───────────────────────────────────────
 chatUserSchema.pre('save', async function (next) {
@@ -251,15 +263,16 @@ chatUserSchema.methods.belongsToDepartment = function (departmentId) {
 };
 
 // ─── Static Methods ──────────────────────────────────────────────────────────
-chatUserSchema.statics.findByFlowTaskId = function (flowTaskUserId) {
-  return this.findOne({ flowTaskUserId });
+chatUserSchema.statics.findByFlowTaskId = function (flowTaskUserId, workspaceId) {
+  const filter = { flowTaskUserId };
+  if (workspaceId) filter.workspaceId = workspaceId;
+  return this.findOne(filter);
 };
 
-chatUserSchema.statics.findActiveByDepartment = function (departmentId) {
-  return this.find({
-    departmentIds: departmentId,
-    isActive: true,
-  });
+chatUserSchema.statics.findActiveByDepartment = function (departmentId, workspaceId) {
+  const filter = { departmentIds: departmentId, isActive: true };
+  if (workspaceId) filter.workspaceId = workspaceId;
+  return this.find(filter);
 };
 
 const ChatUser = model('ChatUser', chatUserSchema);

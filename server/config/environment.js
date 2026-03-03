@@ -84,6 +84,11 @@ const env = Object.freeze({
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
+
+  // Workspace — Multi-tenant configuration
+  DEFAULT_WORKSPACE_SLUG: process.env.DEFAULT_WORKSPACE_SLUG || 'flowtask',
+  DEFAULT_WORKSPACE_NAME: process.env.DEFAULT_WORKSPACE_NAME || 'FlowTask',
+  WORKSPACE_SUBDOMAIN_ENABLED: process.env.WORKSPACE_SUBDOMAIN_ENABLED === 'true',
 });
 
 export default env;

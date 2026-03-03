@@ -16,6 +16,7 @@ export const markAsRead = asyncHandler(async (req, res) => {
     req.user._id,
     req.params.channelId,
     lastReadMessageId,
+    req.workspaceId,
   );
 
   res.json({ success: true });
@@ -26,7 +27,7 @@ export const markAsRead = asyncHandler(async (req, res) => {
  * Get unread counts for all user's channels.
  */
 export const getUnreadCounts = asyncHandler(async (req, res) => {
-  const unreads = await readReceiptService.getUnreadCounts(req.user._id);
+  const unreads = await readReceiptService.getUnreadCounts(req.user._id, req.workspaceId);
 
   res.json({
     success: true,

@@ -1,8 +1,10 @@
 import ChatUser from './ChatUser.model.js';
+import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
 
 /**
  * User Repository — data access layer for ChatUser documents.
  * Supports both native (email/password) and FlowTask SSO users.
+ * All query methods accept an optional workspaceId for multi-tenant scoping.
  */
 
 class UserRepository {
@@ -31,16 +33,17 @@ class UserRepository {
 
   /**
    * Create a native (email/password) user.
-   * @param {{ name: string, email: string, password: string }} data
+   * @param {{ name: string, email: string, password: string, workspaceId: string }} data
    * @returns {Promise<ChatUser>}
    */
-  async createNativeUser({ name, email, password }) {
+  async createNativeUser({ name, email, password, workspaceId }) {
     const user = new ChatUser({
       authProvider: 'native',
       name,
       email,
       password,
       role: 'employee',
+      workspaceId,
     });
     return user.save();
   }
@@ -48,10 +51,12 @@ class UserRepository {
   /**
    * Find user by email — includes password for login verification.
    * @param {string} email
+   * @param {string} [workspaceId]
    * @returns {Promise<ChatUser|null>}
    */
-  async findByEmail(email) {
-    return ChatUser.findOne({ email: email.toLowerCase() })
+  async findByEmail(email, workspaceId) {
+    const filter = injectWorkspaceFilter({ email: email.toLowerCase() }, workspaceId);
+    return ChatUser.findOne(filter)
       .select('+password +loginAttempts +lockUntil')
       .exec();
   }
@@ -59,10 +64,12 @@ class UserRepository {
   /**
    * Find by email (without sensitive fields).
    * @param {string} email
+   * @param {string} [workspaceId]
    * @returns {Promise<ChatUser|null>}
    */
-  async findByEmailPublic(email) {
-    return ChatUser.findOne({ email: email.toLowerCase() }).exec();
+  async findByEmailPublic(email, workspaceId) {
+    const filter = injectWorkspaceFilter({ email: email.toLowerCase() }, workspaceId);
+    return ChatUser.findOne(filter).exec();
   }
 
   /**
@@ -154,10 +161,11 @@ class UserRepository {
   /**
    * Find user by FlowTask user ID.
    * @param {string} flowTaskUserId
+   * @param {string} [workspaceId]
    * @returns {Promise<ChatUser|null>}
    */
-  async findByFlowTaskId(flowTaskUserId) {
-    return ChatUser.findByFlowTaskId(flowTaskUserId);
+  async findByFlowTaskId(flowTaskUserId, workspaceId) {
+    return ChatUser.findByFlowTaskId(flowTaskUserId, workspaceId);
   }
 
   /**
@@ -165,17 +173,21 @@ class UserRepository {
    * Upserts to handle race conditions during initial sync.
    *
    * @param {object} flowTaskUser - User data from FlowTask API
+   * @param {string} workspaceId - Workspace to scope to
    * @returns {Promise<ChatUser>}
    */
-  async upsertFromFlowTask(flowTaskUser) {
+  async upsertFromFlowTask(flowTaskUser, workspaceId) {
     const { _id, name, email, role, department, team, avatar } = flowTaskUser;
 
     const departmentIds = Array.isArray(department)
       ? department.map((d) => (typeof d === 'object' ? d._id || d : d).toString())
       : department ? [department.toString()] : [];
 
+    const filter = { flowTaskUserId: _id.toString() };
+    if (workspaceId) filter.workspaceId = workspaceId;
+
     return ChatUser.findOneAndUpdate(
-      { flowTaskUserId: _id.toString() },
+      filter,
       {
         $set: {
           authProvider: 'flowtask',
@@ -192,6 +204,7 @@ class UserRepository {
           flowTaskUserId: _id.toString(),
           onlineStatus: 'offline',
           chatPreferences: {},
+          ...(workspaceId && { workspaceId }),
         },
       },
       { upsert: true, new: true },
@@ -269,30 +282,35 @@ class UserRepository {
   /**
    * Get all active users in a department.
    * @param {string} departmentId
+   * @param {string} [workspaceId]
    * @returns {Promise<ChatUser[]>}
    */
-  async findByDepartment(departmentId) {
-    return ChatUser.findActiveByDepartment(departmentId);
+  async findByDepartment(departmentId, workspaceId) {
+    return ChatUser.findActiveByDepartment(departmentId, workspaceId);
   }
 
   /**
    * Get all active users by role.
    * @param {string} role
+   * @param {string} [workspaceId]
    * @returns {Promise<ChatUser[]>}
    */
-  async findByRole(role) {
-    return ChatUser.find({ role, isActive: true }).exec();
+  async findByRole(role, workspaceId) {
+    const filter = injectWorkspaceFilter({ role, isActive: true }, workspaceId);
+    return ChatUser.find(filter).exec();
   }
 
   /**
    * Get all online users (for presence sidebar).
+   * @param {string} [workspaceId]
    * @returns {Promise<ChatUser[]>}
    */
-  async findOnline() {
-    return ChatUser.find({
+  async findOnline(workspaceId) {
+    const filter = injectWorkspaceFilter({
       onlineStatus: { $in: ['online', 'away', 'dnd'] },
       isActive: true,
-    })
+    }, workspaceId);
+    return ChatUser.find(filter)
       .select('name email avatar onlineStatus flowTaskUserId')
       .lean();
   }
@@ -301,17 +319,19 @@ class UserRepository {
    * Search users by name or email.
    * @param {string} query
    * @param {number} [limit=10]
+   * @param {string} [workspaceId]
    * @returns {Promise<ChatUser[]>}
    */
-  async search(query, limit = 10) {
+  async search(query, limit = 10, workspaceId) {
     const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    return ChatUser.find({
+    const filter = injectWorkspaceFilter({
       isActive: true,
       $or: [
         { name: regex },
         { email: regex },
       ],
-    })
+    }, workspaceId);
+    return ChatUser.find(filter)
       .limit(limit)
       .select('name email avatar flowTaskUserId onlineStatus')
       .lean();
@@ -333,12 +353,14 @@ class UserRepository {
   /**
    * Find multiple users by FlowTask IDs.
    * @param {string[]} flowTaskUserIds
+   * @param {string} [workspaceId]
    * @returns {Promise<ChatUser[]>}
    */
-  async findByFlowTaskIds(flowTaskUserIds) {
-    return ChatUser.find({
+  async findByFlowTaskIds(flowTaskUserIds, workspaceId) {
+    const filter = injectWorkspaceFilter({
       flowTaskUserId: { $in: flowTaskUserIds },
-    }).exec();
+    }, workspaceId);
+    return ChatUser.find(filter).exec();
   }
 
   /**

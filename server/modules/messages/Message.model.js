@@ -75,11 +75,19 @@ const flowTaskRefSchema = new Schema({
 }, { _id: false });
 
 const messageSchema = new Schema({
+  // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────
+  workspaceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Workspace',
+    required: true,
+    index: true,
+  },
+
   channelId: {
     type: Schema.Types.ObjectId,
     ref: 'Channel',
     required: true,
-    // index: removed — covered by compound { channelId: 1, createdAt: -1 }
+    // index: removed — covered by compound { workspaceId: 1, channelId: 1, createdAt: -1 }
   },
   // If this message is a thread reply, threadId points to the Thread document.
   // Root messages have threadId = null.
@@ -209,27 +217,29 @@ const messageSchema = new Schema({
   toObject: { virtuals: true },
 });
 
-// ─── Indexes ─────────────────────────────────────────────────────────────────
+// ─── Indexes (all workspace-scoped) ──────────────────────────────────────────
 // Primary query: channel messages ordered by time (cursor-based pagination)
-messageSchema.index({ channelId: 1, createdAt: -1 });
+messageSchema.index({ workspaceId: 1, channelId: 1, createdAt: -1 });
 // Thread replies ordered by time
-messageSchema.index({ threadId: 1, createdAt: 1 }, { sparse: true });
+messageSchema.index({ workspaceId: 1, threadId: 1, createdAt: 1 }, { sparse: true });
 // Author's messages (for user activity view)
-messageSchema.index({ authorId: 1, createdAt: -1 });
+messageSchema.index({ workspaceId: 1, authorId: 1, createdAt: -1 });
 // Pinned messages per channel
-messageSchema.index({ channelId: 1, isPinned: 1 }, { sparse: true });
+messageSchema.index({ workspaceId: 1, channelId: 1, isPinned: 1 }, { sparse: true });
 // FlowTask entity reference lookup (find messages for a specific task)
 messageSchema.index(
-  { 'flowTaskRef.entityType': 1, 'flowTaskRef.entityId': 1 },
+  { workspaceId: 1, 'flowTaskRef.entityType': 1, 'flowTaskRef.entityId': 1 },
   { sparse: true },
 );
 // Full-text search
 messageSchema.index({ content: 'text' });
+// Workspace + time for global workspace queries
+messageSchema.index({ workspaceId: 1, createdAt: -1 });
 // Delivery status lookup for DM channels
-messageSchema.index({ channelId: 1, status: 1 }, { sparse: true });
+messageSchema.index({ workspaceId: 1, channelId: 1, status: 1 }, { sparse: true });
 // Partial index for active (non-deleted) messages
 messageSchema.index(
-  { channelId: 1, createdAt: -1, isDeleted: 1 },
+  { workspaceId: 1, channelId: 1, createdAt: -1, isDeleted: 1 },
   { partialFilterExpression: { isDeleted: false } },
 );
 

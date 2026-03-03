@@ -12,6 +12,10 @@ import CreateChannelModal from '../chat/CreateChannelModal'
 import UserPickerModal from '../chat/UserPickerModal'
 import PreferencesModal from '../chat/PreferencesModal'
 import SetStatusModal from '../chat/SetStatusModal'
+import WorkspaceSwitcher from '../workspace/WorkspaceSwitcher'
+import CreateWorkspaceModal from '../workspace/CreateWorkspaceModal'
+import JoinWorkspaceModal from '../workspace/JoinWorkspaceModal'
+import WorkspaceSettingsModal from '../workspace/WorkspaceSettingsModal'
 import { formatDistanceToNowStrict } from 'date-fns'
 
 const CHANNEL_ICONS = {
@@ -38,6 +42,9 @@ export default function Sidebar({ onClose, onToggleAllThreads }) {
   const [showUserPicker, setShowUserPicker] = useState(false)
   const [showPreferences, setShowPreferences] = useState(false)
   const [showStatusModal, setShowStatusModal] = useState(false)
+  const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
+  const [showJoinWorkspace, setShowJoinWorkspace] = useState(false)
+  const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false)
 
   const toggleSection = (section) => {
     setExpandedSections((s) => ({ ...s, [section]: !s[section] }));
@@ -107,21 +114,11 @@ export default function Sidebar({ onClose, onToggleAllThreads }) {
           borderBottom: '1px solid var(--border-secondary)',
         }}
       >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-            style={{
-              background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-purple))',
-            }}
-          >
-            <MessageCircle size={16} color="white" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-bold truncate" style={{ color: 'var(--text-white)' }}>
-              FlowTask
-            </p>
-          </div>
-        </div>
+        <WorkspaceSwitcher
+          onOpenCreate={() => setShowCreateWorkspace(true)}
+          onOpenJoin={() => setShowJoinWorkspace(true)}
+          onOpenSettings={() => setShowWorkspaceSettings(true)}
+        />
         <div className="flex items-center gap-1">
           {/* Theme Toggle */}
           <button
@@ -337,6 +334,18 @@ export default function Sidebar({ onClose, onToggleAllThreads }) {
 
       {showStatusModal && (
         <SetStatusModal onClose={() => setShowStatusModal(false)} />
+      )}
+
+      {showCreateWorkspace && (
+        <CreateWorkspaceModal onClose={() => setShowCreateWorkspace(false)} />
+      )}
+
+      {showJoinWorkspace && (
+        <JoinWorkspaceModal onClose={() => setShowJoinWorkspace(false)} />
+      )}
+
+      {showWorkspaceSettings && (
+        <WorkspaceSettingsModal onClose={() => setShowWorkspaceSettings(false)} />
       )}
     </nav>
   )

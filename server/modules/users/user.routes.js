@@ -8,6 +8,7 @@ import {
   searchUsers,
 } from './user.controller.js';
 import { protect } from '../auth/auth.middleware.js';
+import { resolveWorkspace } from '../../middleware/workspaceContext.js';
 
 const router = Router();
 
@@ -25,8 +26,8 @@ const router = Router();
  */
 
 // Search & list routes (must come before :id param route)
-router.get('/search', protect, searchUsers);
-router.get('/online', protect, getOnlineUsers);
+router.get('/search', protect, resolveWorkspace, searchUsers);
+router.get('/online', protect, resolveWorkspace, getOnlineUsers);
 
 // Custom status
 router.put('/status', protect, setCustomStatus);

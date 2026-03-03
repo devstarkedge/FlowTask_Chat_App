@@ -7,6 +7,14 @@ const { Schema, model } = mongoose;
  * Separates the file storage logic from the context of where the file is used.
  */
 const fileAssetSchema = new Schema({
+  // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────────
+  workspaceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Workspace',
+    required: true,
+    index: true,
+  },
+
   publicId: { 
     type: String, 
     required: true, 
@@ -69,7 +77,10 @@ const fileAssetSchema = new Schema({
   timestamps: true,
 });
 
-fileAssetSchema.index({ uploadedBy: 1, createdAt: -1 });
+// Workspace-scoped indexes
+fileAssetSchema.index({ workspaceId: 1, uploadedBy: 1, createdAt: -1 });
+fileAssetSchema.index({ workspaceId: 1, checksumHash: 1 });
+fileAssetSchema.index({ workspaceId: 1, status: 1 });
 
 const FileAsset = model('FileAsset', fileAssetSchema);
 

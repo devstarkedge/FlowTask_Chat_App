@@ -25,16 +25,16 @@ class BotNotifier {
    * @param {string} message - Formatted message content
    * @param {object} [flowTaskRef] - Optional FlowTask entity reference
    */
-  async notifyAdmins(message, flowTaskRef = null) {
+  async notifyAdmins(message, flowTaskRef = null, workspaceId = null) {
     try {
-      const adminChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ADMIN.slug);
+      const adminChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ADMIN.slug, workspaceId);
       if (!adminChannel) {
-        logger.warn('BotNotifier: #admin channel not found');
+        logger.warn('BotNotifier: #admin channel not found', { workspaceId });
         return;
       }
-      await messageService.sendSystemMessage(adminChannel._id, message, flowTaskRef);
+      await messageService.sendSystemMessage(adminChannel._id, message, flowTaskRef, workspaceId);
     } catch (error) {
-      logger.error('BotNotifier: Failed to notify admins', { error: error.message });
+      logger.error('BotNotifier: Failed to notify admins', { error: error.message, workspaceId });
     }
   }
 
@@ -43,16 +43,16 @@ class BotNotifier {
    * @param {string} message - Formatted message content
    * @param {object} [flowTaskRef] - Optional FlowTask entity reference
    */
-  async notifyManagers(message, flowTaskRef = null) {
+  async notifyManagers(message, flowTaskRef = null, workspaceId = null) {
     try {
-      const managersChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.MANAGERS.slug);
+      const managersChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.MANAGERS.slug, workspaceId);
       if (!managersChannel) {
-        logger.warn('BotNotifier: #managers channel not found');
+        logger.warn('BotNotifier: #managers channel not found', { workspaceId });
         return;
       }
-      await messageService.sendSystemMessage(managersChannel._id, message, flowTaskRef);
+      await messageService.sendSystemMessage(managersChannel._id, message, flowTaskRef, workspaceId);
     } catch (error) {
-      logger.error('BotNotifier: Failed to notify managers', { error: error.message });
+      logger.error('BotNotifier: Failed to notify managers', { error: error.message, workspaceId });
     }
   }
 
@@ -61,44 +61,50 @@ class BotNotifier {
    * @param {string} message - Formatted message content
    * @param {object} [flowTaskRef] - Optional FlowTask entity reference
    */
-  async notifyAnnouncements(message, flowTaskRef = null) {
+  async notifyAnnouncements(message, flowTaskRef = null, workspaceId = null) {
     try {
-      const channel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ANNOUNCEMENTS.slug);
+      const channel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ANNOUNCEMENTS.slug, workspaceId);
       if (!channel) {
-        logger.warn('BotNotifier: #announcements channel not found');
+        logger.warn('BotNotifier: #announcements channel not found', { workspaceId });
         return;
       }
-      await messageService.sendSystemMessage(channel._id, message, flowTaskRef);
+      await messageService.sendSystemMessage(channel._id, message, flowTaskRef, workspaceId);
     } catch (error) {
-      logger.error('BotNotifier: Failed to notify announcements', { error: error.message });
+      logger.error('BotNotifier: Failed to notify announcements', { error: error.message, workspaceId });
     }
   }
 
   /**
    * Route a project-created notification to admin and managers channels.
    */
-  async onProjectCreated(boardName, creatorName, departmentName) {
+  async onProjectCreated(boardName, creatorName, departmentName, workspaceId = null) {
     const ref = { entityType: 'board' };
     await this.notifyAdmins(
       `📋 New project created: **${boardName}** by ${creatorName}${departmentName ? ` (${departmentName})` : ''}`,
       ref,
+      workspaceId,
     );
     await this.notifyManagers(
       `📋 New project: **${boardName}**${departmentName ? ` in ${departmentName}` : ''} — created by ${creatorName}`,
       ref,
+      workspaceId,
     );
   }
 
   /**
    * Route a user-verified notification to admin and managers channels.
    */
-  async onUserVerified(userName, email, role, departmentName) {
+  async onUserVerified(userName, email, role, departmentName, workspaceId = null) {
     await this.notifyAdmins(
       `✅ User verified: **${userName}** (${email}), Role: ${role}`,
+      null,
+      workspaceId,
     );
     if (departmentName) {
       await this.notifyManagers(
         `✅ New verified user **${userName}** joined **${departmentName}**`,
+        null,
+        workspaceId,
       );
     }
   }
@@ -106,10 +112,11 @@ class BotNotifier {
   /**
    * Route an announcement notification to admin channel (in addition to #announcements).
    */
-  async onAnnouncementCreated(title, authorName) {
+  async onAnnouncementCreated(title, authorName, workspaceId = null) {
     await this.notifyAdmins(
       `📢 New announcement: **${title}** by ${authorName}`,
       { entityType: 'announcement' },
+      workspaceId,
     );
   }
 }

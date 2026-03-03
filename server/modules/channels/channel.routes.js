@@ -14,6 +14,7 @@ import {
   getChannelMembers,
 } from './channel.controller.js';
 import { protect, requireChannelAccess } from '../auth/auth.middleware.js';
+import { resolveWorkspace } from '../../middleware/workspaceContext.js';
 import { validate } from '../../middleware/validate.js';
 import { createChannelSchema, updateChannelSchema, createDMSchema } from '../../middleware/schemas.js';
 
@@ -36,6 +37,7 @@ const router = Router();
  */
 
 router.use(protect);
+router.use(resolveWorkspace);
 
 router.get('/', getChannels);
 router.get('/search', searchChannels);

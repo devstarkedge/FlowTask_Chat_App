@@ -21,23 +21,23 @@ import { FLOWTASK_EVENTS } from '../../../config/constants.js';
 export function registerTaskEventHandlers() {
   // ─── task.created ──────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_CREATED, async (payload) => {
-    const { card, boardId, userId } = payload;
+    const { card, boardId, userId, _workspaceId: wsId } = payload;
 
     if (!card || !boardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId);
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
     if (!channel) {
       logger.debug('task.created: no project channel', { boardId });
       return;
     }
 
-    const creator = userId ? await userRepository.findByFlowTaskId(userId) : null;
+    const creator = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const creatorName = creator?.name || 'Someone';
 
     const priority = card.priority ? ` [${card.priority}]` : '';
     const assignee = card.assignedTo
       ? await userRepository.findByFlowTaskId(
-        typeof card.assignedTo === 'string' ? card.assignedTo : card.assignedTo._id,
+        typeof card.assignedTo === 'string' ? card.assignedTo : card.assignedTo._id, wsId,
       )
       : null;
 
@@ -52,19 +52,19 @@ export function registerTaskEventHandlers() {
     await messageService.sendSystemMessage(channel._id, msg, {
       entityType: 'task',
       entityId: card._id,
-    });
+    }, wsId);
   });
 
   // ─── task.updated ──────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_UPDATED, async (payload) => {
-    const { card, boardId, changes, userId } = payload;
+    const { card, boardId, changes, userId, _workspaceId: wsId } = payload;
 
     if (!card || !boardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId);
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
     if (!channel) return;
 
-    const user = userId ? await userRepository.findByFlowTaskId(userId) : null;
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const userName = user?.name || 'Someone';
 
     // Build change summary
@@ -82,37 +82,39 @@ export function registerTaskEventHandlers() {
     await messageService.sendSystemMessage(channel._id, msg, {
       entityType: 'task',
       entityId: card._id,
-    });
+    }, wsId);
   });
 
   // ─── task.deleted ──────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_DELETED, async (payload) => {
-    const { cardId, cardTitle, boardId, userId } = payload;
+    const { cardId, cardTitle, boardId, userId, _workspaceId: wsId } = payload;
 
     if (!boardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId);
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
     if (!channel) return;
 
-    const user = userId ? await userRepository.findByFlowTaskId(userId) : null;
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const title = cardTitle || cardId || 'a task';
 
     await messageService.sendSystemMessage(
       channel._id,
       `🗑️ ${user?.name || 'Someone'} deleted task: **${title}**`,
+      undefined,
+      wsId,
     );
   });
 
   // ─── task.assigned ─────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_ASSIGNED, async (payload) => {
-    const { card, boardId, assigneeId, assignerId } = payload;
+    const { card, boardId, assigneeId, assignerId, _workspaceId: wsId } = payload;
 
     if (!card || !assigneeId) return;
 
     const [assignee, assigner, channel] = await Promise.all([
-      userRepository.findByFlowTaskId(assigneeId),
-      assignerId ? userRepository.findByFlowTaskId(assignerId) : null,
-      boardId ? channelRepository.findByFlowTaskRef('board', boardId) : null,
+      userRepository.findByFlowTaskId(assigneeId, wsId),
+      assignerId ? userRepository.findByFlowTaskId(assignerId, wsId) : null,
+      boardId ? channelRepository.findByFlowTaskRef('board', boardId, wsId) : null,
     ]);
 
     if (!assignee) return;
@@ -123,20 +125,21 @@ export function registerTaskEventHandlers() {
         channel._id,
         `👤 ${assigner?.name || 'Someone'} assigned **${card.title}** to ${assignee.name}`,
         { entityType: 'task', entityId: card._id },
+        wsId,
       );
     }
   });
 
   // ─── task.commented ────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_COMMENTED, async (payload) => {
-    const { comment, card, boardId, userId } = payload;
+    const { comment, card, boardId, userId, _workspaceId: wsId } = payload;
 
     if (!comment || !card || !boardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId);
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
     if (!channel) return;
 
-    const user = userId ? await userRepository.findByFlowTaskId(userId) : null;
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const commentText = typeof comment === 'string'
       ? comment
       : comment.text || comment.content || '';
@@ -152,19 +155,20 @@ export function registerTaskEventHandlers() {
       channel._id,
       `💬 ${user?.name || 'Someone'} commented on **${card.title}**: "${preview}"`,
       { entityType: 'task', entityId: card._id },
+      wsId,
     );
   });
 
   // ─── task.status_changed ───────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_STATUS_CHANGED, async (payload) => {
-    const { card, boardId, oldStatus, newStatus, userId } = payload;
+    const { card, boardId, oldStatus, newStatus, userId, _workspaceId: wsId } = payload;
 
     if (!card || !boardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId);
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
     if (!channel) return;
 
-    const user = userId ? await userRepository.findByFlowTaskId(userId) : null;
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const userName = user?.name || 'Someone';
 
     // Status emoji mapping
@@ -187,13 +191,14 @@ export function registerTaskEventHandlers() {
       channel._id,
       `${emoji} ${userName} changed **${card.title}** status: ${from} → ${to}`,
       { entityType: 'task', entityId: card._id },
+      wsId,
     );
 
     // Auto-resolve thread if task is completed
     if (['completed', 'done'].includes((newStatus || '').toLowerCase())) {
       try {
         const taskId = card._id || card.id;
-        const thread = await threadRepository.findByTaskId(taskId);
+        const thread = await threadRepository.findByTaskId(taskId, wsId);
         if (thread && !thread.isResolved) {
           await threadRepository.resolve(thread._id, null);
           logger.info('Auto-resolved thread for completed task', { threadId: thread._id, taskId });
@@ -206,14 +211,14 @@ export function registerTaskEventHandlers() {
 
   // ─── task.due_date_changed ─────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_DUE_DATE_CHANGED, async (payload) => {
-    const { card, boardId, oldDueDate, newDueDate, userId } = payload;
+    const { card, boardId, oldDueDate, newDueDate, userId, _workspaceId: wsId } = payload;
 
     if (!card || !boardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId);
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
     if (!channel) return;
 
-    const user = userId ? await userRepository.findByFlowTaskId(userId) : null;
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const userName = user?.name || 'Someone';
 
     const oldDate = oldDueDate ? new Date(oldDueDate).toLocaleDateString() : 'none';
@@ -227,6 +232,7 @@ export function registerTaskEventHandlers() {
       channel._id,
       `📅 ${userName} changed due date for **${card.title}**: ${oldDate} → ${newDate}${warning}`,
       { entityType: 'task', entityId: card._id },
+      wsId,
     );
   });
 
@@ -235,14 +241,14 @@ export function registerTaskEventHandlers() {
 
   // ─── time_entry_added ──────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TIME_ENTRY_ADDED, async (payload) => {
-    const { timeEntry, card, boardId, userId } = payload;
+    const { timeEntry, card, boardId, userId, _workspaceId: wsId } = payload;
 
     if (!timeEntry || !boardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId);
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
     if (!channel) return;
 
-    const user = userId ? await userRepository.findByFlowTaskId(userId) : null;
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const userName = user?.name || 'Someone';
 
     // Format duration
@@ -262,6 +268,7 @@ export function registerTaskEventHandlers() {
       channel._id,
       `⏱️ ${userName} logged **${durationStr}** on **${taskTitle}**${description}`,
       { entityType: 'task', entityId: card?._id || timeEntry.cardId },
+      wsId,
     );
   });
 

@@ -21,18 +21,18 @@ class AuthService {
 
   /**
    * Register a new native user.
-   * @param {{ name: string, email: string, password: string }} data
+   * @param {{ name: string, email: string, password: string, workspaceId?: string }} data
    * @returns {Promise<{ chatUser: object, message: string }>}
    */
-  async register({ name, email, password }) {
+  async register({ name, email, password, workspaceId }) {
     // Check for existing user
-    const existing = await userRepository.findByEmailPublic(email);
+    const existing = await userRepository.findByEmailPublic(email, workspaceId);
     if (existing) {
       throw new ValidationError('An account with this email already exists');
     }
 
     // Create user
-    const chatUser = await userRepository.createNativeUser({ name, email, password });
+    const chatUser = await userRepository.createNativeUser({ name, email, password, workspaceId });
 
     // Generate verification token
     const verificationToken = tokenService.generateRandomToken();
@@ -55,12 +55,12 @@ class AuthService {
 
   /**
    * Login a native user with email and password.
-   * @param {{ email: string, password: string, userAgent?: string }} data
+   * @param {{ email: string, password: string, userAgent?: string, workspaceId?: string }} data
    * @returns {Promise<{ chatUser: object, accessToken: string, refreshToken: string }>}
    */
-  async loginNative({ email, password, userAgent = '' }) {
+  async loginNative({ email, password, userAgent = '', workspaceId }) {
     // Find user with password field
-    const user = await userRepository.findByEmail(email);
+    const user = await userRepository.findByEmail(email, workspaceId);
     if (!user) {
       throw new UnauthorizedError('Invalid email or password');
     }
@@ -96,8 +96,8 @@ class AuthService {
       : undefined;
 
     // Issue tokens
-    const accessToken = tokenService.issueAccessToken({ id: user._id.toString(), role: user.role });
-    const refreshToken = tokenService.issueRefreshToken({ id: user._id.toString() });
+    const accessToken = tokenService.issueAccessToken({ id: user._id.toString(), role: user.role, workspaceId });
+    const refreshToken = tokenService.issueRefreshToken({ id: user._id.toString(), workspaceId });
 
     // Store hashed refresh token
     await userRepository.addRefreshToken(user._id, {
@@ -128,10 +128,10 @@ class AuthService {
    * Verifies the token with FLOWTASK_JWT_SECRET, fetches user from FlowTask API,
    * upserts ChatUser, and issues Chat-specific tokens.
    *
-   * @param {{ token: string, userAgent?: string }} data
+   * @param {{ token: string, userAgent?: string, workspaceId?: string }} data
    * @returns {Promise<{ chatUser: object, accessToken: string, refreshToken: string }>}
    */
-  async loginFlowTask({ token, userAgent = '' }) {
+  async loginFlowTask({ token, userAgent = '', workspaceId }) {
     if (!env.FLOWTASK_ENABLED) {
       throw new UnauthorizedError('FlowTask integration is disabled');
     }
@@ -165,11 +165,11 @@ class AuthService {
     }
 
     // 4. Upsert ChatUser
-    const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser);
+    const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser, workspaceId);
 
     // 5. Issue Chat tokens
-    const accessToken = tokenService.issueAccessToken({ id: chatUser._id.toString(), role: chatUser.role });
-    const refreshToken = tokenService.issueRefreshToken({ id: chatUser._id.toString() });
+    const accessToken = tokenService.issueAccessToken({ id: chatUser._id.toString(), role: chatUser.role, workspaceId });
+    const refreshToken = tokenService.issueRefreshToken({ id: chatUser._id.toString(), workspaceId });
 
     // 6. Store hashed refresh token
     await userRepository.addRefreshToken(chatUser._id, {
@@ -227,8 +227,8 @@ class AuthService {
     await userRepository.removeRefreshToken(user._id, tokenHash);
 
     // Issue new token pair
-    const newAccessToken = tokenService.issueAccessToken({ id: user._id.toString(), role: user.role });
-    const newRefreshToken = tokenService.issueRefreshToken({ id: user._id.toString() });
+    const newAccessToken = tokenService.issueAccessToken({ id: user._id.toString(), role: user.role, workspaceId: decoded.workspaceId });
+    const newRefreshToken = tokenService.issueRefreshToken({ id: user._id.toString(), workspaceId: decoded.workspaceId });
 
     // Store new hashed refresh token
     await userRepository.addRefreshToken(user._id, {
@@ -359,9 +359,10 @@ class AuthService {
   /**
    * Sync (or create) a ChatUser from FlowTask. (Legacy — used by syncUser controller)
    * @param {string} token - FlowTask JWT
+   * @param {string} [workspaceId]
    * @returns {Promise<{chatUser: object}>}
    */
-  async syncFlowTaskUser(token) {
+  async syncFlowTaskUser(token, workspaceId) {
     if (!env.FLOWTASK_ENABLED) {
       throw new UnauthorizedError('FlowTask integration is disabled');
     }
@@ -391,7 +392,7 @@ class AuthService {
       throw new UnauthorizedError('FlowTask account is deactivated');
     }
 
-    const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser);
+    const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser, workspaceId);
 
     logger.info('FlowTask user synced', {
       chatUserId: chatUser._id,
@@ -406,10 +407,11 @@ class AuthService {
    * Get or create a ChatUser from a FlowTask user ID.
    * Used when processing webhook events.
    * @param {string} flowTaskUserId
+   * @param {string} [workspaceId]
    * @returns {Promise<object|null>}
    */
-  async getOrCreateChatUser(flowTaskUserId) {
-    return userRepository.findByFlowTaskId(flowTaskUserId);
+  async getOrCreateChatUser(flowTaskUserId, workspaceId) {
+    return userRepository.findByFlowTaskId(flowTaskUserId, workspaceId);
   }
 
   /**

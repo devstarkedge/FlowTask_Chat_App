@@ -97,6 +97,21 @@ export const USER_ROLES = Object.freeze({
   EMPLOYEE: 'employee',
 });
 
+// ─── Workspace Roles ─────────────────────────────────────────────────────────
+export const WORKSPACE_ROLES = Object.freeze({
+  OWNER: 'owner',
+  ADMIN: 'admin',
+  MEMBER: 'member',
+  GUEST: 'guest',
+});
+
+// ─── Workspace Plan Limits ───────────────────────────────────────────────────
+export const WORKSPACE_LIMITS = Object.freeze({
+  free: { maxMembers: 50, maxChannels: 20, maxFileSize: 5 * 1024 * 1024 },
+  pro: { maxMembers: 500, maxChannels: -1, maxFileSize: 25 * 1024 * 1024 },
+  enterprise: { maxMembers: -1, maxChannels: -1, maxFileSize: 100 * 1024 * 1024 },
+});
+
 // ─── System Channel Slugs ────────────────────────────────────────────────────
 export const SYSTEM_CHANNELS = Object.freeze({
   GENERAL: { slug: 'flowtask-general', name: 'General', description: 'Company-wide general discussion', visibility: 'public' },
@@ -207,3 +222,19 @@ export const CHANNEL_NAME = Object.freeze({
   DEPT_PREFIX: 'flowtask-dept-',
   TEAM_PREFIX: 'flowtask-team-',
 });
+
+// ─── Workspace-Scoped Socket Room Helpers ────────────────────────────────────
+export const ROOM_PREFIX = Object.freeze({
+  WORKSPACE: 'ws',
+  USER: 'user',
+  CHANNEL: 'channel',
+  DEPARTMENT: 'dept',
+});
+
+/**
+ * Build workspace-scoped room names for Socket.IO.
+ * All rooms are prefixed with ws:{workspaceId}: to prevent cross-workspace leakage.
+ */
+export function buildRoomName(workspaceId, type, id) {
+  return `${ROOM_PREFIX.WORKSPACE}:${workspaceId}:${type}:${id}`;
+}

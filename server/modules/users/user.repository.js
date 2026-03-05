@@ -338,6 +338,32 @@ class UserRepository {
   }
 
   /**
+   * Get all active users for a workspace (for DM contacts list).
+   * Supports optional search filtering by name or email.
+   * Uses lean() for read-only performance.
+   *
+   * @param {string} workspaceId - Required workspace scope
+   * @param {string} [searchQuery] - Optional name/email filter
+   * @returns {Promise<object[]>}
+   */
+  async findAllForWorkspace(workspaceId, searchQuery) {
+    if (!workspaceId) {
+      throw new Error('findAllForWorkspace requires a valid workspaceId');
+    }
+    const filter = { workspaceId, isActive: true };
+
+    if (searchQuery && searchQuery.trim().length >= 1) {
+      const regex = new RegExp(searchQuery.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$or = [{ name: regex }, { email: regex }];
+    }
+
+    return ChatUser.find(filter)
+      .select('name email avatar flowTaskUserId onlineStatus role')
+      .sort({ name: 1 })
+      .lean();
+  }
+
+  /**
    * Deactivate a user.
    * @param {string} flowTaskUserId
    * @returns {Promise<ChatUser|null>}

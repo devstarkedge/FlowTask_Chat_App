@@ -146,6 +146,20 @@ export const searchMessages = asyncHandler(async (req, res) => {
 });
 
 /**
+ * POST /api/chat/channels/:channelId/seen
+ * Mark all DM messages in a channel as seen by the current user.
+ * REST fallback for when socket is unavailable.
+ */
+export const markDMSeen = asyncHandler(async (req, res) => {
+  const { channelId } = req.params;
+  const userId = req.user._id;
+
+  await messageService.markDMMessagesAsSeen(channelId, userId);
+
+  res.json({ success: true, data: { channelId, status: 'seen' } });
+});
+
+/**
  * POST /api/chat/channels/:channelId/upload
  * Upload files to a channel. Returns file metadata for attaching to messages.
  */

@@ -26,6 +26,10 @@ class ChannelService {
    * Called by webhook handler on project.created.
    */
   async createProjectChannel(board, creatorFlowTaskId, workspaceId) {
+    if (!workspaceId) {
+      throw new ValidationError('workspaceId is required to create a project channel');
+    }
+
     const boardId = board._id || board.id;
     const boardName = board.name || board.title;
     const deptName = typeof board.department === 'object'
@@ -63,7 +67,7 @@ class ChannelService {
         : CHANNEL_VISIBILITY.PRIVATE,
       members,
       memberCount: members.length,
-      ...(workspaceId && { workspaceId }),
+      workspaceId,
     });
 
     logger.info('Project channel created', {
@@ -79,6 +83,10 @@ class ChannelService {
    * Create or get a department channel.
    */
   async getOrCreateDepartmentChannel(departmentId, departmentName, workspaceId) {
+    if (!workspaceId) {
+      throw new ValidationError('workspaceId is required to create a department channel');
+    }
+
     const existing = await channelRepository.findByFlowTaskRef('department', departmentId, workspaceId);
     if (existing) return existing;
 
@@ -95,7 +103,7 @@ class ChannelService {
       visibility: CHANNEL_VISIBILITY.PRIVATE,
       members: [],
       memberCount: 0,
-      ...(workspaceId && { workspaceId }),
+      workspaceId,
     });
 
     logger.info('Department channel created', {
@@ -111,6 +119,10 @@ class ChannelService {
    * Create or get a team channel.
    */
   async getOrCreateTeamChannel(teamId, teamName, workspaceId) {
+    if (!workspaceId) {
+      throw new ValidationError('workspaceId is required to create a team channel');
+    }
+
     const existing = await channelRepository.findByFlowTaskRef('team', teamId, workspaceId);
     if (existing) return existing;
 
@@ -127,7 +139,7 @@ class ChannelService {
       visibility: CHANNEL_VISIBILITY.PRIVATE,
       members: [],
       memberCount: 0,
-      ...(workspaceId && { workspaceId }),
+      workspaceId,
     });
 
     logger.info('Team channel created', { channelId: channel._id, slug, teamId });
@@ -136,13 +148,35 @@ class ChannelService {
 
   /**
    * Create or get a DM channel between two users.
+   * Both user IDs must be valid ChatUser _id values within the same workspace.
+   *
+   * @param {string} user1Id - ChatUser _id of the initiating user
+   * @param {string} user2Id - ChatUser _id of the target user
+   * @param {string} workspaceId - Workspace scope (required)
+   * @returns {Promise<Channel>}
    */
   async getOrCreateDM(user1Id, user2Id, workspaceId) {
-    const ids = [user1Id.toString(), user2Id.toString()].sort();
+    // ── Workspace is mandatory for DM creation (multi-tenant isolation) ──
+    if (!workspaceId) {
+      throw new ValidationError('workspaceId is required to create a DM channel');
+    }
 
-    const existing = await channelRepository.findDMChannel(ids[0], ids[1], workspaceId);
+    const id1 = user1Id.toString();
+    const id2 = user2Id.toString();
+
+    // ── Prevent self-DM ──
+    if (id1 === id2) {
+      throw new ValidationError('Cannot create a DM conversation with yourself');
+    }
+
+    // ── Canonical ID ordering for deterministic dedup ──
+    const ids = [id1, id2].sort();
+
+    // ── Check for existing DM channel (pass as array — matches repository signature) ──
+    const existing = await channelRepository.findDMChannel(ids, workspaceId);
     if (existing) return existing;
 
+    // ── Validate both users exist in ChatApp within this workspace ──
     const [user1, user2] = await Promise.all([
       userRepository.findById(ids[0]),
       userRepository.findById(ids[1]),
@@ -150,6 +184,11 @@ class ChannelService {
 
     if (!user1 || !user2) {
       throw new NotFoundError('One or both users not found');
+    }
+
+    // ── Verify both users belong to the same workspace ──
+    if (user1.workspaceId?.toString() !== workspaceId || user2.workspaceId?.toString() !== workspaceId) {
+      throw new ForbiddenError('Both users must belong to the same workspace');
     }
 
     const channel = await channelRepository.create({
@@ -163,19 +202,63 @@ class ChannelService {
         { userId: ids[1], role: CHANNEL_MEMBER_ROLES.MEMBER },
       ],
       memberCount: 2,
-      ...(workspaceId && { workspaceId }),
+      workspaceId,
     });
 
-    // Auto-join both users to the channel room
-    joinChannelRoom(ids[0], channel._id.toString());
-    joinChannelRoom(ids[1], channel._id.toString());
+    // Auto-join both users to the workspace-scoped channel room
+    joinChannelRoom(ids[0], channel._id.toString(), workspaceId);
+    joinChannelRoom(ids[1], channel._id.toString(), workspaceId);
 
     logger.info('DM channel created', {
       channelId: channel._id,
       participants: ids,
+      workspaceId,
     });
 
     return channel;
+  }
+
+  /**
+   * Resolve a target user identifier to a ChatUser _id.
+   * Accepts either a ChatUser _id (ObjectId) or a flowTaskUserId string.
+   * Validates the target exists within the given workspace.
+   *
+   * @param {string} targetUserId - ChatUser _id or flowTaskUserId
+   * @param {string} workspaceId - Workspace scope
+   * @param {string} workspaceName - Workspace display name (for error messages)
+   * @returns {Promise<{ chatUserId: string, user: object }>}
+   */
+  async resolveAndValidateDMTarget(targetUserId, workspaceId, workspaceName) {
+    let targetUser = null;
+
+    // Strategy 1: Try as a ChatUser _id (24-char hex ObjectId)
+    if (/^[0-9a-fA-F]{24}$/.test(targetUserId)) {
+      targetUser = await userRepository.findById(targetUserId);
+      // Verify workspace match
+      if (targetUser && targetUser.workspaceId?.toString() !== workspaceId) {
+        targetUser = null;
+      }
+    }
+
+    // Strategy 2: Try as a flowTaskUserId (if not found above)
+    if (!targetUser) {
+      targetUser = await userRepository.findByFlowTaskId(targetUserId, workspaceId);
+    }
+
+    // ── Target user does not exist in this workspace's ChatApp ──
+    if (!targetUser) {
+      throw new NotFoundError(
+        `User '${targetUserId}' not found in workspace '${workspaceName || workspaceId}'.`
+      );
+    }
+
+    if (!targetUser.isActive) {
+      throw new ForbiddenError(
+        `${targetUser.name}'s account is deactivated in this workspace.`
+      );
+    }
+
+    return { chatUserId: targetUser._id.toString(), user: targetUser };
   }
 
   /**

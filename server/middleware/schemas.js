@@ -76,7 +76,8 @@ export const updateChannelSchema = z.object({
 });
 
 export const createDMSchema = z.object({
-  targetUserId: objectId,
+  // Accept both ChatUser _id (24-char ObjectId) and flowTaskUserId (arbitrary string)
+  targetUserId: z.string().min(1, 'targetUserId is required').max(128),
 });
 
 // ─── Threads ─────────────────────────────────────────────────────────────────

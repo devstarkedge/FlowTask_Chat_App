@@ -139,6 +139,7 @@ export const useChannelStore = create(
 
   createDM: async (targetUserId) => {
     // Deduplication guard: check if DM already exists locally
+    // dmParticipants stores ChatUser _id values consistently
     const existing = get().channels.find(
       (c) => c.type === 'dm' && c.dmParticipants?.includes(targetUserId)
     )
@@ -147,14 +148,26 @@ export const useChannelStore = create(
       return existing
     }
 
-    const { data: res } = await channelAPI.createDM(targetUserId)
-    const channel = res.data.channel
-    set((state) => {
-      if (state.channels.some((c) => c._id === channel._id)) return state
-      return { channels: [...state.channels, channel] }
-    })
-    get().setActiveChannel(channel._id)
-    return channel
+    try {
+      const { data: res } = await channelAPI.createDM(targetUserId)
+      const channel = res.data.channel
+      set((state) => {
+        if (state.channels.some((c) => c._id === channel._id)) return state
+        return { channels: [...state.channels, channel] }
+      })
+      get().setActiveChannel(channel._id)
+      return channel
+    } catch (error) {
+      // Handle USER_NOT_IN_WORKSPACE error with user-friendly message
+      const errorCode = error.response?.data?.error?.code
+      const errorMsg = error.response?.data?.error?.message
+      if (errorCode === 'USER_NOT_IN_WORKSPACE') {
+        toast.error(errorMsg || 'This user has not joined Chat yet.')
+      } else {
+        toast.error(errorMsg || 'Failed to start conversation')
+      }
+      throw error
+    }
   },
 
   // ─── Channel Management ─────────────────────────────────────────────

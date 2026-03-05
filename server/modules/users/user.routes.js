@@ -6,6 +6,7 @@ import {
   setPresence,
   getOnlineUsers,
   searchUsers,
+  getDMContacts,
 } from './user.controller.js';
 import { protect } from '../auth/auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
@@ -26,6 +27,7 @@ const router = Router();
  */
 
 // Search & list routes (must come before :id param route)
+router.get('/dm-contacts', protect, resolveWorkspace, getDMContacts);
 router.get('/search', protect, resolveWorkspace, searchUsers);
 router.get('/online', protect, resolveWorkspace, getOnlineUsers);
 

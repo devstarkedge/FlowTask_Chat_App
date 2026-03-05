@@ -103,9 +103,20 @@ export const archiveChannel = asyncHandler(async (req, res) => {
 /**
  * POST /api/chat/channels/dm
  * Create or get a DM channel between current user and target.
+ *
+ * Validates that:
+ *  1. targetUserId is provided
+ *  2. Target user exists in ChatApp within this workspace
+ *  3. Target user is active
+ *  4. Sender is not messaging themselves
+ *
+ * Returns 403 with USER_NOT_IN_WORKSPACE if target hasn't joined ChatApp.
  */
 export const createDM = asyncHandler(async (req, res) => {
   const { targetUserId } = req.body;
+  const { _id: senderId } = req.user;
+  const workspaceId = req.workspaceId;
+  const workspaceName = req.workspace?.name || '';
 
   if (!targetUserId) {
     return res.status(400).json({
@@ -114,16 +125,48 @@ export const createDM = asyncHandler(async (req, res) => {
     });
   }
 
-  const channel = await channelService.getOrCreateDM(
-    req.user._id,
-    targetUserId,
-    req.workspaceId,
-  );
+  try {
+    // ── Resolve & validate target user exists in this workspace ──
+    const { chatUserId } = await channelService.resolveAndValidateDMTarget(
+      targetUserId,
+      workspaceId,
+      workspaceName,
+    );
 
-  res.status(200).json({
-    success: true,
-    data: { channel },
-  });
+    // ── Create or retrieve existing DM channel ──
+    const channel = await channelService.getOrCreateDM(
+      senderId,
+      chatUserId,
+      workspaceId,
+    );
+
+    res.status(200).json({
+      success: true,
+      data: { channel },
+    });
+  } catch (error) {
+    // Surface user-friendly forbidden errors to the client
+    if (error.name === 'ForbiddenError' || error.statusCode === 403) {
+      const logger = (await import('../../utils/logger.js')).default;
+      logger.warn('DM creation blocked', {
+        senderId: senderId.toString(),
+        targetUserId,
+        workspaceId,
+        reason: 'target_not_in_workspace',
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_IN_WORKSPACE',
+          message: error.message,
+        },
+      });
+    }
+    throw error; // Re-throw other errors to asyncHandler
+  }
 });
 
 /**

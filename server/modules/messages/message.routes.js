@@ -12,6 +12,7 @@ import {
   getPinnedMessages,
   searchMessages,
   uploadFiles,
+  markDMSeen,
 } from './message.controller.js';
 import { protect, requireChannelAccess, requireMessageAccess } from '../auth/auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
@@ -81,4 +82,5 @@ channelMessageRouter.post('/messages', validate({ body: sendMessageSchema }), se
 channelMessageRouter.post('/upload', uploadLimiter, uploadMiddleware, handleMulterError, uploadFiles);
 channelMessageRouter.post('/upload/sign', getUploadSignature);
 channelMessageRouter.get('/pins', getPinnedMessages);
+channelMessageRouter.post('/seen', markDMSeen);
 

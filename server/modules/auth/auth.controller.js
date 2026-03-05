@@ -1,8 +1,25 @@
 import authService from './auth.service.js';
 import channelRepository from '../channels/channel.repository.js';
 import channelService from '../channels/channel.service.js';
+import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
 import asyncHandler from '../../middleware/asyncHandler.js';
 import env from '../../config/environment.js';
+
+/**
+ * Ensure the user has a WorkspaceMembership record for the given workspace.
+ * Called after login/register so subsequent resolveWorkspace checks pass.
+ */
+async function ensureWorkspaceMembership(userId, workspaceId) {
+  if (!workspaceId) return;
+  const existing = await WorkspaceMembership.findOne({
+    userId,
+    workspaceId,
+    isActive: true,
+  }).lean();
+  if (!existing) {
+    await WorkspaceMembership.addMember(userId, workspaceId);
+  }
+}
 
 /**
  * Auth Controller — handles all authentication HTTP endpoints.
@@ -51,6 +68,9 @@ export const login = asyncHandler(async (req, res) => {
     workspaceId: req.workspaceId,
   });
 
+  // Ensure workspace membership exists for subsequent authenticated requests
+  await ensureWorkspaceMembership(chatUser._id, req.workspaceId);
+
   res.status(200).json({
     success: true,
     data: {
@@ -79,6 +99,9 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
     userAgent,
     workspaceId: req.workspaceId,
   });
+
+  // Ensure workspace membership exists for subsequent authenticated requests
+  await ensureWorkspaceMembership(chatUser._id, req.workspaceId);
 
   // Auto-join public system channels
   const systemChannels = await channelRepository.findSystemChannels(req.workspaceId);
@@ -127,6 +150,9 @@ export const syncUser = asyncHandler(async (req, res) => {
   }
 
   const { chatUser } = await authService.syncFlowTaskUser(token, req.workspaceId);
+
+  // Ensure workspace membership exists for subsequent authenticated requests
+  await ensureWorkspaceMembership(chatUser._id, req.workspaceId);
 
   // Auto-join public system channels
   const systemChannels = await channelRepository.findSystemChannels(req.workspaceId);

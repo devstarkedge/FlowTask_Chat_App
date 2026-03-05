@@ -1,10 +1,120 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
 import userService from './user.service.js';
+import flowtaskService from '../flowtask/flowtask.service.js';
+import userRepository from './user.repository.js';
+import logger from '../../utils/logger.js';
 
 /**
- * Get user profile by ID.
- * GET /users/:id
+ * GET /users/dm-contacts
+ * Get merged list of FlowTask + ChatApp users for DM contact search.
+ *
+ * Returns each user with:
+ *  - name, email, avatar, flowTaskUserId
+ *  - chatUserId (if exists in ChatApp)
+ *  - onlineStatus (if in ChatApp)
+ *  - isInChatApp: boolean
+ *
+ * Falls back to ChatApp-only users if FlowTask API fails.
  */
+export const getDMContacts = asyncHandler(async (req, res) => {
+  const { search } = req.query;
+  const workspaceId = req.workspaceId;
+  const currentUser = req.user;
+  const flowTaskToken = req.headers['x-flowtask-token'] || currentUser.flowTaskToken;
+
+  // ── Step 1: Fetch ChatApp users for this workspace (always available) ──
+  const chatUsers = await userRepository.findAllForWorkspace(workspaceId, search);
+
+  // ── Step 2: Try to fetch FlowTask platform users (graceful degradation) ──
+  let flowTaskUsers = [];
+  let flowTaskFetchFailed = false;
+
+  if (flowTaskToken) {
+    try {
+      flowTaskUsers = await flowtaskService.getUsers(
+        search ? { search } : {},
+        flowTaskToken,
+      );
+    } catch (err) {
+      flowTaskFetchFailed = true;
+      logger.warn('Failed to fetch FlowTask users for DM contacts', {
+        error: err.message,
+        workspaceId,
+      });
+    }
+  }
+
+  // ── Step 3: Merge and deduplicate by email ──
+  const contactMap = new Map(); // email -> merged contact
+
+  // First, index ChatApp users by email
+  for (const cu of chatUsers) {
+    const email = cu.email?.toLowerCase();
+    if (!email) continue;
+    // Exclude current user
+    if (cu._id.toString() === currentUser._id.toString()) continue;
+
+    contactMap.set(email, {
+      name: cu.name,
+      email: cu.email,
+      avatar: cu.avatar || null,
+      flowTaskUserId: cu.flowTaskUserId || null,
+      chatUserId: cu._id.toString(),
+      onlineStatus: cu.onlineStatus || 'offline',
+      isInChatApp: true,
+      role: cu.role || 'employee',
+    });
+  }
+
+  // Then, merge in FlowTask users (add those not already in ChatApp)
+  for (const ftu of flowTaskUsers) {
+    const email = ftu.email?.toLowerCase();
+    if (!email) continue;
+    // Exclude current user by flowTaskUserId or email
+    if (ftu._id?.toString() === currentUser.flowTaskUserId) continue;
+    if (ftu.email?.trim().toLowerCase() === currentUser.email?.trim().toLowerCase()) continue;
+
+    if (contactMap.has(email)) {
+      // Already in ChatApp — enrich with FlowTask data if missing
+      const existing = contactMap.get(email);
+      if (!existing.avatar && ftu.avatar) existing.avatar = ftu.avatar;
+      if (!existing.flowTaskUserId && ftu._id) existing.flowTaskUserId = ftu._id.toString();
+    } else {
+      // FlowTask user NOT in ChatApp
+      contactMap.set(email, {
+        name: ftu.name,
+        email: ftu.email,
+        avatar: ftu.avatar || null,
+        flowTaskUserId: ftu._id?.toString() || null,
+        chatUserId: null,
+        onlineStatus: 'offline',
+        isInChatApp: false,
+        role: ftu.role || 'employee',
+      });
+    }
+  }
+
+  // ── Step 4: Sort — ChatApp users first, then alphabetical ──
+  const contacts = Array.from(contactMap.values()).sort((a, b) => {
+    // Available users first
+    if (a.isInChatApp && !b.isInChatApp) return -1;
+    if (!a.isInChatApp && b.isInChatApp) return 1;
+    // Then by name
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  res.json({
+    success: true,
+    data: {
+      contacts,
+      meta: {
+        total: contacts.length,
+        inChatApp: contacts.filter((c) => c.isInChatApp).length,
+        flowTaskFetchFailed,
+      },
+    },
+  });
+});
 export const getProfile = asyncHandler(async (req, res) => {
   const profile = await userService.getProfile(req.params.id);
   res.json({ success: true, data: profile });

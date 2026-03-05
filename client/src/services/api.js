@@ -139,6 +139,8 @@ export const messageAPI = {
   unpin: (id) => api.delete(`/messages/${id}/pin`),
   getPinned: (channelId) => api.get(`/channels/${channelId}/pins`),
   search: (q, channelId) => api.get('/messages/search', { params: { q, channelId } }),
+  // Mark DM messages as seen (REST fallback when socket unavailable)
+  markDMSeen: (channelId) => api.post(`/channels/${channelId}/seen`),
   uploadFiles: (channelId, formData) => api.post(`/channels/${channelId}/upload`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 60000,
@@ -179,8 +181,8 @@ export const userAPI = {
   getOnline: () => api.get('/users/online'),
   setCustomStatus: (status) => api.put('/users/status', status),
   clearCustomStatus: () => api.delete('/users/status'),
-  setPresence: (status) => api.put('/users/presence', { status }),
-}
+  setPresence: (status) => api.put('/users/presence', { status }),  // DM contacts: merged FlowTask + ChatApp users with availability badges
+  getDMContacts: (search) => api.get('/users/dm-contacts', { params: { search } }),}
 
 // ─── Workspaces ──────────────────────────────────────────────────────────
 export const workspaceAPI = {

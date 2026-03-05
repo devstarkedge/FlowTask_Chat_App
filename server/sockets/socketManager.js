@@ -259,6 +259,31 @@ export async function initializeSocket(httpServer, corsOptions) {
           socket.emit('error', { message: 'Channel not found' });
           return;
         }
+
+        // ── Cross-workspace isolation: prevent joining channels from other workspaces ──
+        if (wsId && channel.workspaceId && channel.workspaceId.toString() !== wsId) {
+          logger.warn('Socket cross-workspace join attempt blocked', {
+            userId, channelId, socketWorkspace: wsId,
+            channelWorkspace: channel.workspaceId.toString(),
+          });
+          socket.emit('error', { message: 'Access denied: cross-workspace channel' });
+          return;
+        }
+
+        // ── DM channels: strict participant check ──
+        if (channel.type === 'dm') {
+          const userIdStr = userId.toString();
+          const isMember = channel.hasMember(user._id);
+          const isParticipant = channel.dmParticipants?.map(p => p.toString()).includes(userIdStr);
+          if (!isMember && !isParticipant) {
+            socket.emit('error', { message: 'Not a participant of this DM' });
+            return;
+          }
+          const joinRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+          socket.join(joinRoom);
+          return;
+        }
+
         // Public non-DM channels are accessible to all authenticated users
         if (channel.visibility === 'public' && channel.type !== 'dm') {
           const joinRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
@@ -275,6 +300,27 @@ export async function initializeSocket(httpServer, corsOptions) {
       } catch (error) {
         logger.error('Socket channel:join failed', { userId, channelId, error: error.message });
         socket.emit('error', { message: 'Failed to join channel' });
+      }
+    });
+
+    // ── DM: Mark messages as seen (wires up messageService.markDMMessagesAsSeen) ──
+    socket.on('dm:markSeen', async ({ channelId }) => {
+      if (isSocketRateLimited(socket.id)) return;
+      if (!channelId) return;
+      try {
+        // Verify the user is a participant of this DM channel before marking seen
+        const channel = await channelRepository.findById(channelId);
+        if (!channel || channel.type !== 'dm') return;
+        if (wsId && channel.workspaceId?.toString() !== wsId) return;
+        const userIdStr = userId.toString();
+        const isParticipant = channel.dmParticipants?.map(p => p.toString()).includes(userIdStr);
+        if (!isParticipant) return;
+
+        // Lazy import to avoid circular dependency
+        const { default: messageService } = await import('../modules/messages/message.service.js');
+        await messageService.markDMMessagesAsSeen(channelId, userId);
+      } catch (error) {
+        logger.error('Socket dm:markSeen failed', { userId, channelId, error: error.message });
       }
     });
 

@@ -104,14 +104,14 @@ export const resolveDefaultWorkspace = async (req, res, next) => {
       return next();
     }
 
-    // Auto-resolve to default workspace for FlowTask users
-    if (req.user?.authProvider === 'flowtask') {
-      const defaultWorkspace = await Workspace.findBySlug(env.DEFAULT_WORKSPACE_SLUG);
-      if (defaultWorkspace) {
-        req.workspaceId = defaultWorkspace._id.toString();
-        req.workspace = defaultWorkspace;
+    // Auto-resolve to default workspace
+    const defaultWorkspace = await Workspace.findBySlug(env.DEFAULT_WORKSPACE_SLUG);
+    if (defaultWorkspace) {
+      req.workspaceId = defaultWorkspace._id.toString();
+      req.workspace = defaultWorkspace;
 
-        // Check/create membership
+      // If user is authenticated, check/create membership
+      if (req.user) {
         let membership = await WorkspaceMembership.findOne({
           userId: req.user._id,
           workspaceId: defaultWorkspace._id,
@@ -119,10 +119,10 @@ export const resolveDefaultWorkspace = async (req, res, next) => {
         }).lean();
 
         if (!membership) {
-          // Auto-join FlowTask users to the default workspace
+          // Auto-join users to the default workspace
           membership = await WorkspaceMembership.addMember(
-            defaultWorkspace._id,
             req.user._id,
+            defaultWorkspace._id,
             WORKSPACE_ROLES.MEMBER,
           );
           membership = membership.toObject();

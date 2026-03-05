@@ -263,6 +263,41 @@ class FlowTaskService {
   }
 
   /**
+   * Get all users from FlowTask platform.
+   * Supports search filtering. Uses cache and circuit breaker.
+   *
+   * @param {object} [filters] - { search, department, team, role }
+   * @param {string} token - FlowTask JWT token
+   * @returns {Promise<object[]>} Array of FlowTask user objects
+   */
+  async getUsers(filters = {}, token) {
+    try {
+      const params = new URLSearchParams();
+      if (filters.search) params.set('search', filters.search);
+      if (filters.department) params.set('department', filters.department);
+      if (filters.team) params.set('team', filters.team);
+      if (filters.role) params.set('role', filters.role);
+      const queryString = params.toString();
+      const path = `/api/users${queryString ? `?${queryString}` : ''}`;
+      const result = await this.get(path, token);
+      // FlowTask returns { success: true, data: { users: [...] } } or just an array
+      const users = result.data?.users || result.users || result.data || [];
+      return Array.isArray(users) ? users : [];
+    } catch (error) {
+      // If the user doesn't have admin/HR permissions, FlowTask returns 403
+      // Gracefully return empty array — DM contacts will fall back to ChatApp users only
+      if (error.response?.status === 403) {
+        logger.warn('FlowTask getUsers: insufficient permissions, falling back to ChatApp users', {
+          status: error.response.status,
+        });
+        return [];
+      }
+      logger.error('FlowTask getUsers failed', { error: error.message });
+      return []; // Graceful degradation — never block the UI
+    }
+  }
+
+  /**
    * Get circuit breaker status.
    * @returns {object}
    */

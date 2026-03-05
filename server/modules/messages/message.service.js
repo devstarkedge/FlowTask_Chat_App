@@ -459,16 +459,15 @@ class MessageService {
    */
   async _updateDeliveryStatus(message, channel, senderUserId) {
     try {
+      const senderIdStr = senderUserId.toString();
+      // dmParticipants now always stores ChatUser _id values
       const recipientParticipantId = channel.dmParticipants?.find(
-        (p) => p !== senderUserId.toString()
+        (p) => p.toString() !== senderIdStr
       );
       if (!recipientParticipantId) return;
 
-      // Find the ChatUser for the recipient (could be by flowTaskUserId)
-      let recipient = await userRepository.findByFlowTaskId(recipientParticipantId);
-      if (!recipient) {
-        recipient = await userRepository.findById(recipientParticipantId);
-      }
+      // Look up recipient by ChatUser _id (consistent with dmParticipants format)
+      const recipient = await userRepository.findById(recipientParticipantId);
       if (!recipient) return;
 
       // Check if recipient is online (has active sockets)

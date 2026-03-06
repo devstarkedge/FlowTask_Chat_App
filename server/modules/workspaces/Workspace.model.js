@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 
 const { Schema, model } = mongoose;
 
@@ -52,6 +53,14 @@ const workspaceSettingsSchema = new Schema({
 }, { _id: false });
 
 const workspaceSchema = new Schema({
+  // ─── Organization Scope (top-level tenant isolation) ──────────────────
+  organizationId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Organization',
+    default: null,
+    index: true,
+  },
+
   // Display name of the workspace
   name: {
     type: String,
@@ -135,7 +144,7 @@ workspaceSchema.index({ isActive: 1, name: 1 });
  * @returns {string} 8-char alphanumeric code
  */
 workspaceSchema.methods.generateInviteCode = function () {
-  this.inviteCode = Math.random().toString(36).substring(2, 10);
+  this.inviteCode = crypto.randomBytes(6).toString('base64url').slice(0, 8);
   return this.inviteCode;
 };
 
@@ -147,6 +156,7 @@ workspaceSchema.methods.generateInviteCode = function () {
  * @returns {Promise<Workspace|null>}
  */
 workspaceSchema.statics.findBySlug = function (slug) {
+  if (!slug) return null;
   return this.findOne({ slug: slug.toLowerCase(), isActive: true });
 };
 
@@ -156,6 +166,7 @@ workspaceSchema.statics.findBySlug = function (slug) {
  * @returns {Promise<Workspace|null>}
  */
 workspaceSchema.statics.findByInviteCode = function (code) {
+  if (!code) return null;
   return this.findOne({ inviteCode: code, isActive: true });
 };
 

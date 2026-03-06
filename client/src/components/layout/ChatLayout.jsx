@@ -15,7 +15,27 @@ import PinnedMessagesPanel from '../chat/PinnedMessagesPanel'
 import AllThreadsPanel from '../chat/AllThreadsPanel'
 import NotificationPanel from '../notifications/NotificationPanel'
 import KeyboardShortcutsModal from '../chat/KeyboardShortcutsModal'
+import SavedMessagesPanel from '../chat/SavedMessagesPanel'
 import { useKeyboardShortcuts } from '../../utils/keyboardShortcuts'
+import { savedMessageAPI } from '../../services/api'
+import toast from 'react-hot-toast'
+
+const SIDEBAR_MIN = 200
+const SIDEBAR_MAX = 400
+const SIDEBAR_DEFAULT = 268
+const SIDEBAR_COLLAPSED = 60
+const SIDEBAR_STORAGE_KEY = 'chat-sidebar-width'
+
+function getSavedSidebarWidth() {
+  try {
+    const v = localStorage.getItem(SIDEBAR_STORAGE_KEY)
+    if (v) {
+      const n = Number(v)
+      if (n === SIDEBAR_COLLAPSED || (n >= SIDEBAR_MIN && n <= SIDEBAR_MAX)) return n
+    }
+  } catch { /* ignore */ }
+  return SIDEBAR_DEFAULT
+}
 
 export default function ChatLayout() {
   const { fetchChannels, activeChannelId, channels, showInfoPanel } = useChannelStore()
@@ -32,6 +52,57 @@ export default function ChatLayout() {
   const [showMobileSidebar, setShowMobileSidebar] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
+  const [showSaved, setShowSaved] = useState(false)
+
+  // ─── Resizable Sidebar ───────────────────────────────────────────
+  const [sidebarWidth, setSidebarWidth] = useState(getSavedSidebarWidth)
+  const isResizingRef = useRef(false)
+  const [isResizing, setIsResizing] = useState(false)
+  const widthBeforeCollapseRef = useRef(SIDEBAR_DEFAULT)
+  const sidebarCollapsed = sidebarWidth === SIDEBAR_COLLAPSED
+
+  const persistWidth = useCallback((w) => {
+    try { localStorage.setItem(SIDEBAR_STORAGE_KEY, String(w)) } catch { /* ignore */ }
+  }, [])
+
+  const handleResizeStart = useCallback((e) => {
+    e.preventDefault()
+    isResizingRef.current = true
+    setIsResizing(true)
+    const startX = e.clientX
+    const startW = sidebarCollapsed ? SIDEBAR_MIN : sidebarWidth
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const onMove = (ev) => {
+      const delta = ev.clientX - startX
+      const newW = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startW + delta))
+      setSidebarWidth(newW)
+    }
+    const onUp = () => {
+      isResizingRef.current = false
+      setIsResizing(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      setSidebarWidth((w) => { persistWidth(w); return w })
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [sidebarWidth, sidebarCollapsed, persistWidth])
+
+  const handleResizeDoubleClick = useCallback(() => {
+    if (sidebarCollapsed) {
+      const restored = widthBeforeCollapseRef.current
+      setSidebarWidth(restored)
+      persistWidth(restored)
+    } else {
+      widthBeforeCollapseRef.current = sidebarWidth
+      setSidebarWidth(SIDEBAR_COLLAPSED)
+      persistWidth(SIDEBAR_COLLAPSED)
+    }
+  }, [sidebarCollapsed, sidebarWidth, persistWidth])
 
   // Keyboard shortcuts
   const shortcutHandlers = useMemo(() => ({
@@ -42,11 +113,12 @@ export default function ChatLayout() {
       if (showShortcuts) setShowShortcuts(false)
       else if (showSearch) setShowSearch(false)
       else if (showPins) setShowPins(false)
+      else if (showSaved) setShowSaved(false)
       else if (showNotifications) setShowNotifications(false)
       else if (showAllThreads) setShowAllThreads(false)
       else if (profileUser) setProfileUser(null)
     },
-  }), [showShortcuts, showSearch, showPins, showAllThreads, showNotifications, profileUser, closeThread])
+  }), [showShortcuts, showSearch, showPins, showSaved, showAllThreads, showNotifications, profileUser, closeThread])
   useKeyboardShortcuts(shortcutHandlers)
 
   // ─── Idle Presence Detection (5 min timeout) ─────────────────────
@@ -101,19 +173,30 @@ export default function ChatLayout() {
     setPreviewFiles(allFiles.length > 0 ? allFiles : [file])
   }
 
+  const handleSaveMessage = useCallback(async (messageId) => {
+    try {
+      const { data } = await savedMessageAPI.toggle(messageId)
+      toast.success(data.data?.saved ? 'Message saved' : 'Message unsaved', { duration: 1500 })
+    } catch {
+      toast.error('Failed to save message')
+    }
+  }, [])
+
   const activeChannel = channels.find((c) => c._id === activeChannelId) || null
 
   return (
     <div className="h-full flex" style={{ background: 'var(--bg-primary)' }}>
       {/* Desktop Sidebar */}
-      <div className="hide-on-mobile">
+      <div className="hide-on-mobile relative" style={{ width: sidebarWidth, minWidth: sidebarWidth, transition: isResizing ? 'none' : 'width 200ms ease, min-width 200ms ease' }}>
         <ErrorBoundary name="Sidebar" compact>
           <Sidebar
+            collapsed={sidebarCollapsed}
             onToggleAllThreads={() => {
               setShowAllThreads((s) => !s)
               setShowSearch(false)
               setShowPins(false)
               setShowNotifications(false)
+              setShowSaved(false)
               setProfileUser(null)
               closeThread()
             }}
@@ -122,11 +205,28 @@ export default function ChatLayout() {
               setShowAllThreads(false)
               setShowSearch(false)
               setShowPins(false)
+              setShowSaved(false)
+              setProfileUser(null)
+              closeThread()
+            }}
+            onToggleSaved={() => {
+              setShowSaved((s) => !s)
+              setShowAllThreads(false)
+              setShowSearch(false)
+              setShowPins(false)
+              setShowNotifications(false)
               setProfileUser(null)
               closeThread()
             }}
           />
         </ErrorBoundary>
+        {/* Resize Handle */}
+        <div
+          className="sidebar-resize-handle"
+          onMouseDown={handleResizeStart}
+          onDoubleClick={handleResizeDoubleClick}
+          title="Drag to resize, double-click to collapse"
+        />
       </div>
 
       {/* Mobile Sidebar Overlay */}
@@ -167,6 +267,7 @@ export default function ChatLayout() {
               onOpenProfile={openProfile}
               onOpenFilePreview={openFilePreview}
               onOpenMobileSidebar={() => setShowMobileSidebar(true)}
+              onSaveMessage={handleSaveMessage}
             />
           ) : (
             <WelcomeScreen onOpenMobileSidebar={() => setShowMobileSidebar(true)} />
@@ -216,6 +317,21 @@ export default function ChatLayout() {
       {showNotifications && (
         <ErrorBoundary name="Notifications" compact>
           <NotificationPanel onClose={() => setShowNotifications(false)} />
+        </ErrorBoundary>
+      )}
+
+      {/* Saved Messages Panel */}
+      {showSaved && (
+        <ErrorBoundary name="Saved Messages" compact>
+          <SavedMessagesPanel
+            onClose={() => setShowSaved(false)}
+            onJumpToMessage={(msg) => {
+              if (msg.channelId !== activeChannelId) {
+                useChannelStore.getState().setActiveChannel(msg.channelId)
+              }
+              setShowSaved(false)
+            }}
+          />
         </ErrorBoundary>
       )}
 

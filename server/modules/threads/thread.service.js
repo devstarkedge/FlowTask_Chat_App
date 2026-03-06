@@ -46,7 +46,7 @@ class ThreadService {
     emitToChannel(channelId.toString(), SOCKET_EVENTS.THREAD_CREATED, {
       thread,
       rootMessage,
-    });
+    }, workspaceId?.toString());
 
     logger.info('Thread created', {
       threadId: thread._id,
@@ -79,6 +79,7 @@ class ThreadService {
           _id: rootMessage._id,
           rootMessageId: rootMessage._id,
           channelId: rootMessage.channelId,
+          workspaceId: rootMessage.workspaceId,
           replyCount: rootMessage.replyCount || 0,
           participantIds: rootMessage.authorId ? [rootMessage.authorId] : [],
           createdAt: rootMessage.createdAt,
@@ -152,7 +153,7 @@ class ThreadService {
       threadId,
       updates: { isLocked: true },
       lockedBy: userId,
-    });
+    }, thread.workspaceId?.toString());
 
     return threadRepository.findById(threadId);
   }
@@ -170,7 +171,7 @@ class ThreadService {
       threadId,
       updates: { isResolved: true },
       resolvedBy: userId,
-    });
+    }, thread.workspaceId?.toString());
 
     return threadRepository.findById(threadId);
   }
@@ -189,7 +190,7 @@ class ThreadService {
       threadId,
       updates: { title: sanitizedTitle },
       updatedBy: userId,
-    });
+    }, thread.workspaceId?.toString());
 
     return threadRepository.findById(threadId);
   }

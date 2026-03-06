@@ -100,7 +100,7 @@ export function registerProjectEventHandlers() {
       const { SOCKET_EVENTS: SE } = await import('../../../config/constants.js');
       emitChannel(channel._id.toString(), SE.CHANNEL_UPDATED, {
         channel: { _id: channel._id, name: updates.name || channel.name, slug: updates.slug || channel.slug },
-      });
+      }, wsId);
     }
 
     // Post update notification

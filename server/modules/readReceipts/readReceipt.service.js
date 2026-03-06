@@ -27,7 +27,7 @@ class ReadReceiptService {
       channelId,
       unreadCount: 0,
       unreadMentionCount: 0,
-    });
+    }, workspaceId?.toString());
 
     // For DM channels, update message delivery status to 'seen'
     messageService.markDMMessagesAsSeen(channelId, userId).catch((err) => {

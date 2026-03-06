@@ -5,7 +5,7 @@ import { useChatStore } from '../../stores/chatStore'
 import { useThemeStore } from '../../stores/themeStore'
 import {
   Hash, Lock, MessageCircle, Users, ChevronDown, ChevronRight,
-  Plus, Search, LogOut, Volume2, Sun, Moon, X, MessageSquareText, Settings, Bell,
+  Plus, Search, LogOut, Volume2, Sun, Moon, X, MessageSquareText, Settings, Bell, Bookmark,
 } from 'lucide-react'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { Avatar } from '../chat/MemberAvatarGroup'
@@ -27,7 +27,7 @@ const CHANNEL_ICONS = {
   system: Volume2,
 }
 
-export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotifications }) {
+export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotifications, collapsed, onToggleSaved }) {
   const { channels, activeChannelId, setActiveChannel, unreads } = useChannelStore()
   const { user, logout } = useAuthStore()
   const { onlineUsers } = useChatStore()
@@ -99,15 +99,93 @@ export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotificat
 
   return (
     <nav
-      className="flex flex-col h-full select-none"
+      className="flex flex-col h-full select-none overflow-hidden"
       aria-label="Channels sidebar"
       style={{
-        width: 'var(--sidebar-width)',
-        minWidth: 'var(--sidebar-width)',
+        width: '100%',
+        minWidth: '100%',
         background: 'var(--bg-sidebar)',
         borderRight: '1px solid var(--border-secondary)',
       }}
     >
+      {collapsed ? (
+        /* ─── Collapsed Icon-only Sidebar ─── */
+        <div className="flex flex-col items-center h-full py-2 gap-1">
+          <button
+            onClick={() => onToggleNotifications?.()}
+            title="Notifications"
+            className="relative p-2 rounded-lg cursor-pointer transition-colors"
+            style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Bell size={20} />
+            {unreadNotifications > 0 && (
+              <span
+                className="absolute -top-0.5 -right-0.5 flex items-center justify-center rounded-full text-[9px] font-bold"
+                style={{ minWidth: 15, height: 15, padding: '0 4px', background: 'var(--accent-red)', color: 'white' }}
+              >{unreadNotifications > 99 ? '99+' : unreadNotifications}</span>
+            )}
+          </button>
+          <button
+            onClick={() => onToggleAllThreads?.()}
+            title="Threads"
+            className="p-2 rounded-lg cursor-pointer transition-colors"
+            style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <MessageSquareText size={20} />
+          </button>
+          <button
+            onClick={() => onToggleSaved?.()}
+            title="Saved messages"
+            className="p-2 rounded-lg cursor-pointer transition-colors"
+            style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Bookmark size={20} />
+          </button>
+          <button
+            onClick={() => { if (collapsed) { /* collapsed sidebar doesn't show search */ return } setShowSearch(true) }}
+            title="Search channels"
+            className="p-2 rounded-lg cursor-pointer transition-colors"
+            style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Search size={20} />
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={toggleTheme}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            className="p-2 rounded-lg cursor-pointer transition-colors"
+            style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          <Avatar
+            member={{ name: user?.name || '?', avatar: user?.avatar, onlineStatus: 'online' }}
+            size={30}
+            showStatus={false}
+          />
+          <button
+            onClick={logout}
+            title="Sign out"
+            className="p-2 rounded-lg cursor-pointer transition-colors"
+            style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <LogOut size={20} />
+          </button>
+        </div>
+      ) : (
+      <>
       {/* Workspace Header */}
       <div
         className="px-4 flex items-center justify-between shrink-0"
@@ -231,6 +309,20 @@ export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotificat
         >
           <MessageSquareText size={15} style={{ opacity: 0.6 }} />
           <span>Threads</span>
+        </button>
+        <button
+          onClick={() => onToggleSaved?.()}
+          className="flex items-center gap-2.5 w-full px-3 py-1.5 rounded-lg text-[13px] cursor-pointer transition-colors"
+          style={{
+            color: 'var(--text-secondary)',
+            background: 'transparent',
+            border: 'none',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+        >
+          <Bookmark size={15} style={{ opacity: 0.6 }} />
+          <span>Saved</span>
         </button>
       </div>
 
@@ -371,6 +463,8 @@ export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotificat
       {showWorkspaceSettings && (
         <WorkspaceSettingsModal onClose={() => setShowWorkspaceSettings(false)} />
       )}
+      </>
+      )}
     </nav>
   )
 }
@@ -490,7 +584,7 @@ function ChannelItem({ channel, isActive, unread, onClick, isDM, onlineUsers }) 
                 className="text-[10px] shrink-0"
                 style={{ color: 'var(--text-muted)', fontWeight: 400 }}
               >
-                {formatDistanceToNowStrict(new Date(channel.lastMessageAt), { addSuffix: false })}
+                {(() => { const d = new Date(channel.lastMessageAt); return isNaN(d.getTime()) ? '' : formatDistanceToNowStrict(d, { addSuffix: false }) })()}
               </span>
             )}
           </div>

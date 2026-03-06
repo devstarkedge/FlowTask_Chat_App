@@ -766,6 +766,26 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
+/*  SIDEBAR RESIZE HANDLE                                                    */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  transition: background var(--transition-fast);
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+  background: var(--accent-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
 /*  RESPONSIVE BREAKPOINTS                                                   */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -1157,11 +1177,34 @@ body {
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   background: rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(2px);
   border-radius: var(--radius-md);
+}
+
+.slack-upload-progress {
+  width: 70%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.slack-upload-progress-bar {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: 2px;
+  transition: width 150ms ease;
+}
+
+.slack-upload-progress-text {
+  font-size: 10px;
+  color: white;
+  font-weight: 600;
 }
 
 .slack-spinner {

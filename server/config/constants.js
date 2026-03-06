@@ -25,6 +25,24 @@ export const FLOWTASK_EVENTS = Object.freeze({
   USER_DEACTIVATED: 'USER_DEACTIVATED',
   USER_VERIFIED: 'USER_VERIFIED',
   ANNOUNCEMENT_CREATED: 'ANNOUNCEMENT_CREATED',
+  // Department events
+  DEPARTMENT_CREATED: 'DEPARTMENT_CREATED',
+  DEPARTMENT_UPDATED: 'DEPARTMENT_UPDATED',
+  DEPARTMENT_DELETED: 'DEPARTMENT_DELETED',
+  DEPARTMENT_MEMBER_ADDED: 'DEPARTMENT_MEMBER_ADDED',
+  DEPARTMENT_MEMBER_REMOVED: 'DEPARTMENT_MEMBER_REMOVED',
+  // Team events
+  TEAM_CREATED: 'TEAM_CREATED',
+  TEAM_UPDATED: 'TEAM_UPDATED',
+  TEAM_DELETED: 'TEAM_DELETED',
+  TEAM_MEMBER_ADDED: 'TEAM_MEMBER_ADDED',
+  TEAM_MEMBER_REMOVED: 'TEAM_MEMBER_REMOVED',
+  // Comment events
+  COMMENT_UPDATED: 'COMMENT_UPDATED',
+  COMMENT_DELETED: 'COMMENT_DELETED',
+  // Attachment events
+  ATTACHMENT_ADDED: 'ATTACHMENT_ADDED',
+  ATTACHMENT_DELETED: 'ATTACHMENT_DELETED',
 });
 
 // ─── Channel Types ───────────────────────────────────────────────────────────
@@ -248,5 +266,8 @@ export const ROOM_PREFIX = Object.freeze({
  * All rooms are prefixed with ws:{workspaceId}: to prevent cross-workspace leakage.
  */
 export function buildRoomName(workspaceId, type, id) {
+  if (!workspaceId || !type || !id) {
+    throw new Error(`buildRoomName: invalid args (workspaceId=${workspaceId}, type=${type}, id=${id})`);
+  }
   return `${ROOM_PREFIX.WORKSPACE}:${workspaceId}:${type}:${id}`;
 }

@@ -306,7 +306,18 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     try {
       const formData = new FormData()
       files.forEach((f) => formData.append('files', f))
-      const { data } = await messageAPI.uploadFiles(channelId, formData)
+      const { data } = await messageAPI.uploadFiles(channelId, formData, (progressEvent) => {
+        const percent = progressEvent.total
+          ? Math.round((progressEvent.loaded / progressEvent.total) * 100)
+          : 0
+        setUploadingFiles((prev) =>
+          prev.map((f) =>
+            localPreviews.some((lp) => lp.localId === f.localId)
+              ? { ...f, progress: percent }
+              : f
+          )
+        )
+      })
 
       localPreviews.forEach(({ preview }) => { if (preview) URL.revokeObjectURL(preview) })
 
@@ -640,7 +651,13 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
                   </div>
                   {file.uploading && (
                     <div className="slack-file-preview-loading">
-                      <div className="slack-spinner" />
+                      <div className="slack-upload-progress">
+                        <div
+                          className="slack-upload-progress-bar"
+                          style={{ width: `${file.progress || 0}%` }}
+                        />
+                      </div>
+                      <span className="slack-upload-progress-text">{file.progress || 0}%</span>
                     </div>
                   )}
                   {!file.uploading && (

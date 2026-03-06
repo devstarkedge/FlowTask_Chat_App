@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
@@ -23,6 +24,8 @@ import botRoutes from './modules/bot/bot.routes.js';
 import userRoutes from './modules/users/user.routes.js';
 import workspaceRoutes from './modules/workspaces/workspace.routes.js';
 import notificationRoutes from './modules/notifications/notification.routes.js';
+import organizationRoutes from './modules/organizations/organization.routes.js';
+import adminRoutes from './modules/admin/admin.routes.js';
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
 import eventBus from './services/eventBus.js';
 import channelService from './modules/channels/channel.service.js';
@@ -31,6 +34,7 @@ import { startDeadlineWarningCron, stopDeadlineWarningCron } from './modules/bot
 import fileCleanupService from './services/fileCleanup.service.js';
 import fileUploadService from './services/fileUpload.service.js';
 import webhookRetryService from './services/webhookRetry.service.js';
+import cache from './services/cache.service.js';
 
 // ─── Express App ─────────────────────────────────────────────────────────────
 const app = express();
@@ -52,9 +56,31 @@ const corsOptions = {
 };
 
 // ─── Global Middleware ───────────────────────────────────────────────────────
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+      connectSrc: ["'self'", 'wss:', 'ws:'],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Allow loading external images
+}));
 app.use(cors(corsOptions));
 app.use(compression());
+
+// ─── Request ID Middleware (cross-service log correlation) ───────────────────
+app.use((req, res, next) => {
+  req.requestId = req.headers['x-request-id'] || randomUUID();
+  res.setHeader('X-Request-Id', req.requestId);
+  next();
+});
 
 // Parse JSON with raw body capture for webhook verification
 app.use(
@@ -80,18 +106,41 @@ if (env.NODE_ENV !== 'test') {
   );
 }
 
+// Request timing — logs slow API requests (>1s)
+app.use((req, res, next) => {
+  const start = process.hrtime.bigint();
+  res.on('finish', () => {
+    const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
+    if (durationMs > 1000) {
+      logger.warn('Slow request', {
+        metric: 'slow_request',
+        method: req.method,
+        url: req.originalUrl,
+        statusCode: res.statusCode,
+        durationMs: Math.round(durationMs),
+        userId: req.user?._id?.toString(),
+        requestId: req.requestId,
+      });
+    }
+  });
+  next();
+});
+
 // ─── Health Check ────────────────────────────────────────────────────────────
 app.get('/api/chat/health', (_req, res) => {
   const dbHealth = getDatabaseHealth();
-  const status = dbHealth.connected ? 'ok' : 'degraded';
+  const cacheStatus = cache.getStatus();
+  const allHealthy = dbHealth.connected;
+  const status = allHealthy ? 'ok' : 'degraded';
   const memUsage = process.memoryUsage();
 
-  res.status(dbHealth.connected ? 200 : 503).json({
+  res.status(allHealthy ? 200 : 503).json({
     status,
     service: 'flowtask-chat',
     uptime: Math.floor(process.uptime()),
     connections: getConnectionCount(),
     database: dbHealth,
+    cache: cacheStatus,
     eventBus: eventBus.getStatus(),
     memory: {
       rss: Math.round(memUsage.rss / 1024 / 1024),
@@ -105,6 +154,7 @@ app.get('/api/chat/health', (_req, res) => {
 
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/chat/auth', authRoutes);
+app.use('/api/chat/organizations', organizationRoutes);
 app.use('/api/chat/workspaces', workspaceRoutes);
 app.use('/api/chat/channels', channelRoutes);
 app.use('/api/chat/channels/:channelId', channelMessageRouter);
@@ -118,12 +168,21 @@ if (env.FLOWTASK_ENABLED) {
 app.use('/api/chat/bot', botRoutes);
 app.use('/api/chat/users', userRoutes);
 app.use('/api/chat/notifications', notificationRoutes);
+app.use('/api/chat/admin', adminRoutes);
 app.use('/api/chat', readReceiptRoutes);
 
 // ─── Static File Serving (Uploads) ───────────────────────────────────────────
 app.use('/api/chat/uploads', express.static(path.resolve(env.UPLOAD_DIR), {
   maxAge: '7d',
   immutable: true,
+  setHeaders: (res, filePath) => {
+    // Serve all uploaded files as attachment to prevent XSS via HTML/SVG
+    const ext = path.extname(filePath).toLowerCase();
+    if (['.html', '.htm', '.svg', '.xml'].includes(ext)) {
+      res.setHeader('Content-Disposition', 'attachment');
+    }
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  },
 }));
 
 // ─── 404 Catch-All ───────────────────────────────────────────────────────────
@@ -188,6 +247,10 @@ async function startServer() {
       }
     }, 60000); // Check every 60s
 
+    // 8b. Start scheduled message processor
+    const { startScheduledMessageProcessor } = await import('./services/scheduledMessages.service.js');
+    startScheduledMessageProcessor();
+
     // 9. Start HTTP server
     httpServer.listen(env.PORT, () => {
       logger.info(`FlowTask Chat server running`, {
@@ -231,7 +294,18 @@ async function shutdown(signal) {
   stopDeadlineWarningCron();
 
   // 3b. Stop webhook retry service
-  webhookRetryService.stop();
+  if (env.FLOWTASK_ENABLED) {
+    webhookRetryService.stop();
+  }
+
+  // 3c. Stop scheduled message processor
+  try {
+    const { stopScheduledMessageProcessor } = await import('./services/scheduledMessages.service.js');
+    stopScheduledMessageProcessor();
+    logger.info('Scheduled message processor stopped');
+  } catch {
+    // May not be initialized
+  }
 
   // 4. Stop DB health check
   stopHealthCheck();
@@ -239,6 +313,14 @@ async function shutdown(signal) {
   // 5. Stop accepting new connections, wait for in-flight to drain
   httpServer.close(async () => {
     logger.info('HTTP server closed');
+
+    try {
+      const { shutdownQueues } = await import('./services/jobQueue.service.js');
+      await shutdownQueues();
+      logger.info('Job queues closed');
+    } catch (err) {
+      logger.error('Error closing job queues', { error: err.message });
+    }
 
     try {
       await disconnectDatabase();

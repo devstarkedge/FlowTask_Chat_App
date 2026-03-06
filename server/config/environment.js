@@ -26,6 +26,14 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+// ─── Secret Strength Validation ──────────────────────────────────────────────
+if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
+  console.warn('[SECURITY WARNING] JWT_SECRET should be at least 32 characters for production safety');
+}
+if (process.env.JWT_REFRESH_SECRET && process.env.JWT_REFRESH_SECRET.length < 32) {
+  console.warn('[SECURITY WARNING] JWT_REFRESH_SECRET should be at least 32 characters for production safety');
+}
+
 // ─── Parse CORS origins ─────────────────────────────────────────────────────
 function parseCorsOrigins(raw) {
   if (!raw) return 'http://localhost:5174';

@@ -13,6 +13,11 @@ import {
   searchMessages,
   uploadFiles,
   markDMSeen,
+  toggleSaveMessage,
+  getSavedMessages,
+  scheduleMessage,
+  getScheduledMessages,
+  cancelScheduledMessage,
 } from './message.controller.js';
 import { protect, requireChannelAccess, requireMessageAccess } from '../auth/auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
@@ -23,6 +28,7 @@ import {
   editMessageSchema,
   reactionSchema,
   searchMessagesSchema,
+  scheduleMessageSchema,
 } from '../../middleware/schemas.js';
 
 const router = Router();
@@ -56,6 +62,9 @@ router.use(resolveWorkspace);
 
 // ─── Message-scoped routes (mounted under /api/chat/messages) ────────────────
 router.get('/search', validate({ query: searchMessagesSchema }), searchMessages);
+router.get('/saved', getSavedMessages);
+router.get('/scheduled', getScheduledMessages);
+router.delete('/scheduled/:id', cancelScheduledMessage);
 router.get('/:id', requireMessageAccess(), getMessage);
 router.put('/:id', requireMessageAccess(), validate({ body: editMessageSchema }), editMessage);
 router.delete('/:id', requireMessageAccess(), deleteMessage);
@@ -63,6 +72,7 @@ router.post('/:id/reactions', requireMessageAccess(), validate({ body: reactionS
 router.delete('/:id/reactions/:emoji', requireMessageAccess(), removeReaction);
 router.post('/:id/pin', requireMessageAccess(), pinMessage);
 router.delete('/:id/pin', requireMessageAccess(), unpinMessage);
+router.post('/:id/save', requireMessageAccess(), toggleSaveMessage);
 
 export default router;
 
@@ -83,4 +93,5 @@ channelMessageRouter.post('/upload', uploadLimiter, uploadMiddleware, handleMult
 channelMessageRouter.post('/upload/sign', getUploadSignature);
 channelMessageRouter.get('/pins', getPinnedMessages);
 channelMessageRouter.post('/seen', markDMSeen);
+channelMessageRouter.post('/scheduled-messages', validate({ body: scheduleMessageSchema }), scheduleMessage);
 

@@ -143,6 +143,7 @@ class MessageService {
 
     // Build minimal socket payload
     const socketPayload = messageSocketPayload(populated, { tempId: tempId || null });
+    const wsId = (workspaceId || channel.workspaceId)?.toString();
 
     // Emit to channel (real-time)
     try {
@@ -153,12 +154,12 @@ class MessageService {
           message: socketPayload,
           threadId: actualThreadId.toString(),
           rootMessageId: resolvedRootMessageId,
-        });
+        }, wsId);
       } else {
         // Main message → standard event
         emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, {
           message: socketPayload,
-        });
+        }, wsId);
       }
     } catch (err) {
       logDeliveryFailure(message._id, err);
@@ -176,7 +177,7 @@ class MessageService {
         if (actualThreadId && thread) {
           ackPayload.rootMessageId = (thread.rootMessageId || threadId).toString();
         }
-        emitToUser(authorId.toString(), SOCKET_EVENTS.MESSAGE_ACK, ackPayload);
+        emitToUser(authorId.toString(), SOCKET_EVENTS.MESSAGE_ACK, ackPayload, wsId);
       } catch (err) {
         logDeliveryFailure(message._id, err);
       }
@@ -236,7 +237,7 @@ class MessageService {
     channelRepository.updateLastMessage(channelId, preview, new Date()).catch(() => {});
 
     const socketPayload = messageSocketPayload(message);
-    emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload });
+    emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
 
     return message;
   }
@@ -328,7 +329,7 @@ class MessageService {
 
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_UPDATE, {
       message: socketPayload,
-    });
+    }, (message.workspaceId || populated.workspaceId)?.toString());
 
     return populated;
   }
@@ -352,7 +353,7 @@ class MessageService {
       messageId: messageId.toString(),
       channelId: message.channelId.toString(),
       isDeleted: true,
-    });
+    }, message.workspaceId?.toString());
 
     return { messageId };
   }
@@ -370,6 +371,7 @@ class MessageService {
 
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.REACTION_ADD,
       reactionSocketPayload({ messageId, channelId: message.channelId, userId, emoji }),
+      message.workspaceId?.toString(),
     );
 
     return updated;
@@ -386,6 +388,7 @@ class MessageService {
 
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.REACTION_REMOVE,
       reactionSocketPayload({ messageId, channelId: message.channelId, userId, emoji }),
+      message.workspaceId?.toString(),
     );
 
     return updated;
@@ -406,7 +409,7 @@ class MessageService {
       messageId,
       channelId: message.channelId,
       pinnedBy: userId,
-    });
+    }, message.workspaceId?.toString());
 
     return message;
   }
@@ -424,7 +427,7 @@ class MessageService {
       messageId,
       channelId: message.channelId,
       unpinnedBy: userId,
-    });
+    }, message.workspaceId?.toString());
 
     return message;
   }
@@ -489,7 +492,7 @@ class MessageService {
           channelId: channel._id.toString(),
           status: 'delivered',
           deliveredAt: now,
-        });
+        }, channel.workspaceId?.toString());
       }
     } catch (error) {
       logger.error('Failed to update delivery status', {
@@ -545,7 +548,7 @@ class MessageService {
             messageIds,
             status: 'seen',
             seenAt: now,
-          });
+          }, channel.workspaceId?.toString());
         }
       }
     } catch (error) {
@@ -583,6 +586,7 @@ class MessageService {
     if (!mentions || mentions.length === 0) return;
 
     const notificationService = (await import('../notifications/notification.service.js')).default;
+    const ChannelMember = (await import('../channels/ChannelMember.model.js')).default;
 
     for (const mention of mentions) {
       if (mention.type === MENTION_TYPES.USER) {
@@ -603,6 +607,44 @@ class MessageService {
             channelName: channel.name,
             messageId: message._id,
             preview: truncate(stripHtml(message.content), 100),
+          });
+        }
+      } else if (mention.type === MENTION_TYPES.CHANNEL && (mention.name === 'channel' || mention.name === 'here')) {
+        // @channel / @here — notify all (or online) channel members
+        try {
+          const memberIds = await ChannelMember.getMemberIds(channel._id);
+          const authorIdStr = (message.authorId?._id || message.authorId)?.toString();
+
+          // For @here, batch-load online status to avoid N+1 queries
+          let onlineMemberIds = null;
+          if (mention.name === 'here') {
+            const members = await userRepository.findByIds(memberIds);
+            onlineMemberIds = new Set(
+              members.filter((m) => m.onlineStatus !== 'offline').map((m) => m._id.toString())
+            );
+          }
+
+          for (const memberId of memberIds) {
+            if (memberId === authorIdStr) continue;
+
+            // For @here, only notify online users
+            if (onlineMemberIds && !onlineMemberIds.has(memberId)) continue;
+
+            await notificationService.createMentionNotification({
+              workspaceId: message.workspaceId || channel.workspaceId,
+              recipientId: memberId,
+              senderId: message.authorId?._id || message.authorId,
+              senderName: message.senderSnapshot?.name || 'Someone',
+              channelId: channel._id,
+              channelName: channel.name,
+              messageId: message._id,
+              preview: truncate(stripHtml(message.content), 100),
+            });
+          }
+        } catch (err) {
+          logger.error('Failed to send @channel/@here notifications', {
+            channelId: channel._id,
+            error: err.message,
           });
         }
       }

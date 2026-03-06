@@ -108,7 +108,7 @@ async function checkDeadlines() {
  * Post a deadline warning message for a specific task.
  * Called by the cron job or by webhook when a task approaches its deadline.
  */
-export async function postDeadlineWarning(channelId, card, assignee) {
+export async function postDeadlineWarning(channelId, card, assignee, workspaceId) {
   const dueDate = new Date(card.dueDate);
   const now = new Date();
   const hoursLeft = Math.max(0, Math.round((dueDate - now) / (60 * 60 * 1000)));
@@ -136,7 +136,7 @@ export async function postDeadlineWarning(channelId, card, assignee) {
   await messageService.sendSystemMessage(channelId, msg, {
     entityType: 'task',
     entityId: card._id,
-  });
+  }, workspaceId);
 
   // Also notify the assignee directly
   if (assignee) {
@@ -146,6 +146,6 @@ export async function postDeadlineWarning(channelId, card, assignee) {
       taskTitle: card.title,
       dueDate: card.dueDate,
       hoursLeft,
-    });
+    }, workspaceId?.toString());
   }
 }

@@ -1,13 +1,26 @@
-import { useEffect } from 'react'
+import { useEffect, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
+
+// Eager load the main chat layout (most common route)
 import ChatLayout from './components/layout/ChatLayout'
-import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
-import ForgotPasswordPage from './pages/ForgotPasswordPage'
-import ResetPasswordPage from './pages/ResetPasswordPage'
-import LandingPage from './pages/LandingPage'
-import WorkspaceSetupWizard from './components/workspace/WorkspaceSetupWizard'
+
+// Lazy load auth & setup pages (rarely revisited after login)
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const RegisterPage = lazy(() => import('./pages/RegisterPage'))
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'))
+const LandingPage = lazy(() => import('./pages/LandingPage'))
+const WorkspaceSetupWizard = lazy(() => import('./components/workspace/WorkspaceSetupWizard'))
+
+function PageFallback() {
+  return (
+    <div className="h-full flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+      <div className="w-8 h-8 border-3 border-t-transparent rounded-full animate-spin"
+        style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }} />
+    </div>
+  )
+}
 
 function App() {
   const { accessToken, user, fetchUser, isLoading } = useAuthStore()
@@ -31,21 +44,23 @@ function App() {
   }
 
   return (
-    <Routes>
-      {/* Public routes */}
-      <Route path="/" element={!user ? <LandingPage /> : <Navigate to="/chat" />} />
-      <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/chat" />} />
-      <Route path="/register" element={!user ? <RegisterPage /> : <Navigate to="/chat" />} />
-      <Route path="/forgot-password" element={!user ? <ForgotPasswordPage /> : <Navigate to="/chat" />} />
-      <Route path="/reset-password/:token" element={!user ? <ResetPasswordPage /> : <Navigate to="/chat" />} />
+    <Suspense fallback={<PageFallback />}>
+      <Routes>
+        {/* Public routes */}
+        <Route path="/" element={!user ? <LandingPage /> : <Navigate to="/chat" />} />
+        <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/chat" />} />
+        <Route path="/register" element={!user ? <RegisterPage /> : <Navigate to="/chat" />} />
+        <Route path="/forgot-password" element={!user ? <ForgotPasswordPage /> : <Navigate to="/chat" />} />
+        <Route path="/reset-password/:token" element={!user ? <ResetPasswordPage /> : <Navigate to="/chat" />} />
 
-      {/* Protected routes */}
-      <Route path="/workspace/setup/:workspaceId" element={user ? <WorkspaceSetupWizard /> : <Navigate to="/login" />} />
-      <Route path="/chat/*" element={user ? <ChatLayout /> : <Navigate to="/login" />} />
+        {/* Protected routes */}
+        <Route path="/workspace/setup/:workspaceId" element={user ? <WorkspaceSetupWizard /> : <Navigate to="/login" />} />
+        <Route path="/chat/*" element={user ? <ChatLayout /> : <Navigate to="/login" />} />
 
-      {/* Catch-all */}
-      <Route path="*" element={<Navigate to={user ? '/chat' : '/'} />} />
-    </Routes>
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to={user ? '/chat' : '/'} />} />
+      </Routes>
+    </Suspense>
   )
 }
 

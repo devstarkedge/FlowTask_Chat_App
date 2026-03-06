@@ -51,6 +51,22 @@ const chatPreferencesSchema = new Schema({
     }, { _id: false }),
     default: new Map(),
   },
+  // DND schedule — suppress all notifications during these hours (user's local time)
+  dndSchedule: {
+    enabled: { type: Boolean, default: false },
+    startHour: { type: Number, default: 22, min: 0, max: 23 },
+    endHour: { type: Number, default: 8, min: 0, max: 23 },
+    timezone: { type: String, default: 'UTC' },
+  },
+  // Email notification preferences
+  emailNotifications: {
+    enabled: { type: Boolean, default: true },
+    mentions: { type: Boolean, default: true },
+    dms: { type: Boolean, default: true },
+    threadReplies: { type: Boolean, default: true },
+    // Delay before sending email (batch window) — in minutes
+    delayMinutes: { type: Number, default: 5, min: 1, max: 60 },
+  },
 }, { _id: false });
 
 const chatUserSchema = new Schema({

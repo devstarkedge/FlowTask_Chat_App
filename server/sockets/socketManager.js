@@ -6,6 +6,7 @@ import logger from '../utils/logger.js';
 import { logSocketReconnect } from '../utils/performanceLogger.js';
 import { SOCKET_EVENTS, buildRoomName } from '../config/constants.js';
 
+
 /**
  * Socket.IO Manager — handles WebSocket connections, authentication, and room management.
  *
@@ -17,12 +18,14 @@ import { SOCKET_EVENTS, buildRoomName } from '../config/constants.js';
  * Enterprise features:
  *   - Scoped presence broadcast (only to user's channels, not global)
  *   - Server-side typing throttle (max 1 emit per 2s per user/channel)
- *   - Per-socket event rate limiting (prevents abuse)
+ *   - Per-socket event rate limiting (Redis-backed for multi-instance)
  *   - Stale socket cleanup on server start (crash recovery)
  *   - Proper error handling in joinChannelRoom
  *   - Fresh channel list on disconnect (no stale closure)
  *   - Socket reconnect logging for monitoring
  *   - Redis adapter ready (conditional on REDIS_URL)
+ *   - JWT heartbeat (periodic token validation, force reconnect on expiry)
+ *   - Max 5 concurrent socket connections per user
  */
 
 let io = null;
@@ -32,20 +35,59 @@ const typingThrottleMap = new Map();
 const TYPING_THROTTLE_MS = 2000;
 
 // ─── Socket Rate Limiting ────────────────────────────────────────────────────
-const socketRateLimits = new Map(); // Map<socketId, { count, windowStart }>
+// Redis-backed when available; local Map fallback for single-instance
+let _redisClient = null;
+const socketRateLimits = new Map(); // Fallback Map<socketId, { count, windowStart }>
 const RATE_LIMIT_WINDOW_MS = 60000;  // 1 minute
 const RATE_LIMIT_MAX_EVENTS = 100;   // Max events per window per socket
+const MAX_SOCKETS_PER_USER = 5;      // Cap concurrent connections per user
+
+// ─── JWT Heartbeat ───────────────────────────────────────────────────────────
+const TOKEN_HEARTBEAT_MS = 5 * 60 * 1000; // Validate tokens every 5 minutes
 
 // ─── Interval Tracking (for cleanup on shutdown) ─────────────────────────────
 let throttleCleanupTimer = null;
 let rateLimitCleanupTimer = null;
+let tokenHeartbeatTimer = null;
+
+/**
+ * Get or initialize Redis client for socket rate limiting.
+ */
+async function getRedisClient() {
+  if (_redisClient) return _redisClient;
+  if (!env.REDIS_URL) return null;
+  try {
+    const { createClient } = await import('redis');
+    _redisClient = createClient({ url: env.REDIS_URL });
+    await _redisClient.connect();
+    return _redisClient;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Check if a socket has exceeded its event rate limit.
+ * Uses Redis INCR for multi-instance safety when available.
  * @param {string} socketId
- * @returns {boolean} true if rate limited
+ * @returns {Promise<boolean>} true if rate limited
  */
-function isSocketRateLimited(socketId) {
+async function isSocketRateLimited(socketId) {
+  const redis = await getRedisClient();
+  if (redis) {
+    try {
+      const key = `sock_rl:${socketId}`;
+      const count = await redis.incr(key);
+      if (count === 1) {
+        await redis.expire(key, Math.ceil(RATE_LIMIT_WINDOW_MS / 1000));
+      }
+      return count > RATE_LIMIT_MAX_EVENTS;
+    } catch {
+      // Fall through to in-memory
+    }
+  }
+
+  // In-memory fallback
   const now = Date.now();
   let entry = socketRateLimits.get(socketId);
 
@@ -55,11 +97,7 @@ function isSocketRateLimited(socketId) {
   }
 
   entry.count++;
-
-  if (entry.count > RATE_LIMIT_MAX_EVENTS) {
-    return true;
-  }
-  return false;
+  return entry.count > RATE_LIMIT_MAX_EVENTS;
 }
 
 /**
@@ -196,8 +234,20 @@ export async function initializeSocket(httpServer, corsOptions) {
       workspaceId: wsId,
     });
 
-    // Register socket and set user online
-    await userRepository.addSocketId(userId, socket.id);
+    // Enforce max connections per user (cap at 5 tabs/devices)
+    const currentUser = await userRepository.addSocketId(userId, socket.id);
+    if (currentUser && currentUser.socketIds && currentUser.socketIds.length > MAX_SOCKETS_PER_USER) {
+      // Disconnect oldest socket
+      const oldestSocketId = currentUser.socketIds[0];
+      if (oldestSocketId !== socket.id) {
+        const oldSocket = io.sockets.sockets.get(oldestSocketId);
+        if (oldSocket) {
+          oldSocket.emit('error', { message: 'Session limit reached. Disconnecting oldest session.' });
+          oldSocket.disconnect(true);
+        }
+        await userRepository.removeSocketId(userId, oldestSocketId);
+      }
+    }
 
     // ─── Auto-join rooms ─────────────────────────────────────────────
     // Personal room (workspace-scoped)
@@ -242,7 +292,7 @@ export async function initializeSocket(httpServer, corsOptions) {
 
     // Join a specific channel room — with membership verification
     socket.on('channel:join', async (channelId) => {
-      if (isSocketRateLimited(socket.id)) {
+      if (await isSocketRateLimited(socket.id)) {
         socket.emit('error', { message: 'Rate limited. Please slow down.' });
         return;
       }
@@ -305,7 +355,7 @@ export async function initializeSocket(httpServer, corsOptions) {
 
     // ── DM: Mark messages as seen (wires up messageService.markDMMessagesAsSeen) ──
     socket.on('dm:markSeen', async ({ channelId }) => {
-      if (isSocketRateLimited(socket.id)) return;
+      if (await isSocketRateLimited(socket.id)) return;
       if (!channelId) return;
       try {
         // Verify the user is a participant of this DM channel before marking seen
@@ -325,15 +375,15 @@ export async function initializeSocket(httpServer, corsOptions) {
     });
 
     // Leave a channel room
-    socket.on('channel:leave', (channelId) => {
-      if (isSocketRateLimited(socket.id)) return;
+    socket.on('channel:leave', async (channelId) => {
+      if (await isSocketRateLimited(socket.id)) return;
       const leaveRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
       socket.leave(leaveRoom);
     });
 
     // Typing indicators — server-side throttled (max 1 emit per 2s per user/channel)
-    socket.on('typing:start', ({ channelId }) => {
-      if (isSocketRateLimited(socket.id)) return;
+    socket.on('typing:start', async ({ channelId }) => {
+      if (await isSocketRateLimited(socket.id)) return;
 
       const throttleKey = `${userId}-${channelId}`;
       const now = Date.now();
@@ -352,8 +402,8 @@ export async function initializeSocket(httpServer, corsOptions) {
       });
     });
 
-    socket.on('typing:stop', ({ channelId }) => {
-      if (isSocketRateLimited(socket.id)) return;
+    socket.on('typing:stop', async ({ channelId }) => {
+      if (await isSocketRateLimited(socket.id)) return;
 
       const throttleKey = `${userId}-${channelId}`;
       typingThrottleMap.delete(throttleKey);
@@ -366,8 +416,8 @@ export async function initializeSocket(httpServer, corsOptions) {
     });
 
     // ─── Presence Update (away / back online) ────────────────────────
-    socket.on('presence:update', ({ status }) => {
-      if (isSocketRateLimited(socket.id)) return;
+    socket.on('presence:update', async ({ status }) => {
+      if (await isSocketRateLimited(socket.id)) return;
       if (status !== 'away' && status !== 'online') return;
 
       const event = status === 'away' ? SOCKET_EVENTS.USER_AWAY : SOCKET_EVENTS.USER_ONLINE;
@@ -441,6 +491,29 @@ export async function initializeSocket(httpServer, corsOptions) {
       }
     }
   }, 60000);
+
+  // ─── JWT Heartbeat (periodic token validation) ───────────────────────
+  // Every 5 minutes, validate connected sockets' tokens.
+  // Forces reconnect with fresh token if expired.
+  tokenHeartbeatTimer = setInterval(async () => {
+    if (!io) return;
+    try {
+      const sockets = await io.fetchSockets();
+      for (const socket of sockets) {
+        const { token } = socket.handshake.auth;
+        if (!token) continue;
+        try {
+          tokenService.verifyAccessToken(token);
+        } catch {
+          // Token expired or invalid — tell client to refresh and reconnect
+          socket.emit('auth:expired', { message: 'Token expired. Please reconnect with a fresh token.' });
+          socket.disconnect(true);
+        }
+      }
+    } catch (err) {
+      logger.error('Token heartbeat check failed', { error: err.message });
+    }
+  }, TOKEN_HEARTBEAT_MS);
 
   logger.info('Socket.IO initialized', {
     metric: 'socket_lifecycle',
@@ -553,8 +626,18 @@ export function cleanupSocketResources() {
     clearInterval(rateLimitCleanupTimer);
     rateLimitCleanupTimer = null;
   }
+  if (tokenHeartbeatTimer) {
+    clearInterval(tokenHeartbeatTimer);
+    tokenHeartbeatTimer = null;
+  }
   typingThrottleMap.clear();
   socketRateLimits.clear();
+
+  // Close Redis rate-limit client if initialized
+  if (_redisClient) {
+    _redisClient.quit().catch(() => {});
+    _redisClient = null;
+  }
 
   logger.info('Socket resources cleaned up', {
     metric: 'socket_lifecycle',

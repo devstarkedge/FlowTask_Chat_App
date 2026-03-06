@@ -5,7 +5,7 @@ import { format } from 'date-fns'
 import {
   Smile, MessageSquare, MoreHorizontal, Edit, Trash2, Pin,
   FileText, Download, Image as ImageIcon, File, FileArchive, FileCode,
-  Film, Music, Check, CheckCheck, Copy,
+  Film, Music, Check, CheckCheck, Copy, Bookmark, Forward, Link2,
 } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
 import EmojiPicker from './EmojiPicker'
@@ -46,27 +46,29 @@ function fileIcon(mimeType) {
 
 const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000 // 10 minutes
 
-const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, onOpenProfile, onOpenFilePreview, isDMChannel }) {
+const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, onOpenProfile, onOpenFilePreview, isDMChannel, onSaveMessage }) {
   const { user } = useAuthStore()
   const { addReaction, removeReaction, editMessage, deleteMessage, retryMessage, pinMessage, unpinMessage } = useChatStore()
   const [showActions, setShowActions] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(message.content)
   const [showReactionPicker, setShowReactionPicker] = useState(false)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
   const messageRef = useRef(null)
 
-  // Close action bar + reaction picker when clicking outside the message
+  // Close action bar + reaction picker + more menu when clicking outside the message
   useEffect(() => {
-    if (!showReactionPicker) return
+    if (!showReactionPicker && !showMoreMenu) return
     const handleClickOutside = (e) => {
       if (messageRef.current && !messageRef.current.contains(e.target)) {
         setShowReactionPicker(false)
+        setShowMoreMenu(false)
         setShowActions(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showReactionPicker])
+  }, [showReactionPicker, showMoreMenu])
 
   const isOwn = message.authorId?._id === user?._id || message.authorId === user?._id
   const isSystem = message.contentType === 'system' && !message.activityMeta
@@ -187,8 +189,8 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
       }}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => {
-        // Don't close the action bar if the reaction picker is open
-        if (!showReactionPicker) {
+        // Don't close the action bar if the reaction picker or more menu is open
+        if (!showReactionPicker && !showMoreMenu) {
           setShowActions(false)
         }
       }}
@@ -438,7 +440,7 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
       </div>
 
       {/* Action Bar (hover) */}
-      {(showActions || showReactionPicker) && !isEditing && !isPending && !isFailed && (
+      {(showActions || showReactionPicker || showMoreMenu) && !isEditing && !isPending && !isFailed && (
         <div
           className="absolute -top-3.5 right-5 flex items-center gap-0.5 px-1 py-0.5 rounded-lg z-10 animate-fade-in-scale"
           style={{
@@ -458,47 +460,17 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
             onClick={() => onOpenThread?.({ rootMessageId: message._id, channelId: message.channelId })}
           />
           <ActionButton
-            icon={Pin}
-            title={message.isPinned ? 'Unpin message' : 'Pin message'}
-            onClick={() => message.isPinned ? unpinMessage(message._id) : pinMessage(message._id)}
+            icon={Bookmark}
+            title="Save message"
+            onClick={() => {
+              onSaveMessage?.(message._id)
+              setShowActions(false)
+            }}
           />
           <ActionButton
-            icon={Copy}
-            title="Copy text"
-            onClick={async () => {
-              const textToCopy = message.content || ''
-
-              const fallbackCopy = () => {
-                try {
-                  const textarea = document.createElement('textarea')
-                  textarea.value = textToCopy
-                  textarea.setAttribute('readonly', '')
-                  textarea.style.position = 'fixed'
-                  textarea.style.opacity = '0'
-                  document.body.appendChild(textarea)
-                  textarea.select()
-                  const ok = document.execCommand('copy')
-                  document.body.removeChild(textarea)
-                  return ok
-                } catch {
-                  return false
-                }
-              }
-
-              try {
-                if (!navigator?.clipboard?.writeText) {
-                  throw new Error('Clipboard API unavailable')
-                }
-                await navigator.clipboard.writeText(textToCopy)
-                toast.success('Copied to clipboard', { duration: 1500 })
-              } catch {
-                if (fallbackCopy()) {
-                  toast.success('Copied to clipboard', { duration: 1500 })
-                } else {
-                  toast.error('Copy failed')
-                }
-              }
-            }}
+            icon={MoreHorizontal}
+            title="More actions"
+            onClick={() => setShowMoreMenu(!showMoreMenu)}
           />
           {isOwn && (
             <>
@@ -518,6 +490,66 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
               />
             </>
           )}
+        </div>
+      )}
+
+      {/* More Actions Dropdown */}
+      {showMoreMenu && (
+        <div
+          className="absolute -top-1 right-5 z-20 mt-7 rounded-lg py-1 animate-fade-in-scale"
+          style={{
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-primary)',
+            boxShadow: 'var(--shadow-lg)',
+            minWidth: 180,
+          }}
+        >
+          <MoreMenuItem
+            icon={Pin}
+            label={message.isPinned ? 'Unpin message' : 'Pin message'}
+            onClick={() => { message.isPinned ? unpinMessage(message._id) : pinMessage(message._id); setShowMoreMenu(false); setShowActions(false) }}
+          />
+          <MoreMenuItem
+            icon={Copy}
+            label="Copy text"
+            onClick={async () => {
+              const textToCopy = message.content || ''
+              try {
+                if (navigator?.clipboard?.writeText) {
+                  await navigator.clipboard.writeText(textToCopy)
+                } else {
+                  const textarea = document.createElement('textarea')
+                  textarea.value = textToCopy
+                  textarea.setAttribute('readonly', '')
+                  textarea.style.cssText = 'position:fixed;opacity:0'
+                  document.body.appendChild(textarea)
+                  textarea.select()
+                  document.execCommand('copy')
+                  document.body.removeChild(textarea)
+                }
+                toast.success('Copied to clipboard', { duration: 1500 })
+              } catch {
+                toast.error('Copy failed')
+              }
+              setShowMoreMenu(false)
+              setShowActions(false)
+            }}
+          />
+          <MoreMenuItem
+            icon={Link2}
+            label="Copy link"
+            onClick={async () => {
+              const link = `${window.location.origin}/chat/${message.channelId}/${message._id}`
+              try {
+                await navigator.clipboard.writeText(link)
+                toast.success('Link copied', { duration: 1500 })
+              } catch {
+                toast.error('Failed to copy link')
+              }
+              setShowMoreMenu(false)
+              setShowActions(false)
+            }}
+          />
         </div>
       )}
 
@@ -567,6 +599,25 @@ function ActionButton({ icon: Icon, title, onClick, danger }) {
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
       <Icon size={15} />
+    </button>
+  )
+}
+
+function MoreMenuItem({ icon: Icon, label, onClick, danger }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-2.5 w-full px-3 py-1.5 text-[13px] cursor-pointer transition-colors text-left"
+      style={{
+        color: danger ? 'var(--accent-red)' : 'var(--text-primary)',
+        background: 'transparent',
+        border: 'none',
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+    >
+      <Icon size={15} style={{ opacity: 0.7 }} />
+      <span>{label}</span>
     </button>
   )
 }

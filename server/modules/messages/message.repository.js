@@ -1,4 +1,5 @@
 import Message from './Message.model.js';
+import MessageReaction from './MessageReaction.model.js';
 import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
 
 /**
@@ -6,6 +7,9 @@ import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
  * Encapsulates all Mongoose queries for messages.
  * Uses cursor-based pagination for real-time feed performance.
  * All query methods accept an optional workspaceId for multi-tenant scoping.
+ *
+ * Reactions are dual-written to both Message.reactions[] (embedded)
+ * and the MessageReaction collection for scalability.
  */
 
 class MessageRepository {
@@ -46,7 +50,7 @@ class MessageRepository {
    * @param {string} channelId
    * @param {object} options
    * @param {string|null} [options.cursor] - Message _id to paginate from
-   * @param {number} [options.limit=50]
+   * @param {number} [options.limit=80]
    * @param {'before'|'after'} [options.direction='before'] - Load before or after cursor
    * @param {string} [options.workspaceId]
    * @returns {Promise<Message[]>}
@@ -195,13 +199,24 @@ class MessageRepository {
 
   /**
    * Add reaction to a message (atomic operation).
+   * Dual-writes to both embedded array and MessageReaction collection.
    * @param {string} messageId
    * @param {string} emoji
    * @param {string} userId - ChatUser _id
    * @returns {Promise<Message|null>}
    */
   async addReaction(messageId, emoji, userId) {
-    // First try to add to existing reaction entry
+    // Write to MessageReaction collection
+    const msg = await Message.findById(messageId).select('channelId workspaceId').lean();
+    if (msg) {
+      await MessageReaction.findOneAndUpdate(
+        { messageId, emoji, userId },
+        { $setOnInsert: { messageId, emoji, userId, channelId: msg.channelId, workspaceId: msg.workspaceId } },
+        { upsert: true },
+      ).catch(() => {}); // non-critical — embedded array is primary for now
+    }
+
+    // First try to add to existing reaction entry (embedded)
     const result = await Message.findOneAndUpdate(
       {
         _id: messageId,
@@ -218,7 +233,7 @@ class MessageRepository {
     if (result) return result;
 
     // If emoji doesn't exist yet, add new reaction entry
-    return Message.findOneAndUpdate(
+    const added = await Message.findOneAndUpdate(
       {
         _id: messageId,
         'reactions.emoji': { $ne: emoji },
@@ -230,20 +245,28 @@ class MessageRepository {
       },
       { new: true },
     );
+
+    // If both updates returned null, user already reacted — return as-is
+    return added || Message.findById(messageId);
   }
 
   /**
    * Remove reaction from a message (atomic operation).
+   * Dual-writes to both embedded array and MessageReaction collection.
    * @param {string} messageId
    * @param {string} emoji
    * @param {string} userId - ChatUser _id
    * @returns {Promise<Message|null>}
    */
   async removeReaction(messageId, emoji, userId) {
+    // Remove from MessageReaction collection
+    await MessageReaction.deleteOne({ messageId, emoji, userId }).catch(() => {});
+
     const message = await Message.findOneAndUpdate(
       {
         _id: messageId,
         'reactions.emoji': emoji,
+        'reactions.userIds': userId,
       },
       {
         $pull: { 'reactions.$.userIds': userId },

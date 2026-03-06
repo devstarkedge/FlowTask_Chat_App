@@ -1,11 +1,17 @@
 import Channel from './Channel.model.js';
+import ChannelMember from './ChannelMember.model.js';
 import { CHANNEL_TYPES } from '../../config/constants.js';
 import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
+import cache from '../../services/cache.service.js';
 
 /**
  * Channel Repository — data access layer for Channel documents.
  * All database queries are encapsulated here to decouple business logic from Mongoose.
  * All query methods accept an optional workspaceId for multi-tenant scoping.
+ *
+ * Membership is stored in the separate ChannelMember collection.
+ * The embedded Channel.members[] array is kept in sync for backward compat
+ * but ChannelMember is the source of truth for new operations.
  */
 
 class ChannelRepository {
@@ -59,6 +65,7 @@ class ChannelRepository {
 
   /**
    * Find all channels for a user, sorted by last activity.
+   * Uses ChannelMember collection to get channel IDs, then fetches channels.
    * @param {string} userId - ChatUser _id
    * @param {object} [options]
    * @param {boolean} [options.includeArchived=false]
@@ -66,7 +73,28 @@ class ChannelRepository {
    * @returns {Promise<Channel[]>}
    */
   async findByMember(userId, { includeArchived = false, workspaceId } = {}) {
-    return Channel.findUserChannels(userId, includeArchived, workspaceId);
+    // Check cache for user's channel list
+    const cacheKey = `channels:user:${userId}:ws:${workspaceId || 'all'}:arch:${includeArchived}`;
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
+
+    let channels;
+    // Try ChannelMember collection first
+    if (workspaceId) {
+      const channelIds = await ChannelMember.getChannelIdsForUser(userId, workspaceId);
+      if (channelIds.length > 0) {
+        const filter = { _id: { $in: channelIds } };
+        if (!includeArchived) filter.isArchived = false;
+        channels = await Channel.find(filter).sort({ lastMessageAt: -1 });
+        await cache.set(cacheKey, channels, 60); // 60s TTL
+        return channels;
+      }
+    }
+
+    // Fallback to embedded array query
+    channels = await Channel.findUserChannels(userId, includeArchived, workspaceId);
+    await cache.set(cacheKey, channels, 60);
+    return channels;
   }
 
   /**
@@ -81,13 +109,24 @@ class ChannelRepository {
 
   /**
    * Add a member to a channel (idempotent).
+   * Writes to both the ChannelMember collection and the embedded array.
    * @param {string} channelId
    * @param {string} userId - ChatUser _id
    * @param {string} [role='member']
+   * @param {string} [workspaceId] - Required for ChannelMember collection
    * @returns {Promise<Channel>}
    */
-  async addMember(channelId, userId, role = 'member') {
-    return Channel.findOneAndUpdate(
+  async addMember(channelId, userId, role = 'member', workspaceId) {
+    // Invalidate user's channel list cache
+    await cache.delPattern(`channels:user:${userId}:*`);
+
+    // Write to ChannelMember collection (source of truth)
+    if (workspaceId) {
+      await ChannelMember.addMember(channelId, userId, workspaceId, role);
+    }
+
+    // Also update embedded array for backward compat
+    const updated = await Channel.findOneAndUpdate(
       {
         _id: channelId,
         'members.userId': { $ne: userId },
@@ -98,17 +137,27 @@ class ChannelRepository {
       },
       { new: true },
     );
+    // If user was already in embedded array, return the channel as-is
+    return updated || Channel.findById(channelId);
   }
 
   /**
    * Remove a member from a channel.
+   * Updates both ChannelMember collection and embedded array.
    * @param {string} channelId
    * @param {string} userId - ChatUser _id
    * @returns {Promise<Channel>}
    */
-  async removeMember(channelId, userId) {
+  async removeMember(channelId, userId, workspaceId) {
+    // Invalidate user's channel list cache
+    await cache.delPattern(`channels:user:${userId}:*`);
+
+    // Soft-remove from ChannelMember collection
+    await ChannelMember.removeMember(channelId, userId);
+
+    // Only decrement if member was actually in the embedded array
     return Channel.findOneAndUpdate(
-      { _id: channelId },
+      { _id: channelId, 'members.userId': userId },
       {
         $pull: { members: { userId } },
         $inc: { memberCount: -1 },
@@ -164,6 +213,7 @@ class ChannelRepository {
 
   /**
    * Search channels by name (for channel browser).
+   * Uses ChannelMember for membership filtering.
    * @param {string} query
    * @param {string} userId - ChatUser _id (for visibility filtering)
    * @param {number} [limit=20]
@@ -172,12 +222,20 @@ class ChannelRepository {
    */
   async search(query, userId, limit = 20, workspaceId) {
     const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+    // Get user's channel IDs from ChannelMember
+    let userChannelIds = [];
+    if (workspaceId) {
+      userChannelIds = await ChannelMember.getChannelIdsForUser(userId, workspaceId);
+    }
+
     const filter = injectWorkspaceFilter({
       name: regex,
       isArchived: false,
       $or: [
         { visibility: 'public' },
-        { 'members.userId': userId },
+        ...(userChannelIds.length > 0 ? [{ _id: { $in: userChannelIds } }] : []),
+        { 'members.userId': userId }, // fallback to embedded array
       ],
     }, workspaceId);
     return Channel.find(filter)
@@ -222,17 +280,17 @@ class ChannelRepository {
 
   /**
    * Get member IDs for a channel (for Socket.IO room management).
+   * Uses ChannelMember collection as primary source.
    * @param {string} channelId
    * @returns {Promise<string[]>} Array of ChatUser _id strings
    */
   async getMemberIds(channelId) {
-    const channel = await Channel.findById(channelId).select('members.userId').lean();
-    if (!channel) return [];
-    return channel.members.map((m) => m.userId.toString());
+    return ChannelMember.getMemberIds(channelId);
   }
 
   /**
    * Bulk add members to a channel.
+   * Writes to both ChannelMember collection and embedded array.
    * @param {string} channelId
    * @param {Array<{userId: string, role?: string}>} membersToAdd
    * @returns {Promise<Channel>}
@@ -252,9 +310,35 @@ class ChannelRepository {
 
     if (newMembers.length === 0) return channel;
 
-    channel.members.push(...newMembers);
-    channel.memberCount = channel.members.length;
-    return channel.save();
+    // Invalidate channel list cache for all new members
+    await Promise.all(newMembers.map((m) => cache.delPattern(`channels:user:${m.userId}:*`)));
+
+    // Write to ChannelMember collection
+    const workspaceId = channel.workspaceId;
+    if (workspaceId) {
+      const bulkOps = newMembers.map((m) => ({
+        updateOne: {
+          filter: { channelId, userId: m.userId },
+          update: {
+            $setOnInsert: { channelId, userId: m.userId, joinedAt: m.joinedAt },
+            $set: { isActive: true, workspaceId, role: m.role },
+          },
+          upsert: true,
+        },
+      }));
+      await ChannelMember.bulkWrite(bulkOps);
+    }
+
+    // Atomically update embedded array — only add members not yet present
+    const result = await Channel.findOneAndUpdate(
+      { _id: channelId },
+      {
+        $push: { members: { $each: newMembers } },
+        $inc: { memberCount: newMembers.length },
+      },
+      { new: true },
+    );
+    return result;
   }
 }
 

@@ -17,9 +17,10 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 // Allowed MIME types
+// NOTE: SVG excluded due to XSS risk (can embed JavaScript)
 const ALLOWED_TYPES = new Set([
-  // Images
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+  // Images (SVG excluded — XSS vector)
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
   // Documents
   'application/pdf',
   'application/msword',
@@ -36,13 +37,28 @@ const ALLOWED_TYPES = new Set([
   'application/json', 'application/xml',
 ]);
 
+// Mime-to-extension mapping for safe filename generation
+const MIME_TO_EXT = {
+  'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp', 'image/svg+xml': '.svg',
+  'video/mp4': '.mp4', 'video/webm': '.webm', 'audio/mpeg': '.mp3', 'audio/ogg': '.ogg', 'audio/wav': '.wav',
+  'application/pdf': '.pdf', 'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/vnd.ms-excel': '.xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'application/vnd.ms-powerpoint': '.ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+  'text/plain': '.txt', 'text/csv': '.csv', 'text/markdown': '.md',
+  'application/zip': '.zip', 'application/x-rar-compressed': '.rar', 'application/gzip': '.gz',
+  'application/json': '.json', 'application/xml': '.xml',
+};
+
 // Storage configuration
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, uploadDir);
   },
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname) || '';
+    const ext = MIME_TO_EXT[file.mimetype] || path.extname(file.originalname) || '';
     const uniqueName = `${randomUUID()}${ext}`;
     cb(null, uniqueName);
   },

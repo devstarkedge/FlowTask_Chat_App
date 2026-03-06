@@ -432,21 +432,29 @@ function InviteTab({ inviteCode, canManage, isRegenerating, onCopy, onRegenerate
   const [isSendingInvite, setIsSendingInvite] = useState(false)
   const { activeWorkspaceId } = useWorkspaceStore()
 
+  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+
   const handleSendEmailInvite = async () => {
-    if (!inviteEmail.trim()) return
+    const email = inviteEmail.trim()
+    if (!email) return
+    if (!isValidEmail(email)) {
+      toast.error('Please enter a valid email address')
+      return
+    }
     setIsSendingInvite(true)
     try {
       await api.post(`/workspaces/${activeWorkspaceId}/invite-email`, {
-        email: inviteEmail.trim(),
+        email,
         role: inviteRole,
       })
-      toast.success(`Invite sent to ${inviteEmail}`)
+      toast.success(`Invite sent to ${email}`)
       setInviteEmail('')
     } catch (error) {
       toast.error(error.response?.data?.error?.message || 'Failed to send invite')
     }
     setIsSendingInvite(false)
   }
+
   return (
     <div className="space-y-6">
       {/* Email invite */}

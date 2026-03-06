@@ -145,3 +145,10 @@ export const updatePreferencesSchema = z.object({
   sidebarCollapsed: z.boolean().optional(),
   compactMode: z.boolean().optional(),
 });
+
+export const scheduleMessageSchema = z.object({
+  content: z.string().min(1, 'Content is required').max(10000),
+  htmlContent: z.string().max(20000).optional(),
+  threadId: z.string().optional(),
+  scheduledAt: z.string().min(1, 'scheduledAt is required'),
+});

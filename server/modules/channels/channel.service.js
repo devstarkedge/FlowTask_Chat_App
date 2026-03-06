@@ -1,4 +1,5 @@
 import Channel from './Channel.model.js';
+import ChannelMember from './ChannelMember.model.js';
 import channelRepository from './channel.repository.js';
 import userRepository from '../users/user.repository.js';
 import { emitToChannel, emitToUser, joinChannelRoom } from '../../sockets/socketManager.js';
@@ -267,6 +268,10 @@ class ChannelService {
    * Create a custom channel (user-initiated).
    */
   async createCustomChannel(data, creatorId, workspaceId) {
+    if (!workspaceId) {
+      throw new ValidationError('workspaceId is required to create a channel');
+    }
+
     let slug = slugify(data.name);
     if (await channelRepository.slugExists(slug, workspaceId)) {
       slug = appendCollisionSuffix(slug, Date.now().toString(36));
@@ -294,13 +299,16 @@ class ChannelService {
       ...(workspaceId && { workspaceId }),
     });
 
+    // Join creator to channel room
+    joinChannelRoom(creatorId.toString(), channel._id.toString(), workspaceId?.toString());
+
     // Notify all added members
     for (const member of members) {
       if (member.userId.toString() !== creatorId.toString()) {
         emitToUser(member.userId.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
           channel: { _id: channel._id, name: channel.name, slug: channel.slug, type: channel.type },
-        });
-        joinChannelRoom(member.userId.toString(), channel._id.toString());
+        }, workspaceId?.toString());
+        joinChannelRoom(member.userId.toString(), channel._id.toString(), workspaceId?.toString());
       }
     }
 
@@ -480,19 +488,19 @@ class ChannelService {
       return channel; // Already a member — idempotent
     }
 
-    const updated = await channelRepository.addMember(channelId, userId, role);
+    const updated = await channelRepository.addMember(channelId, userId, role, channel.workspaceId?.toString());
 
     // Notify the user and make their socket join the room
     emitToUser(userId.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
       channel: { _id: updated._id, name: updated.name, slug: updated.slug, type: updated.type },
-    });
-    joinChannelRoom(userId.toString(), channelId.toString());
+    }, channel.workspaceId?.toString());
+    joinChannelRoom(userId.toString(), channelId.toString(), channel.workspaceId?.toString());
 
     // Notify channel
     emitToChannel(channelId.toString(), SOCKET_EVENTS.MEMBER_JOINED, {
       channelId,
       userId,
-    });
+    }, channel.workspaceId?.toString());
 
     // Persist channel invite notification
     import('../notifications/notification.service.js').then(({ default: notificationService }) => {
@@ -535,8 +543,8 @@ class ChannelService {
     for (const uid of newMembers) {
       emitToUser(uid.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
         channel: { _id: updated._id, name: updated.name, slug: updated.slug },
-      });
-      joinChannelRoom(uid.toString(), channelId.toString());
+      }, channel.workspaceId?.toString());
+      joinChannelRoom(uid.toString(), channelId.toString(), channel.workspaceId?.toString());
     }
 
     logger.info('Members synced to channel', {
@@ -564,10 +572,10 @@ class ChannelService {
       }
     }
 
-    const updated = await channelRepository.removeMember(channelId, userId);
+    const updated = await channelRepository.removeMember(channelId, userId, channel.workspaceId);
 
-    emitToUser(userId.toString(), SOCKET_EVENTS.CHANNEL_REMOVED, { channelId });
-    emitToChannel(channelId.toString(), SOCKET_EVENTS.MEMBER_LEFT, { channelId, userId });
+    emitToUser(userId.toString(), SOCKET_EVENTS.CHANNEL_REMOVED, { channelId }, channel.workspaceId?.toString());
+    emitToChannel(channelId.toString(), SOCKET_EVENTS.MEMBER_LEFT, { channelId, userId }, channel.workspaceId?.toString());
 
     return updated;
   }
@@ -618,7 +626,7 @@ class ChannelService {
       channelId,
       updates: allowed,
       updatedBy: userId,
-    });
+    }, channel.workspaceId?.toString());
 
     return updated;
   }
@@ -645,7 +653,7 @@ class ChannelService {
       channelId,
       updates: { isArchived: true },
       archivedBy: userId,
-    });
+    }, channel.workspaceId?.toString());
 
     logger.info('Channel archived', { channelId, archivedBy: userId });
     return updated;
@@ -742,7 +750,7 @@ class ChannelService {
 
         // Resolve FlowTask user IDs to chat users
         if (flowTaskUserIds.size > 0) {
-          const chatUsers = await userRepository.findByFlowTaskIds([...flowTaskUserIds]);
+          const chatUsers = await userRepository.findByFlowTaskIds([...flowTaskUserIds], channel.workspaceId);
           for (const chatUser of chatUsers) {
             const ftId = chatUser.flowTaskUserId;
             if (memberMap.has(ftId)) {

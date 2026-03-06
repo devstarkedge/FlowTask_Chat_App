@@ -1,6 +1,8 @@
 import messageService from './message.service.js';
 import fileUploadService from '../../services/fileUpload.service.js';
 import asyncHandler from '../../middleware/asyncHandler.js';
+import SavedMessage from './SavedMessage.model.js';
+import ScheduledMessage from './ScheduledMessage.model.js';
 
 /**
  * Message Controller — REST endpoints for messages.
@@ -187,4 +189,99 @@ export const uploadFiles = asyncHandler(async (req, res) => {
   }
 
   res.status(201).json({ success: true, data: { files: uploads } });
+});
+
+// ──────────────────── Saved Messages ────────────────────────────────────────
+
+/**
+ * POST /api/chat/messages/:id/save
+ * Toggle save/unsave a message.
+ */
+export const toggleSaveMessage = asyncHandler(async (req, res) => {
+  const message = await messageService.getMessageById(req.params.id);
+  const result = await SavedMessage.toggle(
+    req.user._id,
+    message._id,
+    message.channelId,
+    req.workspaceId,
+  );
+  res.json({ success: true, data: result });
+});
+
+/**
+ * GET /api/chat/saved-messages
+ * Get user's saved messages.
+ */
+export const getSavedMessages = asyncHandler(async (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
+  const skip = Math.max(parseInt(req.query.skip) || 0, 0);
+  const saved = await SavedMessage.getUserSaved(req.user._id, req.workspaceId, { limit, skip });
+  res.json({ success: true, data: { messages: saved } });
+});
+
+// ──────────────────── Scheduled Messages ────────────────────────────────────
+
+/**
+ * POST /api/chat/channels/:channelId/scheduled-messages
+ * Schedule a message for future delivery.
+ */
+export const scheduleMessage = asyncHandler(async (req, res) => {
+  const { content, htmlContent, threadId, scheduledAt } = req.body;
+
+  if (!content || !content.trim()) {
+    return res.status(400).json({ success: false, error: { message: 'Message content is required' } });
+  }
+
+  const schedDate = new Date(scheduledAt);
+  if (isNaN(schedDate.getTime()) || schedDate <= new Date()) {
+    return res.status(400).json({ success: false, error: { message: 'scheduledAt must be a future date' } });
+  }
+
+  const scheduled = await ScheduledMessage.create({
+    channelId: req.params.channelId,
+    authorId: req.user._id,
+    workspaceId: req.workspaceId,
+    content,
+    htmlContent: htmlContent || content,
+    threadId: threadId || null,
+    scheduledAt: schedDate,
+  });
+
+  res.status(201).json({ success: true, data: { scheduledMessage: scheduled } });
+});
+
+/**
+ * GET /api/chat/scheduled-messages
+ * Get user's pending scheduled messages.
+ */
+export const getScheduledMessages = asyncHandler(async (req, res) => {
+  const messages = await ScheduledMessage.find({
+    authorId: req.user._id,
+    workspaceId: req.workspaceId,
+    status: 'pending',
+  }).sort({ scheduledAt: 1 });
+
+  res.json({ success: true, data: { messages } });
+});
+
+/**
+ * DELETE /api/chat/scheduled-messages/:id
+ * Cancel a scheduled message.
+ */
+export const cancelScheduledMessage = asyncHandler(async (req, res) => {
+  const scheduled = await ScheduledMessage.findOne({
+    _id: req.params.id,
+    authorId: req.user._id,
+    workspaceId: req.workspaceId,
+    status: 'pending',
+  });
+
+  if (!scheduled) {
+    return res.status(404).json({ success: false, error: { message: 'Scheduled message not found or already sent' } });
+  }
+
+  scheduled.status = 'cancelled';
+  await scheduled.save();
+
+  res.json({ success: true, data: { scheduledMessage: scheduled } });
 });

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
-import {
-  ArrowRight, ArrowLeft, Check, Upload, Users, Settings, Zap, Loader2,
-  Mail, Plus, X, Copy,
-} from 'lucide-react'
+ import {
+   ArrowRight, ArrowLeft, Check, Users, Settings, Zap, Loader2,
+   Mail, Plus, X, Copy,
+ } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
@@ -44,18 +44,23 @@ export default function WorkspaceSetupWizard({ onComplete }) {
 
   const id = paramWorkspaceId || activeWorkspace?._id
 
+  if (!id) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p style={{ color: 'var(--text-muted)' }}>No workspace selected.</p>
+      </div>
+    )
+  }
   const handleNext = async () => {
+    setIsLoading(true)
     if (currentStep === 0) {
-      // Save name/description
-      if (!name.trim()) {
-        toast.error('Workspace name is required')
-        return
-      }
-      setIsLoading(true)
       try {
         await updateWorkspace(id, { name: name.trim(), description: description.trim() })
-      } catch { /* handled */}
-      setIsLoading(false)
+      } catch (err) {
+        toast.error('Failed to save workspace info')
+        setIsLoading(false)
+        return
+      }
     }
     if (currentStep === 1) {
       // Send pending invites
@@ -72,6 +77,7 @@ export default function WorkspaceSetupWizard({ onComplete }) {
         toast.success(`${inviteEmails.length} invite(s) sent`)
       }
     }
+    setIsLoading(false)
     setCurrentStep((s) => Math.min(s + 1, STEPS.length - 1))
   }
 

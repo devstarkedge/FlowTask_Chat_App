@@ -141,9 +141,10 @@ export const messageAPI = {
   search: (q, channelId) => api.get('/messages/search', { params: { q, channelId } }),
   // Mark DM messages as seen (REST fallback when socket unavailable)
   markDMSeen: (channelId) => api.post(`/channels/${channelId}/seen`),
-  uploadFiles: (channelId, formData) => api.post(`/channels/${channelId}/upload`, formData, {
+  uploadFiles: (channelId, formData, onUploadProgress) => api.post(`/channels/${channelId}/upload`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 60000,
+    onUploadProgress,
   }),
   // Direct Cloudinary upload support
   getUploadSignature: (channelId) => api.post(`/channels/${channelId}/upload/sign`),
@@ -212,6 +213,46 @@ export const workspaceAPI = {
   getPendingInvites: (id) => api.get(`/workspaces/${id}/invites`),
   revokeInvite: (id, inviteId) => api.delete(`/workspaces/${id}/invites/${inviteId}`),
   acceptEmailInvite: (token) => api.post('/workspaces/accept-invite', { token }),
+}
+
+// ─── Saved Messages ──────────────────────────────────────────────────────
+export const savedMessageAPI = {
+  list: () => api.get('/messages/saved'),
+  toggle: (messageId) => api.post(`/messages/${messageId}/save`),
+}
+
+// ─── Scheduled Messages ──────────────────────────────────────────────────
+export const scheduledMessageAPI = {
+  list: () => api.get('/messages/scheduled'),
+  create: (channelId, data) => api.post(`/channels/${channelId}/scheduled-messages`, data),
+  cancel: (id) => api.delete(`/messages/scheduled/${id}`),
+}
+
+// ─── Admin ───────────────────────────────────────────────────────────────
+export const adminAPI = {
+  getAnalytics: () => api.get('/admin/analytics'),
+  listUsers: (params) => api.get('/admin/users', { params }),
+  changeUserRole: (userId, role) => api.patch(`/admin/users/${userId}/role`, { role }),
+  deactivateUser: (userId) => api.post(`/admin/users/${userId}/deactivate`),
+  activateUser: (userId) => api.post(`/admin/users/${userId}/activate`),
+  listChannels: (params) => api.get('/admin/channels', { params }),
+  archiveChannel: (channelId) => api.post(`/admin/channels/${channelId}/archive`),
+  unarchiveChannel: (channelId) => api.post(`/admin/channels/${channelId}/unarchive`),
+  deleteChannel: (channelId) => api.delete(`/admin/channels/${channelId}`),
+  getSettings: () => api.get('/admin/settings'),
+  updateSettings: (settings) => api.patch('/admin/settings', settings),
+}
+
+// ─── Organizations ───────────────────────────────────────────────────────
+export const organizationAPI = {
+  list: () => api.get('/organizations'),
+  create: (data) => api.post('/organizations', data),
+  get: (id) => api.get(`/organizations/${id}`),
+  update: (id, data) => api.put(`/organizations/${id}`, data),
+  getWorkspaces: (id) => api.get(`/organizations/${id}/workspaces`),
+  getMembers: (id) => api.get(`/organizations/${id}/members`),
+  addMember: (id, data) => api.post(`/organizations/${id}/members`, data),
+  removeMember: (id, userId) => api.delete(`/organizations/${id}/members/${userId}`),
 }
 
 export default api

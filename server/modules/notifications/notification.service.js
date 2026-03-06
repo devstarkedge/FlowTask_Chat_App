@@ -2,6 +2,7 @@ import Notification from './Notification.model.js';
 import { emitToUser } from '../../sockets/socketManager.js';
 import { SOCKET_EVENTS } from '../../config/constants.js';
 import logger from '../../utils/logger.js';
+import userRepository from '../users/user.repository.js';
 
 /**
  * Notification Service — business logic for creating, retrieving,
@@ -9,11 +10,32 @@ import logger from '../../utils/logger.js';
  *
  * Notifications are workspace-scoped and emitted in real-time via socket.
  * Old notifications auto-expire after 90 days via TTL index.
+ * Respects DND schedule and channel mute preferences.
  */
 class NotificationService {
   /**
+   * Check if a user is currently in DND mode.
+   * @param {object} user - ChatUser document (needs chatPreferences)
+   * @returns {boolean}
+   */
+  _isInDND(user) {
+    if (!user?.chatPreferences?.dndSchedule?.enabled) return false;
+    if (user.onlineStatus === 'dnd') return true;
+
+    const { startHour, endHour } = user.chatPreferences.dndSchedule;
+    const now = new Date();
+    const currentHour = now.getUTCHours(); // Simplified — timezone handling can be enhanced
+
+    if (startHour <= endHour) {
+      return currentHour >= startHour && currentHour < endHour;
+    }
+    // Wraps midnight (e.g., 22:00 – 08:00)
+    return currentHour >= startHour || currentHour < endHour;
+  }
+
+  /**
    * Create a notification, persist it, and emit via socket.
-   * Respects channel mute preferences — suppresses notification if muted.
+   * Respects DND and channel mute preferences.
    */
   async create({ workspaceId, recipientId, type, title, body, sourceType, sourceId, channelId, threadId, senderId, senderName, channelName }) {
     // Don't send notification to yourself
@@ -37,23 +59,36 @@ class NotificationService {
     });
 
     // Emit real-time notification to the recipient's personal room
-    emitToUser(recipientId.toString(), SOCKET_EVENTS.NOTIFICATION, {
-      notification: {
-        _id: notification._id,
-        type: notification.type,
-        title: notification.title,
-        body: notification.body,
-        sourceType: notification.sourceType,
-        sourceId: notification.sourceId,
-        channelId: notification.channelId,
-        threadId: notification.threadId,
-        senderId: notification.senderId,
-        senderName: notification.senderName,
-        channelName: notification.channelName,
-        isRead: false,
-        createdAt: notification.createdAt,
-      },
-    });
+    // Suppress socket emit if user is in DND mode (notification is still persisted)
+    let suppressEmit = false;
+    try {
+      const recipient = await userRepository.findById(recipientId);
+      if (recipient && this._isInDND(recipient)) {
+        suppressEmit = true;
+      }
+    } catch (err) {
+      logger.warn('Failed to check DND status for notification', { recipientId, error: err.message });
+    }
+
+    if (!suppressEmit) {
+      emitToUser(recipientId.toString(), SOCKET_EVENTS.NOTIFICATION, {
+        notification: {
+          _id: notification._id,
+          type: notification.type,
+          title: notification.title,
+          body: notification.body,
+          sourceType: notification.sourceType,
+          sourceId: notification.sourceId,
+          channelId: notification.channelId,
+          threadId: notification.threadId,
+          senderId: notification.senderId,
+          senderName: notification.senderName,
+          channelName: notification.channelName,
+          isRead: false,
+          createdAt: notification.createdAt,
+        },
+      }, workspaceId?.toString());
+    }
 
     return notification;
   }

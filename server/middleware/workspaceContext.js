@@ -30,6 +30,14 @@ export const resolveWorkspace = async (req, res, next) => {
       });
     }
 
+    // Validate ObjectId format to prevent injection
+    if (!/^[0-9a-fA-F]{24}$/.test(workspaceId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid workspace ID format.',
+      });
+    }
+
     // Validate workspace exists and is active
     const workspace = await Workspace.findById(workspaceId).lean();
     if (!workspace || !workspace.isActive) {

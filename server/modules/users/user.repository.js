@@ -29,6 +29,15 @@ class UserRepository {
     return ChatUser.findById(id).exec();
   }
 
+  /**
+   * Find multiple users by IDs.
+   * @param {string[]} ids
+   * @returns {Promise<ChatUser[]>}
+   */
+  async findByIds(ids) {
+    return ChatUser.find({ _id: { $in: ids } }).exec();
+  }
+
   // ─── Native Auth ─────────────────────────────────────────────────────
 
   /**

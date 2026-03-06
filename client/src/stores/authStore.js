@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { authAPI } from '../services/api'
+import { useChannelStore } from './channelStore'
 import { connectSocket, disconnectSocket } from '../services/socket'
 import { useWorkspaceStore } from './workspaceStore'
 
@@ -64,10 +65,15 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const { data } = await authAPI.loginFlowTask(token)
-      const { user, accessToken, refreshToken } = data.data
+      const { user, accessToken, refreshToken, channels } = data.data
       localStorage.setItem('chat_access_token', accessToken)
       localStorage.setItem('chat_refresh_token', refreshToken)
       set({ accessToken, refreshToken, user, isLoading: false })
+      // Seed sidebar channels immediately from login payload to avoid
+      // any race with subsequent /channels fetch.
+      if (Array.isArray(channels) && channels.length > 0) {
+        useChannelStore.setState({ channels })
+      }
       await useWorkspaceStore.getState().fetchWorkspaces()
       connectSocket()
       return data

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAuthStore } from '../../stores/authStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
@@ -24,7 +24,10 @@ export default function AddMemberModal({ channel, onClose }) {
   const debounceRef = useRef(null)
 
   const channelMembers = (channel && membersByChannel?.[channel._id]) || []
-  const memberIds = new Set(channelMembers.map((m) => m._id))
+  const memberIds = useMemo(
+    () => new Set(channelMembers.map((m) => m._id)),
+    [channelMembers],
+  )
 
   useEffect(() => {
     searchInputRef.current?.focus()

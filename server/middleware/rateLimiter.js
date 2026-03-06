@@ -75,9 +75,9 @@ export function createRateLimiter({ windowMs, max, prefix = 'default' }) {
 
 // ─── Pre-built Auth Rate Limiters ────────────────────────────────────────────
 
-/** Strict limiter for login/register — 5 attempts per 15 minutes per IP. */
+/** Strict limiter for login/register — 5 attempts per 100 seconds per user/IP. */
 export const authLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 100 * 1000,
   max: 5,
   prefix: 'auth',
 });

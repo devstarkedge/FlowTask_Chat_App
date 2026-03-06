@@ -81,6 +81,19 @@ class CircuitBreaker {
   }
 
   _onFailure(error) {
+    // For FlowTask-style per-user auth errors (HTTP 4xx), we do NOT
+    // trip the breaker. These indicate invalid tokens or permissions,
+    // not upstream service instability.
+    const status = error?.statusCode || error?.response?.status;
+    if (status >= 400 && status < 500) {
+      logger.warn(`Circuit breaker [${this.name}] non-fatal client error`, {
+        status,
+        error: error.message,
+        state: this.state,
+      });
+      return;
+    }
+
     this._recordCall(false);
     this._consecutiveFailures += 1;
     this._lastFailureTime = Date.now();

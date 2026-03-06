@@ -390,9 +390,18 @@ class ChannelService {
           workspaceId,
         );
 
-        // Ensure current user is a member
+        // Ensure current user is a member (ChannelMember + embedded array)
         if (!channel.hasMember(chatUser._id)) {
           await this.addMember(channel._id, chatUser._id);
+        } else {
+          // Embedded members may be in sync while ChannelMember is missing.
+          // Force idempotent add to guarantee ChannelMember row exists.
+          await channelRepository.addMember(
+            channel._id,
+            chatUser._id,
+            CHANNEL_MEMBER_ROLES.MEMBER,
+            channel.workspaceId?.toString() || workspaceId,
+          );
         }
 
         // Sync board members
@@ -409,7 +418,7 @@ class ChannelService {
         }
 
         if (memberIds.length > 0) {
-          await this.syncMembers(channel._id, memberIds);
+          await this.syncMembers(channel._id, memberIds, workspaceId);
           synced++;
         }
 
@@ -425,8 +434,9 @@ class ChannelService {
       }
     }
 
-    logger.info('Project channels synced', {
+    logger.info('[CHANNEL_SYNC] Project channels synced for user', {
       userId: chatUser._id,
+      workspaceId,
       totalBoards: boards.length,
       created,
       synced,
@@ -449,7 +459,17 @@ class ChannelService {
         !channels.some((c) => c._id.toString() === sc._id.toString()),
     );
 
-    return [...channels, ...publicSystem];
+    const all = [...channels, ...publicSystem];
+
+    logger.debug?.('[CHANNEL_FETCH] Channels resolved for sidebar', {
+      userId,
+      workspaceId,
+      memberChannels: channels.length,
+      publicSystem: publicSystem.length,
+      total: all.length,
+    });
+
+    return all;
   }
 
   /**
@@ -484,11 +504,13 @@ class ChannelService {
     if (!channel) throw new NotFoundError('Channel not found');
     if (channel.isArchived) throw new ForbiddenError('Channel is archived');
 
-    if (channel.hasMember(userId)) {
-      return channel; // Already a member — idempotent
-    }
-
-    const updated = await channelRepository.addMember(channelId, userId, role, channel.workspaceId?.toString());
+    // Always go through repository to keep ChannelMember and embedded members in sync.
+    const updated = await channelRepository.addMember(
+      channelId,
+      userId,
+      role,
+      channel.workspaceId?.toString(),
+    );
 
     // Notify the user and make their socket join the room
     emitToUser(userId.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {

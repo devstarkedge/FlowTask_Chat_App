@@ -213,7 +213,8 @@ export const RATE_LIMITS = Object.freeze({
   REACTION: { windowMs: 60_000, max: 60 },
   SEARCH: { windowMs: 60_000, max: 10 },
   WEBHOOK: { windowMs: 60_000, max: 1000 },
-  AUTH: { windowMs: 60_000, max: 20 },
+  // Auth: 5 requests per 100 seconds
+  AUTH: { windowMs: 100_000, max: 5 },
 });
 
 // ─── Circuit Breaker ─────────────────────────────────────────────────────────

@@ -85,14 +85,16 @@ class ChannelRepository {
       if (channelIds.length > 0) {
         const filter = { _id: { $in: channelIds } };
         if (!includeArchived) filter.isArchived = false;
-        channels = await Channel.find(filter).sort({ lastMessageAt: -1 });
+        channels = await Channel.find(filter)
+          .sort({ lastMessageAt: -1 })
+          .lean();
         await cache.set(cacheKey, channels, 60); // 60s TTL
         return channels;
       }
     }
 
     // Fallback to embedded array query
-    channels = await Channel.findUserChannels(userId, includeArchived, workspaceId);
+    channels = await Channel.findUserChannels(userId, includeArchived, workspaceId).lean();
     await cache.set(cacheKey, channels, 60);
     return channels;
   }
@@ -252,6 +254,7 @@ class ChannelRepository {
    */
   async findSystemChannels(workspaceId) {
     const filter = injectWorkspaceFilter({ type: CHANNEL_TYPES.SYSTEM }, workspaceId);
+    // Return full documents so instance methods like hasMember() are available
     return Channel.find(filter).exec();
   }
 

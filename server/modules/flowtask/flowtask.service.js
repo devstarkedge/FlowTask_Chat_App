@@ -124,6 +124,12 @@ class FlowTaskService {
       if (cached) return cached;
     }
 
+    // Debug: Log outgoing FlowTask token (partially masked)
+    logger.debug('FlowTask GET request', {
+      path,
+      tokenMasked: token ? `${token.slice(0, 6)}...${token.slice(-6)}` : null,
+    });
+
     const data = await breaker.execute(async () => {
       const response = await httpClient.get(path, {
         headers: { Authorization: `Bearer ${token}` },
@@ -146,6 +152,11 @@ class FlowTaskService {
    * @returns {Promise<object>}
    */
   async post(path, body, token) {
+    // Debug: Log outgoing FlowTask token (partially masked)
+    logger.debug('FlowTask POST request', {
+      path,
+      tokenMasked: token ? `${token.slice(0, 6)}...${token.slice(-6)}` : null,
+    });
     return breaker.execute(async () => {
       const response = await httpClient.post(path, body, {
         headers: { Authorization: `Bearer ${token}` },

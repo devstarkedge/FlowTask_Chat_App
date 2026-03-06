@@ -146,13 +146,26 @@ export function requireChannelAccess() {
         return next();
       }
 
-      // Public channels are accessible to all
+      // Public non-DM channels are accessible to all workspace members
       if (channel.visibility === 'public' && channel.type !== 'dm') {
         req.channel = channel;
         return next();
       }
 
-      // Check membership
+      // DM channels: allow access if user is a participant, even if
+      // embedded members[] is out of sync with ChannelMember.
+      if (channel.type === 'dm') {
+        const userIdStr = req.user._id.toString();
+        const isMember = channel.hasMember(req.user._id);
+        const isParticipant = channel.dmParticipants?.some((id) => id.toString() === userIdStr);
+        if (!isMember && !isParticipant) {
+          return next(new ForbiddenError('Not a participant of this DM channel'));
+        }
+        req.channel = channel;
+        return next();
+      }
+
+      // Other private channels: require membership
       if (!channel.hasMember(req.user._id)) {
         return next(new ForbiddenError('Not a member of this channel'));
       }

@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useChatStore } from '../stores/chatStore'
 import { useChannelStore } from '../stores/channelStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
+import { useNotificationStore } from '../stores/notificationStore'
 import { throttle } from '../utils/throttle'
 
 let socket = null
@@ -253,6 +254,9 @@ export function connectSocket() {
     if (data.channelId && data.channelId === activeChannelId && document.hasFocus()) {
       return
     }
+    // Persist to notification store
+    useNotificationStore.getState().addNotification(data)
+    // Also keep legacy in-memory notification for toast/badge
     useChatStore.getState().addNotification(data)
   })
 
@@ -268,11 +272,36 @@ export function disconnectSocket() {
 
 /**
  * Reconnect socket with a new workspace context.
- * Used when switching workspaces — disconnects and reconnects with the new workspaceId.
+ * Used when switching workspaces — leaves all rooms, clears transient state,
+ * disconnects and reconnects with the new workspaceId.
  */
 export function reconnectWithWorkspace() {
+  // Leave all current channel rooms before disconnecting
+  if (socket?.connected) {
+    const channels = useChannelStore.getState().channels
+    for (const ch of channels) {
+      socket.emit('channel:leave', ch._id)
+    }
+  }
+
+  // Clear transient state across all stores
+  useNotificationStore.getState().clearNotifications()
+  useChatStore.getState().clearAllTyping?.()
+
   disconnectSocket()
   connectSocket()
+
+  // After connection established, fetch fresh data
+  const waitForConnect = () => {
+    if (socket?.connected) {
+      useChannelStore.getState().fetchChannels()
+      useNotificationStore.getState().fetchNotifications(true)
+      useNotificationStore.getState().fetchUnreadCount()
+    } else {
+      setTimeout(waitForConnect, 200)
+    }
+  }
+  setTimeout(waitForConnect, 100)
 }
 
 // ─── Throttled typing emission (max 1 per 2 seconds) ────────────────────────

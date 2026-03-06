@@ -193,6 +193,11 @@ class MessageService {
     // Notify mentioned users
     this._notifyMentions(mentions, populated, channel).catch(() => {});
 
+    // Notify DM recipient with persistent notification
+    if (channel.type === CHANNEL_TYPES.DM) {
+      this._notifyDMRecipient(populated, channel, authorId).catch(() => {});
+    }
+
     // Log performance
     logMessageLatency(startTime, message._id.toString(), channelId.toString());
 
@@ -571,26 +576,74 @@ class MessageService {
   }
 
   /**
-   * Notify mentioned users with a socket event.
+   * Notify mentioned users with a socket event and persist notification.
    * @private
    */
   async _notifyMentions(mentions, message, channel) {
     if (!mentions || mentions.length === 0) return;
 
+    const notificationService = (await import('../notifications/notification.service.js')).default;
+
     for (const mention of mentions) {
       if (mention.type === MENTION_TYPES.USER) {
         const chatUser = await userRepository.findByFlowTaskId(mention.id);
         if (chatUser && chatUser._id.toString() !== message.authorId?.toString()) {
-          emitToUser(chatUser._id.toString(), SOCKET_EVENTS.NOTIFICATION, {
-            type: 'mention',
+          // Check channel mute preference
+          const preferences = chatUser.preferences || {};
+          const channelMutes = preferences.channelMutes || {};
+          if (channelMutes[channel._id.toString()]) continue;
+
+          // Persist notification
+          await notificationService.createMentionNotification({
+            workspaceId: message.workspaceId || channel.workspaceId,
+            recipientId: chatUser._id,
+            senderId: message.authorId?._id || message.authorId,
+            senderName: message.senderSnapshot?.name || 'Someone',
             channelId: channel._id,
             channelName: channel.name,
             messageId: message._id,
-            authorName: message.senderSnapshot?.name || message.authorId?.name || 'System',
             preview: truncate(stripHtml(message.content), 100),
           });
         }
       }
+    }
+  }
+
+  /**
+   * Send DM notification to recipient (persisted).
+   * Called after message is sent to a DM channel.
+   * @private
+   */
+  async _notifyDMRecipient(message, channel, senderUserId) {
+    try {
+      const senderIdStr = senderUserId.toString();
+      const recipientParticipantId = channel.dmParticipants?.find(
+        (p) => p.toString() !== senderIdStr,
+      );
+      if (!recipientParticipantId) return;
+
+      const recipient = await userRepository.findById(recipientParticipantId);
+      if (!recipient) return;
+
+      // Check DM mute preference
+      const channelMutes = recipient.preferences?.channelMutes || {};
+      if (channelMutes[channel._id.toString()]) return;
+
+      const notificationService = (await import('../notifications/notification.service.js')).default;
+      await notificationService.createDMNotification({
+        workspaceId: message.workspaceId || channel.workspaceId,
+        recipientId: recipient._id,
+        senderId: message.authorId?._id || message.authorId,
+        senderName: message.senderSnapshot?.name || 'Someone',
+        channelId: channel._id,
+        messageId: message._id,
+        preview: truncate(stripHtml(message.content), 100),
+      });
+    } catch (error) {
+      logger.error('Failed to notify DM recipient', {
+        messageId: message._id,
+        error: error.message,
+      });
     }
   }
 }

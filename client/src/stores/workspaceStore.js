@@ -2,6 +2,10 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import api from '../services/api'
 import toast from 'react-hot-toast'
+import { useChannelStore } from './channelStore'
+import { useChatStore } from './chatStore'
+import { useNotificationStore } from './notificationStore'
+import { reconnectWithWorkspace } from '../services/socket'
 
 /**
  * Workspace Store — manages workspace state for multi-tenant isolation.
@@ -69,15 +73,33 @@ export const useWorkspaceStore = create(
         set({ isSwitching: true })
 
         try {
-          // Update active workspace
+          // 1. Clear channel state for clean slate
+          useChannelStore.setState({
+            channels: [],
+            activeChannelId: null,
+            unreads: {},
+            membersByChannel: {},
+            showInfoPanel: false,
+          })
+
+          // 2. Clear chat state (messages, threads, typing, online)
+          useChatStore.getState().clearCache?.()
+
+          // 3. Clear notification state
+          useNotificationStore.getState().clearNotifications()
+
+          // 4. Update active workspace
           set({
             activeWorkspaceId: workspaceId,
             activeWorkspace: workspace,
-            isSwitching: false,
+            members: [],
           })
 
-          // The socket reconnection and channel refresh will be triggered
-          // by the component that observes activeWorkspaceId changes
+          // 5. Reconnect socket with new workspace context
+          // (handles disconnect, reconnect, fetchChannels, fetchNotifications)
+          reconnectWithWorkspace()
+
+          set({ isSwitching: false })
         } catch (error) {
           set({ isSwitching: false })
           toast.error('Failed to switch workspace')

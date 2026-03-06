@@ -17,6 +17,7 @@ import { protect, requireChannelAccess } from '../auth/auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
 import { validate } from '../../middleware/validate.js';
 import { createChannelSchema, updateChannelSchema, createDMSchema } from '../../middleware/schemas.js';
+import { requirePermission } from '../../middleware/permissions.js';
 
 const router = Router();
 
@@ -41,16 +42,16 @@ router.use(resolveWorkspace);
 
 router.get('/', getChannels);
 router.get('/search', searchChannels);
-router.post('/', validate({ body: createChannelSchema }), createChannel);
+router.post('/', requirePermission('channel:create'), validate({ body: createChannelSchema }), createChannel);
 router.post('/dm', validate({ body: createDMSchema }), createDM);
 router.get('/slug/:slug', getChannelBySlug);
 
 router.get('/:id', requireChannelAccess(), getChannel);
 router.get('/:id/members', requireChannelAccess(), getChannelMembers);
-router.put('/:id', requireChannelAccess(), validate({ body: updateChannelSchema }), updateChannel);
-router.post('/:id/archive', requireChannelAccess(), archiveChannel);
-router.post('/:id/members', requireChannelAccess(), addMember);
-router.delete('/:id/members/:userId', requireChannelAccess(), removeMember);
+router.put('/:id', requireChannelAccess(), requirePermission('channel:update'), validate({ body: updateChannelSchema }), updateChannel);
+router.post('/:id/archive', requireChannelAccess(), requirePermission('channel:archive'), archiveChannel);
+router.post('/:id/members', requireChannelAccess(), requirePermission('channel:manage_members'), addMember);
+router.delete('/:id/members/:userId', requireChannelAccess(), requirePermission('channel:manage_members'), removeMember);
 router.post('/:id/leave', requireChannelAccess(), leaveChannel);
 
 export default router;

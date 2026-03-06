@@ -68,6 +68,8 @@ class ChannelService {
       members,
       memberCount: members.length,
       workspaceId,
+      systemManaged: true,
+      adminOverrides: { allowRename: false, allowArchive: false, allowMemberEdit: false },
     });
 
     logger.info('Project channel created', {
@@ -492,6 +494,18 @@ class ChannelService {
       userId,
     });
 
+    // Persist channel invite notification
+    import('../notifications/notification.service.js').then(({ default: notificationService }) => {
+      notificationService.createChannelInviteNotification({
+        workspaceId: channel.workspaceId,
+        recipientId: userId,
+        channelId: channel._id,
+        channelName: channel.name,
+        inviterName: 'System',
+        inviterId: null,
+      }).catch(() => {});
+    });
+
     return updated;
   }
 
@@ -568,12 +582,28 @@ class ChannelService {
     if (!channel) throw new NotFoundError('Channel not found');
     if (channel.isArchived) throw new ForbiddenError('Channel is archived');
 
+    // System-managed channel protection
+    if (channel.systemManaged && userId !== null) {
+      if (updates.name && !channel.adminOverrides?.allowRename) {
+        throw new ForbiddenError('Cannot rename a system-managed channel. Enable admin override first.');
+      }
+    }
+
     const allowed = {};
+    if (updates.name !== undefined) {
+      allowed.name = sanitizeHtml(updates.name);
+    }
+    if (updates.slug !== undefined) {
+      allowed.slug = updates.slug;
+    }
     if (updates.description !== undefined) {
       allowed.description = sanitizeHtml(updates.description);
     }
     if (updates.topic !== undefined) {
       allowed.topic = sanitizeHtml(updates.topic);
+    }
+    if (updates.adminOverrides !== undefined) {
+      allowed.adminOverrides = updates.adminOverrides;
     }
 
     const updated = await channelRepository.update(channelId, allowed);
@@ -596,6 +626,11 @@ class ChannelService {
 
     if (channel.type === CHANNEL_TYPES.SYSTEM) {
       throw new ForbiddenError('Cannot archive system channels');
+    }
+
+    // System-managed channel protection
+    if (channel.systemManaged && userId !== 'system' && !channel.adminOverrides?.allowArchive) {
+      throw new ForbiddenError('Cannot archive a system-managed channel. Enable admin override first.');
     }
 
     const updated = await channelRepository.archive(channelId);

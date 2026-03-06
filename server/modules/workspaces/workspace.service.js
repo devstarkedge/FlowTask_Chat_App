@@ -273,6 +273,140 @@ class WorkspaceService {
     return workspace;
   }
 
+  // ─── Email Invites ──────────────────────────────────────────────────
+
+  /**
+   * Invite a user to a workspace by email.
+   * - If user exists in this workspace: error (already member)
+   * - If user exists in system but not workspace: add directly + email notification
+   * - If user doesn't exist: create invite record + send invite email with signup link
+   */
+  async inviteByEmail(workspaceId, email, role = WORKSPACE_ROLES.MEMBER, invitedBy) {
+    const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
+    const { default: emailService } = await import('../auth/email.service.js');
+    const { default: ChatUser } = await import('../users/ChatUser.model.js');
+
+    const workspace = await this.getWorkspace(workspaceId);
+
+    // Check plan limits
+    const currentCount = await workspaceRepository.countMembers(workspaceId);
+    const limit = WORKSPACE_LIMITS[workspace.plan]?.maxMembers || WORKSPACE_LIMITS.free.maxMembers;
+    if (limit > 0 && currentCount >= limit) {
+      throw new BadRequestError(
+        `Workspace has reached the member limit (${limit}) for the ${workspace.plan} plan.`,
+      );
+    }
+
+    // Check if user exists in this workspace already
+    const existingUser = await ChatUser.findOne({ email: email.toLowerCase(), workspaceId }).lean();
+    if (existingUser) {
+      const isMember = await workspaceRepository.isMember(workspaceId, existingUser._id);
+      if (isMember) {
+        throw new BadRequestError('This user is already a member of this workspace.');
+      }
+      // User exists but not in workspace — add directly
+      const membership = await workspaceRepository.addMember(workspaceId, existingUser._id, role, invitedBy);
+      await emailService.sendWorkspaceInviteEmail(
+        email,
+        workspace.name,
+        (await ChatUser.findById(invitedBy).lean())?.name || 'A team member',
+        null, // No token needed — user already exists
+      );
+      logger.info(`Existing user ${email} added to workspace ${workspace.slug}`);
+      return { type: 'direct_add', membership };
+    }
+
+    // Check for existing pending invite
+    const existingInvite = await WorkspaceInvite.findOne({
+      workspaceId,
+      email: email.toLowerCase(),
+      status: 'pending',
+      expiresAt: { $gt: new Date() },
+    });
+    if (existingInvite) {
+      throw new BadRequestError('An invite is already pending for this email.');
+    }
+
+    // Create invite record
+    const invite = await WorkspaceInvite.create({
+      workspaceId,
+      email: email.toLowerCase(),
+      role,
+      invitedBy,
+    });
+
+    // Get inviter name
+    const inviter = await ChatUser.findById(invitedBy).lean();
+    const inviterName = inviter?.name || 'A team member';
+
+    // Send invite email
+    await emailService.sendWorkspaceInviteEmail(
+      email,
+      workspace.name,
+      inviterName,
+      invite.token,
+    );
+
+    logger.info(`Invite email sent to ${email} for workspace ${workspace.slug}`);
+    return { type: 'email_invite', invite: { _id: invite._id, email: invite.email, role: invite.role, status: invite.status, expiresAt: invite.expiresAt } };
+  }
+
+  /**
+   * Accept a workspace invite by token.
+   */
+  async acceptInvite(token, userId) {
+    const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
+
+    const invite = await WorkspaceInvite.findValidByToken(token);
+    if (!invite) {
+      throw new NotFoundError('Invalid or expired invite.');
+    }
+
+    // Check plan limits
+    const workspace = invite.workspaceId;
+    const currentCount = await workspaceRepository.countMembers(workspace._id);
+    const limit = WORKSPACE_LIMITS[workspace.plan]?.maxMembers || WORKSPACE_LIMITS.free.maxMembers;
+    if (limit > 0 && currentCount >= limit) {
+      throw new BadRequestError(
+        `Workspace has reached the member limit (${limit}) for the ${workspace.plan} plan.`,
+      );
+    }
+
+    // Check if already a member
+    const isMember = await workspaceRepository.isMember(workspace._id, userId);
+    if (isMember) {
+      await WorkspaceInvite.markAccepted(token, userId);
+      return { workspace, alreadyMember: true };
+    }
+
+    // Add as member with the invite's role
+    const membership = await workspaceRepository.addMember(workspace._id, userId, invite.role);
+    await WorkspaceInvite.markAccepted(token, userId);
+
+    logger.info(`User ${userId} accepted invite to workspace ${workspace.slug}`);
+    return { workspace, membership, alreadyMember: false };
+  }
+
+  /**
+   * Get pending invites for a workspace.
+   */
+  async getPendingInvites(workspaceId) {
+    const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
+    return WorkspaceInvite.getPendingInvites(workspaceId);
+  }
+
+  /**
+   * Revoke a pending invite.
+   */
+  async revokeInvite(inviteId, workspaceId) {
+    const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
+    const invite = await WorkspaceInvite.revoke(inviteId, workspaceId);
+    if (!invite) {
+      throw new NotFoundError('Invite not found or already used.');
+    }
+    return invite;
+  }
+
   /**
    * Leave a workspace (self-remove).
    */

@@ -22,6 +22,7 @@ import webhookRoutes from './modules/webhooks/webhook.routes.js';
 import botRoutes from './modules/bot/bot.routes.js';
 import userRoutes from './modules/users/user.routes.js';
 import workspaceRoutes from './modules/workspaces/workspace.routes.js';
+import notificationRoutes from './modules/notifications/notification.routes.js';
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
 import eventBus from './services/eventBus.js';
 import channelService from './modules/channels/channel.service.js';
@@ -115,6 +116,7 @@ if (env.FLOWTASK_ENABLED) {
 }
 app.use('/api/chat/bot', botRoutes);
 app.use('/api/chat/users', userRoutes);
+app.use('/api/chat/notifications', notificationRoutes);
 app.use('/api/chat', readReceiptRoutes);
 
 // ─── Static File Serving (Uploads) ───────────────────────────────────────────

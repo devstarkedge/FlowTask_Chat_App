@@ -1,8 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
-import { useChannelStore } from '../../stores/channelStore'
-import { useChatStore } from '../../stores/chatStore'
-import { reconnectWithWorkspace } from '../../services/socket'
 import {
   ChevronDown, Plus, Settings, LogIn, Check, Loader2, MessageCircle,
 } from 'lucide-react'
@@ -60,13 +57,8 @@ export default function WorkspaceSwitcher({ onOpenCreate, onOpenJoin, onOpenSett
     })
     useChatStore.getState().clearCache?.()
 
-    // Reconnect socket with new workspace context
+    // Reconnect socket with new workspace context (handles fetch + notification reset)
     reconnectWithWorkspace()
-
-    // Fetch channels for the new workspace
-    setTimeout(() => {
-      useChannelStore.getState().fetchChannels()
-    }, 100)
   }
 
   const getWorkspaceInitial = (name) => {

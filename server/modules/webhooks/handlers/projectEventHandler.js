@@ -75,13 +75,32 @@ export function registerProjectEventHandlers() {
     }
 
     // Update channel metadata if name changed
-    if (changes?.title || board.title) {
+    if (changes?.title || changes?.description) {
       const updates = {};
       if (changes?.title) {
-        updates.description = channel.description; // keep existing
+        updates.name = changes.title;
+        // Generate new slug from the new title
+        const { slugify, appendCollisionSuffix } = await import('../../../utils/slugify.js');
+        let newSlug = slugify(changes.title);
+        // Check if slug already exists for another channel
+        const existingSlug = await channelRepository.findBySlug(newSlug, wsId);
+        if (existingSlug && existingSlug._id.toString() !== channel._id.toString()) {
+          newSlug = appendCollisionSuffix(newSlug, board._id);
+        }
+        updates.slug = newSlug;
+      }
+      if (changes?.description) {
+        updates.description = changes.description;
       }
 
       await channelService.updateChannel(channel._id, updates, null);
+
+      // Emit channel update via socket
+      const { emitToChannel: emitChannel } = await import('../../../sockets/socketManager.js');
+      const { SOCKET_EVENTS: SE } = await import('../../../config/constants.js');
+      emitChannel(channel._id.toString(), SE.CHANNEL_UPDATED, {
+        channel: { _id: channel._id, name: updates.name || channel.name, slug: updates.slug || channel.slug },
+      });
     }
 
     // Post update notification

@@ -50,3 +50,27 @@ export const uploadLimiter = createRateLimiter({
   windowMs: 60 * 1000, // 1 minute
   max: 50,
 });
+
+/** Message send limiter — 30 messages per minute per user. */
+export const messageLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 30,
+});
+
+/** Search limiter — 20 searches per minute per user. */
+export const searchLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 20,
+});
+
+/** Webhook limiter — 100 webhooks per minute per source IP. */
+export const webhookLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 100,
+});
+
+/** Invite limiter — 20 invites per hour per user. */
+export const inviteLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20,
+});

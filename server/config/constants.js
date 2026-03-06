@@ -168,6 +168,17 @@ export const SOCKET_EVENTS = Object.freeze({
 
   // Notifications
   NOTIFICATION: 'notification',
+  NOTIFICATION_UNREAD_UPDATED: 'notification:unread:updated',
+});
+
+// ─── Notification Types ──────────────────────────────────────────────────────
+export const NOTIFICATION_TYPES = Object.freeze({
+  MENTION: 'mention',
+  DM: 'dm',
+  CHANNEL_INVITE: 'channel_invite',
+  TASK_UPDATE: 'task_update',
+  SYSTEM: 'system',
+  THREAD_REPLY: 'thread_reply',
 });
 
 // ─── Pagination Defaults ─────────────────────────────────────────────────────

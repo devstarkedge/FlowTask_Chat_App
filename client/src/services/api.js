@@ -184,6 +184,14 @@ export const userAPI = {
   setPresence: (status) => api.put('/users/presence', { status }),  // DM contacts: merged FlowTask + ChatApp users with availability badges
   getDMContacts: (search) => api.get('/users/dm-contacts', { params: { search } }),}
 
+// ─── Notifications ───────────────────────────────────────────────────────
+export const notificationAPI = {
+  list: (params) => api.get('/notifications', { params }),
+  markAsRead: (id) => api.post(`/notifications/${id}/read`),
+  markAllAsRead: () => api.post('/notifications/read-all'),
+  getUnreadCount: () => api.get('/notifications/unread-count'),
+}
+
 // ─── Workspaces ──────────────────────────────────────────────────────────
 export const workspaceAPI = {
   mine: () => api.get('/workspaces/mine'),
@@ -199,6 +207,11 @@ export const workspaceAPI = {
   leaveWorkspace: (id) => api.post(`/workspaces/${id}/leave`),
   joinByInviteCode: (inviteCode) => api.post('/workspaces/join', { inviteCode }),
   regenerateInviteCode: (id) => api.post(`/workspaces/${id}/invite-code`),
+  // Email invites
+  inviteByEmail: (id, data) => api.post(`/workspaces/${id}/invite-email`, data),
+  getPendingInvites: (id) => api.get(`/workspaces/${id}/invites`),
+  revokeInvite: (id, inviteId) => api.delete(`/workspaces/${id}/invites/${inviteId}`),
+  acceptEmailInvite: (token) => api.post('/workspaces/accept-invite', { token }),
 }
 
 export default api

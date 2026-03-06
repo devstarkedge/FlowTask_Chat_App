@@ -26,5 +26,9 @@ router.post('/:id/leave', protect, resolveWorkspace, ctrl.leaveWorkspace);
 
 // ─── Invite Code ─────────────────────────────────────────────────────────────
 router.post('/:id/invite-code/regenerate', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.regenerateInviteCode);
-
+// ─── Email Invites ─────────────────────────────────────────────────────────────────
+router.post('/:id/invite-email', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.inviteByEmail);
+router.get('/:id/invites', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.getPendingInvites);
+router.delete('/:id/invites/:inviteId', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.revokeInvite);
+router.post('/accept-invite', protect, ctrl.acceptInvite);
 export default router;

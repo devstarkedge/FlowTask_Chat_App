@@ -101,6 +101,44 @@ class EmailService {
   }
 
   /**
+   * Send workspace invite email.
+   * @param {string} email - Recipient email
+   * @param {string} workspaceName - Name of the workspace
+   * @param {string} inviterName - Name of the person who invited
+   * @param {string|null} token - Invite token (null if user already exists)
+   */
+  async sendWorkspaceInviteEmail(email, workspaceName, inviterName, token) {
+    const clientBaseUrl = Array.isArray(env.CORS_ORIGINS) ? env.CORS_ORIGINS[0] : env.CORS_ORIGINS;
+    const actionUrl = token
+      ? `${clientBaseUrl}/invite/${token}`
+      : `${clientBaseUrl}/login`;
+    const actionText = token ? 'Accept Invite' : 'Sign In';
+
+    await this.send({
+      to: email,
+      subject: `${inviterName} invited you to ${workspaceName} on ${env.APP_NAME}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
+          <h2>You're invited to ${workspaceName}!</h2>
+          <p>${inviterName} has invited you to join the <strong>${workspaceName}</strong> workspace on ${env.APP_NAME}.</p>
+          <p style="text-align: center; margin: 30px 0;">
+            <a href="${actionUrl}" 
+               style="background: #4F46E5; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+              ${actionText}
+            </a>
+          </p>
+          <p style="color: #666; font-size: 14px;">
+            Or copy this link: <br/>
+            <a href="${actionUrl}">${actionUrl}</a>
+          </p>
+          <p style="color: #999; font-size: 12px;">This invite expires in 7 days.</p>
+        </div>
+      `,
+      text: `${inviterName} invited you to ${workspaceName} on ${env.APP_NAME}.\n\n${actionText}: ${actionUrl}\n\nThis invite expires in 7 days.`,
+    });
+  }
+
+  /**
    * Send password reset link.
    * @param {string} email
    * @param {string} name

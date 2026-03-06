@@ -145,6 +145,17 @@ const channelSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'Message',
   }],
+  // Whether this channel is system-managed (created by FlowTask integration)
+  systemManaged: {
+    type: Boolean,
+    default: false,
+  },
+  // Admin override rules for system-managed channels
+  adminOverrides: {
+    allowRename: { type: Boolean, default: false },
+    allowArchive: { type: Boolean, default: false },
+    allowMemberEdit: { type: Boolean, default: false },
+  },
   metadata: {
     type: Schema.Types.Mixed,
     default: {},

@@ -98,3 +98,30 @@ export const regenerateInviteCode = asyncHandler(async (req, res) => {
   const workspace = await workspaceService.regenerateInviteCode(req.params.id, req.user._id);
   res.json({ success: true, data: { inviteCode: workspace.inviteCode } });
 });
+
+// ─── Email Invites ──────────────────────────────────────────────────────────────────
+
+export const inviteByEmail = asyncHandler(async (req, res) => {
+  const result = await workspaceService.inviteByEmail(
+    req.params.id,
+    req.body.email,
+    req.body.role,
+    req.user._id,
+  );
+  res.status(201).json({ success: true, data: result });
+});
+
+export const acceptInvite = asyncHandler(async (req, res) => {
+  const result = await workspaceService.acceptInvite(req.body.token, req.user._id);
+  res.json({ success: true, data: result });
+});
+
+export const getPendingInvites = asyncHandler(async (req, res) => {
+  const invites = await workspaceService.getPendingInvites(req.params.id);
+  res.json({ success: true, data: invites });
+});
+
+export const revokeInvite = asyncHandler(async (req, res) => {
+  const invite = await workspaceService.revokeInvite(req.params.inviteId, req.params.id);
+  res.json({ success: true, data: invite });
+});

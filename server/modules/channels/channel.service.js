@@ -587,6 +587,12 @@ class ChannelService {
       if (updates.name && !channel.adminOverrides?.allowRename) {
         throw new ForbiddenError('Cannot rename a system-managed channel. Enable admin override first.');
       }
+      if (updates.slug && !channel.adminOverrides?.allowRename) {
+        throw new ForbiddenError('Cannot change the slug of a system-managed channel.');
+      }
+      if (updates.adminOverrides !== undefined) {
+        throw new ForbiddenError('Only system actions can modify admin overrides on system-managed channels.');
+      }
     }
 
     const allowed = {};

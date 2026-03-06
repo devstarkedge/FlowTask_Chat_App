@@ -365,6 +365,20 @@ export async function initializeSocket(httpServer, corsOptions) {
       });
     });
 
+    // ─── Presence Update (away / back online) ────────────────────────
+    socket.on('presence:update', ({ status }) => {
+      if (isSocketRateLimited(socket.id)) return;
+      if (status !== 'away' && status !== 'online') return;
+
+      const event = status === 'away' ? SOCKET_EVENTS.USER_AWAY : SOCKET_EVENTS.USER_ONLINE;
+      const payload = { userId, name: user.name };
+
+      for (const channelId of initialChannelIds) {
+        const chRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+        socket.to(chRoom).emit(event, payload);
+      }
+    });
+
     // ─── Disconnection ───────────────────────────────────────────────
     socket.on('disconnect', async (reason) => {
       logger.info('Socket disconnected', {

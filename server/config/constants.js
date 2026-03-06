@@ -154,6 +154,7 @@ export const SOCKET_EVENTS = Object.freeze({
   // Presence
   USER_ONLINE: 'presence:online',
   USER_OFFLINE: 'presence:offline',
+  USER_AWAY: 'presence:away',
   TYPING_START: 'typing:start',
   TYPING_STOP: 'typing:stop',
 

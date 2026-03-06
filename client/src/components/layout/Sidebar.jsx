@@ -5,8 +5,9 @@ import { useChatStore } from '../../stores/chatStore'
 import { useThemeStore } from '../../stores/themeStore'
 import {
   Hash, Lock, MessageCircle, Users, ChevronDown, ChevronRight,
-  Plus, Search, LogOut, Volume2, Sun, Moon, X, MessageSquareText, Settings,
+  Plus, Search, LogOut, Volume2, Sun, Moon, X, MessageSquareText, Settings, Bell,
 } from 'lucide-react'
+import { useNotificationStore } from '../../stores/notificationStore'
 import { Avatar } from '../chat/MemberAvatarGroup'
 import CreateChannelModal from '../chat/CreateChannelModal'
 import UserPickerModal from '../chat/UserPickerModal'
@@ -26,11 +27,12 @@ const CHANNEL_ICONS = {
   system: Volume2,
 }
 
-export default function Sidebar({ onClose, onToggleAllThreads }) {
+export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotifications }) {
   const { channels, activeChannelId, setActiveChannel, unreads } = useChannelStore()
   const { user, logout } = useAuthStore()
   const { onlineUsers } = useChatStore()
   const { theme, toggleTheme } = useThemeStore()
+  const unreadNotifications = useNotificationStore((s) => s.unreadCount)
   const [expandedSections, setExpandedSections] = useState({
     channels: true,
     dms: true,
@@ -120,6 +122,28 @@ export default function Sidebar({ onClose, onToggleAllThreads }) {
           onOpenSettings={() => setShowWorkspaceSettings(true)}
         />
         <div className="flex items-center gap-1">
+          {/* Notification Bell */}
+          <button
+            onClick={() => onToggleNotifications?.()}
+            title="Notifications"
+            className="relative p-1.5 rounded-md cursor-pointer transition-colors"
+            style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Bell size={16} />
+            {unreadNotifications > 0 && (
+              <span
+                className="absolute -top-0.5 -right-0.5 flex items-center justify-center rounded-full text-[9px] font-bold"
+                style={{
+                  minWidth: 15, height: 15, padding: '0 4px',
+                  background: 'var(--accent-red)', color: 'white',
+                }}
+              >
+                {unreadNotifications > 99 ? '99+' : unreadNotifications}
+              </span>
+            )}
+          </button>
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
@@ -413,6 +437,7 @@ function ChannelSection({ title, channels, expanded, onToggle, activeId, unreads
 function ChannelItem({ channel, isActive, unread, onClick, isDM, onlineUsers }) {
   const Icon = CHANNEL_ICONS[channel.type] || Hash
   const isOnline = isDM && onlineUsers?.has?.(channel.dmRecipientId)
+  const isAway = isOnline && onlineUsers?.get?.(channel.dmRecipientId) === 'away'
 
   return (
     <button
@@ -430,7 +455,7 @@ function ChannelItem({ channel, isActive, unread, onClick, isDM, onlineUsers }) 
       {isDM ? (
         <div className="relative shrink-0">
           <Avatar
-            member={{ name: channel.name, avatar: channel.avatar, onlineStatus: isOnline ? 'online' : 'offline' }}
+            member={{ name: channel.name, avatar: channel.avatar, onlineStatus: isOnline ? (isAway ? 'away' : 'online') : 'offline' }}
             size={22}
             showStatus={false}
           />
@@ -439,7 +464,7 @@ function ChannelItem({ channel, isActive, unread, onClick, isDM, onlineUsers }) 
               className="absolute rounded-full"
               style={{
                 width: 7, height: 7,
-                background: 'var(--status-online)',
+                background: isAway ? 'var(--status-away, #f59e0b)' : 'var(--status-online)',
                 border: '1.5px solid var(--bg-sidebar)',
                 bottom: -1, right: -1,
               }}

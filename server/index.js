@@ -30,6 +30,7 @@ import workspaceService from './modules/workspaces/workspace.service.js';
 import { startDeadlineWarningCron, stopDeadlineWarningCron } from './modules/bot/deadlineWarning.js';
 import fileCleanupService from './services/fileCleanup.service.js';
 import fileUploadService from './services/fileUpload.service.js';
+import webhookRetryService from './services/webhookRetry.service.js';
 
 // ─── Express App ─────────────────────────────────────────────────────────────
 const app = express();
@@ -165,6 +166,11 @@ async function startServer() {
     // 7b. Recover uploads that were interrupted by last shutdown
     await fileUploadService.recoverStuckUploads();
 
+    // 7c. Start webhook retry service (dead letter queue)
+    if (env.FLOWTASK_ENABLED) {
+      webhookRetryService.start();
+    }
+
     // 8. Start memory usage monitor
     memoryMonitorTimer = setInterval(() => {
       const mem = process.memoryUsage();
@@ -223,6 +229,9 @@ async function shutdown(signal) {
 
   // 3. Stop cron jobs
   stopDeadlineWarningCron();
+
+  // 3b. Stop webhook retry service
+  webhookRetryService.stop();
 
   // 4. Stop DB health check
   stopHealthCheck();

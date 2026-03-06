@@ -29,6 +29,7 @@ const SOCKET_EVENTS = {
   // Presence
   USER_ONLINE: 'presence:online',
   USER_OFFLINE: 'presence:offline',
+  USER_AWAY: 'presence:away',
 
   // Channels
   CHANNEL_ADDED: 'channel:added',
@@ -242,6 +243,10 @@ export function connectSocket() {
     useChatStore.getState().setUserOffline(userId)
   })
 
+  socket.on(SOCKET_EVENTS.USER_AWAY, ({ userId }) => {
+    useChatStore.getState().setUserAway(userId)
+  })
+
   // ─── Unread Events ──────────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.UNREAD_UPDATED, ({ channelId, unreadCount }) => {
     useChannelStore.getState().updateUnread(channelId, unreadCount)
@@ -333,6 +338,10 @@ export function joinChannel(channelId) {
 
 export function leaveChannel(channelId) {
   socket?.emit('channel:leave', channelId)
+}
+
+export function emitPresenceUpdate(status) {
+  socket?.emit('presence:update', { status })
 }
 
 export function getSocket() {

@@ -6,6 +6,8 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
+import LandingPage from './pages/LandingPage'
+import WorkspaceSetupWizard from './components/workspace/WorkspaceSetupWizard'
 
 function App() {
   const { accessToken, user, fetchUser, isLoading } = useAuthStore()
@@ -31,16 +33,18 @@ function App() {
   return (
     <Routes>
       {/* Public routes */}
+      <Route path="/" element={!user ? <LandingPage /> : <Navigate to="/chat" />} />
       <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/chat" />} />
       <Route path="/register" element={!user ? <RegisterPage /> : <Navigate to="/chat" />} />
       <Route path="/forgot-password" element={!user ? <ForgotPasswordPage /> : <Navigate to="/chat" />} />
       <Route path="/reset-password/:token" element={!user ? <ResetPasswordPage /> : <Navigate to="/chat" />} />
 
       {/* Protected routes */}
+      <Route path="/workspace/setup/:workspaceId" element={user ? <WorkspaceSetupWizard /> : <Navigate to="/login" />} />
       <Route path="/chat/*" element={user ? <ChatLayout /> : <Navigate to="/login" />} />
 
       {/* Catch-all */}
-      <Route path="*" element={<Navigate to={user ? '/chat' : '/login'} />} />
+      <Route path="*" element={<Navigate to={user ? '/chat' : '/'} />} />
     </Routes>
   )
 }

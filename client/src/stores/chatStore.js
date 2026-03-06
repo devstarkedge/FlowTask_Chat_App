@@ -617,7 +617,7 @@ export const useChatStore = create((set, get) => ({
   setUserOnline: (userId) => {
     set((state) => {
       const users = new Map(state.onlineUsers)
-      users.set(userId, true)
+      users.set(userId, 'online')
       return { onlineUsers: users }
     })
   },
@@ -626,6 +626,16 @@ export const useChatStore = create((set, get) => ({
     set((state) => {
       const users = new Map(state.onlineUsers)
       users.delete(userId)
+      return { onlineUsers: users }
+    })
+  },
+
+  setUserAway: (userId) => {
+    set((state) => {
+      const users = new Map(state.onlineUsers)
+      if (users.has(userId)) {
+        users.set(userId, 'away')
+      }
       return { onlineUsers: users }
     })
   },

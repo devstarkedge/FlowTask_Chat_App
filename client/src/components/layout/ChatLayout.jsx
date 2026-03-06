@@ -1,7 +1,8 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
+import { emitPresenceUpdate } from '../../services/socket'
 import ErrorBoundary from '../ErrorBoundary'
 import Sidebar from './Sidebar'
 import ChatPanel from '../chat/ChatPanel'
@@ -12,6 +13,7 @@ import ProfileSidePanel from '../chat/ProfileSidePanel'
 import FilePreviewModal from '../chat/FilePreviewModal'
 import PinnedMessagesPanel from '../chat/PinnedMessagesPanel'
 import AllThreadsPanel from '../chat/AllThreadsPanel'
+import NotificationPanel from '../notifications/NotificationPanel'
 import KeyboardShortcutsModal from '../chat/KeyboardShortcutsModal'
 import { useKeyboardShortcuts } from '../../utils/keyboardShortcuts'
 
@@ -29,21 +31,49 @@ export default function ChatLayout() {
   const [previewFiles, setPreviewFiles] = useState([])
   const [showMobileSidebar, setShowMobileSidebar] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
 
   // Keyboard shortcuts
   const shortcutHandlers = useMemo(() => ({
-    toggleSearch: () => { setShowSearch((s) => !s); setShowPins(false); setShowAllThreads(false) },
-    toggleThreads: () => { setShowAllThreads((s) => !s); setShowSearch(false); setShowPins(false); closeThread(); setProfileUser(null) },
+    toggleSearch: () => { setShowSearch((s) => !s); setShowPins(false); setShowAllThreads(false); setShowNotifications(false) },
+    toggleThreads: () => { setShowAllThreads((s) => !s); setShowSearch(false); setShowPins(false); setShowNotifications(false); closeThread(); setProfileUser(null) },
     showShortcuts: () => setShowShortcuts((s) => !s),
     escape: () => {
       if (showShortcuts) setShowShortcuts(false)
       else if (showSearch) setShowSearch(false)
       else if (showPins) setShowPins(false)
+      else if (showNotifications) setShowNotifications(false)
       else if (showAllThreads) setShowAllThreads(false)
       else if (profileUser) setProfileUser(null)
     },
-  }), [showShortcuts, showSearch, showPins, showAllThreads, profileUser, closeThread])
+  }), [showShortcuts, showSearch, showPins, showAllThreads, showNotifications, profileUser, closeThread])
   useKeyboardShortcuts(shortcutHandlers)
+
+  // ─── Idle Presence Detection (5 min timeout) ─────────────────────
+  const idleTimerRef = useRef(null)
+  const isIdleRef = useRef(false)
+
+  const resetIdleTimer = useCallback(() => {
+    if (isIdleRef.current) {
+      isIdleRef.current = false
+      emitPresenceUpdate('online')
+    }
+    clearTimeout(idleTimerRef.current)
+    idleTimerRef.current = setTimeout(() => {
+      isIdleRef.current = true
+      emitPresenceUpdate('away')
+    }, 5 * 60 * 1000)
+  }, [])
+
+  useEffect(() => {
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart']
+    events.forEach((e) => window.addEventListener(e, resetIdleTimer, { passive: true }))
+    resetIdleTimer()
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, resetIdleTimer))
+      clearTimeout(idleTimerRef.current)
+    }
+  }, [resetIdleTimer])
 
   useEffect(() => {
     fetchChannels()
@@ -78,13 +108,24 @@ export default function ChatLayout() {
       {/* Desktop Sidebar */}
       <div className="hide-on-mobile">
         <ErrorBoundary name="Sidebar" compact>
-          <Sidebar onToggleAllThreads={() => {
-            setShowAllThreads((s) => !s)
-            setShowSearch(false)
-            setShowPins(false)
-            setProfileUser(null)
-            closeThread()
-          }} />
+          <Sidebar
+            onToggleAllThreads={() => {
+              setShowAllThreads((s) => !s)
+              setShowSearch(false)
+              setShowPins(false)
+              setShowNotifications(false)
+              setProfileUser(null)
+              closeThread()
+            }}
+            onToggleNotifications={() => {
+              setShowNotifications((s) => !s)
+              setShowAllThreads(false)
+              setShowSearch(false)
+              setShowPins(false)
+              setProfileUser(null)
+              closeThread()
+            }}
+          />
         </ErrorBoundary>
       </div>
 
@@ -97,7 +138,18 @@ export default function ChatLayout() {
           />
           <div className="sidebar-mobile">
             <ErrorBoundary name="Sidebar" compact>
-              <Sidebar onClose={() => setShowMobileSidebar(false)} />
+              <Sidebar
+                onClose={() => setShowMobileSidebar(false)}
+                onToggleNotifications={() => {
+                  setShowNotifications((s) => !s)
+                  setShowMobileSidebar(false)
+                  setShowAllThreads(false)
+                  setShowSearch(false)
+                  setShowPins(false)
+                  setProfileUser(null)
+                  closeThread()
+                }}
+              />
             </ErrorBoundary>
           </div>
         </>
@@ -157,6 +209,13 @@ export default function ChatLayout() {
       {profileUser && (
         <ErrorBoundary name="Profile" compact>
           <ProfileSidePanel user={profileUser} onClose={() => setProfileUser(null)} />
+        </ErrorBoundary>
+      )}
+
+      {/* Notification Panel */}
+      {showNotifications && (
+        <ErrorBoundary name="Notifications" compact>
+          <NotificationPanel onClose={() => setShowNotifications(false)} />
         </ErrorBoundary>
       )}
 

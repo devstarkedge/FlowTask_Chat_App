@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
+import { useNotificationStore } from '../../stores/notificationStore'
 import {
   ChevronDown, Plus, Settings, LogIn, Check, Loader2, MessageCircle,
 } from 'lucide-react'
+import api from '../../services/api'
 
 /**
  * WorkspaceSwitcher — dropdown in sidebar header for switching/creating workspaces.
@@ -13,6 +15,7 @@ export default function WorkspaceSwitcher({ onOpenCreate, onOpenJoin, onOpenSett
     switchWorkspace, isSwitching,
   } = useWorkspaceStore()
   const [isOpen, setIsOpen] = useState(false)
+  const [unreadByWorkspace, setUnreadByWorkspace] = useState({})
   const dropdownRef = useRef(null)
 
   // Close dropdown on outside click
@@ -26,6 +29,17 @@ export default function WorkspaceSwitcher({ onOpenCreate, onOpenJoin, onOpenSett
       document.addEventListener('mousedown', handleClickOutside)
     }
     return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isOpen])
+
+  // Fetch unread counts for all workspaces when dropdown opens
+  useEffect(() => {
+    if (!isOpen) return
+    api.get('/notifications/unread-counts-all')
+      .then(({ data }) => {
+        const counts = data.data?.counts || {}
+        setUnreadByWorkspace(counts)
+      })
+      .catch(() => {})
   }, [isOpen])
 
   // Close on Escape
@@ -170,6 +184,18 @@ export default function WorkspaceSwitcher({ onOpenCreate, onOpenJoin, onOpenSett
                   </div>
                   {isActive && (
                     <Check size={16} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                  )}
+                  {!isActive && (unreadByWorkspace[ws._id] || 0) > 0 && (
+                    <span
+                      className="flex items-center justify-center rounded-full text-[10px] font-bold"
+                      style={{
+                        minWidth: 18, height: 18, padding: '0 5px',
+                        background: 'var(--accent-red)', color: 'white',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {unreadByWorkspace[ws._id] > 99 ? '99+' : unreadByWorkspace[ws._id]}
+                    </span>
                   )}
                   {isSwitching && ws._id === activeWorkspaceId && (
                     <Loader2 size={16} className="animate-spin" style={{ color: 'var(--text-muted)', flexShrink: 0 }} />

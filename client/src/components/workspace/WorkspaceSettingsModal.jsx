@@ -3,15 +3,19 @@ import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useAuthStore } from '../../stores/authStore'
 import {
   X, Settings, Users, Link2, Copy, RefreshCw, Loader2,
-  Crown, Shield, UserMinus, ChevronDown, Trash2,
+  Crown, Shield, UserMinus, ChevronDown, Trash2, Zap, Lock, Bell,
 } from 'lucide-react'
 import { Avatar } from '../chat/MemberAvatarGroup'
 import toast from 'react-hot-toast'
+import api from '../../services/api'
 
 const TABS = [
   { id: 'general', label: 'General', icon: Settings },
   { id: 'members', label: 'Members', icon: Users },
   { id: 'invite', label: 'Invite', icon: Link2 },
+  { id: 'integrations', label: 'Integrations', icon: Zap },
+  { id: 'security', label: 'Security', icon: Lock },
+  { id: 'notifications', label: 'Notifications', icon: Bell },
 ]
 
 const ROLE_LABELS = {
@@ -191,6 +195,18 @@ export default function WorkspaceSettingsModal({ onClose }) {
               onCopy={handleCopyInviteCode}
               onRegenerate={handleRegenerate}
             />
+          )}
+
+          {activeTab === 'integrations' && (
+            <IntegrationsTab canManage={canManage} />
+          )}
+
+          {activeTab === 'security' && (
+            <SecurityTab canManage={canManage} />
+          )}
+
+          {activeTab === 'notifications' && (
+            <NotificationsTab />
           )}
         </div>
       </div>
@@ -411,8 +427,74 @@ function MembersTab({ members, currentUserId, currentUserRole, canManage, onRemo
 
 // ─── Invite Tab ───────────────────────────────────────────────────────────
 function InviteTab({ inviteCode, canManage, isRegenerating, onCopy, onRegenerate }) {
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState('member')
+  const [isSendingInvite, setIsSendingInvite] = useState(false)
+  const { activeWorkspaceId } = useWorkspaceStore()
+
+  const handleSendEmailInvite = async () => {
+    if (!inviteEmail.trim()) return
+    setIsSendingInvite(true)
+    try {
+      await api.post(`/workspaces/${activeWorkspaceId}/invite-email`, {
+        email: inviteEmail.trim(),
+        role: inviteRole,
+      })
+      toast.success(`Invite sent to ${inviteEmail}`)
+      setInviteEmail('')
+    } catch (error) {
+      toast.error(error.response?.data?.error?.message || 'Failed to send invite')
+    }
+    setIsSendingInvite(false)
+  }
   return (
     <div className="space-y-6">
+      {/* Email invite */}
+      {canManage && (
+        <div>
+          <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+            Invite by Email
+          </label>
+          <div className="flex gap-2 mb-2">
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSendEmailInvite()}
+              placeholder="name@company.com"
+              className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none"
+              style={{
+                background: 'var(--bg-tertiary)',
+                border: '1px solid var(--border-primary)',
+                color: 'var(--text-white)',
+              }}
+            />
+            <select
+              value={inviteRole}
+              onChange={(e) => setInviteRole(e.target.value)}
+              className="px-2 py-2.5 rounded-lg text-sm outline-none cursor-pointer"
+              style={{
+                background: 'var(--bg-tertiary)',
+                border: '1px solid var(--border-primary)',
+                color: 'var(--text-white)',
+              }}
+            >
+              <option value="admin">Admin</option>
+              <option value="member">Member</option>
+              <option value="guest">Guest</option>
+            </select>
+            <button
+              onClick={handleSendEmailInvite}
+              disabled={!inviteEmail.trim() || isSendingInvite}
+              className="px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors disabled:opacity-50"
+              style={{ background: 'var(--accent-primary)', color: 'white', border: 'none' }}
+            >
+              {isSendingInvite ? <Loader2 size={14} className="animate-spin" /> : 'Send'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div>
         <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
           Invite Code
@@ -482,6 +564,196 @@ function InviteTab({ inviteCode, canManage, isRegenerating, onCopy, onRegenerate
           {inviteCode ? 'Regenerate Code' : 'Generate Invite Code'}
         </button>
       )}
+    </div>
+  )
+}
+
+// ─── Integrations Tab ─────────────────────────────────────────────────────
+function IntegrationsTab({ canManage }) {
+  const [flowTaskConnected] = useState(!!import.meta.env.VITE_FLOWTASK_ENABLED)
+  const [autoChannels, setAutoChannels] = useState(true)
+  const [syncMembers, setSyncMembers] = useState(true)
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h4 className="text-sm font-medium mb-3" style={{ color: 'var(--text-white)' }}>
+          FlowTask Integration
+        </h4>
+        <div
+          className="flex items-center justify-between p-3 rounded-lg"
+          style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-secondary)' }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{
+                background: flowTaskConnected ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+              }}
+            >
+              <Zap size={16} style={{ color: flowTaskConnected ? '#10b981' : '#ef4444' }} />
+            </div>
+            <div>
+              <p className="text-sm font-medium" style={{ color: 'var(--text-white)' }}>FlowTask</p>
+              <p className="text-[11px]" style={{ color: flowTaskConnected ? '#10b981' : '#ef4444' }}>
+                {flowTaskConnected ? 'Connected' : 'Not connected'}
+              </p>
+            </div>
+          </div>
+          <span
+            className="px-2 py-0.5 rounded-full text-[11px] font-medium"
+            style={{
+              background: flowTaskConnected ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+              color: flowTaskConnected ? '#10b981' : '#ef4444',
+            }}
+          >
+            {flowTaskConnected ? 'Active' : 'Inactive'}
+          </span>
+        </div>
+      </div>
+
+      {flowTaskConnected && (
+        <>
+          <SettingsToggle
+            label="Auto-create project channels"
+            description="Automatically create channels for new FlowTask projects"
+            checked={autoChannels}
+            onChange={setAutoChannels}
+            disabled={!canManage}
+          />
+          <SettingsToggle
+            label="Sync team members"
+            description="Automatically add FlowTask project members to channels"
+            checked={syncMembers}
+            onChange={setSyncMembers}
+            disabled={!canManage}
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Security Tab ─────────────────────────────────────────────────────────
+function SecurityTab({ canManage }) {
+  const [requireVerification, setRequireVerification] = useState(true)
+  const [sessionTimeout, setSessionTimeout] = useState('7d')
+
+  return (
+    <div className="space-y-6">
+      <SettingsToggle
+        label="Require email verification"
+        description="New members must verify their email before accessing the workspace"
+        checked={requireVerification}
+        onChange={setRequireVerification}
+        disabled={!canManage}
+      />
+
+      <div>
+        <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+          Session Timeout
+        </label>
+        <select
+          value={sessionTimeout}
+          onChange={(e) => setSessionTimeout(e.target.value)}
+          disabled={!canManage}
+          className="w-full px-3 py-2.5 rounded-lg text-sm outline-none cursor-pointer disabled:opacity-60"
+          style={{
+            background: 'var(--bg-tertiary)',
+            border: '1px solid var(--border-primary)',
+            color: 'var(--text-white)',
+          }}
+        >
+          <option value="1d">1 day</option>
+          <option value="7d">7 days</option>
+          <option value="30d">30 days</option>
+          <option value="never">Never</option>
+        </select>
+      </div>
+
+      <div
+        className="p-3 rounded-lg"
+        style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-secondary)' }}
+      >
+        <div className="flex items-center gap-2 mb-1">
+          <Shield size={14} style={{ color: 'var(--text-muted)' }} />
+          <p className="text-sm font-medium" style={{ color: 'var(--text-white)' }}>Two-Factor Authentication</p>
+        </div>
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Coming soon — enforce 2FA for all workspace members.</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Notifications Tab ────────────────────────────────────────────────────
+function NotificationsTab() {
+  const [notifyMentions, setNotifyMentions] = useState(true)
+  const [notifyDMs, setNotifyDMs] = useState(true)
+  const [notifyThreads, setNotifyThreads] = useState(true)
+  const [notifyTasks, setNotifyTasks] = useState(true)
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+        Configure default notification preferences for this workspace.
+      </p>
+      <SettingsToggle
+        label="@Mentions"
+        description="Notify when someone mentions you"
+        checked={notifyMentions}
+        onChange={setNotifyMentions}
+      />
+      <SettingsToggle
+        label="Direct messages"
+        description="Notify for new direct messages"
+        checked={notifyDMs}
+        onChange={setNotifyDMs}
+      />
+      <SettingsToggle
+        label="Thread replies"
+        description="Notify when someone replies to your thread"
+        checked={notifyThreads}
+        onChange={setNotifyThreads}
+      />
+      <SettingsToggle
+        label="Task updates"
+        description="Notify for FlowTask task assignments and updates"
+        checked={notifyTasks}
+        onChange={setNotifyTasks}
+      />
+    </div>
+  )
+}
+
+// ─── Shared Toggle Component ──────────────────────────────────────────────
+function SettingsToggle({ label, description, checked, onChange, disabled }) {
+  return (
+    <div
+      className="flex items-center justify-between p-3 rounded-lg"
+      style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-secondary)', opacity: disabled ? 0.6 : 1 }}
+    >
+      <div className="flex-1 min-w-0 mr-3">
+        <p className="text-sm font-medium" style={{ color: 'var(--text-white)' }}>{label}</p>
+        {description && <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{description}</p>}
+      </div>
+      <button
+        onClick={() => !disabled && onChange(!checked)}
+        disabled={disabled}
+        className="relative shrink-0 cursor-pointer disabled:cursor-not-allowed"
+        style={{
+          background: checked ? 'var(--accent-primary)' : 'var(--bg-primary)',
+          border: `1px solid ${checked ? 'var(--accent-primary)' : 'var(--border-primary)'}`,
+          borderRadius: 12, width: 40, height: 22, padding: 0,
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute', top: 2, left: checked ? 20 : 2,
+            width: 16, height: 16, borderRadius: '50%',
+            background: 'white', transition: 'left 0.2s',
+          }}
+        />
+      </button>
     </div>
   )
 }

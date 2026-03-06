@@ -12,7 +12,7 @@ import { Avatar } from './MemberAvatarGroup'
  */
 export default function AddMemberModal({ channel, onClose }) {
   const { user } = useAuthStore()
-  const { members, addMember } = useChannelStore()
+  const { membersByChannel, addMember } = useChannelStore()
   const { onlineUsers } = useChatStore()
   const [searchQuery, setSearchQuery] = useState('')
   const [users, setUsers] = useState([])
@@ -23,7 +23,8 @@ export default function AddMemberModal({ channel, onClose }) {
   const modalRef = useRef(null)
   const debounceRef = useRef(null)
 
-  const memberIds = new Set(members.map((m) => m._id))
+  const channelMembers = (channel && membersByChannel?.[channel._id]) || []
+  const memberIds = new Set(channelMembers.map((m) => m._id))
 
   useEffect(() => {
     searchInputRef.current?.focus()

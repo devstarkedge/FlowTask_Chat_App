@@ -93,10 +93,12 @@ class MessageService {
       thread = await threadRepository.findById(threadId);
       if (!thread) {
         // Create the thread if this is the first reply to a message
+        const threadWorkspaceId = workspaceId || channel.workspaceId;
         thread = await threadRepository.create({
+          workspaceId: threadWorkspaceId,
           channelId,
           rootMessageId: threadId,
-          participantIds: [],
+          participantIds: [authorId],
         });
       }
       actualThreadId = thread._id;
@@ -367,7 +369,8 @@ class MessageService {
     const message = await messageRepository.findById(messageId);
     if (!message) throw new NotFoundError('Message not found');
 
-    const updated = await messageRepository.addReaction(messageId, userId, emoji);
+    // Repository expects arguments as (messageId, emoji, userId)
+    const updated = await messageRepository.addReaction(messageId, emoji, userId);
 
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.REACTION_ADD,
       reactionSocketPayload({ messageId, channelId: message.channelId, userId, emoji }),
@@ -384,7 +387,8 @@ class MessageService {
     const message = await messageRepository.findById(messageId);
     if (!message) throw new NotFoundError('Message not found');
 
-    const updated = await messageRepository.removeReaction(messageId, userId, emoji);
+    // Repository expects arguments as (messageId, emoji, userId)
+    const updated = await messageRepository.removeReaction(messageId, emoji, userId);
 
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.REACTION_REMOVE,
       reactionSocketPayload({ messageId, channelId: message.channelId, userId, emoji }),

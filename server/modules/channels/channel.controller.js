@@ -249,7 +249,7 @@ export const searchChannels = asyncHandler(async (req, res) => {
  * For other channels: channel members.
  */
 export const getChannelMembers = asyncHandler(async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
+  const token = req.flowTaskToken;
   const members = await channelService.getAggregatedMembers(
     req.params.id,
     token,

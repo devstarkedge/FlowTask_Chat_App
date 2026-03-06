@@ -69,7 +69,7 @@ const PRICING_TIERS = [
 
 export default function LandingPage() {
   return (
-    <div style={{ background: '#0a0a0f', color: '#e5e7eb', minHeight: '100vh' }}>
+    <div style={{ background: '#0a0a0f', color: '#e5e7eb', height: '100%', overflowY: 'auto' }}>
       {/* Nav */}
       <nav
         style={{
@@ -155,7 +155,7 @@ export default function LandingPage() {
             </span>
           </h1>
           <p style={{ fontSize: 18, color: '#9ca3af', lineHeight: 1.7, maxWidth: 600, margin: '0 auto 36px' }}>
-            A Slack-level, workspace-based messaging platform with deep project management integration. Built for teams that ship fast.
+            A workspace-based messaging platform with deep project management integration. Built for teams that ship fast.
           </p>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
             <Link

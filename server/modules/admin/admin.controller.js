@@ -4,12 +4,12 @@ import ChannelMember from '../channels/ChannelMember.model.js';
 import Message from '../messages/Message.model.js';
 import ChatUser from '../users/ChatUser.model.js';
 import Workspace from '../workspaces/Workspace.model.js';
-import Organization from '../organizations/Organization.model.js';
+import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
 import Notification from '../notifications/Notification.model.js';
 import logger from '../../utils/logger.js';
 
 /**
- * Admin Controller — workspace/organization management endpoints.
+ * Admin Controller — workspace management endpoints.
  *
  * All endpoints require admin role.
  */
@@ -31,6 +31,10 @@ export const requireAdmin = (req, res, next) => {
 export const getAnalytics = asyncHandler(async (req, res) => {
   const workspaceId = req.workspaceId;
 
+  // Get workspace member IDs for user-scoped queries
+  const memberships = await WorkspaceMembership.find({ workspaceId }).select('userId').lean();
+  const memberUserIds = memberships.map((m) => m.userId);
+
   const [
     totalUsers,
     activeUsers,
@@ -39,15 +43,15 @@ export const getAnalytics = asyncHandler(async (req, res) => {
     todayMessages,
     onlineUsers,
   ] = await Promise.all([
-    ChatUser.countDocuments({ workspaceId }),
-    ChatUser.countDocuments({ workspaceId, isActive: true }),
+    Promise.resolve(memberUserIds.length),
+    ChatUser.countDocuments({ _id: { $in: memberUserIds }, isActive: true }),
     Channel.countDocuments({ workspaceId, isArchived: false }),
     Message.countDocuments({ workspaceId }),
     Message.countDocuments({
       workspaceId,
       createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
     }),
-    ChatUser.countDocuments({ workspaceId, onlineStatus: { $ne: 'offline' } }),
+    ChatUser.countDocuments({ _id: { $in: memberUserIds }, onlineStatus: { $ne: 'offline' } }),
   ]);
 
   // Messages per day for last 7 days
@@ -90,7 +94,11 @@ export const listUsers = asyncHandler(async (req, res) => {
   const skip = Math.max(parseInt(req.query.skip) || 0, 0);
   const search = req.query.search;
 
-  const filter = { workspaceId: req.workspaceId };
+  // Get workspace member IDs
+  const memberships = await WorkspaceMembership.find({ workspaceId: req.workspaceId }).select('userId').lean();
+  const memberUserIds = memberships.map((m) => m.userId);
+
+  const filter = { _id: { $in: memberUserIds } };
   if (search) {
     const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     filter.$or = [{ name: regex }, { email: regex }];
@@ -128,15 +136,24 @@ export const changeUserRole = asyncHandler(async (req, res) => {
   if (role !== 'admin') {
     const target = await ChatUser.findById(req.params.userId).lean();
     if (target?.role === 'admin') {
-      const adminCount = await ChatUser.countDocuments({ workspaceId: req.workspaceId, role: 'admin', isActive: true });
+      // Count admins within workspace membership
+      const memberships = await WorkspaceMembership.find({ workspaceId: req.workspaceId }).select('userId').lean();
+      const memberIds = memberships.map((m) => m.userId);
+      const adminCount = await ChatUser.countDocuments({ _id: { $in: memberIds }, role: 'admin', isActive: true });
       if (adminCount <= 1) {
         return res.status(400).json({ success: false, error: { message: 'Cannot demote the last admin' } });
       }
     }
   }
 
-  const user = await ChatUser.findOneAndUpdate(
-    { _id: req.params.userId, workspaceId: req.workspaceId },
+  // Verify user is a workspace member before updating
+  const isMember = await WorkspaceMembership.exists({ workspaceId: req.workspaceId, userId: req.params.userId });
+  if (!isMember) {
+    return res.status(404).json({ success: false, error: { message: 'User not found in this workspace' } });
+  }
+
+  const user = await ChatUser.findByIdAndUpdate(
+    req.params.userId,
     { role },
     { new: true },
   ).select('name email role');
@@ -161,14 +178,21 @@ export const deactivateUser = asyncHandler(async (req, res) => {
   // Prevent deactivating the last admin
   const target = await ChatUser.findById(req.params.userId).lean();
   if (target?.role === 'admin') {
-    const adminCount = await ChatUser.countDocuments({ workspaceId: req.workspaceId, role: 'admin', isActive: true });
+    const memberships = await WorkspaceMembership.find({ workspaceId: req.workspaceId }).select('userId').lean();
+    const memberIds = memberships.map((m) => m.userId);
+    const adminCount = await ChatUser.countDocuments({ _id: { $in: memberIds }, role: 'admin', isActive: true });
     if (adminCount <= 1) {
       return res.status(400).json({ success: false, error: { message: 'Cannot deactivate the last admin' } });
     }
   }
 
-  const user = await ChatUser.findOneAndUpdate(
-    { _id: req.params.userId, workspaceId: req.workspaceId },
+  const isMember = await WorkspaceMembership.exists({ workspaceId: req.workspaceId, userId: req.params.userId });
+  if (!isMember) {
+    return res.status(404).json({ success: false, error: { message: 'User not found in this workspace' } });
+  }
+
+  const user = await ChatUser.findByIdAndUpdate(
+    req.params.userId,
     { isActive: false, onlineStatus: 'offline' },
     { new: true },
   ).select('name email isActive');
@@ -185,8 +209,13 @@ export const deactivateUser = asyncHandler(async (req, res) => {
  * Reactivate a deactivated user.
  */
 export const activateUser = asyncHandler(async (req, res) => {
-  const user = await ChatUser.findOneAndUpdate(
-    { _id: req.params.userId, workspaceId: req.workspaceId },
+  const isMember = await WorkspaceMembership.exists({ workspaceId: req.workspaceId, userId: req.params.userId });
+  if (!isMember) {
+    return res.status(404).json({ success: false, error: { message: 'User not found in this workspace' } });
+  }
+
+  const user = await ChatUser.findByIdAndUpdate(
+    req.params.userId,
     { isActive: true },
     { new: true },
   ).select('name email isActive');

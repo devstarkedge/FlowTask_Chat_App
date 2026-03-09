@@ -1,14 +1,12 @@
 import Workspace from '../modules/workspaces/Workspace.model.js';
 import WorkspaceMembership from '../modules/workspaces/WorkspaceMembership.model.js';
 import { WORKSPACE_ROLES } from '../config/constants.js';
-import env from '../config/environment.js';
 
 /**
- * resolveWorkspace — extracts workspace from JWT or header and attaches to req.
+ * resolveWorkspace — extracts workspace from header and attaches to req.
  *
- * Resolution order:
- *   1. req.user.workspaceId (set by auth middleware from JWT claim)
- *   2. x-workspace-id header (for API clients / workspace switching)
+ * Resolution:
+ *   x-workspace-id header (workspace switching / API calls)
  *
  * Sets:
  *   req.workspaceId  — ObjectId string
@@ -19,14 +17,12 @@ import env from '../config/environment.js';
  */
 export const resolveWorkspace = async (req, res, next) => {
   try {
-    const workspaceId =
-      req.user?.workspaceId ||
-      req.headers['x-workspace-id'];
+    const workspaceId = req.headers['x-workspace-id'];
 
     if (!workspaceId) {
       return res.status(400).json({
         success: false,
-        message: 'Workspace context is required. Provide workspaceId in token or x-workspace-id header.',
+        message: 'Workspace context is required. Provide x-workspace-id header.',
       });
     }
 
@@ -97,53 +93,6 @@ export const requireWorkspaceRole = (...roles) => {
 
     next();
   };
-};
-
-/**
- * resolveDefaultWorkspace — for FlowTask-authenticated requests, auto-resolve
- * to the default 'flowtask' workspace if no workspace header is present.
- *
- * Useful for webhook/FlowTask-originated requests that don't know about workspaces.
- */
-export const resolveDefaultWorkspace = async (req, res, next) => {
-  try {
-    // If workspace already set, skip
-    if (req.workspaceId || req.user?.workspaceId || req.headers['x-workspace-id']) {
-      return next();
-    }
-
-    // Auto-resolve to default workspace
-    const defaultWorkspace = await Workspace.findBySlug(env.DEFAULT_WORKSPACE_SLUG);
-    if (defaultWorkspace) {
-      req.workspaceId = defaultWorkspace._id.toString();
-      req.workspace = defaultWorkspace;
-
-      // If user is authenticated, check/create membership
-      if (req.user) {
-        let membership = await WorkspaceMembership.findOne({
-          userId: req.user._id,
-          workspaceId: defaultWorkspace._id,
-          isActive: true,
-        }).lean();
-
-        if (!membership) {
-          // Auto-join users to the default workspace
-          membership = await WorkspaceMembership.addMember(
-            req.user._id,
-            defaultWorkspace._id,
-            WORKSPACE_ROLES.MEMBER,
-          );
-          membership = membership.toObject();
-        }
-
-        req.membership = membership;
-      }
-    }
-
-    next();
-  } catch (error) {
-    next(error);
-  }
 };
 
 /**

@@ -15,7 +15,7 @@ import {
   searchUsers,
 } from './auth.controller.js';
 import { protect } from './auth.middleware.js';
-import { resolveWorkspace, resolveDefaultWorkspace } from '../../middleware/workspaceContext.js';
+import { resolveWorkspace } from '../../middleware/workspaceContext.js';
 import { authLimiter, refreshLimiter, passwordResetLimiter } from '../../middleware/rateLimiter.js';
 import { validate } from '../../middleware/validate.js';
 import {
@@ -50,10 +50,10 @@ const router = Router();
  */
 
 // Public auth routes (rate-limited)
-router.post('/register', authLimiter, validate({ body: registerSchema }), resolveDefaultWorkspace, register);
-router.post('/login', authLimiter, validate({ body: loginSchema }), resolveDefaultWorkspace, login);
-router.post('/login/flowtask', authLimiter, validate({ body: loginFlowTaskSchema }), resolveDefaultWorkspace, loginFlowTask);
-router.post('/sync', authLimiter, resolveDefaultWorkspace, syncUser);
+router.post('/register', authLimiter, validate({ body: registerSchema }), register);
+router.post('/login', authLimiter, validate({ body: loginSchema }), login);
+router.post('/login/flowtask', authLimiter, validate({ body: loginFlowTaskSchema }), loginFlowTask);
+router.post('/sync', authLimiter, syncUser);
 router.post('/refresh', refreshLimiter, validate({ body: refreshTokenSchema }), refresh);
 
 // Email verification

@@ -2,8 +2,8 @@ import { useEffect, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 
-// Eager load the main chat layout (most common route)
-import ChatLayout from './components/layout/ChatLayout'
+// Eager load workspace layout (most common route)
+import WorkspaceLayout from './components/layout/WorkspaceLayout'
 
 // Lazy load auth & setup pages (rarely revisited after login)
 const LoginPage = lazy(() => import('./pages/LoginPage'))
@@ -11,6 +11,9 @@ const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'))
 const LandingPage = lazy(() => import('./pages/LandingPage'))
+const PricingPage = lazy(() => import('./pages/PricingPage'))
+const CreateWorkspacePage = lazy(() => import('./pages/CreateWorkspacePage'))
+const WorkspaceSelectorPage = lazy(() => import('./pages/WorkspaceSelectorPage'))
 const WorkspaceSetupWizard = lazy(() => import('./components/workspace/WorkspaceSetupWizard'))
 
 function PageFallback() {
@@ -47,18 +50,26 @@ function App() {
     <Suspense fallback={<PageFallback />}>
       <Routes>
         {/* Public routes */}
-        <Route path="/" element={!user ? <LandingPage /> : <Navigate to="/chat" />} />
-        <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/chat" />} />
-        <Route path="/register" element={!user ? <RegisterPage /> : <Navigate to="/chat" />} />
-        <Route path="/forgot-password" element={!user ? <ForgotPasswordPage /> : <Navigate to="/chat" />} />
-        <Route path="/reset-password/:token" element={!user ? <ResetPasswordPage /> : <Navigate to="/chat" />} />
+        <Route path="/" element={!user ? <LandingPage /> : <Navigate to="/select-workspace" />} />
+        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/select-workspace" />} />
+        <Route path="/register" element={!user ? <RegisterPage /> : <Navigate to="/select-workspace" />} />
+        <Route path="/forgot-password" element={!user ? <ForgotPasswordPage /> : <Navigate to="/select-workspace" />} />
+        <Route path="/reset-password/:token" element={!user ? <ResetPasswordPage /> : <Navigate to="/select-workspace" />} />
 
-        {/* Protected routes */}
-        <Route path="/workspace/setup/:workspaceId" element={user ? <WorkspaceSetupWizard /> : <Navigate to="/login" />} />
-        <Route path="/chat/*" element={user ? <ChatLayout /> : <Navigate to="/login" />} />
+        {/* Workspace selection & creation (requires auth) */}
+        <Route path="/select-workspace" element={user ? <WorkspaceSelectorPage /> : <Navigate to="/login" />} />
+        <Route path="/create-workspace" element={user ? <CreateWorkspacePage /> : <Navigate to="/login" />} />
+
+        {/* Workspace-scoped routes */}
+        <Route path="/workspace/:workspaceId/setup" element={user ? <WorkspaceSetupWizard /> : <Navigate to="/login" />} />
+        <Route path="/workspace/:workspaceId/*" element={user ? <WorkspaceLayout /> : <Navigate to="/login" />} />
+
+        {/* Legacy /chat redirect → workspace selector */}
+        <Route path="/chat/*" element={user ? <Navigate to="/select-workspace" /> : <Navigate to="/login" />} />
 
         {/* Catch-all */}
-        <Route path="*" element={<Navigate to={user ? '/chat' : '/'} />} />
+        <Route path="*" element={<Navigate to={user ? '/select-workspace' : '/'} />} />
       </Routes>
     </Suspense>
   )

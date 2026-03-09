@@ -213,6 +213,9 @@ export const workspaceAPI = {
   getPendingInvites: (id) => api.get(`/workspaces/${id}/invites`),
   revokeInvite: (id, inviteId) => api.delete(`/workspaces/${id}/invites/${inviteId}`),
   acceptEmailInvite: (token) => api.post('/workspaces/accept-invite', { token }),
+  // Billing & plan
+  getBilling: (id) => api.get(`/workspaces/${id}/billing`),
+  upgradePlan: (id, plan) => api.post(`/workspaces/${id}/upgrade-plan`, { plan }),
 }
 
 // ─── Saved Messages ──────────────────────────────────────────────────────
@@ -241,18 +244,6 @@ export const adminAPI = {
   deleteChannel: (channelId) => api.delete(`/admin/channels/${channelId}`),
   getSettings: () => api.get('/admin/settings'),
   updateSettings: (settings) => api.patch('/admin/settings', settings),
-}
-
-// ─── Organizations ───────────────────────────────────────────────────────
-export const organizationAPI = {
-  list: () => api.get('/organizations'),
-  create: (data) => api.post('/organizations', data),
-  get: (id) => api.get(`/organizations/${id}`),
-  update: (id, data) => api.put(`/organizations/${id}`, data),
-  getWorkspaces: (id) => api.get(`/organizations/${id}/workspaces`),
-  getMembers: (id) => api.get(`/organizations/${id}/members`),
-  addMember: (id, data) => api.post(`/organizations/${id}/members`, data),
-  removeMember: (id, userId) => api.delete(`/organizations/${id}/members/${userId}`),
 }
 
 export default api

@@ -4,18 +4,18 @@ import crypto from 'crypto';
 const { Schema, model } = mongoose;
 
 /**
- * Workspace — the top-level organizational boundary for multi-tenant isolation.
+ * Workspace — the top-level tenant boundary for multi-tenant isolation.
  *
- * Every workspace represents an organization (like Slack workspaces).
- * All data (users, channels, messages, files) is scoped to a workspace.
+ * Every workspace is a standalone tenant (like Slack workspaces).
+ * All data (channels, messages, files) is scoped to a workspace.
+ * Users have global identity and join workspaces via WorkspaceMembership.
  *
  * Examples:
  *   - FlowTask platform → Workspace slug: "flowtask"
  *   - External company ACME → Workspace slug: "acme"
  *
  * Resolution methods:
- *   - JWT token claim (workspaceId embedded in access token)
- *   - X-Workspace-Id / X-Workspace-Slug headers
+ *   - X-Workspace-Id header
  *   - Subdomain extraction (acme.chatapp.com → slug "acme")
  */
 
@@ -53,14 +53,6 @@ const workspaceSettingsSchema = new Schema({
 }, { _id: false });
 
 const workspaceSchema = new Schema({
-  // ─── Organization Scope (top-level tenant isolation) ──────────────────
-  organizationId: {
-    type: Schema.Types.ObjectId,
-    ref: 'Organization',
-    default: null,
-    index: true,
-  },
-
   // Display name of the workspace
   name: {
     type: String,
@@ -123,6 +115,19 @@ const workspaceSchema = new Schema({
   memberCount: {
     type: Number,
     default: 0,
+  },
+  // ─── Billing (Stripe-ready) ───────────────────────────────────────────
+  billing: {
+    stripeCustomerId: { type: String, default: null, sparse: true },
+    stripeSubscriptionId: { type: String, default: null, sparse: true },
+    billingStatus: {
+      type: String,
+      enum: ['active', 'trialing', 'past_due', 'canceled', 'unpaid'],
+      default: 'active',
+    },
+    billingEmail: { type: String, default: null },
+    planExpiresAt: { type: Date, default: null },
+    trialEndsAt: { type: Date, default: null },
   },
 }, {
   timestamps: true,

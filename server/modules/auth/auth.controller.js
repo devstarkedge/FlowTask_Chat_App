@@ -36,7 +36,7 @@ async function ensureWorkspaceMembership(userId, workspaceId) {
  */
 export const register = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
-  const { chatUser, message } = await authService.register({ name, email, password, workspaceId: req.workspaceId });
+  const { chatUser, message } = await authService.register({ name, email, password });
 
   res.status(201).json({
     success: true,
@@ -65,11 +65,11 @@ export const login = asyncHandler(async (req, res) => {
     email,
     password,
     userAgent,
-    workspaceId: req.workspaceId,
   });
 
-  // Ensure workspace membership exists for subsequent authenticated requests
-  await ensureWorkspaceMembership(chatUser._id, req.workspaceId);
+  // Fetch user's workspaces for client-side workspace selection
+  const { default: WorkspaceMembership } = await import('../workspaces/WorkspaceMembership.model.js');
+  const workspaces = await WorkspaceMembership.findUserWorkspaces(chatUser._id);
 
   res.status(200).json({
     success: true,
@@ -77,6 +77,7 @@ export const login = asyncHandler(async (req, res) => {
       user: chatUser,
       accessToken,
       refreshToken,
+      workspaces,
     },
     ...(emailWarning && { warning: emailWarning }),
   });
@@ -97,27 +98,45 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
   const { chatUser, accessToken, refreshToken } = await authService.loginFlowTask({
     token,
     userAgent,
-    workspaceId: req.workspaceId,
   });
 
-  // Ensure workspace membership exists for subsequent authenticated requests
-  await ensureWorkspaceMembership(chatUser._id, req.workspaceId);
+  // Fetch user's workspaces
+  const { default: WorkspaceMembership } = await import('../workspaces/WorkspaceMembership.model.js');
+  const workspaces = await WorkspaceMembership.findUserWorkspaces(chatUser._id);
 
-  // Auto-join public system channels
-  const systemChannels = await channelRepository.findSystemChannels(req.workspaceId);
-  for (const sc of systemChannels) {
-    if (sc.visibility === 'public' && !sc.hasMember(chatUser._id)) {
-      await channelService.addMember(sc._id, chatUser._id).catch(() => {});
+  // If user has a workspace with FlowTask enabled, get channels for that workspace
+  let channels = [];
+  const wsId = req.headers['x-workspace-id'];
+  if (wsId) {
+    // Ensure workspace membership exists
+    await ensureWorkspaceMembership(chatUser._id, wsId);
+
+    // Auto-join public system channels
+    const systemChannels = await channelRepository.findSystemChannels(wsId);
+    for (const sc of systemChannels) {
+      if (sc.visibility === 'public' && !sc.hasMember(chatUser._id)) {
+        await channelService.addMember(sc._id, chatUser._id).catch(() => {});
+      }
     }
-  }
 
-  // Sync project channels from FlowTask boards (if FlowTask token available)
-  if (env.FLOWTASK_ENABLED) {
-    await channelService.syncProjectChannelsForUser(token, chatUser, req.workspaceId).catch(() => {});
-  }
+    // Sync project channels from FlowTask boards
+    if (env.FLOWTASK_ENABLED) {
+      await channelService.syncProjectChannelsForUser(token, chatUser, wsId).catch(() => {});
+    }
 
-  // Get user's channels for initial state
-  const channels = await channelRepository.findByMember(chatUser._id, { workspaceId: req.workspaceId });
+    // Get user's channels for initial state
+    const userChannels = await channelRepository.findByMember(chatUser._id, { workspaceId: wsId });
+    channels = userChannels.map((ch) => ({
+      _id: ch._id,
+      name: ch.name,
+      slug: ch.slug,
+      type: ch.type,
+      visibility: ch.visibility,
+      lastMessageAt: ch.lastMessageAt,
+      lastMessagePreview: ch.lastMessagePreview,
+      memberCount: ch.memberCount,
+    }));
+  }
 
   res.status(200).json({
     success: true,
@@ -125,16 +144,8 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
       user: chatUser,
       accessToken,
       refreshToken,
-      channels: channels.map((ch) => ({
-        _id: ch._id,
-        name: ch.name,
-        slug: ch.slug,
-        type: ch.type,
-        visibility: ch.visibility,
-        lastMessageAt: ch.lastMessageAt,
-        lastMessagePreview: ch.lastMessagePreview,
-        memberCount: ch.memberCount,
-      })),
+      workspaces,
+      channels,
     },
   });
 });
@@ -149,40 +160,46 @@ export const syncUser = asyncHandler(async (req, res) => {
     return res.status(401).json({ success: false, error: { message: 'Token required' } });
   }
 
-  const { chatUser } = await authService.syncFlowTaskUser(token, req.workspaceId);
+  const { chatUser } = await authService.syncFlowTaskUser(token);
 
-  // Ensure workspace membership exists for subsequent authenticated requests
-  await ensureWorkspaceMembership(chatUser._id, req.workspaceId);
+  const wsId = req.headers['x-workspace-id'];
+  let channels = [];
 
-  // Auto-join public system channels
-  const systemChannels = await channelRepository.findSystemChannels(req.workspaceId);
-  for (const sc of systemChannels) {
-    if (sc.visibility === 'public' && !sc.hasMember(chatUser._id)) {
-      await channelService.addMember(sc._id, chatUser._id).catch(() => {});
+  if (wsId) {
+    // Ensure workspace membership exists
+    await ensureWorkspaceMembership(chatUser._id, wsId);
+
+    // Auto-join public system channels
+    const systemChannels = await channelRepository.findSystemChannels(wsId);
+    for (const sc of systemChannels) {
+      if (sc.visibility === 'public' && !sc.hasMember(chatUser._id)) {
+        await channelService.addMember(sc._id, chatUser._id).catch(() => {});
+      }
     }
-  }
 
-  // Sync project channels
-  if (env.FLOWTASK_ENABLED) {
-    await channelService.syncProjectChannelsForUser(token, chatUser, req.workspaceId).catch(() => {});
-  }
+    // Sync project channels
+    if (env.FLOWTASK_ENABLED) {
+      await channelService.syncProjectChannelsForUser(token, chatUser, wsId).catch(() => {});
+    }
 
-  const channels = await channelRepository.findByMember(chatUser._id, { workspaceId: req.workspaceId });
+    const userChannels = await channelRepository.findByMember(chatUser._id, { workspaceId: wsId });
+    channels = userChannels.map((ch) => ({
+      _id: ch._id,
+      name: ch.name,
+      slug: ch.slug,
+      type: ch.type,
+      visibility: ch.visibility,
+      lastMessageAt: ch.lastMessageAt,
+      lastMessagePreview: ch.lastMessagePreview,
+      memberCount: ch.memberCount,
+    }));
+  }
 
   res.status(200).json({
     success: true,
     data: {
       user: chatUser,
-      channels: channels.map((ch) => ({
-        _id: ch._id,
-        name: ch.name,
-        slug: ch.slug,
-        type: ch.type,
-        visibility: ch.visibility,
-        lastMessageAt: ch.lastMessageAt,
-        lastMessagePreview: ch.lastMessagePreview,
-        memberCount: ch.memberCount,
-      })),
+      channels,
     },
   });
 });
@@ -299,10 +316,15 @@ export const resetPassword = asyncHandler(async (req, res) => {
  * Get current chat user profile.
  */
 export const getMe = asyncHandler(async (req, res) => {
+  // Include user's workspaces in the response
+  const { default: WorkspaceMembership } = await import('../workspaces/WorkspaceMembership.model.js');
+  const workspaces = await WorkspaceMembership.findUserWorkspaces(req.user._id);
+
   res.status(200).json({
     success: true,
     data: {
       user: req.user,
+      workspaces,
     },
   });
 });

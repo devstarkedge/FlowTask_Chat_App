@@ -51,8 +51,8 @@ export const CHANNEL_TYPES = Object.freeze({
   DEPARTMENT: 'department',
   TEAM: 'team',
   DM: 'dm',
-  SYSTEM: 'system',
-});
+  SYSTEM: 'system',  PUBLIC: 'public',
+  PRIVATE: 'private',});
 
 // ─── Channel Visibility ──────────────────────────────────────────────────────
 export const CHANNEL_VISIBILITY = Object.freeze({
@@ -123,14 +123,66 @@ export const WORKSPACE_ROLES = Object.freeze({
   GUEST: 'guest',
 });
 
-// ─── Workspace Plan Limits ───────────────────────────────────────────────────
+// ─── Workspace Plan Limits & Feature Flags ───────────────────────────────
 export const WORKSPACE_LIMITS = Object.freeze({
-  free: { maxMembers: 50, maxChannels: 20, maxFileSize: 5 * 1024 * 1024 },
-  pro: { maxMembers: 500, maxChannels: -1, maxFileSize: 25 * 1024 * 1024 },
-  enterprise: { maxMembers: -1, maxChannels: -1, maxFileSize: 100 * 1024 * 1024 },
+  free: {
+    maxMembers: 50,
+    maxChannels: 20,
+    maxFileSize: 5 * 1024 * 1024,
+    features: {
+      threads: true,
+      reactions: true,
+      fileUploads: true,
+      customEmoji: false,
+      videoCall: false,
+      guestAccess: false,
+      advancedSearch: false,
+      auditLog: false,
+      sso: false,
+    },
+  },
+  pro: {
+    maxMembers: 500,
+    maxChannels: -1,
+    maxFileSize: 25 * 1024 * 1024,
+    features: {
+      threads: true,
+      reactions: true,
+      fileUploads: true,
+      customEmoji: true,
+      videoCall: false,
+      guestAccess: true,
+      advancedSearch: true,
+      auditLog: false,
+      sso: false,
+    },
+  },
+  enterprise: {
+    maxMembers: -1,
+    maxChannels: -1,
+    maxFileSize: 100 * 1024 * 1024,
+    features: {
+      threads: true,
+      reactions: true,
+      fileUploads: true,
+      customEmoji: true,
+      videoCall: true,
+      guestAccess: true,
+      advancedSearch: true,
+      auditLog: true,
+      sso: true,
+    },
+  },
 });
 
-// ─── System Channel Slugs ────────────────────────────────────────────────────
+// ─── Default Channels (created on workspace creation) ─────────────────
+// These are always created for every workspace.
+export const DEFAULT_CHANNELS = Object.freeze([
+  { slug: 'general', name: 'general', description: 'Company-wide general discussion', visibility: 'public', type: 'public' },
+  { slug: 'random', name: 'random', description: 'Non-work banter and water-cooler chat', visibility: 'public', type: 'public' },
+]);
+
+// ─── FlowTask System Channels (only when FlowTask integration enabled) ───
 export const SYSTEM_CHANNELS = Object.freeze({
   GENERAL: { slug: 'flowtask-general', name: 'General', description: 'Company-wide general discussion', visibility: 'public' },
   ADMIN: { slug: 'flowtask-admin', name: 'Admin', description: 'Admin-only channel', visibility: 'private' },

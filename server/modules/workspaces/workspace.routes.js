@@ -31,4 +31,9 @@ router.post('/:id/invite-email', protect, resolveWorkspace, requireWorkspaceRole
 router.get('/:id/invites', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.getPendingInvites);
 router.delete('/:id/invites/:inviteId', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.revokeInvite);
 router.post('/accept-invite', protect, ctrl.acceptInvite);
+
+// ─── Billing & Plan ──────────────────────────────────────────────────────────
+router.get('/:id/billing', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.getWorkspaceBilling);
+router.post('/:id/upgrade-plan', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER), ctrl.upgradePlan);
+
 export default router;

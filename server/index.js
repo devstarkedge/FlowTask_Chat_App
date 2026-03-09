@@ -24,7 +24,6 @@ import botRoutes from './modules/bot/bot.routes.js';
 import userRoutes from './modules/users/user.routes.js';
 import workspaceRoutes from './modules/workspaces/workspace.routes.js';
 import notificationRoutes from './modules/notifications/notification.routes.js';
-import organizationRoutes from './modules/organizations/organization.routes.js';
 import adminRoutes from './modules/admin/admin.routes.js';
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
 import eventBus from './services/eventBus.js';
@@ -154,7 +153,6 @@ app.get('/api/chat/health', (_req, res) => {
 
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/chat/auth', authRoutes);
-app.use('/api/chat/organizations', organizationRoutes);
 app.use('/api/chat/workspaces', workspaceRoutes);
 app.use('/api/chat/channels', channelRoutes);
 app.use('/api/chat/channels/:channelId', channelMessageRouter);

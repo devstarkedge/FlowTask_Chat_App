@@ -17,12 +17,11 @@ class TokenService {
 
   /**
    * Issue a new access token for a Chat user.
-   * @param {{ id: string, role: string, workspaceId?: string }} payload
+   * @param {{ id: string, role: string }} payload
    * @returns {string} JWT access token
    */
   issueAccessToken(payload) {
     const claims = { id: payload.id, role: payload.role, type: 'access' };
-    if (payload.workspaceId) claims.workspaceId = payload.workspaceId;
     return jwt.sign(
       claims,
       env.JWT_SECRET,
@@ -44,12 +43,11 @@ class TokenService {
 
   /**
    * Issue a new refresh token.
-   * @param {{ id: string, workspaceId?: string }} payload
+   * @param {{ id: string }} payload
    * @returns {string} JWT refresh token
    */
   issueRefreshToken(payload) {
     const claims = { id: payload.id, type: 'refresh' };
-    if (payload.workspaceId) claims.workspaceId = payload.workspaceId;
     return jwt.sign(
       claims,
       env.JWT_REFRESH_SECRET,

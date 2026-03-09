@@ -49,9 +49,8 @@ export const useAuthStore = create((set, get) => ({
       localStorage.setItem('chat_access_token', accessToken)
       localStorage.setItem('chat_refresh_token', refreshToken)
       set({ accessToken, refreshToken, user, isLoading: false })
-      // Initialize workspaces before connecting socket (socket needs workspaceId)
+      // Fetch workspaces for workspace selector; socket connects when workspace is selected
       await useWorkspaceStore.getState().fetchWorkspaces()
-      connectSocket()
       return data
     } catch (error) {
       const msg = error.response?.data?.error?.message || 'Login failed'
@@ -75,7 +74,6 @@ export const useAuthStore = create((set, get) => ({
         useChannelStore.setState({ channels })
       }
       await useWorkspaceStore.getState().fetchWorkspaces()
-      connectSocket()
       return data
     } catch (error) {
       const msg = error.response?.data?.error?.message || 'FlowTask login failed'
@@ -89,10 +87,11 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const { data } = await authAPI.me()
-      set({ user: data.data.user, isLoading: false })
+      set({ user: data.data.user || data.data, isLoading: false })
       await useWorkspaceStore.getState().fetchWorkspaces()
+      // Socket connects when workspace is selected via WorkspaceLayout
       connectSocket()
-      return data.data.user
+      return data.data.user || data.data
     } catch (error) {
       const msg = error.response?.data?.error?.message || 'Failed to fetch user'
       set({ isLoading: false, error: msg })

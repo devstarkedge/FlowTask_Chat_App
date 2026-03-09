@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import {
@@ -8,11 +9,13 @@ import api from '../../services/api'
 
 /**
  * WorkspaceSwitcher — dropdown in sidebar header for switching/creating workspaces.
+ * Workspace switching is URL-driven: navigates to /workspace/:id.
  */
 export default function WorkspaceSwitcher({ onOpenCreate, onOpenJoin, onOpenSettings }) {
+  const navigate = useNavigate()
   const {
     workspaces, activeWorkspace, activeWorkspaceId,
-    switchWorkspace, isSwitching,
+    isSwitching,
   } = useWorkspaceStore()
   const [isOpen, setIsOpen] = useState(false)
   const [unreadByWorkspace, setUnreadByWorkspace] = useState({})
@@ -51,7 +54,7 @@ export default function WorkspaceSwitcher({ onOpenCreate, onOpenJoin, onOpenSett
     return () => document.removeEventListener('keydown', handleKey)
   }, [isOpen])
 
-  const handleSwitch = async (workspaceId) => {
+  const handleSwitch = (workspaceId) => {
     if (workspaceId === activeWorkspaceId) {
       setIsOpen(false)
       return
@@ -59,20 +62,8 @@ export default function WorkspaceSwitcher({ onOpenCreate, onOpenJoin, onOpenSett
 
     setIsOpen(false)
 
-    // Switch workspace state
-    await switchWorkspace(workspaceId)
-
-    // Clear channel and chat state for clean slate
-    useChannelStore.setState({
-      channels: [],
-      activeChannelId: null,
-      unreads: {},
-      membersByChannel: {},
-    })
-    useChatStore.getState().clearCache?.()
-
-    // Reconnect socket with new workspace context (handles fetch + notification reset)
-    reconnectWithWorkspace()
+    // Navigate to the new workspace URL — WorkspaceLayout handles state sync
+    navigate(`/workspace/${workspaceId}`)
   }
 
   const getWorkspaceInitial = (name) => {

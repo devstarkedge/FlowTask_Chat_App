@@ -125,3 +125,19 @@ export const revokeInvite = asyncHandler(async (req, res) => {
   const invite = await workspaceService.revokeInvite(req.params.inviteId, req.params.id);
   res.json({ success: true, data: invite });
 });
+
+// ─── Billing & Plan ───────────────────────────────────────────────────────────
+
+export const getWorkspaceBilling = asyncHandler(async (req, res) => {
+  const billing = await workspaceService.getWorkspaceBilling(req.params.id, req.user._id);
+  res.json({ success: true, data: billing });
+});
+
+export const upgradePlan = asyncHandler(async (req, res) => {
+  const workspace = await workspaceService.upgradePlan(
+    req.params.id,
+    req.body.plan,
+    req.user._id,
+  );
+  res.json({ success: true, data: workspace });
+});

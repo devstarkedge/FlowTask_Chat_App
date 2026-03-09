@@ -25,6 +25,8 @@ const CHANNEL_ICONS = {
   team: Users,
   dm: MessageCircle,
   system: Volume2,
+  public: Hash,
+  private: Lock,
 }
 
 export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotifications, collapsed, onToggleSaved }) {
@@ -53,6 +55,8 @@ export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotificat
   }
 
   const projectChannels = channels.filter((c) => c.type === 'project' && !c.isArchived)
+  const publicChannels = channels.filter((c) => c.type === 'public' && !c.isArchived)
+  const privateChannels = channels.filter((c) => c.type === 'private' && !c.isArchived)
   // Enrich DM channels with dmRecipientId for online indicator
   const dmChannels = useMemo(() => {
     return channels
@@ -343,7 +347,7 @@ export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotificat
 
         <ChannelSection
           title="Channels"
-          channels={sortChannels(filteredChannels([...projectChannels, ...deptChannels]))}
+          channels={sortChannels(filteredChannels([...publicChannels, ...projectChannels, ...deptChannels]))}
           expanded={expandedSections.channels}
           onToggle={() => toggleSection('channels')}
           activeId={activeChannelId}
@@ -353,6 +357,19 @@ export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotificat
           onAdd={() => setShowCreateChannel(true)}
           onlineUsers={onlineUsers}
         />
+
+        {privateChannels.length > 0 && (
+          <ChannelSection
+            title="Private Channels"
+            channels={sortChannels(filteredChannels(privateChannels))}
+            expanded={expandedSections.channels}
+            onToggle={() => toggleSection('channels')}
+            activeId={activeChannelId}
+            unreads={unreads}
+            onSelect={handleSelectChannel}
+            onlineUsers={onlineUsers}
+          />
+        )}
 
         <ChannelSection
           title="Direct Messages"

@@ -21,18 +21,18 @@ class AuthService {
 
   /**
    * Register a new native user.
-   * @param {{ name: string, email: string, password: string, workspaceId?: string }} data
+   * @param {{ name: string, email: string, password: string }} data
    * @returns {Promise<{ chatUser: object, message: string }>}
    */
-  async register({ name, email, password, workspaceId }) {
+  async register({ name, email, password }) {
     // Check for existing user
-    const existing = await userRepository.findByEmailPublic(email, workspaceId);
+    const existing = await userRepository.findByEmailPublic(email);
     if (existing) {
       throw new ValidationError('An account with this email already exists');
     }
 
-    // Create user
-    const chatUser = await userRepository.createNativeUser({ name, email, password, workspaceId });
+    // Create user (global identity — no workspace scope)
+    const chatUser = await userRepository.createNativeUser({ name, email, password });
 
     // Generate verification token
     const verificationToken = tokenService.generateRandomToken();
@@ -55,12 +55,12 @@ class AuthService {
 
   /**
    * Login a native user with email and password.
-   * @param {{ email: string, password: string, userAgent?: string, workspaceId?: string }} data
+   * @param {{ email: string, password: string, userAgent?: string }} data
    * @returns {Promise<{ chatUser: object, accessToken: string, refreshToken: string }>}
    */
-  async loginNative({ email, password, userAgent = '', workspaceId }) {
+  async loginNative({ email, password, userAgent = '' }) {
     // Find user with password field
-    const user = await userRepository.findByEmail(email, workspaceId);
+    const user = await userRepository.findByEmail(email);
     if (!user) {
       throw new UnauthorizedError('Invalid email or password');
     }
@@ -95,9 +95,9 @@ class AuthService {
       ? 'Please verify your email address.'
       : undefined;
 
-    // Issue tokens
-    const accessToken = tokenService.issueAccessToken({ id: user._id.toString(), role: user.role, workspaceId });
-    const refreshToken = tokenService.issueRefreshToken({ id: user._id.toString(), workspaceId });
+    // Issue tokens (no workspaceId in JWT — workspace resolved via header)
+    const accessToken = tokenService.issueAccessToken({ id: user._id.toString(), role: user.role });
+    const refreshToken = tokenService.issueRefreshToken({ id: user._id.toString() });
 
     // Store hashed refresh token
     await userRepository.addRefreshToken(user._id, {
@@ -128,10 +128,10 @@ class AuthService {
    * Verifies the token with FLOWTASK_JWT_SECRET, fetches user from FlowTask API,
    * upserts ChatUser, and issues Chat-specific tokens.
    *
-   * @param {{ token: string, userAgent?: string, workspaceId?: string }} data
+   * @param {{ token: string, userAgent?: string }} data
    * @returns {Promise<{ chatUser: object, accessToken: string, refreshToken: string }>}
    */
-  async loginFlowTask({ token, userAgent = '', workspaceId }) {
+  async loginFlowTask({ token, userAgent = '' }) {
     if (!env.FLOWTASK_ENABLED) {
       throw new UnauthorizedError('FlowTask integration is disabled');
     }
@@ -164,12 +164,12 @@ class AuthService {
       throw new UnauthorizedError('FlowTask account is deactivated');
     }
 
-    // 4. Upsert ChatUser
-    const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser, workspaceId);
+    // 4. Upsert ChatUser (global identity)
+    const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser);
 
-    // 5. Issue Chat tokens
-    const accessToken = tokenService.issueAccessToken({ id: chatUser._id.toString(), role: chatUser.role, workspaceId });
-    const refreshToken = tokenService.issueRefreshToken({ id: chatUser._id.toString(), workspaceId });
+    // 5. Issue Chat tokens (no workspaceId in JWT)
+    const accessToken = tokenService.issueAccessToken({ id: chatUser._id.toString(), role: chatUser.role });
+    const refreshToken = tokenService.issueRefreshToken({ id: chatUser._id.toString() });
 
     // 6. Store hashed refresh token
     await userRepository.addRefreshToken(chatUser._id, {
@@ -227,8 +227,8 @@ class AuthService {
     await userRepository.removeRefreshToken(user._id, tokenHash);
 
     // Issue new token pair
-    const newAccessToken = tokenService.issueAccessToken({ id: user._id.toString(), role: user.role, workspaceId: decoded.workspaceId });
-    const newRefreshToken = tokenService.issueRefreshToken({ id: user._id.toString(), workspaceId: decoded.workspaceId });
+    const newAccessToken = tokenService.issueAccessToken({ id: user._id.toString(), role: user.role });
+    const newRefreshToken = tokenService.issueRefreshToken({ id: user._id.toString() });
 
     // Store new hashed refresh token
     await userRepository.addRefreshToken(user._id, {

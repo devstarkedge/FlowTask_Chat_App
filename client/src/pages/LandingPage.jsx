@@ -95,6 +95,17 @@ export default function LandingPage() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <Link
+                to="/pricing"
+                style={{
+                  color: '#a1a1aa', fontSize: 14, textDecoration: 'none', padding: '8px 16px',
+                  borderRadius: 8, transition: 'color 0.2s',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'white')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = '#a1a1aa')}
+              >
+                Pricing
+              </Link>
+              <Link
                 to="/login"
                 style={{
                   color: '#a1a1aa', fontSize: 14, textDecoration: 'none', padding: '8px 16px',

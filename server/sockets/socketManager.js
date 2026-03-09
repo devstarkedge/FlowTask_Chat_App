@@ -178,7 +178,6 @@ export async function initializeSocket(httpServer, corsOptions) {
         const decoded = tokenService.verifyAccessToken(token);
         if (decoded?.id && decoded.type === 'access') {
           chatUser = await userRepository.findById(decoded.id);
-          workspaceId = decoded.workspaceId || null;
         }
       } catch {
         // Not a Chat-issued token

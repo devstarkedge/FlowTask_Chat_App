@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import workspaceRepository from './workspace.repository.js';
-import { WORKSPACE_ROLES, WORKSPACE_LIMITS } from '../../config/constants.js';
+import { WORKSPACE_ROLES, WORKSPACE_LIMITS, DEFAULT_CHANNELS, CHANNEL_VISIBILITY, CHANNEL_MEMBER_ROLES } from '../../config/constants.js';
 import env from '../../config/environment.js';
 import logger from '../../utils/logger.js';
 import { BadRequestError, NotFoundError, ForbiddenError } from '../../middleware/errorHandler.js';
@@ -14,9 +14,11 @@ class WorkspaceService {
 
   /**
    * Create a new workspace. Creator becomes the owner.
+   * Auto-creates #general and #random default channels.
    */
   async createWorkspace(data, creatorId) {
-    const { name, slug, description, logo } = data;
+    const { name, description, logo, plan = 'free' } = data;
+    const slug = (data.slug || name).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
     // Check slug uniqueness
     const existing = await workspaceRepository.findBySlug(slug);
@@ -27,9 +29,10 @@ class WorkspaceService {
     // Create workspace
     const workspace = await workspaceRepository.create({
       name,
-      slug: slug.toLowerCase(),
+      slug,
       description,
       logo,
+      plan,
       owner: creatorId,
       inviteCode: crypto.randomBytes(16).toString('hex'),
     });
@@ -41,9 +44,42 @@ class WorkspaceService {
       WORKSPACE_ROLES.OWNER,
     );
 
+    // Auto-create default channels (#general, #random)
+    await this._createDefaultChannels(workspace._id, creatorId);
+
     logger.info(`Workspace created: ${workspace.name} (${workspace.slug}) by user ${creatorId}`);
 
     return workspace;
+  }
+
+  /**
+   * Create default channels for a new workspace.
+   * @private
+   */
+  async _createDefaultChannels(workspaceId, creatorId) {
+    const { default: channelRepository } = await import('../channels/channel.repository.js');
+
+    for (const ch of DEFAULT_CHANNELS) {
+      try {
+        const exists = await channelRepository.findBySlug(ch.slug, workspaceId);
+        if (exists) continue;
+
+        await channelRepository.create({
+          name: ch.name,
+          slug: ch.slug,
+          type: ch.type,
+          description: ch.description,
+          visibility: ch.visibility === 'public' ? CHANNEL_VISIBILITY.PUBLIC : CHANNEL_VISIBILITY.PRIVATE,
+          members: [{ userId: creatorId, role: CHANNEL_MEMBER_ROLES.OWNER }],
+          memberCount: 1,
+          workspaceId,
+        });
+
+        logger.info(`Default channel #${ch.slug} created for workspace ${workspaceId}`);
+      } catch (err) {
+        logger.error(`Failed to create default channel #${ch.slug}: ${err.message}`);
+      }
+    }
   }
 
   /**
@@ -297,8 +333,8 @@ class WorkspaceService {
       );
     }
 
-    // Check if user exists in this workspace already
-    const existingUser = await ChatUser.findOne({ email: email.toLowerCase(), workspaceId }).lean();
+    // Check if user exists and already in workspace
+    const existingUser = await ChatUser.findOne({ email: email.toLowerCase() }).lean();
     if (existingUser) {
       const isMember = await workspaceRepository.isMember(workspaceId, existingUser._id);
       if (isMember) {
@@ -405,6 +441,53 @@ class WorkspaceService {
       throw new NotFoundError('Invite not found or already used.');
     }
     return invite;
+  }
+
+  // ─── Billing & Plan ────────────────────────────────────────────────
+
+  /**
+   * Get workspace billing information.
+   */
+  async getWorkspaceBilling(workspaceId, requesterId) {
+    const workspace = await this.getWorkspace(workspaceId);
+    const role = await workspaceRepository.getUserRole(workspaceId, requesterId);
+    if (!role || ![WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN].includes(role)) {
+      throw new ForbiddenError('Only workspace owner or admin can view billing.');
+    }
+
+    const memberCount = await workspaceRepository.countMembers(workspaceId);
+    const planConfig = WORKSPACE_LIMITS[workspace.plan] || WORKSPACE_LIMITS.free;
+
+    return {
+      plan: workspace.plan,
+      billing: workspace.billing || {},
+      limits: planConfig,
+      usage: { members: memberCount },
+    };
+  }
+
+  /**
+   * Upgrade workspace plan (schema only — no actual payment processing).
+   */
+  async upgradePlan(workspaceId, newPlan, requesterId) {
+    const workspace = await this.getWorkspace(workspaceId);
+
+    if (workspace.owner.toString() !== requesterId.toString()) {
+      throw new ForbiddenError('Only the workspace owner can change the plan.');
+    }
+
+    if (!WORKSPACE_LIMITS[newPlan]) {
+      throw new BadRequestError(`Invalid plan: ${newPlan}`);
+    }
+
+    if (workspace.plan === newPlan) {
+      throw new BadRequestError(`Workspace is already on the ${newPlan} plan.`);
+    }
+
+    const updated = await workspaceRepository.update(workspaceId, { plan: newPlan });
+    logger.info(`Workspace ${workspace.slug} upgraded from ${workspace.plan} to ${newPlan} by user ${requesterId}`);
+
+    return updated;
   }
 
   /**

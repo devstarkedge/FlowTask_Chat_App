@@ -108,11 +108,11 @@ export const useWorkspaceStore = create(
       },
 
       // ─── Create workspace ──────────────────────────────────────────────
-      createWorkspace: async ({ name, description }) => {
+      createWorkspace: async ({ name, description, plan }) => {
         set({ isLoading: true, error: null })
         try {
-          const { data } = await api.post('/workspaces', { name, description })
-          const workspace = data.data?.workspace
+          const { data } = await api.post('/workspaces', { name, description, plan })
+          const workspace = data.data?.workspace || data.data
           set((state) => ({
             workspaces: [...state.workspaces, workspace],
             isLoading: false,
@@ -286,6 +286,42 @@ export const useWorkspaceStore = create(
           members: [],
           error: null,
         })
+      },
+
+      // ─── Billing & Plan ─────────────────────────────────────────────
+      fetchBilling: async (workspaceId) => {
+        const id = workspaceId || get().activeWorkspaceId
+        if (!id) return null
+        try {
+          const { data } = await api.get(`/workspaces/${id}/billing`)
+          return data.data
+        } catch (error) {
+          console.error('Failed to fetch billing:', error)
+          return null
+        }
+      },
+
+      upgradePlan: async (workspaceId, newPlan) => {
+        const id = workspaceId || get().activeWorkspaceId
+        if (!id) return
+        try {
+          const { data } = await api.post(`/workspaces/${id}/upgrade-plan`, { plan: newPlan })
+          const updated = data.data
+          set((state) => ({
+            workspaces: state.workspaces.map((w) =>
+              w._id === id ? { ...w, plan: newPlan } : w,
+            ),
+            activeWorkspace:
+              state.activeWorkspaceId === id
+                ? { ...state.activeWorkspace, plan: newPlan }
+                : state.activeWorkspace,
+          }))
+          toast.success(`Plan upgraded to ${newPlan}!`)
+          return updated
+        } catch (error) {
+          toast.error(error.response?.data?.error?.message || 'Failed to upgrade plan')
+          throw error
+        }
       },
     }),
     {

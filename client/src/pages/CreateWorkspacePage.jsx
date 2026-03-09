@@ -79,10 +79,11 @@ export default function CreateWorkspacePage() {
 
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#d1d5db', marginBottom: 6 }}>
+            <label htmlFor="workspace-name" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#d1d5db', marginBottom: 6 }}>
               Workspace Name *
             </label>
             <input
+              id="workspace-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -103,10 +104,11 @@ export default function CreateWorkspacePage() {
           </div>
 
           <div style={{ marginBottom: 32 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#d1d5db', marginBottom: 6 }}>
+            <label htmlFor="workspace-description" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#d1d5db', marginBottom: 6 }}>
               Description (optional)
             </label>
             <textarea
+              id="workspace-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="What's this workspace for?"

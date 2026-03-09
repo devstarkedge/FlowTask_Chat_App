@@ -31,13 +31,12 @@ export default function WorkspaceLayout() {
     if (!workspaceId) return
 
     if (workspaceId !== activeWorkspaceId) {
-      // Validate that user belongs to this workspace
-      if (workspaces.length > 0) {
-        const valid = workspaces.find((w) => w._id === workspaceId)
-        if (!valid) {
-          navigate('/select-workspace', { replace: true })
-          return
-        }
+      // Wait until workspaces have been loaded before validating
+      if (workspaces.length === 0) return
+      const valid = workspaces.find((w) => w._id === workspaceId)
+      if (!valid) {
+        navigate('/select-workspace', { replace: true })
+        return
       }
       switchWorkspace(workspaceId)
     }

@@ -90,7 +90,6 @@ export const useAuthStore = create((set, get) => ({
       set({ user: data.data.user || data.data, isLoading: false })
       await useWorkspaceStore.getState().fetchWorkspaces()
       // Socket connects when workspace is selected via WorkspaceLayout
-      connectSocket()
       return data.data.user || data.data
     } catch (error) {
       const msg = error.response?.data?.error?.message || 'Failed to fetch user'

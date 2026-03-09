@@ -7,6 +7,9 @@ import { WORKSPACE_LIMITS } from '../config/constants.js';
  * @returns {Function} Express middleware
  */
 export const requirePlan = (...plans) => {
+  if (plans.length === 0) {
+    throw new Error('requirePlan() called with no plan names — this would block all requests. Provide at least one plan name.');
+  }
   return (req, res, next) => {
     if (!req.workspace) {
       return res.status(400).json({

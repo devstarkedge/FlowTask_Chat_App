@@ -307,16 +307,18 @@ export const useWorkspaceStore = create(
         try {
           const { data } = await api.post(`/workspaces/${id}/upgrade-plan`, { plan: newPlan })
           const updated = data.data
-          set((state) => ({
-            workspaces: state.workspaces.map((w) =>
-              w._id === id ? { ...w, plan: newPlan } : w,
-            ),
-            activeWorkspace:
-              state.activeWorkspaceId === id
-                ? { ...state.activeWorkspace, plan: newPlan }
-                : state.activeWorkspace,
-          }))
-          toast.success(`Plan upgraded to ${newPlan}!`)
+          if (updated) {
+            set((state) => ({
+              workspaces: state.workspaces.map((w) =>
+                w._id === id ? { ...w, plan: updated.plan } : w,
+              ),
+              activeWorkspace:
+                state.activeWorkspaceId === id
+                  ? { ...state.activeWorkspace, plan: updated.plan }
+                  : state.activeWorkspace,
+            }))
+          }
+          toast.success(`Plan changed to ${updated?.plan || newPlan}!`)
           return updated
         } catch (error) {
           toast.error(error.response?.data?.error?.message || 'Failed to upgrade plan')

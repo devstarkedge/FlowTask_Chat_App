@@ -93,7 +93,6 @@ const chatUserSchema = new Schema({
   email: {
     type: String,
     required: true,
-    unique: true,
     lowercase: true,
   },
   role: {
@@ -206,6 +205,7 @@ chatUserSchema.index({ flowTaskUserId: 1 }, { unique: true, sparse: true });
 // Role/status lookup
 chatUserSchema.index({ role: 1, isActive: 1 });
 chatUserSchema.index({ onlineStatus: 1 });
+chatUserSchema.index({ departmentIds: 1, isActive: 1 });
 
 // ─── Pre-save: Hash password on change ───────────────────────────────────────
 chatUserSchema.pre('save', async function (next) {

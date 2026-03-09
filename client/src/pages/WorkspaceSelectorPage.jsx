@@ -6,7 +6,7 @@ import { MessageSquare, Plus, ArrowRight, LogOut, Loader2 } from 'lucide-react'
 
 export default function WorkspaceSelectorPage() {
   const navigate = useNavigate()
-  const { workspaces, isLoading, fetchWorkspaces, switchWorkspace } = useWorkspaceStore()
+  const { workspaces, isLoading, error, fetchWorkspaces, switchWorkspace } = useWorkspaceStore()
   const { user, logout } = useAuthStore()
 
   useEffect(() => {
@@ -29,6 +29,20 @@ export default function WorkspaceSelectorPage() {
   const handleLogout = () => {
     logout()
     navigate('/')
+  }
+
+  if (error) {
+    return (
+      <div style={{ background: '#0a0a0f', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <p style={{ color: '#ef4444', fontSize: 15 }}>{error}</p>
+        <button
+          onClick={fetchWorkspaces}
+          style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: '#6366f1', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+        >
+          Retry
+        </button>
+      </div>
+    )
   }
 
   if (isLoading) {

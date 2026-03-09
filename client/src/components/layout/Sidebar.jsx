@@ -37,6 +37,7 @@ export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotificat
   const unreadNotifications = useNotificationStore((s) => s.unreadCount)
   const [expandedSections, setExpandedSections] = useState({
     channels: true,
+    privateChannels: true,
     dms: true,
     system: true,
   })
@@ -362,8 +363,8 @@ export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotificat
           <ChannelSection
             title="Private Channels"
             channels={sortChannels(filteredChannels(privateChannels))}
-            expanded={expandedSections.channels}
-            onToggle={() => toggleSection('channels')}
+            expanded={expandedSections.privateChannels}
+            onToggle={() => toggleSection('privateChannels')}
             activeId={activeChannelId}
             unreads={unreads}
             onSelect={handleSelectChannel}

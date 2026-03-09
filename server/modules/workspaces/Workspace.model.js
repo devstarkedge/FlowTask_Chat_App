@@ -141,6 +141,8 @@ const workspaceSchema = new Schema({
 workspaceSchema.index({ owner: 1 });
 // Active workspaces sorted by name for listing
 workspaceSchema.index({ isActive: 1, name: 1 });
+workspaceSchema.index({ 'billing.stripeCustomerId': 1 }, { sparse: true });
+workspaceSchema.index({ 'billing.stripeSubscriptionId': 1 }, { sparse: true });
 
 // ─── Instance Methods ────────────────────────────────────────────────────────
 

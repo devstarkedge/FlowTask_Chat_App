@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import authService from './auth.service.js';
 import channelRepository from '../channels/channel.repository.js';
 import channelService from '../channels/channel.service.js';
@@ -68,7 +69,6 @@ export const login = asyncHandler(async (req, res) => {
   });
 
   // Fetch user's workspaces for client-side workspace selection
-  const { default: WorkspaceMembership } = await import('../workspaces/WorkspaceMembership.model.js');
   const workspaces = await WorkspaceMembership.findUserWorkspaces(chatUser._id);
 
   res.status(200).json({
@@ -101,13 +101,15 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
   });
 
   // Fetch user's workspaces
-  const { default: WorkspaceMembership } = await import('../workspaces/WorkspaceMembership.model.js');
   const workspaces = await WorkspaceMembership.findUserWorkspaces(chatUser._id);
 
   // If user has a workspace with FlowTask enabled, get channels for that workspace
   let channels = [];
   const wsId = req.headers['x-workspace-id'];
   if (wsId) {
+    if (!mongoose.Types.ObjectId.isValid(wsId)) {
+      return res.status(400).json({ success: false, error: { message: 'Invalid workspace ID format' } });
+    }
     // Ensure workspace membership exists
     await ensureWorkspaceMembership(chatUser._id, wsId);
 
@@ -317,7 +319,6 @@ export const resetPassword = asyncHandler(async (req, res) => {
  */
 export const getMe = asyncHandler(async (req, res) => {
   // Include user's workspaces in the response
-  const { default: WorkspaceMembership } = await import('../workspaces/WorkspaceMembership.model.js');
   const workspaces = await WorkspaceMembership.findUserWorkspaces(req.user._id);
 
   res.status(200).json({

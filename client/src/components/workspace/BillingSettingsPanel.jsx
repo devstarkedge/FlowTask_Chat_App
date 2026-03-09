@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
-import { CreditCard, Check, ArrowRight, Loader2 } from 'lucide-react'
+import { CreditCard, Check, ArrowRight, Loader2, AlertCircle } from 'lucide-react'
 
 const PLAN_DETAILS = {
   free: { name: 'Free', price: '$0', period: 'forever', color: '#71717a' },
@@ -13,23 +13,35 @@ export default function BillingSettingsPanel() {
   const [billing, setBilling] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [upgrading, setUpgrading] = useState(null)
+  const [error, setError] = useState(null)
+  const [confirmPlan, setConfirmPlan] = useState(null)
 
   useEffect(() => {
     if (!activeWorkspaceId) return
     setIsLoading(true)
+    setError(null)
     fetchBilling(activeWorkspaceId)
       .then((data) => setBilling(data))
+      .catch((err) => {
+        const msg = err?.response?.data?.error?.message || 'Failed to load billing information'
+        setError(msg)
+      })
       .finally(() => setIsLoading(false))
   }, [activeWorkspaceId, fetchBilling])
 
   const currentPlan = activeWorkspace?.plan || 'free'
 
   const handleUpgrade = async (newPlan) => {
+    setConfirmPlan(null)
     setUpgrading(newPlan)
     try {
       await upgradePlan(activeWorkspaceId, newPlan)
       const data = await fetchBilling(activeWorkspaceId)
       setBilling(data)
+    } catch (err) {
+      const msg = err?.response?.data?.error?.message || 'Failed to change plan'
+      setError(msg)
+      console.error('Plan change error:', err)
     } finally {
       setUpgrading(null)
     }
@@ -43,6 +55,28 @@ export default function BillingSettingsPanel() {
     )
   }
 
+  if (error && !billing) {
+    return (
+      <div style={{ padding: 24, textAlign: 'center' }}>
+        <AlertCircle size={32} style={{ color: '#ef4444', margin: '0 auto 12px' }} />
+        <p style={{ color: '#ef4444', marginBottom: 16, fontSize: 14 }}>{error}</p>
+        <button
+          onClick={() => {
+            setError(null)
+            setIsLoading(true)
+            fetchBilling(activeWorkspaceId)
+              .then((data) => setBilling(data))
+              .catch((e) => setError(e?.response?.data?.error?.message || 'Failed to load billing information'))
+              .finally(() => setIsLoading(false))
+          }}
+          style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: 'var(--accent-primary)', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div style={{ padding: 24 }}>
       <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-white)', marginBottom: 4 }}>
@@ -52,6 +86,17 @@ export default function BillingSettingsPanel() {
       <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
         Manage your workspace plan and billing.
       </p>
+
+      {error && (
+        <div style={{
+          background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+          borderRadius: 8, padding: '10px 14px', marginBottom: 16,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <AlertCircle size={16} style={{ color: '#ef4444', flexShrink: 0 }} />
+          <span style={{ fontSize: 13, color: '#ef4444' }}>{error}</span>
+        </div>
+      )}
 
       {/* Current Plan */}
       <div style={{
@@ -122,20 +167,40 @@ export default function BillingSettingsPanel() {
                 </p>
               </div>
               {!isCurrent && planId !== 'enterprise' && (
-                <button
-                  onClick={() => handleUpgrade(planId)}
-                  disabled={upgrading === planId}
-                  style={{
-                    padding: '8px 16px', borderRadius: 8, border: 'none',
-                    background: 'var(--accent-primary)', color: 'white',
-                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    opacity: upgrading === planId ? 0.6 : 1,
-                  }}
-                >
-                  {upgrading === planId ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
-                  {upgrading === planId ? 'Upgrading...' : 'Select'}
-                </button>
+                confirmPlan === planId ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Confirm change?</span>
+                    <button
+                      onClick={() => handleUpgrade(planId)}
+                      disabled={!!upgrading}
+                      style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: 'var(--accent-primary)', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: !!upgrading ? 0.6 : 1 }}
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => setConfirmPlan(null)}
+                      disabled={!!upgrading}
+                      style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-secondary)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmPlan(planId)}
+                    disabled={!!upgrading}
+                    style={{
+                      padding: '8px 16px', borderRadius: 8, border: 'none',
+                      background: 'var(--accent-primary)', color: 'white',
+                      fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      opacity: !!upgrading ? 0.6 : 1,
+                    }}
+                  >
+                    {upgrading === planId ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
+                    {upgrading === planId ? 'Changing...' : 'Select'}
+                  </button>
+                )
               )}
               {isCurrent && <Check size={18} style={{ color: 'var(--accent-primary)' }} />}
             </div>

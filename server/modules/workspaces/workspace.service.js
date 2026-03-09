@@ -484,8 +484,16 @@ class WorkspaceService {
       throw new BadRequestError(`Workspace is already on the ${newPlan} plan.`);
     }
 
+    // Validate current usage against the new plan's limits before applying the change
+    const targetLimits = WORKSPACE_LIMITS[newPlan];
+    if (targetLimits.maxMembers > 0 && workspace.memberCount > targetLimits.maxMembers) {
+      throw new BadRequestError(
+        `Cannot change to ${newPlan} plan: workspace has ${workspace.memberCount} members but the plan allows a maximum of ${targetLimits.maxMembers}.`,
+      );
+    }
+
     const updated = await workspaceRepository.update(workspaceId, { plan: newPlan });
-    logger.info(`Workspace ${workspace.slug} upgraded from ${workspace.plan} to ${newPlan} by user ${requesterId}`);
+    logger.info(`Workspace ${workspace.slug} plan changed from ${workspace.plan} to ${newPlan} by user ${requesterId}`);
 
     return updated;
   }

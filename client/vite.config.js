@@ -4,7 +4,12 @@ import tailwindcss from "@tailwindcss/vite"
 
 export default ({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
-  const backend = env.VITE_BACKEND_URL
+  
+  let validatedBackend = env.VITE_BACKEND_URL
+  if (!validatedBackend) {
+    console.warn("VITE_BACKEND_URL is missing in environment variables. Falling back to HTTP http://localhost:3000");
+    validatedBackend = "http://localhost:3000";
+  }
 
   return defineConfig({
     base: "/",
@@ -15,11 +20,11 @@ export default ({ mode }) => {
       port: 5174,
       proxy: {
         "/api/chat": {
-          target: backend,
+          target: validatedBackend,
           changeOrigin: true,
         },
         "/socket.io": {
-          target: backend,
+          target: validatedBackend,
           ws: true,
         },
       },

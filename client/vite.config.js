@@ -1,20 +1,38 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig, loadEnv } from "vite"
+import react from "@vitejs/plugin-react"
+import tailwindcss from "@tailwindcss/vite"
 
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  server: {
-    port: 5174,
-    proxy: {
-      '/api/chat': {
-        target: 'http://localhost:3200',
-        changeOrigin: true,
-      },
-      '/socket.io': {
-        target: 'http://localhost:3200',
-        ws: true,
+export default ({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "")
+  const backend = env.VITE_BACKEND_URL
+
+  return defineConfig({
+    base: "/",
+
+    plugins: [react(), tailwindcss()],
+
+    server: {
+      port: 5174,
+      proxy: {
+        "/api/chat": {
+          target: backend,
+          changeOrigin: true,
+        },
+        "/socket.io": {
+          target: backend,
+          ws: true,
+        },
       },
     },
-  },
-})
+
+    build: {
+      minify: "terser",
+      terserOptions: {
+        compress: {
+          drop_console: true,
+          drop_debugger: true,
+        },
+      },
+    },
+  })
+}

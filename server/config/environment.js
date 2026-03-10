@@ -36,9 +36,11 @@ if (process.env.JWT_REFRESH_SECRET && process.env.JWT_REFRESH_SECRET.length < 32
 
 // ─── Parse CORS origins ─────────────────────────────────────────────────────
 function parseCorsOrigins(raw) {
-  if (!raw) return 'http://localhost:5174';
-  const origins = raw.split(',').map((o) => o.trim()).filter(Boolean);
-  return origins.length === 1 ? origins[0] : origins;
+  if (!raw) return ['http://localhost:5174'];
+  return raw
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, '')) // strip trailing slashes
+    .filter(Boolean);
 }
 
 // ─── Build Config ────────────────────────────────────────────────────────────

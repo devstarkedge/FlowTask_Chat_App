@@ -50,8 +50,33 @@ if (env.IS_PRODUCTION && !process.env.CORS_ORIGINS) {
   process.exit(1);
 }
 
+// CORS_ORIGINS is always an array now (parseCorsOrigins always returns []).
+// Log at startup so you can verify the value in Render logs.
+const effectiveOrigins = Array.isArray(env.CORS_ORIGINS)
+  ? env.CORS_ORIGINS
+  : [env.CORS_ORIGINS];
+logger.info('CORS: effective allowed origins', { origins: effectiveOrigins });
+
 const corsOptions = {
-  origin: env.CORS_ORIGINS,
+  // Function-based origin: logs every rejection so you can see the exact
+  // mismatch in Render logs  →  Dashboard → Chat Backend → Logs
+  origin: (incomingOrigin, callback) => {
+    // Allow same-origin / server-to-server requests (no Origin header)
+    if (!incomingOrigin) return callback(null, true);
+    // Normalise the incoming origin exactly as we do our config (no trailing slash)
+    const normalized = incomingOrigin.replace(/\/+$/, '');
+    if (effectiveOrigins.includes(normalized)) {
+      callback(null, true);
+    } else {
+      logger.warn('CORS: blocked request from unlisted origin', {
+        incomingOrigin,
+        normalizedOrigin: normalized,
+        effectiveOrigins,
+        action: `Add "${normalized}" to CORS_ORIGINS in Render → Chat Backend → Environment, then redeploy`,
+      });
+      callback(null, false);
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Workspace-Id'],
@@ -60,6 +85,11 @@ const corsOptions = {
 };
 
 // ─── Global Middleware ───────────────────────────────────────────────────────
+// CORS must be applied before Helmet and all routes — including an explicit
+// handler for OPTIONS preflight so browsers get the CORS headers back
+// even when the actual endpoint hasn't been reached yet.
+app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -76,7 +106,6 @@ app.use(helmet({
   },
   crossOriginEmbedderPolicy: false, // Allow loading external images
 }));
-app.use(cors(corsOptions));
 app.use(compression());
 
 // ─── Request ID Middleware (cross-service log correlation) ───────────────────
@@ -176,7 +205,7 @@ app.get('/api/chat/debug/env', (req, res) => {
       PORT: env.PORT,
       FLOWTASK_ENABLED: env.FLOWTASK_ENABLED,
       FLOWTASK_API_URL: env.FLOWTASK_API_URL || '(not set)',
-      CORS_ORIGINS: Array.isArray(env.CORS_ORIGINS) ? env.CORS_ORIGINS : [env.CORS_ORIGINS],
+      CORS_ORIGINS: effectiveOrigins,
       LOG_LEVEL: env.LOG_LEVEL,
     },
     secrets: {

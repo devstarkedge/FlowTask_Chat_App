@@ -3,6 +3,7 @@ import { registerTaskEventHandlers } from './handlers/taskEventHandler.js';
 import { registerUserEventHandlers } from './handlers/userEventHandler.js';
 import { registerAnnouncementEventHandlers } from './handlers/announcementEventHandler.js';
 import { registerDepartmentTeamEventHandlers } from './handlers/departmentTeamEventHandler.js';
+import { registerIntegrationEventHandlers } from './handlers/integrationEventHandler.js';
 import eventBus from '../../services/eventBus.js';
 import logger from '../../utils/logger.js';
 
@@ -16,6 +17,7 @@ export function registerAllEventHandlers() {
   registerUserEventHandlers();
   registerAnnouncementEventHandlers();
   registerDepartmentTeamEventHandlers();
+  registerIntegrationEventHandlers();
 
   // Global handler-error listener for observability / future alerting
   eventBus.on('handler:error', ({ eventName, handlerName, error }) => {

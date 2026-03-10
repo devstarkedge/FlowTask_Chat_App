@@ -2,13 +2,15 @@ import { Router } from 'express';
 import { protect } from '../auth/auth.middleware.js';
 import { resolveWorkspace, requireWorkspaceRole } from '../../middleware/workspaceContext.js';
 import { WORKSPACE_ROLES } from '../../config/constants.js';
+import { validate } from '../../middleware/validate.js';
+import { createWorkspaceSchema } from '../../middleware/schemas.js';
 import * as ctrl from './workspace.controller.js';
 
 const router = Router();
 
 // ─── Public-ish (requires auth, but no workspace context) ──────────────────
 router.get('/mine', protect, ctrl.getMyWorkspaces);
-router.post('/', protect, ctrl.createWorkspace);
+router.post('/', protect, validate({ body: createWorkspaceSchema }), ctrl.createWorkspace);
 router.post('/join', protect, ctrl.joinByInviteCode);
 router.get('/slug/:slug', protect, ctrl.getWorkspaceBySlug);
 

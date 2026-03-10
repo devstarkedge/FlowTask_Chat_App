@@ -11,6 +11,7 @@ export const useAuthStore = create((set, get) => ({
   refreshToken: localStorage.getItem('chat_refresh_token') || null,
   user: null,
   isLoading: false,
+  isInitialized: !localStorage.getItem('chat_access_token'),
   error: null,
   flowtaskEnabled: FLOWTASK_ENABLED,
 
@@ -87,16 +88,15 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const { data } = await authAPI.me()
-      set({ user: data.data.user || data.data, isLoading: false })
+      set({ user: data.data.user || data.data, isLoading: false, isInitialized: true })
       await useWorkspaceStore.getState().fetchWorkspaces()
       // Socket connects when workspace is selected via WorkspaceLayout
       return data.data.user || data.data
     } catch (error) {
       const msg = error.response?.data?.error?.message || 'Failed to fetch user'
-      set({ isLoading: false, error: msg })
-      if (error.response?.status === 401) {
-        get().logout()
-      }
+      set({ isLoading: false, error: msg, isInitialized: true })
+      // Don't call logout() here — the API 401 interceptor handles token refresh
+      // and calls logout only when refresh fails. Calling it here would be premature.
       throw error
     }
   },
@@ -114,7 +114,7 @@ export const useAuthStore = create((set, get) => ({
     localStorage.removeItem('flowtask_token')
     disconnectSocket()
     useWorkspaceStore.getState().clearWorkspaceState()
-    set({ accessToken: null, refreshToken: null, user: null, error: null })
+    set({ accessToken: null, refreshToken: null, user: null, error: null, isInitialized: true })
   },
 
   // ─── Password Reset ──────────────────────────────────────────────

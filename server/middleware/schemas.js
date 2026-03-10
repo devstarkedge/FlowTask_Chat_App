@@ -152,3 +152,12 @@ export const scheduleMessageSchema = z.object({
   threadId: z.string().optional(),
   scheduledAt: z.string().min(1, 'scheduledAt is required'),
 });
+
+// ─── Workspaces ──────────────────────────────────────────────────────────────
+
+export const createWorkspaceSchema = z.object({
+  name: z.string().min(2, 'Workspace name must be 2-100 characters').max(100),
+  description: z.string().max(500).optional().default(''),
+  plan: z.enum(['free', 'pro', 'enterprise']).optional().default('free'),
+  slug: z.string().max(100).optional(),
+});

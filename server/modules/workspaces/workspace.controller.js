@@ -39,8 +39,15 @@ export const deleteWorkspace = asyncHandler(async (req, res) => {
 // ─── User's Workspaces ──────────────────────────────────────────────────────
 
 export const getMyWorkspaces = asyncHandler(async (req, res) => {
-  const workspaces = await workspaceService.getUserWorkspaces(req.user._id);
-  res.json({ success: true, data: workspaces });
+  const memberships = await workspaceService.getUserWorkspaces(req.user._id);
+  const workspaces = memberships
+    .filter((m) => m.workspaceId && m.workspaceId.isActive !== false)
+    .map((m) => ({
+      ...m.workspaceId,
+      role: m.role,
+      joinedAt: m.joinedAt,
+    }));
+  res.json({ success: true, data: { workspaces } });
 });
 
 // ─── Membership ─────────────────────────────────────────────────────────────

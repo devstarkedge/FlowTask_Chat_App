@@ -10,6 +10,62 @@ import { BadRequestError, NotFoundError, ForbiddenError } from '../../middleware
  */
 
 class WorkspaceService {
+  // ─── FlowTask Integration ───────────────────────────────────────────────
+
+  /**
+   * Find or create a workspace linked to the FlowTask instance.
+   * Used during FlowTask SSO login to auto-provision workspace.
+   * Always assigns plan = 'enterprise' for FlowTask workspaces.
+   *
+   * @param {string} creatorId - ChatUser _id of the FlowTask user
+   * @param {string} [workspaceName] - Name override from FlowTask
+   * @returns {Promise<object>} workspace document
+   */
+  async findOrCreateFlowTaskWorkspace(creatorId, workspaceName) {
+    // Check for existing FlowTask-linked workspace
+    const existing = await workspaceRepository.findFlowTaskWorkspace();
+    if (existing) {
+      // Ensure user is a member
+      const isMember = await workspaceRepository.isMember(existing._id, creatorId);
+      if (!isMember) {
+        await workspaceRepository.addMember(
+          existing._id,
+          creatorId,
+          WORKSPACE_ROLES.MEMBER,
+        );
+        logger.info('FlowTask user auto-added to workspace', {
+          userId: creatorId,
+          workspaceId: existing._id,
+        });
+      }
+      return existing;
+    }
+
+    // Create new workspace for FlowTask integration
+    const name = workspaceName || 'FlowTask Workspace';
+    const workspace = await this.createWorkspace({
+      name,
+      description: 'Auto-created workspace for FlowTask integration',
+      plan: 'enterprise',
+    }, creatorId);
+
+    // Enable FlowTask integration settings
+    await workspaceRepository.update(workspace._id, {
+      'settings.flowtaskIntegration': {
+        enabled: true,
+        apiUrl: env.FLOWTASK_API_URL || '',
+        webhookSecret: env.FLOWTASK_WEBHOOK_SECRET || '',
+      },
+    });
+
+    logger.info('FlowTask workspace auto-created', {
+      workspaceId: workspace._id,
+      name: workspace.name,
+      creatorId,
+    });
+
+    return workspace;
+  }
   // ─── Workspace CRUD ──────────────────────────────────────────────────
 
   /**

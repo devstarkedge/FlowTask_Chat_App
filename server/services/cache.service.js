@@ -130,11 +130,11 @@ class CacheService {
           lazyConnect: true,
         });
 
-        await client.connect();
-
         client.on('error', (err) => {
           logger.error('Redis cache error', { error: err.message });
         });
+
+        await client.connect();
 
         this.backend = new RedisCacheWrapper(client);
         this.type = 'redis';

@@ -277,36 +277,46 @@ export function disconnectSocket() {
 
 /**
  * Reconnect socket with a new workspace context.
- * Used when switching workspaces — leaves all rooms, clears transient state,
- * disconnects and reconnects with the new workspaceId.
+ * Tries server-side workspace:switch first (no disconnect needed).
+ * Falls back to full reconnect if socket is not connected.
  */
 export function reconnectWithWorkspace() {
-  // Leave all current channel rooms before disconnecting
-  if (socket?.connected) {
-    const channels = useChannelStore.getState().channels
-    for (const ch of channels) {
-      socket.emit('channel:leave', ch._id)
-    }
-  }
+  const workspaceId = localStorage.getItem('chat_workspace_id')
 
   // Clear transient state across all stores
   useNotificationStore.getState().clearNotifications()
   useChatStore.getState().clearAllTyping?.()
 
-  disconnectSocket()
-  connectSocket()
-
-  // After connection established, fetch fresh data
-  const waitForConnect = () => {
-    if (socket?.connected) {
+  // If socket is connected, try in-place workspace switch
+  if (socket?.connected && workspaceId) {
+    const onSwitched = () => {
+      socket.off('workspace:switched', onSwitched)
       useChannelStore.getState().fetchChannels()
       useNotificationStore.getState().fetchNotifications(true)
       useNotificationStore.getState().fetchUnreadCount()
+    }
+    socket.on('workspace:switched', onSwitched)
+    socket.emit('workspace:switch', workspaceId)
+    return
+  }
+
+  // Fallback: full disconnect/reconnect
+  disconnectSocket()
+  connectSocket()
+
+  if (socket) {
+    const onConnect = () => {
+      useChannelStore.getState().fetchChannels()
+      useNotificationStore.getState().fetchNotifications(true)
+      useNotificationStore.getState().fetchUnreadCount()
+      socket.off('connect', onConnect)
+    }
+    if (socket.connected) {
+      onConnect()
     } else {
-      setTimeout(waitForConnect, 200)
+      socket.on('connect', onConnect)
     }
   }
-  setTimeout(waitForConnect, 100)
 }
 
 // ─── Throttled typing emission (max 1 per 2 seconds) ────────────────────────

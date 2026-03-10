@@ -26,15 +26,16 @@ function PageFallback() {
 }
 
 function App() {
-  const { accessToken, user, fetchUser, isLoading } = useAuthStore()
+  const { user, isInitialized } = useAuthStore()
 
   useEffect(() => {
-    if (accessToken && !user) {
-      fetchUser()
+    const state = useAuthStore.getState()
+    if (state.accessToken && !state.user) {
+      state.fetchUser().catch(() => {})
     }
-  }, [accessToken, user, fetchUser])
+  }, [])
 
-  if (isLoading && accessToken) {
+  if (!isInitialized) {
     return (
       <div className="h-full flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
         <div className="flex flex-col items-center gap-4">

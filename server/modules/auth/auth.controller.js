@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import authService from './auth.service.js';
 import channelRepository from '../channels/channel.repository.js';
 import channelService from '../channels/channel.service.js';
+import workspaceService from '../workspaces/workspace.service.js';
 import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
 import asyncHandler from '../../middleware/asyncHandler.js';
 import env from '../../config/environment.js';
@@ -99,6 +100,14 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
     token,
     userAgent,
   });
+
+  // Auto-create/find FlowTask workspace and ensure membership
+  if (env.FLOWTASK_ENABLED) {
+    await workspaceService.findOrCreateFlowTaskWorkspace(chatUser._id).catch((err) => {
+      // Non-blocking — workspace creation failure shouldn't prevent login
+      console.error('Failed to auto-create FlowTask workspace:', err.message);
+    });
+  }
 
   // Fetch user's workspaces
   const workspaces = await WorkspaceMembership.findUserWorkspaces(chatUser._id);

@@ -59,6 +59,9 @@ async function getRedisClient() {
   try {
     const { createClient } = await import('redis');
     _redisClient = createClient({ url: env.REDIS_URL });
+    _redisClient.on('error', (err) => {
+      logger.error('Redis client error (socket rate limit)', { error: err.message });
+    });
     await _redisClient.connect();
     return _redisClient;
   } catch {
@@ -128,6 +131,9 @@ export async function initializeSocket(httpServer, corsOptions) {
 
       const pubClient = createClient({ url: env.REDIS_URL });
       const subClient = pubClient.duplicate();
+
+      pubClient.on('error', (err) => logger.error('Redis pubClient error', { error: err.message }));
+      subClient.on('error', (err) => logger.error('Redis subClient error', { error: err.message }));
 
       await Promise.all([pubClient.connect(), subClient.connect()]);
       io.adapter(createAdapter(pubClient, subClient));
@@ -425,6 +431,75 @@ export async function initializeSocket(httpServer, corsOptions) {
       for (const channelId of initialChannelIds) {
         const chRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
         socket.to(chRoom).emit(event, payload);
+      }
+    });
+
+    // ─── Workspace Switching ─────────────────────────────────────────
+    socket.on('workspace:switch', async (newWorkspaceId) => {
+      if (await isSocketRateLimited(socket.id)) return;
+      if (!newWorkspaceId || newWorkspaceId === wsId) return;
+
+      try {
+        // Verify membership in target workspace
+        const { default: workspaceRepository } = await import('../modules/workspaces/workspace.repository.js');
+        const isMember = await workspaceRepository.isMember(newWorkspaceId, userId);
+        if (!isMember) {
+          socket.emit('error', { message: 'Not a member of target workspace' });
+          return;
+        }
+
+        // Broadcast offline to OLD workspace channels
+        for (const channelId of initialChannelIds) {
+          const chRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+          socket.to(chRoom).emit(SOCKET_EVENTS.USER_OFFLINE, {
+            userId,
+            flowTaskUserId: user.flowTaskUserId,
+          });
+        }
+
+        // Leave all current rooms (except personal socket room)
+        const currentRooms = Array.from(socket.rooms);
+        for (const room of currentRooms) {
+          if (room !== socket.id) {
+            socket.leave(room);
+          }
+        }
+
+        // Update workspace context
+        socket.workspaceId = newWorkspaceId;
+
+        // Re-join rooms for new workspace
+        const newUserRoom = buildRoomName(newWorkspaceId, 'user', userId);
+        socket.join(newUserRoom);
+
+        for (const deptId of user.departmentIds) {
+          socket.join(buildRoomName(newWorkspaceId, 'dept', deptId));
+        }
+
+        const newChannels = await channelRepository.findByMember(userId, { workspaceId: newWorkspaceId });
+        initialChannelIds = newChannels.map((c) => c._id.toString());
+
+        for (const channelId of initialChannelIds) {
+          socket.join(buildRoomName(newWorkspaceId, 'channel', channelId));
+        }
+
+        // Broadcast online to NEW workspace channels
+        const onlinePayload = {
+          userId,
+          flowTaskUserId: user.flowTaskUserId,
+          name: user.name,
+          avatar: user.avatar,
+        };
+        for (const channelId of initialChannelIds) {
+          const chRoom = buildRoomName(newWorkspaceId, 'channel', channelId);
+          io.to(chRoom).emit(SOCKET_EVENTS.USER_ONLINE, onlinePayload);
+        }
+
+        socket.emit('workspace:switched', { workspaceId: newWorkspaceId });
+        logger.info('Socket workspace switched', { userId, from: wsId, to: newWorkspaceId });
+      } catch (error) {
+        logger.error('Socket workspace:switch failed', { userId, error: error.message });
+        socket.emit('error', { message: 'Failed to switch workspace' });
       }
     });
 

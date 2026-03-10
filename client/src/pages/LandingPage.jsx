@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import {
   MessageSquare, Users, Zap, FolderKanban, Shield, ArrowRight,
-  CheckCircle2, Globe, Clock, FileText,
+  Globe, Clock, FileText,
 } from 'lucide-react'
 
 const FEATURES = [
@@ -34,36 +34,6 @@ const FEATURES = [
     icon: Zap,
     title: 'Slack-Level Performance',
     description: 'Optimistic UI, cursor pagination, and real-time Socket.IO for zero-lag chat.',
-  },
-]
-
-const PRICING_TIERS = [
-  {
-    name: 'Free',
-    price: '$0',
-    period: 'forever',
-    description: 'For small teams getting started',
-    features: ['Up to 50 members', '20 channels', '5GB storage', 'Community support'],
-    cta: 'Get Started',
-    highlighted: false,
-  },
-  {
-    name: 'Pro',
-    price: '$8',
-    period: 'per user/month',
-    description: 'For growing teams that need more',
-    features: ['Up to 500 members', 'Unlimited channels', '50GB storage', 'FlowTask integration', 'Priority support'],
-    cta: 'Start Free Trial',
-    highlighted: true,
-  },
-  {
-    name: 'Enterprise',
-    price: 'Custom',
-    period: 'contact us',
-    description: 'For organizations at scale',
-    features: ['Unlimited members', 'Unlimited channels', 'Unlimited storage', 'SSO & SAML', 'Dedicated support', 'Custom integrations'],
-    cta: 'Contact Sales',
-    highlighted: false,
   },
 ]
 
@@ -269,82 +239,31 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Pricing */}
-      <section style={{ padding: '80px 24px', maxWidth: 1100, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 56 }}>
-          <h2 style={{ fontSize: 32, fontWeight: 700, color: 'white', marginBottom: 12 }}>
-            Simple, transparent pricing
-          </h2>
-          <p style={{ fontSize: 16, color: '#9ca3af' }}>
-            Start free. Upgrade when you're ready.
-          </p>
-        </div>
+      {/* Pricing CTA */}
+      <section style={{ padding: '60px 24px', textAlign: 'center' }}>
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: 20,
-          alignItems: 'start',
+          maxWidth: 600, margin: '0 auto', padding: '40px 32px', borderRadius: 16,
+          background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
         }}>
-          {PRICING_TIERS.map((tier, i) => (
-            <div
-              key={i}
-              style={{
-                padding: 32,
-                borderRadius: 16,
-                background: tier.highlighted
-                  ? 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.1))'
-                  : 'rgba(255,255,255,0.03)',
-                border: tier.highlighted
-                  ? '1px solid rgba(99,102,241,0.4)'
-                  : '1px solid rgba(255,255,255,0.06)',
-                position: 'relative',
-              }}
-            >
-              {tier.highlighted && (
-                <div
-                  style={{
-                    position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)',
-                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                    color: 'white', fontSize: 11, fontWeight: 600,
-                    padding: '4px 14px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1,
-                  }}
-                >
-                  Popular
-                </div>
-              )}
-              <h3 style={{ fontSize: 20, fontWeight: 600, color: 'white', marginBottom: 4 }}>{tier.name}</h3>
-              <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 20 }}>{tier.description}</p>
-              <div style={{ marginBottom: 24 }}>
-                <span style={{ fontSize: 40, fontWeight: 800, color: 'white' }}>{tier.price}</span>
-                <span style={{ fontSize: 14, color: '#6b7280', marginLeft: 4 }}>/{tier.period}</span>
-              </div>
-              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 28px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {tier.features.map((f, fi) => (
-                  <li key={fi} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: '#d1d5db' }}>
-                    <CheckCircle2 size={16} style={{ color: '#6366f1', flexShrink: 0 }} />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <Link
-                to="/register"
-                style={{
-                  display: 'block', textAlign: 'center', padding: '12px 0', borderRadius: 10,
-                  fontSize: 14, fontWeight: 600, textDecoration: 'none',
-                  background: tier.highlighted
-                    ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
-                    : 'transparent',
-                  color: tier.highlighted ? 'white' : '#a5b4fc',
-                  border: tier.highlighted ? 'none' : '1px solid rgba(99,102,241,0.3)',
-                  transition: 'opacity 0.2s',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
-              >
-                {tier.cta}
-              </Link>
-            </div>
-          ))}
+          <h2 style={{ fontSize: 24, fontWeight: 700, color: 'white', marginBottom: 12 }}>
+            Plans for every team size
+          </h2>
+          <p style={{ fontSize: 15, color: '#9ca3af', marginBottom: 24 }}>
+            Start free and scale as you grow. View our pricing to find the right plan.
+          </p>
+          <Link
+            to="/pricing"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              border: '1px solid rgba(99,102,241,0.4)', color: '#a5b4fc',
+              fontSize: 15, fontWeight: 600, padding: '12px 28px', borderRadius: 10,
+              textDecoration: 'none', transition: 'background 0.2s',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99,102,241,0.1)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            View Pricing <ArrowRight size={16} />
+          </Link>
         </div>
       </section>
 

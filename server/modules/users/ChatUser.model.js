@@ -81,7 +81,7 @@ const chatUserSchema = new Schema({
   // ─── FlowTask-synced fields (only for FlowTask auth) ─────────────────
   flowTaskUserId: {
     type: String,
-    sparse: true, // Allow null for native users
+    // sparse index defined explicitly below
   },
 
   // ─── Identity ─────────────────────────────────────────────────────────

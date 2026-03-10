@@ -100,7 +100,7 @@ export default function WorkspaceSelectorPage() {
         <p style={{ textAlign: 'center', color: '#a1a1aa', fontSize: 15, marginBottom: 40 }}>
           {workspaces.length > 0
             ? 'Select a workspace to continue, or create a new one.'
-            : 'Create your first workspace to get started.'}
+            : 'You are not part of any workspace yet. Create one or join with an invite code.'}
         </p>
 
         {/* Workspace List */}
@@ -135,7 +135,17 @@ export default function WorkspaceSelectorPage() {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 16, fontWeight: 600, color: 'white' }}>{ws.name}</div>
-                  <div style={{ fontSize: 13, color: '#71717a', marginTop: 2 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#71717a', marginTop: 2 }}>
+                    {ws.role && (
+                      <span style={{
+                        textTransform: 'capitalize', fontSize: 11, fontWeight: 600,
+                        padding: '1px 7px', borderRadius: 4,
+                        background: ws.role === 'owner' ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.08)',
+                        color: ws.role === 'owner' ? '#a5b4fc' : '#a1a1aa',
+                      }}>
+                        {ws.role}
+                      </span>
+                    )}
                     {ws.plan && <span style={{ textTransform: 'capitalize' }}>{ws.plan} plan</span>}
                     {ws.memberCount != null && <span> · {ws.memberCount} member{ws.memberCount !== 1 ? 's' : ''}</span>}
                   </div>

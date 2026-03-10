@@ -16,7 +16,9 @@ export default function SavedMessagesPanel({ onClose, onJumpToMessage }) {
     async function fetch() {
       try {
         const { data } = await savedMessageAPI.list()
-        if (!cancelled) setSavedMessages(data.data || [])
+        if (!cancelled) {
+          setSavedMessages(data.data?.messages || (Array.isArray(data.data) ? data.data : []))
+        }
       } catch {
         toast.error('Failed to load saved messages')
       } finally {

@@ -329,9 +329,15 @@ class MessageService {
     const populated = await messageRepository.findById(messageId);
     const socketPayload = messageSocketPayload(populated);
 
+    // Resolve workspaceId: prefer message, then channel
+    let wsId = (message.workspaceId || populated.workspaceId)?.toString();
+    if (!wsId) {
+      const ch = await channelRepository.findById(message.channelId);
+      wsId = ch?.workspaceId?.toString();
+    }
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_UPDATE, {
       message: socketPayload,
-    }, (message.workspaceId || populated.workspaceId)?.toString());
+    }, wsId);
 
     return populated;
   }
@@ -350,12 +356,19 @@ class MessageService {
 
     await messageRepository.softDelete(messageId);
 
+    // Resolve workspaceId: prefer message, then channel
+    let wsId = message.workspaceId?.toString();
+    if (!wsId) {
+      const ch = await channelRepository.findById(message.channelId);
+      wsId = ch?.workspaceId?.toString();
+    }
+
     // Emit soft-delete event with isDeleted flag so clients render tombstone
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_DELETE, {
       messageId: messageId.toString(),
       channelId: message.channelId.toString(),
       isDeleted: true,
-    }, message.workspaceId?.toString());
+    }, wsId);
 
     return { messageId };
   }
@@ -372,9 +385,10 @@ class MessageService {
     // Repository expects arguments as (messageId, emoji, userId)
     const updated = await messageRepository.addReaction(messageId, emoji, userId);
 
+    const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId))?.workspaceId?.toString();
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.REACTION_ADD,
       reactionSocketPayload({ messageId, channelId: message.channelId, userId, emoji }),
-      message.workspaceId?.toString(),
+      wsId,
     );
 
     return updated;
@@ -390,9 +404,10 @@ class MessageService {
     // Repository expects arguments as (messageId, emoji, userId)
     const updated = await messageRepository.removeReaction(messageId, emoji, userId);
 
+    const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId))?.workspaceId?.toString();
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.REACTION_REMOVE,
       reactionSocketPayload({ messageId, channelId: message.channelId, userId, emoji }),
-      message.workspaceId?.toString(),
+      wsId,
     );
 
     return updated;
@@ -409,11 +424,12 @@ class MessageService {
 
     await messageRepository.pin(messageId);
 
+    const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId))?.workspaceId?.toString();
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_PINNED, {
       messageId,
       channelId: message.channelId,
       pinnedBy: userId,
-    }, message.workspaceId?.toString());
+    }, wsId);
 
     return message;
   }
@@ -427,11 +443,12 @@ class MessageService {
 
     await messageRepository.unpin(messageId);
 
+    const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId))?.workspaceId?.toString();
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_UNPINNED, {
       messageId,
       channelId: message.channelId,
       unpinnedBy: userId,
-    }, message.workspaceId?.toString());
+    }, wsId);
 
     return message;
   }

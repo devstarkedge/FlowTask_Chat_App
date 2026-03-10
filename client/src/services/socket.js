@@ -66,6 +66,16 @@ export function connectSocket() {
   socket.on('connect', () => {
     console.log('[Socket] Connected:', socket.id)
     useChatStore.getState().setConnectionStatus('connected')
+
+    // Join all channel rooms on initial connect
+    try {
+      const channels = useChannelStore.getState().channels
+      for (const ch of channels) {
+        socket.emit('channel:join', ch._id)
+      }
+    } catch (err) {
+      console.error('[Socket] Failed to join channels on connect:', err.message)
+    }
   })
 
   socket.on('disconnect', (reason) => {
@@ -281,7 +291,7 @@ export function disconnectSocket() {
  * Falls back to full reconnect if socket is not connected.
  */
 export function reconnectWithWorkspace() {
-  const workspaceId = localStorage.getItem('chat_workspace_id')
+  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
 
   // Clear transient state across all stores
   useNotificationStore.getState().clearNotifications()

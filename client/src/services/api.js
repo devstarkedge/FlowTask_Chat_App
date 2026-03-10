@@ -112,7 +112,7 @@ export const authAPI = {
 
 // ─── Channels ────────────────────────────────────────────────────────────
 export const channelAPI = {
-  list: () => api.get('/channels'),
+  list: (config) => api.get('/channels', config),
   get: (id) => api.get(`/channels/${id}`),
   getBySlug: (slug) => api.get(`/channels/slug/${slug}`),
   create: (data) => api.post('/channels', data),

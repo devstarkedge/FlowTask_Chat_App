@@ -42,11 +42,12 @@ class WorkspaceService {
     }
 
     // Create new workspace for FlowTask integration
-    const name = workspaceName || 'FlowTask Workspace';
+    const name = workspaceName || env.DEFAULT_WORKSPACE_NAME || 'FlowTask Workspace';
     const workspace = await this.createWorkspace({
       name,
       description: 'Auto-created workspace for FlowTask integration',
       plan: 'enterprise',
+      source: 'flowtask',
     }, creatorId);
 
     // Enable FlowTask integration settings
@@ -73,7 +74,7 @@ class WorkspaceService {
    * Auto-creates #general and #random default channels.
    */
   async createWorkspace(data, creatorId) {
-    const { name, description, logo, plan = 'free' } = data;
+    const { name, description, logo, plan = 'free', source = 'independent' } = data;
     const slug = (data.slug || name).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
     // Check slug uniqueness
@@ -89,6 +90,7 @@ class WorkspaceService {
       description,
       logo,
       plan,
+      source,
       owner: creatorId,
       inviteCode: crypto.randomBytes(16).toString('hex'),
     });

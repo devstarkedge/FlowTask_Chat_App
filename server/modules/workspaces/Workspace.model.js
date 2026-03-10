@@ -93,6 +93,12 @@ const workspaceSchema = new Schema({
     enum: ['free', 'pro', 'enterprise'],
     default: 'free',
   },
+  // Origin source for the workspace
+  source: {
+    type: String,
+    enum: ['independent', 'flowtask'],
+    default: 'independent',
+  },
   // Workspace-level configuration
   settings: {
     type: workspaceSettingsSchema,

@@ -1,16 +1,53 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuthStore } from '../stores/authStore'
-import { Link } from 'react-router-dom'
-import { Eye, EyeOff, MessageCircle, ArrowRight, Zap, Shield, Users } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Eye, EyeOff, MessageCircle, ArrowRight, Zap, Shield, Users, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
   const { loginNative, loginFlowTask, isLoading, error, clearError, flowtaskEnabled } = useAuthStore()
+  const [searchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState(flowtaskEnabled ? 'flowtask' : 'native')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [flowtaskToken, setFlowtaskToken] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [autoLoginAttempted, setAutoLoginAttempted] = useState(false)
+  const [autoLoginInProgress, setAutoLoginInProgress] = useState(false)
+
+  // Auto-login from FlowTask redirect: ?token=<jwt>&source=flowtask
+  useEffect(() => {
+    if (autoLoginAttempted) return
+    const token = searchParams.get('token')
+    const source = searchParams.get('source')
+    if (token && source === 'flowtask') {
+      setAutoLoginAttempted(true)
+      setAutoLoginInProgress(true)
+      loginFlowTask(token)
+        .then(() => toast.success('Welcome from FlowTask!'))
+        .catch(() => {
+          toast.error('FlowTask auto-login failed. Please try again.')
+          setAutoLoginInProgress(false)
+        })
+    }
+  }, [searchParams, autoLoginAttempted, loginFlowTask])
+
+  // Show loading screen during auto-login
+  if (autoLoginInProgress) {
+    return (
+      <div
+        className="h-full flex items-center justify-center"
+        style={{ background: 'var(--bg-primary)' }}
+      >
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 size={40} className="animate-spin" style={{ color: 'var(--accent-primary)' }} />
+          <p style={{ color: 'var(--text-secondary)', fontSize: 15 }}>
+            Signing in from FlowTask...
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const handleNativeLogin = async (e) => {
     e.preventDefault()

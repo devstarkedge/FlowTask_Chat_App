@@ -102,19 +102,22 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
   });
 
   // Auto-create/find FlowTask workspace and ensure membership
+  let flowtaskWorkspace = null;
   if (env.FLOWTASK_ENABLED) {
-    await workspaceService.findOrCreateFlowTaskWorkspace(chatUser._id).catch((err) => {
+    try {
+      flowtaskWorkspace = await workspaceService.findOrCreateFlowTaskWorkspace(chatUser._id);
+    } catch (err) {
       // Non-blocking — workspace creation failure shouldn't prevent login
       console.error('Failed to auto-create FlowTask workspace:', err.message);
-    });
+    }
   }
 
   // Fetch user's workspaces
   const workspaces = await WorkspaceMembership.findUserWorkspaces(chatUser._id);
 
-  // If user has a workspace with FlowTask enabled, get channels for that workspace
+  // Determine workspace ID for channel sync: prefer explicit header, fallback to auto-detected FlowTask workspace
   let channels = [];
-  const wsId = req.headers['x-workspace-id'];
+  const wsId = req.headers['x-workspace-id'] || (flowtaskWorkspace ? flowtaskWorkspace._id.toString() : null);
   if (wsId) {
     if (!mongoose.Types.ObjectId.isValid(wsId)) {
       return res.status(400).json({ success: false, error: { message: 'Invalid workspace ID format' } });
@@ -241,7 +244,22 @@ export const refresh = asyncHandler(async (req, res) => {
  */
 export const logout = asyncHandler(async (req, res) => {
   const { refreshToken } = req.body;
-  await authService.logout(req.user._id, refreshToken);
+
+  // Derive userId: prefer req.user (if protect ran), else decode the refresh token
+  let userId = req.user?._id;
+  if (!userId && refreshToken) {
+    try {
+      const tokenService = (await import('./token.service.js')).default;
+      const decoded = tokenService.verifyRefreshToken(refreshToken);
+      userId = decoded?.id;
+    } catch {
+      // Token expired / invalid — nothing to revoke
+    }
+  }
+
+  if (userId) {
+    await authService.logout(userId, refreshToken);
+  }
 
   res.status(200).json({
     success: true,

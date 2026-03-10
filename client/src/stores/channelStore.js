@@ -18,10 +18,13 @@ export const useChannelStore = create(
   // Channel info panel
   showInfoPanel: false,
 
-  fetchChannels: async () => {
+  fetchChannels: async (overrideWorkspaceId = null) => {
     set({ isLoading: true })
     try {
-      const { data } = await channelAPI.list()
+      const options = overrideWorkspaceId
+        ? { headers: { 'X-Workspace-Id': overrideWorkspaceId } }
+        : undefined
+      const { data } = await channelAPI.list(options)
       set({ channels: data.data.channels, isLoading: false })
       get().fetchUnreads()
     } catch (error) {

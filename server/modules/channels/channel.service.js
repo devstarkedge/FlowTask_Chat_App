@@ -2,6 +2,7 @@ import Channel from './Channel.model.js';
 import ChannelMember from './ChannelMember.model.js';
 import channelRepository from './channel.repository.js';
 import userRepository from '../users/user.repository.js';
+import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
 import { emitToChannel, emitToUser, joinChannelRoom } from '../../sockets/socketManager.js';
 import { slugify, projectChannelSlug, departmentChannelSlug, teamChannelSlug, appendCollisionSuffix } from '../../utils/slugify.js';
 import { sanitizeHtml, stripHtml, truncate } from '../../utils/sanitize.js';
@@ -189,9 +190,14 @@ class ChannelService {
       throw new NotFoundError('One or both users not found');
     }
 
-    // ── Verify both users belong to the same workspace ──
-    if (user1.workspaceId?.toString() !== workspaceId || user2.workspaceId?.toString() !== workspaceId) {
-      throw new ForbiddenError('Both users must belong to the same workspace');
+    // ── Verify both users are active members of this workspace ──
+    const [membership1, membership2] = await Promise.all([
+      WorkspaceMembership.findOne({ userId: ids[0], workspaceId, isActive: true }).lean(),
+      WorkspaceMembership.findOne({ userId: ids[1], workspaceId, isActive: true }).lean(),
+    ]);
+
+    if (!membership1 || !membership2) {
+      throw new ForbiddenError('Both users must be active members of the workspace');
     }
 
     const channel = await channelRepository.create({

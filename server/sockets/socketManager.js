@@ -39,7 +39,7 @@ const TYPING_THROTTLE_MS = 2000;
 let _redisClient = null;
 const socketRateLimits = new Map(); // Fallback Map<socketId, { count, windowStart }>
 const RATE_LIMIT_WINDOW_MS = 60000;  // 1 minute
-const RATE_LIMIT_MAX_EVENTS = 100;   // Max events per window per socket
+const RATE_LIMIT_MAX_EVENTS = 30;    // Max events per window per socket
 const MAX_SOCKETS_PER_USER = 5;      // Cap concurrent connections per user
 
 // ─── JWT Heartbeat ───────────────────────────────────────────────────────────
@@ -212,7 +212,27 @@ export async function initializeSocket(httpServer, corsOptions) {
 
       // Attach user to socket
       socket.chatUser = chatUser;
-      socket.workspaceId = workspaceId || socket.handshake.auth.workspaceId || null;
+      const requestedWsId = workspaceId || socket.handshake.auth.workspaceId || null;
+
+      // Validate workspace membership if a workspace is specified
+      if (requestedWsId) {
+        try {
+          const { default: WorkspaceMembership } = await import('../modules/workspaces/WorkspaceMembership.model.js');
+          const membership = await WorkspaceMembership.findOne({
+            userId: chatUser._id,
+            workspaceId: requestedWsId,
+            isActive: true,
+          }).lean();
+          if (!membership) {
+            return next(new Error('Not a member of the requested workspace'));
+          }
+        } catch (err) {
+          logger.error('Workspace membership check failed during socket auth', { error: err.message });
+          return next(new Error('Workspace validation failed'));
+        }
+      }
+
+      socket.workspaceId = requestedWsId;
       next();
     } catch (error) {
       logger.warn('Socket authentication failed', {
@@ -316,7 +336,15 @@ export async function initializeSocket(httpServer, corsOptions) {
         }
 
         // ── Cross-workspace isolation: prevent joining channels from other workspaces ──
-        if (wsId && channel.workspaceId && channel.workspaceId.toString() !== wsId) {
+        if (!wsId || !channel.workspaceId) {
+          logger.warn('Socket channel join blocked — missing workspace context', {
+            userId, channelId, socketWorkspace: wsId,
+            channelWorkspace: channel.workspaceId?.toString(),
+          });
+          socket.emit('error', { message: 'Access denied: workspace context required' });
+          return;
+        }
+        if (channel.workspaceId.toString() !== wsId) {
           logger.warn('Socket cross-workspace join attempt blocked', {
             userId, channelId, socketWorkspace: wsId,
             channelWorkspace: channel.workspaceId.toString(),
@@ -576,10 +604,28 @@ export async function initializeSocket(httpServer, corsOptions) {
       for (const socket of sockets) {
         const { token } = socket.handshake.auth;
         if (!token) continue;
+
+        let valid = false;
+
+        // Try as Chat-issued access token first
         try {
           tokenService.verifyAccessToken(token);
+          valid = true;
         } catch {
-          // Token expired or invalid — tell client to refresh and reconnect
+          // Not a Chat token — try FlowTask token
+        }
+
+        // Fallback: verify as FlowTask token
+        if (!valid && env.FLOWTASK_ENABLED) {
+          try {
+            tokenService.verifyFlowTaskToken(token);
+            valid = true;
+          } catch {
+            // Both token types failed
+          }
+        }
+
+        if (!valid) {
           socket.emit('auth:expired', { message: 'Token expired. Please reconnect with a fresh token.' });
           socket.disconnect(true);
         }

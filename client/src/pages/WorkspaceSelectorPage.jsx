@@ -1,13 +1,15 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useAuthStore } from '../stores/authStore'
-import { MessageSquare, Plus, ArrowRight, LogOut, Loader2 } from 'lucide-react'
+import { MessageSquare, Plus, ArrowRight, LogOut, Loader2, LogIn } from 'lucide-react'
+import JoinWorkspaceModal from '../components/workspace/JoinWorkspaceModal'
 
 export default function WorkspaceSelectorPage() {
   const navigate = useNavigate()
   const { workspaces, isLoading, error, fetchWorkspaces, switchWorkspace } = useWorkspaceStore()
   const { user, logout } = useAuthStore()
+  const [showJoinModal, setShowJoinModal] = useState(false)
 
   useEffect(() => {
     fetchWorkspaces()
@@ -29,6 +31,14 @@ export default function WorkspaceSelectorPage() {
   const handleLogout = () => {
     logout()
     navigate('/')
+  }
+
+  const handleJoined = (workspace) => {
+    fetchWorkspaces()
+    if (workspace?._id) {
+      switchWorkspace(workspace._id)
+      navigate(`/workspace/${workspace._id}`)
+    }
   }
 
   if (error) {
@@ -157,22 +167,45 @@ export default function WorkspaceSelectorPage() {
         )}
 
         {/* Create Workspace */}
-        <Link
-          to="/create-workspace"
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            width: '100%', padding: '14px 24px', borderRadius: 12, textDecoration: 'none',
-            background: workspaces.length === 0
-              ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
-              : 'rgba(255,255,255,0.06)',
-            border: workspaces.length === 0 ? 'none' : '1px solid rgba(255,255,255,0.1)',
-            color: 'white', fontSize: 15, fontWeight: 600, cursor: 'pointer',
-          }}
-        >
-          <Plus size={18} />
-          Create a new workspace
-        </Link>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <Link
+            to="/create-workspace"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              flex: 1, padding: '14px 24px', borderRadius: 12, textDecoration: 'none',
+              background: workspaces.length === 0
+                ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                : 'rgba(255,255,255,0.06)',
+              border: workspaces.length === 0 ? 'none' : '1px solid rgba(255,255,255,0.1)',
+              color: 'white', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            <Plus size={18} />
+            Create Workspace
+          </Link>
+          <button
+            onClick={() => setShowJoinModal(true)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              flex: 1, padding: '14px 24px', borderRadius: 12,
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: 'white', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            <LogIn size={18} />
+            Join Workspace
+          </button>
+        </div>
       </div>
+
+      {/* Join Workspace Modal */}
+      {showJoinModal && (
+        <JoinWorkspaceModal
+          onClose={() => setShowJoinModal(false)}
+          onJoined={handleJoined}
+        />
+      )}
     </div>
   )
 }

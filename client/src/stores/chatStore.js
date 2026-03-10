@@ -96,9 +96,15 @@ export const useChatStore = create((set, get) => ({
           const uniqueNew = sortedIncoming.filter(m => !existingIds.has(m._id))
           merged = [...uniqueNew, ...existingMessages]
         } else {
-          // Initial load: prefer fresh messages, keep existing ones that aren't in fresh (e.g. pending local ones)
+          // Initial load: prefer fresh messages, keep only RECENT pending local messages (< 30s old)
           const freshIds = new Set(sortedIncoming.map(m => m._id))
-          const uniqueExisting = existingMessages.filter(m => !freshIds.has(m._id) && m.pending)
+          const thirtySecsAgo = Date.now() - 30000
+          const uniqueExisting = existingMessages.filter(m =>
+            !freshIds.has(m._id) &&
+            m.pending &&
+            m.channelId === channelId &&
+            new Date(m.createdAt).getTime() > thirtySecsAgo
+          )
           merged = [...sortedIncoming, ...uniqueExisting]
         }
 
@@ -427,7 +433,12 @@ export const useChatStore = create((set, get) => ({
           merged = [...existing, ...unique]
         } else {
           const freshIds = new Set(items.map(m => m._id))
-          const pendingOnly = existing.filter(m => !freshIds.has(m._id) && m.pending)
+          const thirtySecsAgo = Date.now() - 30000
+          const pendingOnly = existing.filter(m =>
+            !freshIds.has(m._id) &&
+            m.pending &&
+            new Date(m.createdAt).getTime() > thirtySecsAgo
+          )
           merged = [...items, ...pendingOnly]
         }
         merged.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))

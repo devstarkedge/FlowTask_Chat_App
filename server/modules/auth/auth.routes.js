@@ -65,9 +65,9 @@ router.post('/forgot-password', passwordResetLimiter, validate({ body: forgotPas
 router.post('/reset-password', passwordResetLimiter, validate({ body: resetPasswordSchema }), resetPassword);
 
 // Protected routes
-router.get('/me', protect, resolveWorkspace, getMe);
+router.get('/me', protect, getMe);
 router.put('/preferences', protect, resolveWorkspace, updatePreferences);
-router.post('/logout', protect, logout);
+router.post('/logout', logout);
 
 // User search (protected)
 router.get('/users/search', protect, resolveWorkspace, searchUsers);

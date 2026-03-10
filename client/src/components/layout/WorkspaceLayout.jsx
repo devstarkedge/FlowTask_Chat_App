@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
+import { useChatStore } from '../../stores/chatStore'
+import { connectSocket } from '../../services/socket'
 import ChatLayout from './ChatLayout'
 
 /**
@@ -41,6 +43,14 @@ export default function WorkspaceLayout() {
       switchWorkspace(workspaceId)
     }
   }, [workspaceId, activeWorkspaceId, workspaces, switchWorkspace, navigate])
+
+  // Ensure socket is connected once workspace context is ready
+  const connectionStatus = useChatStore((s) => s.connectionStatus)
+  useEffect(() => {
+    if (activeWorkspaceId && activeWorkspaceId === workspaceId && connectionStatus === 'disconnected') {
+      connectSocket()
+    }
+  }, [activeWorkspaceId, workspaceId, connectionStatus])
 
   // Don't render ChatLayout until workspace context is set
   if (!activeWorkspaceId || activeWorkspaceId !== workspaceId) {

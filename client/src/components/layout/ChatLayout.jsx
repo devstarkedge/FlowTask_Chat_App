@@ -148,7 +148,9 @@ export default function ChatLayout() {
   }, [resetIdleTimer])
 
   useEffect(() => {
-    fetchChannels()
+    if (activeWorkspaceId) {
+      fetchChannels(activeWorkspaceId)
+    }
   }, [fetchChannels, activeWorkspaceId])
 
   // Close mobile sidebar when channel is selected

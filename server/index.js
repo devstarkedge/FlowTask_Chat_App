@@ -45,6 +45,11 @@ if (env.TRUST_PROXY) {
 }
 
 // ─── CORS ────────────────────────────────────────────────────────────────────
+if (env.IS_PRODUCTION && !process.env.CORS_ORIGINS) {
+  logger.error('CORS_ORIGINS must be explicitly set in production');
+  process.exit(1);
+}
+
 const corsOptions = {
   origin: env.CORS_ORIGINS,
   credentials: true,

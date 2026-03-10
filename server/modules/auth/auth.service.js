@@ -147,21 +147,36 @@ class AuthService {
       throw new UnauthorizedError('Invalid FlowTask token');
     }
 
-    // 2. Fetch fresh user data from FlowTask
+    // 2. Determine flow: redirect SSO (token has embedded user data) vs legacy (requires API fetch)
     let flowTaskUser;
-    try {
-      flowTaskUser = await flowTaskService.getCurrentUser(token);
-    } catch (error) {
-      logger.error('Failed to fetch FlowTask user during login', {
-        flowTaskUserId: decoded.id,
-        error: error.message,
-      });
-      throw new UnauthorizedError('Failed to verify user with FlowTask');
-    }
+    const isRedirectFlow = decoded.source === 'flowtask' && decoded.email && decoded.name;
 
-    // 3. Check if user is active in FlowTask
-    if (!flowTaskUser.isActive) {
-      throw new UnauthorizedError('FlowTask account is deactivated');
+    if (isRedirectFlow) {
+      // Redirect flow — user data is embedded in the JWT from FlowTask's redirect endpoint
+      flowTaskUser = {
+        _id: decoded.id,
+        name: decoded.name,
+        email: decoded.email,
+        role: decoded.role || 'employee',
+        avatar: decoded.avatar || '',
+        isActive: true,
+      };
+    } else {
+      // Legacy flow — fetch fresh user data from FlowTask API
+      try {
+        flowTaskUser = await flowTaskService.getCurrentUser(token);
+      } catch (error) {
+        logger.error('Failed to fetch FlowTask user during login', {
+          flowTaskUserId: decoded.id,
+          error: error.message,
+        });
+        throw new UnauthorizedError('Failed to verify user with FlowTask');
+      }
+
+      // 3. Check if user is active in FlowTask
+      if (!flowTaskUser.isActive) {
+        throw new UnauthorizedError('FlowTask account is deactivated');
+      }
     }
 
     // 4. Upsert ChatUser (global identity)

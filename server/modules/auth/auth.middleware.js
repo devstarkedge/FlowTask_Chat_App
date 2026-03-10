@@ -41,8 +41,11 @@ export async function protect(req, res, next) {
       if (decoded?.id && decoded.type === 'access') {
         chatUser = await userRepository.findById(decoded.id);
       }
-    } catch {
-      // Not a Chat-issued token — continue to FlowTask fallback
+    } catch (err) {
+      logger.debug('Chat-native token verify failed (will try FlowTask fallback)', {
+        errorName: err.name,
+        path: req.path,
+      });
     }
 
     // Strategy 2: Try as FlowTask-issued token (if enabled and Strategy 1 failed)
@@ -55,12 +58,24 @@ export async function protect(req, res, next) {
           req.flowTaskToken = token;
           req.flowTaskUserId = decoded.id;
         }
-      } catch {
-        // Not a valid FlowTask token either
+      } catch (err) {
+        logger.warn('FlowTask token verify failed', {
+          errorName: err.name,
+          path: req.path,
+          hint: err.name === 'TokenExpiredError'
+            ? 'Token expired — user must re-login via FlowTask'
+            : 'Secret mismatch? Verify FLOWTASK_JWT_SECRET (Chat) === CHAT_JWT_SECRET (FlowTask)',
+        });
       }
     }
 
     if (!chatUser) {
+      logger.warn('Auth failed: no matching user for token', {
+        path: req.path,
+        method: req.method,
+        flowtaskEnabled: env.FLOWTASK_ENABLED,
+        tokenPrefix: token.slice(0, 10) + '...',
+      });
       throw new UnauthorizedError('Invalid or expired token');
     }
 

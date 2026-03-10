@@ -141,15 +141,29 @@ class AuthService {
     try {
       decoded = tokenService.verifyFlowTaskToken(token);
     } catch (error) {
+      logger.warn('FlowTask SSO token verification failed', {
+        errorName: error.name,
+        hint: error.name === 'TokenExpiredError'
+          ? 'Token expired (5-min window) — FlowTask must re-generate the redirect token'
+          : 'Secret mismatch? Confirm FLOWTASK_JWT_SECRET (Chat backend) === CHAT_JWT_SECRET (FlowTask backend)',
+      });
       if (error.name === 'TokenExpiredError') {
-        throw new UnauthorizedError('FlowTask token expired');
+        throw new UnauthorizedError('FlowTask token expired — please return to FlowTask and try again');
       }
-      throw new UnauthorizedError('Invalid FlowTask token');
+      throw new UnauthorizedError(`Invalid FlowTask token (${error.name})`);
     }
 
     // 2. Determine flow: redirect SSO (token has embedded user data) vs legacy (requires API fetch)
     let flowTaskUser;
     const isRedirectFlow = decoded.source === 'flowtask' && decoded.email && decoded.name;
+
+    logger.debug('FlowTask SSO login attempt', {
+      flowTaskUserId: decoded.id,
+      source: decoded.source,
+      isRedirectFlow,
+      hasEmail: !!decoded.email,
+      hasName: !!decoded.name,
+    });
 
     if (isRedirectFlow) {
       // Redirect flow — user data is embedded in the JWT from FlowTask's redirect endpoint

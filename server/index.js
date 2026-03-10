@@ -155,7 +155,39 @@ app.get('/api/chat/health', (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+// ─── Debug Env Check ────────────────────────────────────────────────────────────────
+// Returns non-sensitive config for deployment verification.
+// Gated by X-Debug-Token header matching DEBUG_TOKEN env var.
+// Usage: curl -H "X-Debug-Token: <your-token>" https://flowtask-chat-app.onrender.com/api/chat/debug/env
+app.get('/api/chat/debug/env', (req, res) => {
+  const debugToken = process.env.DEBUG_TOKEN;
+  if (debugToken && req.headers['x-debug-token'] !== debugToken) {
+    return res.status(401).json({ error: 'Unauthorized. Provide X-Debug-Token header.' });
+  }
 
+  const maskSecret = (v) => (v ? `${v.slice(0, 4)}****` : 'MISSING');
+
+  res.json({
+    service: 'flowtask-chat',
+    node_env: env.NODE_ENV,
+    timestamp: new Date().toISOString(),
+    config: {
+      BASE_URL: env.BASE_URL || '(not set)',
+      PORT: env.PORT,
+      FLOWTASK_ENABLED: env.FLOWTASK_ENABLED,
+      FLOWTASK_API_URL: env.FLOWTASK_API_URL || '(not set)',
+      CORS_ORIGINS: Array.isArray(env.CORS_ORIGINS) ? env.CORS_ORIGINS : [env.CORS_ORIGINS],
+      LOG_LEVEL: env.LOG_LEVEL,
+    },
+    secrets: {
+      MONGO_URI: process.env.MONGO_URI ? 'set' : 'MISSING',
+      JWT_SECRET: maskSecret(process.env.JWT_SECRET),
+      JWT_REFRESH_SECRET: maskSecret(process.env.JWT_REFRESH_SECRET),
+      FLOWTASK_JWT_SECRET: maskSecret(process.env.FLOWTASK_JWT_SECRET),
+      FLOWTASK_WEBHOOK_SECRET: process.env.FLOWTASK_WEBHOOK_SECRET ? 'set' : 'MISSING',
+    },
+  });
+});
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/chat/auth', authRoutes);
 app.use('/api/chat/workspaces', workspaceRoutes);

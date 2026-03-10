@@ -54,7 +54,16 @@ export function connectSocket() {
   const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
   if (!token || socket?.connected) return
 
-  socket = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
+  const socketUrl = import.meta.env.VITE_SOCKET_URL
+  if (!socketUrl) {
+    console.error(
+      '[Socket] VITE_SOCKET_URL is not set. Falling back to window.location.origin — ' +
+      'this WILL FAIL in production when the frontend and backend are on different domains. ' +
+      'Set VITE_SOCKET_URL=https://flowtask-chat-app.onrender.com in your Render static site environment.'
+    )
+  }
+
+  socket = io(socketUrl || window.location.origin, {
     auth: { token, workspaceId },
     transports: ['websocket', 'polling'],
     reconnection: true,

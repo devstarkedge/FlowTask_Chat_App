@@ -109,11 +109,11 @@ class FileUploadService {
   /**
    * Queues a file for upload and immediately returns the FileAsset in 'uploading' state.
    */
-  async queueUpload(file, userId) {
+  async queueUpload(file, userId, workspaceId) {
     const checksumHash = await this.generateChecksum(file.path);
 
     // Duplicate detection: reuse existing file asset
-    const existingAsset = await FileAsset.findOne({ checksumHash, status: 'available' });
+    const existingAsset = await FileAsset.findOne({ checksumHash, workspaceId, status: 'available' });
     if (existingAsset) {
       // Clean up the temporary local file as it's a duplicate
       fs.unlink(file.path, () => {});
@@ -134,6 +134,7 @@ class FileUploadService {
       fileSize: file.size,
       originalName: file.originalname,
       uploadedBy: userId,
+      workspaceId,
       checksumHash,
       status: 'uploading',
     });

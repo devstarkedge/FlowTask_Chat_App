@@ -1,10 +1,12 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
+import { useEffect, useState, useMemo, useRef, useCallback, lazy, Suspense } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { emitPresenceUpdate } from '../../services/socket'
 import ErrorBoundary from '../ErrorBoundary'
-import Sidebar from './Sidebar'
+import WorkspaceSidebar from './WorkspaceSidebar'
+import NavigationSidebar from './NavigationSidebar'
 import ChatPanel from '../chat/ChatPanel'
 import ThreadPanel from '../chat/ThreadPanel'
 import ChannelInfoPanel from '../chat/ChannelInfoPanel'
@@ -19,6 +21,14 @@ import SavedMessagesPanel from '../chat/SavedMessagesPanel'
 import { useKeyboardShortcuts } from '../../utils/keyboardShortcuts'
 import { savedMessageAPI } from '../../services/api'
 import toast from 'react-hot-toast'
+
+const HomePage = lazy(() => import('../../pages/HomePage'))
+const ActivityPage = lazy(() => import('../../pages/ActivityPage'))
+const FilesPage = lazy(() => import('../../pages/FilesPage'))
+const LaterPage = lazy(() => import('../../pages/LaterPage'))
+const ToolsPage = lazy(() => import('../../pages/ToolsPage'))
+
+const PAGE_ROUTES = { home: HomePage, activity: ActivityPage, files: FilesPage, later: LaterPage, tools: ToolsPage }
 
 const SIDEBAR_MIN = 200
 const SIDEBAR_MAX = 400
@@ -40,6 +50,7 @@ function getSavedSidebarWidth() {
 export default function ChatLayout() {
   const { fetchChannels, activeChannelId, channels, showInfoPanel } = useChannelStore()
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const location = useLocation()
   const activeThread = useChatStore(s => s.activeThread)
   const openThreadAction = useChatStore(s => s.openThread)
   const closeThread = useChatStore(s => s.closeThread)
@@ -188,11 +199,17 @@ export default function ChatLayout() {
 
   return (
     <div className="h-full flex" style={{ background: 'var(--bg-primary)' }}>
-      {/* Desktop Sidebar */}
+      {/* Workspace Sidebar (70px fixed) */}
+      <div className="hide-on-mobile">
+        <ErrorBoundary name="WorkspaceSidebar" compact>
+          <WorkspaceSidebar />
+        </ErrorBoundary>
+      </div>
+
+      {/* Navigation Sidebar (resizable) */}
       <div className="hide-on-mobile relative" style={{ width: sidebarWidth, minWidth: sidebarWidth, transition: isResizing ? 'none' : 'width 200ms ease, min-width 200ms ease' }}>
-        <ErrorBoundary name="Sidebar" compact>
-          <Sidebar
-            collapsed={sidebarCollapsed}
+        <ErrorBoundary name="NavigationSidebar" compact>
+          <NavigationSidebar
             onToggleAllThreads={() => {
               setShowAllThreads((s) => !s)
               setShowSearch(false)
@@ -239,8 +256,8 @@ export default function ChatLayout() {
             onClick={() => setShowMobileSidebar(false)}
           />
           <div className="sidebar-mobile">
-            <ErrorBoundary name="Sidebar" compact>
-              <Sidebar
+            <ErrorBoundary name="NavigationSidebar" compact>
+              <NavigationSidebar
                 onClose={() => setShowMobileSidebar(false)}
                 onToggleNotifications={() => {
                   setShowNotifications((s) => !s)
@@ -257,23 +274,36 @@ export default function ChatLayout() {
         </>
       )}
 
-      {/* Main Chat Area */}
+      {/* Main Content Area */}
       <div className="flex-1 flex min-w-0">
-        <ErrorBoundary name="Chat">
-          {activeChannelId ? (
-            <ChatPanel
-              channelId={activeChannelId}
-              onOpenThread={openThread}
-              onToggleSearch={() => { setShowSearch((s) => !s); setShowPins(false) }}
-              onTogglePins={() => { setShowPins((s) => !s); setShowSearch(false) }}
-              onOpenProfile={openProfile}
-              onOpenFilePreview={openFilePreview}
-              onOpenMobileSidebar={() => setShowMobileSidebar(true)}
-              onSaveMessage={handleSaveMessage}
-            />
-          ) : (
-            <WelcomeScreen onOpenMobileSidebar={() => setShowMobileSidebar(true)} />
-          )}
+        <ErrorBoundary name="Content">
+          {(() => {
+            // Detect page routes like /workspace/:id/home, /workspace/:id/activity, etc.
+            const pathSegments = location.pathname.split('/')
+            const lastSegment = pathSegments[pathSegments.length - 1]
+            const PageComponent = PAGE_ROUTES[lastSegment]
+            if (PageComponent) {
+              return (
+                <Suspense fallback={<div className="flex-1 flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}><div className="w-8 h-8 border-3 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }} /></div>}>
+                  <PageComponent />
+                </Suspense>
+              )
+            }
+            return activeChannelId ? (
+              <ChatPanel
+                channelId={activeChannelId}
+                onOpenThread={openThread}
+                onToggleSearch={() => { setShowSearch((s) => !s); setShowPins(false) }}
+                onTogglePins={() => { setShowPins((s) => !s); setShowSearch(false) }}
+                onOpenProfile={openProfile}
+                onOpenFilePreview={openFilePreview}
+                onOpenMobileSidebar={() => setShowMobileSidebar(true)}
+                onSaveMessage={handleSaveMessage}
+              />
+            ) : (
+              <WelcomeScreen onOpenMobileSidebar={() => setShowMobileSidebar(true)} />
+            )
+          })()}
         </ErrorBoundary>
       </div>
 

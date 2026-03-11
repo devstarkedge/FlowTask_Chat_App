@@ -46,7 +46,7 @@ function fileIcon(mimeType) {
 
 const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000 // 10 minutes
 
-const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, onOpenProfile, onOpenFilePreview, isDMChannel, onSaveMessage }) {
+const MessageItem = memo(function MessageItem({ message, compact, isLastInGroup, onOpenThread, onOpenProfile, onOpenFilePreview, isDMChannel, onSaveMessage }) {
   const { user } = useAuthStore()
   const { addReaction, removeReaction, editMessage, deleteMessage, retryMessage, pinMessage, unpinMessage } = useChatStore()
   const [showActions, setShowActions] = useState(false)
@@ -178,57 +178,64 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
     )
   }
 
+  // Position within group: solo | first | middle | last
+  const groupPos = !compact && isLastInGroup ? 'solo'
+    : !compact ? 'first'
+    : isLastInGroup ? 'last'
+    : 'middle'
+
   return (
     <div
       ref={messageRef}
       className="relative group"
       style={{
         background: showActions ? 'var(--bg-hover)' : 'transparent',
-        transition: 'background var(--transition-fast)',
+        transition: 'background 150ms ease',
         opacity: isPending ? 0.6 : isFailed ? 0.5 : 1,
+        // Group spacing: large gap before first-in-group, tiny gap within
+        marginTop: compact ? 2 : 12,
       }}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => {
-        // Don't close the action bar if the reaction picker or more menu is open
-        if (!showReactionPicker && !showMoreMenu) {
-          setShowActions(false)
-        }
+        if (!showReactionPicker && !showMoreMenu) setShowActions(false)
       }}
     >
-      <div className={`flex gap-2.5 px-5 ${compact ? 'py-0.5' : 'pt-2 pb-0.5'}`}>
-        {/* Avatar / Time gutter */}
-        {!compact ? (
-          <div
-            className="cursor-pointer"
-            onClick={() => onOpenProfile?.(authorData)}
-          >
-            <Avatar
-              member={{
-                name: authorName,
-                avatar: authorAvatar,
-                onlineStatus: 'offline',
-              }}
-              size={36}
-              showStatus={false}
-            />
-          </div>
-        ) : (
-          <div className="w-9 shrink-0 flex items-center justify-center">
+      <div className={`flex items-end gap-2 px-4 pb-0 ${isOwn ? 'flex-row-reverse' : ''}`}>
+
+        {/* Avatar — only on first/solo message of a group */}
+        <div className="shrink-0 self-end" style={{ width: 34, marginBottom: 2 }}>
+          {!compact ? (
+            <div
+              className="cursor-pointer"
+              onClick={() => onOpenProfile?.(authorData)}
+            >
+              <Avatar
+                member={{ name: authorName, avatar: authorAvatar, onlineStatus: 'offline' }}
+                size={34}
+                showStatus={false}
+              />
+            </div>
+          ) : (
+            // Invisible gutter keeps alignment; show timestamp on hover
             <span
-              className="text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ color: 'var(--text-muted)' }}
+              className="flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ color: 'var(--text-muted)', height: 34, fontSize: 10 }}
             >
               {format(new Date(message.createdAt), 'h:mm')}
             </span>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
+        {/* Column: name header + bubble */}
+        <div
+          className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}
+          style={{ maxWidth: 'min(65%, 480px)' }}
+        >
+          {/* Name + time row — only on first/solo message */}
           {!compact && (
-            <div className="flex items-baseline gap-2 mb-0.5">
+            <div className={`flex items-baseline gap-1.5 mb-1 px-1 ${isOwn ? 'flex-row-reverse' : ''}`}>
               <span
-                className="font-bold text-sm cursor-pointer hover:underline"
+                className="font-semibold text-[13px] cursor-pointer hover:underline"
                 style={{ color: 'var(--text-white)' }}
                 onClick={() => onOpenProfile?.(authorData)}
               >
@@ -237,33 +244,25 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
               {message.contentType === 'bot' && (
                 <span
                   style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    padding: '1px 5px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'var(--accent-primary)',
-                    color: 'white',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
+                    fontSize: 10, fontWeight: 700, padding: '1px 5px',
+                    borderRadius: 'var(--radius-sm)', background: 'var(--accent-primary)',
+                    color: 'white', textTransform: 'uppercase', letterSpacing: '0.5px',
                   }}
                 >
                   BOT
                 </span>
               )}
-              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                {time}
-              </span>
+              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{time}</span>
               {message.isEdited && (
-                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                  (edited)
-                </span>
+                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>(edited)</span>
               )}
-              {message.isPinned && (
-                <Pin size={11} style={{ color: 'var(--accent-yellow)' }} />
-              )}
+              {message.isPinned && <Pin size={11} style={{ color: 'var(--accent-yellow)' }} />}
               {renderDeliveryStatus()}
             </div>
           )}
+
+          {/* Bubble */}
+          <div className={`message-bubble ${isOwn ? 'sent' : 'received'} ${groupPos}`}>
 
           {isEditing ? (
             <div className="mt-1">
@@ -285,13 +284,13 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
           ) : message.htmlContent && message.htmlContent !== message.content ? (
             <div
               className="message-content text-[15px] leading-relaxed"
-              style={{ color: 'var(--text-primary)' }}
+              style={{ color: 'inherit' }}
               dangerouslySetInnerHTML={{ __html: sanitizeHtml(message.htmlContent) }}
             />
           ) : (
             <div
               className="message-content text-[15px] leading-relaxed"
-              style={{ color: 'var(--text-primary)' }}
+              style={{ color: 'inherit' }}
             >
               {message.content}
             </div>
@@ -436,8 +435,9 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
               </span>
             </button>
           )}
-        </div>
-      </div>
+          </div>{/* end bubble */}
+        </div>{/* end column */}
+      </div>{/* end flex row */}
 
       {/* Action Bar (hover) */}
       {(showActions || showReactionPicker || showMoreMenu) && !isEditing && !isPending && !isFailed && (
@@ -583,6 +583,7 @@ const MessageItem = memo(function MessageItem({ message, compact, onOpenThread, 
     && prev.message.pending === next.message.pending
     && prev.message.failed === next.message.failed
     && prev.compact === next.compact
+    && prev.isLastInGroup === next.isLastInGroup
     && prev.isDMChannel === next.isDMChannel
 })
 

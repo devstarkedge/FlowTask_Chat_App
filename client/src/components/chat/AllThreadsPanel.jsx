@@ -108,8 +108,13 @@ export default function AllThreadsPanel({ onClose, onOpenThread }) {
               currentUser={user}
               onClick={() => {
                 onOpenThread({
-                  rootMessageId: thread.rootMessageId || thread.parentMessage?._id || thread._id,
-                  channelId: thread.channelId,
+                  rootMessageId: (
+                    thread.rootMessageId?._id ??
+                    thread.rootMessageId ??
+                    thread.parentMessage?._id ??
+                    thread._id
+                  )?.toString(),
+                  channelId: thread.channelId?.toString?.() ?? thread.channelId,
                 })
               }}
             />

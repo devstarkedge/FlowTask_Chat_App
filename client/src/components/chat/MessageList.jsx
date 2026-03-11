@@ -73,21 +73,34 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
         insertedUnreadMarker = true
       }
 
-      // Add compact property dynamically ahead of time
+      // Add compact + group-position properties dynamically
       const prevMsg = i > 0 ? messages[i - 1] : null
-      
+      const nextMsg = i < messages.length - 1 ? messages[i + 1] : null
+
       const prevAuthorId = prevMsg?.authorId?._id || prevMsg?.authorId
       const currentAuthorId = msg.authorId?._id || msg.authorId
+      const nextAuthorId = nextMsg?.authorId?._id || nextMsg?.authorId
 
-      const isCompact = prevMsg
+      const sameAsPrev = !!(prevMsg
         && prevAuthorId
         && currentAuthorId
         && prevAuthorId.toString() === currentAuthorId.toString()
         && !isActivityMessage(msg)
         && !isActivityMessage(prevMsg)
-        && (new Date(msg.createdAt) - new Date(prevMsg.createdAt)) < 300000 // 5 min
+        && (new Date(msg.createdAt) - new Date(prevMsg.createdAt)) < 300000)
 
-      flattened.push({ ...msg, isCompact })
+      const sameAsNext = !!(nextMsg
+        && nextAuthorId
+        && currentAuthorId
+        && nextAuthorId.toString() === currentAuthorId.toString()
+        && !isActivityMessage(msg)
+        && !isActivityMessage(nextMsg)
+        && (new Date(nextMsg.createdAt) - new Date(msg.createdAt)) < 300000)
+
+      const isCompact = sameAsPrev
+      const isLastInGroup = !sameAsNext
+
+      flattened.push({ ...msg, isCompact, isLastInGroup })
     }
     return flattened
   }, [messages, lastReadMessageId])
@@ -212,6 +225,7 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
             <MessageItem
               message={item}
               compact={item.isCompact}
+              isLastInGroup={item.isLastInGroup}
               onOpenThread={onOpenThread}
               onOpenProfile={onOpenProfile}
               onOpenFilePreview={onOpenFilePreview}

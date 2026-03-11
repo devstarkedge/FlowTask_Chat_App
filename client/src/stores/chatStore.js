@@ -418,6 +418,10 @@ export const useChatStore = create((set, get) => ({
 
   // ─── Thread Replies ─────────────────────────────────────────────────
   fetchThreadReplies: async (rootMessageId, options = {}) => {
+    // Normalize: if an object is passed instead of a plain ID string, extract ._id
+    const resolvedId = (rootMessageId?._id ?? rootMessageId)?.toString?.()
+    if (!resolvedId) return
+    rootMessageId = resolvedId
     set({ isLoadingThread: true })
     try {
       const { data } = await threadAPI.replies(rootMessageId, options)

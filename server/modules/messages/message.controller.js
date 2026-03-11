@@ -173,7 +173,7 @@ export const uploadFiles = asyncHandler(async (req, res) => {
   const uploads = [];
 
   for (const file of req.files) {
-    const asset = await fileUploadService.queueUpload(file, req.user._id);
+    const asset = await fileUploadService.queueUpload(file, req.user._id, req.workspaceId);
 
     uploads.push({
       _id: asset._id, // This is now a FileAsset _id

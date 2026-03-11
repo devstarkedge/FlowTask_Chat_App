@@ -55,9 +55,14 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
       const d = new Date(msg.createdAt)
       const label = formatDateLabel(d)
 
+      // Track if any separator is inserted just before this message so we can
+      // break the visual group (prevent isCompact being true across a separator)
+      let separatorJustInserted = false
+
       if (label !== currentDate) {
         currentDate = label
         flattened.push({ isDateSeparator: true, date: label, _id: `date-${label}` })
+        separatorJustInserted = true
       }
 
       // Insert unread separator after the last-read message
@@ -71,11 +76,22 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
       ) {
         flattened.push({ isUnreadSeparator: true, _id: 'unread-separator' })
         insertedUnreadMarker = true
+        separatorJustInserted = true
       }
 
-      // Add compact + group-position properties dynamically
-      const prevMsg = i > 0 ? messages[i - 1] : null
-      const nextMsg = i < messages.length - 1 ? messages[i + 1] : null
+      // Add compact + group-position properties dynamically.
+      // Null out prevMsg if a separator was inserted right before this message
+      // so the first message after a separator always starts a new visual group.
+      const prevMsg = (i > 0 && !separatorJustInserted) ? messages[i - 1] : null
+
+      // Null out nextMsg if a separator will be inserted before the next message
+      // (date change or unread marker) to correctly mark `isLastInGroup`.
+      const nextMsgRaw = i < messages.length - 1 ? messages[i + 1] : null
+      const nextWillHaveSeparator = nextMsgRaw && (
+        formatDateLabel(new Date(nextMsgRaw.createdAt)) !== label ||
+        (!insertedUnreadMarker && lastReadMessageId && msg._id === lastReadMessageId)
+      )
+      const nextMsg = nextWillHaveSeparator ? null : nextMsgRaw
 
       const prevAuthorId = prevMsg?.authorId?._id || prevMsg?.authorId
       const currentAuthorId = msg.authorId?._id || msg.authorId

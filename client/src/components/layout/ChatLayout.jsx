@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback, lazy, Suspense } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, matchPath } from 'react-router-dom'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
@@ -278,13 +278,15 @@ export default function ChatLayout() {
       <div className="flex-1 flex min-w-0">
         <ErrorBoundary name="Content">
           {(() => {
-            // Detect page routes like /workspace/:id/home, /workspace/:id/activity, etc.
-            const pathSegments = location.pathname.split('/')
-            const lastSegment = pathSegments[pathSegments.length - 1]
-            const PageComponent = PAGE_ROUTES[lastSegment]
+            // Detect page routes using matchPath to avoid fragile string splitting
+            // (handles trailing slashes and prevents channel names from colliding)
+            const matchedEntry = Object.entries(PAGE_ROUTES).find(([key]) =>
+              matchPath(`/workspace/:workspaceId/${key}`, location.pathname)
+            )
+            const PageComponent = matchedEntry?.[1] ?? null
             if (PageComponent) {
               return (
-                <Suspense fallback={<div className="flex-1 flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}><div className="w-8 h-8 border-3 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }} /></div>}>
+                <Suspense fallback={<div className="flex-1 flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}><div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }} /></div>}>
                   <PageComponent />
                 </Suspense>
               )

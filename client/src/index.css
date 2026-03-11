@@ -1830,7 +1830,11 @@ body {
     padding: 0 8px;
     background: var(--bg-workspace-sidebar);
     border-top: 1px solid var(--border-secondary);
-    z-index: 40;
+    /* z-index stacking:
+       .sidebar-overlay = 40  (covers content when nav sidebar opens)
+       .workspace-sidebar-mobile = 45  (above the overlay so bottom bar stays visible)
+       .sidebar-mobile = 50  (nav sidebar slides over everything) */
+    z-index: 45;
   }
 
   .workspace-sidebar-mobile .workspace-sidebar-icon {

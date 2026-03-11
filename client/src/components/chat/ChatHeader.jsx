@@ -28,7 +28,18 @@ export default function ChatHeader({ channel, onToggleSearch, onOpenMobileSideba
   const [editingTopic, setEditingTopic] = useState(false)
   const [topicValue, setTopicValue] = useState('')
   const [activeTab, setActiveTab] = useState('messages')
+  const [isStarred, setIsStarred] = useState(false)
   const topicInputRef = useRef(null)
+
+  const handleToggleStar = () => {
+    setIsStarred((s) => !s)
+    // TODO: persist star state via API when feature is implemented
+  }
+
+  const handleHuddleClick = () => {
+    // TODO: implement huddle feature
+    console.log('Huddle clicked for channel:', channel?._id)
+  }
 
   if (!channel) return null
 
@@ -91,12 +102,14 @@ export default function ChatHeader({ channel, onToggleSearch, onOpenMobileSideba
           )}
           <button
             className="p-0.5 rounded cursor-pointer transition-colors shrink-0 hide-mobile"
-            style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+            style={{ color: isStarred ? 'var(--accent-yellow)' : 'var(--text-muted)', background: 'transparent', border: 'none' }}
             onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-yellow)')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-            title="Star channel"
+            onMouseLeave={(e) => (e.currentTarget.style.color = isStarred ? 'var(--accent-yellow)' : 'var(--text-muted)')}
+            onClick={handleToggleStar}
+            aria-pressed={isStarred}
+            title={isStarred ? 'Unstar channel' : 'Star channel'}
           >
-            <Star size={14} />
+            <Star size={14} fill={isStarred ? 'currentColor' : 'none'} />
           </button>
         </div>
 
@@ -155,7 +168,7 @@ export default function ChatHeader({ channel, onToggleSearch, onOpenMobileSideba
             <HeaderBtn icon={Users} title="Members" label={members.length > 0 ? String(members.length) : undefined} onClick={toggleInfoPanel} />
           )}
           <HeaderBtn icon={Pin} title="Pinned messages" label={pinnedMessages.length > 0 ? String(pinnedMessages.length) : undefined} onClick={onTogglePins} />
-          <HeaderBtn icon={Headphones} title="Huddle" className="hide-mobile" />
+          <HeaderBtn icon={Headphones} title="Huddle" className="hide-mobile" onClick={handleHuddleClick} />
           <HeaderBtn icon={Search} title="Search" onClick={onToggleSearch} />
           <HeaderBtn icon={Info} title="Channel details" onClick={toggleInfoPanel} className="hide-mobile" />
         </div>

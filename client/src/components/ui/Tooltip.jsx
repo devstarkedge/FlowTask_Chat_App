@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 
 export default function Tooltip({ children, label, position = 'right', delay = 200 }) {
@@ -16,6 +16,9 @@ export default function Tooltip({ children, label, position = 'right', delay = 2
       if (position === 'right') {
         top = rect.top + rect.height / 2
         left = rect.right + 10
+      } else if (position === 'left') {
+        top = rect.top + rect.height / 2
+        left = rect.left - 10
       } else if (position === 'top') {
         top = rect.top - 8
         left = rect.left + rect.width / 2
@@ -34,12 +37,24 @@ export default function Tooltip({ children, label, position = 'right', delay = 2
     setVisible(false)
   }, [])
 
+  // Clear pending timer on unmount to prevent setState on an unmounted component
+  useEffect(() => {
+    return () => {
+      if (timerRef.current != null) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [])
+
   const transformStyle =
     position === 'right'
       ? 'translateY(-50%)'
-      : position === 'top'
-        ? 'translate(-50%, -100%)'
-        : 'translate(-50%, 0)'
+      : position === 'left'
+        ? 'translate(-100%, -50%)'
+        : position === 'top'
+          ? 'translate(-50%, -100%)'
+          : 'translate(-50%, 0)'
 
   return (
     <>

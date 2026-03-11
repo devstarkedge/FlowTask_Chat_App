@@ -14,7 +14,7 @@ export default function HoverPreview({ section, anchorRect, onClose }) {
 
   useEffect(() => {
     const handleMouseMove = (e) => {
-      if (!ref.current) return
+      if (!ref.current || !anchorRect) return
       const previewRect = ref.current.getBoundingClientRect()
       const buffer = 20
       const inPreview =
@@ -34,6 +34,8 @@ export default function HoverPreview({ section, anchorRect, onClose }) {
     document.addEventListener('mousemove', handleMouseMove)
     return () => document.removeEventListener('mousemove', handleMouseMove)
   }, [anchorRect, onClose])
+
+  if (!anchorRect) return null
 
   const top = anchorRect.top
   const left = anchorRect.right + 8
@@ -116,6 +118,10 @@ export default function HoverPreview({ section, anchorRect, onClose }) {
       </>
     )
   }
+
+  if (!content) return null
+
+  if (typeof document === 'undefined' || !document.body) return null
 
   return createPortal(
     <div

@@ -326,7 +326,7 @@ function ChannelSection({ title, channels, expanded, onToggle, activeId, unreads
             style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
             onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-white)')}
             onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-            title="Create channel"
+            title={isDM ? 'Start direct message' : 'Create channel'}
           >
             <Plus size={14} />
           </button>

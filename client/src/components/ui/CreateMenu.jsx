@@ -13,7 +13,7 @@ const ITEMS = [
   { icon: Zap, label: 'Workflow', desc: 'Automate everyday tasks' },
 ]
 
-export default function CreateMenu({ anchorRef, onClose }) {
+export default function CreateMenu({ anchorRef, onClose, onSelect }) {
   const menuRef = useRef(null)
 
   useEffect(() => {
@@ -23,8 +23,15 @@ export default function CreateMenu({ anchorRef, onClose }) {
         onClose()
       }
     }
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose()
+    }
     document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKey)
+    }
   }, [onClose, anchorRef])
 
   const rect = anchorRef.current?.getBoundingClientRect()
@@ -41,7 +48,11 @@ export default function CreateMenu({ anchorRef, onClose }) {
         Create
       </p>
       {ITEMS.map((item) => (
-        <button key={item.label} className="create-menu-item" onClick={onClose}>
+        <button
+          key={item.label}
+          className="create-menu-item"
+          onClick={() => { item.onClick?.(); onSelect?.(item); onClose() }}
+        >
           <div className="create-menu-item-icon">
             <item.icon size={16} />
           </div>

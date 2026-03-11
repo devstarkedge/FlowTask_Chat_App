@@ -19,10 +19,14 @@ export default function useResponsive() {
 }
 
 function getState() {
+  if (typeof window === 'undefined') {
+    // SSR-safe fallback: assume desktop layout
+    return { isMobile: false, isTablet: false, isDesktop: true, width: BREAKPOINTS.desktop }
+  }
   const w = window.innerWidth
   return {
     isMobile: w < BREAKPOINTS.mobile,
-    isTablet: w >= BREAKPOINTS.mobile && w < BREAKPOINTS.desktop,
+    isTablet: w >= BREAKPOINTS.mobile && w < BREAKPOINTS.tablet,
     isDesktop: w >= BREAKPOINTS.desktop,
     width: w,
   }

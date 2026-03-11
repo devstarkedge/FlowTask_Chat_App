@@ -68,6 +68,14 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
     setHoverRect(null)
   }, [])
 
+  // Cleanup any pending hover timer on unmount to prevent state updates after unmount
+  useEffect(() => {
+    return () => {
+      clearTimeout(hoverTimerRef.current)
+      hoverTimerRef.current = null
+    }
+  }, [])
+
   // Close menus on Escape
   useEffect(() => {
     const onKey = (e) => {
@@ -84,20 +92,23 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
     <>
       <nav className="workspace-sidebar" aria-label="Workspace navigation">
         {/* Logo */}
-        <div
+        <button
           className="flex items-center justify-center mb-2 cursor-pointer"
           style={{
             width: 36,
             height: 36,
             borderRadius: 'var(--radius-lg)',
             background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-purple))',
+            border: 'none',
+            padding: 0,
           }}
           onClick={() => navigate(basePath)}
+          aria-label="Go to home"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
-        </div>
+        </button>
 
         <div className="workspace-sidebar-divider" />
 
@@ -135,10 +146,12 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
         </Tooltip>
 
         {/* User Avatar */}
-        <div
+        <button
           ref={avatarBtnRef}
           className="workspace-sidebar-avatar"
           onClick={() => { setShowUserMenu((s) => !s); setShowCreateMenu(false) }}
+          style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+          aria-label="Open user menu"
         >
           <Avatar
             member={{ name: user?.name || '?', avatar: user?.avatar, onlineStatus: 'online' }}
@@ -146,7 +159,7 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
             showStatus={false}
           />
           <span className="online-dot" />
-        </div>
+        </button>
       </nav>
 
       {/* Hover Preview Panels */}

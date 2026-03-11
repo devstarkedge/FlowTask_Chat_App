@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
@@ -9,6 +9,23 @@ export default function UserProfileMenu({ anchorRef, onClose }) {
   const menuRef = useRef(null)
   const { user, logout } = useAuthStore()
   const { theme, toggleTheme } = useThemeStore()
+  const [isSigningOut, setIsSigningOut] = useState(false)
+
+  const STATUS_COLORS = {
+    online: 'var(--status-online)',
+    away: 'var(--status-away)',
+    busy: 'var(--status-dnd)',
+    dnd: 'var(--status-dnd)',
+    offline: 'var(--status-offline)',
+  }
+  const STATUS_LABELS = {
+    online: 'Active',
+    away: 'Away',
+    busy: 'Do not disturb',
+    dnd: 'Do not disturb',
+    offline: 'Offline',
+  }
+  const userStatus = user?.status || 'online'
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -34,7 +51,7 @@ export default function UserProfileMenu({ anchorRef, onClose }) {
       {/* Header */}
       <div className="user-menu-header">
         <Avatar
-          member={{ name: user?.name || '?', avatar: user?.avatar, onlineStatus: 'online' }}
+          member={{ name: user?.name || '?', avatar: user?.avatar, onlineStatus: userStatus }}
           size={40}
           showStatus={true}
         />
@@ -43,8 +60,8 @@ export default function UserProfileMenu({ anchorRef, onClose }) {
             {user?.name || 'User'}
           </p>
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full" style={{ background: 'var(--status-online)' }} />
-            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Active</span>
+            <span className="w-2 h-2 rounded-full" style={{ background: STATUS_COLORS[userStatus] || 'var(--status-online)' }} />
+            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{STATUS_LABELS[userStatus] || 'Active'}</span>
           </div>
         </div>
       </div>
@@ -97,11 +114,21 @@ export default function UserProfileMenu({ anchorRef, onClose }) {
 
       <button
         className="user-menu-item"
-        onClick={() => { logout(); onClose() }}
-        style={{ color: 'var(--accent-red)' }}
+        onClick={async () => {
+          setIsSigningOut(true)
+          try {
+            await logout()
+          } catch {
+            // logout failure is non-critical; close menu regardless
+          } finally {
+            onClose()
+          }
+        }}
+        disabled={isSigningOut}
+        style={{ color: 'var(--accent-red)', opacity: isSigningOut ? 0.6 : 1 }}
       >
         <LogOut size={16} />
-        <span>Sign out of {user?.name || 'workspace'}</span>
+        <span>{isSigningOut ? 'Signing out…' : `Sign out of ${user?.name || 'workspace'}`}</span>
       </button>
     </div>,
     document.body,

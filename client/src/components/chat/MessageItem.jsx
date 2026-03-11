@@ -420,22 +420,12 @@ const MessageItem = memo(function MessageItem({ message, compact, isLastInGroup,
             </div>
           )}
 
-          {/* Thread link */}
-          {message.replyCount > 0 && (
-            <button
-              onClick={() => onOpenThread?.({ rootMessageId: message._id, channelId: message.channelId })}
-              className="flex items-center gap-1.5 mt-1.5 text-xs cursor-pointer py-1 px-2 rounded-md transition-colors"
-              style={{ color: 'var(--text-link)', background: 'transparent', border: 'none' }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-            >
-              <MessageSquare size={13} />
-              <span className="font-medium">
-                {message.replyCount} {message.replyCount === 1 ? 'reply' : 'replies'}
-              </span>
-            </button>
-          )}
           </div>{/* end bubble */}
+
+          {/* Thread preview — Slack-style, outside the bubble */}
+          {message.replyCount > 0 && (
+            <ThreadPreview message={message} onOpenThread={onOpenThread} />
+          )}
         </div>{/* end column */}
       </div>{/* end flex row */}
 
@@ -619,6 +609,67 @@ function MoreMenuItem({ icon: Icon, label, onClick, danger }) {
     >
       <Icon size={15} style={{ opacity: 0.7 }} />
       <span>{label}</span>
+    </button>
+  )
+}
+
+/* ─── Thread Preview (under the bubble) ─────────────────────────────────── */
+function ThreadPreview({ message, onOpenThread }) {
+  const participants = Array.isArray(message.threadParticipants) ? message.threadParticipants : []
+  const count = message.replyCount || 0
+
+  const formatLastReply = (dateStr) => {
+    if (!dateStr) return null
+    const d = new Date(dateStr)
+    const now = new Date()
+    const isToday = d.toDateString() === now.toDateString()
+    if (isToday) return `Last reply today at ${format(d, 'h:mm a')}`
+    const isYesterday = new Date(now - 86400000).toDateString() === d.toDateString()
+    if (isYesterday) return `Last reply yesterday at ${format(d, 'h:mm a')}`
+    return `Last reply ${format(d, 'MMM d')} at ${format(d, 'h:mm a')}`
+  }
+
+  const lastReplyText = formatLastReply(message.lastReplyAt)
+
+  return (
+    <button
+      className="thread-preview"
+      onClick={() => onOpenThread?.({ rootMessageId: message._id, channelId: message.channelId })}
+    >
+      {/* Participant avatar stack */}
+      {participants.length > 0 ? (
+        <div className="thread-preview__avatars">
+          {participants.slice(0, 4).map((p, i) =>
+            p.avatar ? (
+              <img
+                key={p._id || i}
+                src={p.avatar}
+                alt={p.name || ''}
+                className="thread-preview__avatar-img"
+              />
+            ) : (
+              <div key={p._id || i} className="thread-preview__avatar-fallback">
+                {(p.name || '?').charAt(0).toUpperCase()}
+              </div>
+            ),
+          )}
+        </div>
+      ) : (
+        <MessageSquare size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+      )}
+
+      {/* Reply count */}
+      <span className="thread-preview__count">
+        {count} {count === 1 ? 'reply' : 'replies'}
+      </span>
+
+      {/* Last reply time */}
+      {lastReplyText && (
+        <span className="thread-preview__time">{lastReplyText}</span>
+      )}
+
+      {/* CTA — visible on hover */}
+      <span className="thread-preview__cta">View thread</span>
     </button>
   )
 }

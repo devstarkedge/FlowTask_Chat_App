@@ -104,7 +104,7 @@ export default function AllThreadsPanel({ onClose, onOpenThread }) {
             <ThreadCard
               key={thread._id}
               thread={thread}
-              channel={channelMap[thread.channelId]}
+              channel={channelMap[typeof thread.channelId === 'object' ? thread.channelId._id : thread.channelId]}
               currentUser={user}
               onClick={() => {
                 onOpenThread({
@@ -126,15 +126,19 @@ export default function AllThreadsPanel({ onClose, onOpenThread }) {
 }
 
 function ThreadCard({ thread, channel, currentUser, onClick }) {
-  const rootContent = thread.parentMessage?.content || thread.rootContent || thread.content || ''
-  const rootHtml = thread.parentMessage?.htmlContent || thread.rootHtmlContent || thread.htmlContent || ''
-  const author = thread.parentMessage?.sender || thread.sender || thread.createdBy || {}
+  const rootMsg = (typeof thread.rootMessageId === 'object' && thread.rootMessageId !== null) ? thread.rootMessageId : (thread.parentMessage || thread)
+  const rootContent = rootMsg.content || thread.rootContent || ''
+  const rootHtml = rootMsg.htmlContent || thread.rootHtmlContent || ''
+  const author = rootMsg.senderSnapshot || rootMsg.author || rootMsg.sender || thread.createdBy || {}
   const replyCount = thread.replyCount || thread.replies?.length || 0
   const lastReplyAt = thread.lastReplyAt || thread.updatedAt || thread.createdAt
   const lastReplyDate = lastReplyAt ? new Date(lastReplyAt) : null
   const hasValidLastReplyDate = lastReplyDate && !Number.isNaN(lastReplyDate.getTime())
-  const channelName = channel?.name || 'unknown'
-  const isPrivate = channel?.visibility === 'private'
+  
+  // thread.channelId might be populated from the backend
+  const resolvedChannel = channel || (typeof thread.channelId === 'object' ? thread.channelId : null)
+  const channelName = resolvedChannel?.name || 'unknown'
+  const isPrivate = resolvedChannel?.visibility === 'private' || resolvedChannel?.type === 'dm'
 
   const displayContent = rootHtml
     ? sanitizeHtml(rootHtml)

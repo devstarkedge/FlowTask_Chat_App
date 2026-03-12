@@ -87,7 +87,7 @@ class TokenService {
       throw new Error('FlowTask integration is disabled');
     }
     return jwt.verify(token, env.FLOWTASK_JWT_SECRET, {
-      clockTolerance: 30, // Allow 30s clock skew between Render instances
+      clockTolerance: 60, // Allow 60s clock skew between Render instances
     });
   }
 

@@ -147,7 +147,7 @@ class AuthService {
         tokenLength: token ? token.length : 0,
         tokenPrefix: token ? token.substring(0, 20) + '...' : '(empty)',
         hint: error.name === 'TokenExpiredError'
-          ? 'Token expired (5-min window) — FlowTask must re-generate the redirect token'
+          ? 'Token expired (10-min window) — FlowTask must re-generate the redirect token'
           : 'Secret mismatch? Confirm FLOWTASK_JWT_SECRET (Chat backend) === CHAT_JWT_SECRET (FlowTask backend)',
         configCheck: {
           flowtaskEnabled: env.FLOWTASK_ENABLED,

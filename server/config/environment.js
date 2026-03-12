@@ -34,9 +34,20 @@ if (process.env.JWT_REFRESH_SECRET && process.env.JWT_REFRESH_SECRET.length < 32
   console.warn('[SECURITY WARNING] JWT_REFRESH_SECRET should be at least 32 characters for production safety');
 }
 
+// ─── Production enforcement ──────────────────────────────────────────────────
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+if (IS_PRODUCTION) {
+  const prodRequired = ['BASE_URL', 'CORS_ORIGINS'];
+  const prodMissing = prodRequired.filter((key) => !process.env[key]);
+  if (prodMissing.length > 0) {
+    console.error(`[FATAL] Missing production-required env vars: ${prodMissing.join(', ')}`);
+    process.exit(1);
+  }
+}
+
 // ─── Parse CORS origins ─────────────────────────────────────────────────────
 function parseCorsOrigins(raw) {
-  if (!raw) return ['http://localhost:5174'];
+  if (!raw) return IS_PRODUCTION ? [] : ['http://localhost:5174'];
   return raw
     .split(',')
     .map((o) => o.trim().replace(/\/+$/, '')) // strip trailing slashes
@@ -49,8 +60,8 @@ const env = Object.freeze({
   APP_NAME: process.env.APP_NAME || 'FlowTask Chat',
   PORT: parseInt(process.env.PORT, 10) || 3200,
   NODE_ENV: process.env.NODE_ENV || 'development',
-  IS_PRODUCTION: process.env.NODE_ENV === 'production',
-  BASE_URL: process.env.BASE_URL || 'http://localhost:3200',
+  IS_PRODUCTION,
+  BASE_URL: process.env.BASE_URL || (IS_PRODUCTION ? '' : 'http://localhost:3200'),
 
   // Database
   MONGO_URI: process.env.MONGO_URI,

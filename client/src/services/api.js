@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { useAuthStore } from '../stores/authStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
+import logger from '../utils/logger'
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || '/api/chat'
 
@@ -11,7 +12,7 @@ if (
   baseURL.startsWith('/') &&
   !['localhost', '127.0.0.1'].includes(window.location.hostname)
 ) {
-  console.error(
+  logger.error(
     '[API] VITE_API_BASE_URL is a relative path ("%s") but the app is running on %s. ' +
     'API calls will go to the frontend host instead of the backend. ' +
     'Set VITE_API_BASE_URL to the full backend URL (e.g. https://flowtask-chat-app.onrender.com/api/chat) ' +

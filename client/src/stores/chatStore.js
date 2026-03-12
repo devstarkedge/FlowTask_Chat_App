@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { messageAPI, threadAPI, botAPI } from '../services/api'
 import { useAuthStore } from './authStore'
 import toast from 'react-hot-toast'
+import logger from '../utils/logger'
 
 // ─── LRU Message Cache ─────────────────────────────────────────────────────
 // Prevent unbounded memory growth by evicting least-recently-used channels.
@@ -130,7 +131,7 @@ export const useChatStore = create((set, get) => ({
       })
     } catch (error) {
       set({ isLoadingMessages: false })
-      console.error('Failed to fetch messages:', error)
+      logger.error('Failed to fetch messages:', error)
     } finally {
       fetching.delete(fetchKey)
     }
@@ -458,7 +459,7 @@ export const useChatStore = create((set, get) => ({
       })
     } catch (error) {
       set({ isLoadingThread: false })
-      console.error('Failed to fetch thread replies:', error)
+      logger.error('Failed to fetch thread replies:', error)
     }
   },
 
@@ -682,7 +683,7 @@ export const useChatStore = create((set, get) => ({
       }))
     } catch (error) {
       set({ isLoadingPins: false })
-      console.error('Failed to fetch pinned messages:', error)
+      logger.error('Failed to fetch pinned messages:', error)
     }
   },
 
@@ -787,7 +788,7 @@ export const useChatStore = create((set, get) => ({
       set({ allThreads: Array.isArray(threads) ? threads : [], allThreadsLoading: false })
     } catch (error) {
       set({ allThreadsLoading: false })
-      console.error('Failed to fetch threads:', error)
+      logger.error('Failed to fetch threads:', error)
     }
   },
 

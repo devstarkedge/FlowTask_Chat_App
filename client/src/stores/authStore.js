@@ -3,6 +3,7 @@ import { authAPI } from '../services/api'
 import { useChannelStore } from './channelStore'
 import { connectSocket, disconnectSocket } from '../services/socket'
 import { useWorkspaceStore } from './workspaceStore'
+import logger from '../utils/logger'
 
 const FLOWTASK_ENABLED = import.meta.env.VITE_FLOWTASK_ENABLED !== 'false'
 
@@ -158,7 +159,7 @@ export const useAuthStore = create((set, get) => ({
       const { data } = await authAPI.updatePreferences(prefs)
       set({ user: data.data.user })
     } catch (error) {
-      console.error('Failed to update preferences:', error)
+      logger.error('Failed to update preferences:', error)
     }
   },
 

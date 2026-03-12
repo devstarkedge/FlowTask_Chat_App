@@ -5,6 +5,7 @@ import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
 import { channelAPI } from '../../services/api'
 import toast from 'react-hot-toast'
+import logger from '../../utils/logger'
 
 const TYPE_ICONS = {
   project: Hash,
@@ -38,7 +39,7 @@ export default function ChatHeader({ channel, onToggleSearch, onOpenMobileSideba
 
   const handleHuddleClick = () => {
     // TODO: implement huddle feature
-    console.log('Huddle clicked for channel:', channel?._id)
+    logger.log('Huddle clicked for channel:', channel?._id)
   }
 
   if (!channel) return null

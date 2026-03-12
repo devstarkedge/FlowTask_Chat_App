@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import api from '../services/api'
+import logger from '../utils/logger'
 
 export const useNotificationStore = create((set, get) => ({
   notifications: [],
@@ -32,7 +33,7 @@ export const useNotificationStore = create((set, get) => ({
       }))
     } catch (error) {
       set({ isLoading: false })
-      console.error('Failed to fetch notifications:', error)
+      logger.error('Failed to fetch notifications:', error)
     }
   },
 
@@ -42,7 +43,7 @@ export const useNotificationStore = create((set, get) => ({
       const { data } = await api.get('/notifications/unread-count')
       set({ unreadCount: data.data?.count || 0 })
     } catch (error) {
-      console.error('Failed to fetch unread count:', error)
+      logger.error('Failed to fetch unread count:', error)
     }
   },
 
@@ -57,7 +58,7 @@ export const useNotificationStore = create((set, get) => ({
         unreadCount: Math.max(0, state.unreadCount - 1),
       }))
     } catch (error) {
-      console.error('Failed to mark notification as read:', error)
+      logger.error('Failed to mark notification as read:', error)
     }
   },
 
@@ -74,7 +75,7 @@ export const useNotificationStore = create((set, get) => ({
         unreadCount: 0,
       }))
     } catch (error) {
-      console.error('Failed to mark all notifications as read:', error)
+      logger.error('Failed to mark all notifications as read:', error)
     }
   },
 

@@ -6,6 +6,7 @@ import { useChannelStore } from './channelStore'
 import { useChatStore } from './chatStore'
 import { useNotificationStore } from './notificationStore'
 import { reconnectWithWorkspace } from '../services/socket'
+import logger from '../utils/logger'
 
 /**
  * Workspace Store — manages workspace state for multi-tenant isolation.
@@ -54,7 +55,7 @@ export const useWorkspaceStore = create(
         } catch (error) {
           const msg = error.response?.data?.error?.message || 'Failed to fetch workspaces'
           set({ isLoading: false, error: msg })
-          console.error('Failed to fetch workspaces:', error)
+          logger.error('Failed to fetch workspaces:', error)
           return []
         }
       },
@@ -103,7 +104,7 @@ export const useWorkspaceStore = create(
         } catch (error) {
           set({ isSwitching: false })
           toast.error('Failed to switch workspace')
-          console.error('Workspace switch failed:', error)
+          logger.error('Workspace switch failed:', error)
         }
       },
 
@@ -179,7 +180,7 @@ export const useWorkspaceStore = create(
           set({ members })
           return members
         } catch (error) {
-          console.error('Failed to fetch workspace members:', error)
+          logger.error('Failed to fetch workspace members:', error)
           return []
         }
       },
@@ -296,7 +297,7 @@ export const useWorkspaceStore = create(
           const { data } = await api.get(`/workspaces/${id}/billing`)
           return data.data
         } catch (error) {
-          console.error('Failed to fetch billing:', error)
+          logger.error('Failed to fetch billing:', error)
           return null
         }
       },

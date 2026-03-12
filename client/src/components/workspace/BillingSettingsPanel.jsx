@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { CreditCard, Check, ArrowRight, Loader2, AlertCircle } from 'lucide-react'
+import logger from '../../utils/logger'
 
 const PLAN_DETAILS = {
   free: { name: 'Free', price: '$0', period: 'forever', color: '#71717a' },
@@ -41,7 +42,7 @@ export default function BillingSettingsPanel() {
     } catch (err) {
       const msg = err?.response?.data?.error?.message || 'Failed to change plan'
       setError(msg)
-      console.error('Plan change error:', err)
+      logger.error('Plan change error:', err)
     } finally {
       setUpgrading(null)
     }

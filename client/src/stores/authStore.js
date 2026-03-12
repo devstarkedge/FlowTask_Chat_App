@@ -50,7 +50,7 @@ export const useAuthStore = create((set, get) => ({
       const { user, accessToken, refreshToken } = data.data
       localStorage.setItem('chat_access_token', accessToken)
       localStorage.setItem('chat_refresh_token', refreshToken)
-      set({ accessToken, refreshToken, user, isLoading: false })
+      set({ accessToken, refreshToken, user, isLoading: false, isInitialized: true })
       // Fetch workspaces for workspace selector; socket connects when workspace is selected
       await useWorkspaceStore.getState().fetchWorkspaces()
       return data

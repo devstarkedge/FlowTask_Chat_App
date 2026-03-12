@@ -1,607 +1,897 @@
-import { useState, useEffect, useRef, memo } from 'react'
-import { useChatStore } from '../../stores/chatStore'
-import { useAuthStore } from '../../stores/authStore'
-import { format } from 'date-fns'
+import { useState, useEffect, useRef, memo } from "react";
+import { useChatStore } from "../../stores/chatStore";
+import { useAuthStore } from "../../stores/authStore";
+import { format } from "date-fns";
 import {
-  Smile, MessageSquare, MoreHorizontal, Edit, Trash2, Pin,
-  FileText, Download, Image as ImageIcon, File, FileArchive, FileCode,
-  Film, Music, Check, CheckCheck, Copy, Bookmark, Forward, Link2,
-} from 'lucide-react'
-import { Avatar } from './MemberAvatarGroup'
-import EmojiPicker from './EmojiPicker'
-import { sanitizeHtml } from '../../utils/sanitize'
-import toast from 'react-hot-toast'
+  Smile,
+  MessageSquare,
+  MoreHorizontal,
+  Edit,
+  Trash2,
+  Pin,
+  FileText,
+  Download,
+  Image as ImageIcon,
+  File,
+  FileArchive,
+  FileCode,
+  Film,
+  Music,
+  Check,
+  CheckCheck,
+  Copy,
+  Bookmark,
+  Forward,
+  Link2,
+} from "lucide-react";
+import { Avatar } from "./MemberAvatarGroup";
+import EmojiPicker from "./EmojiPicker";
+import { sanitizeHtml } from "../../utils/sanitize";
+import toast from "react-hot-toast";
 
 function isImage(mimeType) {
-  return mimeType?.startsWith('image/')
+  return mimeType?.startsWith("image/");
 }
 function isVideo(mimeType) {
-  return mimeType?.startsWith('video/')
+  return mimeType?.startsWith("video/");
 }
 function isAudio(mimeType) {
-  return mimeType?.startsWith('audio/')
+  return mimeType?.startsWith("audio/");
 }
 
 function formatFileSize(bytes) {
-  if (!bytes) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let i = 0
-  let size = bytes
-  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
-  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  let size = bytes;
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024;
+    i++;
+  }
+  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
 function fileIcon(mimeType) {
-  if (mimeType?.startsWith('image/')) return ImageIcon
-  if (mimeType?.startsWith('video/')) return Film
-  if (mimeType?.startsWith('audio/')) return Music
-  if (mimeType?.includes('pdf') || mimeType?.includes('document') || mimeType?.includes('word'))
-    return FileText
-  if (mimeType?.includes('zip') || mimeType?.includes('rar') || mimeType?.includes('tar') || mimeType?.includes('gzip'))
-    return FileArchive
-  if (mimeType?.includes('json') || mimeType?.includes('javascript') || mimeType?.includes('xml'))
-    return FileCode
-  return File
+  if (mimeType?.startsWith("image/")) return ImageIcon;
+  if (mimeType?.startsWith("video/")) return Film;
+  if (mimeType?.startsWith("audio/")) return Music;
+  if (
+    mimeType?.includes("pdf") ||
+    mimeType?.includes("document") ||
+    mimeType?.includes("word")
+  )
+    return FileText;
+  if (
+    mimeType?.includes("zip") ||
+    mimeType?.includes("rar") ||
+    mimeType?.includes("tar") ||
+    mimeType?.includes("gzip")
+  )
+    return FileArchive;
+  if (
+    mimeType?.includes("json") ||
+    mimeType?.includes("javascript") ||
+    mimeType?.includes("xml")
+  )
+    return FileCode;
+  return File;
 }
 
-const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000 // 10 minutes
+const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
-const MessageItem = memo(function MessageItem({ message, compact, isLastInGroup, onOpenThread, onOpenProfile, onOpenFilePreview, isDMChannel, onSaveMessage }) {
-  const { user } = useAuthStore()
-  const { addReaction, removeReaction, editMessage, deleteMessage, retryMessage, pinMessage, unpinMessage } = useChatStore()
-  const [showActions, setShowActions] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editContent, setEditContent] = useState(message.content)
-  const [showReactionPicker, setShowReactionPicker] = useState(false)
-  const [showMoreMenu, setShowMoreMenu] = useState(false)
-  const messageRef = useRef(null)
+const MessageItem = memo(
+  function MessageItem({
+    message,
+    compact,
+    isLastInGroup,
+    onOpenThread,
+    onOpenProfile,
+    onOpenFilePreview,
+    isDMChannel,
+    onSaveMessage,
+  }) {
+    const { user } = useAuthStore();
+    const {
+      addReaction,
+      removeReaction,
+      editMessage,
+      deleteMessage,
+      retryMessage,
+      pinMessage,
+      unpinMessage,
+    } = useChatStore();
+    const [showActions, setShowActions] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editContent, setEditContent] = useState(message.content);
+    const [showReactionPicker, setShowReactionPicker] = useState(false);
+    const [showMoreMenu, setShowMoreMenu] = useState(false);
+    const messageRef = useRef(null);
 
-  // Close action bar + reaction picker + more menu when clicking outside the message
-  useEffect(() => {
-    if (!showReactionPicker && !showMoreMenu) return
-    const handleClickOutside = (e) => {
-      if (messageRef.current && !messageRef.current.contains(e.target)) {
-        setShowReactionPicker(false)
-        setShowMoreMenu(false)
-        setShowActions(false)
+    // Close action bar + reaction picker + more menu when clicking outside the message
+    useEffect(() => {
+      if (!showReactionPicker && !showMoreMenu) return;
+      const handleClickOutside = (e) => {
+        if (messageRef.current && !messageRef.current.contains(e.target)) {
+          setShowReactionPicker(false);
+          setShowMoreMenu(false);
+          setShowActions(false);
+        }
+      };
+      document.addEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
+    }, [showReactionPicker, showMoreMenu]);
+
+    const isOwn =
+      message.authorId?._id === user?._id || message.authorId === user?._id;
+    const isSystem = message.contentType === "system" && !message.activityMeta;
+    const isPending = message.pending === true;
+    const isFailed = message.failed === true;
+    const isDeleted = message.isDeleted === true;
+    const canEdit =
+      isOwn &&
+      !isDeleted &&
+      Date.now() - new Date(message.createdAt).getTime() <
+        MESSAGE_EDIT_WINDOW_MS;
+    // Prefer senderSnapshot for display (denormalized), fall back to populated authorId
+    const authorName =
+      message.senderSnapshot?.name || message.authorId?.name || "FlowTask Bot";
+    const authorAvatar =
+      message.senderSnapshot?.avatar ||
+      (typeof message.authorId === "object" ? message.authorId?.avatar : null);
+    const authorData =
+      typeof message.authorId === "object"
+        ? message.authorId
+        : { _id: message.authorId, name: authorName, avatar: authorAvatar };
+    const time = format(new Date(message.createdAt), "h:mm a");
+
+    const handleEdit = () => {
+      if (editContent.trim() && editContent !== message.content) {
+        editMessage(message._id, editContent);
       }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showReactionPicker, showMoreMenu])
+      setIsEditing(false);
+    };
 
-  const isOwn = message.authorId?._id === user?._id || message.authorId === user?._id
-  const isSystem = message.contentType === 'system' && !message.activityMeta
-  const isPending = message.pending === true
-  const isFailed = message.failed === true
-  const isDeleted = message.isDeleted === true
-  const canEdit = isOwn && !isDeleted && (Date.now() - new Date(message.createdAt).getTime()) < MESSAGE_EDIT_WINDOW_MS
-  // Prefer senderSnapshot for display (denormalized), fall back to populated authorId
-  const authorName = message.senderSnapshot?.name || message.authorId?.name || 'FlowTask Bot'
-  const authorAvatar = message.senderSnapshot?.avatar || (typeof message.authorId === 'object' ? message.authorId?.avatar : null)
-  const authorData = typeof message.authorId === 'object' ? message.authorId : { _id: message.authorId, name: authorName, avatar: authorAvatar }
-  const time = format(new Date(message.createdAt), 'h:mm a')
+    const handleReaction = (emoji) => {
+      const existing = message.reactions?.find(
+        (r) =>
+          r.emoji === emoji &&
+          (r.users?.includes(user?._id) ||
+            r.userIds?.some((id) => id?.toString() === user?._id)),
+      );
+      if (existing) {
+        removeReaction(message._id, emoji);
+      } else {
+        addReaction(message._id, emoji);
+      }
+      setShowReactionPicker(false);
+    };
 
-  const handleEdit = () => {
-    if (editContent.trim() && editContent !== message.content) {
-      editMessage(message._id, editContent)
-    }
-    setIsEditing(false)
-  }
+    const derivedAttachments =
+      message.fileReferences?.length > 0
+        ? message.fileReferences
+            .map((ref) =>
+              ref.fileId
+                ? { ...ref.fileId, url: ref.fileId.secureUrl || ref.fileId.url }
+                : null,
+            )
+            .filter(Boolean)
+        : message.attachments || [];
 
-  const handleReaction = (emoji) => {
-    const existing = message.reactions?.find(
-      (r) => r.emoji === emoji && (r.users?.includes(user?._id) || r.userIds?.some(id => id?.toString() === user?._id)),
-    )
-    if (existing) {
-      removeReaction(message._id, emoji)
-    } else {
-      addReaction(message._id, emoji)
-    }
-    setShowReactionPicker(false)
-  }
-
-  const derivedAttachments = message.fileReferences?.length > 0
-    ? message.fileReferences.map(ref => ref.fileId ? { ...ref.fileId, url: ref.fileId.secureUrl || ref.fileId.url } : null).filter(Boolean)
-    : message.attachments || []
-
-  // System messages (plain separator style)
-  if (isSystem) {
-    return (
-      <div className="flex items-center gap-3 py-2 px-5 my-1 animate-fade-in">
-        <div className="flex-1 h-px" style={{ background: 'var(--border-secondary)' }} />
-        <p className="text-xs italic px-2" style={{ color: 'var(--text-muted)' }}>
-          {message.content}
-        </p>
-        <div className="flex-1 h-px" style={{ background: 'var(--border-secondary)' }} />
-      </div>
-    )
-  }
-
-  // Deleted message tombstone
-  if (isDeleted) {
-    return (
-      <div className="relative group" style={{ opacity: 0.6 }}>
-        <div className={`flex gap-2.5 px-5 ${compact ? 'py-0.5' : 'pt-2 pb-0.5'}`}>
-          {!compact ? (
-            <Avatar
-              member={{ name: authorName, avatar: authorAvatar, onlineStatus: 'offline' }}
-              size={36}
-              showStatus={false}
-            />
-          ) : (
-            <div className="w-9 shrink-0" />
-          )}
-          <div className="flex-1 min-w-0">
-            {!compact && (
-              <div className="flex items-baseline gap-2 mb-0.5">
-                <span className="font-bold text-sm" style={{ color: 'var(--text-white)' }}>
-                  {authorName}
-                </span>
-                <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                  {time}
-                </span>
-              </div>
-            )}
-            <p className="text-[15px] italic" style={{ color: 'var(--text-muted)' }}>
-              This message was deleted
-            </p>
-          </div>
+    // System messages (plain separator style)
+    if (isSystem) {
+      return (
+        <div className="flex items-center gap-3 py-2 px-5 my-1 animate-fade-in">
+          <div
+            className="flex-1 h-px"
+            style={{ background: "var(--border-secondary)" }}
+          />
+          <p
+            className="text-xs italic px-2"
+            style={{ color: "var(--text-muted)" }}
+          >
+            {message.content}
+          </p>
+          <div
+            className="flex-1 h-px"
+            style={{ background: "var(--border-secondary)" }}
+          />
         </div>
-      </div>
-    )
-  }
-
-  // Delivery status indicator for DM messages
-  const renderDeliveryStatus = () => {
-    if (!isDMChannel || !isOwn || isPending || isFailed) return null
-    const status = message.status || 'sent'
-    if (status === 'seen') {
-      return (
-        <span title="Seen" className="inline-flex items-center ml-1">
-          <CheckCheck size={13} style={{ color: 'var(--accent-primary)' }} />
-        </span>
-      )
+      );
     }
-    if (status === 'delivered') {
+
+    // Deleted message tombstone
+    if (isDeleted) {
       return (
-        <span title="Delivered" className="inline-flex items-center ml-1">
-          <CheckCheck size={13} style={{ color: 'var(--text-muted)' }} />
-        </span>
-      )
-    }
-    // sent
-    return (
-      <span title="Sent" className="inline-flex items-center ml-1">
-        <Check size={13} style={{ color: 'var(--text-muted)' }} />
-      </span>
-    )
-  }
-
-  // Position within group: solo | first | middle | last
-  const groupPos = !compact && isLastInGroup ? 'solo'
-    : !compact ? 'first'
-    : isLastInGroup ? 'last'
-    : 'middle'
-
-  return (
-    <div
-      ref={messageRef}
-      className="relative group"
-      style={{
-        background: showActions ? 'var(--bg-hover)' : 'transparent',
-        transition: 'background 150ms ease',
-        opacity: isPending ? 0.6 : isFailed ? 0.5 : 1,
-        // Group spacing: large gap before first-in-group, tiny gap within
-        marginTop: compact ? 2 : 12,
-      }}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => {
-        if (!showReactionPicker && !showMoreMenu) setShowActions(false)
-      }}
-    >
-      <div className={`flex items-end gap-2 px-4 pb-0 ${isOwn ? 'flex-row-reverse' : ''}`}>
-
-        {/* Avatar — only on first/solo message of a group */}
-        <div className="shrink-0 self-end" style={{ width: 34, marginBottom: 2 }}>
-          {!compact ? (
-            <div
-              className="cursor-pointer"
-              onClick={() => onOpenProfile?.(authorData)}
-            >
+        <div className="relative group" style={{ opacity: 0.6 }}>
+          <div
+            className={`flex gap-2.5 px-5 ${compact ? "py-0.5" : "pt-2 pb-0.5"}`}
+          >
+            {!compact ? (
               <Avatar
-                member={{ name: authorName, avatar: authorAvatar, onlineStatus: 'offline' }}
-                size={34}
+                member={{
+                  name: authorName,
+                  avatar: authorAvatar,
+                  onlineStatus: "offline",
+                }}
+                size={36}
                 showStatus={false}
               />
-            </div>
-          ) : (
-            // Invisible gutter keeps alignment; show timestamp on hover
-            <span
-              className="flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ color: 'var(--text-muted)', height: 34, fontSize: 10 }}
-            >
-              {format(new Date(message.createdAt), 'h:mm')}
-            </span>
-          )}
-        </div>
-
-        {/* Column: name header + bubble */}
-        <div
-          className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}
-          style={{ maxWidth: 'min(65%, 480px)' }}
-        >
-          {/* Name + time row — only on first/solo message */}
-          {!compact && (
-            <div className={`flex items-baseline gap-1.5 mb-1 px-1 ${isOwn ? 'flex-row-reverse' : ''}`}>
-              <span
-                className="font-semibold text-[13px] cursor-pointer hover:underline"
-                style={{ color: 'var(--text-white)' }}
-                onClick={() => onOpenProfile?.(authorData)}
+            ) : (
+              <div className="w-9 shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              {!compact && (
+                <div className="flex items-baseline gap-2 mb-0.5">
+                  <span
+                    className="font-bold text-sm"
+                    style={{ color: "var(--text-white)" }}
+                  >
+                    {authorName}
+                  </span>
+                  <span
+                    className="text-[11px]"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    {time}
+                  </span>
+                </div>
+              )}
+              <p
+                className="text-[15px] italic"
+                style={{ color: "var(--text-muted)" }}
               >
-                {authorName}
-              </span>
-              {message.contentType === 'bot' && (
-                <span
-                  style={{
-                    fontSize: 10, fontWeight: 700, padding: '1px 5px',
-                    borderRadius: 'var(--radius-sm)', background: 'var(--accent-primary)',
-                    color: 'white', textTransform: 'uppercase', letterSpacing: '0.5px',
-                  }}
-                >
-                  BOT
-                </span>
-              )}
-              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{time}</span>
-              {message.isEdited && (
-                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>(edited)</span>
-              )}
-              {message.isPinned && <Pin size={11} style={{ color: 'var(--accent-yellow)' }} />}
-              {renderDeliveryStatus()}
-            </div>
-          )}
-
-          {/* Bubble */}
-          <div className={`message-bubble ${isOwn ? 'sent' : 'received'} ${groupPos}`}>
-
-          {isEditing ? (
-            <div className="mt-1">
-              <input
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleEdit()
-                  if (e.key === 'Escape') setIsEditing(false)
-                }}
-                className="input-field"
-                style={{ fontSize: 14, padding: '6px 10px' }}
-                autoFocus
-              />
-              <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
-                Enter to save · Escape to cancel
+                This message was deleted
               </p>
             </div>
-          ) : message.htmlContent && message.htmlContent !== message.content ? (
-            <div
-              className="message-content text-[15px] leading-relaxed"
-              style={{ color: 'inherit' }}
-              dangerouslySetInnerHTML={{ __html: sanitizeHtml(message.htmlContent) }}
-            />
-          ) : (
-            <div
-              className="message-content text-[15px] leading-relaxed"
-              style={{ color: 'inherit' }}
-            >
-              {message.content}
-            </div>
-          )}
+          </div>
+        </div>
+      );
+    }
 
-          {/* Failed message indicator */}
-          {isFailed && (
-            <div className="flex items-center gap-2 mt-1">
-              <span style={{ fontSize: 12, color: 'var(--accent-red)' }}>Failed to send</span>
-              <button
-                onClick={() => retryMessage(message._id, message.channelId)}
-                className="text-xs cursor-pointer px-2 py-0.5 rounded"
-                style={{
-                  color: 'var(--text-link)',
-                  background: 'transparent',
-                  border: '1px solid var(--border-secondary)',
-                }}
+    // Delivery status indicator for DM messages
+    const renderDeliveryStatus = () => {
+      if (!isDMChannel || !isOwn || isPending || isFailed) return null;
+      const status = message.status || "sent";
+      if (status === "seen") {
+        return (
+          <span title="Seen" className="inline-flex items-center ml-1">
+            <CheckCheck size={13} style={{ color: "var(--accent-primary)" }} />
+          </span>
+        );
+      }
+      if (status === "delivered") {
+        return (
+          <span title="Delivered" className="inline-flex items-center ml-1">
+            <CheckCheck size={13} style={{ color: "var(--text-muted)" }} />
+          </span>
+        );
+      }
+      // sent
+      return (
+        <span title="Sent" className="inline-flex items-center ml-1">
+          <Check size={13} style={{ color: "var(--text-muted)" }} />
+        </span>
+      );
+    };
+
+    // Position within group: solo | first | middle | last
+    const groupPos =
+      !compact && isLastInGroup
+        ? "solo"
+        : !compact
+          ? "first"
+          : isLastInGroup
+            ? "last"
+            : "middle";
+
+    return (
+      <div
+        ref={messageRef}
+        className="relative group"
+        style={{
+          background: showActions ? "var(--bg-hover)" : "transparent",
+          transition: "background 150ms ease",
+          opacity: isPending ? 0.6 : isFailed ? 0.5 : 1,
+          // Group spacing: large gap before first-in-group, tiny gap within
+          marginTop: compact ? 2 : 12,
+        }}
+        onMouseEnter={() => setShowActions(true)}
+        onMouseLeave={() => {
+          if (!showReactionPicker && !showMoreMenu) setShowActions(false);
+        }}
+      >
+        <div
+          className={`flex items-end gap-2 px-4 pb-0 ${isOwn ? "flex-row-reverse" : ""}`}
+        >
+          {/* Avatar — only on first/solo message of a group */}
+          <div
+            className="shrink-0 self-end"
+            style={{ width: 34, marginBottom: 2 }}
+          >
+            {!compact ? (
+              <div
+                className="cursor-pointer"
+                onClick={() => onOpenProfile?.(authorData)}
               >
-                Retry
-              </button>
-            </div>
-          )}
+                <Avatar
+                  member={{
+                    name: authorName,
+                    avatar: authorAvatar,
+                    onlineStatus: "offline",
+                  }}
+                  size={34}
+                  showStatus={false}
+                />
+              </div>
+            ) : (
+              // Invisible gutter keeps alignment; show timestamp on hover
+              <span
+                className="flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ color: "var(--text-muted)", height: 34, fontSize: 10 }}
+              >
+                {format(new Date(message.createdAt), "h:mm")}
+              </span>
+            )}
+          </div>
 
-          {/* Pending indicator */}
-          {isPending && !isFailed && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'inline-block' }}>Sending...</span>
-          )}
+          {/* Column: name header + bubble */}
+          <div
+            className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}
+            style={{ maxWidth: "min(65%, 480px)" }}
+          >
+            {/* Name + time row — only on first/solo message */}
+            {!compact && (
+              <div
+                className={`flex items-baseline gap-1.5 mb-1 px-1 ${isOwn ? "flex-row-reverse" : ""}`}
+              >
+                <span
+                  className="font-semibold text-[13px] cursor-pointer hover:underline"
+                  style={{ color: "var(--text-white)" }}
+                  onClick={() => onOpenProfile?.(authorData)}
+                >
+                  {authorName}
+                </span>
+                {message.contentType === "bot" && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: "1px 5px",
+                      borderRadius: "var(--radius-sm)",
+                      background: "var(--accent-primary)",
+                      color: "white",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    BOT
+                  </span>
+                )}
+                <span
+                  className="text-[11px]"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  {time}
+                </span>
+                {message.isEdited && (
+                  <span
+                    className="text-[10px]"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    (edited)
+                  </span>
+                )}
+                {message.isPinned && (
+                  <Pin size={11} style={{ color: "var(--accent-yellow)" }} />
+                )}
+                {renderDeliveryStatus()}
+              </div>
+            )}
 
-          {/* Attachments */}
-          {derivedAttachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-2">
-              {derivedAttachments.map((att, idx) =>
-                isImage(att.mimeType) ? (
-                  <div
-                    key={att._id || idx}
-                    className="rounded-lg overflow-hidden cursor-pointer transition-opacity hover:opacity-90"
-                    style={{ border: '1px solid var(--border-primary)', maxWidth: 320 }}
-                    onClick={() => onOpenFilePreview?.(att, derivedAttachments)}
+            {/* Bubble */}
+            <div
+              className={`message-bubble ${isOwn ? "sent" : "received"} ${groupPos}`}
+            >
+              {isEditing ? (
+                <div className="mt-1">
+                  <input
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleEdit();
+                      if (e.key === "Escape") setIsEditing(false);
+                    }}
+                    className="input-field"
+                    style={{ fontSize: 14, padding: "6px 10px" }}
+                    autoFocus
+                  />
+                  <p
+                    className="text-[11px] mt-1"
+                    style={{ color: "var(--text-muted)" }}
                   >
-                    <img
-                      src={att.thumbnailUrl || att.url}
-                      alt={att.originalName}
-                      className="max-h-60 object-cover"
-                      loading="lazy"
-                    />
-                    <div
-                      className="flex items-center gap-2 px-2 py-1 text-xs"
-                      style={{ background: 'var(--bg-secondary)', color: 'var(--text-muted)' }}
-                    >
-                      <span className="truncate flex-1">{att.originalName}</span>
-                      <span>{formatFileSize(att.fileSize)}</span>
-                    </div>
-                  </div>
-                ) : isVideo(att.mimeType) ? (
-                  <div
-                    key={att._id || idx}
-                    className="file-card"
-                    onClick={() => onOpenFilePreview?.(att, derivedAttachments)}
-                  >
-                    <Film size={24} style={{ color: 'var(--accent-purple)', flexShrink: 0 }} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{att.originalName}</p>
-                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{formatFileSize(att.fileSize)}</p>
-                    </div>
-                    <Download size={14} style={{ color: 'var(--text-muted)' }} />
-                  </div>
-                ) : isAudio(att.mimeType) ? (
-                  <div
-                    key={att._id || idx}
-                    className="file-card"
-                    onClick={() => onOpenFilePreview?.(att, derivedAttachments)}
-                  >
-                    <Music size={24} style={{ color: 'var(--accent-green)', flexShrink: 0 }} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{att.originalName}</p>
-                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{formatFileSize(att.fileSize)}</p>
-                    </div>
-                    <Download size={14} style={{ color: 'var(--text-muted)' }} />
-                  </div>
-                ) : (
-                  <div
-                    key={att._id || idx}
-                    className="file-card"
-                    onClick={() => onOpenFilePreview?.(att, derivedAttachments)}
-                  >
-                    {(() => { const FIcon = fileIcon(att.mimeType); return <FIcon size={24} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} /> })()}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{att.originalName}</p>
-                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{formatFileSize(att.fileSize)}</p>
-                    </div>
-                    <Download size={14} style={{ color: 'var(--text-muted)' }} />
-                  </div>
-                ),
+                    Enter to save · Escape to cancel
+                  </p>
+                </div>
+              ) : message.htmlContent &&
+                message.htmlContent !== message.content ? (
+                <div
+                  className="message-content text-[16px] leading-relaxed"
+                  style={{ color: "inherit" }}
+                  dangerouslySetInnerHTML={{
+                    __html: sanitizeHtml(message.htmlContent),
+                  }}
+                />
+              ) : (
+                <div
+                  className="message-content text-[16px] leading-relaxed"
+                  style={{ color: "inherit" }}
+                >
+                  {message.content}
+                </div>
               )}
-            </div>
-          )}
 
-          {/* Reactions */}
-          {message.reactions?.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              {message.reactions.map((reaction) => {
-                const hasReacted = reaction.users?.includes(user?._id) || reaction.userIds?.some(id => id?.toString() === user?._id)
-                const count = reaction.users?.length || reaction.count || 0
-                const tooltipParts = []
-                if (hasReacted) tooltipParts.push('You')
-                if (count > 1 && hasReacted) tooltipParts.push(`and ${count - 1} other${count - 1 > 1 ? 's' : ''}`)
-                else if (count > 0 && !hasReacted) tooltipParts.push(`${count} ${count === 1 ? 'person' : 'people'}`)
-                const tooltip = `${reaction.emoji} ${tooltipParts.join(' ')} reacted`
-                return (
-                <button
-                  key={reaction.emoji}
-                  onClick={() => handleReaction(reaction.emoji)}
-                  title={tooltip}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer transition-all"
+              {/* Failed message indicator */}
+              {isFailed && (
+                <div className="flex items-center gap-2 mt-1">
+                  <span style={{ fontSize: 12, color: "var(--accent-red)" }}>
+                    Failed to send
+                  </span>
+                  <button
+                    onClick={() => retryMessage(message._id, message.channelId)}
+                    className="text-xs cursor-pointer px-2 py-0.5 rounded"
+                    style={{
+                      color: "var(--text-link)",
+                      background: "transparent",
+                      border: "1px solid var(--border-secondary)",
+                    }}
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {/* Pending indicator */}
+              {isPending && !isFailed && (
+                <span
                   style={{
-                    background: hasReacted
-                      ? 'rgba(18, 100, 163, 0.3)'
-                      : 'var(--bg-hover)',
-                    border: `1px solid ${hasReacted ? 'var(--accent-primary)' : 'var(--border-secondary)'}`,
-                    color: 'var(--text-primary)',
+                    fontSize: 11,
+                    color: "var(--text-muted)",
+                    marginTop: 2,
+                    display: "inline-block",
                   }}
                 >
-                  {reaction.emoji} {count}
+                  Sending...
+                </span>
+              )}
+
+              {/* Attachments */}
+              {derivedAttachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {derivedAttachments.map((att, idx) =>
+                    isImage(att.mimeType) ? (
+                      <div
+                        key={att._id || idx}
+                        className="rounded-lg overflow-hidden cursor-pointer transition-opacity hover:opacity-90"
+                        style={{
+                          border: "1px solid var(--border-primary)",
+                          maxWidth: 320,
+                        }}
+                        onClick={() =>
+                          onOpenFilePreview?.(att, derivedAttachments)
+                        }
+                      >
+                        <img
+                          src={att.thumbnailUrl || att.url}
+                          alt={att.originalName}
+                          className="max-h-60 object-cover"
+                          loading="lazy"
+                        />
+                        <div
+                          className="flex items-center gap-2 px-2 py-1 text-xs"
+                          style={{
+                            background: "var(--bg-secondary)",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          <span className="truncate flex-1">
+                            {att.originalName}
+                          </span>
+                          <span>{formatFileSize(att.fileSize)}</span>
+                        </div>
+                      </div>
+                    ) : isVideo(att.mimeType) ? (
+                      <div
+                        key={att._id || idx}
+                        className="file-card"
+                        onClick={() =>
+                          onOpenFilePreview?.(att, derivedAttachments)
+                        }
+                      >
+                        <Film
+                          size={24}
+                          style={{
+                            color: "var(--accent-purple)",
+                            flexShrink: 0,
+                          }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="text-sm font-medium truncate"
+                            style={{ color: "var(--text-primary)" }}
+                          >
+                            {att.originalName}
+                          </p>
+                          <p
+                            className="text-[11px]"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            {formatFileSize(att.fileSize)}
+                          </p>
+                        </div>
+                        <Download
+                          size={14}
+                          style={{ color: "var(--text-muted)" }}
+                        />
+                      </div>
+                    ) : isAudio(att.mimeType) ? (
+                      <div
+                        key={att._id || idx}
+                        className="file-card"
+                        onClick={() =>
+                          onOpenFilePreview?.(att, derivedAttachments)
+                        }
+                      >
+                        <Music
+                          size={24}
+                          style={{
+                            color: "var(--accent-green)",
+                            flexShrink: 0,
+                          }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="text-sm font-medium truncate"
+                            style={{ color: "var(--text-primary)" }}
+                          >
+                            {att.originalName}
+                          </p>
+                          <p
+                            className="text-[11px]"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            {formatFileSize(att.fileSize)}
+                          </p>
+                        </div>
+                        <Download
+                          size={14}
+                          style={{ color: "var(--text-muted)" }}
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        key={att._id || idx}
+                        className="file-card"
+                        onClick={() =>
+                          onOpenFilePreview?.(att, derivedAttachments)
+                        }
+                      >
+                        {(() => {
+                          const FIcon = fileIcon(att.mimeType);
+                          return (
+                            <FIcon
+                              size={24}
+                              style={{
+                                color: "var(--accent-primary)",
+                                flexShrink: 0,
+                              }}
+                            />
+                          );
+                        })()}
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="text-sm font-medium truncate"
+                            style={{ color: "var(--text-primary)" }}
+                          >
+                            {att.originalName}
+                          </p>
+                          <p
+                            className="text-[11px]"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            {formatFileSize(att.fileSize)}
+                          </p>
+                        </div>
+                        <Download
+                          size={14}
+                          style={{ color: "var(--text-muted)" }}
+                        />
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
+
+              {/* Reactions */}
+              {message.reactions?.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {message.reactions.map((reaction) => {
+                    const hasReacted =
+                      reaction.users?.includes(user?._id) ||
+                      reaction.userIds?.some(
+                        (id) => id?.toString() === user?._id,
+                      );
+                    const count = reaction.users?.length || reaction.count || 0;
+                    const tooltipParts = [];
+                    if (hasReacted) tooltipParts.push("You");
+                    if (count > 1 && hasReacted)
+                      tooltipParts.push(
+                        `and ${count - 1} other${count - 1 > 1 ? "s" : ""}`,
+                      );
+                    else if (count > 0 && !hasReacted)
+                      tooltipParts.push(
+                        `${count} ${count === 1 ? "person" : "people"}`,
+                      );
+                    const tooltip = `${reaction.emoji} ${tooltipParts.join(" ")} reacted`;
+                    return (
+                      <button
+                        key={reaction.emoji}
+                        onClick={() => handleReaction(reaction.emoji)}
+                        title={tooltip}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer transition-all"
+                        style={{
+                          background: hasReacted
+                            ? "rgba(18, 100, 163, 0.3)"
+                            : "var(--bg-hover)",
+                          border: `1px solid ${hasReacted ? "var(--accent-primary)" : "var(--border-secondary)"}`,
+                          color: "var(--text-primary)",
+                        }}
+                      >
+                        {reaction.emoji} {count}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Thread link */}
+              {message.replyCount > 0 && (
+                <button
+                  onClick={() =>
+                    onOpenThread?.({
+                      rootMessageId: message._id,
+                      channelId: message.channelId,
+                    })
+                  }
+                  className="flex items-center gap-1.5 mt-1.5 text-xs cursor-pointer py-1 px-2 rounded-md transition-colors"
+                  style={{
+                    color: "var(--text-link)",
+                    background: "transparent",
+                    border: "none",
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background = "var(--bg-hover)")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = "transparent")
+                  }
+                >
+                  <MessageSquare size={13} />
+                  <span className="font-medium">
+                    {message.replyCount}{" "}
+                    {message.replyCount === 1 ? "reply" : "replies"}
+                  </span>
                 </button>
-                )
-              })}
+              )}
+            </div>
+            {/* end bubble */}
+          </div>
+          {/* end column */}
+        </div>
+        {/* end flex row */}
+
+        {/* Action Bar (hover) */}
+        {(showActions || showReactionPicker || showMoreMenu) &&
+          !isEditing &&
+          !isPending &&
+          !isFailed && (
+            <div
+              className="absolute -top-3.5 right-5 flex items-center gap-0.5 px-1 py-0.5 rounded-lg z-10 animate-fade-in-scale"
+              style={{
+                background: "var(--bg-secondary)",
+                border: "1px solid var(--border-primary)",
+                boxShadow: "var(--shadow-md)",
+              }}
+            >
+              <ActionButton
+                icon={Smile}
+                title="Add reaction"
+                onClick={() => setShowReactionPicker(!showReactionPicker)}
+              />
+              <ActionButton
+                icon={MessageSquare}
+                title="Reply in thread"
+                onClick={() =>
+                  onOpenThread?.({
+                    rootMessageId: message._id,
+                    channelId: message.channelId,
+                  })
+                }
+              />
+              <ActionButton
+                icon={Bookmark}
+                title="Save message"
+                onClick={() => {
+                  onSaveMessage?.(message._id);
+                  setShowActions(false);
+                }}
+              />
+              <ActionButton
+                icon={MoreHorizontal}
+                title="More actions"
+                onClick={() => setShowMoreMenu(!showMoreMenu)}
+              />
+              {isOwn && (
+                <>
+                  <div
+                    style={{
+                      width: 1,
+                      height: 16,
+                      background: "var(--border-secondary)",
+                      margin: "0 2px",
+                    }}
+                  />
+                  {canEdit && (
+                    <ActionButton
+                      icon={Edit}
+                      title="Edit"
+                      onClick={() => {
+                        setEditContent(message.content);
+                        setIsEditing(true);
+                      }}
+                    />
+                  )}
+                  <ActionButton
+                    icon={Trash2}
+                    title="Delete"
+                    danger
+                    onClick={() =>
+                      deleteMessage(message._id, message.channelId)
+                    }
+                  />
+                </>
+              )}
             </div>
           )}
 
-          {/* Thread link */}
-          {message.replyCount > 0 && (
-            <button
-              onClick={() => onOpenThread?.({ rootMessageId: message._id, channelId: message.channelId })}
-              className="flex items-center gap-1.5 mt-1.5 text-xs cursor-pointer py-1 px-2 rounded-md transition-colors"
-              style={{ color: 'var(--text-link)', background: 'transparent', border: 'none' }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-            >
-              <MessageSquare size={13} />
-              <span className="font-medium">
-                {message.replyCount} {message.replyCount === 1 ? 'reply' : 'replies'}
-              </span>
-            </button>
-          )}
-          </div>{/* end bubble */}
-        </div>{/* end column */}
-      </div>{/* end flex row */}
-
-      {/* Action Bar (hover) */}
-      {(showActions || showReactionPicker || showMoreMenu) && !isEditing && !isPending && !isFailed && (
-        <div
-          className="absolute -top-3.5 right-5 flex items-center gap-0.5 px-1 py-0.5 rounded-lg z-10 animate-fade-in-scale"
-          style={{
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-primary)',
-            boxShadow: 'var(--shadow-md)',
-          }}
-        >
-          <ActionButton
-            icon={Smile}
-            title="Add reaction"
-            onClick={() => setShowReactionPicker(!showReactionPicker)}
-          />
-          <ActionButton
-            icon={MessageSquare}
-            title="Reply in thread"
-            onClick={() => onOpenThread?.({ rootMessageId: message._id, channelId: message.channelId })}
-          />
-          <ActionButton
-            icon={Bookmark}
-            title="Save message"
-            onClick={() => {
-              onSaveMessage?.(message._id)
-              setShowActions(false)
+        {/* More Actions Dropdown */}
+        {showMoreMenu && (
+          <div
+            className="absolute -top-1 right-5 z-20 mt-7 rounded-lg py-1 animate-fade-in-scale"
+            style={{
+              background: "var(--bg-secondary)",
+              border: "1px solid var(--border-primary)",
+              boxShadow: "var(--shadow-lg)",
+              minWidth: 180,
             }}
-          />
-          <ActionButton
-            icon={MoreHorizontal}
-            title="More actions"
-            onClick={() => setShowMoreMenu(!showMoreMenu)}
-          />
-          {isOwn && (
-            <>
-              <div style={{ width: 1, height: 16, background: 'var(--border-secondary)', margin: '0 2px' }} />
-              {canEdit && (
-                <ActionButton
-                  icon={Edit}
-                  title="Edit"
-                  onClick={() => { setEditContent(message.content); setIsEditing(true) }}
-                />
-              )}
-              <ActionButton
-                icon={Trash2}
-                title="Delete"
-                danger
-                onClick={() => deleteMessage(message._id, message.channelId)}
-              />
-            </>
-          )}
-        </div>
-      )}
-
-      {/* More Actions Dropdown */}
-      {showMoreMenu && (
-        <div
-          className="absolute -top-1 right-5 z-20 mt-7 rounded-lg py-1 animate-fade-in-scale"
-          style={{
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-primary)',
-            boxShadow: 'var(--shadow-lg)',
-            minWidth: 180,
-          }}
-        >
-          <MoreMenuItem
-            icon={Pin}
-            label={message.isPinned ? 'Unpin message' : 'Pin message'}
-            onClick={() => { message.isPinned ? unpinMessage(message._id) : pinMessage(message._id); setShowMoreMenu(false); setShowActions(false) }}
-          />
-          <MoreMenuItem
-            icon={Copy}
-            label="Copy text"
-            onClick={async () => {
-              const textToCopy = message.content || ''
-              try {
-                if (navigator?.clipboard?.writeText) {
-                  await navigator.clipboard.writeText(textToCopy)
-                } else {
-                  const textarea = document.createElement('textarea')
-                  textarea.value = textToCopy
-                  textarea.setAttribute('readonly', '')
-                  textarea.style.cssText = 'position:fixed;opacity:0'
-                  document.body.appendChild(textarea)
-                  textarea.select()
-                  document.execCommand('copy')
-                  document.body.removeChild(textarea)
+          >
+            <MoreMenuItem
+              icon={Pin}
+              label={message.isPinned ? "Unpin message" : "Pin message"}
+              onClick={() => {
+                message.isPinned
+                  ? unpinMessage(message._id)
+                  : pinMessage(message._id);
+                setShowMoreMenu(false);
+                setShowActions(false);
+              }}
+            />
+            <MoreMenuItem
+              icon={Copy}
+              label="Copy text"
+              onClick={async () => {
+                const textToCopy = message.content || "";
+                try {
+                  if (navigator?.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(textToCopy);
+                  } else {
+                    const textarea = document.createElement("textarea");
+                    textarea.value = textToCopy;
+                    textarea.setAttribute("readonly", "");
+                    textarea.style.cssText = "position:fixed;opacity:0";
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(textarea);
+                  }
+                  toast.success("Copied to clipboard", { duration: 1500 });
+                } catch {
+                  toast.error("Copy failed");
                 }
-                toast.success('Copied to clipboard', { duration: 1500 })
-              } catch {
-                toast.error('Copy failed')
-              }
-              setShowMoreMenu(false)
-              setShowActions(false)
-            }}
-          />
-          <MoreMenuItem
-            icon={Link2}
-            label="Copy link"
-            onClick={async () => {
-              const link = `${window.location.origin}/chat/${message.channelId}/${message._id}`
-              try {
-                await navigator.clipboard.writeText(link)
-                toast.success('Link copied', { duration: 1500 })
-              } catch {
-                toast.error('Failed to copy link')
-              }
-              setShowMoreMenu(false)
-              setShowActions(false)
-            }}
-          />
-        </div>
-      )}
+                setShowMoreMenu(false);
+                setShowActions(false);
+              }}
+            />
+            <MoreMenuItem
+              icon={Link2}
+              label="Copy link"
+              onClick={async () => {
+                const link = `${window.location.origin}/chat/${message.channelId}/${message._id}`;
+                try {
+                  await navigator.clipboard.writeText(link);
+                  toast.success("Link copied", { duration: 1500 });
+                } catch {
+                  toast.error("Failed to copy link");
+                }
+                setShowMoreMenu(false);
+                setShowActions(false);
+              }}
+            />
+          </div>
+        )}
 
-      {/* Reaction Picker (extended with EmojiPicker) */}
-      {showReactionPicker && (
-        <div className="absolute -top-3 right-5 z-20" style={{ position: 'absolute' }}>
-          <EmojiPicker
-            onSelect={(emoji) => {
-              handleReaction(emoji)
-              setShowActions(false)
-            }}
-            onClose={() => {
-              setShowReactionPicker(false)
-              setShowActions(false)
-            }}
-            position="top"
-          />
-        </div>
-      )}
-    </div>
-  )
-}, (prev, next) => {
-  return prev.message._id === next.message._id
-    && prev.message.content === next.message.content
-    && prev.message.reactions === next.message.reactions
-    && prev.message.isEdited === next.message.isEdited
-    && prev.message.isPinned === next.message.isPinned
-    && prev.message.isDeleted === next.message.isDeleted
-    && prev.message.status === next.message.status
-    && prev.message.replyCount === next.message.replyCount
-    && prev.message.pending === next.message.pending
-    && prev.message.failed === next.message.failed
-    && prev.compact === next.compact
-    && prev.isLastInGroup === next.isLastInGroup
-    && prev.isDMChannel === next.isDMChannel
-})
+        {/* Reaction Picker (extended with EmojiPicker) */}
+        {showReactionPicker && (
+          <div
+            className="absolute -top-3 right-5 z-20"
+            style={{ position: "absolute" }}
+          >
+            <EmojiPicker
+              onSelect={(emoji) => {
+                handleReaction(emoji);
+                setShowActions(false);
+              }}
+              onClose={() => {
+                setShowReactionPicker(false);
+                setShowActions(false);
+              }}
+              position="top"
+            />
+          </div>
+        )}
+      </div>
+    );
+  },
+  (prev, next) => {
+    return (
+      prev.message._id === next.message._id &&
+      prev.message.content === next.message.content &&
+      prev.message.reactions === next.message.reactions &&
+      prev.message.isEdited === next.message.isEdited &&
+      prev.message.isPinned === next.message.isPinned &&
+      prev.message.isDeleted === next.message.isDeleted &&
+      prev.message.status === next.message.status &&
+      prev.message.replyCount === next.message.replyCount &&
+      prev.message.pending === next.message.pending &&
+      prev.message.failed === next.message.failed &&
+      prev.compact === next.compact &&
+      prev.isLastInGroup === next.isLastInGroup &&
+      prev.isDMChannel === next.isDMChannel
+    );
+  },
+);
 
-export default MessageItem
+export default MessageItem;
 
 function ActionButton({ icon: Icon, title, onClick, danger }) {
   return (
     <button
       className="p-1.5 rounded-md cursor-pointer transition-colors"
-      style={{ color: danger ? 'var(--accent-red)' : 'var(--text-muted)', background: 'transparent', border: 'none' }}
+      style={{
+        color: danger ? "var(--accent-red)" : "var(--text-muted)",
+        background: "transparent",
+        border: "none",
+      }}
       onClick={onClick}
       title={title}
-      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+      onMouseEnter={(e) =>
+        (e.currentTarget.style.background = "var(--bg-hover)")
+      }
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
       <Icon size={15} />
     </button>
-  )
+  );
 }
 
 function MoreMenuItem({ icon: Icon, label, onClick, danger }) {
@@ -610,15 +900,17 @@ function MoreMenuItem({ icon: Icon, label, onClick, danger }) {
       onClick={onClick}
       className="flex items-center gap-2.5 w-full px-3 py-1.5 text-[13px] cursor-pointer transition-colors text-left"
       style={{
-        color: danger ? 'var(--accent-red)' : 'var(--text-primary)',
-        background: 'transparent',
-        border: 'none',
+        color: danger ? "var(--accent-red)" : "var(--text-primary)",
+        background: "transparent",
+        border: "none",
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+      onMouseEnter={(e) =>
+        (e.currentTarget.style.background = "var(--bg-hover)")
+      }
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
       <Icon size={15} style={{ opacity: 0.7 }} />
       <span>{label}</span>
     </button>
-  )
+  );
 }

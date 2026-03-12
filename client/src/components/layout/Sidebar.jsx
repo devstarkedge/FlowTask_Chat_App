@@ -402,7 +402,7 @@ export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotificat
           showStatus={true}
         />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-white)' }}>
+          <p className="text-sm font-medium truncate" style={{ color: 'var(--text-white)' }}>
             {user?.name || 'User'}
           </p>
           <button
@@ -496,7 +496,7 @@ function ChannelSection({ title, channels, expanded, onToggle, activeId, unreads
       <div className="flex items-center justify-between px-1 py-1">
         <button
           onClick={onToggle}
-          className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider cursor-pointer"
+          className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider cursor-pointer"
           style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
         >
           {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}

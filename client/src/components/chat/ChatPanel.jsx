@@ -34,7 +34,7 @@ export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onT
   const isDMChannel = channel?.type === 'dm'
 
   return (
-    <div className="flex-1 flex flex-col min-w-0" style={{ background: 'var(--bg-primary)' }}>
+    <div className="flex-1 flex flex-col min-w-0 bg-[#f0f2fa]">
       <ChatHeader
         channel={channel}
         onToggleSearch={onToggleSearch}

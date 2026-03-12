@@ -1,10 +1,25 @@
-import { useMemo, useState, useRef } from 'react'
-import { Hash, Lock, Users, MessageCircle, Search, Info, Menu, Pin, FileText, Star, Headphones, MoreHorizontal } from 'lucide-react'
-import MemberAvatarGroup from './MemberAvatarGroup'
-import { useChannelStore } from '../../stores/channelStore'
-import { useChatStore } from '../../stores/chatStore'
-import { channelAPI } from '../../services/api'
-import toast from 'react-hot-toast'
+import { useMemo, useState, useRef } from "react";
+import {
+  Hash,
+  Lock,
+  Users,
+  MessageCircle,
+  Search,
+  Info,
+  Menu,
+  Pin,
+  FileText,
+  Star,
+  Headphones,
+  MoreHorizontal,
+  Plus,
+  MoreVertical,
+} from "lucide-react";
+import MemberAvatarGroup from "./MemberAvatarGroup";
+import { useChannelStore } from "../../stores/channelStore";
+import { useChatStore } from "../../stores/chatStore";
+import { channelAPI } from "../../services/api";
+import toast from "react-hot-toast";
 
 const TYPE_ICONS = {
   project: Hash,
@@ -12,111 +27,154 @@ const TYPE_ICONS = {
   team: Users,
   dm: MessageCircle,
   system: Hash,
-}
+};
 
-const EMPTY_PINS = []
+const EMPTY_PINS = [];
 
 const HEADER_TABS = [
-  { id: 'messages', label: 'Messages' },
-  { id: 'files', label: 'Files' },
-  { id: 'canvas', label: 'Canvas' },
-]
+  { id: "messages", label: "Messages", icon: MessageCircle },
+  { id: "files", label: "Files", icon: FileText },
+  { id: "untitled", label: "Untitled", icon: FileText },
+];
 
-export default function ChatHeader({ channel, onToggleSearch, onOpenMobileSidebar, onTogglePins }) {
-  const { membersByChannel, toggleInfoPanel, updateChannel } = useChannelStore()
-  const pinnedMessages = useChatStore((s) => s.pinnedMessagesByChannel[channel?._id]) ?? EMPTY_PINS
-  const [editingTopic, setEditingTopic] = useState(false)
-  const [topicValue, setTopicValue] = useState('')
-  const [activeTab, setActiveTab] = useState('messages')
-  const [isStarred, setIsStarred] = useState(false)
-  const topicInputRef = useRef(null)
+export default function ChatHeader({
+  channel,
+  onToggleSearch,
+  onOpenMobileSidebar,
+  onTogglePins,
+}) {
+  const { membersByChannel, toggleInfoPanel, updateChannel } =
+    useChannelStore();
+  const pinnedMessages =
+    useChatStore((s) => s.pinnedMessagesByChannel[channel?._id]) ?? EMPTY_PINS;
+  const [editingTopic, setEditingTopic] = useState(false);
+  const [topicValue, setTopicValue] = useState("");
+  const [activeTab, setActiveTab] = useState("messages");
+  const [isStarred, setIsStarred] = useState(false);
+  const topicInputRef = useRef(null);
 
   const handleToggleStar = () => {
-    setIsStarred((s) => !s)
-    // TODO: persist star state via API when feature is implemented
-  }
+    setIsStarred((s) => !s);
+  };
 
   const handleHuddleClick = () => {
-    // TODO: implement huddle feature
-    console.log('Huddle clicked for channel:', channel?._id)
-  }
+    console.log("Huddle clicked for channel:", channel?._id);
+  };
 
-  if (!channel) return null
+  if (!channel) return null;
 
-  const Icon = TYPE_ICONS[channel.type] || Hash
-  const members = membersByChannel[channel._id] || []
-  const isDM = channel.type === 'dm'
+  const Icon = TYPE_ICONS[channel.type] || Hash;
+  const members = membersByChannel[channel._id] || [];
+  const isDM = channel.type === "dm";
 
   const handleTopicClick = () => {
-    setTopicValue(channel.topic || '')
-    setEditingTopic(true)
-    setTimeout(() => topicInputRef.current?.focus(), 0)
-  }
+    setTopicValue(channel.topic || "");
+    setEditingTopic(true);
+    setTimeout(() => topicInputRef.current?.focus(), 0);
+  };
 
   const handleTopicSave = async () => {
-    setEditingTopic(false)
-    if (topicValue === (channel.topic || '')) return
+    setEditingTopic(false);
+    if (topicValue === (channel.topic || "")) return;
     try {
-      await channelAPI.update(channel._id, { topic: topicValue })
-      if (updateChannel) updateChannel(channel._id, { topic: topicValue })
+      await channelAPI.update(channel._id, { topic: topicValue });
+      if (updateChannel) updateChannel(channel._id, { topic: topicValue });
     } catch {
-      toast.error('Failed to update topic')
+      toast.error("Failed to update topic");
     }
-  }
+  };
 
   return (
     <div
-      className="shrink-0 select-none"
+      className="shrink-0 select-none bg-white"
       style={{
-        borderBottom: '1px solid var(--border-primary)',
-        background: 'var(--bg-primary)',
-        position: 'sticky',
+        borderBottom: "1px solid transparent",
+        position: "sticky",
         top: 0,
         zIndex: 20,
       }}
     >
-      {/* Top row: channel info + actions */}
-      <div className="flex items-center px-4 gap-3" style={{ height: 'var(--header-height)' }}>
+      {/* Top row: channel info */}
+      <div className="flex items-center px-6 pt-4 pb-2 gap-4">
         {/* Mobile Menu */}
         <button
           onClick={onOpenMobileSidebar}
-          className="mobile-menu-btn p-1.5 rounded-md cursor-pointer transition-colors"
-          style={{ color: 'var(--text-secondary)', background: 'transparent', border: 'none' }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          className="mobile-menu-btn p-2 rounded-lg cursor-pointer transition-colors"
+          style={{
+            color: "#8A92A6",
+            background: "transparent",
+            border: "none",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "#EEF1FF")}
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.background = "transparent")
+          }
         >
-          <Menu size={18} />
+          <Menu size={20} />
         </button>
 
-        {/* Channel Name + Star */}
-        <div className="flex items-center gap-2 min-w-0">
-          <Icon size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-          <h2
-            className="font-bold text-[15px] truncate"
-            style={{ color: 'var(--text-white)' }}
-          >
-            {channel.name || channel.slug}
-          </h2>
-          {channel.visibility === 'private' && (
-            <Lock size={11} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+        {/* Channel Name & Details */}
+        <div
+          className="flex flex-col min-w-0 cursor-pointer group py-1.5 px-2 -ml-2 rounded-xl hover:bg-[#F7F8FC] transition-colors"
+          onClick={toggleInfoPanel}
+        >
+          <div className="flex items-center gap-2">
+            <Icon size={20} style={{ color: "#4F46E5", flexShrink: 0 }} />
+            <h2
+              className="font-bold text-[20px] truncate group-hover:underline"
+              style={{ color: "#1F2A44" }}
+            >
+              {channel.name || channel.slug}
+            </h2>
+            {channel.visibility === "private" && (
+              <Lock size={14} style={{ color: "#8A92A6", flexShrink: 0 }} />
+            )}
+            <button
+              className="p-1 rounded cursor-pointer transition-colors shrink-0 hide-mobile z-10 ml-1"
+              style={{
+                color: isStarred ? "#F59E0B" : "#8A92A6",
+                background: "transparent",
+                border: "none",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "#EEF1FF";
+                e.currentTarget.style.color = "#F59E0B";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = isStarred ? "#F59E0B" : "#8A92A6";
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleStar();
+              }}
+              aria-pressed={isStarred}
+              title={isStarred ? "Unstar channel" : "Star channel"}
+            >
+              <Star size={16} fill={isStarred ? "currentColor" : "none"} />
+            </button>
+          </div>
+
+          {/* Member count under name (for channels) */}
+          {!isDM && (
+            <div
+              className="flex items-center gap-1 mt-0.5"
+              style={{ paddingLeft: "28px" }}
+            >
+              <span
+                className="text-[13px] font-medium group-hover:text-[#1F2A44] transition-colors"
+                style={{ color: "#8A92A6" }}
+              >
+                {members.length} member{members.length !== 1 ? "s" : ""}
+              </span>
+            </div>
           )}
-          <button
-            className="p-0.5 rounded cursor-pointer transition-colors shrink-0 hide-mobile"
-            style={{ color: isStarred ? 'var(--accent-yellow)' : 'var(--text-muted)', background: 'transparent', border: 'none' }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-yellow)')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = isStarred ? 'var(--accent-yellow)' : 'var(--text-muted)')}
-            onClick={handleToggleStar}
-            aria-pressed={isStarred}
-            title={isStarred ? 'Unstar channel' : 'Star channel'}
-          >
-            <Star size={14} fill={isStarred ? 'currentColor' : 'none'} />
-          </button>
         </div>
 
         {/* Topic — editable on click */}
         {!isDM && (
-          <>
-            <div className="w-px self-stretch my-3.5 hide-mobile" style={{ background: 'var(--border-secondary)' }} />
+          <div className="flex items-center hide-mobile">
+            <div className="w-px h-8 mx-4" style={{ background: "#E2E8F0" }} />
             {editingTopic ? (
               <input
                 ref={topicInputRef}
@@ -124,88 +182,112 @@ export default function ChatHeader({ channel, onToggleSearch, onOpenMobileSideba
                 onChange={(e) => setTopicValue(e.target.value)}
                 onBlur={handleTopicSave}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.target.blur() }
-                  if (e.key === 'Escape') setEditingTopic(false)
+                  if (e.key === "Enter") {
+                    e.target.blur();
+                  }
+                  if (e.key === "Escape") setEditingTopic(false);
                 }}
                 placeholder="Add a topic"
-                className="text-xs hide-mobile bg-transparent outline-none"
-                style={{ color: 'var(--text-primary)', maxWidth: 250, borderBottom: '1px solid var(--accent-primary)', padding: '1px 0' }}
+                className="text-[15px] bg-transparent outline-none px-2 py-1 rounded"
+                style={{
+                  color: "#1F2A44",
+                  maxWidth: 300,
+                  border: "1px solid #93A4FC",
+                }}
               />
             ) : (
               <span
                 role="button"
                 tabIndex={0}
-                className="text-xs truncate hide-mobile cursor-pointer hover:underline"
-                style={{ color: 'var(--text-muted)', maxWidth: 250 }}
+                className="text-[15px] truncate cursor-pointer hover:underline px-2 py-1 rounded transition-colors hover:bg-[#F7F8FC]"
+                style={{ color: "#8A92A6", maxWidth: 300 }}
                 onClick={handleTopicClick}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleTopicClick() } }}
-                title={channel.topic || 'Click to add a topic'}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleTopicClick();
+                  }
+                }}
+                title={channel.topic || "Click to add a topic"}
               >
-                {channel.topic || 'Add a topic'}
+                {channel.topic || "Add a topic"}
               </span>
             )}
-          </>
-        )}
-
-        <div className="flex-1" />
-
-        {/* Members — desktop only */}
-        {!isDM && members.length > 0 && (
-          <div className="hide-mobile">
-            <MemberAvatarGroup
-              members={members}
-              max={4}
-              size={24}
-              showStatus={true}
-              onShowAll={toggleInfoPanel}
-            />
           </div>
         )}
+      </div>
+      {/* Tabs & Actions row as Pill-style Toolbar */}
+      <div className="px-6 pb-4">
+        <div className="flex items-center justify-between bg-[#F3F4F8] px-3 h-14 shadow-sm">
+          <div className="flex items-center gap-3">
+            {HEADER_TABS.map((tab) => {
+              const TabIcon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center justify-center gap-1 p-6 h-10 w-30 rounded text-[15px] font-semibold transition-all ${
+                    isActive
+                      ? "bg-[#94A1F7] text-white shadow-sm"
+                      : "bg-[#ECEEF5] text-[#2C3A8C] hover:bg-[#E2E5EF]"
+                  }`}
+                >
+                  <TabIcon size={18} />
+                  <span className="flex items-center justify-center">
+                    {tab.label}
+                  </span>
+                </button>
+              );
+            })}
+            <button className="flex items-center justify-center gap-0.5 w-36 px-6 h-10 rounded-xl bg-[#D8DBE8] text-[#1F2A44] font-semibold hover:bg-[#CDD1E0] transition">
+              <Plus size={18} />
+              <span>Add New Tab</span>
+            </button>
+          </div>
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2">
+            <HeaderBtn
+              icon={Pin}
+              title="Pinned messages"
+              label={
+                pinnedMessages.length > 0
+                  ? String(pinnedMessages.length)
+                  : undefined
+              }
+              onClick={onTogglePins}
+            />
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-0.5">
-          {!isDM && (
-            <HeaderBtn icon={Users} title="Members" label={members.length > 0 ? String(members.length) : undefined} onClick={toggleInfoPanel} />
-          )}
-          <HeaderBtn icon={Pin} title="Pinned messages" label={pinnedMessages.length > 0 ? String(pinnedMessages.length) : undefined} onClick={onTogglePins} />
-          <HeaderBtn icon={Headphones} title="Huddle" className="hide-mobile" onClick={handleHuddleClick} />
-          <HeaderBtn icon={Search} title="Search" onClick={onToggleSearch} />
-          <HeaderBtn icon={Info} title="Channel details" onClick={toggleInfoPanel} className="hide-mobile" />
+            <HeaderBtn
+              icon={Headphones}
+              title="Huddle"
+              className="hide-mobile"
+              onClick={handleHuddleClick}
+            />
+
+            <HeaderBtn icon={Search} title="Search" onClick={onToggleSearch} />
+
+            <HeaderBtn icon={MoreVertical} title="More" onClick={() => {}} />
+          </div>
         </div>
       </div>
-
-      {/* Tabs row */}
-      <div className="chat-header-tabs" style={{ paddingLeft: 16, paddingRight: 16 }}>
-        {HEADER_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            className={`chat-header-tab ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
     </div>
-  )
+  );
 }
 
-function HeaderBtn({ icon: Icon, title, label, onClick, className = '' }) {
+function HeaderBtn({ icon: Icon, title, label, onClick, className = "" }) {
   return (
     <button
       onClick={onClick}
       title={title}
-      className={`flex items-center gap-1 p-1.5 rounded-md cursor-pointer transition-colors ${className}`}
-      style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+      className={`flex items-center justify-center gap-2 ${label ? "px-4" : "w-10"} h-10 rounded-lg cursor-pointer transition-all bg-transparent hover:bg-[#E5E7EB] text-[#4F5B76] ${className}`}
     >
-      <Icon size={16} />
+      <Icon size={20} />
       {label && (
-        <span className="text-xs font-medium hide-mobile" style={{ color: 'var(--text-secondary)' }}>
+        <span className="text-[14px] font-bold hide-mobile ml-0.5">
           {label}
         </span>
       )}
     </button>
-  )
+  );
 }

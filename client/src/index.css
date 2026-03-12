@@ -28,12 +28,14 @@
   --transition-slow: 320ms cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
+  --font-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono:
+    "JetBrains Mono", "Fira Code", "Consolas", "Courier New", monospace;
 
   /* Accents — shared between themes */
   --accent-primary: #3253f5;
-  --accent-primary-hover: #7B8EF0;
+  --accent-primary-hover: #7b8ef0;
   --accent-green: #059669;
   --accent-green-hover: #047857;
   --accent-red: #dc2626;
@@ -77,13 +79,13 @@
   --text-secondary: #8b949e;
   --text-muted: #6e7681;
   --text-white: #ffffff;
-  --text-link: #93A4FC;
+  --text-link: #93a4fc;
   --text-tooltip: #0d1117;
   --text-inverse: #0a0845;
 
   --border-primary: #2a2578;
   --border-secondary: #1e196b;
-  --border-focus: #93A4FC;
+  --border-focus: #93a4fc;
   --border-activity: rgba(147, 164, 252, 0.2);
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.5);
@@ -168,7 +170,9 @@ body {
   background: var(--bg-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color var(--transition-normal), color var(--transition-normal);
+  transition:
+    background-color var(--transition-normal),
+    color var(--transition-normal);
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────────────────── */
@@ -281,7 +285,6 @@ body {
 }
 
 @keyframes pulse {
-
   0%,
   100% {
     opacity: 1;
@@ -293,7 +296,6 @@ body {
 }
 
 @keyframes bounceDot {
-
   0%,
   80%,
   100% {
@@ -354,7 +356,12 @@ body {
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
 .skeleton {
-  background: linear-gradient(90deg, var(--bg-skeleton) 25%, var(--bg-hover) 50%, var(--bg-skeleton) 75%);
+  background: linear-gradient(
+    90deg,
+    var(--bg-skeleton) 25%,
+    var(--bg-hover) 50%,
+    var(--bg-skeleton) 75%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite linear;
   border-radius: var(--radius-md);
@@ -374,7 +381,9 @@ body {
   font-family: var(--font-sans);
   font-size: 14px;
   outline: none;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .input-field:focus {
@@ -747,7 +756,7 @@ body {
 }
 
 .theme-toggle::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 2px;
   left: 2px;
@@ -882,7 +891,9 @@ body {
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-xl);
   background: var(--bg-input);
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
   overflow: visible;
 }
 
@@ -980,7 +991,7 @@ body {
   max-height: 200px;
   overflow-y: auto;
   padding: 10px 14px;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.5;
   color: var(--text-primary);
   font-family: var(--font-sans);
@@ -1409,7 +1420,7 @@ body {
 }
 
 .workspace-sidebar-icon.active::before {
-  content: '';
+  content: "";
   position: absolute;
   left: -14px;
   top: 50%;
@@ -1509,16 +1520,22 @@ body {
   position: relative;
   word-wrap: break-word;
   overflow-wrap: break-word;
-  line-height: 1.55;
-  font-size: 14.5px;
+  line-height: 1.6;
+  font-size: 16px;
   /* Default: solo bubble — fully rounded */
   border-radius: 18px;
 }
 
 /* ── Sent (right) colour ───────────────────────────────────────────────── */
-.message-bubble.sent           { background: var(--bubble-sender-bg);   color: var(--bubble-sender-text); }
+.message-bubble.sent {
+  background: var(--bubble-sender-bg);
+  color: var(--bubble-sender-text);
+}
 /* ── Received (left) colour ────────────────────────────────────────────── */
-.message-bubble.received       { background: var(--bubble-receiver-bg); color: var(--bubble-receiver-text); }
+.message-bubble.received {
+  background: var(--bubble-receiver-bg);
+  color: var(--bubble-receiver-text);
+}
 
 /*
   Bubble radius by group position (WhatsApp / Telegram convention)
@@ -1538,16 +1555,32 @@ body {
 */
 
 /* SENT */
-.message-bubble.sent.first  { border-radius: 18px 18px  4px 18px; }
-.message-bubble.sent.middle { border-radius: 18px  4px  4px 18px; }
-.message-bubble.sent.last   { border-radius: 18px  4px 18px 18px; }
-.message-bubble.sent.solo   { border-radius: 18px 18px 18px 18px; }
+.message-bubble.sent.first {
+  border-radius: 18px 18px 4px 18px;
+}
+.message-bubble.sent.middle {
+  border-radius: 18px 4px 4px 18px;
+}
+.message-bubble.sent.last {
+  border-radius: 18px 4px 18px 18px;
+}
+.message-bubble.sent.solo {
+  border-radius: 18px 18px 18px 18px;
+}
 
 /* RECEIVED */
-.message-bubble.received.first  { border-radius: 18px 18px 18px  4px; }
-.message-bubble.received.middle { border-radius:  4px 18px 18px  4px; }
-.message-bubble.received.last   { border-radius:  4px 18px 18px 18px; }
-.message-bubble.received.solo   { border-radius: 18px 18px 18px 18px; }
+.message-bubble.received.first {
+  border-radius: 18px 18px 18px 4px;
+}
+.message-bubble.received.middle {
+  border-radius: 4px 18px 18px 4px;
+}
+.message-bubble.received.last {
+  border-radius: 4px 18px 18px 18px;
+}
+.message-bubble.received.solo {
+  border-radius: 18px 18px 18px 18px;
+}
 
 @keyframes bubbleSlideIn {
   from {

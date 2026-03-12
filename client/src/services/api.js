@@ -24,7 +24,7 @@ if (
 
 const api = axios.create({
   baseURL,
-  timeout: 15000,
+  timeout: 25000,
   headers: { 'Content-Type': 'application/json' },
 })
 

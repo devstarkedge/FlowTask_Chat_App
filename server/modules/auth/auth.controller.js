@@ -145,9 +145,9 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
       }
     }
 
-    // Sync project channels from FlowTask boards
+    // Sync project channels from FlowTask boards — fire-and-forget, do NOT block login
     if (env.FLOWTASK_ENABLED) {
-      await channelService.syncProjectChannelsForUser(token, chatUser, wsId).catch(() => {});
+      channelService.syncProjectChannelsForUser(token, chatUser, wsId).catch(() => {});
     }
 
     // Get user's channels for initial state
@@ -203,9 +203,9 @@ export const syncUser = asyncHandler(async (req, res) => {
       }
     }
 
-    // Sync project channels
+    // Sync project channels — fire-and-forget, do NOT block login
     if (env.FLOWTASK_ENABLED) {
-      await channelService.syncProjectChannelsForUser(token, chatUser, wsId).catch(() => {});
+      channelService.syncProjectChannelsForUser(token, chatUser, wsId).catch(() => {});
     }
 
     const userChannels = await channelRepository.findByMember(chatUser._id, { workspaceId: wsId });

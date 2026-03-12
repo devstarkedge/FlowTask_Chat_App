@@ -77,7 +77,15 @@ export const useAuthStore = create((set, get) => ({
       await useWorkspaceStore.getState().fetchWorkspaces()
       return data
     } catch (error) {
-      const msg = error.response?.data?.error?.message || 'FlowTask login failed'
+      const status = error.response?.status
+      const serverMsg = error.response?.data?.error?.message
+      let msg = serverMsg || 'FlowTask login failed'
+      if (!serverMsg && status) {
+        msg = `FlowTask login failed (HTTP ${status})`
+      }
+      if (!error.response) {
+        msg = 'FlowTask login failed — could not reach the server. Check your network or backend URL.'
+      }
       set({ isLoading: false, error: msg })
       throw error
     }

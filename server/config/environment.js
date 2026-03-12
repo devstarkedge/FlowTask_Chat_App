@@ -78,7 +78,10 @@ const env = Object.freeze({
   SMTP_FROM: process.env.SMTP_FROM || 'noreply@flowchat.local',
 
   // Logging
-  LOG_LEVEL: process.env.LOG_LEVEL || 'info',
+  // development → 'debug'  (error, warn, info, http/morgan, debug all visible)
+  // production  → 'info'   (only error, warn, info — debug and http suppressed)
+  // Override via LOG_LEVEL env var (e.g. LOG_LEVEL=debug in Render for a session)
+  LOG_LEVEL: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
 
   // Uploads
   UPLOAD_DIR: process.env.UPLOAD_DIR || './uploads',

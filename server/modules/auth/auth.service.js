@@ -143,9 +143,17 @@ class AuthService {
     } catch (error) {
       logger.warn('FlowTask SSO token verification failed', {
         errorName: error.name,
+        errorMessage: error.message,
+        tokenLength: token ? token.length : 0,
+        tokenPrefix: token ? token.substring(0, 20) + '...' : '(empty)',
         hint: error.name === 'TokenExpiredError'
           ? 'Token expired (5-min window) — FlowTask must re-generate the redirect token'
           : 'Secret mismatch? Confirm FLOWTASK_JWT_SECRET (Chat backend) === CHAT_JWT_SECRET (FlowTask backend)',
+        configCheck: {
+          flowtaskEnabled: env.FLOWTASK_ENABLED,
+          hasFlowtaskJwtSecret: !!env.FLOWTASK_JWT_SECRET,
+          flowtaskJwtSecretLength: env.FLOWTASK_JWT_SECRET ? env.FLOWTASK_JWT_SECRET.length : 0,
+        },
       });
       if (error.name === 'TokenExpiredError') {
         throw new UnauthorizedError('FlowTask token expired — please return to FlowTask and try again');

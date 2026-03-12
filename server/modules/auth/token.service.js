@@ -86,7 +86,9 @@ class TokenService {
     if (!env.FLOWTASK_ENABLED) {
       throw new Error('FlowTask integration is disabled');
     }
-    return jwt.verify(token, env.FLOWTASK_JWT_SECRET);
+    return jwt.verify(token, env.FLOWTASK_JWT_SECRET, {
+      clockTolerance: 30, // Allow 30s clock skew between Render instances
+    });
   }
 
   // ─── Utility Tokens (email verification, password reset) ──────────────

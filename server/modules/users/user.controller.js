@@ -2,6 +2,7 @@ import asyncHandler from '../../middleware/asyncHandler.js';
 import userService from './user.service.js';
 import flowtaskService from '../flowtask/flowtask.service.js';
 import userRepository from './user.repository.js';
+import ChatUser from './ChatUser.model.js';
 import logger from '../../utils/logger.js';
 
 /**
@@ -20,7 +21,12 @@ export const getDMContacts = asyncHandler(async (req, res) => {
   const { search } = req.query;
   const workspaceId = req.workspaceId;
   const currentUser = req.user;
-  const flowTaskToken = req.headers['x-flowtask-token'] || currentUser.flowTaskToken;
+  // Try header first, then fall back to stored token on ChatUser (select:false, needs explicit query)
+  let flowTaskToken = req.headers['x-flowtask-token'];
+  if (!flowTaskToken) {
+    const userWithToken = await ChatUser.findById(currentUser._id).select('flowTaskToken').lean();
+    flowTaskToken = userWithToken?.flowTaskToken || null;
+  }
 
   // ── Step 1: Fetch ChatApp users for this workspace (always available) ──
   const chatUsers = await userRepository.findAllForWorkspace(workspaceId, search);

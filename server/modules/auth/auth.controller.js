@@ -6,6 +6,7 @@ import workspaceService from '../workspaces/workspace.service.js';
 import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
 import asyncHandler from '../../middleware/asyncHandler.js';
 import env from '../../config/environment.js';
+import ChatUser from '../users/ChatUser.model.js';
 
 /**
  * Ensure the user has a WorkspaceMembership record for the given workspace.
@@ -172,8 +173,29 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
       refreshToken,
       workspaces,
       channels,
+      // Include FlowTask token so frontend can forward it for FlowTask API calls
+      flowTaskToken: token,
     },
   });
+
+  // ── Background: store FlowTask token on ChatUser and sync all FlowTask users ──
+  // Fire-and-forget — do NOT block login response
+  (async () => {
+    const log = (await import('../../utils/logger.js')).default;
+    try {
+      // Store FlowTask JWT on the ChatUser for later API calls (e.g., getDMContacts)
+      await ChatUser.findByIdAndUpdate(chatUser._id, { flowTaskToken: token });
+
+      // Sync all FlowTask users to ChatApp workspace so they appear in DM contacts
+      if (wsId) {
+        const syncService = (await import('../flowtask/sync.service.js')).default;
+        await syncService.syncAllUsers(wsId, token);
+        log.info('Background FlowTask user sync completed', { workspaceId: wsId });
+      }
+    } catch (err) {
+      log.warn('Background FlowTask user sync failed (non-blocking)', { error: err.message });
+    }
+  })();
 });
 
 /**

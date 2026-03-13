@@ -243,18 +243,14 @@ class ChannelService {
     // Strategy 1: Try as a ChatUser _id (24-char hex ObjectId)
     if (/^[0-9a-fA-F]{24}$/.test(targetUserId)) {
       targetUser = await userRepository.findById(targetUserId);
-      // Verify workspace match
-      if (targetUser && targetUser.workspaceId?.toString() !== workspaceId) {
-        targetUser = null;
-      }
     }
 
     // Strategy 2: Try as a flowTaskUserId (if not found above)
     if (!targetUser) {
-      targetUser = await userRepository.findByFlowTaskId(targetUserId, workspaceId);
+      targetUser = await userRepository.findByFlowTaskId(targetUserId);
     }
 
-    // ── Target user does not exist in this workspace's ChatApp ──
+    // ── Target user does not exist in ChatApp ──
     if (!targetUser) {
       throw new NotFoundError(
         `User '${targetUserId}' not found in workspace '${workspaceName || workspaceId}'.`
@@ -265,6 +261,28 @@ class ChannelService {
       throw new ForbiddenError(
         `${targetUser.name}'s account is deactivated in this workspace.`
       );
+    }
+
+    // ── Verify workspace membership (ChatUser is global — workspace link is via WorkspaceMembership) ──
+    const membership = await WorkspaceMembership.findOne({
+      userId: targetUser._id,
+      workspaceId,
+      isActive: true,
+    }).lean();
+
+    if (!membership) {
+      // Auto-add FlowTask users to workspace if they've been synced but not yet added as members
+      if (targetUser.authProvider === 'flowtask' && targetUser.flowTaskUserId) {
+        await WorkspaceMembership.addMember(workspaceId, targetUser._id);
+        logger.info('Auto-added FlowTask user to workspace for DM', {
+          userId: targetUser._id,
+          workspaceId,
+        });
+      } else {
+        throw new ForbiddenError(
+          `User '${targetUser.name}' is not a member of workspace '${workspaceName || workspaceId}'.`
+        );
+      }
     }
 
     return { chatUserId: targetUser._id.toString(), user: targetUser };

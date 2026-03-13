@@ -41,6 +41,7 @@ const PERMISSION_MAP = Object.freeze({
   ],
   [WORKSPACE_ROLES.MEMBER]: [
     'channel:create',
+    'channel:update',
     'channel:post_private',
     'channel:manage_members',
     'message:send',

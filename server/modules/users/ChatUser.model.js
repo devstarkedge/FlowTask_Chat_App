@@ -83,6 +83,11 @@ const chatUserSchema = new Schema({
     type: String,
     // sparse index defined explicitly below
   },
+  flowTaskToken: {
+    type: String,
+    select: false, // Never returned unless explicitly requested
+    default: null,
+  },
 
   // ─── Identity ─────────────────────────────────────────────────────────
   name: {

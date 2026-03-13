@@ -28,7 +28,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Attach JWT + Workspace header to every request
+// Attach JWT + Workspace header + FlowTask token to every request
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken
   if (token) {
@@ -37,6 +37,11 @@ api.interceptors.request.use((config) => {
   const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
   if (workspaceId) {
     config.headers['X-Workspace-Id'] = workspaceId
+  }
+  // Forward FlowTask JWT for endpoints that need FlowTask API access (e.g., getDMContacts)
+  const flowTaskToken = localStorage.getItem('flowtask_token')
+  if (flowTaskToken) {
+    config.headers['X-FlowTask-Token'] = flowTaskToken
   }
   return config
 })

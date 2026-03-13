@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useChatStore } from '../../stores/chatStore'
-import { authAPI } from '../../services/api'
+import { userAPI } from '../../services/api'
 import { joinChannel } from '../../services/socket'
 import { X, Search, Loader2, MessageCircle, User } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
@@ -61,16 +61,14 @@ export default function UserPickerModal({ onClose, onSelect }) {
   const fetchUsers = async (query) => {
     setIsLoading(true)
     try {
-      const { data } = await authAPI.searchUsers(query)
-      const allUsers = data.data?.users || data.data || []
-      // Exclude current user
-      const filtered = allUsers.filter(
-        (u) => u._id !== user?._id && u.flowTaskUserId !== user?.flowTaskUserId
-      )
-      setUsers(filtered)
+      const { data } = await userAPI.getDMContacts(query)
+      // dm-contacts returns { data: { contacts: [...], meta: {...} } }
+      // Server already excludes the current user and deduplicates
+      const contacts = data.data?.contacts || []
+      setUsers(contacts)
       setSelectedIndex(0)
     } catch (error) {
-      logger.error('Failed to search users:', error)
+      logger.error('Failed to fetch DM contacts:', error)
       setUsers([])
     } finally {
       setIsLoading(false)
@@ -80,11 +78,14 @@ export default function UserPickerModal({ onClose, onSelect }) {
   const handleSelectUser = useCallback(async (targetUser) => {
     if (isCreating) return // Double-click guard
 
+    // dm-contacts returns chatUserId (ChatApp _id) and/or flowTaskUserId
+    const targetId = targetUser.chatUserId || targetUser.flowTaskUserId
+
     setIsCreating(true)
     try {
       // Check if DM already exists in local state
       const existingDM = channels.find(
-        (c) => c.type === 'dm' && c.dmParticipants?.includes(targetUser.flowTaskUserId || targetUser._id)
+        (c) => c.type === 'dm' && c.dmParticipants?.includes(targetId)
       )
 
       if (existingDM) {
@@ -93,7 +94,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
       }
 
       // Create new DM
-      const channel = await createDM(targetUser.flowTaskUserId || targetUser._id)
+      const channel = await createDM(targetId)
       // Join socket room
       joinChannel(channel._id)
       onSelect(channel._id)
@@ -134,7 +135,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
   }
 
   const isUserOnline = (u) => {
-    return onlineUsers?.has?.(u._id) || onlineUsers?.has?.(u.flowTaskUserId)
+    return onlineUsers?.has?.(u.chatUserId) || onlineUsers?.has?.(u.flowTaskUserId) || u.onlineStatus === 'online'
   }
 
   return (
@@ -208,14 +209,15 @@ export default function UserPickerModal({ onClose, onSelect }) {
             users.map((u, index) => {
               const online = isUserOnline(u)
               const isSelected = index === selectedIndex
+              const uId = u.chatUserId || u.flowTaskUserId
               // Check if DM already exists
               const existingDM = channels.find(
-                (c) => c.type === 'dm' && c.dmParticipants?.includes(u.flowTaskUserId || u._id)
+                (c) => c.type === 'dm' && c.dmParticipants?.includes(uId)
               )
 
               return (
                 <button
-                  key={u._id}
+                  key={u.chatUserId || u.flowTaskUserId || u.email}
                   onClick={() => handleSelectUser(u)}
                   disabled={isCreating}
                   className="flex items-center gap-3 w-full px-5 py-2.5 text-left cursor-pointer transition-colors"

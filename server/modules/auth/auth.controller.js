@@ -96,6 +96,17 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
   const { token } = req.body;
   const userAgent = req.get('User-Agent') || '';
 
+  // Log request diagnostics for production debugging
+  const logger = (await import('../../utils/logger.js')).default;
+  logger.info('FlowTask SSO login attempt', {
+    hasToken: !!token,
+    tokenLength: token ? token.length : 0,
+    contentType: req.get('Content-Type'),
+    origin: req.get('Origin'),
+    referer: req.get('Referer'),
+    userAgent: userAgent.substring(0, 80),
+  });
+
   const { chatUser, accessToken, refreshToken } = await authService.loginFlowTask({
     token,
     userAgent,
@@ -108,7 +119,8 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
       flowtaskWorkspace = await workspaceService.findOrCreateFlowTaskWorkspace(chatUser._id);
     } catch (err) {
       // Non-blocking — workspace creation failure shouldn't prevent login
-      console.error('Failed to auto-create FlowTask workspace:', err.message);
+      const log = (await import('../../utils/logger.js')).default;
+      log.error('Failed to auto-create FlowTask workspace', { error: err.message, userId: chatUser._id });
     }
   }
 
@@ -133,9 +145,9 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
       }
     }
 
-    // Sync project channels from FlowTask boards
+    // Sync project channels from FlowTask boards — fire-and-forget, do NOT block login
     if (env.FLOWTASK_ENABLED) {
-      await channelService.syncProjectChannelsForUser(token, chatUser, wsId).catch(() => {});
+      channelService.syncProjectChannelsForUser(token, chatUser, wsId).catch(() => {});
     }
 
     // Get user's channels for initial state
@@ -191,9 +203,9 @@ export const syncUser = asyncHandler(async (req, res) => {
       }
     }
 
-    // Sync project channels
+    // Sync project channels — fire-and-forget, do NOT block login
     if (env.FLOWTASK_ENABLED) {
-      await channelService.syncProjectChannelsForUser(token, chatUser, wsId).catch(() => {});
+      channelService.syncProjectChannelsForUser(token, chatUser, wsId).catch(() => {});
     }
 
     const userChannels = await channelRepository.findByMember(chatUser._id, { workspaceId: wsId });

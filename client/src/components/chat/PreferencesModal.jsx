@@ -3,6 +3,7 @@ import { X, Bell, BellOff, Volume2, VolumeX, Monitor, Moon, Sun, AlignLeft, Load
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { authAPI } from '../../services/api'
+import logger from '../../utils/logger'
 import toast from 'react-hot-toast'
 
 /**
@@ -56,7 +57,7 @@ export default function PreferencesModal({ onClose }) {
       }
     } catch (error) {
       setNotifPermission(Notification.permission)
-      console.error('Failed to request notification permission:', error)
+      logger.error('Failed to request notification permission:', error)
     }
   }
 

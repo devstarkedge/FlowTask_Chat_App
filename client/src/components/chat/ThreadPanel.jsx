@@ -1,16 +1,113 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useChatStore } from '../../stores/chatStore'
-import MessageItem from './MessageItem'
 import MessageInput from './MessageInput'
-import { X, MessageSquare } from 'lucide-react'
+import { X, MessageSquare, SlidersHorizontal, MoreHorizontal } from 'lucide-react'
+import { Avatar } from './MemberAvatarGroup'
+import { format } from 'date-fns'
+import { sanitizeHtml } from '../../utils/sanitize'
 
+/* ─── Thread Message Item ─────────────────────────────────────────────────── */
+function ThreadMessage({ message, isRoot = false }) {
+  const authorName = message.senderSnapshot?.name || message.authorId?.name || 'FlowTask Bot'
+  const authorAvatar =
+    message.senderSnapshot?.avatar ||
+    (typeof message.authorId === 'object' ? message.authorId?.avatar : null)
+  const time = format(new Date(message.createdAt), 'h:mm a')
+  const isDeleted = message.isDeleted === true
+  const isPending = message.pending === true
+
+  return (
+    <div className={`thread-message${isRoot ? ' thread-message--root' : ''}`}>
+      <div className="thread-message__avatar">
+        <Avatar
+          member={{ name: authorName, avatar: authorAvatar, onlineStatus: 'offline' }}
+          size={36}
+          showStatus={false}
+        />
+      </div>
+      <div className="thread-message__body">
+        <div className="thread-message__meta">
+          <span className="thread-message__name">{authorName}</span>
+          {message.contentType === 'bot' && (
+            <span className="thread-message__bot-badge">BOT</span>
+          )}
+          <span className="thread-message__time">{time}</span>
+          {message.isEdited && (
+            <span className="thread-message__edited">(edited)</span>
+          )}
+          {isPending && (
+            <span className="thread-message__pending">Sending…</span>
+          )}
+        </div>
+
+        {isDeleted ? (
+          <p className="thread-message__deleted">This message was deleted</p>
+        ) : message.htmlContent && message.htmlContent !== message.content ? (
+          <div
+            className="message-content thread-message__content"
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(message.htmlContent) }}
+          />
+        ) : (
+          <p className="thread-message__content">{message.content}</p>
+        )}
+
+        {/* Reactions */}
+        {message.reactions?.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {message.reactions.map((reaction) => {
+              const count = reaction.users?.length || reaction.count || 0
+              return (
+                <span
+                  key={reaction.emoji}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
+                  style={{
+                    background: 'var(--bg-hover)',
+                    border: '1px solid var(--border-secondary)',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  {reaction.emoji} {count}
+                </span>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ─── Loading Skeleton ────────────────────────────────────────────────────── */
+function ThreadSkeleton() {
+  return (
+    <div style={{ padding: '12px 16px' }}>
+      {[1, 2, 3].map((i) => (
+        <div key={i} style={{ display: 'flex', gap: 12, padding: '10px 0' }}>
+          <div
+            className="skeleton"
+            style={{ width: 36, height: 36, borderRadius: 'var(--radius-lg)', flexShrink: 0 }}
+          />
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 7 }}>
+              <div className="skeleton" style={{ width: 100, height: 13 }} />
+              <div className="skeleton" style={{ width: 50, height: 13 }} />
+            </div>
+            <div className="skeleton" style={{ width: '78%', height: 13, marginBottom: 5 }} />
+            <div className="skeleton" style={{ width: '52%', height: 13 }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ─── Main Panel ──────────────────────────────────────────────────────────── */
 export default function ThreadPanel({ thread, onClose }) {
   const {
     threadRepliesByRoot,
     threadHasMore,
     isLoadingThread,
     fetchThreadReplies,
-    clearThreadReplies,
     messagesByChannel,
   } = useChatStore()
 
@@ -19,16 +116,10 @@ export default function ThreadPanel({ thread, onClose }) {
   const bottomRef = useRef(null)
   const prevReplyCountRef = useRef(replies.length)
 
-  // Fetch thread replies on mount / when rootMessageId changes
   useEffect(() => {
     fetchThreadReplies(thread.rootMessageId)
-    return () => {
-      // Optional: clear thread replies when closing to save memory
-      // clearThreadReplies(thread.rootMessageId)
-    }
   }, [thread.rootMessageId, fetchThreadReplies])
 
-  // Auto-scroll to bottom when new replies arrive
   useEffect(() => {
     if (replies.length > prevReplyCountRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -36,7 +127,6 @@ export default function ThreadPanel({ thread, onClose }) {
     prevReplyCountRef.current = replies.length
   }, [replies.length])
 
-  // Load more (older) replies via cursor
   const loadMoreReplies = useCallback(async () => {
     if (!hasMore || isLoadingThread || replies.length === 0) return
     const cursor = replies[replies.length - 1]?._id
@@ -44,123 +134,73 @@ export default function ThreadPanel({ thread, onClose }) {
   }, [hasMore, isLoadingThread, replies, thread.rootMessageId, fetchThreadReplies])
 
   const rootMessage = messagesByChannel[thread.channelId]?.find(
-    (m) => m._id === thread.rootMessageId
+    (m) => m._id === thread.rootMessageId,
   )
 
-  const replyCount = replies.filter(r => !r.pending).length
+  const replyCount = replies.filter((r) => !r.pending).length
 
   return (
-    <div
-      className="flex flex-col h-full animate-slide-in-right"
-      style={{
-        width: 'var(--thread-panel-width)',
-        minWidth: 'var(--thread-panel-width)',
-        borderLeft: '1px solid var(--border-primary)',
-        background: 'var(--bg-primary)',
-      }}
-    >
-      {/* Header */}
-      <div
-        className="flex items-center justify-between px-4 shrink-0"
-        style={{
-          height: 'var(--header-height)',
-          borderBottom: '1px solid var(--border-primary)',
-        }}
-      >
-        <div className="flex items-center gap-2">
-          <MessageSquare size={16} style={{ color: 'var(--text-white)' }} />
-          <span className="font-bold text-sm" style={{ color: 'var(--text-white)' }}>
-            Thread
-          </span>
+    <div className="thread-panel">
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="thread-panel__header">
+        <div className="thread-panel__header-left">
+          <MessageSquare size={15} style={{ color: 'var(--text-secondary)' }} />
+          <span className="thread-panel__title">Thread</span>
           {replyCount > 0 && (
-            <span
-              className="badge badge-muted"
-              style={{ fontSize: 10 }}
-            >
-              {replyCount}
-            </span>
+            <span className="thread-panel__badge">{replyCount}</span>
           )}
         </div>
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-md cursor-pointer transition-colors"
-          style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-        >
-          <X size={16} />
-        </button>
+        <div className="thread-panel__header-actions">
+          <button className="thread-panel__icon-btn" title="Sort / filter">
+            <SlidersHorizontal size={15} />
+          </button>
+          <button className="thread-panel__icon-btn" title="More options">
+            <MoreHorizontal size={15} />
+          </button>
+          <button
+            className="thread-panel__icon-btn thread-panel__close-btn"
+            onClick={onClose}
+            title="Close thread"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
-      {/* Thread Content */}
-      <div className="flex-1 overflow-y-auto">
+      {/* ── Scrollable Content ─────────────────────────────────────────── */}
+      <div className="thread-panel__content">
         {isLoadingThread && replies.length === 0 ? (
-          <div style={{ padding: '16px 20px' }}>
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, padding: '8px 0' }} className="animate-fade-in">
-                <div className="skeleton" style={{ width: 36, height: 36, borderRadius: 'var(--radius-lg)', flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                    <div className="skeleton" style={{ width: 90, height: 14 }} />
-                    <div className="skeleton" style={{ width: 40, height: 14 }} />
-                  </div>
-                  <div className="skeleton" style={{ width: '75%', height: 14, marginBottom: 4 }} />
-                  <div className="skeleton" style={{ width: '50%', height: 14 }} />
-                </div>
-              </div>
-            ))}
-          </div>
+          <ThreadSkeleton />
         ) : (
           <>
-            {/* Root Message — highlighted with accent border */}
+            {/* Root message */}
             {rootMessage && (
-              <div
-                style={{
-                  borderBottom: '1px solid var(--border-secondary)',
-                  borderLeft: '3px solid var(--accent-primary)',
-                  padding: '4px 0 8px',
-                  marginBottom: 4,
-                  background: 'var(--bg-secondary)',
-                }}
-              >
-                <MessageItem message={rootMessage} compact={false} />
+              <div className="thread-panel__root">
+                <ThreadMessage message={rootMessage} isRoot />
               </div>
             )}
 
             {/* Reply count divider */}
-            {replies.length > 0 && (
-              <div
-                className="animate-fade-in"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '8px 20px',
-                  gap: 10,
-                }}
-              >
-                <div style={{ flex: 1, height: 1, background: 'var(--border-secondary)' }} />
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: 'var(--text-link)',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
+            {replyCount > 0 && (
+              <div className="thread-panel__divider">
+                <div className="thread-panel__divider-line" />
+                <span className="thread-panel__divider-text">
                   {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
                 </span>
-                <div style={{ flex: 1, height: 1, background: 'var(--border-secondary)' }} />
+                <div className="thread-panel__divider-line" />
               </div>
             )}
 
             {/* Replies */}
-            {replies.map((reply) => (
-              <MessageItem key={reply._id} message={reply} compact={false} />
-            ))}
+            <div className="thread-panel__replies">
+              {replies.map((reply) => (
+                <ThreadMessage key={reply._id} message={reply} />
+              ))}
+            </div>
 
-            {/* Load more replies */}
+            {/* Load more */}
             {hasMore && (
-              <div className="text-center py-3">
+              <div className="flex justify-center py-3">
                 <button
                   onClick={loadMoreReplies}
                   disabled={isLoadingThread}
@@ -172,34 +212,40 @@ export default function ThreadPanel({ thread, onClose }) {
                     opacity: isLoadingThread ? 0.5 : 1,
                   }}
                 >
-                  {isLoadingThread ? 'Loading...' : 'Load more replies'}
+                  {isLoadingThread ? 'Loading…' : 'Load earlier replies'}
                 </button>
               </div>
             )}
 
+            {/* Empty state */}
             {replies.length === 0 && !isLoadingThread && (
-              <div className="text-center py-8 animate-fade-in">
+              <div className="thread-panel__empty">
                 <MessageSquare
-                  size={28}
-                  style={{ color: 'var(--text-muted)', margin: '0 auto 8px' }}
+                  size={32}
+                  style={{ color: 'var(--text-muted)', opacity: 0.45 }}
                 />
-                <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-                  No replies yet. Start the conversation!
+                <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-secondary)' }}>
+                  No replies yet
+                </p>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Be the first to reply to this thread.
                 </p>
               </div>
             )}
 
-            <div ref={bottomRef} />
+            <div ref={bottomRef} style={{ height: 8 }} />
           </>
         )}
       </div>
 
-      {/* Reply Input */}
-      <MessageInput
-        channelId={thread.channelId}
-        threadId={thread.rootMessageId}
-        placeholder="Reply in thread..."
-      />
+      {/* ── Reply Composer ─────────────────────────────────────────────── */}
+      <div className="thread-panel__composer">
+        <MessageInput
+          channelId={thread.channelId}
+          threadId={thread.rootMessageId}
+          placeholder="Reply in thread…"
+        />
+      </div>
     </div>
   )
 }

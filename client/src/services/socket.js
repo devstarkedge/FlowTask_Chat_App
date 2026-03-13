@@ -5,6 +5,7 @@ import { useChannelStore } from '../stores/channelStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useNotificationStore } from '../stores/notificationStore'
 import { throttle } from '../utils/throttle'
+import logger from '../utils/logger'
 
 let socket = null
 
@@ -56,7 +57,7 @@ export function connectSocket() {
 
   const socketUrl = import.meta.env.VITE_SOCKET_URL
   if (!socketUrl) {
-    console.error(
+    logger.error(
       '[Socket] VITE_SOCKET_URL is not set. Falling back to window.location.origin — ' +
       'this WILL FAIL in production when the frontend and backend are on different domains. ' +
       'Set VITE_SOCKET_URL=https://flowtask-chat-app.onrender.com in your Render static site environment.'
@@ -73,7 +74,7 @@ export function connectSocket() {
   })
 
   socket.on('connect', () => {
-    console.log('[Socket] Connected:', socket.id)
+    logger.log('[Socket] Connected:', socket.id)
     useChatStore.getState().setConnectionStatus('connected')
 
     // Join all channel rooms on initial connect
@@ -83,22 +84,22 @@ export function connectSocket() {
         socket.emit('channel:join', ch._id)
       }
     } catch (err) {
-      console.error('[Socket] Failed to join channels on connect:', err.message)
+      logger.error('[Socket] Failed to join channels on connect:', err.message)
     }
   })
 
   socket.on('disconnect', (reason) => {
-    console.log('[Socket] Disconnected:', reason)
+    logger.log('[Socket] Disconnected:', reason)
     useChatStore.getState().setConnectionStatus('disconnected')
   })
 
   socket.on('reconnect_attempt', (attempt) => {
-    console.log('[Socket] Reconnecting... attempt', attempt)
+    logger.log('[Socket] Reconnecting... attempt', attempt)
     useChatStore.getState().setConnectionStatus('connecting')
   })
 
   socket.on('reconnect', (attempt) => {
-    console.log('[Socket] Reconnected after', attempt, 'attempts')
+    logger.log('[Socket] Reconnected after', attempt, 'attempts')
     useChatStore.getState().setConnectionStatus('connected')
     // Re-sync channels, unreads, rejoin rooms, and fill message gaps
     try {
@@ -120,15 +121,15 @@ export function connectSocket() {
         channelStore.fetchUnreads()
       })
     } catch (err) {
-      console.error('[Socket] Failed to re-sync after reconnect:', err.message)
+      logger.error('[Socket] Failed to re-sync after reconnect:', err.message)
     }
   })
 
   socket.on('connect_error', (err) => {
-    console.error('[Socket] Connection error:', err.message)
+    logger.error('[Socket] Connection error:', err.message)
     // If it's an auth error, the token may be expired — disconnect cleanly
     if (err.message?.includes('auth') || err.message?.includes('token') || err.message?.includes('unauthorized')) {
-      console.warn('[Socket] Auth error detected, disconnecting')
+      logger.warn('[Socket] Auth error detected, disconnecting')
       socket.disconnect()
     }
   })

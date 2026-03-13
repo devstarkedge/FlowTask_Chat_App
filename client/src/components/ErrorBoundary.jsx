@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
+import logger from '../utils/logger'
 
 /**
  * Reusable Error Boundary — catches render errors and displays a styled fallback.
@@ -26,7 +27,7 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error(`[ErrorBoundary:${this.props.name || 'unknown'}]`, error, errorInfo)
+    logger.error(`[ErrorBoundary:${this.props.name || 'unknown'}]`, error, errorInfo)
     this.props.onError?.(error, errorInfo)
   }
 

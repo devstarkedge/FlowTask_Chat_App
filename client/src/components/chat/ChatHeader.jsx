@@ -1,25 +1,11 @@
-import { useMemo, useState, useRef } from "react";
-import {
-  Hash,
-  Lock,
-  Users,
-  MessageCircle,
-  Search,
-  Info,
-  Menu,
-  Pin,
-  FileText,
-  Star,
-  Headphones,
-  MoreHorizontal,
-  Plus,
-  MoreVertical,
-} from "lucide-react";
-import MemberAvatarGroup from "./MemberAvatarGroup";
-import { useChannelStore } from "../../stores/channelStore";
-import { useChatStore } from "../../stores/chatStore";
-import { channelAPI } from "../../services/api";
-import toast from "react-hot-toast";
+import { useMemo, useState, useRef } from 'react'
+import { Hash, Lock, Users, MessageCircle, Search, Info, Menu, Pin, FileText, Star, Headphones,Plus,MoreVertical, MoreHorizontal } from 'lucide-react'
+import MemberAvatarGroup from './MemberAvatarGroup'
+import { useChannelStore } from '../../stores/channelStore'
+import { useChatStore } from '../../stores/chatStore'
+import { channelAPI } from '../../services/api'
+import toast from 'react-hot-toast'
+import logger from '../../utils/logger'
 
 const TYPE_ICONS = {
   project: Hash,
@@ -58,8 +44,9 @@ export default function ChatHeader({
   };
 
   const handleHuddleClick = () => {
-    console.log("Huddle clicked for channel:", channel?._id);
-  };
+    // TODO: implement huddle feature
+    logger.log('Huddle clicked for channel:', channel?._id)
+  }
 
   if (!channel) return null;
 

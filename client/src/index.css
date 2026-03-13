@@ -1880,3 +1880,353 @@ body {
     display: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  THREAD PREVIEW (below message bubble in main chat)                       */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+.thread-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+  padding: 4px 10px 4px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  max-width: 100%;
+  text-align: left;
+  font-family: var(--font-sans);
+}
+
+.thread-preview:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-secondary);
+}
+
+/* Avatar stack */
+.thread-preview__avatars {
+  display: flex;
+  align-items: center;
+}
+
+.thread-preview__avatar-img,
+.thread-preview__avatar-fallback {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-primary);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.thread-preview__avatar-img {
+  margin-left: -6px;
+}
+
+.thread-preview__avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-primary);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  margin-left: -6px;
+}
+
+.thread-preview__avatars > *:first-child {
+  margin-left: 0;
+}
+
+.thread-preview__count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  white-space: nowrap;
+}
+
+.thread-preview__time {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.thread-preview__cta {
+  font-size: 12px;
+  color: var(--accent-primary);
+  white-space: nowrap;
+  opacity: 0;
+  margin-left: 2px;
+  transition: opacity var(--transition-fast);
+}
+
+.thread-preview:hover .thread-preview__cta {
+  opacity: 1;
+}
+
+.thread-preview:hover .thread-preview__time {
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  THREAD PANEL                                                              */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+.thread-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: var(--thread-panel-width);
+  min-width: var(--thread-panel-width);
+  border-left: 1px solid var(--border-primary);
+  background: var(--bg-primary);
+  animation: slideInRight var(--transition-slow) forwards;
+  flex-shrink: 0;
+}
+
+/* ─── Header ────────────────────────────────────────────────────────────── */
+
+.thread-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 16px;
+  height: var(--header-height);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+  background: var(--bg-primary);
+}
+
+.thread-panel__header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.thread-panel__title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-white);
+  line-height: 1;
+}
+
+.thread-panel__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.thread-panel__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.thread-panel__icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.thread-panel__icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.thread-panel__close-btn:hover {
+  color: var(--accent-red);
+}
+
+/* ─── Scrollable Content ────────────────────────────────────────────────── */
+
+.thread-panel__content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ─── Root Message Area ─────────────────────────────────────────────────── */
+
+.thread-panel__root {
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid var(--border-secondary);
+  background: var(--bg-secondary);
+}
+
+/* ─── Reply Count Divider ───────────────────────────────────────────────── */
+
+.thread-panel__divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+}
+
+.thread-panel__divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border-secondary);
+}
+
+.thread-panel__divider-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+/* ─── Replies List ──────────────────────────────────────────────────────── */
+
+.thread-panel__replies {
+  padding-bottom: 4px;
+}
+
+/* ─── Empty State ───────────────────────────────────────────────────────── */
+
+.thread-panel__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 8px;
+  text-align: center;
+}
+
+/* ─── Composer ──────────────────────────────────────────────────────────── */
+
+.thread-panel__composer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-secondary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  THREAD MESSAGE ITEM                                                       */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+.thread-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 16px;
+  transition: background var(--transition-fast);
+}
+
+.thread-message:hover {
+  background: var(--bg-hover);
+}
+
+/* Root message inside thread panel — no hover, no padding override */
+.thread-message--root {
+  padding: 0;
+}
+
+.thread-message--root:hover {
+  background: transparent;
+}
+
+.thread-message__avatar {
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.thread-message__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.thread-message__meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.thread-message__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-white);
+  line-height: 1.3;
+  cursor: default;
+}
+
+.thread-message__time {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.thread-message__edited {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.thread-message__pending {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.thread-message__bot-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-primary);
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.6;
+}
+
+.thread-message__content {
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.thread-message__deleted {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ─── Responsive: thread panel becomes full-screen on mobile ────────────── */
+
+@media (max-width: 768px) {
+  .thread-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    width: 100% !important;
+    min-width: 100% !important;
+    border-left: none;
+    animation: fadeIn 200ms ease;
+  }
+}

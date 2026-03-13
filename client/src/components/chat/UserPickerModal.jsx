@@ -7,6 +7,7 @@ import { joinChannel } from '../../services/socket'
 import { X, Search, Loader2, MessageCircle, User } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
 import toast from 'react-hot-toast'
+import logger from '../../utils/logger'
 
 /**
  * UserPickerModal — modal for selecting a user to start a DM conversation.
@@ -69,7 +70,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
       setUsers(filtered)
       setSelectedIndex(0)
     } catch (error) {
-      console.error('Failed to search users:', error)
+      logger.error('Failed to search users:', error)
       setUsers([])
     } finally {
       setIsLoading(false)

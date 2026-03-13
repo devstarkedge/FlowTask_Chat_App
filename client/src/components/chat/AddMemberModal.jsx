@@ -5,6 +5,7 @@ import { useChatStore } from '../../stores/chatStore'
 import { authAPI } from '../../services/api'
 import { X, Search, Loader2, UserPlus, Check } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
+import logger from '../../utils/logger'
 
 /**
  * AddMemberModal — modal for adding users to a channel.
@@ -94,7 +95,7 @@ export default function AddMemberModal({ channel, onClose }) {
       )
       setUsers(filtered)
     } catch (error) {
-      console.error('Failed to search users:', error)
+      logger.error('Failed to search users:', error)
       setUsers([])
     } finally {
       setIsLoading(false)

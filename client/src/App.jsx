@@ -30,7 +30,7 @@ function App() {
 
   useEffect(() => {
     const state = useAuthStore.getState()
-    if (state.accessToken && !state.user) {
+    if (state.accessToken && !state.user && !state.isLoading) {
       state.fetchUser().catch(() => {})
     }
   }, [])

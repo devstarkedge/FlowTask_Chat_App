@@ -3,6 +3,7 @@ import { authAPI } from '../services/api'
 import { useChannelStore } from './channelStore'
 import { connectSocket, disconnectSocket } from '../services/socket'
 import { useWorkspaceStore } from './workspaceStore'
+import logger from '../utils/logger'
 
 const FLOWTASK_ENABLED = import.meta.env.VITE_FLOWTASK_ENABLED !== 'false'
 
@@ -49,7 +50,7 @@ export const useAuthStore = create((set, get) => ({
       const { user, accessToken, refreshToken } = data.data
       localStorage.setItem('chat_access_token', accessToken)
       localStorage.setItem('chat_refresh_token', refreshToken)
-      set({ accessToken, refreshToken, user, isLoading: false })
+      set({ accessToken, refreshToken, user, isLoading: false, isInitialized: true })
       // Fetch workspaces for workspace selector; socket connects when workspace is selected
       await useWorkspaceStore.getState().fetchWorkspaces()
       return data
@@ -77,7 +78,15 @@ export const useAuthStore = create((set, get) => ({
       await useWorkspaceStore.getState().fetchWorkspaces()
       return data
     } catch (error) {
-      const msg = error.response?.data?.error?.message || 'FlowTask login failed'
+      const status = error.response?.status
+      const serverMsg = error.response?.data?.error?.message
+      let msg = serverMsg || 'FlowTask login failed'
+      if (!serverMsg && status) {
+        msg = `FlowTask login failed (HTTP ${status})`
+      }
+      if (!error.response) {
+        msg = 'FlowTask login failed — could not reach the server. Check your network or backend URL.'
+      }
       set({ isLoading: false, error: msg })
       throw error
     }
@@ -150,7 +159,7 @@ export const useAuthStore = create((set, get) => ({
       const { data } = await authAPI.updatePreferences(prefs)
       set({ user: data.data.user })
     } catch (error) {
-      console.error('Failed to update preferences:', error)
+      logger.error('Failed to update preferences:', error)
     }
   },
 

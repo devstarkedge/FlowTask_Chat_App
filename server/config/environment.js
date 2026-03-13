@@ -34,9 +34,20 @@ if (process.env.JWT_REFRESH_SECRET && process.env.JWT_REFRESH_SECRET.length < 32
   console.warn('[SECURITY WARNING] JWT_REFRESH_SECRET should be at least 32 characters for production safety');
 }
 
+// ─── Production enforcement ──────────────────────────────────────────────────
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+if (IS_PRODUCTION) {
+  const prodRequired = ['BASE_URL', 'CORS_ORIGINS'];
+  const prodMissing = prodRequired.filter((key) => !process.env[key]);
+  if (prodMissing.length > 0) {
+    console.error(`[FATAL] Missing production-required env vars: ${prodMissing.join(', ')}`);
+    process.exit(1);
+  }
+}
+
 // ─── Parse CORS origins ─────────────────────────────────────────────────────
 function parseCorsOrigins(raw) {
-  if (!raw) return ['http://localhost:5174'];
+  if (!raw) return IS_PRODUCTION ? [] : ['http://localhost:5174'];
   return raw
     .split(',')
     .map((o) => o.trim().replace(/\/+$/, '')) // strip trailing slashes
@@ -49,8 +60,8 @@ const env = Object.freeze({
   APP_NAME: process.env.APP_NAME || 'FlowTask Chat',
   PORT: parseInt(process.env.PORT, 10) || 3200,
   NODE_ENV: process.env.NODE_ENV || 'development',
-  IS_PRODUCTION: process.env.NODE_ENV === 'production',
-  BASE_URL: process.env.BASE_URL || 'http://localhost:3200',
+  IS_PRODUCTION,
+  BASE_URL: process.env.BASE_URL || (IS_PRODUCTION ? '' : 'http://localhost:3200'),
 
   // Database
   MONGO_URI: process.env.MONGO_URI,
@@ -78,7 +89,10 @@ const env = Object.freeze({
   SMTP_FROM: process.env.SMTP_FROM || 'noreply@flowchat.local',
 
   // Logging
-  LOG_LEVEL: process.env.LOG_LEVEL || 'info',
+  // development → 'debug'  (error, warn, info, http/morgan, debug all visible)
+  // production  → 'info'   (only error, warn, info — debug and http suppressed)
+  // Override via LOG_LEVEL env var (e.g. LOG_LEVEL=debug in Render for a session)
+  LOG_LEVEL: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
 
   // Uploads
   UPLOAD_DIR: process.env.UPLOAD_DIR || './uploads',

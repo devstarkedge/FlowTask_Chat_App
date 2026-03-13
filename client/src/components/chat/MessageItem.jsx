@@ -683,172 +683,185 @@ const MessageItem = memo(
                   </span>
                 </button>
               )}
+              {/* Thread preview — Slack-style, outside the bubble */}
+              {message.replyCount > 0 && (
+                <ThreadPreview message={message} onOpenThread={onOpenThread} />
+              )}
             </div>
-            {/* end bubble */}
+            {/* end column */}
           </div>
-          {/* end column */}
-        </div>
-        {/* end flex row */}
+          {/* end flex row */}
 
-        {/* Action Bar (hover) */}
-        {(showActions || showReactionPicker || showMoreMenu) &&
-          !isEditing &&
-          !isPending &&
-          !isFailed && (
+          {/* Action Bar (hover) */}
+          {(showActions || showReactionPicker || showMoreMenu) &&
+            !isEditing &&
+            !isPending &&
+            !isFailed && (
+              <div
+                className="absolute -top-3.5 right-5 flex items-center gap-0.5 px-1 py-0.5 rounded-lg z-10 animate-fade-in-scale"
+                style={{
+                  background: "var(--bg-secondary)",
+                  border: "1px solid var(--border-primary)",
+                  boxShadow: "var(--shadow-md)",
+                }}
+              >
+                <ActionButton
+                  icon={Smile}
+                  title="Add reaction"
+                  onClick={() => setShowReactionPicker(!showReactionPicker)}
+                />
+                <ActionButton
+                  icon={MessageSquare}
+                  title="Reply in thread"
+                  onClick={() =>
+                    onOpenThread?.({
+                      rootMessageId: message._id,
+                      channelId: message.channelId,
+                    })
+                  }
+                />
+                <ActionButton
+                  icon={Bookmark}
+                  title="Save message"
+                  onClick={() => {
+                    onSaveMessage?.(message._id);
+                    setShowActions(false);
+                  }}
+                />
+                <ActionButton
+                  icon={MoreHorizontal}
+                  title="More actions"
+                  onClick={() => setShowMoreMenu(!showMoreMenu)}
+                />
+                {isOwn && (
+                  <>
+                    <div
+                      style={{
+                        width: 1,
+                        height: 16,
+                        background: "var(--border-secondary)",
+                        margin: "0 2px",
+                      }}
+                    />
+                    {canEdit && (
+                      <ActionButton
+                        icon={Edit}
+                        title="Edit"
+                        onClick={() => {
+                          setEditContent(message.content);
+                          setIsEditing(true);
+                        }}
+                      />
+                    )}
+                    <ActionButton
+                      icon={Trash2}
+                      title="Delete"
+                      danger
+                      onClick={() =>
+                        deleteMessage(message._id, message.channelId)
+                      }
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
+          {/* More Actions Menu */}
+          {showMoreMenu && (
             <div
-              className="absolute -top-3.5 right-5 flex items-center gap-0.5 px-1 py-0.5 rounded-lg z-10 animate-fade-in-scale"
+              className="absolute z-20 w-48 rounded-md shadow-lg py-1"
               style={{
                 background: "var(--bg-secondary)",
                 border: "1px solid var(--border-primary)",
-                boxShadow: "var(--shadow-md)",
+                top: "-40px",
+                right: "40px",
               }}
             >
-              <ActionButton
-                icon={Smile}
-                title="Add reaction"
-                onClick={() => setShowReactionPicker(!showReactionPicker)}
-              />
-              <ActionButton
-                icon={MessageSquare}
-                title="Reply in thread"
-                onClick={() =>
-                  onOpenThread?.({
-                    rootMessageId: message._id,
-                    channelId: message.channelId,
-                  })
-                }
-              />
-              <ActionButton
-                icon={Bookmark}
-                title="Save message"
+              <MoreMenuItem
+                icon={Pin}
+                label={message.isPinned ? "Unpin message" : "Pin message"}
                 onClick={() => {
-                  onSaveMessage?.(message._id);
+                  message.isPinned
+                    ? unpinMessage(message._id)
+                    : pinMessage(message._id);
+                  setShowMoreMenu(false);
                   setShowActions(false);
                 }}
               />
-              <ActionButton
-                icon={MoreHorizontal}
-                title="More actions"
-                onClick={() => setShowMoreMenu(!showMoreMenu)}
-              />
-              {isOwn && (
-                <>
-                  <div
-                    style={{
-                      width: 1,
-                      height: 16,
-                      background: "var(--border-secondary)",
-                      margin: "0 2px",
-                    }}
-                  />
-                  {canEdit && (
-                    <ActionButton
-                      icon={Edit}
-                      title="Edit"
-                      onClick={() => {
-                        setEditContent(message.content);
-                        setIsEditing(true);
-                      }}
-                    />
-                  )}
-                  <ActionButton
-                    icon={Trash2}
-                    title="Delete"
-                    danger
-                    onClick={() =>
-                      deleteMessage(message._id, message.channelId)
+              <MoreMenuItem
+                icon={Copy}
+                label="Copy text"
+                onClick={async () => {
+                  const textToCopy = message.content || "";
+                  try {
+                    if (navigator?.clipboard?.writeText) {
+                      await navigator.clipboard.writeText(textToCopy);
+                    } else {
+                      const textarea = document.createElement("textarea");
+                      textarea.value = textToCopy;
+                      textarea.setAttribute("readonly", "");
+                      textarea.style.cssText = "position:fixed;opacity:0";
+                      document.body.appendChild(textarea);
+                      textarea.select();
+                      document.execCommand("copy");
+                      document.body.removeChild(textarea);
                     }
-                  />
-                </>
-              )}
+                    toast.success("Copied to clipboard", { duration: 1500 });
+                  } catch {
+                    toast.error("Copy failed");
+                  }
+                  setShowMoreMenu(false);
+                  setShowActions(false);
+                }}
+              />
+              <MoreMenuItem
+                icon={Link2}
+                label="Copy link"
+                onClick={async () => {
+                  const link = `${window.location.origin}/chat/${message.channelId}/${message._id}`;
+                  try {
+                    await navigator.clipboard.writeText(link);
+                    toast.success("Link copied", { duration: 1500 });
+                  } catch {
+                    toast.error("Failed to copy link");
+                  }
+                  setShowMoreMenu(false);
+                  setShowActions(false);
+                }}
+              />
+              <MoreMenuItem
+                icon={Forward}
+                label="Forward message"
+                onClick={() => {
+                  // Future: Implement forward modal
+                  toast.success("Forwarding not yet implemented!");
+                  setShowMoreMenu(false);
+                  setShowActions(false);
+                }}
+              />
             </div>
           )}
 
-        {/* More Actions Dropdown */}
-        {showMoreMenu && (
-          <div
-            className="absolute -top-1 right-5 z-20 mt-7 rounded-lg py-1 animate-fade-in-scale"
-            style={{
-              background: "var(--bg-secondary)",
-              border: "1px solid var(--border-primary)",
-              boxShadow: "var(--shadow-lg)",
-              minWidth: 180,
-            }}
-          >
-            <MoreMenuItem
-              icon={Pin}
-              label={message.isPinned ? "Unpin message" : "Pin message"}
-              onClick={() => {
-                message.isPinned
-                  ? unpinMessage(message._id)
-                  : pinMessage(message._id);
-                setShowMoreMenu(false);
-                setShowActions(false);
-              }}
-            />
-            <MoreMenuItem
-              icon={Copy}
-              label="Copy text"
-              onClick={async () => {
-                const textToCopy = message.content || "";
-                try {
-                  if (navigator?.clipboard?.writeText) {
-                    await navigator.clipboard.writeText(textToCopy);
-                  } else {
-                    const textarea = document.createElement("textarea");
-                    textarea.value = textToCopy;
-                    textarea.setAttribute("readonly", "");
-                    textarea.style.cssText = "position:fixed;opacity:0";
-                    document.body.appendChild(textarea);
-                    textarea.select();
-                    document.execCommand("copy");
-                    document.body.removeChild(textarea);
-                  }
-                  toast.success("Copied to clipboard", { duration: 1500 });
-                } catch {
-                  toast.error("Copy failed");
-                }
-                setShowMoreMenu(false);
-                setShowActions(false);
-              }}
-            />
-            <MoreMenuItem
-              icon={Link2}
-              label="Copy link"
-              onClick={async () => {
-                const link = `${window.location.origin}/chat/${message.channelId}/${message._id}`;
-                try {
-                  await navigator.clipboard.writeText(link);
-                  toast.success("Link copied", { duration: 1500 });
-                } catch {
-                  toast.error("Failed to copy link");
-                }
-                setShowMoreMenu(false);
-                setShowActions(false);
-              }}
-            />
-          </div>
-        )}
-
-        {/* Reaction Picker (extended with EmojiPicker) */}
-        {showReactionPicker && (
-          <div
-            className="absolute -top-3 right-5 z-20"
-            style={{ position: "absolute" }}
-          >
-            <EmojiPicker
-              onSelect={(emoji) => {
-                handleReaction(emoji);
-                setShowActions(false);
-              }}
-              onClose={() => {
-                setShowReactionPicker(false);
-                setShowActions(false);
-              }}
-              position="top"
-            />
-          </div>
-        )}
+          {/* Reaction Picker (extended with EmojiPicker) */}
+          {showReactionPicker && (
+            <div
+              className="absolute -top-3 right-5 z-20"
+              style={{ position: "absolute" }}
+            >
+              <EmojiPicker
+                onSelect={(emoji) => {
+                  handleReaction(emoji);
+                  setShowActions(false);
+                }}
+                onClose={() => {
+                  setShowReactionPicker(false);
+                  setShowActions(false);
+                }}
+                position="top"
+              />
+            </div>
+          )}
+        </div>
       </div>
     );
   },
@@ -911,6 +924,78 @@ function MoreMenuItem({ icon: Icon, label, onClick, danger }) {
     >
       <Icon size={15} style={{ opacity: 0.7 }} />
       <span>{label}</span>
+    </button>
+  );
+}
+
+/* ─── Thread Preview (under the bubble) ─────────────────────────────────── */
+function ThreadPreview({ message, onOpenThread }) {
+  const participants = Array.isArray(message.threadParticipants)
+    ? message.threadParticipants
+    : [];
+  const count = message.replyCount || 0;
+
+  const formatLastReply = (dateStr) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    if (isToday) return `Last reply today at ${format(d, "h:mm a")}`;
+    const isYesterday =
+      new Date(now - 86400000).toDateString() === d.toDateString();
+    if (isYesterday) return `Last reply yesterday at ${format(d, "h:mm a")}`;
+    return `Last reply ${format(d, "MMM d")} at ${format(d, "h:mm a")}`;
+  };
+
+  const lastReplyText = formatLastReply(message.lastReplyAt);
+
+  return (
+    <button
+      className="thread-preview"
+      onClick={() =>
+        onOpenThread?.({
+          rootMessageId: message._id,
+          channelId: message.channelId,
+        })
+      }
+    >
+      {/* Participant avatar stack */}
+      {participants.length > 0 ? (
+        <div className="thread-preview__avatars">
+          {participants.slice(0, 4).map((p, i) =>
+            p.avatar ? (
+              <img
+                key={p._id || i}
+                src={p.avatar}
+                alt={p.name || ""}
+                className="thread-preview__avatar-img"
+              />
+            ) : (
+              <div key={p._id || i} className="thread-preview__avatar-fallback">
+                {(p.name || "?").charAt(0).toUpperCase()}
+              </div>
+            ),
+          )}
+        </div>
+      ) : (
+        <MessageSquare
+          size={14}
+          style={{ color: "var(--accent-primary)", flexShrink: 0 }}
+        />
+      )}
+
+      {/* Reply count */}
+      <span className="thread-preview__count">
+        {count} {count === 1 ? "reply" : "replies"}
+      </span>
+
+      {/* Last reply time */}
+      {lastReplyText && (
+        <span className="thread-preview__time">{lastReplyText}</span>
+      )}
+
+      {/* CTA — visible on hover */}
+      <span className="thread-preview__cta">View thread</span>
     </button>
   );
 }

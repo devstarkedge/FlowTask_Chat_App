@@ -18,15 +18,17 @@ export default function WorkspaceLayout() {
     workspaces,
     switchWorkspace,
     fetchWorkspaces,
-    isLoading,
   } = useWorkspaceStore()
 
-  // Ensure workspaces are loaded
+  // Ensure workspaces are loaded — run ONCE on mount using a store snapshot
+  // to avoid an infinite loop when the user has no workspaces (workspaces stays
+  // [] after every fetch, re-triggering an effect that watches workspaces.length)
   useEffect(() => {
-    if (workspaces.length === 0 && !isLoading) {
+    const { workspaces: ws, isLoading: loading } = useWorkspaceStore.getState()
+    if (ws.length === 0 && !loading) {
       fetchWorkspaces()
     }
-  }, [workspaces.length, isLoading, fetchWorkspaces])
+  }, [fetchWorkspaces])
 
   // Sync URL workspaceId → store
   useEffect(() => {

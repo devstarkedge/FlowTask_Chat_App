@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { channelAPI, readReceiptAPI } from '../services/api'
 import toast from 'react-hot-toast'
+import logger from '../utils/logger'
 
 export const useChannelStore = create(
   persist(
@@ -29,7 +30,7 @@ export const useChannelStore = create(
       get().fetchUnreads()
     } catch (error) {
       set({ isLoading: false })
-      console.error('Failed to fetch channels:', error)
+      logger.error('Failed to fetch channels:', error)
     }
   },
 
@@ -47,7 +48,7 @@ export const useChannelStore = create(
       }
       set({ unreads, lastReadByChannel })
     } catch (error) {
-      console.error('Failed to fetch unreads:', error)
+      logger.error('Failed to fetch unreads:', error)
     }
   },
 
@@ -76,7 +77,7 @@ export const useChannelStore = create(
       }))
     } catch (error) {
       set({ isMembersLoading: false })
-      console.error('Failed to fetch members:', error)
+      logger.error('Failed to fetch members:', error)
     }
   },
 

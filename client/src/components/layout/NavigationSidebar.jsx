@@ -82,13 +82,18 @@ export default function NavigationSidebar({
     (c) => c.type === "private" && !c.isArchived,
   );
   const dmChannels = useMemo(() => {
+    const currentChatId = user?._id?.toString?.();
+    const currentFlowTaskId = user?.flowTaskUserId?.toString?.();
+    const selfIds = new Set([currentChatId, currentFlowTaskId].filter(Boolean));
+
     return channels
       .filter((c) => c.type === "dm" && !c.isArchived)
       .map((c) => {
-        if (c.dmRecipientId) return c;
-        const currentFlowTaskId = user?.flowTaskUserId || user?._id;
+        const participants = Array.isArray(c.dmParticipants)
+          ? c.dmParticipants.map((p) => p?.toString?.() || String(p))
+          : [];
         const recipientId =
-          c.dmParticipants?.find((p) => p !== currentFlowTaskId) || null;
+          c.dmRecipientId || participants.find((p) => p && !selfIds.has(p)) || null;
         return { ...c, dmRecipientId: recipientId };
       });
   }, [channels, user]);

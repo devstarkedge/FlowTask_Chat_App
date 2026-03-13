@@ -142,6 +142,7 @@ export const useChatStore = create((set, get) => ({
    * Flow: generate tempId → show instantly → send to server → reconcile on ACK
    */
   sendMessage: async (channelId, content, options = {}) => {
+    let tempId = null
     try {
       // Check if it's a slash command (not optimistic)
       if (content.trim().startsWith('/flowtask')) {
@@ -151,7 +152,7 @@ export const useChatStore = create((set, get) => ({
       }
 
       const user = useAuthStore.getState().user
-      const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       const isThreadReply = !!options.threadId
 
       // Create optimistic message to show immediately
@@ -163,8 +164,8 @@ export const useChatStore = create((set, get) => ({
         contentType: 'text',
         authorId: user,
         senderSnapshot: { name: user?.name || 'You', avatar: user?.avatar || null },
-        attachments: [],
-        fileReferences: [],
+        attachments: options.attachments || [],
+        fileReferences: options.fileReferences || [],
         mentions: [],
         reactions: [],
         replyCount: 0,
@@ -207,18 +208,10 @@ export const useChatStore = create((set, get) => ({
       return serverMessage
     } catch (error) {
       // Mark the optimistic message as failed
-      if (options.threadId) {
-        const threadReplies = get().threadRepliesByRoot[options.threadId] || []
-        const failedMsg = threadReplies.find(m => m.pending && m._id?.startsWith('temp-'))
-        if (failedMsg) {
-          get().markThreadReplyFailed(failedMsg._id, options.threadId)
-        }
-      } else {
-        const tempMessages = (get().messagesByChannel[channelId] || [])
-        const failedMsg = tempMessages.find(m => m.pending && m._id?.startsWith('temp-'))
-        if (failedMsg) {
-          get().markMessageFailed(failedMsg._id, channelId)
-        }
+      if (tempId && options.threadId) {
+        get().markThreadReplyFailed(tempId, options.threadId)
+      } else if (tempId) {
+        get().markMessageFailed(tempId, channelId)
       }
       toast.error('Failed to send message')
       throw error
@@ -341,6 +334,9 @@ export const useChatStore = create((set, get) => ({
     try {
       await get().sendMessage(channelId, failedMsg.content, {
         threadId: failedMsg.threadId,
+        htmlContent: failedMsg.htmlContent,
+        fileReferences: failedMsg.fileReferences,
+        attachments: failedMsg.attachments,
       })
     } catch {
       // Error already handled in sendMessage

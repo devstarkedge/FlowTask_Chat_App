@@ -285,11 +285,30 @@ class ChannelService {
     if (!membership) {
       // Auto-add FlowTask users to workspace if they've been synced but not yet added as members
       if (targetUser.authProvider === 'flowtask' && targetUser.flowTaskUserId) {
-        await WorkspaceMembership.addMember(workspaceId, targetUser._id);
-        logger.info('Auto-added FlowTask user to workspace for DM', {
-          userId: targetUser._id,
-          workspaceId,
-        });
+         try {
+          await WorkspaceMembership.addMember(workspaceId, targetUser._id);
+          logger.info('Auto-added FlowTask user to workspace for DM', {
+            userId: targetUser._id,
+            workspaceId,
+          });
+        } catch (addError) {
+          // Re-check membership in case of race condition (concurrent add)
+          const recheckMembership = await WorkspaceMembership.findOne({
+            userId: targetUser._id,
+            workspaceId,
+            isActive: true,
+          }).lean();
+          if (!recheckMembership) {
+            logger.error('Failed to auto-add FlowTask user to workspace', {
+              userId: targetUser._id,
+              workspaceId,
+              error: addError.message,
+            });
+            throw new ForbiddenError(
+              `Unable to add user '${targetUser.name}' to workspace '${workspaceName || workspaceId}'.`
+            );
+          }
+        }
       } else {
         throw new ForbiddenError(
           `User '${targetUser.name}' is not a member of workspace '${workspaceName || workspaceId}'.`

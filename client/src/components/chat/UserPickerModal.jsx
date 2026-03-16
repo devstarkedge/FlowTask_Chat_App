@@ -91,13 +91,18 @@ export default function UserPickerModal({ onClose, onSelect }) {
 
     // dm-contacts returns chatUserId (ChatApp _id) and/or flowTaskUserId
     const targetId = targetUser.chatUserId || targetUser.flowTaskUserId
+   
+    if (!targetId) {
+      logger.error('Cannot start DM: user has no valid identifier', targetUser)
+      toast.error('Unable to start conversation with this user')
+      return
+    }
 
     setIsCreating(true)
     try {
       // Check if DM already exists in local state
       const existingDM = channels.find(
-        (c) => dmMatchesTarget(c, targetId)
-      )
+        (c) => c.type === 'dm' && c.dmParticipants?.includes(targetId)      )
 
       if (existingDM) {
         onSelect(existingDM._id)

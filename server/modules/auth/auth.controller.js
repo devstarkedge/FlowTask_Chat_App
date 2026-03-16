@@ -184,7 +184,15 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
     const log = (await import('../../utils/logger.js')).default;
     try {
       // Store FlowTask JWT on the ChatUser for later API calls (e.g., getDMContacts)
-      await ChatUser.findByIdAndUpdate(chatUser._id, { flowTaskToken: token });
+      // Decode token to extract expiration (without verification, as it's already validated)
+      const [, payload] = token.split('.');
+      const decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
+      const expiresAt = decoded.exp ? new Date(decoded.exp * 1000) : null;
+      
+      await ChatUser.findByIdAndUpdate(chatUser._id, { 
+        flowTaskToken: token,
+        flowTaskTokenExpiresAt: expiresAt,
+      });
 
       // Sync all FlowTask users to ChatApp workspace so they appear in DM contacts
       if (wsId) {
@@ -195,8 +203,7 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
     } catch (err) {
       log.warn('Background FlowTask user sync failed (non-blocking)', { error: err.message });
     }
-  })();
-});
+  })();});
 
 /**
  * POST /api/chat/auth/sync

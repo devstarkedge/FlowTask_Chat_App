@@ -111,7 +111,9 @@ export default function ChannelBrowser({ onClose }) {
             </p>
           ) : (
             filtered.map((ch) => {
-              const Icon = TYPE_ICONS[ch.type] || Hash
+              let Icon = TYPE_ICONS[ch.type] || Hash
+              if (ch.visibility === 'private') Icon = Lock
+              else if (ch.visibility === 'public') Icon = Hash
               return (
                 <div
                   key={ch._id}

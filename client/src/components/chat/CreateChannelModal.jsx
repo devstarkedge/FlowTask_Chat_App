@@ -24,7 +24,8 @@ export default function CreateChannelModal({ onClose }) {
         description: description.trim(),
         visibility,
       })
-      toast.success(`Channel #${channel.name} created!`)
+      const displayName = visibility === 'private' ? channel.name : `#${channel.name}`
+      toast.success(`Channel ${displayName} created!`)
       onClose()
     } catch (error) {
       const msg = error.response?.data?.error?.message || 'Failed to create channel'
@@ -89,7 +90,11 @@ export default function CreateChannelModal({ onClose }) {
                 transition: 'border-color var(--transition-fast)',
               }}
             >
-              <Hash size={16} style={{ color: 'var(--text-muted)' }} />
+              {visibility === 'private' ? (
+                <Lock size={16} style={{ color: 'var(--text-muted)' }} />
+              ) : (
+                <Hash size={16} style={{ color: 'var(--text-muted)' }} />
+              )}
               <input
                 type="text"
                 value={name}
@@ -104,7 +109,7 @@ export default function CreateChannelModal({ onClose }) {
             <div className="flex items-center justify-between mt-1">
               {slugPreview && (
                 <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                  Slug: <span style={{ color: 'var(--text-secondary)' }}>#{slugPreview}</span>
+                  Slug: <span style={{ color: 'var(--text-secondary)' }}>{visibility === 'private' ? '' : '#'}{slugPreview}</span>
                 </p>
               )}
               <p className="text-[11px] ml-auto" style={{ color: 'var(--text-muted)' }}>

@@ -38,7 +38,7 @@ function Avatar({ member, size = 28, showStatus = false, tooltipPosition = 'bott
         />
       ) : (
         <div
-          className="rounded-md flex items-center justify-center font-bold text-white select-none"
+          className="rounded flex items-center justify-center font-bold text-white select-none"
           style={{
             width: size,
             height: size,

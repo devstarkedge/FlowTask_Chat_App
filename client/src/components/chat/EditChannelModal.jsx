@@ -87,11 +87,19 @@ export default function EditChannelModal({ channel, onClose }) {
               Name
             </label>
             <div className="relative">
-              <Hash
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2"
-                style={{ color: 'var(--text-muted)' }}
-              />
+              {visibility === 'private' ? (
+                <Lock
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2"
+                  style={{ color: 'var(--text-muted)' }}
+                />
+              ) : (
+                <Hash
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2"
+                  style={{ color: 'var(--text-muted)' }}
+                />
+              )}
               <input
                 id="channel-name-input"
                 type="text"

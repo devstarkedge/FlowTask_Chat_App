@@ -5,7 +5,6 @@ import { format } from "date-fns";
 import {
   Smile,
   MessageSquare,
-  MoreHorizontal,
   Edit,
   Trash2,
   Pin,
@@ -23,6 +22,7 @@ import {
   Bookmark,
   Forward,
   Link2,
+  MoreVertical,
 } from "lucide-react";
 import { Avatar } from "./MemberAvatarGroup";
 import EmojiPicker from "./EmojiPicker";
@@ -698,7 +698,7 @@ const MessageItem = memo(
             !isPending &&
             !isFailed && (
               <div
-                className="absolute -top-3.5 right-5 flex items-center gap-0.5 px-1 py-0.5 rounded-lg z-10 animate-fade-in-scale"
+                className="absolute -top-3.5 right-5 flex items-center gap-1.5 px-2 py-1 rounded-lg z-10 animate-fade-in-scale"
                 style={{
                   background: "var(--bg-secondary)",
                   border: "1px solid var(--border-primary)",
@@ -728,21 +728,9 @@ const MessageItem = memo(
                     setShowActions(false);
                   }}
                 />
-                <ActionButton
-                  icon={MoreHorizontal}
-                  title="More actions"
-                  onClick={() => setShowMoreMenu(!showMoreMenu)}
-                />
+
                 {isOwn && (
                   <>
-                    <div
-                      style={{
-                        width: 1,
-                        height: 16,
-                        background: "var(--border-secondary)",
-                        margin: "0 2px",
-                      }}
-                    />
                     {canEdit && (
                       <ActionButton
                         icon={Edit}
@@ -763,6 +751,11 @@ const MessageItem = memo(
                     />
                   </>
                 )}
+                <ActionButton
+                  icon={MoreVertical}
+                  title="More actions"
+                  onClick={() => setShowMoreMenu(!showMoreMenu)}
+                />
               </div>
             )}
 
@@ -886,12 +879,12 @@ const MessageItem = memo(
 
 export default MessageItem;
 
-function ActionButton({ icon: Icon, title, onClick, danger }) {
+function ActionButton({ icon: Icon, title, onClick, danger, color, size = 16 }) {
   return (
     <button
-      className="p-1.5 rounded-md cursor-pointer transition-colors"
+      className="p-2 rounded-md cursor-pointer transition-colors"
       style={{
-        color: danger ? "var(--accent-red)" : "var(--text-muted)",
+        color: color || (danger ? "var(--accent-red)" : "#070534"),
         background: "transparent",
         border: "none",
       }}
@@ -902,7 +895,7 @@ function ActionButton({ icon: Icon, title, onClick, danger }) {
       }
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
-      <Icon size={15} />
+      <Icon size={size} />
     </button>
   );
 }

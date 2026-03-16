@@ -214,6 +214,15 @@ class ChannelService {
       workspaceId,
     });
 
+    // Persist both participants to ChannelMember collection so that
+    // findByMember (which uses ChannelMember as primary lookup) can
+    // find this DM channel after page refresh.
+    const channelId = channel._id.toString();
+    await Promise.all([
+      ChannelMember.addMember(channelId, ids[0], workspaceId, CHANNEL_MEMBER_ROLES.MEMBER),
+      ChannelMember.addMember(channelId, ids[1], workspaceId, CHANNEL_MEMBER_ROLES.MEMBER),
+    ]);
+
     // Auto-join both users to the workspace-scoped channel room
     joinChannelRoom(ids[0], channel._id.toString(), workspaceId);
     joinChannelRoom(ids[1], channel._id.toString(), workspaceId);

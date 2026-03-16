@@ -55,9 +55,9 @@ export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotificat
     setExpandedSections((s) => ({ ...s, [section]: !s[section] }));
   }
 
-  const projectChannels = channels.filter((c) => c.type === 'project' && !c.isArchived)
-  const publicChannels = channels.filter((c) => c.type === 'public' && !c.isArchived)
-  const privateChannels = channels.filter((c) => c.type === 'private' && !c.isArchived)
+  const projectChannels = channels.filter((c) => c.type === 'project' && c.visibility?.toLowerCase() !== 'private' && !c.isArchived)
+  const publicChannels = channels.filter((c) => (c.type === 'public' || !c.type) && c.visibility?.toLowerCase() !== 'private' && !c.isArchived)
+  const privateChannels = channels.filter((c) => (c.type?.toLowerCase() === 'private' || c.visibility?.toLowerCase() === 'private') && !c.isArchived)
   // Enrich DM channels with dmRecipientId for online indicator
   const dmChannels = useMemo(() => {
     return channels
@@ -547,7 +547,14 @@ function ChannelSection({ title, channels, expanded, onToggle, activeId, unreads
 /* ─── Channel Item ──────────────────────────────────────────────────────── */
 
 function ChannelItem({ channel, isActive, unread, onClick, isDM, onlineUsers }) {
-  const Icon = CHANNEL_ICONS[channel.type] || Hash
+  let Icon = CHANNEL_ICONS[channel.type] || Hash
+  const isPrivate = channel.visibility?.toLowerCase() === 'private' || channel.type?.toLowerCase() === 'private' || channel.isPrivate
+  
+  if (!isDM && isPrivate) {
+    Icon = Lock
+  } else if (!isDM && channel.type === 'system') {
+    Icon = Volume2
+  }
   const isOnline = isDM && onlineUsers?.has?.(channel.dmRecipientId)
   const isAway = isOnline && onlineUsers?.get?.(channel.dmRecipientId) === 'away'
 

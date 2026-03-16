@@ -88,6 +88,24 @@ class ChannelRepository {
         channels = await Channel.find(filter)
           .sort({ lastMessageAt: -1 })
           .lean();
+
+        // Also check for DM channels via embedded members that may not have
+        // ChannelMember entries yet (pre-fix DMs). Merge without duplicates.
+        const channelIdSet = new Set(channelIds.map(String));
+        const dmFilter = {
+          type: CHANNEL_TYPES.DM,
+          'members.userId': userId,
+          _id: { $nin: [...channelIdSet] },
+        };
+        if (!includeArchived) dmFilter.isArchived = false;
+        if (workspaceId) dmFilter.workspaceId = workspaceId;
+        const extraDMs = await Channel.find(dmFilter)
+          .sort({ lastMessageAt: -1 })
+          .lean();
+        if (extraDMs.length > 0) {
+          channels = [...channels, ...extraDMs];
+        }
+
         await cache.set(cacheKey, channels, 60); // 60s TTL
         return channels;
       }

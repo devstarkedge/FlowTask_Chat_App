@@ -56,7 +56,11 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
         }}
       >
         <div className="flex items-center gap-2">
-          <Hash size={14} style={{ color: 'var(--text-muted)' }} />
+          {channel.visibility === 'private' || channel.type === 'private' ? (
+            <Lock size={14} style={{ color: 'var(--text-muted)' }} />
+          ) : (
+            <Hash size={14} style={{ color: 'var(--text-muted)' }} />
+          )}
           <span
             className="font-bold text-sm truncate"
             style={{ color: 'var(--text-white)', maxWidth: 200 }}
@@ -84,7 +88,11 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
             className="w-14 h-14 rounded-xl flex items-center justify-center mb-3"
             style={{ background: 'var(--bg-hover)' }}
           >
-            <Hash size={24} style={{ color: 'var(--text-muted)' }} />
+            {channel.visibility === 'private' || channel.type === 'private' ? (
+              <Lock size={24} style={{ color: 'var(--text-muted)' }} />
+            ) : (
+              <Hash size={24} style={{ color: 'var(--text-muted)' }} />
+            )}
           </div>
 
           <h3 className="text-lg font-bold mb-1" style={{ color: 'var(--text-white)' }}>
@@ -100,9 +108,22 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
           {channel.topic && (
             <div className="mb-3">
               <p
-                className="text-[10px] font-semibold uppercase tracking-wider mb-1"
+                className="text-[10px] font-semibold uppercase tracking-wider mb-1 relative pl-6"
                 style={{ color: 'var(--text-muted)' }}
               >
+                {channel.visibility === 'private' ? (
+                  <Lock
+                    size={14}
+                    className="absolute left-0 top-1/2 -translate-y-1/2"
+                    style={{ color: 'var(--text-muted)' }}
+                  />
+                ) : (
+                  <Hash
+                    size={14}
+                    className="absolute left-0 top-1/2 -translate-y-1/2"
+                    style={{ color: 'var(--text-muted)' }}
+                  />
+                )}
                 Topic
               </p>
               <p className="text-sm" style={{ color: 'var(--text-primary)' }}>

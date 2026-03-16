@@ -233,36 +233,39 @@ export default function NavigationSidebar({
 
       <div className="flex-1 overflow-y-auto pt-4 pb-4">
         {/* Quick Nav Items (Attached to sidebar with lines) */}
-        <div className="px-5 mb-10">
-          <div
-            className="flex flex-col mr-3.5"
-            style={{
-              borderTop: "2px solid #E2E8F0",
-              borderBottom: "2px solid #E2E8F0",
-            }}
-          >
-            <div style={{ borderBottom: "2px solid #E2E8F0", padding: "4px" }}>
-              <NavButton
-                icon={MessageSquareText}
-                label="Threads"
-                onClick={() => onToggleAllThreads?.()}
-              />
-            </div>
-            <div style={{ borderBottom: "2px solid #E2E8F0", padding: "4px" }}>
-              <NavButton icon={Radio} label="Huddles" onClick={() => {}} />
-            </div>
-            <div style={{ borderBottom: "2px solid #E2E8F0", padding: "4px" }}>
-              <NavButton icon={Send} label="Drafts & Sent" onClick={() => {}} />
-            </div>
-            <div style={{ borderBottom: "2px solid #E2E8F0", padding: "4px" }}>
-              <NavButton
-                icon={Compass}
-                label="Directories"
-                onClick={() => {}}
-              />
-            </div>
-          </div>
-        </div>
+     <div className="px-5 mb-10">
+  <div
+    className="flex flex-col mr-3.5"
+    style={{
+      borderTop: "2px solid #E2E8F0",
+      borderBottom: "2px solid #E2E8F0",
+    }}
+  >
+    <div style={{ borderBottom: "2px solid #E2E8F0", padding: "8px 20px" }}>
+      <NavButton
+        icon={MessageSquareText}
+        label="Threads"
+        onClick={() => onToggleAllThreads?.()}
+      />
+    </div>
+
+    <div style={{ borderBottom: "2px solid #E2E8F0", padding: "8px 20px" }}>
+      <NavButton icon={Radio} label="Huddles" onClick={() => {}} />
+    </div>
+
+    <div style={{ borderBottom: "2px solid #E2E8F0", padding: "8px 20px" }}>
+      <NavButton icon={Send} label="Drafts & Sent" onClick={() => {}} />
+    </div>
+
+    <div style={{ padding: "8px 20px" }}>
+      <NavButton
+        icon={Compass}
+        label="Directories"
+        onClick={() => {}}
+      />
+    </div>
+  </div>
+</div>
 
 <br />        
         {/* Starred Card (Distinct and Separated) */}
@@ -270,7 +273,7 @@ export default function NavigationSidebar({
         <div
           className="p-5 rounded mb-16 "
           style={{
-            background: "#F1F3FF",
+            background: "#e9ecfe",
             border: "2px solid #E2E8F0",
             margin: "0 16px",
             padding: "4px",
@@ -289,7 +292,7 @@ export default function NavigationSidebar({
         <div
           className="p-5 rounded mb-16"
           style={{
-            background: "#F1F3FF",
+            background: "#e9ecfe",
             border: "2px solid #E2E8F0",
             margin: "0 16px",
             padding: "4px",
@@ -417,7 +420,7 @@ function NavButton({ icon: Icon, label, onClick, badge }) {
       onClick={onClick}
       className="flex items-center gap-3.5 w-full px-4 py-2.5 rounded text-[16px] font-medium cursor-pointer transition-colors mb-1"
       style={{
-        color: "#1F2A44",
+        color: "#070534",
         background: "transparent",
         border: "none",
       }}
@@ -450,17 +453,17 @@ function ChannelSection({
     <div
       className="mb-8 p-2 rounded "
       style={{
-        background: "#F1F3FF",
+        background: "#e9ecfe",
         border: "1px solid #E2E8F0",
         margin: "0 12px 24px",
       }}
     >
-      <div className="flex items-center justify-between px-3 py-2">
+      <div className="flex items-center justify-between px-3 py-2 h-8 ">
         <button
           onClick={onToggle}
           className="flex items-center gap-2 text-[16px] p-10 font-bold uppercase tracking-normal cursor-pointer"
           style={{
-            color: "#8A92A6",
+            color: "#070534",
             background: "transparent",
             border: "2px",
           }}
@@ -538,7 +541,7 @@ function ChannelItem({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-4 px-4 py-3 w-full text-left rounded-lg cursor-pointer transition-all"
+      className="flex items-center h-10 gap-2 px-3 py-2 p-10 w-full text-left rounded cursor-pointer transition-all"
       style={{
         background: isActive ? activeBg : "transparent",
         color: "#1F2A44",
@@ -587,7 +590,7 @@ function ChannelItem({
       <div className="flex-1 min-w-0">
         <span
           className="truncate text-[16px] font-medium block"
-          style={{ color: "#1F2A44" }}
+          style={{ color: "#070534" }}
         >
           {channel.name}
         </span>

@@ -142,10 +142,16 @@ export const useChannelStore = create(
   },
 
   createDM: async (targetUserId) => {
+    const target = targetUserId?.toString?.() || String(targetUserId)
     // Deduplication guard: check if DM already exists locally
     // dmParticipants stores ChatUser _id values consistently
     const existing = get().channels.find(
-      (c) => c.type === 'dm' && c.dmParticipants?.includes(targetUserId)
+      (c) => {
+        if (c.type !== 'dm') return false
+        const participants = (c.dmParticipants || []).map((p) => p?.toString?.() || String(p))
+        const recipient = c.dmRecipientId?.toString?.() || (c.dmRecipientId ? String(c.dmRecipientId) : null)
+        return participants.includes(target) || recipient === target
+      }
     )
     if (existing) {
       get().setActiveChannel(existing._id)

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
 import { joinChannel, leaveChannel } from '../../services/socket'
@@ -6,6 +6,7 @@ import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import ChatHeader from './ChatHeader'
 import TypingIndicator from './TypingIndicator'
+import FilesTab from './FilesTab'
 import { Wifi, WifiOff, Loader2 } from 'lucide-react'
 
 export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onTogglePins, onOpenProfile, onOpenFilePreview, onOpenMobileSidebar, onSaveMessage }) {
@@ -13,6 +14,7 @@ export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onT
   const { fetchMessages, messagesByChannel } = useChatStore()
   const connectionStatus = useChatStore((s) => s.connectionStatus)
   const prevChannelRef = useRef(null)
+  const [activeTab, setActiveTab] = useState('messages')
 
   useEffect(() => {
     if (!channelId) return
@@ -24,6 +26,7 @@ export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onT
     prevChannelRef.current = channelId
 
     fetchMessages(channelId)
+    setActiveTab('messages')
 
     return () => {
       leaveChannel(channelId)
@@ -40,6 +43,8 @@ export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onT
         onToggleSearch={onToggleSearch}
         onTogglePins={onTogglePins}
         onOpenMobileSidebar={onOpenMobileSidebar}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
       />
 
       {/* Connection Status Banner */}
@@ -62,19 +67,25 @@ export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onT
         </div>
       )}
 
-      <MessageList
-        messages={messages}
-        channelId={channelId}
-        onOpenThread={onOpenThread}
-        onOpenProfile={onOpenProfile}
-        onOpenFilePreview={onOpenFilePreview}
-        isDMChannel={isDMChannel}
-        onSaveMessage={onSaveMessage}
-      />
+      {activeTab === 'files' ? (
+        <FilesTab channelId={channelId} onOpenFilePreview={onOpenFilePreview} />
+      ) : (
+        <>
+          <MessageList
+            messages={messages}
+            channelId={channelId}
+            onOpenThread={onOpenThread}
+            onOpenProfile={onOpenProfile}
+            onOpenFilePreview={onOpenFilePreview}
+            isDMChannel={isDMChannel}
+            onSaveMessage={onSaveMessage}
+          />
 
-      <TypingIndicator channelId={channelId} />
+          <TypingIndicator channelId={channelId} />
 
-      <MessageInput channelId={channelId} />
+          <MessageInput channelId={channelId} />
+        </>
+      )}
     </div>
   )
 }

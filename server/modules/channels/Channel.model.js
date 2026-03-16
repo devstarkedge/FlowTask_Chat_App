@@ -108,6 +108,11 @@ const channelSchema = new Schema({
   dmParticipants: [{
     type: String,
   }],
+  // Deterministic key for one-to-one DM uniqueness within a workspace.
+  dmKey: {
+    type: String,
+    default: null,
+  },
   isArchived: {
     type: Boolean,
     default: false,
@@ -178,6 +183,17 @@ channelSchema.index(
 channelSchema.index({ workspaceId: 1, 'members.userId': 1, lastMessageAt: -1 });
 // DM participant lookup within workspace
 channelSchema.index({ workspaceId: 1, dmParticipants: 1 }, { sparse: true });
+// Ensure single DM per participant pair per workspace
+channelSchema.index(
+  { workspaceId: 1, dmKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      type: CHANNEL_TYPES.DM,
+      dmKey: { $type: 'string' },
+    },
+  },
+);
 // Type + archive filter within workspace
 channelSchema.index({ workspaceId: 1, type: 1, isArchived: 1 });
 

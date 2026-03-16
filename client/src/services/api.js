@@ -175,6 +175,12 @@ export const messageAPI = {
   getUploadSignature: (channelId) => api.post(`/channels/${channelId}/upload/sign`),
 }
 
+// ─── Files (channel/DM scoped) ─────────────────────────────────────────
+export const fileAPI = {
+  listByChannel: (channelId, params) => api.get(`/channels/${channelId}/files`, { params }),
+  deleteFromChannel: (channelId, fileId) => api.delete(`/channels/${channelId}/files/${fileId}`),
+}
+
 // ─── Threads ─────────────────────────────────────────────────────────────
 export const threadAPI = {
   create: (data) => api.post('/threads', data),

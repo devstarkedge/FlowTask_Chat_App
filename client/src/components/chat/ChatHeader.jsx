@@ -28,6 +28,8 @@ export default function ChatHeader({
   onToggleSearch,
   onOpenMobileSidebar,
   onTogglePins,
+  activeTab = 'messages',
+  onTabChange,
 }) {
   const { membersByChannel, toggleInfoPanel, updateChannel, showInfoPanel } =
     useChannelStore();
@@ -54,7 +56,6 @@ export default function ChatHeader({
   }, [showMoreActions]);
   const [editingTopic, setEditingTopic] = useState(false);
   const [topicValue, setTopicValue] = useState("");
-  const [activeTab, setActiveTab] = useState("messages");
   const [isStarred, setIsStarred] = useState(false);
   const topicInputRef = useRef(null);
 
@@ -234,10 +235,8 @@ export default function ChatHeader({
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center justify-center gap-1 h-10 rounded text-[15px] font-semibold transition-all ${
-                    isConstrained ? "w-10 px-0" : "w-30 px-6"
-                  } ${
+                  onClick={() => onTabChange?.(tab.id)}
+                  className={`flex items-center justify-center gap-1 p-6 h-10 w-30 rounded text-[15px] font-semibold transition-all ${
                     isActive
                       ? "bg-[#94A1F7] text-white shadow-sm"
                       : "bg-[#ECEEF5] text-[#2C3A8C] hover:bg-[#E2E5EF]"

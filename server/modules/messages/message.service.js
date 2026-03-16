@@ -109,13 +109,18 @@ class MessageService {
     const message = await messageRepository.create(messageData);
 
     if (fileReferences && fileReferences.length > 0) {
+      const refContextType = actualThreadId
+        ? 'thread'
+        : channel.type === CHANNEL_TYPES.DM
+          ? 'dm'
+          : 'channel';
       const refsToCreate = fileReferences.map((fileId) => ({
         fileId,
         channelId,
         messageId: message._id,
         threadId: actualThreadId || null,
         referencedBy: authorId,
-        contextType: actualThreadId ? 'thread' : 'channel',
+        contextType: refContextType,
         ...(workspaceId && { workspaceId }),
       }));
       await FileReference.insertMany(refsToCreate);

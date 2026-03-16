@@ -12,6 +12,8 @@ import {
   getPinnedMessages,
   searchMessages,
   uploadFiles,
+  getChannelFiles,
+  deleteChannelFile,
   markDMSeen,
   toggleSaveMessage,
   getSavedMessages,
@@ -91,6 +93,8 @@ channelMessageRouter.get('/messages', getMessages);
 channelMessageRouter.post('/messages', validate({ body: sendMessageSchema }), sendMessage);
 channelMessageRouter.post('/upload', uploadLimiter, uploadMiddleware, handleMulterError, uploadFiles);
 channelMessageRouter.post('/upload/sign', getUploadSignature);
+channelMessageRouter.get('/files', getChannelFiles);
+channelMessageRouter.delete('/files/:fileId', deleteChannelFile);
 channelMessageRouter.get('/pins', getPinnedMessages);
 channelMessageRouter.post('/seen', markDMSeen);
 channelMessageRouter.post('/scheduled-messages', validate({ body: scheduleMessageSchema }), scheduleMessage);

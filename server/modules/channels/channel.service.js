@@ -175,6 +175,7 @@ class ChannelService {
 
     // ── Canonical ID ordering for deterministic dedup ──
     const ids = [id1, id2].sort();
+    const dmKey = `${ids[0]}:${ids[1]}`;
 
     // ── Check for existing DM channel (pass as array — matches repository signature) ──
     const existing = await channelRepository.findDMChannel(ids, workspaceId);
@@ -200,19 +201,30 @@ class ChannelService {
       throw new ForbiddenError('Both users must be active members of the workspace');
     }
 
-    const channel = await channelRepository.create({
-      name: `${user1.name}, ${user2.name}`,
-      slug: `dm-${ids[0]}-${ids[1]}`,
-      type: CHANNEL_TYPES.DM,
-      visibility: CHANNEL_VISIBILITY.PRIVATE,
-      dmParticipants: ids,
-      members: [
-        { userId: ids[0], role: CHANNEL_MEMBER_ROLES.MEMBER },
-        { userId: ids[1], role: CHANNEL_MEMBER_ROLES.MEMBER },
-      ],
-      memberCount: 2,
-      workspaceId,
-    });
+    let channel;
+    try {
+      channel = await channelRepository.create({
+        name: `${user1.name}, ${user2.name}`,
+        slug: `dm-${ids[0]}-${ids[1]}`,
+        type: CHANNEL_TYPES.DM,
+        visibility: CHANNEL_VISIBILITY.PRIVATE,
+        dmParticipants: ids,
+        dmKey,
+        members: [
+          { userId: ids[0], role: CHANNEL_MEMBER_ROLES.MEMBER },
+          { userId: ids[1], role: CHANNEL_MEMBER_ROLES.MEMBER },
+        ],
+        memberCount: 2,
+        workspaceId,
+      });
+    } catch (error) {
+      // Race-safe path: another request created the DM first.
+      if (error?.code === 11000) {
+        const winner = await channelRepository.findDMChannel(ids, workspaceId);
+        if (winner) return winner;
+      }
+      throw error;
+    }
 
     // Persist both participants to ChannelMember collection so that
     // findByMember (which uses ChannelMember as primary lookup) can
@@ -493,16 +505,55 @@ class ChannelService {
     );
 
     const all = [...channels, ...publicSystem];
+    const decorated = await this._decorateDMChannels(all, userId, workspaceId);
 
     logger.debug?.('[CHANNEL_FETCH] Channels resolved for sidebar', {
       userId,
       workspaceId,
       memberChannels: channels.length,
       publicSystem: publicSystem.length,
-      total: all.length,
+      total: decorated.length,
     });
 
-    return all;
+    return decorated;
+  }
+
+  async _decorateDMChannels(channels, currentUserId, workspaceId) {
+    const currentId = currentUserId?.toString();
+    if (!currentId) return channels;
+
+    const dmChannels = channels.filter((c) => c.type === CHANNEL_TYPES.DM);
+    if (dmChannels.length === 0) return channels;
+
+    const recipientIds = new Set();
+    for (const dm of dmChannels) {
+      const participants = Array.isArray(dm.dmParticipants) ? dm.dmParticipants.map((p) => p?.toString()) : [];
+      const recipientId = participants.find((p) => p && p !== currentId);
+      if (recipientId) recipientIds.add(recipientId);
+    }
+
+    if (recipientIds.size === 0) return channels;
+
+    const users = await userRepository.findByIds([...recipientIds]);
+    const byId = new Map(users.map((u) => [u._id.toString(), u]));
+
+    return channels.map((channel) => {
+      if (channel.type !== CHANNEL_TYPES.DM) return channel;
+
+      const participants = Array.isArray(channel.dmParticipants)
+        ? channel.dmParticipants.map((p) => p?.toString())
+        : [];
+      const recipientId = participants.find((p) => p && p !== currentId) || null;
+      const recipient = recipientId ? byId.get(recipientId) : null;
+
+      const raw = channel.toObject ? channel.toObject() : channel;
+      return {
+        ...raw,
+        dmRecipientId: recipientId,
+        name: recipient?.name || raw.name || 'Direct message',
+        avatar: recipient?.avatar || raw.avatar || null,
+      };
+    });
   }
 
   /**

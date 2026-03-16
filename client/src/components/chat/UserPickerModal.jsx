@@ -32,6 +32,17 @@ export default function UserPickerModal({ onClose, onSelect }) {
   const listRef = useRef(null)
   const debounceRef = useRef(null)
 
+  const dmMatchesTarget = useCallback((channel, target) => {
+    if (!channel || channel.type !== 'dm') return false
+    const ids = new Set(
+      (channel.dmParticipants || []).map((p) => p?.toString?.() || String(p))
+    )
+    if (channel.dmRecipientId) {
+      ids.add(channel.dmRecipientId?.toString?.() || String(channel.dmRecipientId))
+    }
+    return ids.has(target?.toString?.() || String(target))
+  }, [])
+
   // Focus search input on mount
   useEffect(() => {
     searchInputRef.current?.focus()
@@ -85,7 +96,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
     try {
       // Check if DM already exists in local state
       const existingDM = channels.find(
-        (c) => c.type === 'dm' && c.dmParticipants?.includes(targetId)
+        (c) => dmMatchesTarget(c, targetId)
       )
 
       if (existingDM) {
@@ -103,7 +114,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
       toast.error(msg)
       setIsCreating(false)
     }
-  }, [isCreating, channels, createDM, onSelect])
+  }, [isCreating, channels, createDM, onSelect, dmMatchesTarget])
 
   // Keyboard navigation
   const handleKeyDown = (e) => {
@@ -212,7 +223,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
               const uId = u.chatUserId || u.flowTaskUserId
               // Check if DM already exists
               const existingDM = channels.find(
-                (c) => c.type === 'dm' && c.dmParticipants?.includes(uId)
+                (c) => dmMatchesTarget(c, uId)
               )
 
               return (

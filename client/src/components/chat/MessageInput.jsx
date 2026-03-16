@@ -126,7 +126,6 @@ function LinkModal({ onInsert, onClose }) {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function MessageInput({ channelId, threadId, placeholder }) {
-  const [isSending, setIsSending] = useState(false)
   const [pendingFiles, setPendingFiles] = useState([])
   const [uploadingFiles, setUploadingFiles] = useState([])
   const [isUploading, setIsUploading] = useState(false)
@@ -384,32 +383,34 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
     const { html, text } = ed.getContent()
     if (!text.trim() && pendingFiles.length === 0) return
-    if (isSending || isUploading) return
+    if (isUploading) return
 
-    setIsSending(true)
+    const submitChannelId = channelId
+    const submitThreadId = threadId
+    const submitHtml = html || undefined
+    const submitText = text.trim() || ' '
+    const submitFileReferences = pendingFiles.map((f) => f._id)
+
+    // Optimistic UX: clear composer immediately so next message can be sent right away.
+    ed.clear()
+    setHasContent(false)
+    setPendingFiles([])
+    clearDraft(submitChannelId)
+
+    emitTypingStop(submitChannelId)
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    requestAnimationFrame(() => editorRef.current?.focus())
+
     try {
-      const fileReferences = pendingFiles.map((f) => f._id)
-      await sendMessage(channelId, text.trim() || ' ', {
-        threadId,
-        htmlContent: html || undefined,
-        fileReferences: fileReferences.length > 0 ? fileReferences : undefined,
+      await sendMessage(submitChannelId, submitText, {
+        threadId: submitThreadId,
+        htmlContent: submitHtml,
+        fileReferences: submitFileReferences.length > 0 ? submitFileReferences : undefined,
       })
-
-      // Clear editor
-      ed.clear()
-      setHasContent(false)
-      setPendingFiles([])
-      clearDraft(channelId)
-
-      emitTypingStop(channelId)
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     } catch {
       // Error handled in store
-    } finally {
-      setIsSending(false)
-      requestAnimationFrame(() => editorRef.current?.focus())
     }
-  }, [channelId, threadId, pendingFiles, isSending, isUploading, sendMessage, clearDraft])
+  }, [channelId, threadId, pendingFiles, isUploading, sendMessage, clearDraft])
 
   // ─── Paste Handler (images) ───────────────────────────────────────────────
 
@@ -539,7 +540,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
-  const isDisabled = (!hasContent && pendingFiles.length === 0) || isSending || isUploading
+  const isDisabled = (!hasContent && pendingFiles.length === 0) || isUploading
   const allPreviewFiles = [
     ...uploadingFiles,
     ...pendingFiles.map((f, i) => ({ ...f, isPending: true, idx: i })),
@@ -729,7 +730,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
             data-has-content={hasContent || pendingFiles.length > 0 || undefined}
             aria-label="Send message"
           >
-            {isSending ? (
+            {isUploading ? (
               <Loader2 size={16} className="animate-spin" />
             ) : (
               <Send size={16} />

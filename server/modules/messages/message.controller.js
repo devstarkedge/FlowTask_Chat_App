@@ -3,6 +3,8 @@ import fileUploadService from '../../services/fileUpload.service.js';
 import asyncHandler from '../../middleware/asyncHandler.js';
 import SavedMessage from './SavedMessage.model.js';
 import ScheduledMessage from './ScheduledMessage.model.js';
+import FileReference from '../files/FileReference.model.js';
+import FileAsset from '../files/FileAsset.model.js';
 
 /**
  * Message Controller — REST endpoints for messages.
@@ -189,6 +191,107 @@ export const uploadFiles = asyncHandler(async (req, res) => {
   }
 
   res.status(201).json({ success: true, data: { files: uploads } });
+});
+
+/**
+ * GET /api/chat/channels/:channelId/files
+ * List files shared in the current chat context (channel or DM).
+ */
+export const getChannelFiles = asyncHandler(async (req, res) => {
+  const { channelId } = req.params;
+  const workspaceId = req.workspaceId;
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+  const skip = Math.max(parseInt(req.query.skip, 10) || 0, 0);
+
+  const refs = await FileReference.find({
+    workspaceId,
+    channelId,
+    contextType: { $in: ['channel', 'dm'] },
+  })
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .populate('fileId')
+    .populate('referencedBy', 'name avatar')
+    .populate('messageId', 'createdAt')
+    .lean();
+
+  const items = refs
+    .filter((ref) => ref.fileId && ref.fileId.status !== 'deleted')
+    .map((ref) => ({
+      _id: ref.fileId._id,
+      referenceId: ref._id,
+      messageId: ref.messageId?._id || null,
+      channelId: ref.channelId,
+      contextType: ref.contextType,
+      fileName: ref.fileId.originalName,
+      originalName: ref.fileId.originalName,
+      mimeType: ref.fileId.mimeType,
+      fileSize: ref.fileId.fileSize,
+      url: ref.fileId.secureUrl,
+      thumbnailUrl: ref.fileId.thumbnailUrl,
+      uploadedBy: ref.referencedBy
+        ? {
+            _id: ref.referencedBy._id,
+            name: ref.referencedBy.name,
+            avatar: ref.referencedBy.avatar || null,
+          }
+        : null,
+      uploadedAt: ref.createdAt,
+    }));
+
+  res.json({
+    success: true,
+    data: {
+      items,
+      hasMore: refs.length === limit,
+      pagination: { limit, skip },
+    },
+  });
+});
+
+/**
+ * DELETE /api/chat/channels/:channelId/files/:fileId
+ * Delete a file reference from this chat. Owner/admin can delete.
+ */
+export const deleteChannelFile = asyncHandler(async (req, res) => {
+  const { channelId, fileId } = req.params;
+  const workspaceId = req.workspaceId;
+  const userId = req.user._id.toString();
+  const role = req.membership?.role;
+
+  const ref = await FileReference.findOne({
+    workspaceId,
+    channelId,
+    fileId,
+    contextType: { $in: ['channel', 'dm'] },
+  });
+
+  if (!ref) {
+    return res.status(404).json({ success: false, error: { message: 'File not found in this chat' } });
+  }
+
+  const isAdmin = role === 'owner' || role === 'admin';
+  const isOwner = ref.referencedBy?.toString() === userId;
+  if (!isAdmin && !isOwner) {
+    return res.status(403).json({ success: false, error: { message: 'You can only delete your own files' } });
+  }
+
+  await FileReference.deleteOne({ _id: ref._id });
+
+  const remainingRefs = await FileReference.countDocuments({
+    workspaceId,
+    fileId,
+  });
+
+  if (remainingRefs === 0) {
+    await FileAsset.updateOne(
+      { _id: fileId, workspaceId },
+      { $set: { status: 'deleted' } },
+    );
+  }
+
+  res.json({ success: true, data: { fileId, channelId } });
 });
 
 // ──────────────────── Saved Messages ────────────────────────────────────────

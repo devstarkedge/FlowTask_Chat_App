@@ -60,12 +60,19 @@ export default function Sidebar({ onClose, onToggleAllThreads, onToggleNotificat
   const privateChannels = channels.filter((c) => (c.type?.toLowerCase() === 'private' || c.visibility?.toLowerCase() === 'private') && !c.isArchived)
   // Enrich DM channels with dmRecipientId for online indicator
   const dmChannels = useMemo(() => {
+    const currentChatId = user?._id?.toString?.()
+    const currentFlowTaskId = user?.flowTaskUserId?.toString?.()
+    const selfIds = new Set([currentChatId, currentFlowTaskId].filter(Boolean))
+
     return channels
       .filter((c) => c.type === 'dm' && !c.isArchived)
       .map((c) => {
-        if (c.dmRecipientId) return c
-        const currentFlowTaskId = user?.flowTaskUserId || user?._id
-        const recipientId = c.dmParticipants?.find((p) => p !== currentFlowTaskId) || null
+        const participants = Array.isArray(c.dmParticipants)
+          ? c.dmParticipants.map((p) => p?.toString?.() || String(p))
+          : []
+        const recipientId = c.dmRecipientId
+          || participants.find((p) => p && !selfIds.has(p))
+          || null
         return { ...c, dmRecipientId: recipientId }
       })
   }, [channels, user])

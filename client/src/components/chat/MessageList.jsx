@@ -7,10 +7,11 @@ import { MessageCircle } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
 
 export default function MessageList({ messages, channelId, onOpenThread, onOpenProfile, onOpenFilePreview, isDMChannel, onSaveMessage }) {
-  const { isLoadingMessages, hasMore, fetchMessages } = useChatStore()
+  const { isLoadingMessages, hasMore, fetchMessages, highlightMessageId } = useChatStore()
   const lastReadByChannel = useChannelStore((s) => s.lastReadByChannel)
   const lastReadMessageId = lastReadByChannel[channelId]
   const virtuosoRef = useRef(null)
+  const lastScrolledHighlightId = useRef(null)
 
   // Load more on scroll to top — with debounce protection
   const loadMore = useCallback(() => {
@@ -29,6 +30,8 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
       }, 50)
     }
   }, [channelId])
+
+
 
   // Check if message is activity/system type
   const isActivityMessage = (msg) => {
@@ -120,6 +123,21 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
     }
     return flattened
   }, [messages, lastReadMessageId])
+
+  // Scroll to highlighted message
+  useEffect(() => {
+    if (highlightMessageId && highlightMessageId !== lastScrolledHighlightId.current && virtuosoRef.current && flattenedItems.length > 0) {
+      const idx = flattenedItems.findIndex(item => item._id === highlightMessageId)
+      if (idx !== -1) {
+        lastScrolledHighlightId.current = highlightMessageId
+        setTimeout(() => {
+          virtuosoRef.current.scrollToIndex({ index: idx, align: 'center', behavior: 'smooth' })
+        }, 100)
+      }
+    } else if (!highlightMessageId) {
+      lastScrolledHighlightId.current = null
+    }
+  }, [highlightMessageId, flattenedItems])
 
   // Track initial load vs pagination load (show skeleton on initial load only)
   const isInitialLoad = isLoadingMessages && messages.length === 0

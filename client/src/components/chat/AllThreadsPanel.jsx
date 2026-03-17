@@ -114,7 +114,7 @@ export default function AllThreadsPanel({ onClose, onOpenThread }) {
                     thread.parentMessage?._id ??
                     thread._id
                   )?.toString(),
-                  channelId: thread.channelId?.toString?.() ?? thread.channelId,
+                  channelId: (typeof thread.channelId === 'object' ? thread.channelId._id : thread.channelId)?.toString(),
                 })
               }}
             />

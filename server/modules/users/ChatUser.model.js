@@ -88,7 +88,11 @@ const chatUserSchema = new Schema({
     select: false, // Never returned unless explicitly requested
     default: null,
   },
-
+  flowTaskTokenExpiry: {
+    type: Date,
+    select: false,
+    default: null,
+  },
   // ─── Identity ─────────────────────────────────────────────────────────
   name: {
     type: String,

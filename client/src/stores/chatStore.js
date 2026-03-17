@@ -26,6 +26,9 @@ export const useChatStore = create((set, get) => ({
   hasMore: {},
   isLoadingMessages: false,
 
+  highlightMessageId: null,
+  setHighlightMessageId: (id) => set({ highlightMessageId: id }),
+
   // Pinned messages keyed by channelId
   pinnedMessagesByChannel: {},
   isLoadingPins: false,

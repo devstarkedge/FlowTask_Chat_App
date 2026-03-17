@@ -99,6 +99,7 @@ const MessageItem = memo(
       retryMessage,
       pinMessage,
       unpinMessage,
+      highlightMessageId,
     } = useChatStore();
     const [showActions, setShowActions] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -287,8 +288,9 @@ const MessageItem = memo(
 
     return (
       <div
+        id={`message-${message._id}`}
         ref={messageRef}
-        className="relative group"
+        className={`relative group ${highlightMessageId === message._id ? 'message-highlight' : ''}`}
         style={{
           background: showActions ? "var(--bg-hover)" : "transparent",
           transition: "background 150ms ease",
@@ -652,36 +654,6 @@ const MessageItem = memo(
                     );
                   })}
                 </div>
-              )}
-
-              {/* Thread link */}
-              {message.replyCount > 0 && (
-                <button
-                  onClick={() =>
-                    onOpenThread?.({
-                      rootMessageId: message._id,
-                      channelId: message.channelId,
-                    })
-                  }
-                  className="flex items-center gap-1.5 mt-1.5 text-xs cursor-pointer py-1 px-2 rounded-md transition-colors"
-                  style={{
-                    color: "var(--text-link)",
-                    background: "transparent",
-                    border: "none",
-                  }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = "var(--bg-hover)")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = "transparent")
-                  }
-                >
-                  <MessageSquare size={13} />
-                  <span className="font-medium">
-                    {message.replyCount}{" "}
-                    {message.replyCount === 1 ? "reply" : "replies"}
-                  </span>
-                </button>
               )}
               {/* Thread preview — Slack-style, outside the bubble */}
               {message.replyCount > 0 && (

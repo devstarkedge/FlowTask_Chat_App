@@ -170,6 +170,17 @@ export default function ChatLayout() {
   }, [activeChannelId])
 
   const openThread = (thread) => {
+    const channelId = typeof thread.channelId === 'object' ? thread.channelId._id : thread.channelId;
+    if (channelId && channelId !== activeChannelId) {
+      useChannelStore.getState().setActiveChannel(channelId);
+    }
+    const rootMessageId = typeof thread.rootMessageId === 'object' ? thread.rootMessageId._id : thread.rootMessageId;
+    if (rootMessageId) {
+      useChatStore.getState().setHighlightMessageId(rootMessageId);
+      setTimeout(() => {
+        useChatStore.getState().setHighlightMessageId(null);
+      }, 3000);
+    }
     openThreadAction(thread)
     setProfileUser(null)
     setShowAllThreads(false)

@@ -1,0 +1,35 @@
+import React from 'react'
+import { X } from 'lucide-react'
+import { Avatar } from './MemberAvatarGroup'
+
+export default function MemberItem({ member, onOpenProfile, canRemove, onRemove }) {
+  const isOnline = member?.onlineStatus === 'online'
+
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors hover:bg-(--bg-hover) cursor-default">
+      <button onClick={() => onOpenProfile?.(member)} className="flex items-center gap-3 w-full text-left">
+        <Avatar member={member} size={40} showStatus={true} />
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium truncate" style={{ color: 'var(--text-white)' }}>{member.name}</p>
+            {member.channelRole && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)' }}>
+                {member.channelRole.charAt(0).toUpperCase() + member.channelRole.slice(1)}
+              </span>
+            )}
+          </div>
+          <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-muted)' }}>{member.email || member.role || ''}</p>
+        </div>
+      </button>
+      <div className="flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full" style={{ background: isOnline ? '#44b700' : 'transparent', border: isOnline ? 'none' : '1px solid var(--border-secondary)' }} />
+        {canRemove && (
+          <button onClick={onRemove} className="p-1 rounded-md text-muted hover:text-red-500 transition-colors" title="Remove member">
+            <X size={14} />
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}

@@ -396,8 +396,7 @@ function HeaderBtn({ icon: Icon, title, label, onClick, className = "" }) {
       title={title}
       className={`shrink-0 flex items-center justify-center gap-2 ${
         label ? "px-4" : "w-10"
-      } h-10 rounded-lg cursor-pointer transition-all bg-transparent hover:bg-[#E5E7EB] text-[#4F5B76] ${className}`}
-    >
+      } h-10 rounded-lg cursor-pointer transition-all bg-transparent hover:bg-[#E5E7EB] text-[#4F5B76] ${className}`}>
       <Icon size={20} />
       {label && (
         <span className="text-[14px] font-bold hide-mobile ml-0.5">

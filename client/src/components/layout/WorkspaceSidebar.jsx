@@ -4,7 +4,7 @@ import { Home, MessageSquare, Bell, FolderOpen, Clock, Wrench, Plus } from 'luci
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { Avatar } from '../chat/MemberAvatarGroup'
-import Tooltip from '../ui/Tooltip'
+// Tooltip removed for sidebar hover - using direct buttons to avoid popovers
 import CreateMenu from '../ui/CreateMenu'
 import UserProfileMenu from '../ui/UserProfileMenu'
 import HoverPreview from './HoverPreview'
@@ -114,36 +114,35 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
 
         {/* Nav Icons */}
         {NAV_ITEMS.map((item) => (
-          <Tooltip key={item.id} label={item.label} position="right">
-            <button
-              className={`workspace-sidebar-icon ${activeId === item.id ? 'active' : ''}`}
-              onClick={() => handleNav(item)}
-              onMouseEnter={(e) => handleHoverEnter(item.id, e)}
-              onMouseLeave={handleHoverLeave}
-              aria-label={item.label}
-            >
-              <item.icon size={20} />
-              {item.id === 'activity' && unreadNotifications > 0 && (
-                <span className="badge-dot" />
-              )}
-            </button>
-          </Tooltip>
+          <button
+            key={item.id}
+            className={`workspace-sidebar-icon ${activeId === item.id ? 'active' : ''}`}
+            onClick={() => handleNav(item)}
+            onMouseEnter={(e) => handleHoverEnter(item.id, e)}
+            onMouseLeave={handleHoverLeave}
+            aria-label={item.label}
+            title=""
+          >
+            <item.icon size={20} />
+            {item.id === 'activity' && unreadNotifications > 0 && (
+              <span className="badge-dot" />
+            )}
+          </button>
         ))}
 
         <div className="flex-1" />
 
         {/* Create Button */}
         <div className="workspace-sidebar-divider" />
-        <Tooltip label="Create new" position="right">
-          <button
-            ref={createBtnRef}
-            className="workspace-sidebar-create"
-            onClick={() => { setShowCreateMenu((s) => !s); setShowUserMenu(false) }}
-            aria-label="Create new"
-          >
-            <Plus size={20} />
-          </button>
-        </Tooltip>
+        <button
+          ref={createBtnRef}
+          className="workspace-sidebar-create"
+          onClick={() => { setShowCreateMenu((s) => !s); setShowUserMenu(false) }}
+          aria-label="Create new"
+          title=""
+        >
+          <Plus size={20} />
+        </button>
 
         {/* User Avatar */}
         <button

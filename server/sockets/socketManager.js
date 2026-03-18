@@ -214,6 +214,10 @@ export async function initializeSocket(httpServer, corsOptions) {
       socket.chatUser = chatUser;
       const requestedWsId = workspaceId || socket.handshake.auth.workspaceId || null;
 
+      if (env.SOCKET_REQUIRE_WORKSPACE && !requestedWsId) {
+        return next(new Error('Workspace context is required for socket connection'));
+      }
+
       // Validate workspace membership if a workspace is specified
       if (requestedWsId) {
         try {
@@ -329,7 +333,7 @@ export async function initializeSocket(httpServer, corsOptions) {
           socket.join(joinRoom);
           return;
         }
-        const channel = await channelRepository.findById(channelId);
+        const channel = await channelRepository.findById(channelId, { workspaceId: wsId });
         if (!channel) {
           socket.emit('error', { message: 'Channel not found' });
           return;
@@ -392,7 +396,7 @@ export async function initializeSocket(httpServer, corsOptions) {
       if (!channelId) return;
       try {
         // Verify the user is a participant of this DM channel before marking seen
-        const channel = await channelRepository.findById(channelId);
+        const channel = await channelRepository.findById(channelId, { workspaceId: wsId });
         if (!channel || channel.type !== 'dm') return;
         if (wsId && channel.workspaceId?.toString() !== wsId) return;
         const userIdStr = userId.toString();
@@ -401,7 +405,7 @@ export async function initializeSocket(httpServer, corsOptions) {
 
         // Lazy import to avoid circular dependency
         const { default: messageService } = await import('../modules/messages/message.service.js');
-        await messageService.markDMMessagesAsSeen(channelId, userId);
+        await messageService.markDMMessagesAsSeen(channelId, userId, wsId);
       } catch (error) {
         logger.error('Socket dm:markSeen failed', { userId, channelId, error: error.message });
       }
@@ -418,7 +422,7 @@ export async function initializeSocket(httpServer, corsOptions) {
     socket.on('typing:start', async ({ channelId }) => {
       if (await isSocketRateLimited(socket.id)) return;
 
-      const throttleKey = `${userId}-${channelId}`;
+      const throttleKey = `${wsId || 'global'}-${userId}-${channelId}`;
       const now = Date.now();
       const lastEmit = typingThrottleMap.get(throttleKey) || 0;
 
@@ -438,7 +442,7 @@ export async function initializeSocket(httpServer, corsOptions) {
     socket.on('typing:stop', async ({ channelId }) => {
       if (await isSocketRateLimited(socket.id)) return;
 
-      const throttleKey = `${userId}-${channelId}`;
+      const throttleKey = `${wsId || 'global'}-${userId}-${channelId}`;
       typingThrottleMap.delete(throttleKey);
 
       const typingRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
@@ -655,7 +659,8 @@ export async function initializeSocket(httpServer, corsOptions) {
  */
 export function emitToUser(userId, event, data, workspaceId) {
   if (!io) return;
-  const room = workspaceId ? buildRoomName(workspaceId, 'user', userId) : `user-${userId}`;
+  const room = resolveScopedRoom(workspaceId, 'user', userId, 'emitToUser');
+  if (!room) return;
   io.to(room).emit(event, data);
 }
 
@@ -668,7 +673,8 @@ export function emitToUser(userId, event, data, workspaceId) {
  */
 export function emitToChannel(channelId, event, data, workspaceId) {
   if (!io) return;
-  const room = workspaceId ? buildRoomName(workspaceId, 'channel', channelId) : `channel-${channelId}`;
+  const room = resolveScopedRoom(workspaceId, 'channel', channelId, 'emitToChannel');
+  if (!room) return;
   io.to(room).emit(event, data);
 }
 
@@ -681,8 +687,39 @@ export function emitToChannel(channelId, event, data, workspaceId) {
  */
 export function emitToDepartment(departmentId, event, data, workspaceId) {
   if (!io) return;
-  const room = workspaceId ? buildRoomName(workspaceId, 'dept', departmentId) : `department-${departmentId}`;
+  const room = resolveScopedRoom(workspaceId, 'dept', departmentId, 'emitToDepartment');
+  if (!room) return;
   io.to(room).emit(event, data);
+}
+
+function resolveScopedRoom(workspaceId, type, entityId, context) {
+  if (workspaceId) {
+    return buildRoomName(workspaceId, type, entityId);
+  }
+
+  if (env.SOCKET_REQUIRE_WORKSPACE) {
+    logger.warn('Blocked unscoped socket emit due to strict workspace mode', {
+      metric: 'socket_workspace_guard',
+      event: 'emit_blocked_unscoped',
+      context,
+      type,
+      entityId,
+    });
+    return null;
+  }
+
+  logger.warn('Unscoped socket emit fallback used', {
+    metric: 'socket_workspace_guard',
+    event: 'emit_unscoped_fallback',
+    context,
+    type,
+    entityId,
+  });
+
+  if (type === 'user') return `user-${entityId}`;
+  if (type === 'channel') return `channel-${entityId}`;
+  if (type === 'dept') return `department-${entityId}`;
+  return null;
 }
 
 /**
@@ -703,8 +740,9 @@ export function emitToAll(event, data) {
 export async function joinChannelRoom(userId, channelId, workspaceId) {
   if (!io) return;
   try {
-    const userRoom = workspaceId ? buildRoomName(workspaceId, 'user', userId) : `user-${userId}`;
-    const channelRoom = workspaceId ? buildRoomName(workspaceId, 'channel', channelId) : `channel-${channelId}`;
+    const userRoom = resolveScopedRoom(workspaceId, 'user', userId, 'joinChannelRoom.userRoom');
+    const channelRoom = resolveScopedRoom(workspaceId, 'channel', channelId, 'joinChannelRoom.channelRoom');
+    if (!userRoom || !channelRoom) return;
     const socketList = await io.in(userRoom).fetchSockets();
     for (const socket of socketList) {
       socket.join(channelRoom);

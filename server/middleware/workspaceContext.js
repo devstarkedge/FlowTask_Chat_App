@@ -1,6 +1,7 @@
 import Workspace from '../modules/workspaces/Workspace.model.js';
 import WorkspaceMembership from '../modules/workspaces/WorkspaceMembership.model.js';
 import { WORKSPACE_ROLES } from '../config/constants.js';
+import { BadRequestError } from './errorHandler.js';
 
 /**
  * resolveWorkspace — extracts workspace from header and attaches to req.
@@ -105,5 +106,21 @@ export const requireWorkspaceRole = (...roles) => {
  */
 export const injectWorkspaceFilter = (filter, workspaceId) => {
   if (!workspaceId) return filter;
+  return { ...filter, workspaceId };
+};
+
+/**
+ * injectWorkspaceFilterRequired — utility to enforce workspace scope.
+ * Throws if workspaceId is missing.
+ *
+ * @param {Object} filter
+ * @param {string} workspaceId
+ * @param {string} [context='query']
+ * @returns {Object}
+ */
+export const injectWorkspaceFilterRequired = (filter, workspaceId, context = 'query') => {
+  if (!workspaceId) {
+    throw new BadRequestError(`workspaceId is required for ${context}`);
+  }
   return { ...filter, workspaceId };
 };

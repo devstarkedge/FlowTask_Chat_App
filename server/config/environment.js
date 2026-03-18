@@ -113,6 +113,7 @@ const env = Object.freeze({
   DEFAULT_WORKSPACE_SLUG: process.env.DEFAULT_WORKSPACE_SLUG || 'flowtask',
   DEFAULT_WORKSPACE_NAME: process.env.DEFAULT_WORKSPACE_NAME || 'FlowTask',
   WORKSPACE_SUBDOMAIN_ENABLED: process.env.WORKSPACE_SUBDOMAIN_ENABLED === 'true',
+  SOCKET_REQUIRE_WORKSPACE: process.env.SOCKET_REQUIRE_WORKSPACE === 'true',
 });
 
 export default env;

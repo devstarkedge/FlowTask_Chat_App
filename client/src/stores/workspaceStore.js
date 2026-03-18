@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { useChannelStore } from './channelStore'
 import { useChatStore } from './chatStore'
 import { useNotificationStore } from './notificationStore'
+import { useDraftStore } from './draftStore'
 import { reconnectWithWorkspace } from '../services/socket'
 import logger from '../utils/logger'
 
@@ -89,14 +90,17 @@ export const useWorkspaceStore = create(
           // 3. Clear notification state
           useNotificationStore.getState().clearNotifications()
 
-          // 4. Update active workspace
+          // 4. Clear draft state to prevent workspace leakage
+          useDraftStore.getState().clearAllDrafts?.()
+
+          // 5. Update active workspace
           set({
             activeWorkspaceId: workspaceId,
             activeWorkspace: workspace,
             members: [],
           })
 
-          // 5. Reconnect socket with new workspace context
+          // 6. Reconnect socket with new workspace context
           // (handles disconnect, reconnect, fetchChannels, fetchNotifications)
           reconnectWithWorkspace()
 

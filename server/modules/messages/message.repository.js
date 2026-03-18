@@ -1,6 +1,6 @@
 import Message from './Message.model.js';
 import MessageReaction from './MessageReaction.model.js';
-import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
+import { injectWorkspaceFilter, injectWorkspaceFilterRequired } from '../../middleware/workspaceContext.js';
 
 /**
  * Message Repository — data access layer for Message documents.
@@ -31,8 +31,8 @@ class MessageRepository {
    * @param {boolean} [options.populate=true]
    * @returns {Promise<Message|null>}
    */
-  async findById(id, { populate = true } = {}) {
-    const query = Message.findById(id);
+  async findById(id, { populate = true, workspaceId } = {}) {
+    const query = Message.findOne(injectWorkspaceFilter({ _id: id }, workspaceId));
     if (populate) {
       query.populate('authorId', 'name email avatar flowTaskUserId onlineStatus');
       query.populate({
@@ -56,7 +56,11 @@ class MessageRepository {
    * @returns {Promise<Message[]>}
    */
   async getChannelMessages(channelId, { cursor = null, limit = 80, direction = 'before', workspaceId } = {}) {
-    const filter = injectWorkspaceFilter({ channelId, isDeleted: false, threadId: null }, workspaceId);
+    const filter = injectWorkspaceFilterRequired(
+      { channelId, isDeleted: false, threadId: null },
+      workspaceId,
+      'channel messages query',
+    );
 
     if (cursor) {
       if (direction === 'before') {
@@ -97,8 +101,12 @@ class MessageRepository {
    * @param {number} [options.limit=30]
    * @returns {Promise<Message[]>}
    */
-  async getThreadReplies(threadId, { cursor = null, limit = 30 } = {}) {
-    const filter = { threadId, isDeleted: false };
+  async getThreadReplies(threadId, { cursor = null, limit = 30, workspaceId } = {}) {
+    const filter = injectWorkspaceFilterRequired(
+      { threadId, isDeleted: false },
+      workspaceId,
+      'thread replies query',
+    );
 
     if (cursor) {
       filter._id = { $gt: cursor };
@@ -121,8 +129,9 @@ class MessageRepository {
    * @param {object} updates
    * @returns {Promise<Message|null>}
    */
-  async update(messageId, updates) {
-    return Message.findByIdAndUpdate(messageId, updates, { new: true })
+  async update(messageId, updates, workspaceId) {
+    const filter = injectWorkspaceFilter({ _id: messageId }, workspaceId);
+    return Message.findOneAndUpdate(filter, updates, { new: true })
       .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
       .populate({
         path: 'fileReferences',
@@ -137,9 +146,10 @@ class MessageRepository {
    * @param {string} deletedBy - ChatUser _id
    * @returns {Promise<Message|null>}
    */
-  async softDelete(messageId, deletedBy) {
-    return Message.findByIdAndUpdate(
-      messageId,
+  async softDelete(messageId, deletedBy, workspaceId) {
+    const filter = injectWorkspaceFilter({ _id: messageId }, workspaceId);
+    return Message.findOneAndUpdate(
+      filter,
       {
         isDeleted: true,
         deletedAt: new Date(),
@@ -158,9 +168,10 @@ class MessageRepository {
    * @param {string} pinnedBy - ChatUser _id
    * @returns {Promise<Message|null>}
    */
-  async pin(messageId, pinnedBy) {
-    return Message.findByIdAndUpdate(
-      messageId,
+  async pin(messageId, pinnedBy, workspaceId) {
+    const filter = injectWorkspaceFilter({ _id: messageId }, workspaceId);
+    return Message.findOneAndUpdate(
+      filter,
       { isPinned: true, pinnedBy, pinnedAt: new Date() },
       { new: true },
     ).exec();
@@ -171,9 +182,10 @@ class MessageRepository {
    * @param {string} messageId
    * @returns {Promise<Message|null>}
    */
-  async unpin(messageId) {
-    return Message.findByIdAndUpdate(
-      messageId,
+  async unpin(messageId, workspaceId) {
+    const filter = injectWorkspaceFilter({ _id: messageId }, workspaceId);
+    return Message.findOneAndUpdate(
+      filter,
       { isPinned: false, pinnedBy: null, pinnedAt: null },
       { new: true },
     ).exec();
@@ -186,7 +198,11 @@ class MessageRepository {
    * @returns {Promise<Message[]>}
    */
   async getPinnedMessages(channelId, workspaceId) {
-    const filter = injectWorkspaceFilter({ channelId, isPinned: true, isDeleted: false }, workspaceId);
+    const filter = injectWorkspaceFilterRequired(
+      { channelId, isPinned: true, isDeleted: false },
+      workspaceId,
+      'pinned messages query',
+    );
     return Message.find(filter)
       .sort({ pinnedAt: -1 })
       .populate('authorId', 'name email avatar flowTaskUserId')
@@ -296,10 +312,10 @@ class MessageRepository {
    * @returns {Promise<Message[]>}
    */
   async search(query, { channelId = null, channelIds = null, limit = 20, workspaceId } = {}) {
-    const filter = injectWorkspaceFilter({
+    const filter = injectWorkspaceFilterRequired({
       $text: { $search: query },
       isDeleted: false,
-    }, workspaceId);
+    }, workspaceId, 'message search query');
     if (channelId) filter.channelId = channelId;
     else if (channelIds && channelIds.length > 0) filter.channelId = { $in: channelIds };
 

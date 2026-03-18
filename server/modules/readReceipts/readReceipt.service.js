@@ -30,7 +30,7 @@ class ReadReceiptService {
     }, workspaceId?.toString());
 
     // For DM channels, update message delivery status to 'seen'
-    messageService.markDMMessagesAsSeen(channelId, userId).catch((err) => {
+    messageService.markDMMessagesAsSeen(channelId, userId, workspaceId).catch((err) => {
       logger.error('Failed to mark DM messages as seen', { channelId, userId: userId.toString(), error: err.message });
     });
 

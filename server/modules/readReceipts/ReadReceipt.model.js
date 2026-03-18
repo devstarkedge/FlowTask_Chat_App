@@ -62,8 +62,7 @@ readReceiptSchema.index({ workspaceId: 1, userId: 1, unreadCount: 1 });
 
 // ─── Static Methods ──────────────────────────────────────────────────────────
 readReceiptSchema.statics.getUnreadCounts = function (userId, workspaceId) {
-  const filter = { userId, unreadCount: { $gt: 0 } };
-  if (workspaceId) filter.workspaceId = workspaceId;
+  const filter = { userId, workspaceId, unreadCount: { $gt: 0 } };
   return this.find(
     filter,
     { channelId: 1, unreadCount: 1, unreadMentionCount: 1, _id: 0 },
@@ -71,8 +70,7 @@ readReceiptSchema.statics.getUnreadCounts = function (userId, workspaceId) {
 };
 
 readReceiptSchema.statics.markChannelAsRead = async function (userId, channelId, lastMessageId, workspaceId) {
-  const filter = { userId, channelId };
-  if (workspaceId) filter.workspaceId = workspaceId;
+  const filter = { userId, channelId, workspaceId };
   return this.findOneAndUpdate(
     filter,
     {
@@ -80,7 +78,7 @@ readReceiptSchema.statics.markChannelAsRead = async function (userId, channelId,
       lastReadAt: new Date(),
       unreadCount: 0,
       unreadMentionCount: 0,
-      ...(workspaceId && { workspaceId }),
+      workspaceId,
     },
     { upsert: true, new: true },
   );
@@ -93,9 +91,9 @@ readReceiptSchema.statics.incrementUnread = async function (channelId, excludeUs
   }
   const filter = {
     channelId,
+    workspaceId,
     userId: { $ne: excludeUserId },
   };
-  if (workspaceId) filter.workspaceId = workspaceId;
   return this.updateMany(filter, update);
 };
 

@@ -32,8 +32,9 @@ class ChannelRepository {
    * @param {boolean} [options.populate=false]
    * @returns {Promise<Channel|null>}
    */
-  async findById(id, { populate = false } = {}) {
-    const query = Channel.findById(id);
+  async findById(id, { populate = false, workspaceId } = {}) {
+    const filter = injectWorkspaceFilter({ _id: id }, workspaceId);
+    const query = Channel.findOne(filter);
     if (populate) {
       query.populate('members.userId', 'name email avatar onlineStatus');
       query.populate('createdBy', 'name email');
@@ -192,8 +193,9 @@ class ChannelRepository {
    * @param {object} updates
    * @returns {Promise<Channel>}
    */
-  async update(channelId, updates) {
-    return Channel.findByIdAndUpdate(channelId, updates, { new: true }).exec();
+  async update(channelId, updates, workspaceId) {
+    const filter = injectWorkspaceFilter({ _id: channelId }, workspaceId);
+    return Channel.findOneAndUpdate(filter, updates, { new: true }).exec();
   }
 
   /**
@@ -202,9 +204,10 @@ class ChannelRepository {
    * @param {string} [reason]
    * @returns {Promise<Channel>}
    */
-  async archive(channelId, reason = '') {
-    return Channel.findByIdAndUpdate(
-      channelId,
+  async archive(channelId, reason = '', workspaceId) {
+    const filter = injectWorkspaceFilter({ _id: channelId }, workspaceId);
+    return Channel.findOneAndUpdate(
+      filter,
       {
         isArchived: true,
         archivedAt: new Date(),
@@ -221,9 +224,10 @@ class ChannelRepository {
    * @param {Date} timestamp
    * @returns {Promise<void>}
    */
-  async updateLastMessage(channelId, preview, timestamp) {
+  async updateLastMessage(channelId, preview, timestamp, workspaceId) {
+    const filter = injectWorkspaceFilter({ _id: channelId }, workspaceId);
     await Channel.updateOne(
-      { _id: channelId },
+      filter,
       {
         lastMessagePreview: preview,
         lastMessageAt: timestamp,

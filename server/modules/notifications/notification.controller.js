@@ -48,7 +48,7 @@ export const getUnreadCountsAll = asyncHandler(async (req, res) => {
  * Mark a single notification as read.
  */
 export const markAsRead = asyncHandler(async (req, res) => {
-  const notification = await notificationService.markAsRead(req.params.id, req.user._id);
+  const notification = await notificationService.markAsRead(req.params.id, req.user._id, req.workspaceId);
   res.json({ success: true, notification });
 });
 
@@ -66,6 +66,6 @@ export const markAllAsRead = asyncHandler(async (req, res) => {
  * Delete a notification.
  */
 export const deleteNotification = asyncHandler(async (req, res) => {
-  await notificationService.deleteNotification(req.params.id, req.user._id);
+  await notificationService.deleteNotification(req.params.id, req.user._id, req.workspaceId);
   res.json({ success: true, message: 'Notification deleted.' });
 });

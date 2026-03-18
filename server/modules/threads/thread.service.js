@@ -21,15 +21,19 @@ class ThreadService {
    */
   async createThread({ channelId, rootMessageId, authorId, title, flowTaskRef, workspaceId }) {
     // Validate root message exists
-    const rootMessage = await messageRepository.findById(rootMessageId);
+    const rootMessage = await messageRepository.findById(rootMessageId, { workspaceId });
     if (!rootMessage) throw new NotFoundError('Root message not found');
 
     if (rootMessage.channelId.toString() !== channelId.toString()) {
       throw new ValidationError('Root message does not belong to this channel');
     }
 
+    if (workspaceId && rootMessage.workspaceId?.toString() !== workspaceId.toString()) {
+      throw new ForbiddenError('Root message does not belong to this workspace');
+    }
+
     // Check if thread already exists for this root message
-    const existingThread = await threadRepository.findById(rootMessageId);
+    const existingThread = await threadRepository.findById(rootMessageId, { workspaceId });
     if (existingThread) return existingThread;
 
     const threadData = {
@@ -63,18 +67,24 @@ class ThreadService {
    * Used by webhook handlers when a task event triggers a discussion.
    */
   async getOrCreateForTask(channelId, taskId, projectId, rootMessageId, workspaceId) {
-    return threadRepository.findOrCreateForTask(channelId, taskId, projectId, rootMessageId, workspaceId);
+    return threadRepository.findOrCreateForTask({
+      channelId,
+      taskId,
+      projectId,
+      rootMessageId,
+      workspaceId,
+    });
   }
 
   /**
    * Get a thread by ID.
    */
-  async getThreadById(threadId) {
-    const thread = await threadRepository.findById(threadId);
+  async getThreadById(threadId, workspaceId) {
+    const thread = await threadRepository.findById(threadId, { workspaceId });
     if (!thread) {
       // Check if it's a valid root message
-      const rootMessage = await messageRepository.findById(threadId);
-      if (rootMessage) {
+      const rootMessage = await messageRepository.findById(threadId, { workspaceId });
+      if (rootMessage && (!workspaceId || rootMessage.workspaceId?.toString() === workspaceId.toString())) {
         return {
           _id: rootMessage._id,
           rootMessageId: rootMessage._id,
@@ -112,15 +122,15 @@ class ThreadService {
    */
   async getUserThreads(userId, query = {}, workspaceId) {
     const { limit } = parsePagination(query);
-    return threadRepository.getUserThreads(userId, { limit }, workspaceId);
+    return threadRepository.getUserThreads(userId, { limit, workspaceId });
   }
 
   /**
    * Get replies in a thread (delegates to message service).
    */
-  async getThreadReplies(threadIdOrRootId, query = {}) {
+  async getThreadReplies(threadIdOrRootId, query = {}, workspaceId) {
     // First resolve the actual thread to ensure we have the correct identifiers
-    const thread = await threadRepository.findById(threadIdOrRootId);
+    const thread = await threadRepository.findById(threadIdOrRootId, { workspaceId });
     const { limit, cursor } = parsePagination(query);
 
     // If no Thread document exists, it means no one has replied yet. 
@@ -130,11 +140,13 @@ class ThreadService {
     }
 
     const cursorFilter = cursor ? buildCursorFilter(cursor, 'after') : {};
+    const cursorValue = cursorFilter?._id?.$gt || null;
 
     // message.repository.js 'getThreadReplies' expects the thread ID which matches Message.threadId.
     const messages = await messageRepository.getThreadReplies(thread._id, {
       limit,
-      cursorFilter,
+      cursor: cursorValue,
+      workspaceId,
     });
 
     return cursorPaginationResponse(messages, limit, '_id');
@@ -143,8 +155,8 @@ class ThreadService {
   /**
    * Lock a thread (prevent new replies).
    */
-  async lockThread(threadId, userId) {
-    const thread = await threadRepository.findById(threadId);
+  async lockThread(threadId, userId, workspaceId) {
+    const thread = await threadRepository.findById(threadId, { workspaceId });
     if (!thread) throw new NotFoundError('Thread not found');
 
     await threadRepository.lock(threadId);
@@ -155,14 +167,14 @@ class ThreadService {
       lockedBy: userId,
     }, thread.workspaceId?.toString());
 
-    return threadRepository.findById(threadId);
+    return threadRepository.findById(threadId, { workspaceId: thread.workspaceId?.toString() });
   }
 
   /**
    * Resolve a thread (mark discussion as complete).
    */
-  async resolveThread(threadId, userId) {
-    const thread = await threadRepository.findById(threadId);
+  async resolveThread(threadId, userId, workspaceId) {
+    const thread = await threadRepository.findById(threadId, { workspaceId });
     if (!thread) throw new NotFoundError('Thread not found');
 
     await threadRepository.resolve(threadId, userId);
@@ -173,14 +185,14 @@ class ThreadService {
       resolvedBy: userId,
     }, thread.workspaceId?.toString());
 
-    return threadRepository.findById(threadId);
+    return threadRepository.findById(threadId, { workspaceId: thread.workspaceId?.toString() });
   }
 
   /**
    * Update thread title.
    */
-  async updateThreadTitle(threadId, title, userId) {
-    const thread = await threadRepository.findById(threadId);
+  async updateThreadTitle(threadId, title, userId, workspaceId) {
+    const thread = await threadRepository.findById(threadId, { workspaceId });
     if (!thread) throw new NotFoundError('Thread not found');
 
     const sanitizedTitle = sanitizeHtml(title);
@@ -192,7 +204,7 @@ class ThreadService {
       updatedBy: userId,
     }, thread.workspaceId?.toString());
 
-    return threadRepository.findById(threadId);
+    return threadRepository.findById(threadId, { workspaceId: thread.workspaceId?.toString() });
   }
 }
 

@@ -37,6 +37,15 @@ import FileReference from '../files/FileReference.model.js';
  */
 
 class MessageService {
+  _assertWorkspaceMatch(entityWorkspaceId, workspaceId, resource = 'Resource') {
+    if (!workspaceId) {
+      throw new ValidationError('Workspace context is required');
+    }
+    if (!entityWorkspaceId || entityWorkspaceId.toString() !== workspaceId.toString()) {
+      throw new ForbiddenError(`${resource} does not belong to this workspace`);
+    }
+  }
+
   // ──────────────────── Send Message ────────────────────────────────────────
 
   /**
@@ -48,7 +57,7 @@ class MessageService {
     const startTime = performance.now();
 
     // Validate channel exists and is not archived
-    const channel = await channelRepository.findById(channelId);
+    const channel = await channelRepository.findById(channelId, { workspaceId });
     if (!channel) throw new NotFoundError('Channel not found');
     if (channel.isArchived) throw new ForbiddenError('Channel is archived');
 
@@ -105,10 +114,10 @@ class MessageService {
     let thread = null;
 
     if (threadId) {
-      thread = await threadRepository.findById(threadId);
+      const threadWorkspaceId = workspaceId || channel.workspaceId;
+      thread = await threadRepository.findById(threadId, { workspaceId: threadWorkspaceId?.toString() });
       if (!thread) {
         // Create the thread if this is the first reply to a message
-        const threadWorkspaceId = workspaceId || channel.workspaceId;
         thread = await threadRepository.create({
           workspaceId: threadWorkspaceId,
           channelId,
@@ -142,11 +151,14 @@ class MessageService {
     }
 
     // Populate author and fileReferences for emission
-    const populated = await messageRepository.findById(message._id);
+    const populated = await messageRepository.findById(message._id, {
+      workspaceId: (workspaceId || channel.workspaceId)?.toString(),
+    });
 
     // Update channel's last message
     const preview = truncate(stripHtml(sanitizedContent), 100);
-    channelRepository.updateLastMessage(channelId, preview, new Date()).catch((err) => {
+    const wsId = (workspaceId || channel.workspaceId)?.toString();
+    channelRepository.updateLastMessage(channelId, preview, new Date(), wsId).catch((err) => {
       logger.error('Failed to update last message', { channelId, error: err.message });
     });
 
@@ -165,7 +177,6 @@ class MessageService {
 
     // Build minimal socket payload
     const socketPayload = messageSocketPayload(populated, { tempId: tempId || null });
-    const wsId = (workspaceId || channel.workspaceId)?.toString();
 
     // Emit to channel (real-time)
     try {
@@ -206,7 +217,7 @@ class MessageService {
     }
 
     // Update unread counts for other members
-    this._incrementUnreadForChannel(channelId, authorId).catch(() => {});
+    this._incrementUnreadForChannel(channelId, authorId, wsId).catch(() => {});
 
     // DM delivery status: if recipient is online, mark as delivered
     if (channel.type === CHANNEL_TYPES.DM) {
@@ -256,7 +267,7 @@ class MessageService {
     const message = await messageRepository.create(messageData);
 
     const preview = truncate(stripHtml(content), 100);
-    channelRepository.updateLastMessage(channelId, preview, new Date()).catch(() => {});
+    channelRepository.updateLastMessage(channelId, preview, new Date(), workspaceId?.toString()).catch(() => {});
 
     const socketPayload = messageSocketPayload(message);
     emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
@@ -269,13 +280,13 @@ class MessageService {
   /**
    * Get messages for a channel with cursor-based pagination.
    */
-  async getChannelMessages(channelId, query = {}) {
+  async getChannelMessages(channelId, query = {}, workspaceId) {
     const { limit, cursor } = parsePagination(query);
     const direction = query.direction || 'before';
 
     const messages = await messageRepository.getChannelMessages(
       channelId,
-      { limit, cursor, direction },
+      { limit, cursor, direction, workspaceId },
     );
 
     return cursorPaginationResponse(messages, limit, '_id');
@@ -284,13 +295,15 @@ class MessageService {
   /**
    * Get thread replies for a root message.
    */
-  async getThreadReplies(threadId, query = {}) {
+  async getThreadReplies(threadId, query = {}, workspaceId) {
     const { limit, cursor } = parsePagination(query);
     const cursorFilter = cursor ? buildCursorFilter(cursor, 'after') : {};
+    const cursorValue = cursorFilter?._id?.$gt || null;
 
     const messages = await messageRepository.getThreadReplies(threadId, {
       limit,
-      cursorFilter,
+      cursor: cursorValue,
+      workspaceId,
     });
 
     return cursorPaginationResponse(messages, limit, '_id');
@@ -299,9 +312,10 @@ class MessageService {
   /**
    * Get a single message by ID.
    */
-  async getMessageById(messageId) {
-    const message = await messageRepository.findById(messageId);
+  async getMessageById(messageId, workspaceId) {
+    const message = await messageRepository.findById(messageId, { workspaceId });
     if (!message) throw new NotFoundError('Message not found');
+    this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
     return message;
   }
 
@@ -310,9 +324,10 @@ class MessageService {
   /**
    * Edit a message. Only the author can edit. Stores edit history.
    */
-  async editMessage(messageId, userId, newContent) {
-    const message = await messageRepository.findById(messageId);
+  async editMessage(messageId, userId, newContent, workspaceId) {
+    const message = await messageRepository.findById(messageId, { workspaceId });
     if (!message) throw new NotFoundError('Message not found');
+    this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
 
     const authorIdStr = message.authorId?._id?.toString() || message.authorId?.toString();
     if (authorIdStr !== userId.toString()) {
@@ -344,15 +359,15 @@ class MessageService {
           editedAt: new Date(),
         },
       },
-    });
+    }, workspaceId);
 
-    const populated = await messageRepository.findById(messageId);
+    const populated = await messageRepository.findById(messageId, { workspaceId });
     const socketPayload = messageSocketPayload(populated);
 
     // Resolve workspaceId: prefer message, then channel
     let wsId = (message.workspaceId || populated.workspaceId)?.toString();
     if (!wsId) {
-      const ch = await channelRepository.findById(message.channelId);
+      const ch = await channelRepository.findById(message.channelId, { workspaceId });
       wsId = ch?.workspaceId?.toString();
     }
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_UPDATE, {
@@ -365,21 +380,22 @@ class MessageService {
   /**
    * Soft-delete a message. Author or admin can delete.
    */
-  async deleteMessage(messageId, userId, isAdmin = false) {
-    const message = await messageRepository.findById(messageId);
+  async deleteMessage(messageId, userId, isAdmin = false, workspaceId) {
+    const message = await messageRepository.findById(messageId, { workspaceId });
     if (!message) throw new NotFoundError('Message not found');
+    this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
 
     const authorIdStr = message.authorId?._id?.toString() || message.authorId?.toString();
     if (authorIdStr !== userId.toString() && !isAdmin) {
       throw new ForbiddenError('Can only delete your own messages');
     }
 
-    await messageRepository.softDelete(messageId);
+    await messageRepository.softDelete(messageId, userId, workspaceId);
 
     // Resolve workspaceId: prefer message, then channel
     let wsId = message.workspaceId?.toString();
     if (!wsId) {
-      const ch = await channelRepository.findById(message.channelId);
+      const ch = await channelRepository.findById(message.channelId, { workspaceId });
       wsId = ch?.workspaceId?.toString();
     }
 
@@ -398,14 +414,15 @@ class MessageService {
   /**
    * Add a reaction to a message.
    */
-  async addReaction(messageId, userId, emoji) {
-    const message = await messageRepository.findById(messageId);
+  async addReaction(messageId, userId, emoji, workspaceId) {
+    const message = await messageRepository.findById(messageId, { workspaceId });
     if (!message) throw new NotFoundError('Message not found');
+    this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
 
     // Repository expects arguments as (messageId, emoji, userId)
     const updated = await messageRepository.addReaction(messageId, emoji, userId);
 
-    const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId))?.workspaceId?.toString();
+    const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId, { workspaceId }))?.workspaceId?.toString();
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.REACTION_ADD,
       reactionSocketPayload({ messageId, channelId: message.channelId, userId, emoji }),
       wsId,
@@ -417,14 +434,15 @@ class MessageService {
   /**
    * Remove a reaction from a message.
    */
-  async removeReaction(messageId, userId, emoji) {
-    const message = await messageRepository.findById(messageId);
+  async removeReaction(messageId, userId, emoji, workspaceId) {
+    const message = await messageRepository.findById(messageId, { workspaceId });
     if (!message) throw new NotFoundError('Message not found');
+    this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
 
     // Repository expects arguments as (messageId, emoji, userId)
     const updated = await messageRepository.removeReaction(messageId, emoji, userId);
 
-    const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId))?.workspaceId?.toString();
+    const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId, { workspaceId }))?.workspaceId?.toString();
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.REACTION_REMOVE,
       reactionSocketPayload({ messageId, channelId: message.channelId, userId, emoji }),
       wsId,
@@ -438,13 +456,14 @@ class MessageService {
   /**
    * Pin a message in its channel.
    */
-  async pinMessage(messageId, userId) {
-    const message = await messageRepository.findById(messageId);
+  async pinMessage(messageId, userId, workspaceId) {
+    const message = await messageRepository.findById(messageId, { workspaceId });
     if (!message) throw new NotFoundError('Message not found');
+    this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
 
-    await messageRepository.pin(messageId);
+    await messageRepository.pin(messageId, userId, workspaceId);
 
-    const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId))?.workspaceId?.toString();
+    const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId, { workspaceId }))?.workspaceId?.toString();
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_PINNED, {
       messageId,
       channelId: message.channelId,
@@ -457,13 +476,14 @@ class MessageService {
   /**
    * Unpin a message.
    */
-  async unpinMessage(messageId, userId) {
-    const message = await messageRepository.findById(messageId);
+  async unpinMessage(messageId, userId, workspaceId) {
+    const message = await messageRepository.findById(messageId, { workspaceId });
     if (!message) throw new NotFoundError('Message not found');
+    this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
 
-    await messageRepository.unpin(messageId);
+    await messageRepository.unpin(messageId, workspaceId);
 
-    const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId))?.workspaceId?.toString();
+    const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId, { workspaceId }))?.workspaceId?.toString();
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_UNPINNED, {
       messageId,
       channelId: message.channelId,
@@ -476,8 +496,8 @@ class MessageService {
   /**
    * Get pinned messages for a channel.
    */
-  async getPinnedMessages(channelId) {
-    return messageRepository.getPinnedMessages(channelId);
+  async getPinnedMessages(channelId, workspaceId) {
+    return messageRepository.getPinnedMessages(channelId, workspaceId);
   }
 
   // ──────────────────── Search ──────────────────────────────────────────────
@@ -486,17 +506,17 @@ class MessageService {
    * Full-text search across messages.
    * Filters results to channels the user has access to.
    */
-  async searchMessages(query, userId, channelId, options = {}) {
+  async searchMessages(query, userId, channelId, options = {}, workspaceId) {
     const { limit } = parsePagination(options);
 
     // If no specific channel, restrict search to user's channels
     if (!channelId) {
-      const userChannels = await channelRepository.findByMember(userId);
+      const userChannels = await channelRepository.findByMember(userId, { workspaceId });
       const channelIds = userChannels.map((c) => c._id);
-      return messageRepository.search(query, { channelIds, limit });
+      return messageRepository.search(query, { channelIds, limit, workspaceId });
     }
 
-    return messageRepository.search(query, { channelId, limit });
+    return messageRepository.search(query, { channelId, limit, workspaceId });
   }
 
   // ──────────────────── Internal Helpers ────────────────────────────────────
@@ -525,7 +545,7 @@ class MessageService {
         await messageRepository.update(message._id, {
           status: 'delivered',
           deliveredAt: now,
-        });
+        }, channel.workspaceId?.toString());
 
         // Notify the sender about delivery
         emitToUser(senderUserId.toString(), SOCKET_EVENTS.MESSAGE_STATUS, {
@@ -547,10 +567,11 @@ class MessageService {
    * Mark messages as seen in a DM channel.
    * Called when a user opens/views a DM conversation.
    */
-  async markDMMessagesAsSeen(channelId, userId) {
+  async markDMMessagesAsSeen(channelId, userId, workspaceId) {
     try {
-      const channel = await channelRepository.findById(channelId);
+      const channel = await channelRepository.findById(channelId, { workspaceId });
       if (!channel || channel.type !== CHANNEL_TYPES.DM) return;
+      this._assertWorkspaceMatch(channel.workspaceId, workspaceId, 'Channel');
 
       // Find undelivered/unseen messages NOT from this user
       const Message = (await import('./Message.model.js')).default;
@@ -558,6 +579,7 @@ class MessageService {
       const result = await Message.updateMany(
         {
           channelId,
+          workspaceId,
           authorId: { $ne: userId },
           status: { $in: ['sent', 'delivered'] },
           isDeleted: false,
@@ -572,6 +594,7 @@ class MessageService {
         // Find sender(s) to notify about seen status
         const unseenMessages = await Message.find({
           channelId,
+          workspaceId,
           authorId: { $ne: userId },
           status: 'seen',
           seenAt: now,
@@ -605,12 +628,12 @@ class MessageService {
    * Increment unread counts for all channel members except the sender.
    * @private
    */
-  async _incrementUnreadForChannel(channelId, senderUserId) {
+  async _incrementUnreadForChannel(channelId, senderUserId, workspaceId) {
     try {
       const { default: ReadReceipt } = await import('../readReceipts/ReadReceipt.model.js');
 
       // ReadReceipt.incrementUnread increments for everyone EXCEPT excludeUserId
-      await ReadReceipt.incrementUnread(channelId, senderUserId);
+      await ReadReceipt.incrementUnread(channelId, senderUserId, false, workspaceId);
     } catch (error) {
       logger.error('Failed to increment unread counts', {
         channelId,

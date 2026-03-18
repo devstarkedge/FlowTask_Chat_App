@@ -133,7 +133,7 @@ class FlowTaskSyncService {
             updates.description = board.description.substring(0, 500);
           }
           if (Object.keys(updates).length > 0) {
-            await channelRepository.update(existing._id, updates);
+            await channelRepository.update(existing._id, updates, workspaceId);
           }
           report.updated++;
         } else {

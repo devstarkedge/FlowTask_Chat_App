@@ -1,5 +1,5 @@
 import ReadReceipt from './ReadReceipt.model.js';
-import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
+import { injectWorkspaceFilterRequired } from '../../middleware/workspaceContext.js';
 
 /**
  * ReadReceipt Repository — data access layer for read receipt documents.
@@ -15,7 +15,11 @@ class ReadReceiptRepository {
    * @returns {Promise<Array<{ channelId, unreadCount, unreadMentionCount }>>}
    */
   async getUnreadCounts(userId, workspaceId) {
-    const filter = injectWorkspaceFilter({ userId, unreadCount: { $gt: 0 } }, workspaceId);
+    const filter = injectWorkspaceFilterRequired(
+      { userId, unreadCount: { $gt: 0 } },
+      workspaceId,
+      'read receipt unread counts query',
+    );
     return ReadReceipt.find(
       filter,
       { channelId: 1, unreadCount: 1, unreadMentionCount: 1, lastReadMessageId: 1, _id: 0 },
@@ -31,7 +35,11 @@ class ReadReceiptRepository {
    * @returns {Promise<ReadReceipt>}
    */
   async markChannelAsRead(userId, channelId, lastMessageId, workspaceId) {
-    const filter = injectWorkspaceFilter({ userId, channelId }, workspaceId);
+    const filter = injectWorkspaceFilterRequired(
+      { userId, channelId },
+      workspaceId,
+      'mark channel as read query',
+    );
     return ReadReceipt.findOneAndUpdate(
       filter,
       {
@@ -39,7 +47,7 @@ class ReadReceiptRepository {
         lastReadAt: new Date(),
         unreadCount: 0,
         unreadMentionCount: 0,
-        ...(workspaceId && { workspaceId }),
+        workspaceId,
       },
       { upsert: true, new: true },
     );
@@ -58,10 +66,10 @@ class ReadReceiptRepository {
     if (hasMention) {
       update.$inc.unreadMentionCount = 1;
     }
-    const filter = injectWorkspaceFilter({
+    const filter = injectWorkspaceFilterRequired({
       channelId,
       userId: { $ne: excludeUserId },
-    }, workspaceId);
+    }, workspaceId, 'increment unread query');
     return ReadReceipt.updateMany(filter, update);
   }
 
@@ -73,7 +81,11 @@ class ReadReceiptRepository {
    * @returns {Promise<ReadReceipt|null>}
    */
   async findByUserAndChannel(userId, channelId, workspaceId) {
-    const filter = injectWorkspaceFilter({ userId, channelId }, workspaceId);
+    const filter = injectWorkspaceFilterRequired(
+      { userId, channelId },
+      workspaceId,
+      'find read receipt query',
+    );
     return ReadReceipt.findOne(filter).lean();
   }
 
@@ -85,10 +97,14 @@ class ReadReceiptRepository {
    * @returns {Promise<ReadReceipt>}
    */
   async ensureExists(userId, channelId, workspaceId) {
-    const filter = injectWorkspaceFilter({ userId, channelId }, workspaceId);
+    const filter = injectWorkspaceFilterRequired(
+      { userId, channelId },
+      workspaceId,
+      'ensure read receipt query',
+    );
     return ReadReceipt.findOneAndUpdate(
       filter,
-      { $setOnInsert: { unreadCount: 0, unreadMentionCount: 0, ...(workspaceId && { workspaceId }) } },
+      { $setOnInsert: { unreadCount: 0, unreadMentionCount: 0, workspaceId } },
       { upsert: true, new: true },
     );
   }
@@ -101,7 +117,11 @@ class ReadReceiptRepository {
    * @returns {Promise}
    */
   async removeByUserAndChannel(userId, channelId, workspaceId) {
-    const filter = injectWorkspaceFilter({ userId, channelId }, workspaceId);
+    const filter = injectWorkspaceFilterRequired(
+      { userId, channelId },
+      workspaceId,
+      'remove read receipt query',
+    );
     return ReadReceipt.deleteOne(filter);
   }
 
@@ -112,7 +132,11 @@ class ReadReceiptRepository {
    * @returns {Promise<Array<ReadReceipt>>}
    */
   async getChannelReaders(channelId, workspaceId) {
-    const filter = injectWorkspaceFilter({ channelId }, workspaceId);
+    const filter = injectWorkspaceFilterRequired(
+      { channelId },
+      workspaceId,
+      'channel readers query',
+    );
     return ReadReceipt.find(filter).lean();
   }
 }

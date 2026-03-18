@@ -18,6 +18,7 @@ export const getMessages = asyncHandler(async (req, res) => {
   const result = await messageService.getChannelMessages(
     req.params.channelId,
     req.query,
+    req.workspaceId,
   );
 
   res.json({ success: true, data: result });
@@ -53,7 +54,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
  * Get a single message.
  */
 export const getMessage = asyncHandler(async (req, res) => {
-  const message = await messageService.getMessageById(req.params.id);
+  const message = await messageService.getMessageById(req.params.id, req.workspaceId);
   res.json({ success: true, data: { message } });
 });
 
@@ -66,6 +67,7 @@ export const editMessage = asyncHandler(async (req, res) => {
     req.params.id,
     req.user._id,
     req.body.content,
+    req.workspaceId,
   );
   res.json({ success: true, data: { message } });
 });
@@ -79,6 +81,7 @@ export const deleteMessage = asyncHandler(async (req, res) => {
     req.params.id,
     req.user._id,
     req.user.isAdmin(),
+    req.workspaceId,
   );
   res.json({ success: true, data: { messageId: req.params.id } });
 });
@@ -92,6 +95,7 @@ export const addReaction = asyncHandler(async (req, res) => {
     req.params.id,
     req.user._id,
     req.body.emoji,
+    req.workspaceId,
   );
   res.json({ success: true, data: { message } });
 });
@@ -105,6 +109,7 @@ export const removeReaction = asyncHandler(async (req, res) => {
     req.params.id,
     req.user._id,
     req.params.emoji,
+    req.workspaceId,
   );
   res.json({ success: true, data: { message } });
 });
@@ -114,7 +119,7 @@ export const removeReaction = asyncHandler(async (req, res) => {
  * Pin a message.
  */
 export const pinMessage = asyncHandler(async (req, res) => {
-  const message = await messageService.pinMessage(req.params.id, req.user._id);
+  const message = await messageService.pinMessage(req.params.id, req.user._id, req.workspaceId);
   res.json({ success: true, data: { message } });
 });
 
@@ -123,7 +128,7 @@ export const pinMessage = asyncHandler(async (req, res) => {
  * Unpin a message.
  */
 export const unpinMessage = asyncHandler(async (req, res) => {
-  const message = await messageService.unpinMessage(req.params.id, req.user._id);
+  const message = await messageService.unpinMessage(req.params.id, req.user._id, req.workspaceId);
   res.json({ success: true, data: { message } });
 });
 
@@ -132,7 +137,7 @@ export const unpinMessage = asyncHandler(async (req, res) => {
  * Get pinned messages for a channel.
  */
 export const getPinnedMessages = asyncHandler(async (req, res) => {
-  const messages = await messageService.getPinnedMessages(req.params.channelId);
+  const messages = await messageService.getPinnedMessages(req.params.channelId, req.workspaceId);
   res.json({ success: true, data: { messages } });
 });
 
@@ -146,6 +151,7 @@ export const searchMessages = asyncHandler(async (req, res) => {
     req.user._id,
     req.query.channelId,
     req.query,
+    req.workspaceId,
   );
   res.json({ success: true, data: { messages } });
 });
@@ -159,7 +165,7 @@ export const markDMSeen = asyncHandler(async (req, res) => {
   const { channelId } = req.params;
   const userId = req.user._id;
 
-  await messageService.markDMMessagesAsSeen(channelId, userId);
+  await messageService.markDMMessagesAsSeen(channelId, userId, req.workspaceId);
 
   res.json({ success: true, data: { channelId, status: 'seen' } });
 });
@@ -302,7 +308,7 @@ export const deleteChannelFile = asyncHandler(async (req, res) => {
  * Toggle save/unsave a message.
  */
 export const toggleSaveMessage = asyncHandler(async (req, res) => {
-  const message = await messageService.getMessageById(req.params.id);
+  const message = await messageService.getMessageById(req.params.id, req.workspaceId);
   const result = await SavedMessage.toggle(
     req.user._id,
     message._id,

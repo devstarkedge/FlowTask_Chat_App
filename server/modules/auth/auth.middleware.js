@@ -195,13 +195,17 @@ export function requireMessageAccess() {
       const { default: messageRepository } = await import('../messages/message.repository.js');
       const { default: channelRepository } = await import('../channels/channel.repository.js');
 
-      const message = await messageRepository.findById(messageId);
+      const message = await messageRepository.findById(messageId, {
+        workspaceId: req.workspaceId,
+      });
       if (!message) {
         const { NotFoundError } = await import('../../middleware/errorHandler.js');
         return next(new NotFoundError('Message not found'));
       }
 
-      const channel = await channelRepository.findById(message.channelId);
+      const channel = await channelRepository.findById(message.channelId, {
+        workspaceId: req.workspaceId,
+      });
       if (!channel) {
         const { NotFoundError } = await import('../../middleware/errorHandler.js');
         return next(new NotFoundError('Channel not found'));

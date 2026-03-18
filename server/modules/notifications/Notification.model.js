@@ -25,7 +25,7 @@ const notificationSchema = new Schema({
     required: true,
   },
   title: {
-    type: String,
+    type: String,  
     maxlength: 200,
     default: '',
   },
@@ -120,9 +120,9 @@ notificationSchema.statics.getUnreadCount = function (recipientId, workspaceId) 
 /**
  * Mark a single notification as read.
  */
-notificationSchema.statics.markRead = function (notificationId, recipientId) {
+notificationSchema.statics.markRead = function (notificationId, recipientId, workspaceId) {
   return this.findOneAndUpdate(
-    { _id: notificationId, recipientId },
+    { _id: notificationId, recipientId, workspaceId },
     { $set: { isRead: true, readAt: new Date() } },
     { new: true },
   );

@@ -23,7 +23,7 @@ export const getChannels = asyncHandler(async (req, res) => {
  * Get a single channel by ID.
  */
 export const getChannel = asyncHandler(async (req, res) => {
-  const channel = await channelService.getChannelById(req.params.id, req.user._id);
+  const channel = await channelService.getChannelById(req.params.id, req.user._id, req.workspaceId);
 
   res.json({
     success: true,
@@ -36,7 +36,7 @@ export const getChannel = asyncHandler(async (req, res) => {
  * Get a channel by slug.
  */
 export const getChannelBySlug = asyncHandler(async (req, res) => {
-  const channel = await channelService.getChannelBySlug(req.params.slug);
+  const channel = await channelService.getChannelBySlug(req.params.slug, req.workspaceId);
 
   res.json({
     success: true,
@@ -79,6 +79,7 @@ export const updateChannel = asyncHandler(async (req, res) => {
     req.params.id,
     req.body,
     req.user._id,
+    req.workspaceId,
   );
 
   res.json({
@@ -92,7 +93,7 @@ export const updateChannel = asyncHandler(async (req, res) => {
  * Archive a channel.
  */
 export const archiveChannel = asyncHandler(async (req, res) => {
-  const channel = await channelService.archiveChannel(req.params.id, req.user._id);
+  const channel = await channelService.archiveChannel(req.params.id, req.user._id, req.workspaceId);
 
   res.json({
     success: true,
@@ -183,7 +184,7 @@ export const addMember = asyncHandler(async (req, res) => {
     });
   }
 
-  const channel = await channelService.addMember(req.params.id, userId, role);
+  const channel = await channelService.addMember(req.params.id, userId, role, req.workspaceId);
 
   res.json({
     success: true,
@@ -200,6 +201,7 @@ export const removeMember = asyncHandler(async (req, res) => {
     req.params.id,
     req.params.userId,
     req.user._id,
+    req.workspaceId,
   );
 
   res.json({
@@ -217,6 +219,7 @@ export const leaveChannel = asyncHandler(async (req, res) => {
     req.params.id,
     req.user._id,
     req.user._id,
+    req.workspaceId,
   );
 
   res.json({
@@ -253,6 +256,7 @@ export const getChannelMembers = asyncHandler(async (req, res) => {
   const members = await channelService.getAggregatedMembers(
     req.params.id,
     token,
+    req.workspaceId,
   );
 
   res.json({

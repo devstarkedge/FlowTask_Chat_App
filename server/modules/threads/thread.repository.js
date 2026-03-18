@@ -1,5 +1,5 @@
 import Thread from './Thread.model.js';
-import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
+import { injectWorkspaceFilter, injectWorkspaceFilterRequired } from '../../middleware/workspaceContext.js';
 
 /**
  * Thread Repository — data access layer for Thread documents.
@@ -24,8 +24,9 @@ class ThreadRepository {
    * @param {boolean} [options.populate=false]
    * @returns {Promise<Thread|null>}
    */
-  async findById(id, { populate = false } = {}) {
-    let query = Thread.findById(id);
+  async findById(id, { populate = false, workspaceId } = {}) {
+    const idFilter = injectWorkspaceFilterRequired({ _id: id }, workspaceId, 'thread lookup by id');
+    let query = Thread.findOne(idFilter);
     if (populate) {
       query.populate('participantIds', 'name email avatar flowTaskUserId');
       query.populate('rootMessageId');
@@ -36,7 +37,9 @@ class ThreadRepository {
     // Fallback: If not found by _id, check if it's actually a rootMessageId
     // This supports the frontend passing the message ID to open a thread
     if (!thread) {
-      query = Thread.findOne({ rootMessageId: id });
+      query = Thread.findOne(
+        injectWorkspaceFilterRequired({ rootMessageId: id }, workspaceId, 'thread lookup by root message'),
+      );
       if (populate) {
         query.populate('participantIds', 'name email avatar flowTaskUserId');
         query.populate('rootMessageId');
@@ -98,7 +101,7 @@ class ThreadRepository {
    * @returns {Promise<Thread[]>}
    */
   async getChannelThreads(channelId, { limit = 20, skip = 0, workspaceId } = {}) {
-    const filter = injectWorkspaceFilter({ channelId }, workspaceId);
+    const filter = injectWorkspaceFilterRequired({ channelId }, workspaceId, 'channel threads query');
     return Thread.find(filter)
       .sort({ lastReplyAt: -1, createdAt: -1 })
       .skip(skip)
@@ -173,8 +176,8 @@ class ThreadRepository {
    * @param {string} [workspaceId]
    * @returns {Promise<Thread[]>}
    */
-  async getUserThreads(userId, limit = 20, workspaceId) {
-    const filter = injectWorkspaceFilter({ participantIds: userId }, workspaceId);
+  async getUserThreads(userId, { limit = 20, workspaceId } = {}) {
+    const filter = injectWorkspaceFilterRequired({ participantIds: userId }, workspaceId, 'user threads query');
     return Thread.find(filter)
       .sort({ lastReplyAt: -1 })
       .limit(limit)

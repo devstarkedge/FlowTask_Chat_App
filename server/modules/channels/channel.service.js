@@ -3,6 +3,7 @@ import ChannelMember from './ChannelMember.model.js';
 import channelRepository from './channel.repository.js';
 import userRepository from '../users/user.repository.js';
 import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
+import directMessageService from '../dms/directMessage.service.js';
 import { emitToChannel, emitToUser, joinChannelRoom } from '../../sockets/socketManager.js';
 import { slugify, projectChannelSlug, departmentChannelSlug, teamChannelSlug, appendCollisionSuffix } from '../../utils/slugify.js';
 import { sanitizeHtml, stripHtml, truncate } from '../../utils/sanitize.js';
@@ -179,7 +180,22 @@ class ChannelService {
 
     // ── Check for existing DM channel (pass as array — matches repository signature) ──
     const existing = await channelRepository.findDMChannel(ids, workspaceId);
-    if (existing) return existing;
+    if (existing) {
+      // DM v2 foundation: ensure dedicated DM record mirrors legacy channel.
+      await directMessageService.ensureForChannel({
+        workspaceId,
+        memberIds: ids,
+        legacyChannelId: existing._id,
+        createdBy: senderId,
+      }).catch((error) => {
+        logger.warn('Failed to ensure DM v2 record for existing channel', {
+          channelId: existing._id,
+          workspaceId,
+          error: error.message,
+        });
+      });
+      return existing;
+    }
 
     // ── Validate both users exist in ChatApp within this workspace ──
     const [user1, user2] = await Promise.all([
@@ -221,7 +237,15 @@ class ChannelService {
       // Race-safe path: another request created the DM first.
       if (error?.code === 11000) {
         const winner = await channelRepository.findDMChannel(ids, workspaceId);
-        if (winner) return winner;
+        if (winner) {
+          await directMessageService.ensureForChannel({
+            workspaceId,
+            memberIds: ids,
+            legacyChannelId: winner._id,
+            createdBy: senderId,
+          }).catch(() => {});
+          return winner;
+        }
       }
       throw error;
     }
@@ -234,6 +258,20 @@ class ChannelService {
       ChannelMember.addMember(channelId, ids[0], workspaceId, CHANNEL_MEMBER_ROLES.MEMBER),
       ChannelMember.addMember(channelId, ids[1], workspaceId, CHANNEL_MEMBER_ROLES.MEMBER),
     ]);
+
+    // DM v2 foundation: dual-write a dedicated DirectMessage record.
+    await directMessageService.ensureForChannel({
+      workspaceId,
+      memberIds: ids,
+      legacyChannelId: channel._id,
+      createdBy: senderId,
+    }).catch((error) => {
+      logger.warn('Failed to ensure DM v2 record for newly created channel', {
+        channelId: channel._id,
+        workspaceId,
+        error: error.message,
+      });
+    });
 
     // Auto-join both users to the workspace-scoped channel room
     joinChannelRoom(ids[0], channel._id.toString(), workspaceId);
@@ -578,8 +616,8 @@ class ChannelService {
   /**
    * Get a single channel by ID with access check.
    */
-  async getChannelById(channelId, userId) {
-    const channel = await channelRepository.findById(channelId);
+  async getChannelById(channelId, userId, workspaceId) {
+    const channel = await channelRepository.findById(channelId, { workspaceId });
     if (!channel) {
       throw new NotFoundError('Channel not found');
     }
@@ -602,8 +640,8 @@ class ChannelService {
   /**
    * Add a member to a channel.
    */
-  async addMember(channelId, userId, role = CHANNEL_MEMBER_ROLES.MEMBER) {
-    const channel = await channelRepository.findById(channelId);
+  async addMember(channelId, userId, role = CHANNEL_MEMBER_ROLES.MEMBER, workspaceId) {
+    const channel = await channelRepository.findById(channelId, { workspaceId });
     if (!channel) throw new NotFoundError('Channel not found');
     if (channel.isArchived) throw new ForbiddenError('Channel is archived');
 
@@ -683,8 +721,8 @@ class ChannelService {
   /**
    * Remove a member from a channel.
    */
-  async removeMember(channelId, userId, removedBy) {
-    const channel = await channelRepository.findById(channelId);
+  async removeMember(channelId, userId, removedBy, workspaceId) {
+    const channel = await channelRepository.findById(channelId, { workspaceId });
     if (!channel) throw new NotFoundError('Channel not found');
 
     if (!channel.hasMember(userId)) return channel;
@@ -710,8 +748,8 @@ class ChannelService {
   /**
    * Update channel details (name, description, topic).
    */
-  async updateChannel(channelId, updates, userId) {
-    const channel = await channelRepository.findById(channelId);
+  async updateChannel(channelId, updates, userId, workspaceId) {
+    const channel = await channelRepository.findById(channelId, { workspaceId });
     if (!channel) throw new NotFoundError('Channel not found');
     if (channel.isArchived) throw new ForbiddenError('Channel is archived');
 
@@ -745,7 +783,7 @@ class ChannelService {
       allowed.adminOverrides = updates.adminOverrides;
     }
 
-    const updated = await channelRepository.update(channelId, allowed);
+    const updated = await channelRepository.update(channelId, allowed, workspaceId);
 
     emitToChannel(channelId.toString(), SOCKET_EVENTS.CHANNEL_UPDATED, {
       channelId,
@@ -759,8 +797,8 @@ class ChannelService {
   /**
    * Archive a channel.
    */
-  async archiveChannel(channelId, userId) {
-    const channel = await channelRepository.findById(channelId);
+  async archiveChannel(channelId, userId, workspaceId) {
+    const channel = await channelRepository.findById(channelId, { workspaceId });
     if (!channel) throw new NotFoundError('Channel not found');
 
     if (channel.type === CHANNEL_TYPES.SYSTEM) {
@@ -772,7 +810,7 @@ class ChannelService {
       throw new ForbiddenError('Cannot archive a system-managed channel. Enable admin override first.');
     }
 
-    const updated = await channelRepository.archive(channelId);
+    const updated = await channelRepository.archive(channelId, '', workspaceId);
 
     emitToChannel(channelId.toString(), SOCKET_EVENTS.CHANNEL_UPDATED, {
       channelId,
@@ -799,8 +837,8 @@ class ChannelService {
    * For other channels: returns channel members only.
    * All members are deduplicated and enriched with user profile data.
    */
-  async getAggregatedMembers(channelId, token) {
-    const channel = await channelRepository.findById(channelId, { populate: true });
+  async getAggregatedMembers(channelId, token, workspaceId) {
+    const channel = await channelRepository.findById(channelId, { populate: true, workspaceId });
     if (!channel) throw new NotFoundError('Channel not found');
 
     // Start with channel members (always included)

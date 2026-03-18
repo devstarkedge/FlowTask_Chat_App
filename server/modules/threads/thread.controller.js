@@ -36,7 +36,7 @@ export const createThread = asyncHandler(async (req, res) => {
  * Get a single thread.
  */
 export const getThread = asyncHandler(async (req, res) => {
-  const thread = await threadService.getThreadById(req.params.id);
+  const thread = await threadService.getThreadById(req.params.id, req.workspaceId);
   res.json({ success: true, data: { thread } });
 });
 
@@ -45,7 +45,7 @@ export const getThread = asyncHandler(async (req, res) => {
  * Get replies in a thread.
  */
 export const getThreadReplies = asyncHandler(async (req, res) => {
-  const result = await threadService.getThreadReplies(req.params.id, req.query);
+  const result = await threadService.getThreadReplies(req.params.id, req.query, req.workspaceId);
   res.json({ success: true, data: result });
 });
 
@@ -85,7 +85,7 @@ export const getMyThreads = asyncHandler(async (req, res) => {
  * Lock a thread.
  */
 export const lockThread = asyncHandler(async (req, res) => {
-  const thread = await threadService.lockThread(req.params.id, req.user._id);
+  const thread = await threadService.lockThread(req.params.id, req.user._id, req.workspaceId);
   res.json({ success: true, data: { thread } });
 });
 
@@ -94,7 +94,7 @@ export const lockThread = asyncHandler(async (req, res) => {
  * Resolve a thread.
  */
 export const resolveThread = asyncHandler(async (req, res) => {
-  const thread = await threadService.resolveThread(req.params.id, req.user._id);
+  const thread = await threadService.resolveThread(req.params.id, req.user._id, req.workspaceId);
   res.json({ success: true, data: { thread } });
 });
 
@@ -114,6 +114,7 @@ export const updateThreadTitle = asyncHandler(async (req, res) => {
     req.params.id,
     req.body.title,
     req.user._id,
+    req.workspaceId,
   );
   res.json({ success: true, data: { thread } });
 });

@@ -63,7 +63,7 @@ export function registerDepartmentTeamEventHandlers() {
       if (changes?.description !== undefined) updates.description = changes.description;
 
       if (Object.keys(updates).length > 0) {
-        await channelRepository.update(channel._id, updates);
+        await channelRepository.update(channel._id, updates, wsId);
       }
     } catch (err) {
       logger.error('DEPARTMENT_UPDATED handler failed', { error: err.message, payload });
@@ -78,7 +78,7 @@ export function registerDepartmentTeamEventHandlers() {
       const channel = await channelRepository.findByFlowTaskRef('department', departmentId, wsId);
       if (!channel || channel.isArchived) return;
 
-      await channelRepository.archive(channel._id, 'Department deleted in FlowTask');
+      await channelRepository.archive(channel._id, 'Department deleted in FlowTask', wsId);
       await messageService.sendSystemMessage(
         channel._id,
         `🏢 Department "${departmentName || 'Unknown'}" was deleted. Channel archived.`,
@@ -164,7 +164,7 @@ export function registerDepartmentTeamEventHandlers() {
       if (changes?.description !== undefined) updates.description = changes.description;
 
       if (Object.keys(updates).length > 0) {
-        await channelRepository.update(channel._id, updates);
+        await channelRepository.update(channel._id, updates, wsId);
       }
     } catch (err) {
       logger.error('TEAM_UPDATED handler failed', { error: err.message, payload });
@@ -179,7 +179,7 @@ export function registerDepartmentTeamEventHandlers() {
       const channel = await channelRepository.findByFlowTaskRef('team', teamId, wsId);
       if (!channel || channel.isArchived) return;
 
-      await channelRepository.archive(channel._id, 'Team deleted in FlowTask');
+      await channelRepository.archive(channel._id, 'Team deleted in FlowTask', wsId);
       await messageService.sendSystemMessage(
         channel._id,
         `👥 Team "${teamName || 'Unknown'}" was deleted. Channel archived.`,

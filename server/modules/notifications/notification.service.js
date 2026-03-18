@@ -222,10 +222,10 @@ class NotificationService {
   /**
    * Mark a single notification as read.
    */
-  async markAsRead(notificationId, recipientId) {
-    const notification = await Notification.markRead(notificationId, recipientId);
+  async markAsRead(notificationId, recipientId, workspaceId) {
+    const notification = await Notification.markRead(notificationId, recipientId, workspaceId);
     if (!notification) {
-      logger.warn('Notification not found or not owned by user', { notificationId, recipientId });
+      logger.warn('Notification not found or not owned by user', { notificationId, recipientId, workspaceId });
     }
     return notification;
   }
@@ -241,8 +241,8 @@ class NotificationService {
   /**
    * Delete a single notification.
    */
-  async deleteNotification(notificationId, recipientId) {
-    return Notification.findOneAndDelete({ _id: notificationId, recipientId });
+  async deleteNotification(notificationId, recipientId, workspaceId) {
+    return Notification.findOneAndDelete({ _id: notificationId, recipientId, workspaceId });
   }
 }
 

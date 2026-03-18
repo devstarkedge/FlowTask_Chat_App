@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, memo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useDraftStore } from '../../stores/draftStore'
+import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { messageAPI } from '../../services/api'
 import { emitTypingStart, emitTypingStop } from '../../services/socket'
 import {
@@ -126,6 +127,7 @@ function LinkModal({ onInsert, onClose }) {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function MessageInput({ channelId, threadId, placeholder }) {
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const [pendingFiles, setPendingFiles] = useState([])
   const [uploadingFiles, setUploadingFiles] = useState([])
   const [isUploading, setIsUploading] = useState(false)
@@ -181,20 +183,20 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       if (ed) {
         const { html, text } = ed.getContent()
         if (text.trim()) {
-          setDraft(lastChannelRef.current, html, text)
+          setDraft(lastChannelRef.current, html, text, activeWorkspaceId)
         } else {
-          clearDraft(lastChannelRef.current)
+          clearDraft(lastChannelRef.current, activeWorkspaceId)
         }
       }
     }
     lastChannelRef.current = channelId
-  }, [channelId, setDraft, clearDraft])
+  }, [channelId, setDraft, clearDraft, activeWorkspaceId])
 
   // Restore draft when channel changes
   useEffect(() => {
     const ed = editorRef.current
     if (!ed) return
-    const draft = getDraft(channelId)
+    const draft = getDraft(channelId, activeWorkspaceId)
     if (draft?.html) {
       ed.setContent(draft.html)
       setHasContent(true)
@@ -203,7 +205,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       setHasContent(false)
     }
     requestAnimationFrame(() => ed.focus())
-  }, [channelId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [channelId, activeWorkspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced draft save on content change
   const saveDraftDebounced = useCallback(() => {
@@ -213,10 +215,10 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       if (!ed) return
       const { html, text } = ed.getContent()
       if (text.trim()) {
-        setDraft(channelId, html, text)
+        setDraft(channelId, html, text, activeWorkspaceId)
       }
     }, 800)
-  }, [channelId, setDraft])
+  }, [channelId, setDraft, activeWorkspaceId])
 
   // ─── Typing ──────────────────────────────────────────────────────────────
 
@@ -396,7 +398,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     ed.clear()
     setHasContent(false)
     setPendingFiles([])
-    clearDraft(submitChannelId)
+    clearDraft(submitChannelId, activeWorkspaceId)
 
     emitTypingStop(submitChannelId)
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
@@ -412,7 +414,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     } catch {
       // Error handled in store
     }
-  }, [channelId, threadId, pendingFiles, isUploading, sendMessage, clearDraft])
+  }, [channelId, threadId, pendingFiles, isUploading, sendMessage, clearDraft, activeWorkspaceId])
 
   // ─── Paste Handler (images) ───────────────────────────────────────────────
 

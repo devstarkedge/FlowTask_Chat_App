@@ -122,8 +122,27 @@ const RichTextEditor = forwardRef(function RichTextEditor(
     () => ({
       /** Get current HTML & text content */
       getContent() {
-        if (!editor) return { html: '', text: '' }
-        return { html: editor.getHTML(), text: editor.getText() }
+        if (!editor) return { html: '', text: '', mentions: [] }
+        
+        const mentions = []
+        editor.state.doc.descendants((node) => {
+          if (node.type.name === 'mention') {
+            mentions.push({
+              userId: node.attrs.id,
+              username: node.attrs.label,
+              type: node.attrs.mentionType || 'user'
+            })
+          }
+        })
+        
+        // Deduplicate mentions to prevent multiple notifications for same user
+        const uniqueMentions = Array.from(new Map(mentions.map(m => [m.userId, m])).values())
+
+        return { 
+          html: editor.getHTML(), 
+          text: editor.getText(),
+          mentions: uniqueMentions
+        }
       },
       /** Check if editor has no real content */
       isEmpty() {

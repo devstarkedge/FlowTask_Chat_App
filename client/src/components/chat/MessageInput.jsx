@@ -381,7 +381,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     const ed = editorRef.current
     if (!ed) return
 
-    const { html, text } = ed.getContent()
+    const { html, text, mentions } = ed.getContent()
     if (!text.trim() && pendingFiles.length === 0) return
     if (isUploading) return
 
@@ -389,6 +389,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     const submitThreadId = threadId
     const submitHtml = html || undefined
     const submitText = text.trim() || ' '
+    const submitMentions = mentions || []
     const submitFileReferences = pendingFiles.map((f) => f._id)
 
     // Optimistic UX: clear composer immediately so next message can be sent right away.
@@ -406,6 +407,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
         threadId: submitThreadId,
         htmlContent: submitHtml,
         fileReferences: submitFileReferences.length > 0 ? submitFileReferences : undefined,
+        mentions: submitMentions.length > 0 ? submitMentions : undefined,
       })
     } catch {
       // Error handled in store

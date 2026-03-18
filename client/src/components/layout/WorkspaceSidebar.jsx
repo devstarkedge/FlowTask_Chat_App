@@ -116,7 +116,7 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
         {NAV_ITEMS.map((item) => (
           <button
             key={item.id}
-            className={`workspace-sidebar-icon ${activeId === item.id ? 'active' : ''}`}
+            className={`workspace-sidebar-icon relative ${activeId === item.id ? 'active' : ''}`}
             onClick={() => handleNav(item)}
             onMouseEnter={(e) => handleHoverEnter(item.id, e)}
             onMouseLeave={handleHoverLeave}
@@ -125,7 +125,15 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
           >
             <item.icon size={20} />
             {item.id === 'activity' && unreadNotifications > 0 && (
-              <span className="badge-dot" />
+              <span
+                className="absolute shadow-[0_0_0_2px_var(--bg-workspace-sidebar)] flex items-center justify-center rounded-full text-[10px] font-bold"
+                style={{
+                  top: '-4px', right: '-4px', minWidth: '16px', height: '16px', padding: '0 4px',
+                  background: 'var(--accent-red)', color: 'white',
+                }}
+              >
+                {unreadNotifications > 99 ? '99+' : unreadNotifications}
+              </span>
             )}
           </button>
         ))}

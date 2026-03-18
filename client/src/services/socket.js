@@ -273,16 +273,18 @@ export function connectSocket() {
   })
 
   // ─── Notification Events ────────────────────────────────────────────
-  socket.on(SOCKET_EVENTS.NOTIFICATION, (data) => {
+  socket.on(SOCKET_EVENTS.NOTIFICATION, ({ notification }) => {
+    if (!notification) return
+
     // Suppress notification if user is actively viewing the channel
     const activeChannelId = useChannelStore.getState().activeChannelId
-    if (data.channelId && data.channelId === activeChannelId && document.hasFocus()) {
+    if (notification.channelId && notification.channelId === activeChannelId && document.hasFocus()) {
       return
     }
     // Persist to notification store
-    useNotificationStore.getState().addNotification(data)
+    useNotificationStore.getState().addNotification(notification)
     // Also keep legacy in-memory notification for toast/badge
-    useChatStore.getState().addNotification(data)
+    useChatStore.getState().addNotification(notification)
   })
 
   return socket

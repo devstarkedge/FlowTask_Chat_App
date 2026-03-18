@@ -583,6 +583,38 @@ body {
   margin: 4px 0;
 }
 
+/* ─── Mention Tags ───────────────────────────────────────────────────────── */
+
+.mention-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0px 4px;
+  border-radius: var(--radius-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+[data-theme="light"] .mention-tag {
+  color: #1164A3;
+  background: rgba(17, 100, 163, 0.1);
+}
+
+[data-theme="light"] .mention-tag:hover {
+  background: rgba(17, 100, 163, 0.2);
+  text-decoration: underline;
+}
+
+[data-theme="dark"] .mention-tag {
+  color: #1D9BD1;
+  background: rgba(29, 155, 209, 0.15);
+}
+
+[data-theme="dark"] .mention-tag:hover {
+  background: rgba(29, 155, 209, 0.25);
+  text-decoration: underline;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════ */
 /*  ACTIVITY MESSAGE                                                         */
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -1398,6 +1430,7 @@ body {
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
 .workspace-sidebar {
+  position: relative;
   width: var(--workspace-sidebar-width);
   min-width: var(--workspace-sidebar-width);
   height: 100%;
@@ -1407,7 +1440,7 @@ body {
   padding: 12px 0 8px;
   background: var(--bg-workspace-sidebar);
   border-right: 1px solid var(--border-secondary);
-  z-index: 30;
+  z-index: 40;
   flex-shrink: 0;
 }
 

@@ -53,23 +53,24 @@ export default function NotificationPanel({ onClose }) {
   }
 
   const getNotificationText = (n) => {
-    if (n.title) return n.title
-    const senderName = n.senderId?.name || 'Someone'
+    const senderName = n.senderName || n.senderId?.name || 'Someone'
+    const channelName = getChannelName(n) || n.channelName
+
     switch (n.type) {
       case 'mention':
-        return `${senderName} mentioned you`
+        return <span><strong>{senderName}</strong> mentioned you{channelName ? <span> in <strong>#{channelName}</strong></span> : ''}</span>
       case 'dm':
-        return `New message from ${senderName}`
+        return <span>New message from <strong>{senderName}</strong></span>
       case 'channel_invite':
-        return `You were added to a channel`
+        return <span><strong>{senderName}</strong> added you to <strong>#{channelName}</strong></span>
       case 'task_update':
-        return `Task update`
+        return <span>Task update from <strong>{senderName}</strong></span>
       case 'thread_reply':
-        return `${senderName} replied in a thread`
+        return <span><strong>{senderName}</strong> replied in a thread{channelName ? <span> in <strong>#{channelName}</strong></span> : ''}</span>
       case 'system':
-        return 'System notification'
+        return <span>{n.title || 'System notification'}</span>
       default:
-        return 'New notification'
+        return <span>{n.title || 'New notification'}</span>
     }
   }
 
@@ -215,29 +216,24 @@ export default function NotificationPanel({ onClose }) {
 
               {/* Content */}
               <div className="flex-1 min-w-0">
-                <p className="text-[13px] leading-snug" style={{ color: 'var(--text-white)' }}>
-                  {getNotificationText(n)}
-                </p>
+                <div className="flex items-center justify-between mb-0.5">
+                  <p className="text-[14px] leading-snug truncate pr-2" style={{ color: 'var(--text-white)' }}>
+                    {getNotificationText(n)}
+                  </p>
+                  {timeAgo && (
+                    <span className="text-[11px] shrink-0" style={{ color: 'var(--text-muted)' }}>
+                      {timeAgo}
+                    </span>
+                  )}
+                </div>
                 {n.body && (
                   <p
-                    className="text-xs mt-0.5 truncate"
-                    style={{ color: 'var(--text-muted)' }}
+                    className="text-[13px] leading-relaxed line-clamp-2"
+                    style={{ color: 'var(--text-secondary)' }}
                   >
                     {n.body}
                   </p>
                 )}
-                <div className="flex items-center gap-2 mt-1">
-                  {channelName && (
-                    <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                      #{channelName}
-                    </span>
-                  )}
-                  {timeAgo && (
-                    <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                      {channelName ? '·' : ''} {timeAgo}
-                    </span>
-                  )}
-                </div>
               </div>
 
               {/* Unread dot */}

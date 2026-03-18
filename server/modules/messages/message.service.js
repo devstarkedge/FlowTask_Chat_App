@@ -44,7 +44,7 @@ class MessageService {
    * Supports optimistic UI via tempId — client generates a temporary ID,
    * server includes it in the ACK so the client can reconcile.
    */
-  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, tempId, workspaceId }) {
+  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, tempId, workspaceId, mentions }) {
     const startTime = performance.now();
 
     // Validate channel exists and is not archived
@@ -60,8 +60,23 @@ class MessageService {
       throw new ValidationError('Message must have content or attachments');
     }
 
-    // Extract mentions
-    const mentions = extractMentions(sanitizedContent);
+    // Process structured mentions or fallback to extracting from HTML
+    let processedMentions = [];
+    if (mentions && Array.isArray(mentions) && mentions.length > 0) {
+      processedMentions = mentions.map(m => ({
+        targetId: m.userId,
+        name: m.username || 'Unknown',
+        type: m.type || MENTION_TYPES.USER
+      }));
+    } else {
+      // Fallback for older clients
+      const extracted = extractMentions(sanitizedContent);
+      processedMentions = extracted.map(m => ({
+        targetId: m.id,
+        name: m.name,
+        type: m.type || MENTION_TYPES.USER
+      }));
+    }
 
     // Fetch sender data for snapshot denormalization
     const sender = await userRepository.findById(authorId);
@@ -76,7 +91,7 @@ class MessageService {
       content: sanitizedContent,
       htmlContent: sanitizedHtml,
       contentType: contentType || MESSAGE_CONTENT_TYPES.TEXT,
-      mentions,
+      mentions: processedMentions,
       attachments: attachments || [],
       senderSnapshot,
       ...(workspaceId && { workspaceId }),
@@ -199,7 +214,7 @@ class MessageService {
     }
 
     // Notify mentioned users
-    this._notifyMentions(mentions, populated, channel).catch(() => {});
+    this._notifyMentions(processedMentions, populated, channel).catch(() => {});
 
     // Notify DM recipient with persistent notification
     if (channel.type === CHANNEL_TYPES.DM) {
@@ -616,7 +631,8 @@ class MessageService {
 
     for (const mention of mentions) {
       if (mention.type === MENTION_TYPES.USER) {
-        const chatUser = await userRepository.findByFlowTaskId(mention.id);
+        // Find by ObjectId since targetId is the ChatUser _id
+        const chatUser = await userRepository.findById(mention.targetId);
         if (chatUser && chatUser._id.toString() !== message.authorId?.toString()) {
           // Check channel mute preference
           const preferences = chatUser.preferences || {};

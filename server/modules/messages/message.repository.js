@@ -92,6 +92,93 @@ class MessageRepository {
   }
 
   /**
+   * Get message context around a target message in a channel.
+   * Returns [older..., target, newer...] in chronological order.
+   */
+  async getMessagesAround(channelId, messageId, { limit = 20, workspaceId } = {}) {
+    const scopedTargetFilter = injectWorkspaceFilterRequired(
+      { _id: messageId, channelId, isDeleted: false },
+      workspaceId,
+      'message around query',
+    );
+
+    const target = await Message.findOne(scopedTargetFilter)
+      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate({
+        path: 'fileReferences',
+        populate: { path: 'fileId' },
+      })
+      .lean();
+
+    if (!target) return null;
+
+    const safeLimit = Math.min(Math.max(Number(limit) || 20, 4), 80);
+    const beforeLimit = Math.floor(safeLimit / 2);
+    const afterLimit = safeLimit - beforeLimit;
+
+    const beforeFilter = injectWorkspaceFilterRequired(
+      {
+        channelId,
+        isDeleted: false,
+        threadId: null,
+        $or: [
+          { createdAt: { $lt: target.createdAt } },
+          { createdAt: target.createdAt, _id: { $lt: target._id } },
+        ],
+      },
+      workspaceId,
+      'message around before query',
+    );
+
+    const afterFilter = injectWorkspaceFilterRequired(
+      {
+        channelId,
+        isDeleted: false,
+        threadId: null,
+        $or: [
+          { createdAt: { $gt: target.createdAt } },
+          { createdAt: target.createdAt, _id: { $gt: target._id } },
+        ],
+      },
+      workspaceId,
+      'message around after query',
+    );
+
+    const beforeRaw = await Message.find(beforeFilter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(beforeLimit + 1)
+      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate({
+        path: 'fileReferences',
+        populate: { path: 'fileId' },
+      })
+      .lean();
+
+    const afterRaw = await Message.find(afterFilter)
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(afterLimit + 1)
+      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate({
+        path: 'fileReferences',
+        populate: { path: 'fileId' },
+      })
+      .lean();
+
+    const hasMoreBefore = beforeRaw.length > beforeLimit;
+    const hasMoreAfter = afterRaw.length > afterLimit;
+
+    const before = beforeRaw.slice(0, beforeLimit).reverse();
+    const after = afterRaw.slice(0, afterLimit);
+
+    return {
+      messages: [...before, target, ...after],
+      highlightedMessageId: target._id.toString(),
+      hasMoreBefore,
+      hasMoreAfter,
+    };
+  }
+
+  /**
    * Get thread replies with cursor-based pagination.
    * Returns replies in ascending order (oldest first for thread reading).
    *

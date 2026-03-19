@@ -3,7 +3,7 @@ import { webhookVerifier } from '../../middleware/webhookVerifier.js';
 import eventProcessor from '../../services/eventProcessor.js';
 import logger from '../../utils/logger.js';
 import Workspace from '../workspaces/Workspace.model.js';
-import env from '../../config/environment.js';
+import { BadRequestError } from '../../middleware/errorHandler.js';
 
 /**
  * Webhook Controller — single entry point for all FlowTask webhook events.
@@ -13,48 +13,61 @@ import env from '../../config/environment.js';
  * Pipeline: HMAC verify → replay check → idempotency → dispatch → ack.
  * All event-specific logic lives in event handler modules registered on the EventBus.
  *
- * Supports multi-workspace resolution via X-FlowTask-Workspace header.
- * Falls back to default "flowtask" workspace if no workspace specified.
+ * Supports multi-workspace resolution via X-FlowTask-Workspace header
+ * and payload workspaceId, with strict validation.
  */
+
+async function resolveWorkspaceRef(reference) {
+  if (!reference) return null;
+
+  if (/^[0-9a-fA-F]{24}$/.test(reference)) {
+    const workspace = await Workspace.findById(reference);
+    if (workspace?.isActive) return workspace;
+    return null;
+  }
+
+  const workspace = await Workspace.findBySlug(reference);
+  return workspace?.isActive ? workspace : null;
+}
 
 /**
  * Resolve the target workspace for an incoming webhook.
  * Resolution order:
  *   1. X-FlowTask-Workspace header (slug or ObjectId)
  *   2. Payload's workspaceId field
- *   3. Default workspace (flowtask)
+ *   3. Reject if missing/invalid
  */
 async function resolveWebhookWorkspace(req) {
-  // Try header first (allows FlowTask to specify target workspace)
-  const wsHeader = req.headers['x-flowtask-workspace'];
+  const wsHeader = req.headers['x-flowtask-workspace']?.toString().trim();
+  const payloadWorkspaceRef = (req.body?.workspaceId || req.body?.data?.workspaceId)?.toString()?.trim();
+
+  if (!wsHeader && !payloadWorkspaceRef) {
+    throw new BadRequestError('Workspace context is required for webhooks (X-FlowTask-Workspace header or workspaceId payload).');
+  }
+
+  let workspace = null;
+
   if (wsHeader) {
-    // Could be a slug or an ObjectId
-    if (/^[0-9a-fA-F]{24}$/.test(wsHeader)) {
-      const ws = await Workspace.findById(wsHeader);
-      if (ws?.isActive) return ws;
-    } else {
-      const ws = await Workspace.findBySlug(wsHeader);
-      if (ws) return ws;
+    workspace = await resolveWorkspaceRef(wsHeader);
+    if (!workspace) {
+      throw new BadRequestError('Invalid or inactive workspace in X-FlowTask-Workspace header.');
     }
-    logger.warn('Webhook workspace header resolved to nothing, falling back', {
-      wsHeader,
-    });
-    // Fall through to payload / default — header was present but invalid
   }
 
-  // Try payload workspaceId (only if header didn't resolve)
-  const payloadWsId = req.body?.workspaceId || req.body?.data?.workspaceId;
-  if (payloadWsId && /^[0-9a-fA-F]{24}$/.test(payloadWsId)) {
-    const ws = await Workspace.findById(payloadWsId);
-    if (ws?.isActive) return ws;
+  if (payloadWorkspaceRef) {
+    const payloadWorkspace = await resolveWorkspaceRef(payloadWorkspaceRef);
+    if (!payloadWorkspace) {
+      throw new BadRequestError('Invalid or inactive workspaceId in webhook payload.');
+    }
+
+    if (workspace && workspace._id.toString() !== payloadWorkspace._id.toString()) {
+      throw new BadRequestError('Workspace mismatch between header and payload.');
+    }
+
+    workspace = payloadWorkspace;
   }
 
-  // Fall back to default workspace
-  const defaultWs = await Workspace.findBySlug(env.DEFAULT_WORKSPACE_SLUG);
-  if (!defaultWs) {
-    logger.error('Default workspace not found', { slug: env.DEFAULT_WORKSPACE_SLUG });
-  }
-  return defaultWs || null;
+  return workspace;
 }
 
 /**
@@ -70,9 +83,7 @@ export const handleFlowTaskWebhook = [
 
     // Resolve target workspace (supports multi-workspace)
     const workspace = await resolveWebhookWorkspace(req);
-    if (workspace) {
-      payload._workspaceId = workspace._id.toString();
-    }
+    payload._workspaceId = workspace._id.toString();
 
     logger.info('Webhook received', { eventName, deliveryId, workspaceId: payload._workspaceId });
 

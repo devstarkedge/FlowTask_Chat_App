@@ -177,7 +177,6 @@ export async function initializeSocket(httpServer, corsOptions) {
 
       // Dual-auth token verification
       let chatUser = null;
-      let workspaceId = null;
 
       // Strategy 1: Try as Chat-issued access token
       try {
@@ -212,28 +211,30 @@ export async function initializeSocket(httpServer, corsOptions) {
 
       // Attach user to socket
       socket.chatUser = chatUser;
-      const requestedWsId = workspaceId || socket.handshake.auth.workspaceId || null;
+      const requestedWsId = socket.handshake.auth.workspaceId || null;
 
-      if (env.SOCKET_REQUIRE_WORKSPACE && !requestedWsId) {
+      if (!requestedWsId) {
         return next(new Error('Workspace context is required for socket connection'));
       }
 
+      if (!/^[0-9a-fA-F]{24}$/.test(requestedWsId)) {
+        return next(new Error('Invalid workspace context'));
+      }
+
       // Validate workspace membership if a workspace is specified
-      if (requestedWsId) {
-        try {
-          const { default: WorkspaceMembership } = await import('../modules/workspaces/WorkspaceMembership.model.js');
-          const membership = await WorkspaceMembership.findOne({
-            userId: chatUser._id,
-            workspaceId: requestedWsId,
-            isActive: true,
-          }).lean();
-          if (!membership) {
-            return next(new Error('Not a member of the requested workspace'));
-          }
-        } catch (err) {
-          logger.error('Workspace membership check failed during socket auth', { error: err.message });
-          return next(new Error('Workspace validation failed'));
+      try {
+        const { default: WorkspaceMembership } = await import('../modules/workspaces/WorkspaceMembership.model.js');
+        const membership = await WorkspaceMembership.findOne({
+          userId: chatUser._id,
+          workspaceId: requestedWsId,
+          isActive: true,
+        }).lean();
+        if (!membership) {
+          return next(new Error('Not a member of the requested workspace'));
         }
+      } catch (err) {
+        logger.error('Workspace membership check failed during socket auth', { error: err.message });
+        return next(new Error('Workspace validation failed'));
       }
 
       socket.workspaceId = requestedWsId;
@@ -280,12 +281,12 @@ export async function initializeSocket(httpServer, corsOptions) {
 
     // ─── Auto-join rooms ─────────────────────────────────────────────
     // Personal room (workspace-scoped)
-    const userRoom = wsId ? buildRoomName(wsId, 'user', userId) : `user-${userId}`;
+    const userRoom = buildRoomName(wsId, 'user', userId);
     socket.join(userRoom);
 
     // Department rooms
     for (const deptId of user.departmentIds) {
-      const deptRoom = wsId ? buildRoomName(wsId, 'dept', deptId) : `department-${deptId}`;
+      const deptRoom = buildRoomName(wsId, 'dept', deptId);
       socket.join(deptRoom);
     }
 
@@ -294,7 +295,7 @@ export async function initializeSocket(httpServer, corsOptions) {
     try {
       const channels = await channelRepository.findByMember(userId, { workspaceId: wsId });
       for (const channel of channels) {
-        const chRoom = wsId ? buildRoomName(wsId, 'channel', channel._id) : `channel-${channel._id}`;
+        const chRoom = buildRoomName(wsId, 'channel', channel._id);
         socket.join(chRoom);
         initialChannelIds.push(channel._id.toString());
       }
@@ -313,7 +314,7 @@ export async function initializeSocket(httpServer, corsOptions) {
       avatar: user.avatar,
     };
     for (const channelId of initialChannelIds) {
-      const chRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+      const chRoom = buildRoomName(wsId, 'channel', channelId);
       io.to(chRoom).emit(SOCKET_EVENTS.USER_ONLINE, presencePayload);
     }
 
@@ -326,13 +327,12 @@ export async function initializeSocket(httpServer, corsOptions) {
         return;
       }
 
+      if (!wsId) {
+        socket.emit('error', { message: 'Access denied: workspace context required' });
+        return;
+      }
+
       try {
-        // Admin bypasses membership check
-        if (user.role === 'admin') {
-          const joinRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
-          socket.join(joinRoom);
-          return;
-        }
         const channel = await channelRepository.findById(channelId, { workspaceId: wsId });
         if (!channel) {
           socket.emit('error', { message: 'Channel not found' });
@@ -340,7 +340,7 @@ export async function initializeSocket(httpServer, corsOptions) {
         }
 
         // ── Cross-workspace isolation: prevent joining channels from other workspaces ──
-        if (!wsId || !channel.workspaceId) {
+        if (!channel.workspaceId) {
           logger.warn('Socket channel join blocked — missing workspace context', {
             userId, channelId, socketWorkspace: wsId,
             channelWorkspace: channel.workspaceId?.toString(),
@@ -357,6 +357,12 @@ export async function initializeSocket(httpServer, corsOptions) {
           return;
         }
 
+        if (user.role === 'admin') {
+          const joinRoom = buildRoomName(wsId, 'channel', channelId);
+          socket.join(joinRoom);
+          return;
+        }
+
         // ── DM channels: strict participant check ──
         if (channel.type === 'dm') {
           const userIdStr = userId.toString();
@@ -366,14 +372,14 @@ export async function initializeSocket(httpServer, corsOptions) {
             socket.emit('error', { message: 'Not a participant of this DM' });
             return;
           }
-          const joinRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+          const joinRoom = buildRoomName(wsId, 'channel', channelId);
           socket.join(joinRoom);
           return;
         }
 
         // Public non-DM channels are accessible to all authenticated users
         if (channel.visibility === 'public' && channel.type !== 'dm') {
-          const joinRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+          const joinRoom = buildRoomName(wsId, 'channel', channelId);
           socket.join(joinRoom);
           return;
         }
@@ -382,7 +388,7 @@ export async function initializeSocket(httpServer, corsOptions) {
           socket.emit('error', { message: 'Not a member of this channel' });
           return;
         }
-        const joinRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+        const joinRoom = buildRoomName(wsId, 'channel', channelId);
         socket.join(joinRoom);
       } catch (error) {
         logger.error('Socket channel:join failed', { userId, channelId, error: error.message });
@@ -414,7 +420,7 @@ export async function initializeSocket(httpServer, corsOptions) {
     // Leave a channel room
     socket.on('channel:leave', async (channelId) => {
       if (await isSocketRateLimited(socket.id)) return;
-      const leaveRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+      const leaveRoom = buildRoomName(wsId, 'channel', channelId);
       socket.leave(leaveRoom);
     });
 

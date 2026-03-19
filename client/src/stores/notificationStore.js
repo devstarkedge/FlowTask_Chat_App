@@ -21,9 +21,10 @@ export const useNotificationStore = create((set, get) => ({
       if (!reset && cursor) params.cursor = cursor
 
       const { data } = await api.get('/notifications', { params })
-      const items = data.data?.notifications || []
-      const hasMore = data.data?.hasMore ?? false
-      const nextCursor = data.data?.nextCursor || null
+      const payload = data?.data || data || {}
+      const items = payload.notifications || []
+      const hasMore = payload.hasMore ?? false
+      const nextCursor = payload.nextCursor || null
 
       set((state) => ({
         notifications: reset ? items : [...state.notifications, ...items],
@@ -41,7 +42,8 @@ export const useNotificationStore = create((set, get) => ({
   fetchUnreadCount: async () => {
     try {
       const { data } = await api.get('/notifications/unread-count')
-      set({ unreadCount: data.data?.count || 0 })
+      const payload = data?.data || data || {}
+      set({ unreadCount: payload.count || 0 })
     } catch (error) {
       logger.error('Failed to fetch unread count:', error)
     }

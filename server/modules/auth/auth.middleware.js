@@ -128,6 +128,10 @@ export function authorize(...roles) {
 export function requireChannelAccess() {
   return async (req, res, next) => {
     try {
+      if (!req.workspaceId) {
+        return next(new ForbiddenError('Workspace context is required'));
+      }
+
       const channelId = req.params.channelId || req.params.id;
       if (!channelId) {
         return next(new ForbiddenError('Channel ID required'));
@@ -136,7 +140,9 @@ export function requireChannelAccess() {
       // Import here to avoid circular dependency
       const { default: channelRepository } = await import('../channels/channel.repository.js');
 
-      const channel = await channelRepository.findById(channelId);
+      const channel = await channelRepository.findById(channelId, {
+        workspaceId: req.workspaceId,
+      });
       if (!channel) {
         return next(new ForbiddenError('Channel not found'));
       }
@@ -187,6 +193,10 @@ export function requireChannelAccess() {
 export function requireMessageAccess() {
   return async (req, res, next) => {
     try {
+      if (!req.workspaceId) {
+        return next(new ForbiddenError('Workspace context is required'));
+      }
+
       const messageId = req.params.id || req.params.messageId;
       if (!messageId) {
         return next(new ForbiddenError('Message ID required'));

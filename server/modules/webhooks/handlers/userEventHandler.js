@@ -6,6 +6,15 @@ import messageService from '../../messages/message.service.js';
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SYSTEM_CHANNELS } from '../../../config/constants.js';
 
+function requireWorkspaceId(payload, eventName) {
+  const wsId = payload?._workspaceId;
+  if (!wsId) {
+    logger.warn(`${eventName}: missing _workspaceId, skipping event`);
+    return null;
+  }
+  return wsId;
+}
+
 /**
  * User Event Handler — handles FlowTask user lifecycle events.
  *
@@ -18,6 +27,9 @@ import { FLOWTASK_EVENTS, SYSTEM_CHANNELS } from '../../../config/constants.js';
 export function registerUserEventHandlers() {
   // ─── user.created ──────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.USER_CREATED, async (payload) => {
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.USER_CREATED);
+    if (!wsId) return;
+
     const { user } = payload;
 
     if (!user || !user._id) {
@@ -26,12 +38,12 @@ export function registerUserEventHandlers() {
     }
 
     // Upsert ChatUser
-    const chatUser = await userRepository.upsertFromFlowTask(user);
+    const chatUser = await userRepository.upsertFromFlowTask(user, wsId);
 
     // Add to public system channels
-    const generalChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.GENERAL.slug);
+    const generalChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.GENERAL.slug, wsId);
     if (generalChannel) {
-      await channelService.addMember(generalChannel._id, chatUser._id);
+      await channelService.addMember(generalChannel._id, chatUser._id, undefined, wsId);
     }
 
     // Add to department channel if applicable
@@ -40,8 +52,8 @@ export function registerUserEventHandlers() {
       const deptName = typeof user.department === 'string' ? 'Department' : user.department.name;
 
       if (deptId) {
-        const deptChannel = await channelService.getOrCreateDepartmentChannel(deptId, deptName);
-        await channelService.addMember(deptChannel._id, chatUser._id);
+        const deptChannel = await channelService.getOrCreateDepartmentChannel(deptId, deptName, wsId);
+        await channelService.addMember(deptChannel._id, chatUser._id, undefined, wsId);
       }
     }
 
@@ -50,6 +62,8 @@ export function registerUserEventHandlers() {
       await messageService.sendSystemMessage(
         generalChannel._id,
         `👋 Welcome **${chatUser.name}** to the team!`,
+        undefined,
+        wsId,
       );
     }
 
@@ -61,7 +75,10 @@ export function registerUserEventHandlers() {
 
   // ─── user.updated ──────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.USER_UPDATED, async (payload) => {
-    const { user, changes, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.USER_UPDATED);
+    if (!wsId) return;
+
+    const { user, changes } = payload;
 
     if (!user?._id) return;
 
@@ -79,7 +96,7 @@ export function registerUserEventHandlers() {
         if (oldDeptId) {
           const oldChannel = await channelRepository.findByFlowTaskRef('department', oldDeptId, wsId);
           if (oldChannel) {
-            await channelService.removeMember(oldChannel._id, chatUser._id, 'system');
+            await channelService.removeMember(oldChannel._id, chatUser._id, 'system', wsId);
           }
         }
       }
@@ -95,7 +112,7 @@ export function registerUserEventHandlers() {
 
         if (newDeptId) {
           const newChannel = await channelService.getOrCreateDepartmentChannel(newDeptId, newDeptName, wsId);
-          await channelService.addMember(newChannel._id, chatUser._id);
+          await channelService.addMember(newChannel._id, chatUser._id, undefined, wsId);
         }
       }
     }
@@ -106,9 +123,9 @@ export function registerUserEventHandlers() {
       const adminChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ADMIN.slug, wsId);
       if (adminChannel) {
         if (changes.role.new === 'admin') {
-          await channelService.addMember(adminChannel._id, chatUser._id);
+          await channelService.addMember(adminChannel._id, chatUser._id, undefined, wsId);
         } else if (changes.role.old === 'admin') {
-          await channelService.removeMember(adminChannel._id, chatUser._id, 'system');
+          await channelService.removeMember(adminChannel._id, chatUser._id, 'system', wsId);
         }
       }
 
@@ -116,9 +133,9 @@ export function registerUserEventHandlers() {
       const managersChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.MANAGERS.slug, wsId);
       if (managersChannel) {
         if (changes.role.new === 'manager') {
-          await channelService.addMember(managersChannel._id, chatUser._id);
+          await channelService.addMember(managersChannel._id, chatUser._id, undefined, wsId);
         } else if (changes.role.old === 'manager') {
-          await channelService.removeMember(managersChannel._id, chatUser._id, 'system');
+          await channelService.removeMember(managersChannel._id, chatUser._id, 'system', wsId);
         }
       }
     }
@@ -131,7 +148,10 @@ export function registerUserEventHandlers() {
 
   // ─── user.deactivated ──────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.USER_DEACTIVATED, async (payload) => {
-    const { userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.USER_DEACTIVATED);
+    if (!wsId) return;
+
+    const { userId } = payload;
 
     if (!userId) return;
 
@@ -148,7 +168,10 @@ export function registerUserEventHandlers() {
 
   // ─── user.registered ───────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.USER_REGISTERED, async (payload) => {
-    const { user, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.USER_REGISTERED);
+    if (!wsId) return;
+
+    const { user } = payload;
 
     if (!user || !user._id) {
       logger.warn('user.registered: missing user data');
@@ -165,6 +188,8 @@ export function registerUserEventHandlers() {
       await messageService.sendSystemMessage(
         adminChannel._id,
         `🆕 New user registered: **${chatUser.name}** (${user.email || 'no email'}) — pending verification`,
+        undefined,
+        wsId,
       );
     }
 
@@ -176,7 +201,10 @@ export function registerUserEventHandlers() {
 
   // ─── user.verified ─────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.USER_VERIFIED, async (payload) => {
-    const { user, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.USER_VERIFIED);
+    if (!wsId) return;
+
+    const { user } = payload;
 
     if (!user || !user._id) {
       logger.warn('user.verified: missing user data');
@@ -189,10 +217,12 @@ export function registerUserEventHandlers() {
     // Add to #general
     const generalChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.GENERAL.slug, wsId);
     if (generalChannel) {
-      await channelService.addMember(generalChannel._id, chatUser._id);
+      await channelService.addMember(generalChannel._id, chatUser._id, undefined, wsId);
       await messageService.sendSystemMessage(
         generalChannel._id,
         `👋 Welcome **${chatUser.name}** to the team! 🎉`,
+        undefined,
+        wsId,
       );
     }
 
@@ -203,7 +233,7 @@ export function registerUserEventHandlers() {
 
       if (deptId) {
         const deptChannel = await channelService.getOrCreateDepartmentChannel(deptId, deptName, wsId);
-        await channelService.addMember(deptChannel._id, chatUser._id);
+        await channelService.addMember(deptChannel._id, chatUser._id, undefined, wsId);
       }
     }
 
@@ -211,13 +241,13 @@ export function registerUserEventHandlers() {
     if (chatUser.role === 'admin') {
       const adminChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ADMIN.slug, wsId);
       if (adminChannel) {
-        await channelService.addMember(adminChannel._id, chatUser._id);
+        await channelService.addMember(adminChannel._id, chatUser._id, undefined, wsId);
       }
     }
     if (chatUser.role === 'manager') {
       const managersChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.MANAGERS.slug, wsId);
       if (managersChannel) {
-        await channelService.addMember(managersChannel._id, chatUser._id);
+        await channelService.addMember(managersChannel._id, chatUser._id, undefined, wsId);
       }
     }
 
@@ -240,6 +270,8 @@ export function registerUserEventHandlers() {
         await messageService.sendSystemMessage(
           managersChannel._id,
           `✅ New verified user **${chatUser.name}** joined ${deptName}`,
+          undefined,
+          wsId,
         );
       }
     }

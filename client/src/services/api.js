@@ -154,6 +154,7 @@ export const channelAPI = {
 // ─── Messages ────────────────────────────────────────────────────────────
 export const messageAPI = {
   list: (channelId, params) => api.get(`/channels/${channelId}/messages`, { params }),
+  around: (channelId, messageId, params) => api.get(`/channels/${channelId}/messages/around/${messageId}`, { params }),
   send: (channelId, data) => api.post(`/channels/${channelId}/messages`, data),
   get: (id) => api.get(`/messages/${id}`),
   edit: (id, content) => api.put(`/messages/${id}`, { content }),
@@ -177,6 +178,7 @@ export const messageAPI = {
 
 // ─── Files (channel/DM scoped) ─────────────────────────────────────────
 export const fileAPI = {
+  listWorkspace: (params) => api.get('/messages/files', { params }),
   listByChannel: (channelId, params) => api.get(`/channels/${channelId}/files`, { params }),
   deleteFromChannel: (channelId, fileId) => api.delete(`/channels/${channelId}/files/${fileId}`),
 }

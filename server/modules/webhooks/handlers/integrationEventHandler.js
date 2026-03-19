@@ -3,6 +3,15 @@ import syncService from '../../flowtask/sync.service.js';
 import workspaceRepository from '../../workspaces/workspace.repository.js';
 import logger from '../../../utils/logger.js';
 
+function requireWorkspaceId(payload, eventName) {
+  const wsId = payload?._workspaceId;
+  if (!wsId) {
+    logger.warn(`${eventName}: missing _workspaceId, skipping event`);
+    return null;
+  }
+  return wsId;
+}
+
 /**
  * Integration Event Handler — handles meta-events like sync requests
  * and connectivity tests dispatched from FlowTask admin panel.
@@ -14,22 +23,18 @@ import logger from '../../../utils/logger.js';
 
 export function registerIntegrationEventHandlers() {
   eventBus.register('SYNC_REQUESTED', async (payload) => {
-    const { _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, 'SYNC_REQUESTED');
+    if (!wsId) return;
 
     logger.info('Sync requested from FlowTask', {
       requestedBy: payload.requestedBy,
       workspaceId: wsId,
     });
 
-    // Find the FlowTask-linked workspace
-    let workspaceId = wsId;
-    if (!workspaceId) {
-      const workspace = await workspaceRepository.findFlowTaskWorkspace();
-      if (!workspace) {
-        logger.warn('SYNC_REQUESTED: no FlowTask-linked workspace found');
-        return;
-      }
-      workspaceId = workspace._id.toString();
+    const workspace = await workspaceRepository.findById(wsId);
+    if (!workspace) {
+      logger.warn('SYNC_REQUESTED: workspace not found', { workspaceId: wsId });
+      return;
     }
 
     // Note: reconcile needs a FlowTask admin token.
@@ -37,15 +42,19 @@ export function registerIntegrationEventHandlers() {
     // or the sync request payload would include one from the triggering admin.
     // For now, log and skip if no token is available.
     logger.info('Sync requested — workspace identified, sync should be triggered with admin token', {
-      workspaceId,
+      workspaceId: wsId,
     });
   }, 'integrationSyncHandler');
 
   eventBus.register('INTEGRATION_TEST', async (payload) => {
+    const wsId = requireWorkspaceId(payload, 'INTEGRATION_TEST');
+    if (!wsId) return;
+
     logger.info('Integration test received from FlowTask', {
       message: payload.message,
       triggeredBy: payload.triggeredBy,
       timestamp: payload.timestamp,
+      workspaceId: wsId,
     });
   }, 'integrationTestHandler');
 }

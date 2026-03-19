@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useChannelStore } from "../../stores/channelStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useChatStore } from "../../stores/chatStore";
@@ -31,6 +32,7 @@ import CreateWorkspaceModal from "../workspace/CreateWorkspaceModal";
 import JoinWorkspaceModal from "../workspace/JoinWorkspaceModal";
 import WorkspaceSettingsModal from "../workspace/WorkspaceSettingsModal";
 import { formatDistanceToNowStrict } from "date-fns";
+import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
 
 const CHANNEL_ICONS = {
   project: Hash,
@@ -43,11 +45,14 @@ const CHANNEL_ICONS = {
 };
 
 export default function NavigationSidebar({
+  mode = 'home',
   onClose,
   onToggleAllThreads,
   onToggleNotifications,
   onToggleSaved,
 }) {
+  const navigate = useNavigate();
+  const { workspaceId } = useParams();
   const { channels, activeChannelId, setActiveChannel, unreads } =
     useChannelStore();
   const { user } = useAuthStore();
@@ -104,6 +109,8 @@ export default function NavigationSidebar({
     (c) => (c.type === "department" || c.type === "team") && !c.isArchived,
   );
 
+  const isDMMode = mode === 'dms';
+
   const filteredChannels = (list) => {
     if (!searchQuery) return list;
     return list.filter((c) =>
@@ -127,7 +134,16 @@ export default function NavigationSidebar({
   };
 
   const handleSelectChannel = (channelId) => {
+    const channel = channels.find((c) => c._id === channelId);
     setActiveChannel(channelId);
+
+    if (workspaceId && channel) {
+      const nextPath = channel.type === 'dm'
+        ? getDMPath(workspaceId, channelId)
+        : getChannelPath(workspaceId, channelId);
+      navigate(nextPath);
+    }
+
     onClose?.();
   };
 
@@ -237,7 +253,9 @@ export default function NavigationSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto pt-4 pb-4">
-        {/* Quick Nav Items (Attached to sidebar with lines) */}
+        {!isDMMode && (
+          <>
+            {/* Quick Nav Items (Attached to sidebar with lines) */}
      <div className="px-5 mb-10">
   <div
     className="flex flex-col mr-3.5"
@@ -313,9 +331,11 @@ export default function NavigationSidebar({
         </div>
         </div>
 <br />
+          </>
+        )}
         {/* Channel List Container with spacing */}
         <div className="px-1 pt-6">
-          {systemChannels.length > 0 && (
+          {!isDMMode && systemChannels.length > 0 && (
             <ChannelSection
               title="System"
               channels={sortChannels(filteredChannels(systemChannels))}
@@ -328,26 +348,28 @@ export default function NavigationSidebar({
             />
           )}
 
-          <ChannelSection
-            title="Channels"
-            channels={sortChannels(
-              filteredChannels([
-                ...publicChannels,
-                ...projectChannels,
-                ...deptChannels,
-              ]),
-            )}
-            expanded={expandedSections.channels}
-            onToggle={() => toggleSection("channels")}
-            activeId={activeChannelId}
-            unreads={unreads}
-            onSelect={handleSelectChannel}
-            showAdd
-            onAdd={() => setShowCreateChannel(true)}
-            onlineUsers={onlineUsers}
-          />
+          {!isDMMode && (
+            <ChannelSection
+              title="Channels"
+              channels={sortChannels(
+                filteredChannels([
+                  ...publicChannels,
+                  ...projectChannels,
+                  ...deptChannels,
+                ]),
+              )}
+              expanded={expandedSections.channels}
+              onToggle={() => toggleSection("channels")}
+              activeId={activeChannelId}
+              unreads={unreads}
+              onSelect={handleSelectChannel}
+              showAdd
+              onAdd={() => setShowCreateChannel(true)}
+              onlineUsers={onlineUsers}
+            />
+          )}
 
-          {privateChannels.length > 0 && (
+          {!isDMMode && privateChannels.length > 0 && (
             <ChannelSection
               title="Private Channels"
               channels={sortChannels(filteredChannels(privateChannels))}
@@ -361,7 +383,7 @@ export default function NavigationSidebar({
           )}
 
           <ChannelSection
-            title="Direct Messages"
+            title={isDMMode ? 'Direct messages' : 'Direct Messages'}
             channels={sortChannels(filteredChannels(dmChannels), true)}
             expanded={expandedSections.dms}
             onToggle={() => toggleSection("dms")}
@@ -373,15 +395,23 @@ export default function NavigationSidebar({
             isDM
             onlineUsers={onlineUsers}
           />
+
+          {isDMMode && dmChannels.length === 0 && (
+            <div className="px-6 py-6 text-sm" style={{ color: '#8A92A6' }}>
+              Start a direct message to begin private conversations.
+            </div>
+          )}
         </div>
       </div>
 
-      <div
-        className="px-5 py-4 shrink-0 flex items-center justify-between"
-        style={{ borderTop: "2px solid var(--border-secondary)" }}
-      >
-        <NavButton icon={AppWindow} label="Apps" onClick={() => {}} />
-      </div>
+      {!isDMMode && (
+        <div
+          className="px-5 py-4 shrink-0 flex items-center justify-between"
+          style={{ borderTop: "2px solid var(--border-secondary)" }}
+        >
+          <NavButton icon={AppWindow} label="Apps" onClick={() => {}} />
+        </div>
+      )}
 
       {/* Modals */}
       {showCreateChannel && (

@@ -684,7 +684,7 @@ class ChannelService {
    * Add multiple members to a channel (bulk, for project sync).
    */
   async syncMembers(channelId, flowTaskUserIds, workspaceId) {
-    const channel = await channelRepository.findById(channelId);
+    const channel = await channelRepository.findById(channelId, { workspaceId });
     if (!channel) throw new NotFoundError('Channel not found');
 
     const chatUsers = await userRepository.findByFlowTaskIds(flowTaskUserIds, workspaceId);

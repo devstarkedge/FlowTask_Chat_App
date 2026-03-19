@@ -7,6 +7,15 @@ import channelRepository from '../../channels/channel.repository.js';
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, MESSAGE_CONTENT_TYPES } from '../../../config/constants.js';
 
+function requireWorkspaceId(payload, eventName) {
+  const wsId = payload?._workspaceId;
+  if (!wsId) {
+    logger.warn(`${eventName}: missing _workspaceId, skipping event`);
+    return null;
+  }
+  return wsId;
+}
+
 /**
  * Project Event Handler — handles project/board lifecycle events.
  *
@@ -21,7 +30,10 @@ import { FLOWTASK_EVENTS, MESSAGE_CONTENT_TYPES } from '../../../config/constant
 export function registerProjectEventHandlers() {
   // ─── project.created ────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.PROJECT_CREATED, async (payload) => {
-    const { board, userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.PROJECT_CREATED);
+    if (!wsId) return;
+
+    const { board, userId } = payload;
 
     if (!board || !board._id) {
       logger.warn('project.created: missing board data', { payload });
@@ -64,7 +76,10 @@ export function registerProjectEventHandlers() {
 
   // ─── project.updated ────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.PROJECT_UPDATED, async (payload) => {
-    const { board, changes, userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.PROJECT_UPDATED);
+    if (!wsId) return;
+
+    const { board, changes, userId } = payload;
 
     if (!board?._id) return;
 
@@ -124,7 +139,10 @@ export function registerProjectEventHandlers() {
 
   // ─── project.deleted ────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.PROJECT_DELETED, async (payload) => {
-    const { boardId, userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.PROJECT_DELETED);
+    if (!wsId) return;
+
+    const { boardId, userId } = payload;
 
     if (!boardId) return;
 
@@ -148,7 +166,10 @@ export function registerProjectEventHandlers() {
 
   // ─── project.member_added ──────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.PROJECT_MEMBER_ADDED, async (payload) => {
-    const { boardId, memberId, userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.PROJECT_MEMBER_ADDED);
+    if (!wsId) return;
+
+    const { boardId, memberId, userId } = payload;
 
     if (!boardId || !memberId) return;
 
@@ -173,7 +194,10 @@ export function registerProjectEventHandlers() {
 
   // ─── project.member_removed ────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.PROJECT_MEMBER_REMOVED, async (payload) => {
-    const { boardId, memberId, userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.PROJECT_MEMBER_REMOVED);
+    if (!wsId) return;
+
+    const { boardId, memberId, userId } = payload;
 
     if (!boardId || !memberId) return;
 
@@ -195,7 +219,10 @@ export function registerProjectEventHandlers() {
 
   // ─── project.member_assigned ───────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.PROJECT_MEMBER_ASSIGNED, async (payload) => {
-    const { boardId, memberId, role, userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.PROJECT_MEMBER_ASSIGNED);
+    if (!wsId) return;
+
+    const { boardId, memberId, role, userId } = payload;
 
     if (!boardId || !memberId) return;
 

@@ -9,6 +9,29 @@ import logger from '../utils/logger'
 
 let socket = null
 
+function getSocketUrl() {
+  const explicit = import.meta.env.VITE_SOCKET_URL
+  if (explicit) return explicit
+
+  const apiBase = import.meta.env.VITE_API_BASE_URL
+  if (apiBase && /^https?:\/\//i.test(apiBase)) {
+    try {
+      return new URL(apiBase).origin
+    } catch {
+      // fall through
+    }
+  }
+
+  return window.location.origin
+}
+
+function getSocketAuth() {
+  return {
+    token: useAuthStore.getState().accessToken,
+    workspaceId: useWorkspaceStore.getState().activeWorkspaceId,
+  }
+}
+
 const SOCKET_EVENTS = {
   // Messages (renamed to enterprise standard)
   MESSAGE_CREATE: 'message:create',
@@ -51,21 +74,32 @@ const SOCKET_EVENTS = {
 }
 
 export function connectSocket() {
-  const token = useAuthStore.getState().accessToken
-  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
-  if (!token || socket?.connected) return
+  const { token, workspaceId } = getSocketAuth()
+  if (!token || !workspaceId) return
+  if (socket?.connected) return socket
 
-  const socketUrl = import.meta.env.VITE_SOCKET_URL
-  if (!socketUrl) {
+  const explicitSocketUrl = import.meta.env.VITE_SOCKET_URL
+  if (!explicitSocketUrl) {
     logger.error(
-      '[Socket] VITE_SOCKET_URL is not set. Falling back to window.location.origin — ' +
-      'this WILL FAIL in production when the frontend and backend are on different domains. ' +
-      'Set VITE_SOCKET_URL=https://flowtask-chat-app.onrender.com in your Render static site environment.'
+      '[Socket] VITE_SOCKET_URL is not set. Deriving socket origin from VITE_API_BASE_URL/window.origin. ' +
+      'For production, set VITE_SOCKET_URL explicitly to avoid cross-domain websocket failures.'
     )
   }
 
-  socket = io(socketUrl || window.location.origin, {
-    auth: { token, workspaceId },
+  const socketUrl = getSocketUrl()
+
+  // Reuse existing disconnected instance instead of creating duplicate clients.
+  if (socket && !socket.connected) {
+    socket.auth = getSocketAuth()
+    useChatStore.getState().setConnectionStatus('connecting')
+    socket.connect()
+    return socket
+  }
+
+  useChatStore.getState().setConnectionStatus('connecting')
+
+  socket = io(socketUrl, {
+    auth: (cb) => cb(getSocketAuth()),
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionAttempts: 10,
@@ -94,6 +128,7 @@ export function connectSocket() {
   })
 
   socket.on('reconnect_attempt', (attempt) => {
+    socket.auth = getSocketAuth()
     logger.log('[Socket] Reconnecting... attempt', attempt)
     useChatStore.getState().setConnectionStatus('connecting')
   })
@@ -126,11 +161,27 @@ export function connectSocket() {
   })
 
   socket.on('connect_error', (err) => {
+    const freshAuth = getSocketAuth()
+    socket.auth = freshAuth
+
     logger.error('[Socket] Connection error:', err.message)
-    // If it's an auth error, the token may be expired — disconnect cleanly
-    if (err.message?.includes('auth') || err.message?.includes('token') || err.message?.includes('unauthorized')) {
-      logger.warn('[Socket] Auth error detected, disconnecting')
+
+    if (!freshAuth.token || !freshAuth.workspaceId) {
+      logger.warn('[Socket] Missing token/workspace for socket auth, disconnecting')
       socket.disconnect()
+      useChatStore.getState().setConnectionStatus('disconnected')
+      return
+    }
+
+    // If auth failed (often due stale token), retry with latest auth payload.
+    if (err.message?.includes('auth') || err.message?.includes('token') || err.message?.includes('unauthorized')) {
+      logger.warn('[Socket] Auth error detected, retrying with fresh auth context')
+      useChatStore.getState().setConnectionStatus('connecting')
+      setTimeout(() => {
+        if (socket && !socket.connected) {
+          socket.connect()
+        }
+      }, 600)
     }
   })
 

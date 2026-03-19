@@ -293,6 +293,32 @@ class MessageService {
   }
 
   /**
+   * Get a context window around a target message for deep-link navigation.
+   */
+  async getMessagesAround(channelId, messageId, query = {}, workspaceId) {
+    const channel = await channelRepository.findById(channelId, { workspaceId });
+    if (!channel) throw new NotFoundError('Channel not found');
+
+    const limit = Math.min(Math.max(parseInt(query.limit, 10) || 20, 4), 80);
+    const around = await messageRepository.getMessagesAround(channelId, messageId, {
+      limit,
+      workspaceId,
+    });
+
+    if (!around) {
+      throw new NotFoundError('Message not found in this channel');
+    }
+
+    return {
+      items: around.messages,
+      highlightedMessageId: around.highlightedMessageId,
+      hasMoreBefore: around.hasMoreBefore,
+      hasMoreAfter: around.hasMoreAfter,
+      pagination: { limit },
+    };
+  }
+
+  /**
    * Get thread replies for a root message.
    */
   async getThreadReplies(threadId, query = {}, workspaceId) {

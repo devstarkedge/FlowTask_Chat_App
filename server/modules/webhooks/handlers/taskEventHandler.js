@@ -7,6 +7,15 @@ import userRepository from '../../users/user.repository.js';
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS } from '../../../config/constants.js';
 
+function requireWorkspaceId(payload, eventName) {
+  const wsId = payload?._workspaceId;
+  if (!wsId) {
+    logger.warn(`${eventName}: missing _workspaceId, skipping event`);
+    return null;
+  }
+  return wsId;
+}
+
 /**
  * Task Event Handler — handles FlowTask card/task lifecycle events.
  *
@@ -21,7 +30,10 @@ import { FLOWTASK_EVENTS } from '../../../config/constants.js';
 export function registerTaskEventHandlers() {
   // ─── task.created ──────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_CREATED, async (payload) => {
-    const { card, boardId, userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_CREATED);
+    if (!wsId) return;
+
+    const { card, boardId, userId } = payload;
 
     if (!card || !boardId) return;
 
@@ -57,7 +69,10 @@ export function registerTaskEventHandlers() {
 
   // ─── task.updated ──────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_UPDATED, async (payload) => {
-    const { card, boardId, changes, userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_UPDATED);
+    if (!wsId) return;
+
+    const { card, boardId, changes, userId } = payload;
 
     if (!card || !boardId) return;
 
@@ -87,7 +102,10 @@ export function registerTaskEventHandlers() {
 
   // ─── task.deleted ──────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_DELETED, async (payload) => {
-    const { cardId, cardTitle, boardId, userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_DELETED);
+    if (!wsId) return;
+
+    const { cardId, cardTitle, boardId, userId } = payload;
 
     if (!boardId) return;
 
@@ -107,7 +125,10 @@ export function registerTaskEventHandlers() {
 
   // ─── task.assigned ─────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_ASSIGNED, async (payload) => {
-    const { card, boardId, assigneeId, assignerId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_ASSIGNED);
+    if (!wsId) return;
+
+    const { card, boardId, assigneeId, assignerId } = payload;
 
     if (!card || !assigneeId) return;
 
@@ -132,7 +153,10 @@ export function registerTaskEventHandlers() {
 
   // ─── task.commented ────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_COMMENTED, async (payload) => {
-    const { comment, card, boardId, userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_COMMENTED);
+    if (!wsId) return;
+
+    const { comment, card, boardId, userId } = payload;
 
     if (!comment || !card || !boardId) return;
 
@@ -161,7 +185,10 @@ export function registerTaskEventHandlers() {
 
   // ─── task.status_changed ───────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_STATUS_CHANGED, async (payload) => {
-    const { card, boardId, oldStatus, newStatus, userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_STATUS_CHANGED);
+    if (!wsId) return;
+
+    const { card, boardId, oldStatus, newStatus, userId } = payload;
 
     if (!card || !boardId) return;
 
@@ -211,7 +238,10 @@ export function registerTaskEventHandlers() {
 
   // ─── task.due_date_changed ─────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TASK_DUE_DATE_CHANGED, async (payload) => {
-    const { card, boardId, oldDueDate, newDueDate, userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_DUE_DATE_CHANGED);
+    if (!wsId) return;
+
+    const { card, boardId, oldDueDate, newDueDate, userId } = payload;
 
     if (!card || !boardId) return;
 
@@ -241,7 +271,10 @@ export function registerTaskEventHandlers() {
 
   // ─── time_entry_added ──────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.TIME_ENTRY_ADDED, async (payload) => {
-    const { timeEntry, card, boardId, userId, _workspaceId: wsId } = payload;
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TIME_ENTRY_ADDED);
+    if (!wsId) return;
+
+    const { timeEntry, card, boardId, userId } = payload;
 
     if (!timeEntry || !boardId) return;
 

@@ -260,10 +260,40 @@ export const useChatStore = create((set, get) => ({
       const existing = state.messagesByChannel[channelId] || []
       // Avoid duplicates
       if (existing.some((m) => m._id === message._id)) return state
+      const merged = [...existing, message].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: [...existing, message],
+          [channelId]: merged,
+        },
+      }
+    })
+  },
+
+  /**
+   * Merge a message window into a channel cache (used by deep-link context loading).
+   */
+  upsertChannelMessages: (channelId, messages = []) => {
+    if (!channelId || !Array.isArray(messages) || messages.length === 0) return
+
+    set((state) => {
+      const existing = state.messagesByChannel[channelId] || []
+      const map = new Map(existing.map((m) => [m._id, m]))
+
+      for (const message of messages) {
+        if (!message?._id) continue
+        map.set(message._id, {
+          ...map.get(message._id),
+          ...message,
+        })
+      }
+
+      const merged = Array.from(map.values()).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+
+      return {
+        messagesByChannel: {
+          ...state.messagesByChannel,
+          [channelId]: merged,
         },
       }
     })

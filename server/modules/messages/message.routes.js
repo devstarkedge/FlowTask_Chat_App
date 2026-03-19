@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getMessages,
+  getMessagesAround,
   sendMessage,
   getMessage,
   editMessage,
@@ -12,6 +13,7 @@ import {
   getPinnedMessages,
   searchMessages,
   uploadFiles,
+  getWorkspaceFiles,
   getChannelFiles,
   deleteChannelFile,
   markDMSeen,
@@ -64,6 +66,7 @@ router.use(resolveWorkspace);
 
 // ─── Message-scoped routes (mounted under /api/chat/messages) ────────────────
 router.get('/search', validate({ query: searchMessagesSchema }), searchMessages);
+router.get('/files', getWorkspaceFiles);
 router.get('/saved', getSavedMessages);
 router.get('/scheduled', getScheduledMessages);
 router.delete('/scheduled/:id', cancelScheduledMessage);
@@ -90,6 +93,7 @@ channelMessageRouter.use(protect);
 channelMessageRouter.use(resolveWorkspace);
 channelMessageRouter.use(requireChannelAccess());
 channelMessageRouter.get('/messages', getMessages);
+channelMessageRouter.get('/messages/around/:messageId', getMessagesAround);
 channelMessageRouter.post('/messages', validate({ body: sendMessageSchema }), sendMessage);
 channelMessageRouter.post('/upload', uploadLimiter, uploadMiddleware, handleMulterError, uploadFiles);
 channelMessageRouter.post('/upload/sign', getUploadSignature);

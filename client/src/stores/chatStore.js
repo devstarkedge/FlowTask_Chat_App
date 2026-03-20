@@ -3,11 +3,21 @@ import { messageAPI, threadAPI, botAPI } from '../services/api'
 import { useAuthStore } from './authStore'
 import toast from 'react-hot-toast'
 import logger from '../utils/logger'
+import { CHAT_FEATURE_FLAGS } from '../config/featureFlags'
+import {
+  loadChannelMessagesFromCache,
+  saveChannelMessagesToCache,
+  clearMessageCache,
+} from '../services/messageCache'
 
 // ─── LRU Message Cache ─────────────────────────────────────────────────────
 // Prevent unbounded memory growth by evicting least-recently-used channels.
 const MAX_CACHED_CHANNELS = 10
 const channelAccessOrder = [] // Most-recently-accessed at end
+const hydratedChannels = new Set()
+const hydrationInFlight = new Set()
+const pendingPersistByChannel = new Map()
+let persistTimer = null
 
 function touchChannel(channelId) {
   const idx = channelAccessOrder.indexOf(channelId)
@@ -20,9 +30,89 @@ function getChannelsToEvict() {
   return channelAccessOrder.splice(0, channelAccessOrder.length - MAX_CACHED_CHANNELS)
 }
 
+function buildNormalizedChannel(messages = []) {
+  const ids = []
+  const byId = {}
+
+  for (const message of messages) {
+    if (!message?._id) continue
+    ids.push(message._id)
+    byId[message._id] = message
+  }
+
+  return { ids, byId }
+}
+
+function mergeChronologicalMessages(existing = [], incoming = []) {
+  const map = new Map()
+
+  for (const message of existing) {
+    if (message?._id) map.set(message._id, message)
+  }
+
+  for (const message of incoming) {
+    if (message?._id) map.set(message._id, message)
+  }
+
+  return Array.from(map.values()).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+}
+
+function flushChannelPersists() {
+  const entries = Array.from(pendingPersistByChannel.entries())
+  pendingPersistByChannel.clear()
+  persistTimer = null
+
+  for (const [channelId, messages] of entries) {
+    void saveChannelMessagesToCache(channelId, messages)
+  }
+}
+
+function scheduleChannelPersist(channelId, messages) {
+  if (!CHAT_FEATURE_FLAGS.indexedDbCache) return
+  if (!channelId) return
+
+  pendingPersistByChannel.set(channelId, Array.isArray(messages) ? messages : [])
+
+  if (persistTimer) return
+  persistTimer = setTimeout(flushChannelPersists, 450)
+}
+
+function buildThreadReplyIndex(replies = []) {
+  const ids = []
+  const byId = {}
+
+  for (const reply of replies) {
+    if (!reply?._id) continue
+    ids.push(reply._id)
+    byId[reply._id] = reply
+  }
+
+  return { ids, byId }
+}
+
+function nowMs() {
+  return (typeof performance !== 'undefined' && performance.now)
+    ? performance.now()
+    : Date.now()
+}
+
+function logSlowMutation(metricName, startedAt, meta = {}) {
+  if (!CHAT_FEATURE_FLAGS.perfDebug) return
+  const duration = nowMs() - startedAt
+  if (duration < 6) return
+  logger.debug('[ChatPerf]', metricName, {
+    durationMs: Number(duration.toFixed(2)),
+    ...meta,
+  })
+}
+
 export const useChatStore = create((set, get) => ({
   // Messages keyed by channelId
   messagesByChannel: {},
+  // Normalized message entities (feature-flagged, maintained via subscription)
+  messagesById: {},
+  channelMessageIds: {},
+  messageChannelById: {},
   hasMore: {},
   isLoadingMessages: false,
 
@@ -39,6 +129,9 @@ export const useChatStore = create((set, get) => ({
 
   // Thread replies keyed by rootMessageId
   threadRepliesByRoot: {},
+  threadRepliesById: {},
+  threadReplyIdsByRoot: {},
+  threadRootByReplyId: {},
   threadHasMore: {},
   isLoadingThread: false,
 
@@ -62,12 +155,62 @@ export const useChatStore = create((set, get) => ({
 
   openThread: (thread) => {
     set({ activeThread: thread })
-    try { sessionStorage.setItem('chat_activeThread', JSON.stringify(thread)) } catch {}
+    try {
+      sessionStorage.setItem('chat_activeThread', JSON.stringify(thread))
+    } catch {
+      // Ignore session storage failures in private browsing or restricted environments.
+    }
   },
 
   closeThread: () => {
     set({ activeThread: null })
     sessionStorage.removeItem('chat_activeThread')
+  },
+
+  selectMessagesForChannel: (channelId) => {
+    if (!channelId) return []
+    const state = get()
+
+    if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
+      const ids = state.channelMessageIds[channelId] || []
+      if (ids.length === 0) return []
+      return ids
+        .map((id) => state.messagesById[id])
+        .filter(Boolean)
+    }
+
+    return state.messagesByChannel[channelId] || []
+  },
+
+  selectThreadReplies: (rootMessageId) => {
+    if (!rootMessageId) return []
+    const state = get()
+
+    if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
+      const ids = state.threadReplyIdsByRoot[rootMessageId] || []
+      if (ids.length === 0) return []
+      return ids
+        .map((id) => state.threadRepliesById[id])
+        .filter(Boolean)
+    }
+
+    return state.threadRepliesByRoot[rootMessageId] || []
+  },
+
+  selectThreadHasMore: (rootMessageId) => {
+    if (!rootMessageId) return false
+    return get().threadHasMore[rootMessageId] ?? false
+  },
+
+  selectMessageByIdOrChannel: (messageId, channelId) => {
+    if (!messageId) return null
+    const state = get()
+
+    if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
+      return state.messagesById[messageId] || null
+    }
+
+    return state.messagesByChannel[channelId]?.find((m) => m._id === messageId) || null
   },
 
   // ─── Messages ────────────────────────────────────────────────────────
@@ -82,6 +225,35 @@ export const useChatStore = create((set, get) => ({
     touchChannel(channelId)
 
     set({ isLoadingMessages: true })
+
+    // Stale-while-revalidate: hydrate from IndexedDB first for instant rendering.
+    if (
+      CHAT_FEATURE_FLAGS.indexedDbCache &&
+      !options.cursor &&
+      !hydratedChannels.has(channelId) &&
+      !hydrationInFlight.has(channelId)
+    ) {
+      hydrationInFlight.add(channelId)
+      try {
+        const cachedMessages = await loadChannelMessagesFromCache(channelId)
+        if (cachedMessages.length > 0) {
+          set((state) => {
+            const existingMessages = state.messagesByChannel[channelId] || []
+            const merged = mergeChronologicalMessages(existingMessages, cachedMessages)
+            return {
+              messagesByChannel: {
+                ...state.messagesByChannel,
+                [channelId]: merged,
+              },
+            }
+          })
+        }
+      } finally {
+        hydratedChannels.add(channelId)
+        hydrationInFlight.delete(channelId)
+      }
+    }
+
     try {
       const { data } = await messageAPI.list(channelId, options)
       const messages = data.data.items || []
@@ -236,7 +408,7 @@ export const useChatStore = create((set, get) => ({
           },
         }
       })
-    } catch (error) {
+    } catch {
       toast.error('Failed to edit message')
     }
   },
@@ -246,7 +418,7 @@ export const useChatStore = create((set, get) => ({
       await messageAPI.delete(messageId)
       // Use soft delete locally to show tombstone
       get().softDeleteMessage(messageId, channelId)
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete message')
     }
   },
@@ -307,29 +479,78 @@ export const useChatStore = create((set, get) => ({
     if (!tempId || !serverMessage) return
 
     set((state) => {
-      const channelId = serverMessage.channelId
+      const channelId = serverMessage.channelId || state.messageChannelById[tempId]
+      if (!channelId) return state
       const existing = state.messagesByChannel[channelId] || []
 
       // Check if already reconciled (edge case: both HTTP response and socket ACK arrive)
       if (existing.some(m => m._id === serverMessage._id)) {
         // Just remove the temp message
+        const nextChannelMessages = existing.filter(m => m._id !== tempId)
+
+        if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
+          const nextMessagesById = { ...state.messagesById }
+          const nextMessageChannelById = { ...state.messageChannelById }
+          delete nextMessagesById[tempId]
+          delete nextMessageChannelById[tempId]
+          nextMessagesById[serverMessage._id] = {
+            ...(nextMessagesById[serverMessage._id] || {}),
+            ...serverMessage,
+          }
+          nextMessageChannelById[serverMessage._id] = channelId
+
+          return {
+            messagesByChannel: {
+              ...state.messagesByChannel,
+              [channelId]: nextChannelMessages,
+            },
+            messagesById: nextMessagesById,
+            messageChannelById: nextMessageChannelById,
+          }
+        }
+
         return {
           messagesByChannel: {
             ...state.messagesByChannel,
-            [channelId]: existing.filter(m => m._id !== tempId),
+            [channelId]: nextChannelMessages,
           },
         }
       }
 
       // Replace temp message with server message
+      const nextChannelMessages = existing.map(m =>
+        m._id === tempId
+          ? { ...serverMessage, pending: false, failed: false }
+          : m,
+      )
+
+      if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
+        const nextMessagesById = { ...state.messagesById }
+        const nextMessageChannelById = { ...state.messageChannelById }
+        delete nextMessagesById[tempId]
+        delete nextMessageChannelById[tempId]
+        nextMessagesById[serverMessage._id] = {
+          ...(nextMessagesById[serverMessage._id] || {}),
+          ...serverMessage,
+          pending: false,
+          failed: false,
+        }
+        nextMessageChannelById[serverMessage._id] = channelId
+
+        return {
+          messagesByChannel: {
+            ...state.messagesByChannel,
+            [channelId]: nextChannelMessages,
+          },
+          messagesById: nextMessagesById,
+          messageChannelById: nextMessageChannelById,
+        }
+      }
+
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: existing.map(m =>
-            m._id === tempId
-              ? { ...serverMessage, pending: false, failed: false }
-              : m,
-          ),
+          [channelId]: nextChannelMessages,
         },
       }
     })
@@ -340,13 +561,39 @@ export const useChatStore = create((set, get) => ({
    */
   markMessageFailed: (tempId, channelId) => {
     set((state) => {
-      const existing = state.messagesByChannel[channelId] || []
+      const resolvedChannelId = channelId || state.messageChannelById[tempId]
+      if (!resolvedChannelId) return state
+      const existing = state.messagesByChannel[resolvedChannelId] || []
+
+      const nextChannelMessages = existing.map(m =>
+        m._id === tempId ? { ...m, pending: false, failed: true } : m,
+      )
+
+      if (CHAT_FEATURE_FLAGS.normalizedMessageStore && state.messagesById[tempId]) {
+        return {
+          messagesByChannel: {
+            ...state.messagesByChannel,
+            [resolvedChannelId]: nextChannelMessages,
+          },
+          messagesById: {
+            ...state.messagesById,
+            [tempId]: {
+              ...state.messagesById[tempId],
+              pending: false,
+              failed: true,
+            },
+          },
+          messageChannelById: {
+            ...state.messageChannelById,
+            [tempId]: resolvedChannelId,
+          },
+        }
+      }
+
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: existing.map(m =>
-            m._id === tempId ? { ...m, pending: false, failed: true } : m,
-          ),
+          [resolvedChannelId]: nextChannelMessages,
         },
       }
     })
@@ -378,12 +625,43 @@ export const useChatStore = create((set, get) => ({
 
   updateMessage: (message) => {
     set((state) => {
-      const channelId = message.channelId
+      const channelId = message.channelId || state.messageChannelById[message._id]
+      if (!channelId) return state
       const existing = state.messagesByChannel[channelId] || []
+
+      let replaced = false
+      const updatedChannelMessages = existing.map((m) => {
+        if (m._id !== message._id) return m
+        replaced = true
+        return message
+      })
+
+      if (!replaced) return state
+
+      if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
+        return {
+          messagesByChannel: {
+            ...state.messagesByChannel,
+            [channelId]: updatedChannelMessages,
+          },
+          messagesById: {
+            ...state.messagesById,
+            [message._id]: {
+              ...(state.messagesById[message._id] || {}),
+              ...message,
+            },
+          },
+          messageChannelById: {
+            ...state.messageChannelById,
+            [message._id]: channelId,
+          },
+        }
+      }
+
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: existing.map((m) => (m._id === message._id ? message : m)),
+          [channelId]: updatedChannelMessages,
         },
       }
     })
@@ -391,12 +669,41 @@ export const useChatStore = create((set, get) => ({
 
   removeMessage: (messageId, channelId) => {
     set((state) => {
-      if (!channelId) return state
-      const existing = state.messagesByChannel[channelId] || []
+      const resolvedChannelId = channelId || state.messageChannelById[messageId]
+      if (!resolvedChannelId) return state
+      const existing = state.messagesByChannel[resolvedChannelId] || []
+      const nextChannelMessages = existing.filter((m) => m._id !== messageId)
+
+      if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
+        const nextMessagesById = { ...state.messagesById }
+        const nextMessageChannelById = { ...state.messageChannelById }
+        const nextChannelMessageIds = { ...state.channelMessageIds }
+
+        delete nextMessagesById[messageId]
+        delete nextMessageChannelById[messageId]
+
+        const nextIds = (nextChannelMessageIds[resolvedChannelId] || []).filter((id) => id !== messageId)
+        if (nextIds.length > 0) {
+          nextChannelMessageIds[resolvedChannelId] = nextIds
+        } else {
+          delete nextChannelMessageIds[resolvedChannelId]
+        }
+
+        return {
+          messagesByChannel: {
+            ...state.messagesByChannel,
+            [resolvedChannelId]: nextChannelMessages,
+          },
+          messagesById: nextMessagesById,
+          messageChannelById: nextMessageChannelById,
+          channelMessageIds: nextChannelMessageIds,
+        }
+      }
+
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: existing.filter((m) => m._id !== messageId),
+          [resolvedChannelId]: nextChannelMessages,
         },
       }
     })
@@ -407,16 +714,49 @@ export const useChatStore = create((set, get) => ({
    */
   softDeleteMessage: (messageId, channelId) => {
     set((state) => {
-      if (!channelId) return state
-      const existing = state.messagesByChannel[channelId] || []
+      const resolvedChannelId = channelId || state.messageChannelById[messageId]
+      if (!resolvedChannelId) return state
+      const existing = state.messagesByChannel[resolvedChannelId] || []
+
+      let deletedMessage = null
+      const updatedChannelMessages = existing.map((m) => {
+        if (m._id !== messageId) return m
+        deletedMessage = {
+          ...m,
+          isDeleted: true,
+          content: '',
+          htmlContent: '',
+          deletedAt: new Date().toISOString(),
+        }
+        return deletedMessage
+      })
+
+      if (!deletedMessage) return state
+
+      if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
+        return {
+          messagesByChannel: {
+            ...state.messagesByChannel,
+            [resolvedChannelId]: updatedChannelMessages,
+          },
+          messagesById: {
+            ...state.messagesById,
+            [messageId]: {
+              ...(state.messagesById[messageId] || {}),
+              ...deletedMessage,
+            },
+          },
+          messageChannelById: {
+            ...state.messageChannelById,
+            [messageId]: resolvedChannelId,
+          },
+        }
+      }
+
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: existing.map((m) =>
-            m._id === messageId
-              ? { ...m, isDeleted: true, content: '', htmlContent: '', deletedAt: new Date().toISOString() }
-              : m
-          ),
+          [resolvedChannelId]: updatedChannelMessages,
         },
       }
     })
@@ -427,20 +767,60 @@ export const useChatStore = create((set, get) => ({
    */
   updateMessageStatus: (channelId, messageId, messageIds, status, timestamps = {}) => {
     set((state) => {
+      const startedAt = nowMs()
       if (!channelId) return state
       const existing = state.messagesByChannel[channelId] || []
       const idsToUpdate = messageIds || (messageId ? [messageId] : [])
       if (idsToUpdate.length === 0) return state
 
       const idSet = new Set(idsToUpdate)
+
+      const updatedChannelMessages = existing.map((m) =>
+        idSet.has(m._id)
+          ? { ...m, status, ...timestamps }
+          : m
+      )
+
+      if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
+        const nextMessagesById = { ...state.messagesById }
+        let hasNormalizedChange = false
+
+        for (const id of idsToUpdate) {
+          const existingEntity = nextMessagesById[id]
+          if (!existingEntity) continue
+          hasNormalizedChange = true
+          nextMessagesById[id] = {
+            ...existingEntity,
+            status,
+            ...timestamps,
+          }
+        }
+
+        logSlowMutation('updateMessageStatus', startedAt, {
+          channelId,
+          updatedCount: idsToUpdate.length,
+          normalized: true,
+        })
+
+        return {
+          messagesByChannel: {
+            ...state.messagesByChannel,
+            [channelId]: updatedChannelMessages,
+          },
+          ...(hasNormalizedChange ? { messagesById: nextMessagesById } : {}),
+        }
+      }
+
+      logSlowMutation('updateMessageStatus', startedAt, {
+        channelId,
+        updatedCount: idsToUpdate.length,
+        normalized: false,
+      })
+
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: existing.map((m) =>
-            idSet.has(m._id)
-              ? { ...m, status, ...timestamps }
-              : m
-          ),
+          [channelId]: updatedChannelMessages,
         },
       }
     })
@@ -459,6 +839,7 @@ export const useChatStore = create((set, get) => ({
       const hasMore = data.data.hasMore ?? false
 
       set((state) => {
+        const startedAt = nowMs()
         const existing = state.threadRepliesByRoot[rootMessageId] || []
         let merged
         if (options.cursor) {
@@ -477,11 +858,38 @@ export const useChatStore = create((set, get) => ({
         }
         merged.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
 
+        const { ids, byId } = buildThreadReplyIndex(merged)
+        const nextRepliesById = { ...state.threadRepliesById }
+        const nextRootByReplyId = { ...state.threadRootByReplyId }
+
+        const previousIds = state.threadReplyIdsByRoot[rootMessageId] || []
+        for (const id of previousIds) {
+          delete nextRepliesById[id]
+          delete nextRootByReplyId[id]
+        }
+
+        for (const id of ids) {
+          nextRepliesById[id] = byId[id]
+          nextRootByReplyId[id] = rootMessageId
+        }
+
+        logSlowMutation('fetchThreadReplies.merge', startedAt, {
+          rootMessageId,
+          mergedCount: merged.length,
+          cursorMode: Boolean(options.cursor),
+        })
+
         return {
           threadRepliesByRoot: {
             ...state.threadRepliesByRoot,
             [rootMessageId]: merged,
           },
+          threadRepliesById: nextRepliesById,
+          threadReplyIdsByRoot: {
+            ...state.threadReplyIdsByRoot,
+            [rootMessageId]: ids,
+          },
+          threadRootByReplyId: nextRootByReplyId,
           threadHasMore: { ...state.threadHasMore, [rootMessageId]: hasMore },
           isLoadingThread: false,
         }
@@ -496,10 +904,27 @@ export const useChatStore = create((set, get) => ({
     set((state) => {
       const existing = state.threadRepliesByRoot[rootMessageId] || []
       if (existing.some(m => m._id === reply._id)) return state
+      const nextReplies = [...existing, reply]
+
+      const nextIds = [...(state.threadReplyIdsByRoot[rootMessageId] || [])]
+      if (!nextIds.includes(reply._id)) nextIds.push(reply._id)
+
       return {
         threadRepliesByRoot: {
           ...state.threadRepliesByRoot,
-          [rootMessageId]: [...existing, reply],
+          [rootMessageId]: nextReplies,
+        },
+        threadRepliesById: {
+          ...state.threadRepliesById,
+          [reply._id]: reply,
+        },
+        threadReplyIdsByRoot: {
+          ...state.threadReplyIdsByRoot,
+          [rootMessageId]: nextIds,
+        },
+        threadRootByReplyId: {
+          ...state.threadRootByReplyId,
+          [reply._id]: rootMessageId,
         },
       }
     })
@@ -508,51 +933,145 @@ export const useChatStore = create((set, get) => ({
   reconcileThreadReply: (rootMessageId, tempId, serverReply) => {
     if (!tempId || !serverReply) return
     set((state) => {
-      const existing = state.threadRepliesByRoot[rootMessageId] || []
+      const resolvedRootId = rootMessageId || state.threadRootByReplyId[tempId]
+      if (!resolvedRootId) return state
+
+      const existing = state.threadRepliesByRoot[resolvedRootId] || []
       if (existing.some(m => m._id === serverReply._id)) {
+        const nextReplies = existing.filter(m => m._id !== tempId)
+        const nextIds = (state.threadReplyIdsByRoot[resolvedRootId] || []).filter((id) => id !== tempId)
+        const nextRepliesById = { ...state.threadRepliesById }
+        const nextRootByReplyId = { ...state.threadRootByReplyId }
+        delete nextRepliesById[tempId]
+        delete nextRootByReplyId[tempId]
+        nextRepliesById[serverReply._id] = {
+          ...(nextRepliesById[serverReply._id] || {}),
+          ...serverReply,
+        }
+        nextRootByReplyId[serverReply._id] = resolvedRootId
+
         return {
           threadRepliesByRoot: {
             ...state.threadRepliesByRoot,
-            [rootMessageId]: existing.filter(m => m._id !== tempId),
+            [resolvedRootId]: nextReplies,
           },
+          threadRepliesById: nextRepliesById,
+          threadReplyIdsByRoot: {
+            ...state.threadReplyIdsByRoot,
+            [resolvedRootId]: nextIds,
+          },
+          threadRootByReplyId: nextRootByReplyId,
         }
       }
+
+      const nextReplies = existing.map(m =>
+        m._id === tempId ? { ...serverReply, pending: false, failed: false } : m,
+      )
+
+      const nextIds = (state.threadReplyIdsByRoot[resolvedRootId] || []).map((id) =>
+        id === tempId ? serverReply._id : id,
+      )
+
+      const dedupedIds = Array.from(new Set(nextIds))
+
+      const nextRepliesById = { ...state.threadRepliesById }
+      const nextRootByReplyId = { ...state.threadRootByReplyId }
+      delete nextRepliesById[tempId]
+      delete nextRootByReplyId[tempId]
+      nextRepliesById[serverReply._id] = {
+        ...(nextRepliesById[serverReply._id] || {}),
+        ...serverReply,
+        pending: false,
+        failed: false,
+      }
+      nextRootByReplyId[serverReply._id] = resolvedRootId
+
       return {
         threadRepliesByRoot: {
           ...state.threadRepliesByRoot,
-          [rootMessageId]: existing.map(m =>
-            m._id === tempId ? { ...serverReply, pending: false, failed: false } : m,
-          ),
+          [resolvedRootId]: nextReplies,
         },
+        threadRepliesById: nextRepliesById,
+        threadReplyIdsByRoot: {
+          ...state.threadReplyIdsByRoot,
+          [resolvedRootId]: dedupedIds,
+        },
+        threadRootByReplyId: nextRootByReplyId,
       }
     })
   },
 
   markThreadReplyFailed: (tempId, rootMessageId) => {
     set((state) => {
-      const existing = state.threadRepliesByRoot[rootMessageId] || []
+      const resolvedRootId = rootMessageId || state.threadRootByReplyId[tempId]
+      if (!resolvedRootId) return state
+
+      const existing = state.threadRepliesByRoot[resolvedRootId] || []
+      const nextReplies = existing.map(m =>
+        m._id === tempId ? { ...m, pending: false, failed: true } : m,
+      )
+
       return {
         threadRepliesByRoot: {
           ...state.threadRepliesByRoot,
-          [rootMessageId]: existing.map(m =>
-            m._id === tempId ? { ...m, pending: false, failed: true } : m,
-          ),
+          [resolvedRootId]: nextReplies,
         },
+        ...(state.threadRepliesById[tempId]
+          ? {
+              threadRepliesById: {
+                ...state.threadRepliesById,
+                [tempId]: {
+                  ...state.threadRepliesById[tempId],
+                  pending: false,
+                  failed: true,
+                },
+              },
+            }
+          : {}),
       }
     })
   },
 
   incrementReplyCount: (rootMessageId, channelId) => {
     set((state) => {
-      const existing = state.messagesByChannel[channelId] || []
+      const resolvedChannelId = channelId || state.messageChannelById[rootMessageId]
+      if (!resolvedChannelId) return state
+      const existing = state.messagesByChannel[resolvedChannelId] || []
+
+      let updatedReplyCount = null
+      const nextChannelMessages = existing.map((m) => {
+        if (m._id !== rootMessageId) return m
+        const updated = { ...m, replyCount: (m.replyCount || 0) + 1 }
+        updatedReplyCount = updated.replyCount
+        return updated
+      })
+
+      if (updatedReplyCount === null) return state
+
+      if (CHAT_FEATURE_FLAGS.normalizedMessageStore && state.messagesById[rootMessageId]) {
+        return {
+          messagesByChannel: {
+            ...state.messagesByChannel,
+            [resolvedChannelId]: nextChannelMessages,
+          },
+          messagesById: {
+            ...state.messagesById,
+            [rootMessageId]: {
+              ...state.messagesById[rootMessageId],
+              replyCount: updatedReplyCount,
+            },
+          },
+          messageChannelById: {
+            ...state.messageChannelById,
+            [rootMessageId]: resolvedChannelId,
+          },
+        }
+      }
+
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: existing.map(m =>
-            m._id === rootMessageId
-              ? { ...m, replyCount: (m.replyCount || 0) + 1 }
-              : m,
-          ),
+          [resolvedChannelId]: nextChannelMessages,
         },
       }
     })
@@ -561,8 +1080,25 @@ export const useChatStore = create((set, get) => ({
   clearThreadReplies: (rootMessageId) => {
     set((state) => {
       const newThreadReplies = { ...state.threadRepliesByRoot }
+      const newThreadReplyIds = { ...state.threadReplyIdsByRoot }
+      const newThreadRepliesById = { ...state.threadRepliesById }
+      const newThreadRootByReplyId = { ...state.threadRootByReplyId }
+
+      const idsForRoot = newThreadReplyIds[rootMessageId] || []
+      for (const replyId of idsForRoot) {
+        delete newThreadRepliesById[replyId]
+        delete newThreadRootByReplyId[replyId]
+      }
+
       delete newThreadReplies[rootMessageId]
-      return { threadRepliesByRoot: newThreadReplies }
+      delete newThreadReplyIds[rootMessageId]
+
+      return {
+        threadRepliesByRoot: newThreadReplies,
+        threadReplyIdsByRoot: newThreadReplyIds,
+        threadRepliesById: newThreadRepliesById,
+        threadRootByReplyId: newThreadRootByReplyId,
+      }
     })
   },
 
@@ -570,7 +1106,7 @@ export const useChatStore = create((set, get) => ({
   addReaction: async (messageId, emoji) => {
     try {
       await messageAPI.addReaction(messageId, emoji)
-    } catch (error) {
+    } catch {
       toast.error('Failed to add reaction')
     }
   },
@@ -578,16 +1114,18 @@ export const useChatStore = create((set, get) => ({
   removeReaction: async (messageId, emoji) => {
     try {
       await messageAPI.removeReaction(messageId, emoji)
-    } catch (error) {
+    } catch {
       toast.error('Failed to remove reaction')
     }
   },
 
   addReactionLocal: (messageId, userId, emoji, channelId) => {
     set((state) => {
+      const startedAt = nowMs()
       const newState = { ...state.messagesByChannel }
-      // If channelId is provided, only scan that channel (O(messages) vs O(channels×messages))
-      const channelsToScan = channelId && newState[channelId] ? [channelId] : Object.keys(newState)
+      // Prefer indexed channel lookup when normalization is enabled.
+      const hintedChannelId = channelId || (CHAT_FEATURE_FLAGS.normalizedMessageStore ? state.messageChannelById[messageId] : null)
+      const channelsToScan = hintedChannelId && newState[hintedChannelId] ? [hintedChannelId] : Object.keys(newState)
       for (const cid of channelsToScan) {
         newState[cid] = newState[cid].map((m) => {
           if (m._id !== messageId) return m
@@ -605,14 +1143,20 @@ export const useChatStore = create((set, get) => ({
           return { ...m, reactions }
         })
       }
+      logSlowMutation('addReactionLocal', startedAt, {
+        channelsScanned: channelsToScan.length,
+        usedHint: Boolean(hintedChannelId),
+      })
       return { messagesByChannel: newState }
     })
   },
 
   removeReactionLocal: (messageId, userId, emoji, channelId) => {
     set((state) => {
+      const startedAt = nowMs()
       const newState = { ...state.messagesByChannel }
-      const channelsToScan = channelId && newState[channelId] ? [channelId] : Object.keys(newState)
+      const hintedChannelId = channelId || (CHAT_FEATURE_FLAGS.normalizedMessageStore ? state.messageChannelById[messageId] : null)
+      const channelsToScan = hintedChannelId && newState[hintedChannelId] ? [hintedChannelId] : Object.keys(newState)
       for (const cid of channelsToScan) {
         newState[cid] = newState[cid].map((m) => {
           if (m._id !== messageId) return m
@@ -630,6 +1174,10 @@ export const useChatStore = create((set, get) => ({
           return { ...m, reactions }
         })
       }
+      logSlowMutation('removeReactionLocal', startedAt, {
+        channelsScanned: channelsToScan.length,
+        usedHint: Boolean(hintedChannelId),
+      })
       return { messagesByChannel: newState }
     })
   },
@@ -721,16 +1269,39 @@ export const useChatStore = create((set, get) => ({
       await messageAPI.pin(messageId)
       // Optimistic: update isPinned in message list
       set((state) => {
+        const targetChannelId = CHAT_FEATURE_FLAGS.normalizedMessageStore
+          ? state.messageChannelById[messageId]
+          : null
+
+        const channelsToScan = targetChannelId
+          ? [targetChannelId]
+          : Object.keys(state.messagesByChannel)
+
         const newState = { ...state.messagesByChannel }
-        for (const cid of Object.keys(newState)) {
+        for (const cid of channelsToScan) {
+          if (!newState[cid]) continue
           newState[cid] = newState[cid].map((m) =>
             m._id === messageId ? { ...m, isPinned: true } : m,
           )
         }
+
+        if (CHAT_FEATURE_FLAGS.normalizedMessageStore && state.messagesById[messageId]) {
+          return {
+            messagesByChannel: newState,
+            messagesById: {
+              ...state.messagesById,
+              [messageId]: {
+                ...state.messagesById[messageId],
+                isPinned: true,
+              },
+            },
+          }
+        }
+
         return { messagesByChannel: newState }
       })
       toast.success('Message pinned')
-    } catch (error) {
+    } catch {
       toast.error('Failed to pin message')
     }
   },
@@ -739,21 +1310,48 @@ export const useChatStore = create((set, get) => ({
     try {
       await messageAPI.unpin(messageId)
       set((state) => {
+        const targetChannelId = CHAT_FEATURE_FLAGS.normalizedMessageStore
+          ? state.messageChannelById[messageId]
+          : null
+
+        const channelsToScan = targetChannelId
+          ? [targetChannelId]
+          : Object.keys(state.messagesByChannel)
+
         const newState = { ...state.messagesByChannel }
-        for (const cid of Object.keys(newState)) {
+        for (const cid of channelsToScan) {
+          if (!newState[cid]) continue
           newState[cid] = newState[cid].map((m) =>
             m._id === messageId ? { ...m, isPinned: false } : m,
           )
         }
+
         // Remove from pinned cache
         const newPins = { ...state.pinnedMessagesByChannel }
-        for (const cid of Object.keys(newPins)) {
+        const pinChannelsToScan = targetChannelId ? [targetChannelId] : Object.keys(newPins)
+        for (const cid of pinChannelsToScan) {
+          if (!newPins[cid]) continue
           newPins[cid] = (newPins[cid] || []).filter((m) => m._id !== messageId)
         }
+
+        if (CHAT_FEATURE_FLAGS.normalizedMessageStore && state.messagesById[messageId]) {
+          return {
+            messagesByChannel: newState,
+            pinnedMessagesByChannel: newPins,
+            messagesById: {
+              ...state.messagesById,
+              [messageId]: {
+                ...state.messagesById[messageId],
+                isPinned: false,
+              },
+            },
+          }
+        }
+
         return { messagesByChannel: newState, pinnedMessagesByChannel: newPins }
       })
       toast.success('Message unpinned')
-    } catch (error) {
+    } catch {
       toast.error('Failed to unpin message')
     }
   },
@@ -783,6 +1381,25 @@ export const useChatStore = create((set, get) => ({
           }
         }
       }
+      if (CHAT_FEATURE_FLAGS.normalizedMessageStore && messageId) {
+        return {
+          messagesByChannel: newMsgs,
+          pinnedMessagesByChannel: newPins,
+          messagesById: {
+            ...state.messagesById,
+            [messageId]: {
+              ...(state.messagesById[messageId] || message || {}),
+              ...(message || {}),
+              isPinned: true,
+            },
+          },
+          messageChannelById: {
+            ...state.messageChannelById,
+            ...(cid ? { [messageId]: cid } : {}),
+          },
+        }
+      }
+
       return { messagesByChannel: newMsgs, pinnedMessagesByChannel: newPins }
     })
   },
@@ -804,6 +1421,21 @@ export const useChatStore = create((set, get) => ({
       if (newPins[cid]) {
         newPins[cid] = newPins[cid].filter((m) => m._id !== messageId)
       }
+      if (CHAT_FEATURE_FLAGS.normalizedMessageStore && messageId && state.messagesById[messageId]) {
+        return {
+          messagesByChannel: newMsgs,
+          pinnedMessagesByChannel: newPins,
+          messagesById: {
+            ...state.messagesById,
+            [messageId]: {
+              ...state.messagesById[messageId],
+              ...(message || {}),
+              isPinned: false,
+            },
+          },
+        }
+      }
+
       return { messagesByChannel: newMsgs, pinnedMessagesByChannel: newPins }
     })
   },
@@ -827,10 +1459,16 @@ export const useChatStore = create((set, get) => ({
   // ─── Workspace Switch — Clear all cached data ──────────────────────
   clearCache: () => set({
     messagesByChannel: {},
+    messagesById: {},
+    channelMessageIds: {},
+    messageChannelById: {},
     hasMore: {},
     pinnedMessagesByChannel: {},
     allThreads: [],
     threadRepliesByRoot: {},
+    threadRepliesById: {},
+    threadReplyIdsByRoot: {},
+    threadRootByReplyId: {},
     threadHasMore: {},
     typingByChannel: {},
     onlineUsers: new Map(),
@@ -838,3 +1476,90 @@ export const useChatStore = create((set, get) => ({
     activeThread: null,
   }),
 }))
+
+useChatStore.subscribe((state, prevState) => {
+  if (!CHAT_FEATURE_FLAGS.indexedDbCache) return
+
+  const nextMessagesByChannel = state.messagesByChannel
+  const prevMessagesByChannel = prevState.messagesByChannel
+  if (nextMessagesByChannel === prevMessagesByChannel) return
+
+  for (const [channelId, messages] of Object.entries(nextMessagesByChannel)) {
+    if (prevMessagesByChannel[channelId] !== messages) {
+      scheduleChannelPersist(channelId, messages)
+    }
+  }
+})
+
+useChatStore.subscribe((state, prevState) => {
+  if (!CHAT_FEATURE_FLAGS.normalizedMessageStore) return
+
+  const nextMessagesByChannel = state.messagesByChannel
+  const prevMessagesByChannel = prevState.messagesByChannel
+  if (nextMessagesByChannel === prevMessagesByChannel) return
+
+  const nextMessagesById = { ...state.messagesById }
+  const nextChannelMessageIds = { ...state.channelMessageIds }
+  const nextMessageChannelById = { ...state.messageChannelById }
+
+  const channelIds = new Set([
+    ...Object.keys(prevMessagesByChannel),
+    ...Object.keys(nextMessagesByChannel),
+  ])
+
+  let hasChanges = false
+
+  for (const channelId of channelIds) {
+    if (prevMessagesByChannel[channelId] === nextMessagesByChannel[channelId]) continue
+
+    hasChanges = true
+    const prevIds = prevState.channelMessageIds[channelId] || []
+
+    for (const messageId of prevIds) {
+      if (nextMessageChannelById[messageId] === channelId) {
+        delete nextMessageChannelById[messageId]
+      }
+      delete nextMessagesById[messageId]
+    }
+
+    const channelMessages = nextMessagesByChannel[channelId] || []
+    const { ids, byId } = buildNormalizedChannel(channelMessages)
+
+    if (channelMessages.length > 0) {
+      nextChannelMessageIds[channelId] = ids
+    } else {
+      delete nextChannelMessageIds[channelId]
+    }
+
+    for (const messageId of ids) {
+      nextMessagesById[messageId] = byId[messageId]
+      nextMessageChannelById[messageId] = channelId
+    }
+  }
+
+  if (hasChanges) {
+    useChatStore.setState({
+      messagesById: nextMessagesById,
+      channelMessageIds: nextChannelMessageIds,
+      messageChannelById: nextMessageChannelById,
+    })
+  }
+})
+
+if (CHAT_FEATURE_FLAGS.indexedDbCache) {
+  const originalClearCache = useChatStore.getState().clearCache
+  useChatStore.setState({
+    clearCache: () => {
+      hydratedChannels.clear()
+      hydrationInFlight.clear()
+      channelAccessOrder.splice(0, channelAccessOrder.length)
+      pendingPersistByChannel.clear()
+      if (persistTimer) {
+        clearTimeout(persistTimer)
+        persistTimer = null
+      }
+      void clearMessageCache()
+      originalClearCache()
+    },
+  })
+}

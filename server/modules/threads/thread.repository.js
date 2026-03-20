@@ -13,7 +13,19 @@ class ThreadRepository {
    * @returns {Promise<Thread>}
    */
   async create(data) {
-    const thread = new Thread(data);
+    const sanitized = { ...data };
+
+    // Avoid persisting flowTaskRef with null/empty taskId, which can conflict
+    // with the unique sparse workspaceId+flowTaskRef.taskId index.
+    if (
+      !sanitized.flowTaskRef ||
+      !sanitized.flowTaskRef.taskId ||
+      String(sanitized.flowTaskRef.taskId).trim() === ''
+    ) {
+      delete sanitized.flowTaskRef;
+    }
+
+    const thread = new Thread(sanitized);
     return thread.save();
   }
 

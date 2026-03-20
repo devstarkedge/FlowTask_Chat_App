@@ -8,6 +8,8 @@ import { Avatar } from '../chat/MemberAvatarGroup'
 import CreateMenu from '../ui/CreateMenu'
 import UserProfileMenu from '../ui/UserProfileMenu'
 import HoverPreview from './HoverPreview'
+import useHoverPanelController from './hooks/useHoverPanelController'
+import { CHAT_FEATURE_FLAGS } from '../../config/featureFlags'
 
 const NAV_ITEMS = [
   { id: 'home', icon: Home, label: 'Home', path: '' },
@@ -26,11 +28,17 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   const unreadNotifications = useNotificationStore((s) => s.unreadCount)
   const [showCreateMenu, setShowCreateMenu] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
-  const [hoveredItem, setHoveredItem] = useState(null)
-  const [hoverRect, setHoverRect] = useState(null)
-  const hoverTimerRef = useRef(null)
   const createBtnRef = useRef(null)
   const avatarBtnRef = useRef(null)
+  const {
+    activePanel,
+    anchorRect,
+    openFromTrigger,
+    refreshAnchorRect,
+    queueClose,
+    cancelClose,
+    closeNow,
+  } = useHoverPanelController({ openDelay: 140, closeDelay: 220 })
 
   const basePath = `/workspace/${workspaceId}`
 
@@ -56,25 +64,32 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
 
   const handleHoverEnter = useCallback((id, e) => {
     const rect = e.currentTarget.getBoundingClientRect()
-    hoverTimerRef.current = setTimeout(() => {
-      setHoveredItem(id)
-      setHoverRect(rect)
-    }, 400)
-  }, [])
-
-  const handleHoverLeave = useCallback(() => {
-    clearTimeout(hoverTimerRef.current)
-    setHoveredItem(null)
-    setHoverRect(null)
-  }, [])
-
-  // Cleanup any pending hover timer on unmount to prevent state updates after unmount
-  useEffect(() => {
-    return () => {
-      clearTimeout(hoverTimerRef.current)
-      hoverTimerRef.current = null
+    if (!['dms', 'activity', 'files'].includes(id)) {
+      if (!CHAT_FEATURE_FLAGS.slackHoverPanels) closeNow()
+      return
     }
-  }, [])
+
+    if (CHAT_FEATURE_FLAGS.slackHoverPanels) {
+      cancelClose()
+      if (activePanel === id) {
+        refreshAnchorRect(rect)
+        return
+      }
+      openFromTrigger(id, rect)
+      return
+    }
+
+    openFromTrigger(id, rect)
+  }, [activePanel, cancelClose, closeNow, openFromTrigger, refreshAnchorRect])
+
+  const handleHoverLeave = useCallback((id) => {
+    if (!['dms', 'activity', 'files'].includes(id)) return
+    if (CHAT_FEATURE_FLAGS.slackHoverPanels) {
+      queueClose()
+      return
+    }
+    closeNow()
+  }, [closeNow, queueClose])
 
   // Close menus on Escape
   useEffect(() => {
@@ -82,11 +97,16 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
       if (e.key === 'Escape') {
         setShowCreateMenu(false)
         setShowUserMenu(false)
+        closeNow()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [closeNow])
+
+  useEffect(() => {
+    closeNow()
+  }, [location.pathname, closeNow])
 
   return (
     <>
@@ -119,7 +139,9 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
             className={`workspace-sidebar-icon relative ${activeId === item.id ? 'active' : ''}`}
             onClick={() => handleNav(item)}
             onMouseEnter={(e) => handleHoverEnter(item.id, e)}
-            onMouseLeave={handleHoverLeave}
+            onMouseLeave={() => handleHoverLeave(item.id)}
+            onPointerEnter={(e) => handleHoverEnter(item.id, e)}
+            onPointerLeave={() => handleHoverLeave(item.id)}
             aria-label={item.label}
             title=""
           >
@@ -170,11 +192,13 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
       </nav>
 
       {/* Hover Preview Panels */}
-      {hoveredItem && hoverRect && ['dms', 'activity', 'files'].includes(hoveredItem) && (
+      {activePanel && anchorRect && ['dms', 'activity', 'files'].includes(activePanel) && (
         <HoverPreview
-          section={hoveredItem}
-          anchorRect={hoverRect}
-          onClose={handleHoverLeave}
+          section={activePanel}
+          anchorRect={anchorRect}
+          onClose={closeNow}
+          onPanelMouseEnter={cancelClose}
+          onPanelMouseLeave={queueClose}
         />
       )}
 

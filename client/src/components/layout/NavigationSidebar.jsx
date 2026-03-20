@@ -8,8 +8,6 @@ import {
   Lock,
   MessageCircle,
   Users,
-  ChevronDown,
-  ChevronRight,
   Plus,
   Search,
   Volume2,
@@ -33,6 +31,9 @@ import JoinWorkspaceModal from "../workspace/JoinWorkspaceModal";
 import WorkspaceSettingsModal from "../workspace/WorkspaceSettingsModal";
 import { formatDistanceToNowStrict } from "date-fns";
 import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
+import SidebarContainer from "./sidebar/SidebarContainer";
+import SidebarItem from "./sidebar/SidebarItem";
+import SidebarSection from "./sidebar/SidebarSection";
 
 const CHANNEL_ICONS = {
   project: Hash,
@@ -147,56 +148,35 @@ export default function NavigationSidebar({
     onClose?.();
   };
 
-  return (
-    <nav
-      className="flex flex-col h-full select-none overflow-hidden"
-      aria-label="Channels sidebar"
-      style={{
-        width: "100%",
-        minWidth: "100%",
-        background: "#F7F8FC",
-        borderRight: "1px solid var(--border-secondary)",
-        fontFamily: "'Inter', sans-serif",
-      }}
-    >
+  const header = (
+    <>
       {/* Workspace Header */}
       <div
-        className="px-5 flex items-center justify-between shrink-0"
-        style={{
-          height: "var(--header-height, 64px)",
-          borderBottom: "1px solid var(--border-secondary)",
-        }}
+        className="flex items-center justify-between"
+        style={{ minHeight: 32 }}
       >
         <WorkspaceSwitcher
           onOpenCreate={() => setShowCreateWorkspace(true)}
           onOpenJoin={() => setShowJoinWorkspace(true)}
           onOpenSettings={() => setShowWorkspaceSettings(true)}
         />
-        <div className="flex items-center gap-1">
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-md cursor-pointer transition-colors mobile-menu-btn"
-              style={{
-                color: "#8A92A6",
-                background: "transparent",
-                border: "none",
-              }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = "#EEF1FF")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.background = "transparent")
-              }
-            >
-              <X size={18} />
-            </button>
-          )}
-        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md cursor-pointer transition-colors mobile-menu-btn"
+            style={{
+              color: "var(--text-muted)",
+              background: "transparent",
+              border: "none",
+            }}
+          >
+            <X size={18} />
+          </button>
+        )}
       </div>
 
       {/* Search */}
-      <div className="px-5 pt-5 pb-3">
+      <div className="mt-3">
         {showSearch ? (
           <div
             className="flex items-center gap-2 px-3 py-2.5 rounded-lg"
@@ -205,14 +185,14 @@ export default function NavigationSidebar({
               border: "1px solid var(--border-primary)",
             }}
           >
-            <Search size={18} style={{ color: "#8A92A6", flexShrink: 0 }} />
+            <Search size={18} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
             <input
               type="text"
               placeholder="Search conversations..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 bg-transparent border-none outline-none text-[16px]"
-              style={{ color: "#1F2A44" }}
+              className="flex-1 bg-transparent border-none outline-none text-sm"
+              style={{ color: "var(--text-primary)" }}
               autoFocus
             />
             <button
@@ -222,7 +202,7 @@ export default function NavigationSidebar({
               }}
               className="p-1 rounded cursor-pointer"
               style={{
-                color: "#8A92A6",
+                color: "var(--text-muted)",
                 background: "transparent",
                 border: "none",
               }}
@@ -233,185 +213,203 @@ export default function NavigationSidebar({
         ) : (
           <button
             onClick={() => setShowSearch(true)}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-[16px] cursor-pointer transition-all"
+            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm cursor-pointer transition-all"
             style={{
-              color: "#8A92A6",
+              color: "var(--text-muted)",
               background: "var(--bg-hover)",
               border: "1px solid var(--border-secondary)",
             }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.borderColor = "var(--border-primary)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.borderColor = "var(--border-secondary)")
-            }
           >
-            <Search size={18} />
+            <Search size={16} />
             <span>Search...</span>
           </button>
         )}
       </div>
+    </>
+  );
 
-      <div className="flex-1 overflow-y-auto pt-4 pb-4">
+  return (
+    <>
+      <SidebarContainer
+        header={header}
+        aria-label="Channels sidebar"
+      >
+        {/* Quick Nav Items (Home mode only) */}
         {!isDMMode && (
-          <>
-            {/* Quick Nav Items (Attached to sidebar with lines) */}
-     <div className="px-5 mb-10">
-  <div
-    className="flex flex-col mr-3.5"
-    style={{
-      borderTop: "2px solid #E2E8F0",
-      borderBottom: "2px solid #E2E8F0",
-    }}
-  >
-    <div style={{ borderBottom: "2px solid #E2E8F0", padding: "8px 20px" }}>
-      <NavButton
-        icon={MessageSquareText}
-        label="Threads"
-        onClick={() => onToggleAllThreads?.()}
-      />
-    </div>
+          <div className="px-3 pt-3 pb-2">
+            <div
+              style={{
+                borderTop: "1px solid var(--border-secondary)",
+                borderBottom: "1px solid var(--border-secondary)",
+              }}
+            >
+              <NavButton
+                icon={MessageSquareText}
+                label="Threads"
+                onClick={() => onToggleAllThreads?.()}
+              />
+              <NavButton icon={Radio} label="Huddles" onClick={() => {}} />
+              <NavButton icon={Send} label="Drafts & Sent" onClick={() => {}} />
+              <NavButton
+                icon={Compass}
+                label="Directories"
+                onClick={() => {}}
+              />
+            </div>
 
-    <div style={{ borderBottom: "2px solid #E2E8F0", padding: "8px 20px" }}>
-      <NavButton icon={Radio} label="Huddles" onClick={() => {}} />
-    </div>
+            {/* Starred & External */}
+            <div className="mt-3 flex flex-col gap-2">
+              <div
+                className="rounded-md"
+                style={{
+                  background: "var(--bg-active)",
+                  border: "1px solid var(--border-secondary)",
+                  padding: "2px",
+                }}
+              >
+                <NavButton
+                  icon={Bookmark}
+                  label="Starred"
+                  onClick={() => onToggleSaved?.()}
+                />
+              </div>
 
-    <div style={{ borderBottom: "2px solid #E2E8F0", padding: "8px 20px" }}>
-      <NavButton icon={Send} label="Drafts & Sent" onClick={() => {}} />
-    </div>
-
-    <div style={{ padding: "8px 20px" }}>
-      <NavButton
-        icon={Compass}
-        label="Directories"
-        onClick={() => {}}
-      />
-    </div>
-  </div>
-</div>
-
-<br />        
-        {/* Starred Card (Distinct and Separated) */}
-        <div className="flex flex-col gap-2">
-        <div
-          className="p-5 rounded mb-16 "
-          style={{
-            background: "#e9ecfe",
-            border: "2px solid #E2E8F0",
-            margin: "0 16px",
-            padding: "4px",
-          }}
-        >
-          <div className="flex flex-col ">
-            <NavButton
-              icon={Bookmark}
-              label="Starred"
-              onClick={() => onToggleSaved?.()}
-            />
+              <div
+                className="rounded-md"
+                style={{
+                  background: "var(--bg-active)",
+                  border: "1px solid var(--border-secondary)",
+                  padding: "2px",
+                }}
+              >
+                <NavButton
+                  icon={Globe}
+                  label="External Connections"
+                  onClick={() => {}}
+                />
+              </div>
+            </div>
           </div>
-        </div>
-
-        {/* External Connections - Starred Style */}
-        <div
-          className="p-5 rounded mb-16"
-          style={{
-            background: "#e9ecfe",
-            border: "2px solid #E2E8F0",
-            margin: "0 16px",
-            padding: "4px",
-          }}
-        >
-          <div className="flex flex-col">
-            <NavButton
-              icon={Globe}
-              label="External Connections"
-              onClick={() => {}}
-            />
-          </div>
-        </div>
-        </div>
-<br />
-          </>
         )}
-        {/* Channel List Container with spacing */}
-        <div className="px-1 pt-6">
+
+        {/* Channel Sections */}
+        <div className="pt-3">
           {!isDMMode && systemChannels.length > 0 && (
-            <ChannelSection
+            <SidebarSection
               title="System"
-              channels={sortChannels(filteredChannels(systemChannels))}
+              count={systemChannels.length}
               expanded={expandedSections.system}
               onToggle={() => toggleSection("system")}
-              activeId={activeChannelId}
-              unreads={unreads}
-              onSelect={handleSelectChannel}
-              onlineUsers={onlineUsers}
-            />
+            >
+              {sortChannels(filteredChannels(systemChannels)).map((channel) => (
+                <ChannelListItem
+                  key={channel._id}
+                  channel={channel}
+                  isActive={channel._id === activeChannelId}
+                  unread={unreads[channel._id] || 0}
+                  onClick={() => handleSelectChannel(channel._id)}
+                  onlineUsers={onlineUsers}
+                />
+              ))}
+              {filteredChannels(systemChannels).length === 0 && (
+                <p className="text-xs px-3 py-2" style={{ color: "var(--text-muted)" }}>
+                  No channels yet
+                </p>
+              )}
+            </SidebarSection>
           )}
 
           {!isDMMode && (
-            <ChannelSection
+            <SidebarSection
               title="Channels"
-              channels={sortChannels(
+              count={[...publicChannels, ...projectChannels, ...deptChannels].length}
+              expanded={expandedSections.channels}
+              onToggle={() => toggleSection("channels")}
+              showAdd
+              onAdd={() => setShowCreateChannel(true)}
+              addTitle="Create channel"
+            >
+              {sortChannels(
                 filteredChannels([
                   ...publicChannels,
                   ...projectChannels,
                   ...deptChannels,
                 ]),
+              ).map((channel) => (
+                <ChannelListItem
+                  key={channel._id}
+                  channel={channel}
+                  isActive={channel._id === activeChannelId}
+                  unread={unreads[channel._id] || 0}
+                  onClick={() => handleSelectChannel(channel._id)}
+                  onlineUsers={onlineUsers}
+                />
+              ))}
+              {filteredChannels([...publicChannels, ...projectChannels, ...deptChannels]).length === 0 && (
+                <p className="text-xs px-3 py-2" style={{ color: "var(--text-muted)" }}>
+                  No channels yet
+                </p>
               )}
-              expanded={expandedSections.channels}
-              onToggle={() => toggleSection("channels")}
-              activeId={activeChannelId}
-              unreads={unreads}
-              onSelect={handleSelectChannel}
-              showAdd
-              onAdd={() => setShowCreateChannel(true)}
-              onlineUsers={onlineUsers}
-            />
+            </SidebarSection>
           )}
 
           {!isDMMode && privateChannels.length > 0 && (
-            <ChannelSection
+            <SidebarSection
               title="Private Channels"
-              channels={sortChannels(filteredChannels(privateChannels))}
+              count={privateChannels.length}
               expanded={expandedSections.privateChannels}
               onToggle={() => toggleSection("privateChannels")}
-              activeId={activeChannelId}
-              unreads={unreads}
-              onSelect={handleSelectChannel}
-              onlineUsers={onlineUsers}
-            />
+            >
+              {sortChannels(filteredChannels(privateChannels)).map((channel) => (
+                <ChannelListItem
+                  key={channel._id}
+                  channel={channel}
+                  isActive={channel._id === activeChannelId}
+                  unread={unreads[channel._id] || 0}
+                  onClick={() => handleSelectChannel(channel._id)}
+                  onlineUsers={onlineUsers}
+                />
+              ))}
+            </SidebarSection>
           )}
 
-          <ChannelSection
+          <SidebarSection
             title={isDMMode ? 'Direct messages' : 'Direct Messages'}
-            channels={sortChannels(filteredChannels(dmChannels), true)}
+            count={dmChannels.length}
             expanded={expandedSections.dms}
             onToggle={() => toggleSection("dms")}
-            activeId={activeChannelId}
-            unreads={unreads}
-            onSelect={handleSelectChannel}
             showAdd
             onAdd={() => setShowUserPicker(true)}
-            isDM
-            onlineUsers={onlineUsers}
-          />
-
-          {isDMMode && dmChannels.length === 0 && (
-            <div className="px-6 py-6 text-sm" style={{ color: '#8A92A6' }}>
-              Start a direct message to begin private conversations.
-            </div>
-          )}
+            addTitle="Start direct message"
+          >
+            {sortChannels(filteredChannels(dmChannels), true).map((channel) => (
+              <DMListItem
+                key={channel._id}
+                channel={channel}
+                isActive={channel._id === activeChannelId}
+                unread={unreads[channel._id] || 0}
+                onClick={() => handleSelectChannel(channel._id)}
+                onlineUsers={onlineUsers}
+              />
+            ))}
+            {filteredChannels(dmChannels).length === 0 && (
+              <p className="text-xs px-3 py-2" style={{ color: "var(--text-muted)" }}>
+                {isDMMode ? "Start a direct message to begin private conversations." : "No conversations yet"}
+              </p>
+            )}
+          </SidebarSection>
         </div>
-      </div>
 
-      {!isDMMode && (
-        <div
-          className="px-5 py-4 shrink-0 flex items-center justify-between"
-          style={{ borderTop: "2px solid var(--border-secondary)" }}
-        >
-          <NavButton icon={AppWindow} label="Apps" onClick={() => {}} />
-        </div>
-      )}
+        {/* Apps footer */}
+        {!isDMMode && (
+          <div
+            className="px-4 py-3 shrink-0 mt-auto"
+            style={{ borderTop: "1px solid var(--border-secondary)" }}
+          >
+            <NavButton icon={AppWindow} label="Apps" onClick={() => {}} />
+          </div>
+        )}
+      </SidebarContainer>
 
       {/* Modals */}
       {showCreateChannel && (
@@ -443,7 +441,7 @@ export default function NavigationSidebar({
           onClose={() => setShowWorkspaceSettings(false)}
         />
       )}
-    </nav>
+    </>
   );
 }
 
@@ -453,144 +451,56 @@ function NavButton({ icon: Icon, label, onClick, badge }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-3.5 w-full px-4 py-2.5 rounded text-[16px] font-medium cursor-pointer transition-colors mb-1"
-      style={{
-        color: "#070534",
-        background: "transparent",
-        border: "none",
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "#EEF1FF")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+      className="sidebar-item"
+      style={{ padding: '8px 12px' }}
     >
-      <Icon size={20} style={{ opacity: 0.8 }} />
-      <span className="flex-1 text-left truncate">{label}</span>
+      <span className="sidebar-item-icon">
+        <Icon size={18} style={{ opacity: 0.8 }} />
+      </span>
+      <span className="sidebar-item-content">
+        <span className="sidebar-item-label" style={{ fontWeight: 500 }}>{label}</span>
+      </span>
       {badge > 0 && <span className="badge badge-red">{badge}</span>}
     </button>
   );
 }
 
-/* ─── Channel Section ───────────────────────────────────────────────────── */
+/* ─── Channel List Item ────────────────────────────────────────────────── */
 
-function ChannelSection({
-  title,
-  channels,
-  expanded,
-  onToggle,
-  activeId,
-  unreads,
-  onSelect,
-  showAdd,
-  onAdd,
-  isDM,
-  onlineUsers,
-}) {
+function ChannelListItem({ channel, isActive, unread, onClick, onlineUsers }) {
+  const Icon = CHANNEL_ICONS[channel.type] || Hash;
+
   return (
-    <div
-      className="mb-8 p-2 rounded "
-      style={{
-        background: "#e9ecfe",
-        border: "1px solid #E2E8F0",
-        margin: "0 12px 24px",
-      }}
-    >
-      <div className="flex items-center justify-between px-3 py-2 h-8 ">
-        <button
-          onClick={onToggle}
-          className="flex items-center gap-2 text-[16px] p-10 font-bold uppercase tracking-normal cursor-pointer"
-          style={{
-            color: "#070534",
-            background: "transparent",
-            border: "2px",
-          }}
-        >
-          {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          <span>{title}</span>
-          {channels.length > 0 && (
-            <span className="ml-1.5 font-normal opacity-50">
-              {channels.length}
-            </span>
-          )}
-        </button>
-        {showAdd && (
-          <button
-            onClick={onAdd}
-            className="p-1 rounded cursor-pointer transition-colors"
-            style={{
-              color: "#8A92A6",
-              background: "transparent",
-              border: "none",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "#1F2A44")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "#8A92A6")}
-            title={isDM ? "Start direct message" : "Create channel"}
-          >
-            <Plus size={20} />
-          </button>
-        )}
-      </div>
-
-      {expanded && (
-        <div className="flex flex-col gap-2 pl-4 pr-1">
-          {channels.map((channel) => (
-            <ChannelItem
-              key={channel._id}
-              channel={channel}
-              isActive={channel._id === activeId}
-              unread={unreads[channel._id] || 0}
-              onClick={() => onSelect(channel._id)}
-              isDM={isDM}
-              onlineUsers={onlineUsers}
-            />
-          ))}
-          {channels.length === 0 && (
-            <p
-              className="text-md px-4 py-2 opacity-60"
-              style={{ color: "#8A92A6" }}
-            >
-              No {isDM ? "conversations" : "channels"} yet
-            </p>
-          )}
-        </div>
-      )}
-    </div>
+    <SidebarItem
+      icon={<Icon size={18} style={{ opacity: isActive ? 1 : 0.6 }} />}
+      label={channel.name}
+      isActive={isActive}
+      isBold={unread > 0}
+      badge={unread}
+      onClick={onClick}
+    />
   );
 }
 
-/* ─── Channel Item ──────────────────────────────────────────────────────── */
+/* ─── DM List Item ─────────────────────────────────────────────────────── */
 
-function ChannelItem({
-  channel,
-  isActive,
-  unread,
-  onClick,
-  isDM,
-  onlineUsers,
-}) {
-  const Icon = CHANNEL_ICONS[channel.type] || Hash;
-  const isOnline = isDM && onlineUsers?.has?.(channel.dmRecipientId);
+function DMListItem({ channel, isActive, unread, onClick, onlineUsers }) {
+  const isOnline = onlineUsers?.has?.(channel.dmRecipientId);
   const isAway =
     isOnline && onlineUsers?.get?.(channel.dmRecipientId) === "away";
 
-  const activeBg = "linear-gradient(90deg, #93A4FC, #C7D2FE)";
+  const timeAgo = channel.lastMessageAt
+    ? (() => {
+        const d = new Date(channel.lastMessageAt);
+        return isNaN(d.getTime())
+          ? ""
+          : formatDistanceToNowStrict(d, { addSuffix: false });
+      })()
+    : "";
 
   return (
-    <button
-      onClick={onClick}
-      className="flex items-center h-10 gap-2 px-3 py-2 p-10 w-full text-left rounded cursor-pointer transition-all"
-      style={{
-        background: isActive ? activeBg : "transparent",
-        color: "#1F2A44",
-        fontWeight: unread > 0 ? 600 : 400,
-        border: "none",
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) e.currentTarget.style.background = "#EEF1FF";
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) e.currentTarget.style.background = "transparent";
-      }}
-    >
-      {isDM ? (
+    <SidebarItem
+      icon={
         <div className="relative shrink-0">
           <Avatar
             member={{
@@ -598,70 +508,35 @@ function ChannelItem({
               avatar: channel.avatar,
               onlineStatus: isOnline ? (isAway ? "away" : "online") : "offline",
             }}
-            size={42}
+            size={28}
             showStatus={false}
           />
           {isOnline && (
             <span
               className="absolute rounded-full"
               style={{
-                width: 12,
-                height: 12,
-                background: isAway ? "#f59e0b" : "var(--status-online)",
-                border: `3px solid #F7F8FC`,
-                bottom: 0,
-                right: 0,
+                width: 10,
+                height: 10,
+                background: isAway ? "var(--status-away)" : "var(--status-online)",
+                border: "2px solid var(--bg-sidebar)",
+                bottom: -1,
+                right: -1,
               }}
             />
           )}
         </div>
-      ) : (
-        <Icon
-          size={20}
-          style={{ opacity: isActive ? 1 : 0.6, flexShrink: 0 }}
-        />
-      )}
-
-      <div className="flex-1 min-w-0">
-        <span
-          className="truncate text-[16px] font-medium block"
-          style={{ color: "#070534" }}
-        >
-          {channel.name}
-        </span>
-        {isDM && channel.lastMessagePreview && (
-          <div className="flex items-center gap-1.5 mt-1">
-            <span
-              className="truncate text-[15px] flex-1"
-              style={{ color: "#8A92A6", fontWeight: 400, lineHeight: "22px" }}
-            >
-              {channel.lastMessagePreview}
-            </span>
-            {channel.lastMessageAt && (
-              <span
-                className="text-[13px] shrink-0"
-                style={{ color: "#8A92A6", fontWeight: 400 }}
-              >
-                {(() => {
-                  const d = new Date(channel.lastMessageAt);
-                  return isNaN(d.getTime())
-                    ? ""
-                    : formatDistanceToNowStrict(d, { addSuffix: false });
-                })()}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {unread > 0 && (
-        <span
-          className="badge badge-red"
-          style={{ fontSize: 12, minWidth: 22, height: 22, borderRadius: 11 }}
-        >
-          {unread > 99 ? "99+" : unread}
+      }
+      label={channel.name}
+      sublabel={channel.lastMessagePreview || undefined}
+      meta={timeAgo && (
+        <span className="text-[11px]" style={{ color: isActive ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)' }}>
+          {timeAgo}
         </span>
       )}
-    </button>
+      isActive={isActive}
+      isBold={unread > 0}
+      badge={unread}
+      onClick={onClick}
+    />
   );
 }

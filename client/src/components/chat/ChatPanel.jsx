@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
 import { joinChannel, leaveChannel } from '../../services/socket'
@@ -7,14 +7,28 @@ import MessageInput from './MessageInput'
 import ChatHeader from './ChatHeader'
 import TypingIndicator from './TypingIndicator'
 import FilesTab from './FilesTab'
-import { Wifi, WifiOff, Loader2 } from 'lucide-react'
+import { WifiOff, Loader2 } from 'lucide-react'
+import { CHAT_FEATURE_FLAGS } from '../../config/featureFlags'
+
+const EMPTY_LIST = []
 
 export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onTogglePins, onOpenProfile, onOpenFilePreview, onOpenMobileSidebar, onSaveMessage }) {
   const channel = useChannelStore((s) => s.channels.find((c) => c._id === channelId))
-  const { fetchMessages, messagesByChannel } = useChatStore()
+  const fetchMessages = useChatStore((s) => s.fetchMessages)
+  const legacyMessages = useChatStore((s) => s.messagesByChannel[channelId] || EMPTY_LIST)
+  const channelMessageIds = useChatStore((s) => s.channelMessageIds[channelId] || EMPTY_LIST)
+  const messagesById = useChatStore((s) => s.messagesById)
   const connectionStatus = useChatStore((s) => s.connectionStatus)
   const prevChannelRef = useRef(null)
   const [activeTab, setActiveTab] = useState('messages')
+
+  const messages = useMemo(() => {
+    if (!CHAT_FEATURE_FLAGS.normalizedMessageStore) return legacyMessages
+    if (!channelMessageIds.length) return EMPTY_LIST
+    return channelMessageIds
+      .map((id) => messagesById[id])
+      .filter(Boolean)
+  }, [legacyMessages, channelMessageIds, messagesById])
 
   useEffect(() => {
     if (!channelId) return
@@ -33,7 +47,6 @@ export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onT
     }
   }, [channelId, fetchMessages])
 
-  const messages = messagesByChannel[channelId] || []
   const isDMChannel = channel?.type === 'dm'
 
   return (

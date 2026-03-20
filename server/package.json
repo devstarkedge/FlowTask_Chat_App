@@ -9,7 +9,8 @@
     "dev": "nodemon index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "db:repair-thread-task-index": "node scripts/repairThreadTaskIndex.js"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

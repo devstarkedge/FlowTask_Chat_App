@@ -17,8 +17,9 @@ const { Schema, model } = mongoose;
  */
 
 const flowTaskRefSchema = new Schema({
-  taskId: { type: String, default: null },
-  projectId: { type: String, default: null },
+  // Use undefined so non-FlowTask threads omit indexed fields entirely.
+  taskId: { type: String, default: undefined },
+  projectId: { type: String, default: undefined },
 }, { _id: false });
 
 const threadSchema = new Schema({
@@ -45,7 +46,8 @@ const threadSchema = new Schema({
   // Links thread to a FlowTask task for event routing
   flowTaskRef: {
     type: flowTaskRefSchema,
-    default: null,
+    // Undefined avoids storing flowTaskRef.taskId: null on regular chat threads.
+    default: undefined,
   },
   title: {
     type: String,
@@ -106,7 +108,14 @@ const threadSchema = new Schema({
 // Find thread by FlowTask task ID within workspace (idempotent thread creation)
 threadSchema.index(
   { workspaceId: 1, 'flowTaskRef.taskId': 1 },
-  { sparse: true, unique: true },
+  {
+    unique: true,
+    // Only enforce uniqueness for actual FlowTask-linked threads.
+    // Sparse compound indexes can still include docs where one key is missing.
+    partialFilterExpression: {
+      'flowTaskRef.taskId': { $exists: true, $type: 'string' },
+    },
+  },
 );
 // Channel threads sorted by latest activity within workspace
 threadSchema.index({ workspaceId: 1, channelId: 1, lastReplyAt: -1 });

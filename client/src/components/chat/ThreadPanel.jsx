@@ -1,10 +1,13 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useMemo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import MessageInput from './MessageInput'
 import { X, MessageSquare, SlidersHorizontal, MoreHorizontal } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
 import { format } from 'date-fns'
 import { sanitizeHtml } from '../../utils/sanitize'
+import { CHAT_FEATURE_FLAGS } from '../../config/featureFlags'
+
+const EMPTY_LIST = []
 
 /* ─── Thread Message Item ─────────────────────────────────────────────────── */
 function ThreadMessage({ message, isRoot = false }) {
@@ -103,16 +106,32 @@ function ThreadSkeleton() {
 
 /* ─── Main Panel ──────────────────────────────────────────────────────────── */
 export default function ThreadPanel({ thread, onClose }) {
-  const {
-    threadRepliesByRoot,
-    threadHasMore,
-    isLoadingThread,
-    fetchThreadReplies,
-    messagesByChannel,
-  } = useChatStore()
+  const fetchThreadReplies = useChatStore((s) => s.fetchThreadReplies)
+  const isLoadingThread = useChatStore((s) => s.isLoadingThread)
+  const legacyReplies = useChatStore((s) => s.threadRepliesByRoot[thread.rootMessageId] || EMPTY_LIST)
+  const threadReplyIds = useChatStore((s) => s.threadReplyIdsByRoot[thread.rootMessageId] || EMPTY_LIST)
+  const threadRepliesById = useChatStore((s) => s.threadRepliesById)
+  const threadHasMore = useChatStore((s) => s.threadHasMore[thread.rootMessageId] ?? false)
+  const channelMessages = useChatStore((s) => s.messagesByChannel[thread.channelId] || EMPTY_LIST)
+  const messagesById = useChatStore((s) => s.messagesById)
 
-  const replies = threadRepliesByRoot[thread.rootMessageId] || []
-  const hasMore = threadHasMore[thread.rootMessageId] ?? false
+  const replies = useMemo(() => {
+    if (!CHAT_FEATURE_FLAGS.normalizedMessageStore) return legacyReplies
+    if (!threadReplyIds.length) return EMPTY_LIST
+    return threadReplyIds
+      .map((id) => threadRepliesById[id])
+      .filter(Boolean)
+  }, [legacyReplies, threadReplyIds, threadRepliesById])
+
+  const hasMore = threadHasMore
+
+  const rootMessage = useMemo(() => {
+    if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
+      return messagesById[thread.rootMessageId] || null
+    }
+    return channelMessages.find((m) => m._id === thread.rootMessageId) || null
+  }, [messagesById, thread.rootMessageId, channelMessages])
+
   const bottomRef = useRef(null)
   const prevReplyCountRef = useRef(replies.length)
 
@@ -132,10 +151,6 @@ export default function ThreadPanel({ thread, onClose }) {
     const cursor = replies[replies.length - 1]?._id
     fetchThreadReplies(thread.rootMessageId, { cursor, limit: 30 })
   }, [hasMore, isLoadingThread, replies, thread.rootMessageId, fetchThreadReplies])
-
-  const rootMessage = messagesByChannel[thread.channelId]?.find(
-    (m) => m._id === thread.rootMessageId,
-  )
 
   const replyCount = replies.filter((r) => !r.pending).length
 

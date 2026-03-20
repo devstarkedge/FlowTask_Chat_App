@@ -13,11 +13,13 @@ import {
 import { formatDistanceToNowStrict } from 'date-fns'
 import { useNotificationStore } from '../../../stores/notificationStore'
 import { Avatar } from '../../chat/MemberAvatarGroup'
+import SidebarContainer from '../sidebar/SidebarContainer'
+import SidebarItem from '../sidebar/SidebarItem'
 
 const NOTIFICATION_ICONS = {
   mention: { icon: AtSign, color: 'var(--accent-primary)' },
   dm: { icon: MessageCircle, color: 'var(--accent-green)' },
-  thread_reply: { icon: MessageSquareText, color: 'var(--accent-blue)' },
+  thread_reply: { icon: MessageSquareText, color: 'var(--accent-blue, var(--accent-primary))' },
   channel_invite: { icon: UserPlus, color: 'var(--accent-purple)' },
   task_update: { icon: Activity, color: 'var(--accent-yellow)' },
   system: { icon: Info, color: 'var(--text-muted)' },
@@ -53,14 +55,41 @@ function moveListFocus(event, direction) {
 
 function ActivitySkeleton() {
   return (
-    <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--border-secondary)' }}>
-      <div className="flex items-start gap-3">
-        <div className="w-8 h-8 rounded-lg skeleton" />
-        <div className="flex-1 min-w-0">
-          <div className="h-3.5 rounded skeleton w-4/5 mb-2" />
-          <div className="h-3 rounded skeleton w-3/5" />
-        </div>
-      </div>
+    <div className="sidebar-item" style={{ cursor: 'default', pointerEvents: 'none' }}>
+      <span className="sidebar-item-icon">
+        <div className="w-7 h-7 rounded-lg skeleton" />
+      </span>
+      <span className="sidebar-item-content">
+        <div className="h-3.5 rounded skeleton" style={{ width: '80%', marginBottom: 6 }} />
+        <div className="h-3 rounded skeleton" style={{ width: '55%' }} />
+      </span>
+    </div>
+  )
+}
+
+function NotificationIcon({ notification }) {
+  const iconEntry = NOTIFICATION_ICONS[notification.type] || NOTIFICATION_ICONS.system
+  const Icon = iconEntry.icon
+
+  if (notification.senderId?.avatar) {
+    return (
+      <Avatar
+        member={{ name: notification.senderId.name, avatar: notification.senderId.avatar }}
+        size={28}
+      />
+    )
+  }
+
+  return (
+    <div
+      className="flex items-center justify-center rounded-lg"
+      style={{
+        width: 28,
+        height: 28,
+        background: `${iconEntry.color}1F`,
+      }}
+    >
+      <Icon size={14} style={{ color: iconEntry.color }} />
     </div>
   )
 }
@@ -102,58 +131,61 @@ export default function ActivityContextSidebar({
 
   const handleSelectNotification = useCallback(async (notification) => {
     if (!notification) return
-
     if (!notification.isRead) {
       await markAsRead(notification._id)
     }
-
     onSelectNotification?.(notification)
   }, [markAsRead, onSelectNotification])
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el || isLoading || !hasMore) return
-
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
       fetchNotifications(false)
     }
   }, [fetchNotifications, hasMore, isLoading])
 
-  return (
-    <section className="h-full flex flex-col" style={{ background: 'var(--bg-secondary)' }}>
-      <header
-        className="px-4 py-3 flex items-center justify-between"
-        style={{ borderBottom: '1px solid var(--border-primary)' }}
-      >
-        <div className="flex items-center gap-2">
-          <Activity size={18} style={{ color: 'var(--accent-primary)' }} />
-          <h1 className="text-sm font-semibold" style={{ color: 'var(--text-white)' }}>
-            Activity
-          </h1>
-          {unreadCount > 0 && (
-            <span
-              className="text-[11px] px-1.5 py-0.5 rounded-full font-semibold"
-              style={{ background: 'var(--accent-primary)', color: '#fff' }}
-            >
-              {unreadCount > 99 ? '99+' : unreadCount}
-            </span>
-          )}
-        </div>
+  const header = (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Activity size={18} style={{ color: 'var(--accent-primary)' }} />
+        <h1 className="text-sm font-semibold" style={{ color: 'var(--text-white)' }}>
+          Activity
+        </h1>
         {unreadCount > 0 && (
-          <button
-            onClick={markAllAsRead}
-            className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium cursor-pointer"
-            style={{ color: 'var(--accent-primary)', border: 'none', background: 'transparent' }}
+          <span
+            className="text-[11px] px-1.5 py-0.5 rounded-full font-semibold"
+            style={{ background: 'var(--accent-primary)', color: '#fff' }}
           >
-            <CheckCheck size={13} />
-            Mark all read
-          </button>
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
         )}
-      </header>
+      </div>
+      {unreadCount > 0 && (
+        <button
+          onClick={markAllAsRead}
+          className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium cursor-pointer"
+          style={{ color: 'var(--accent-primary)', border: 'none', background: 'transparent' }}
+        >
+          <CheckCheck size={13} />
+          Mark all read
+        </button>
+      )}
+    </div>
+  )
 
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto" role="listbox" aria-label="Activity notifications">
+  return (
+    <SidebarContainer header={header} aria-label="Activity notifications">
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="h-full overflow-y-auto"
+        role="listbox"
+        aria-label="Activity notifications"
+      >
+        {/* Loading skeletons */}
         {isLoading && notifications.length === 0 && (
-          <div>
+          <div className="px-2 pt-2">
             {Array.from({ length: 7 }).map((_, idx) => (
               <ActivitySkeleton key={idx} />
             ))}
@@ -163,6 +195,7 @@ export default function ActivityContextSidebar({
           </div>
         )}
 
+        {/* Empty state */}
         {!isLoading && notifications.length === 0 && (
           <div className="py-16 px-6 text-center">
             <Bell size={34} className="mx-auto mb-3" style={{ color: 'var(--text-muted)', opacity: 0.45 }} />
@@ -175,79 +208,62 @@ export default function ActivityContextSidebar({
           </div>
         )}
 
-        {notifications.map((notification) => {
-          const iconEntry = NOTIFICATION_ICONS[notification.type] || NOTIFICATION_ICONS.system
-          const Icon = iconEntry.icon
-          const isSelected = notification._id === selectedNotificationId
-          const timeAgo = notification.createdAt
-            ? formatDistanceToNowStrict(new Date(notification.createdAt), { addSuffix: true })
-            : ''
+        {/* Notification items */}
+        <div className="px-2 pt-1">
+          {notifications.map((notification) => {
+            const isSelected = notification._id === selectedNotificationId
+            const timeAgo = notification.createdAt
+              ? formatDistanceToNowStrict(new Date(notification.createdAt), { addSuffix: true })
+              : ''
 
-          return (
-            <button
-              key={notification._id}
-              onClick={() => handleSelectNotification(notification)}
-              onKeyDown={(e) => {
-                if (e.key === 'ArrowDown') {
-                  e.preventDefault()
-                  moveListFocus(e, 'next')
-                } else if (e.key === 'ArrowUp') {
-                  e.preventDefault()
-                  moveListFocus(e, 'prev')
+            return (
+              <SidebarItem
+                key={notification._id}
+                icon={<NotificationIcon notification={notification} />}
+                label={getNotificationText(notification)}
+                sublabel={notification.body || undefined}
+                meta={timeAgo && (
+                  <span className="text-[11px]" style={{ color: isSelected ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)' }}>
+                    {timeAgo}
+                  </span>
+                )}
+                indicator={
+                  !notification.isRead && (
+                    <span
+                      className="rounded-full shrink-0"
+                      style={{
+                        width: 7,
+                        height: 7,
+                        background: 'var(--accent-primary)',
+                      }}
+                    />
+                  )
                 }
-              }}
-              className="w-full text-left px-4 py-3 flex items-start gap-3 cursor-pointer transition-colors"
-              style={{
-                border: 'none',
-                borderBottom: '1px solid var(--border-secondary)',
-                background: isSelected ? 'var(--bg-hover)' : (notification.isRead ? 'transparent' : 'var(--bg-hover)'),
-              }}
-              aria-selected={isSelected}
-            >
-              <div className="shrink-0 mt-0.5">
-                {notification.senderId?.avatar ? (
-                  <Avatar member={{ name: notification.senderId.name, avatar: notification.senderId.avatar }} size={30} />
-                ) : (
-                  <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center"
-                    style={{ background: `${iconEntry.color}1F` }}
-                  >
-                    <Icon size={15} style={{ color: iconEntry.color }} />
-                  </div>
-                )}
-              </div>
+                isBold={!notification.isRead}
+                isActive={isSelected}
+                onClick={() => handleSelectNotification(notification)}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault()
+                    moveListFocus(e, 'next')
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    moveListFocus(e, 'prev')
+                  }
+                }}
+                ariaSelected={isSelected}
+              />
+            )
+          })}
+        </div>
 
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm leading-5" style={{ color: 'var(--text-white)' }}>
-                    {getNotificationText(notification)}
-                  </p>
-                  {timeAgo && (
-                    <span className="text-[11px] shrink-0" style={{ color: 'var(--text-muted)' }}>
-                      {timeAgo}
-                    </span>
-                  )}
-                </div>
-                {notification.body && (
-                  <p className="text-xs mt-1 line-clamp-2" style={{ color: 'var(--text-secondary)' }}>
-                    {notification.body}
-                  </p>
-                )}
-              </div>
-
-              {!notification.isRead && (
-                <span className="w-2 h-2 rounded-full mt-2 shrink-0" style={{ background: 'var(--accent-primary)' }} />
-              )}
-            </button>
-          )
-        })}
-
+        {/* Load more spinner */}
         {isLoading && notifications.length > 0 && (
           <div className="py-3 flex items-center justify-center">
             <Loader2 size={16} className="animate-spin" style={{ color: 'var(--text-muted)' }} />
           </div>
         )}
       </div>
-    </section>
+    </SidebarContainer>
   )
 }

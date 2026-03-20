@@ -15,6 +15,7 @@ import { useNotificationStore } from '../../../stores/notificationStore'
 import { Avatar } from '../../chat/MemberAvatarGroup'
 import SidebarContainer from '../sidebar/SidebarContainer'
 import SidebarItem from '../sidebar/SidebarItem'
+import { getNotificationText, normalizeNotification } from '../../../utils/notificationFormat'
 
 const NOTIFICATION_ICONS = {
   mention: { icon: AtSign, color: 'var(--accent-primary)' },
@@ -23,26 +24,6 @@ const NOTIFICATION_ICONS = {
   channel_invite: { icon: UserPlus, color: 'var(--accent-purple)' },
   task_update: { icon: Activity, color: 'var(--accent-yellow)' },
   system: { icon: Info, color: 'var(--text-muted)' },
-}
-
-function getNotificationText(notification) {
-  const senderName = notification.senderName || notification.senderId?.name || 'Someone'
-  const channelName = notification.channelId?.name || notification.channelName
-
-  switch (notification.type) {
-    case 'mention':
-      return `${senderName} mentioned you${channelName ? ` in #${channelName}` : ''}`
-    case 'dm':
-      return `New direct message from ${senderName}`
-    case 'thread_reply':
-      return `${senderName} replied in a thread${channelName ? ` in #${channelName}` : ''}`
-    case 'channel_invite':
-      return `${senderName} added you to #${channelName || 'channel'}`
-    case 'task_update':
-      return notification.title || 'Task update'
-    default:
-      return notification.title || 'Notification'
-  }
 }
 
 function moveListFocus(event, direction) {
@@ -68,13 +49,17 @@ function ActivitySkeleton() {
 }
 
 function NotificationIcon({ notification }) {
+  const data = normalizeNotification(notification)
   const iconEntry = NOTIFICATION_ICONS[notification.type] || NOTIFICATION_ICONS.system
   const Icon = iconEntry.icon
 
-  if (notification.senderId?.avatar) {
+  if (data?.senderAvatar) {
     return (
       <Avatar
-        member={{ name: notification.senderId.name, avatar: notification.senderId.avatar }}
+        member={{
+          name: data.senderName,
+          avatar: data.senderAvatar,
+        }}
         size={28}
       />
     )

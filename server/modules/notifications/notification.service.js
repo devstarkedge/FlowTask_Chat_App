@@ -37,7 +37,24 @@ class NotificationService {
    * Create a notification, persist it, and emit via socket.
    * Respects DND and channel mute preferences.
    */
-  async create({ workspaceId, recipientId, type, title, body, sourceType, sourceId, channelId, threadId, senderId, senderName, channelName }) {
+  async create({
+    workspaceId,
+    recipientId,
+    type,
+    title,
+    body,
+    sourceType,
+    sourceId,
+    channelId,
+    threadId,
+    senderId,
+    senderName,
+    senderAvatar,
+    channelName,
+    conversationId,
+    conversationType,
+    messagePreview,
+  }) {
     // Don't send notification to yourself
     if (senderId && recipientId && senderId.toString() === recipientId.toString()) {
       return null;
@@ -55,7 +72,11 @@ class NotificationService {
       threadId,
       senderId,
       senderName,
+      senderAvatar,
       channelName,
+      conversationId: conversationId || channelId || null,
+      conversationType: conversationType || 'channel',
+      messagePreview: messagePreview || body || '',
     });
 
     // Emit real-time notification to the recipient's personal room
@@ -83,7 +104,12 @@ class NotificationService {
           threadId: notification.threadId,
           senderId: notification.senderId,
           senderName: notification.senderName,
+          senderAvatar: notification.senderAvatar,
           channelName: notification.channelName,
+          conversationId: notification.conversationId,
+          conversationType: notification.conversationType,
+          messageId: notification.sourceType === 'message' ? notification.sourceId : null,
+          messagePreview: notification.messagePreview || notification.body || '',
           isRead: false,
           createdAt: notification.createdAt,
         },
@@ -96,38 +122,70 @@ class NotificationService {
   /**
    * Create a mention notification.
    */
-  async createMentionNotification({ workspaceId, recipientId, senderId, senderName, channelId, channelName, messageId, preview }) {
+  async createMentionNotification({
+    workspaceId,
+    recipientId,
+    senderId,
+    senderName,
+    senderAvatar,
+    channelId,
+    channelName,
+    messageId,
+    preview,
+    conversationId,
+    conversationType,
+  }) {
+    const safeSenderName = senderName || 'Someone';
+    const safeChannelName = channelName || 'channel';
     return this.create({
       workspaceId,
       recipientId,
       type: 'mention',
-      title: `${senderName} mentioned you in #${channelName}`,
+      title: `${safeSenderName} mentioned you in #${safeChannelName}`,
       body: preview || '',
       sourceType: 'message',
       sourceId: messageId,
       channelId,
       senderId,
-      senderName,
-      channelName,
+      senderName: safeSenderName,
+      senderAvatar: senderAvatar || null,
+      channelName: safeChannelName,
+      conversationId: conversationId || channelId,
+      conversationType: conversationType || 'channel',
+      messagePreview: preview || '',
     });
   }
 
   /**
    * Create a DM notification.
    */
-  async createDMNotification({ workspaceId, recipientId, senderId, senderName, channelId, messageId, preview }) {
+  async createDMNotification({
+    workspaceId,
+    recipientId,
+    senderId,
+    senderName,
+    senderAvatar,
+    channelId,
+    messageId,
+    preview,
+  }) {
+    const safeSenderName = senderName || 'Someone';
     return this.create({
       workspaceId,
       recipientId,
       type: 'dm',
-      title: `New message from ${senderName}`,
+      title: `New message from ${safeSenderName}`,
       body: preview || '',
       sourceType: 'message',
       sourceId: messageId,
       channelId,
       senderId,
-      senderName,
-      channelName: senderName,
+      senderName: safeSenderName,
+      senderAvatar: senderAvatar || null,
+      channelName: safeSenderName,
+      conversationId: channelId,
+      conversationType: 'dm',
+      messagePreview: preview || '',
     });
   }
 
@@ -153,7 +211,7 @@ class NotificationService {
   /**
    * Create a thread reply notification.
    */
-  async createThreadReplyNotification({ workspaceId, recipientId, senderId, senderName, channelId, channelName, threadId, messageId, preview }) {
+  async createThreadReplyNotification({ workspaceId, recipientId, senderId, senderName, senderAvatar, channelId, channelName, threadId, messageId, preview }) {
     return this.create({
       workspaceId,
       recipientId,
@@ -165,8 +223,12 @@ class NotificationService {
       channelId,
       threadId,
       senderId,
-      senderName,
+      senderName: senderName || 'Someone',
+      senderAvatar: senderAvatar || null,
       channelName,
+      conversationId: channelId,
+      conversationType: 'channel',
+      messagePreview: preview || '',
     });
   }
 

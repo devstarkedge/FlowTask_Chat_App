@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import api from '../services/api'
 import logger from '../utils/logger'
+import { normalizeNotification } from '../utils/notificationFormat'
 
 export const useNotificationStore = create((set, get) => ({
   notifications: [],
@@ -83,11 +84,14 @@ export const useNotificationStore = create((set, get) => ({
 
   // ─── Add notification from socket (real-time) ────────────────────────
   addNotification: (notification) => {
+    const normalized = normalizeNotification(notification)
+    if (!normalized) return
+
     set((state) => {
       // Deduplicate
-      if (state.notifications.some((n) => n._id === notification._id)) return state
+      if (state.notifications.some((n) => n._id === normalized._id)) return state
       return {
-        notifications: [notification, ...state.notifications],
+        notifications: [normalized, ...state.notifications],
         unreadCount: state.unreadCount + 1,
       }
     })

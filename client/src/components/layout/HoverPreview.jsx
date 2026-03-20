@@ -10,6 +10,7 @@ import { Avatar } from '../chat/MemberAvatarGroup'
 import { Bell, FileText, FolderOpen, MessageSquare, Video, Image as ImageIcon } from 'lucide-react'
 import { fileAPI } from '../../services/api'
 import { getActivityPath, getDMPath, getFilesPath } from '../../utils/chatRoutes'
+import { getNotificationText, normalizeNotification } from '../../utils/notificationFormat'
 
 const PANEL_WIDTH = 352
 const PANEL_MAX_HEIGHT = 540
@@ -59,26 +60,6 @@ function getActivityStatus(type) {
   if (type === 'dm') return { label: 'DM', className: 'dm' }
   if (type === 'system') return { label: 'System', className: 'system' }
   return null
-}
-
-function getNotificationTitle(notification) {
-  const senderName = notification.senderName || notification.senderId?.name || 'Someone'
-  const channelName = notification.channelId?.name || notification.channelName
-
-  switch (notification.type) {
-    case 'mention':
-      return `${senderName} mentioned you${channelName ? ` in #${channelName}` : ''}`
-    case 'dm':
-      return `New direct message from ${senderName}`
-    case 'thread_reply':
-      return `${senderName} replied in a thread${channelName ? ` in #${channelName}` : ''}`
-    case 'channel_invite':
-      return `${senderName} added you to #${channelName || 'channel'}`
-    case 'task_update':
-      return notification.title || 'Task update'
-    default:
-      return notification.title || 'Notification'
-  }
 }
 
 function resolvePanelPosition(anchorRect, panelHeight = PANEL_MAX_HEIGHT) {
@@ -476,6 +457,7 @@ export default function HoverPreview({
           )}
 
           {filteredNotifications.map((notification) => {
+            const normalized = normalizeNotification(notification)
             const status = getActivityStatus(notification.type)
             const isActive = location.pathname.includes(`/activity/${notification._id}`)
             const context = notification.type === 'dm'
@@ -493,8 +475,8 @@ export default function HoverPreview({
               >
                 <Avatar
                   member={{
-                    name: notification.senderId?.name || notification.senderName || 'System',
-                    avatar: notification.senderId?.avatar,
+                    name: normalized?.senderName || 'System',
+                    avatar: normalized?.senderAvatar,
                   }}
                   size={30}
                   showStatus={false}
@@ -502,7 +484,7 @@ export default function HoverPreview({
 
                 <span className="hover-preview-item-content">
                   <span className="hover-preview-item-row">
-                    <span className="hover-preview-item-title">{getNotificationTitle(notification)}</span>
+                    <span className="hover-preview-item-title">{getNotificationText(notification)}</span>
                     <span className="hover-preview-item-time">{formatTime(notification.createdAt)}</span>
                   </span>
 

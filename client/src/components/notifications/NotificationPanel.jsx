@@ -1,13 +1,13 @@
 import { useEffect, useCallback, useRef } from 'react'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { useChannelStore } from '../../stores/channelStore'
-import { useAuthStore } from '../../stores/authStore'
 import {
   X, Bell, AtSign, MessageCircle, UserPlus, ClipboardList, Info,
   MessageSquareText, CheckCheck, Loader2,
 } from 'lucide-react'
 import { Avatar } from '../chat/MemberAvatarGroup'
 import { formatDistanceToNowStrict } from 'date-fns'
+import { getNotificationMeta, getNotificationText, normalizeNotification } from '../../utils/notificationFormat'
 
 const NOTIFICATION_ICONS = {
   mention: { icon: AtSign, color: 'var(--accent-primary)' },
@@ -18,13 +18,12 @@ const NOTIFICATION_ICONS = {
   system: { icon: Info, color: 'var(--text-muted)' },
 }
 
-export default function NotificationPanel({ onClose }) {
+export default function NotificationPanel({ onClose, onSelectNotification }) {
   const {
     notifications, unreadCount, isLoading, hasMore,
     fetchNotifications, fetchUnreadCount, markAsRead, markAllAsRead,
   } = useNotificationStore()
   const { setActiveChannel } = useChannelStore()
-  const { user } = useAuthStore()
   const scrollRef = useRef(null)
 
   useEffect(() => {
@@ -42,43 +41,23 @@ export default function NotificationPanel({ onClose }) {
   }, [isLoading, hasMore, fetchNotifications])
 
   const handleNotificationClick = (notification) => {
+    const data = normalizeNotification(notification)
+    if (!data) return
+
     if (!notification.isRead) {
       markAsRead(notification._id)
     }
-    // Navigate to source
-    if (notification.channelId) {
-      setActiveChannel(notification.channelId._id || notification.channelId)
+
+    if (onSelectNotification) {
+      onSelectNotification(data)
+      onClose?.()
+      return
+    }
+
+    if (data.channelId) {
+      setActiveChannel(data.channelId._id || data.channelId)
     }
     onClose?.()
-  }
-
-  const getNotificationText = (n) => {
-    const senderName = n.senderName || n.senderId?.name || 'Someone'
-    const channelName = getChannelName(n) || n.channelName
-
-    switch (n.type) {
-      case 'mention':
-        return <span><strong>{senderName}</strong> mentioned you{channelName ? <span> in <strong>#{channelName}</strong></span> : ''}</span>
-      case 'dm':
-        return <span>New message from <strong>{senderName}</strong></span>
-      case 'channel_invite':
-        return <span><strong>{senderName}</strong> added you to <strong>#{channelName}</strong></span>
-      case 'task_update':
-        return <span>Task update from <strong>{senderName}</strong></span>
-      case 'thread_reply':
-        return <span><strong>{senderName}</strong> replied in a thread{channelName ? <span> in <strong>#{channelName}</strong></span> : ''}</span>
-      case 'system':
-        return <span>{n.title || 'System notification'}</span>
-      default:
-        return <span>{n.title || 'New notification'}</span>
-    }
-  }
-
-  const getChannelName = (n) => {
-    if (n.channelId && typeof n.channelId === 'object') {
-      return n.channelId.name
-    }
-    return null
   }
 
   return (
@@ -173,9 +152,9 @@ export default function NotificationPanel({ onClose }) {
         )}
 
         {notifications.map((n) => {
+          const data = normalizeNotification(n)
           const iconEntry = NOTIFICATION_ICONS[n.type] || NOTIFICATION_ICONS.system
           const Icon = iconEntry.icon
-          const channelName = getChannelName(n)
           const timeAgo = n.createdAt
             ? formatDistanceToNowStrict(new Date(n.createdAt), { addSuffix: true })
             : ''
@@ -199,9 +178,9 @@ export default function NotificationPanel({ onClose }) {
             >
               {/* Icon / Avatar */}
               <div className="mt-0.5 shrink-0">
-                {n.senderId?.avatar ? (
+                {data?.senderAvatar ? (
                   <Avatar
-                    member={{ name: n.senderId.name, avatar: n.senderId.avatar }}
+                    member={{ name: data.senderName, avatar: data.senderAvatar }}
                     size={32}
                   />
                 ) : (
@@ -226,14 +205,17 @@ export default function NotificationPanel({ onClose }) {
                     </span>
                   )}
                 </div>
-                {n.body && (
+                {data?.messagePreview && (
                   <p
                     className="text-[13px] leading-relaxed line-clamp-2"
                     style={{ color: 'var(--text-secondary)' }}
                   >
-                    {n.body}
+                    {data.messagePreview}
                   </p>
                 )}
+                <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                  {getNotificationMeta(n)}
+                </p>
               </div>
 
               {/* Unread dot */}

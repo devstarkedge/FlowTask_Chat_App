@@ -1,9 +1,12 @@
 import { create } from 'zustand'
+import { createElement } from 'react'
 import { messageAPI, threadAPI, botAPI } from '../services/api'
 import { useAuthStore } from './authStore'
 import toast from 'react-hot-toast'
 import logger from '../utils/logger'
 import { CHAT_FEATURE_FLAGS } from '../config/featureFlags'
+import MentionToast from '../components/notifications/MentionToast'
+import { normalizeNotification } from '../utils/notificationFormat'
 import {
   loadChannelMessagesFromCache,
   saveChannelMessagesToCache,
@@ -1235,11 +1238,16 @@ export const useChatStore = create((set, get) => ({
 
   // ─── Notifications ─────────────────────────────────────────────────
   addNotification: (notification) => {
+    const normalized = normalizeNotification(notification)
+    if (!normalized) return
+
     set((state) => ({
-      notifications: [notification, ...state.notifications].slice(0, 50),
+      notifications: [normalized, ...state.notifications].slice(0, 50),
     }))
-    if (notification.type === 'mention') {
-      toast(`${notification.authorName} mentioned you in #${notification.channelName}`)
+    if (normalized.type === 'mention') {
+      toast.custom(() => createElement(MentionToast, { notification: normalized }), {
+        duration: 4200,
+      })
     }
   },
 

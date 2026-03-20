@@ -29,6 +29,7 @@ import {
   getChannelPath,
   getDMPath,
 } from '../../utils/chatRoutes'
+import { getNotificationText, normalizeNotification } from '../../utils/notificationFormat'
 import { Activity, ChevronRight, Download, File, FileText, Info } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -63,26 +64,6 @@ function asId(value) {
 
 function resolveNotificationChannelId(notification) {
   return asId(notification?.channelId)
-}
-
-function getNotificationText(notification) {
-  const senderName = notification?.senderName || notification?.senderId?.name || 'Someone'
-  const channelName = notification?.channelId?.name || notification?.channelName
-
-  switch (notification?.type) {
-    case 'mention':
-      return `${senderName} mentioned you${channelName ? ` in #${channelName}` : ''}`
-    case 'dm':
-      return `New direct message from ${senderName}`
-    case 'thread_reply':
-      return `${senderName} replied in a thread${channelName ? ` in #${channelName}` : ''}`
-    case 'channel_invite':
-      return `${senderName} added you to #${channelName || 'channel'}`
-    case 'task_update':
-      return notification?.title || 'Task update'
-    default:
-      return notification?.title || 'Notification'
-  }
 }
 
 function downloadFile(url, name) {
@@ -429,23 +410,34 @@ export default function ChatLayout() {
   }, [])
 
   const handleSelectActivityNotification = useCallback((notification) => {
-    if (!workspaceId || !notification?._id) return
+    const data = normalizeNotification(notification)
+    if (!workspaceId || !data?._id) return
 
-    navigate(getActivityPath(workspaceId, notification._id))
-
-    const channelId = resolveNotificationChannelId(notification)
+    const channelId = resolveNotificationChannelId(data)
     if (channelId) {
       setActiveChannel(channelId)
+
+      const messageId = asId(data.messageId || data.sourceId)
+      const channelType = data.conversationType
+        || data.channelId?.type
+        || channels.find((c) => c._id === channelId)?.type
+
+      const nextPath = channelType === 'dm'
+        ? getDMPath(workspaceId, channelId, messageId)
+        : getChannelPath(workspaceId, channelId, messageId)
+      navigate(nextPath)
+    } else {
+      navigate(getActivityPath(workspaceId, data._id))
     }
 
-    if (notification.sourceType === 'message' && notification.sourceId) {
-      const messageId = asId(notification.sourceId)
+    if (data.sourceType === 'message' && (data.messageId || data.sourceId)) {
+      const messageId = asId(data.messageId || data.sourceId)
       if (messageId) {
         useChatStore.getState().setHighlightMessageId(messageId)
         setTimeout(() => useChatStore.getState().setHighlightMessageId(null), 3500)
       }
     }
-  }, [workspaceId, navigate, setActiveChannel])
+  }, [workspaceId, navigate, setActiveChannel, channels])
 
   const handleAutoSelectActivityNotification = useCallback((notification) => {
     if (!workspaceId || !notification?._id || activityNotificationId) return
@@ -691,7 +683,10 @@ export default function ChatLayout() {
       {/* Notification Panel */}
       {showNotifications && (
         <ErrorBoundary name="Notifications" compact>
-          <NotificationPanel onClose={() => setShowNotifications(false)} />
+          <NotificationPanel
+            onClose={() => setShowNotifications(false)}
+            onSelectNotification={handleSelectActivityNotification}
+          />
         </ErrorBoundary>
       )}
 

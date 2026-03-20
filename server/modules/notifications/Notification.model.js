@@ -64,10 +64,29 @@ const notificationSchema = new Schema({
     maxlength: 100,
     default: null,
   },
+  senderAvatar: {
+    type: String,
+    default: null,
+  },
   channelName: {
     type: String,
     maxlength: 100,
     default: null,
+  },
+  conversationId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Channel',
+    default: null,
+  },
+  conversationType: {
+    type: String,
+    enum: ['channel', 'dm'],
+    default: 'channel',
+  },
+  messagePreview: {
+    type: String,
+    maxlength: 500,
+    default: '',
   },
   isRead: {
     type: Boolean,

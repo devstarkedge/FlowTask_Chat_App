@@ -694,10 +694,13 @@ class MessageService {
             recipientId: chatUser._id,
             senderId: message.authorId?._id || message.authorId,
             senderName: message.senderSnapshot?.name || 'Someone',
+            senderAvatar: message.senderSnapshot?.avatar || null,
             channelId: channel._id,
             channelName: channel.name,
             messageId: message._id,
             preview: truncate(stripHtml(message.content), 100),
+            conversationId: channel._id,
+            conversationType: channel.type === CHANNEL_TYPES.DM ? 'dm' : 'channel',
           });
         }
       } else if (mention.type === MENTION_TYPES.CHANNEL && (mention.name === 'channel' || mention.name === 'here')) {
@@ -726,10 +729,13 @@ class MessageService {
               recipientId: memberId,
               senderId: message.authorId?._id || message.authorId,
               senderName: message.senderSnapshot?.name || 'Someone',
+              senderAvatar: message.senderSnapshot?.avatar || null,
               channelId: channel._id,
               channelName: channel.name,
               messageId: message._id,
               preview: truncate(stripHtml(message.content), 100),
+              conversationId: channel._id,
+              conversationType: channel.type === CHANNEL_TYPES.DM ? 'dm' : 'channel',
             });
           }
         } catch (err) {
@@ -768,6 +774,7 @@ class MessageService {
         recipientId: recipient._id,
         senderId: message.authorId?._id || message.authorId,
         senderName: message.senderSnapshot?.name || 'Someone',
+        senderAvatar: message.senderSnapshot?.avatar || null,
         channelId: channel._id,
         messageId: message._id,
         preview: truncate(stripHtml(message.content), 100),

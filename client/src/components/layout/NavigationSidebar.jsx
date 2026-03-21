@@ -125,11 +125,9 @@ export default function NavigationSidebar({
       const bUnread = unreads[b._id] || 0;
       if (aUnread > 0 && bUnread === 0) return -1;
       if (aUnread === 0 && bUnread > 0) return 1;
-      if (isDMSort) {
-        const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
-        const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
-        if (aTime !== bTime) return bTime - aTime;
-      }
+      const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+      if (aTime !== bTime) return bTime - aTime;
       return (a.name || "").localeCompare(b.name || "");
     });
   };

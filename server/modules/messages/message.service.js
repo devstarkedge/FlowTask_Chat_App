@@ -151,16 +151,35 @@ class MessageService {
     }
 
     // Populate author and fileReferences for emission
-    const populated = await messageRepository.findById(message._id, {
+    let populated = await messageRepository.findById(message._id, {
       workspaceId: (workspaceId || channel.workspaceId)?.toString(),
     });
 
-    // Update channel's last message
+    // Check delivery status BEFORE building the socket payload so the ACK / CREATE event
+    // inherently contains the 'delivered' state. This prevents a race condition in the UI!
+    if (channel.type === CHANNEL_TYPES.DM) {
+      await this._updateDeliveryStatus(populated, channel, authorId).catch(() => {});
+    }
+
+    // Update channel's last message and emit socket event so sidebar reorders in real-time
     const preview = truncate(stripHtml(sanitizedContent), 100);
     const wsId = (workspaceId || channel.workspaceId)?.toString();
-    channelRepository.updateLastMessage(channelId, preview, new Date(), wsId).catch((err) => {
-      logger.error('Failed to update last message', { channelId, error: err.message });
-    });
+    const lastMessageAt = new Date();
+    channelRepository.updateLastMessage(channelId, preview, lastMessageAt, wsId)
+      .then(() => {
+        // Emit channel:updated so all connected clients update lastMessageAt / lastMessagePreview
+        // without needing a full page refresh. This drives sidebar reordering.
+        emitToChannel(channelId.toString(), SOCKET_EVENTS.CHANNEL_UPDATED, {
+          channelId: channelId.toString(),
+          updates: {
+            lastMessageAt: lastMessageAt.toISOString(),
+            lastMessagePreview: preview,
+          },
+        }, wsId);
+      })
+      .catch((err) => {
+        logger.error('Failed to update last message', { channelId, error: err.message });
+      });
 
     // If this is a thread reply, update thread stats
     if (actualThreadId) {
@@ -218,11 +237,6 @@ class MessageService {
 
     // Update unread counts for other members
     this._incrementUnreadForChannel(channelId, authorId, wsId).catch(() => {});
-
-    // DM delivery status: if recipient is online, mark as delivered
-    if (channel.type === CHANNEL_TYPES.DM) {
-      this._updateDeliveryStatus(message, channel, authorId).catch(() => {});
-    }
 
     // Notify mentioned users
     this._notifyMentions(processedMentions, populated, channel).catch(() => {});
@@ -568,6 +582,9 @@ class MessageService {
       // Check if recipient is online (has active sockets)
       if (recipient.socketIds && recipient.socketIds.length > 0) {
         const now = new Date();
+        message.status = 'delivered';
+        message.deliveredAt = now;
+        
         await messageRepository.update(message._id, {
           status: 'delivered',
           deliveredAt: now,
@@ -599,32 +616,29 @@ class MessageService {
       if (!channel || channel.type !== CHANNEL_TYPES.DM) return;
       this._assertWorkspaceMatch(channel.workspaceId, workspaceId, 'Channel');
 
-      // Find undelivered/unseen messages NOT from this user
       const Message = (await import('./Message.model.js')).default;
       const now = new Date();
-      const result = await Message.updateMany(
-        {
-          channelId,
-          workspaceId,
-          authorId: { $ne: userId },
-          status: { $in: ['sent', 'delivered'] },
-          isDeleted: false,
-        },
-        {
-          $set: { status: 'seen', seenAt: now },
-          $addToSet: { readBy: { userId, readAt: now } },
-        }
-      );
 
-      if (result.modifiedCount > 0) {
-        // Find sender(s) to notify about seen status
-        const unseenMessages = await Message.find({
-          channelId,
-          workspaceId,
-          authorId: { $ne: userId },
-          status: 'seen',
-          seenAt: now,
-        }).select('_id authorId').lean();
+      // Find undelivered/unseen messages NOT from this user FIRST
+      const unseenMessages = await Message.find({
+        channelId,
+        workspaceId,
+        authorId: { $ne: userId },
+        status: { $in: ['sent', 'delivered'] },
+        isDeleted: false,
+      }).select('_id authorId').lean();
+
+      if (unseenMessages.length > 0) {
+        const messageIds = unseenMessages.map(m => m._id);
+        
+        // Update the EXACT messages we just found
+        await Message.updateMany(
+          { _id: { $in: messageIds } },
+          {
+            $set: { status: 'seen', seenAt: now },
+            $addToSet: { readBy: { userId, readAt: now } },
+          }
+        );
 
         // Group by author and notify each
         const authorIds = [...new Set(unseenMessages.map(m => m.authorId.toString()))];
@@ -660,6 +674,21 @@ class MessageService {
 
       // ReadReceipt.incrementUnread increments for everyone EXCEPT excludeUserId
       await ReadReceipt.incrementUnread(channelId, senderUserId, false, workspaceId);
+
+      // Emit per-user unread:updated so badge counts update in real-time without refresh
+      const updatedReceipts = await ReadReceipt.find({
+        channelId,
+        ...(workspaceId ? { workspaceId } : {}),
+        userId: { $ne: senderUserId },
+        unreadCount: { $gt: 0 },
+      }).select('userId unreadCount').lean();
+
+      for (const receipt of updatedReceipts) {
+        emitToUser(receipt.userId.toString(), SOCKET_EVENTS.UNREAD_UPDATED, {
+          channelId: channelId.toString(),
+          unreadCount: receipt.unreadCount,
+        }, workspaceId);
+      }
     } catch (error) {
       logger.error('Failed to increment unread counts', {
         channelId,

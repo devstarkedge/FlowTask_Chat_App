@@ -195,6 +195,11 @@ export function connectSocket() {
     if (message.threadId) return
 
     useChatStore.getState().addMessage(message)
+
+    // Update sidebar: lastMessageAt, lastMessagePreview, and unread count.
+    // This is immediate (optimistic) — the server will also emit channel:updated
+    // and unread:updated which serve as the authoritative confirmation.
+    useChannelStore.getState().handleNewMessage(message)
   })
 
   // ─── Thread Reply Events ──────────────────────────────────────────────

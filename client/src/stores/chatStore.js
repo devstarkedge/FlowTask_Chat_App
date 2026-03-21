@@ -362,6 +362,10 @@ export const useChatStore = create((set, get) => ({
         get().addThreadReply(options.threadId, optimisticMessage)
       } else {
         get().addMessage(optimisticMessage)
+        // Update sidebar ordering + preview for the sender's own message immediately
+        // (Recipients get this via the message:create socket event handler in socket.js)
+        const { useChannelStore } = await import('./channelStore')
+        useChannelStore.getState().handleNewMessage(optimisticMessage)
       }
 
       // Send to server with tempId for ACK reconciliation

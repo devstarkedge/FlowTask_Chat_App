@@ -65,8 +65,8 @@ readReceiptSchema.statics.getUnreadCounts = function (userId, workspaceId) {
   const filter = { userId, workspaceId, unreadCount: { $gt: 0 } };
   return this.find(
     filter,
-    { channelId: 1, unreadCount: 1, unreadMentionCount: 1, _id: 0 },
-  ).lean();
+    { channelId: 1, unreadCount: 1, unreadMentionCount: 1, lastReadMessageId: 1, _id: 0 },
+  ).populate('channelId', 'lastMessageAt lastMessagePreview').lean();
 };
 
 readReceiptSchema.statics.markChannelAsRead = async function (userId, channelId, lastMessageId, workspaceId) {

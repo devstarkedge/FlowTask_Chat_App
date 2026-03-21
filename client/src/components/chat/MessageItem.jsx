@@ -145,6 +145,8 @@ const MessageItem = memo(
         ? message.authorId
         : { _id: message.authorId, name: authorName, avatar: authorAvatar };
     const time = format(new Date(message.createdAt), "h:mm a");
+    const deletedText = isOwn ? "You deleted this message" : "This message was deleted";
+    const deletedTextColor = isOwn ? "var(--text-muted)" : "rgba(226, 232, 240, 0.92)";
 
     const handleEdit = () => {
       if (editContent.trim() && editContent !== message.content) {
@@ -201,55 +203,6 @@ const MessageItem = memo(
       );
     }
 
-    // Deleted message tombstone
-    if (isDeleted) {
-      return (
-        <div className="relative group" style={{ opacity: 0.6 }}>
-          <div
-            className={`flex gap-2.5 px-5 ${compact ? "py-0.5" : "pt-2 pb-0.5"}`}
-          >
-            {!compact ? (
-              <Avatar
-                member={{
-                  name: authorName,
-                  avatar: authorAvatar,
-                  onlineStatus: "offline",
-                }}
-                size={36}
-                showStatus={false}
-              />
-            ) : (
-              <div className="w-9 shrink-0" />
-            )}
-            <div className="flex-1 min-w-0">
-              {!compact && (
-                <div className="flex items-baseline gap-2 mb-0.5">
-                  <span
-                    className="font-bold text-sm"
-                    style={{ color: "var(--text-white)" }}
-                  >
-                    {authorName}
-                  </span>
-                  <span
-                    className="text-[11px]"
-                    style={{ color: "var(--text-muted)" }}
-                  >
-                    {time}
-                  </span>
-                </div>
-              )}
-              <p
-                className="text-[15px] italic"
-                style={{ color: "var(--text-muted)" }}
-              >
-                This message was deleted
-              </p>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
     // Delivery status indicator for DM messages
     const renderDeliveryStatus = () => {
       if (!isDMChannel || !isOwn || isPending || isFailed) return null;
@@ -298,7 +251,9 @@ const MessageItem = memo(
           // Group spacing: large gap before first-in-group, tiny gap within
           marginTop: compact ? 2 : 12,
         }}
-        onMouseEnter={() => setShowActions(true)}
+      onMouseEnter={() => {
+          if (!isDeleted) setShowActions(true);
+        }}
         onMouseLeave={() => {
           if (!showReactionPicker && !showMoreMenu) setShowActions(false);
         }}
@@ -395,7 +350,14 @@ const MessageItem = memo(
             <div
               className={`message-bubble ${isOwn ? "sent" : "received"} ${groupPos}`}
             >
-              {isEditing ? (
+              {isDeleted ? (
+                <div
+                  className="message-content text-[16px] leading-relaxed italic"
+                  style={{ color: deletedTextColor }}
+                >
+                  {deletedText}
+                </div>
+              ) : isEditing ? (
                 <div className="mt-1">
                   <input
                     value={editContent}
@@ -434,7 +396,7 @@ const MessageItem = memo(
               )}
 
               {/* Failed message indicator */}
-              {isFailed && (
+              {!isDeleted && isFailed && (
                 <div className="flex items-center gap-2 mt-1">
                   <span style={{ fontSize: 12, color: "var(--accent-red)" }}>
                     Failed to send
@@ -454,7 +416,7 @@ const MessageItem = memo(
               )}
 
               {/* Pending indicator */}
-              {isPending && !isFailed && (
+              {!isDeleted && isPending && !isFailed && (
                 <span
                   style={{
                     fontSize: 11,
@@ -468,7 +430,7 @@ const MessageItem = memo(
               )}
 
               {/* Attachments */}
-              {derivedAttachments.length > 0 && (
+              {!isDeleted && derivedAttachments.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-2">
                   {derivedAttachments.map((att, idx) =>
                     isImage(att.mimeType) ? (
@@ -666,6 +628,7 @@ const MessageItem = memo(
 
           {/* Action Bar (hover) */}
           {(showActions || showReactionPicker || showMoreMenu) &&
+            !isDeleted &&
             !isEditing &&
             !isPending &&
             !isFailed && (

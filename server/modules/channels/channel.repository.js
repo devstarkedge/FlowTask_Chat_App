@@ -74,10 +74,6 @@ class ChannelRepository {
    * @returns {Promise<Channel[]>}
    */
   async findByMember(userId, { includeArchived = false, workspaceId } = {}) {
-    // Check cache for user's channel list
-    const cacheKey = `channels:user:${userId}:ws:${workspaceId || 'all'}:arch:${includeArchived}`;
-    const cached = await cache.get(cacheKey);
-    if (cached) return cached;
 
     let channels;
     // Try ChannelMember collection first
@@ -107,14 +103,12 @@ class ChannelRepository {
           channels = [...channels, ...extraDMs];
         }
 
-        await cache.set(cacheKey, channels, 60); // 60s TTL
         return channels;
       }
     }
 
     // Fallback to embedded array query
     channels = await Channel.findUserChannels(userId, includeArchived, workspaceId).lean();
-    await cache.set(cacheKey, channels, 60);
     return channels;
   }
 
@@ -229,8 +223,10 @@ class ChannelRepository {
     await Channel.updateOne(
       filter,
       {
-        lastMessagePreview: preview,
-        lastMessageAt: timestamp,
+        $set: {
+          lastMessagePreview: preview,
+          lastMessageAt: timestamp,
+        }
       },
     );
   }

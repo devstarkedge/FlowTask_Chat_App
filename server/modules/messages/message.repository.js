@@ -57,7 +57,7 @@ class MessageRepository {
    */
   async getChannelMessages(channelId, { cursor = null, limit = 80, direction = 'before', workspaceId } = {}) {
     const filter = injectWorkspaceFilterRequired(
-      { channelId, isDeleted: false, threadId: null },
+      { channelId, threadId: null },
       workspaceId,
       'channel messages query',
     );
@@ -97,7 +97,7 @@ class MessageRepository {
    */
   async getMessagesAround(channelId, messageId, { limit = 20, workspaceId } = {}) {
     const scopedTargetFilter = injectWorkspaceFilterRequired(
-      { _id: messageId, channelId, isDeleted: false },
+      { _id: messageId, channelId },
       workspaceId,
       'message around query',
     );
@@ -190,7 +190,7 @@ class MessageRepository {
    */
   async getThreadReplies(threadId, { cursor = null, limit = 30, workspaceId } = {}) {
     const filter = injectWorkspaceFilterRequired(
-      { threadId, isDeleted: false },
+      { threadId },
       workspaceId,
       'thread replies query',
     );

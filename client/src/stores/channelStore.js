@@ -39,14 +39,37 @@ export const useChannelStore = create(
       const { data } = await readReceiptAPI.getUnread()
       const unreads = {}
       const lastReadByChannel = {}
+      const channelsUpdates = {} // Collect fresh timestamps from unread receipts
+
       for (const item of data.data.unreads) {
-        const cid = item.channelId || item._id
+        // channelId might be an object if populated by backend, or just the string ID
+        const cid = typeof item.channelId === 'object' && item.channelId !== null
+          ? item.channelId._id
+          : (item.channelId || item._id)
+          
         unreads[cid] = item.unreadCount || 0
         if (item.lastReadMessageId) {
           lastReadByChannel[cid] = item.lastReadMessageId
         }
+
+        // If backend populated the channel details (to bypass the 60s cache during initial load), process them
+        if (typeof item.channelId === 'object' && item.channelId !== null && item.channelId.lastMessageAt) {
+          channelsUpdates[cid] = {
+            lastMessageAt: item.channelId.lastMessageAt,
+            lastMessagePreview: item.channelId.lastMessagePreview
+          }
+        }
       }
-      set({ unreads, lastReadByChannel })
+
+      set((state) => {
+        let newChannels = state.channels
+        if (Object.keys(channelsUpdates).length > 0) {
+          newChannels = state.channels.map((c) =>
+            channelsUpdates[c._id] ? { ...c, ...channelsUpdates[c._id] } : c
+          )
+        }
+        return { unreads, lastReadByChannel, channels: newChannels }
+      })
     } catch (error) {
       logger.error('Failed to fetch unreads:', error)
     }
@@ -115,6 +138,42 @@ export const useChannelStore = create(
     set((state) => ({
       unreads: { ...state.unreads, [channelId]: count },
     }))
+  },
+
+  /**
+   * Called when a new message:create socket event arrives.
+   * Updates sidebar lastMessageAt + lastMessagePreview and increments
+   * unread count for channels that are not currently active.
+   * This is the client-side optimistic counterpart to the server's
+   * channel:updated + unread:updated socket emissions.
+   */
+  handleNewMessage: (message) => {
+    const { channelId, content, createdAt } = message
+    if (!channelId) return
+
+    // Derive a plain-text preview (strip HTML tags, cap at 80 chars)
+    const rawText = (content || '').replace(/<[^>]*>/g, '').trim()
+    const preview = rawText.length > 80 ? rawText.substring(0, 80) + '\u2026' : rawText
+    const timestamp = createdAt || new Date().toISOString()
+
+    set((state) => {
+      const isActive = channelId === state.activeChannelId
+
+      // Update the channel's lastMessageAt + lastMessagePreview in the channels array
+      const channels = state.channels.map((c) =>
+        c._id === channelId
+          ? { ...c, lastMessageAt: timestamp, lastMessagePreview: preview }
+          : c
+      )
+
+      // Only bump unread count when the channel is NOT the one currently open.
+      // If it IS active, setActiveChannel already cleared the count.
+      const unreads = isActive
+        ? state.unreads
+        : { ...state.unreads, [channelId]: (state.unreads[channelId] || 0) + 1 }
+
+      return { channels, unreads }
+    })
   },
 
   updateMembersForChannel: (channelId, members) => {

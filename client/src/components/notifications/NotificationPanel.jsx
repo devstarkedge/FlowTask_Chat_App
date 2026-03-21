@@ -5,18 +5,9 @@ import {
   X, Bell, AtSign, MessageCircle, UserPlus, ClipboardList, Info,
   MessageSquareText, CheckCheck, Loader2,
 } from 'lucide-react'
-import { Avatar } from '../chat/MemberAvatarGroup'
 import { formatDistanceToNowStrict } from 'date-fns'
+import NotificationItem from './NotificationItem'
 import { getNotificationMeta, getNotificationText, normalizeNotification } from '../../utils/notificationFormat'
-
-const NOTIFICATION_ICONS = {
-  mention: { icon: AtSign, color: 'var(--accent-primary)' },
-  dm: { icon: MessageCircle, color: 'var(--accent-green)' },
-  channel_invite: { icon: UserPlus, color: 'var(--accent-purple)' },
-  task_update: { icon: ClipboardList, color: 'var(--accent-yellow)' },
-  thread_reply: { icon: MessageSquareText, color: 'var(--accent-blue)' },
-  system: { icon: Info, color: 'var(--text-muted)' },
-}
 
 export default function NotificationPanel({ onClose, onSelectNotification }) {
   const {
@@ -152,80 +143,16 @@ export default function NotificationPanel({ onClose, onSelectNotification }) {
         )}
 
         {notifications.map((n) => {
-          const data = normalizeNotification(n)
-          const iconEntry = NOTIFICATION_ICONS[n.type] || NOTIFICATION_ICONS.system
-          const Icon = iconEntry.icon
-          const timeAgo = n.createdAt
-            ? formatDistanceToNowStrict(new Date(n.createdAt), { addSuffix: true })
-            : ''
-
           return (
-            <button
+            <NotificationItem
               key={n._id}
+              notification={n}
+              isRead={n.isRead}
+              isActive={false}
               onClick={() => handleNotificationClick(n)}
-              className="flex items-start gap-3 w-full px-4 py-3 text-left transition-colors cursor-pointer"
-              style={{
-                background: n.isRead ? 'transparent' : 'var(--bg-hover)',
-                border: 'none',
-                borderBottom: '1px solid var(--border-secondary)',
-              }}
-              onMouseEnter={(e) => {
-                if (n.isRead) e.currentTarget.style.background = 'var(--bg-hover)'
-              }}
-              onMouseLeave={(e) => {
-                if (n.isRead) e.currentTarget.style.background = 'transparent'
-              }}
-            >
-              {/* Icon / Avatar */}
-              <div className="mt-0.5 shrink-0">
-                {data?.senderAvatar ? (
-                  <Avatar
-                    member={{ name: data.senderName, avatar: data.senderAvatar }}
-                    size={32}
-                  />
-                ) : (
-                  <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center"
-                    style={{ background: `${iconEntry.color}15` }}
-                  >
-                    <Icon size={16} style={{ color: iconEntry.color }} />
-                  </div>
-                )}
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-0.5">
-                  <p className="text-[14px] leading-snug truncate pr-2" style={{ color: 'var(--text-white)' }}>
-                    {getNotificationText(n)}
-                  </p>
-                  {timeAgo && (
-                    <span className="text-[11px] shrink-0" style={{ color: 'var(--text-muted)' }}>
-                      {timeAgo}
-                    </span>
-                  )}
-                </div>
-                {data?.messagePreview && (
-                  <p
-                    className="text-[13px] leading-relaxed line-clamp-2"
-                    style={{ color: 'var(--text-secondary)' }}
-                  >
-                    {data.messagePreview}
-                  </p>
-                )}
-                <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
-                  {getNotificationMeta(n)}
-                </p>
-              </div>
-
-              {/* Unread dot */}
-              {!n.isRead && (
-                <div
-                  className="w-2 h-2 rounded-full mt-2 shrink-0"
-                  style={{ background: 'var(--accent-primary)' }}
-                />
-              )}
-            </button>
+              showTime={true}
+              className="notification-panel-item"
+            />
           )
         })}
 

@@ -66,6 +66,18 @@ function resolveNotificationChannelId(notification) {
   return asId(notification?.channelId)
 }
 
+function formatSize(bytes) {
+  if (!bytes) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = bytes
+  let i = 0
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024
+    i += 1
+  }
+  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
 function downloadFile(url, name) {
   const a = document.createElement('a')
   a.href = url
@@ -857,6 +869,12 @@ function ActivityMainPane({ selectedNotification, selectedChannelId, onOpenMobil
 }
 
 function FilesMainPane({ selectedFile, files, onPreview, onDownload, onOpenInChat, onOpenMobileSidebar }) {
+  const isImage = selectedFile?.mimeType?.startsWith('image/')
+  const isVideo = selectedFile?.mimeType?.startsWith('video/')
+  const isAudio = selectedFile?.mimeType?.startsWith('audio/')
+
+  const fileName = selectedFile?.fileName || selectedFile?.originalName || 'Untitled file'
+
   return (
     <section className="flex-1 min-w-0 flex flex-col" style={{ background: 'var(--bg-primary)' }}>
       {!selectedFile && (
@@ -885,7 +903,7 @@ function FilesMainPane({ selectedFile, files, onPreview, onDownload, onOpenInCha
       )}
 
       {selectedFile && (
-        <>
+        <div className="h-full flex flex-col">
           <div
             className="px-4 py-2 flex items-center justify-between"
             style={{ borderBottom: '1px solid var(--border-primary)', background: 'var(--bg-secondary)' }}
@@ -893,7 +911,7 @@ function FilesMainPane({ selectedFile, files, onPreview, onDownload, onOpenInCha
             <div className="flex items-center gap-2 text-sm min-w-0" style={{ color: 'var(--text-secondary)' }}>
               <span className="shrink-0">Files</span>
               <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
-              <span className="truncate" style={{ color: 'var(--text-white)' }}>{selectedFile.fileName}</span>
+              <span className="truncate" style={{ color: 'var(--text-white)' }}>{fileName}</span>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -920,20 +938,40 @@ function FilesMainPane({ selectedFile, files, onPreview, onDownload, onOpenInCha
             </div>
           </div>
 
-          <div className="flex-1 flex items-center justify-center px-6 text-center">
-            <div>
-              <File size={34} className="mx-auto mb-3" style={{ color: 'var(--text-muted)', opacity: 0.45 }} />
-              <p style={{ color: 'var(--text-muted)' }}>
-                Preview opens first. Use Open in chat to jump to the message context.
-              </p>
-              {files?.length > 0 && (
-                <p className="text-xs mt-2" style={{ color: 'var(--text-secondary)' }}>
-                  {files.length} files loaded in this workspace
-                </p>
-              )}
+          <div className="flex-1 overflow-hidden p-4">
+            <div className="h-full rounded-xl border overflow-hidden flex flex-col" style={{ borderColor: 'var(--border-secondary)', background: 'var(--bg-secondary)' }}>
+              <div className="px-4 py-3 border-b border-current" style={{ color: 'var(--text-secondary)', background: 'var(--bg-primary)' }}>
+                <div className="text-sm font-semibold" style={{ color: 'var(--text-white)' }}>Preview</div>
+                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{selectedFile.mimeType || 'Unknown type'}, {formatSize(selectedFile.fileSize)}</div>
+              </div>
+              <div className="flex-1 overflow-auto p-4 flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+                {isImage && selectedFile.url && (
+                  <img
+                    src={selectedFile.url}
+                    alt={fileName}
+                    style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }}
+                  />
+                )}
+                {isVideo && selectedFile.url && (
+                  <video src={selectedFile.url} controls style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }} />
+                )}
+                {isAudio && selectedFile.url && (
+                  <div style={{ width: '100%', textAlign: 'center' }}>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>{fileName}</p>
+                    <audio src={selectedFile.url} controls style={{ width: '100%' }} />
+                  </div>
+                )}
+                {!isImage && !isVideo && !isAudio && (
+                  <div className="flex flex-col items-center justify-center" style={{ color: 'var(--text-muted)', gap: '10px' }}>
+                    <File size={40} style={{ color: 'var(--text-muted)' }} />
+                    <p className="text-sm">Preview not available for this file type.</p>
+                    <p className="text-xs">Use Download to open locally.</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </>
+        </div>
       )}
     </section>
   )

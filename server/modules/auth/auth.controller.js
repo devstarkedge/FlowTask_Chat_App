@@ -191,7 +191,7 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
       
       await ChatUser.findByIdAndUpdate(chatUser._id, { 
         flowTaskToken: token,
-        flowTaskTokenExpiresAt: expiresAt,
+        flowTaskTokenExpiry: expiresAt,
       });
 
       // Sync all FlowTask users to ChatApp workspace so they appear in DM contacts

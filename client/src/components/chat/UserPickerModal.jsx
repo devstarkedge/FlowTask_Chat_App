@@ -28,6 +28,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
   const [isLoading, setIsLoading] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [flowTaskFetchFailed, setFlowTaskFetchFailed] = useState(false)
   const searchInputRef = useRef(null)
   const listRef = useRef(null)
   const debounceRef = useRef(null)
@@ -76,10 +77,13 @@ export default function UserPickerModal({ onClose, onSelect }) {
       // dm-contacts returns { data: { contacts: [...], meta: {...} } }
       // Server already excludes the current user and deduplicates
       const contacts = data.data?.contacts || []
+      const flowFail = Boolean(data.data?.meta?.flowTaskFetchFailed)
+      setFlowTaskFetchFailed(flowFail)
       setUsers(contacts)
       setSelectedIndex(0)
     } catch (error) {
       logger.error('Failed to fetch DM contacts:', error)
+      setFlowTaskFetchFailed(false)
       setUsers([])
     } finally {
       setIsLoading(false)
@@ -183,6 +187,20 @@ export default function UserPickerModal({ onClose, onSelect }) {
             <X size={18} />
           </button>
         </div>
+
+        {flowTaskFetchFailed && (
+          <div
+            className="px-5 py-2 text-xs rounded-md"
+            style={{
+              border: '1px solid var(--border-warning)',
+              background: 'rgba(255, 165, 0, 0.13)',
+              color: 'var(--text-warning)',
+              margin: '0 1rem 0.5rem',
+            }}
+          >
+            FlowTask user sync failed (expired token or permissions). Showing workspace users only.
+          </div>
+        )}
 
         {/* Search */}
         <div className="px-5 py-3 shrink-0" style={{ borderBottom: '1px solid var(--border-secondary)' }}>

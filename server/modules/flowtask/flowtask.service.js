@@ -295,7 +295,16 @@ class FlowTaskService {
       const users = result.data?.users || result.users || result.data || [];
       return Array.isArray(users) ? users : [];
     } catch (error) {
-      // If the user doesn't have admin/HR permissions, FlowTask returns 403
+      // If token is invalid/expired (401) or user lacks admin/HR permissions (403),
+      // gracefully fall back to ChatApp-only users for DM contacts.
+      if (error.response?.status === 401) {
+        logger.warn('FlowTask getUsers: unauthorized token, falling back to ChatApp users', {
+          status: error.response.status,
+        });
+        return [];
+      }
+
+      // If the user doesn't have admin/HR permissions, FlowTask returns 403.
       // Gracefully return empty array — DM contacts will fall back to ChatApp users only
       if (error.response?.status === 403) {
         logger.warn('FlowTask getUsers: insufficient permissions, falling back to ChatApp users', {

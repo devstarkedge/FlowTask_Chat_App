@@ -2,6 +2,8 @@ import asyncHandler from '../../middleware/asyncHandler.js';
 import userService from './user.service.js';
 import flowtaskService from '../flowtask/flowtask.service.js';
 import userRepository from './user.repository.js';
+import workspaceRepository from '../workspaces/workspace.repository.js';
+import { WORKSPACE_ROLES } from '../../config/constants.js';
 import ChatUser from './ChatUser.model.js';
 import logger from '../../utils/logger.js';
 
@@ -21,11 +23,24 @@ export const getDMContacts = asyncHandler(async (req, res) => {
   const { search } = req.query;
   const workspaceId = req.workspaceId;
   const currentUser = req.user;
-  // Try header first, then fall back to stored token on ChatUser (select:false, needs explicit query)
-  let flowTaskToken = req.headers['x-flowtask-token'];
+  // Prefer verified FlowTask token from auth middleware, then explicit header,
+  // then fall back to persisted token on ChatUser.
+  let flowTaskToken = req.flowTaskToken || req.headers['x-flowtask-token'];
   if (!flowTaskToken) {
-    const userWithToken = await ChatUser.findById(currentUser._id).select('flowTaskToken').lean();
-    flowTaskToken = userWithToken?.flowTaskToken || null;
+    const userWithToken = await ChatUser.findById(currentUser._id)
+      .select('flowTaskToken flowTaskTokenExpiry')
+      .lean();
+
+    const tokenExpiry = userWithToken?.flowTaskTokenExpiry
+      ? new Date(userWithToken.flowTaskTokenExpiry)
+      : null;
+
+    // Ignore expired persisted tokens to avoid noisy 401 calls to FlowTask.
+    if (userWithToken?.flowTaskToken && (!tokenExpiry || tokenExpiry > new Date())) {
+      flowTaskToken = userWithToken.flowTaskToken;
+    } else {
+      flowTaskToken = null;
+    }
   }
 
   // ── Step 1: Fetch ChatApp users for this workspace (always available) ──
@@ -43,8 +58,19 @@ export const getDMContacts = asyncHandler(async (req, res) => {
       );
     } catch (err) {
       flowTaskFetchFailed = true;
+
+      if (err.response?.status === 401) {
+        // Invalidate stale FlowTask token from persisted user record so
+        // we do not keep retrying a bad token forever.
+        await ChatUser.findByIdAndUpdate(currentUser._id, {
+          flowTaskToken: null,
+          flowTaskTokenExpiry: null,
+        });
+      }
+
       logger.warn('Failed to fetch FlowTask users for DM contacts', {
         error: err.message,
+        status: err.response?.status,
         workspaceId,
       });
     }
@@ -72,8 +98,24 @@ export const getDMContacts = asyncHandler(async (req, res) => {
     });
   }
 
-  // Then, merge in FlowTask users (add those not already in ChatApp)
+  // Synchronize FlowTask users into ChatApp workspace membership as needed.
   for (const ftu of flowTaskUsers) {
+    try {
+      if (!ftu._id || !ftu.email) continue;
+      const syncedUser = await userRepository.upsertFromFlowTask(ftu);
+      const isMember = await workspaceRepository.isMember(workspaceId, syncedUser._id);
+      if (!isMember) {
+        await workspaceRepository.addMember(workspaceId, syncedUser._id, WORKSPACE_ROLES.MEMBER);
+      }
+    } catch (err) {
+      logger.warn('Failed to sync FlowTask user into workspace during DM contacts', {
+        email: ftu.email,
+        error: err.message,
+        workspaceId,
+      });
+      // continue gracefully; contact lookup may still work via FlowTask-only entry
+    }
+
     const email = ftu.email?.toLowerCase();
     if (!email) continue;
     // Exclude current user by flowTaskUserId or email

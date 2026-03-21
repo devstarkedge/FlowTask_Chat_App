@@ -2,6 +2,8 @@ import Channel from './Channel.model.js';
 import ChannelMember from './ChannelMember.model.js';
 import channelRepository from './channel.repository.js';
 import userRepository from '../users/user.repository.js';
+import flowtaskService from '../flowtask/flowtask.service.js';
+import workspaceRepository from '../workspaces/workspace.repository.js';
 import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
 import directMessageService from '../dms/directMessage.service.js';
 import { emitToChannel, emitToUser, joinChannelRoom } from '../../sockets/socketManager.js';
@@ -186,7 +188,7 @@ class ChannelService {
         workspaceId,
         memberIds: ids,
         legacyChannelId: existing._id,
-        createdBy: senderId,
+        createdBy: user1Id,
       }).catch((error) => {
         logger.warn('Failed to ensure DM v2 record for existing channel', {
           channelId: existing._id,
@@ -242,7 +244,7 @@ class ChannelService {
             workspaceId,
             memberIds: ids,
             legacyChannelId: winner._id,
-            createdBy: senderId,
+            createdBy: user1Id,
           }).catch(() => {});
           return winner;
         }
@@ -264,7 +266,7 @@ class ChannelService {
       workspaceId,
       memberIds: ids,
       legacyChannelId: channel._id,
-      createdBy: senderId,
+      createdBy: user1Id,
     }).catch((error) => {
       logger.warn('Failed to ensure DM v2 record for newly created channel', {
         channelId: channel._id,
@@ -296,7 +298,7 @@ class ChannelService {
    * @param {string} workspaceName - Workspace display name (for error messages)
    * @returns {Promise<{ chatUserId: string, user: object }>}
    */
-  async resolveAndValidateDMTarget(targetUserId, workspaceId, workspaceName) {
+  async resolveAndValidateDMTarget(targetUserId, workspaceId, workspaceName, flowTaskToken = null) {
     let targetUser = null;
 
     // Strategy 1: Try as a ChatUser _id (24-char hex ObjectId)
@@ -307,6 +309,22 @@ class ChannelService {
     // Strategy 2: Try as a flowTaskUserId (if not found above)
     if (!targetUser) {
       targetUser = await userRepository.findByFlowTaskId(targetUserId);
+    }
+
+    // Strategy 3: Fetch from FlowTask service if we have a token
+    if (!targetUser && flowTaskToken && !/^[0-9a-fA-F]{24}$/.test(targetUserId)) {
+      try {
+        const ftu = await flowtaskService.getUser(targetUserId, flowTaskToken);
+        if (ftu && ftu._id && ftu.email) {
+          targetUser = await userRepository.upsertFromFlowTask(ftu);
+        }
+      } catch (err) {
+        logger.warn('Failed to resolve target user via FlowTask API', {
+          targetUserId,
+          error: err.message,
+          workspaceId,
+        });
+      }
     }
 
     // ── Target user does not exist in ChatApp ──
@@ -323,29 +341,22 @@ class ChannelService {
     }
 
     // ── Verify workspace membership (ChatUser is global — workspace link is via WorkspaceMembership) ──
-    const membership = await WorkspaceMembership.findOne({
-      userId: targetUser._id,
-      workspaceId,
-      isActive: true,
-    }).lean();
+    let membership = await workspaceRepository.getMembership(workspaceId, targetUser._id);
 
     if (!membership) {
       // Auto-add FlowTask users to workspace if they've been synced but not yet added as members
       if (targetUser.authProvider === 'flowtask' && targetUser.flowTaskUserId) {
-         try {
-          await WorkspaceMembership.addMember(workspaceId, targetUser._id);
+        try {
+          await workspaceRepository.addMember(workspaceId, targetUser._id, CHANNEL_MEMBER_ROLES.MEMBER);
           logger.info('Auto-added FlowTask user to workspace for DM', {
             userId: targetUser._id,
             workspaceId,
           });
+          membership = await workspaceRepository.getMembership(workspaceId, targetUser._id);
         } catch (addError) {
           // Re-check membership in case of race condition (concurrent add)
-          const recheckMembership = await WorkspaceMembership.findOne({
-            userId: targetUser._id,
-            workspaceId,
-            isActive: true,
-          }).lean();
-          if (!recheckMembership) {
+          membership = await workspaceRepository.getMembership(workspaceId, targetUser._id);
+          if (!membership) {
             logger.error('Failed to auto-add FlowTask user to workspace', {
               userId: targetUser._id,
               workspaceId,

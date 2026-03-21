@@ -128,10 +128,12 @@ export const createDM = asyncHandler(async (req, res) => {
 
   try {
     // ── Resolve & validate target user exists in this workspace ──
+    const flowTaskToken = req.flowTaskToken || req.headers['x-flowtask-token'];
     const { chatUserId } = await channelService.resolveAndValidateDMTarget(
       targetUserId,
       workspaceId,
       workspaceName,
+      flowTaskToken,
     );
 
     // ── Create or retrieve existing DM channel ──

@@ -50,10 +50,9 @@ function ActivitySkeleton() {
 
 function NotificationIcon({ notification }) {
   const data = normalizeNotification(notification)
-  const iconEntry = NOTIFICATION_ICONS[notification.type] || NOTIFICATION_ICONS.system
-  const Icon = iconEntry.icon
 
-  if (data?.senderAvatar) {
+  // If sender name exists, use Avatar component (handles default placeholder initials)
+  if (data?.senderName) {
     return (
       <Avatar
         member={{
@@ -64,6 +63,9 @@ function NotificationIcon({ notification }) {
       />
     )
   }
+
+  const iconEntry = NOTIFICATION_ICONS[notification.type] || NOTIFICATION_ICONS.system
+  const Icon = iconEntry.icon
 
   return (
     <div

@@ -28,3 +28,7 @@ export function getLegacyDMPath(workspaceId, dmId, messageId = null) {
   const base = `${workspaceBasePath(workspaceId)}/dm/${dmId}`
   return messageId ? `${base}/message/${messageId}` : base
 }
+
+export function getDirectoriesPath(workspaceId) {
+  return `${workspaceBasePath(workspaceId)}/directories`
+}

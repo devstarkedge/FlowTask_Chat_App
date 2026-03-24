@@ -66,7 +66,7 @@ const channelSchema = new Schema({
   name: {
     type: String,
     required: true,
-    maxlength: 100,
+    maxlength: 80,
   },
   slug: {
     type: String,

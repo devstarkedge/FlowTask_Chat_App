@@ -25,6 +25,7 @@ import userRoutes from './modules/users/user.routes.js';
 import workspaceRoutes from './modules/workspaces/workspace.routes.js';
 import notificationRoutes from './modules/notifications/notification.routes.js';
 import adminRoutes from './modules/admin/admin.routes.js';
+import directoriesRoutes from './modules/directories/directories.routes.js';
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
 import eventBus from './services/eventBus.js';
 import channelService from './modules/channels/channel.service.js';
@@ -233,6 +234,7 @@ app.use('/api/chat/bot', botRoutes);
 app.use('/api/chat/users', userRoutes);
 app.use('/api/chat/notifications', notificationRoutes);
 app.use('/api/chat/admin', adminRoutes);
+app.use('/api/chat/directories', directoriesRoutes);
 app.use('/api/chat', readReceiptRoutes);
 
 // ─── Static File Serving (Uploads) ───────────────────────────────────────────

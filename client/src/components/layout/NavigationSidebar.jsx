@@ -30,7 +30,7 @@ import CreateWorkspaceModal from "../workspace/CreateWorkspaceModal";
 import JoinWorkspaceModal from "../workspace/JoinWorkspaceModal";
 import WorkspaceSettingsModal from "../workspace/WorkspaceSettingsModal";
 import { formatDistanceToNowStrict } from "date-fns";
-import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
+import { getChannelPath, getDMPath, getDirectoriesPath } from "../../utils/chatRoutes";
 import SidebarContainer from "./sidebar/SidebarContainer";
 import SidebarItem from "./sidebar/SidebarItem";
 import SidebarSection from "./sidebar/SidebarSection";
@@ -251,7 +251,7 @@ export default function NavigationSidebar({
               <NavButton
                 icon={Compass}
                 label="Directories"
-                onClick={() => {}}
+                onClick={() => navigate(getDirectoriesPath(workspaceId))}
               />
             </div>
 

@@ -58,6 +58,13 @@ export const createChannel = asyncHandler(async (req, res) => {
     });
   }
 
+  if (name.trim().length > 80) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Channel name must not exceed 80 characters' },
+    });
+  }
+
   const channel = await channelService.createCustomChannel(
     { name: name.trim(), description, visibility, memberIds },
     req.user._id,

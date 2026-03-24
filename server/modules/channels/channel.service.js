@@ -412,6 +412,15 @@ class ChannelService {
       ...(workspaceId && { workspaceId }),
     });
 
+    // Persist all members to ChannelMember collection (source of truth for
+    // findByMember which powers channel list on page refresh / reconnect).
+    const channelId = channel._id.toString();
+    await Promise.all(
+      members.map((m) =>
+        ChannelMember.addMember(channelId, m.userId, workspaceId, m.role)
+      )
+    );
+
     // Join creator to channel room
     joinChannelRoom(creatorId.toString(), channel._id.toString(), workspaceId?.toString());
 

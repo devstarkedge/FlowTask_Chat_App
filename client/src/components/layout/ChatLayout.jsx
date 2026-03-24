@@ -15,6 +15,7 @@ import ThreadPanel from '../chat/ThreadPanel'
 import ChannelInfoPanel from '../chat/ChannelInfoPanel'
 import SearchPanel from '../chat/SearchPanel'
 import ProfileSidePanel from '../chat/ProfileSidePanel'
+import { useProfileStore } from '../../stores/profileStore'
 import FilePreviewModal from '../chat/FilePreviewModal'
 import PinnedMessagesPanel from '../chat/PinnedMessagesPanel'
 import AllThreadsPanel from '../chat/AllThreadsPanel'
@@ -36,8 +37,9 @@ import toast from 'react-hot-toast'
 const HomePage = lazy(() => import('../../pages/HomePage'))
 const LaterPage = lazy(() => import('../../pages/LaterPage'))
 const ToolsPage = lazy(() => import('../../pages/ToolsPage'))
+const DirectoriesPanel = lazy(() => import('../directories/DirectoriesPanel'))
 
-const PAGE_ROUTES = { home: HomePage, later: LaterPage, tools: ToolsPage }
+const PAGE_ROUTES = { home: HomePage, later: LaterPage, tools: ToolsPage, directories: DirectoriesPanel }
 
 const SIDEBAR_MIN = 200
 const SIDEBAR_MAX = 400
@@ -102,7 +104,7 @@ export default function ChatLayout() {
   const [showSearch, setShowSearch] = useState(false)
   const [showPins, setShowPins] = useState(false)
   const [showAllThreads, setShowAllThreads] = useState(false)
-  const [profileUser, setProfileUser] = useState(null)
+  const profileUser = useProfileStore((s) => s.profileUser)
   const [previewFile, setPreviewFile] = useState(null)
   const [previewFiles, setPreviewFiles] = useState([])
   const [showMobileSidebar, setShowMobileSidebar] = useState(false)
@@ -164,7 +166,7 @@ export default function ChatLayout() {
   // Keyboard shortcuts
   const shortcutHandlers = useMemo(() => ({
     toggleSearch: () => { setShowSearch((s) => !s); setShowPins(false); setShowAllThreads(false); setShowNotifications(false) },
-    toggleThreads: () => { setShowAllThreads((s) => !s); setShowSearch(false); setShowPins(false); setShowNotifications(false); closeThread(); setProfileUser(null) },
+    toggleThreads: () => { setShowAllThreads((s) => !s); setShowSearch(false); setShowPins(false); setShowNotifications(false); closeThread(); useProfileStore.getState().closeProfile() },
     showShortcuts: () => setShowShortcuts((s) => !s),
     escape: () => {
       if (showShortcuts) setShowShortcuts(false)
@@ -173,7 +175,7 @@ export default function ChatLayout() {
       else if (showSaved) setShowSaved(false)
       else if (showNotifications) setShowNotifications(false)
       else if (showAllThreads) setShowAllThreads(false)
-      else if (profileUser) setProfileUser(null)
+      else if (profileUser) useProfileStore.getState().closeProfile()
     },
   }), [showShortcuts, showSearch, showPins, showSaved, showAllThreads, showNotifications, profileUser, closeThread])
   useKeyboardShortcuts(shortcutHandlers)
@@ -397,12 +399,12 @@ export default function ChatLayout() {
       }, 3000);
     }
     openThreadAction(thread)
-    setProfileUser(null)
+    useProfileStore.getState().closeProfile()
     setShowAllThreads(false)
   }
 
   const openProfile = (user) => {
-    setProfileUser(user)
+    useProfileStore.getState().openProfile(user)
     closeThread()
     useChannelStore.getState().setShowInfoPanel(false)
   }
@@ -513,7 +515,7 @@ export default function ChatLayout() {
                 setShowPins(false)
                 setShowNotifications(false)
                 setShowSaved(false)
-                setProfileUser(null)
+                useProfileStore.getState().closeProfile()
                 closeThread()
               }}
               onToggleNotifications={() => {
@@ -522,7 +524,7 @@ export default function ChatLayout() {
                 setShowSearch(false)
                 setShowPins(false)
                 setShowSaved(false)
-                setProfileUser(null)
+                useProfileStore.getState().closeProfile()
                 closeThread()
               }}
               onToggleSaved={() => {
@@ -531,7 +533,7 @@ export default function ChatLayout() {
                 setShowSearch(false)
                 setShowPins(false)
                 setShowNotifications(false)
-                setProfileUser(null)
+                useProfileStore.getState().closeProfile()
                 closeThread()
               }}
             />
@@ -583,7 +585,7 @@ export default function ChatLayout() {
                     setShowAllThreads(false)
                     setShowSearch(false)
                     setShowPins(false)
-                    setProfileUser(null)
+                    useProfileStore.getState().closeProfile()
                     closeThread()
                   }}
                 />
@@ -688,7 +690,7 @@ export default function ChatLayout() {
       {/* Profile Side Panel */}
       {profileUser && (
         <ErrorBoundary name="Profile" compact>
-          <ProfileSidePanel user={profileUser} onClose={() => setProfileUser(null)} />
+          <ProfileSidePanel user={profileUser} onClose={() => useProfileStore.getState().closeProfile()} />
         </ErrorBoundary>
       )}
 

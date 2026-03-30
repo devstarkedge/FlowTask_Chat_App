@@ -33,11 +33,11 @@ async function resolveWorkspaceRef(reference) {
 
 /**
  * Resolve the target workspace for an incoming webhook.
+ * FlowTask sends a workspace slug (e.g., 'flowtask') as workspaceId.
  * Resolution order:
  *   1. X-FlowTask-Workspace header (slug or ObjectId)
  *   2. Payload's workspaceId field
- *   3. Fall back to default workspace (FlowTask often sends department IDs
- *      which don't map to ChatApp workspace IDs directly)
+ *   3. Fall back to default workspace
  */
 async function resolveWebhookWorkspace(req) {
   const wsHeader = req.headers['x-flowtask-workspace']?.toString().trim();
@@ -47,16 +47,13 @@ async function resolveWebhookWorkspace(req) {
 
   if (wsHeader) {
     workspace = await resolveWorkspaceRef(wsHeader);
-    // Don't reject if header reference doesn't resolve — FlowTask may send
-    // a department ID that isn't a ChatApp workspace. Fall through to payload check.
   }
 
   if (!workspace && payloadWorkspaceRef) {
     workspace = await resolveWorkspaceRef(payloadWorkspaceRef);
   }
 
-  // Fallback to default workspace when FlowTask's workspaceId (often a department ID)
-  // doesn't match any ChatApp workspace.
+  // Fallback to default workspace
   if (!workspace) {
     const defaultWorkspace = await workspaceService.ensureDefaultWorkspace();
     if (defaultWorkspace?.isActive !== false) {

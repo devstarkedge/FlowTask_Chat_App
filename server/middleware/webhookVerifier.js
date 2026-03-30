@@ -34,6 +34,7 @@ export function webhookVerifier(req, res, next) {
       deliveryId,
       eventName,
       timestamp,
+      serverTime: Math.floor(Date.now() / 1000),
       ip: req.ip,
     });
     return next(new UnauthorizedError('Webhook timestamp too old — possible replay attack'));
@@ -46,10 +47,21 @@ export function webhookVerifier(req, res, next) {
     return next(new UnauthorizedError('Unable to verify webhook signature'));
   }
 
-  if (!verifySignature(rawBody, signature, env.FLOWTASK_WEBHOOK_SECRET)) {
+  const secret = env.FLOWTASK_WEBHOOK_SECRET;
+  if (!secret) {
+    logger.error('FLOWTASK_WEBHOOK_SECRET not configured on ChatApp server');
+    return next(new UnauthorizedError('Webhook verification not configured'));
+  }
+
+  if (!verifySignature(rawBody, signature, secret, timestamp)) {
     logger.warn('Webhook signature verification failed', {
       deliveryId,
       eventName,
+      signatureReceived: signature?.substring(0, 12) + '...',
+      rawBodyLength: rawBody?.length,
+      timestampHeader: timestamp,
+      secretConfigured: !!secret,
+      secretLength: secret?.length,
       ip: req.ip,
     });
     return next(new UnauthorizedError('Invalid webhook signature'));

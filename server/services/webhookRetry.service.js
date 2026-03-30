@@ -78,14 +78,20 @@ class WebhookRetryService {
       );
       if (!updated) return; // Already picked up by another process
 
-      // Re-emit the event for processing
-      eventBus.emit(event.eventName, {
+      // Re-dispatch the event through the bus (dispatch uses Promise.allSettled
+      // so handler errors are captured, unlike bare emit which is fire-and-forget)
+      const results = await eventBus.dispatch(event.eventName, {
         ...event,
         _retryAttempt: updated.attempts,
         _workspaceId: event.workspaceId,
       });
 
-      // Mark completed (handlers will mark failed again if they fail)
+      // Check if any handler rejected
+      const failures = results?.settled?.filter(r => r.status === 'rejected') || [];
+      if (failures.length > 0) {
+        throw new Error(`${failures.length} handler(s) failed: ${failures.map(f => f.reason?.message || f.reason).join('; ')}`);
+      }
+
       await ProcessedEvent.findOneAndUpdate(
         { _id: event._id, status: 'processing' },
         { $set: { status: 'completed', processedAt: new Date() } },

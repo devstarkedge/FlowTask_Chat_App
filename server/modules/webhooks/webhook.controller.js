@@ -3,6 +3,7 @@ import { webhookVerifier } from '../../middleware/webhookVerifier.js';
 import eventProcessor from '../../services/eventProcessor.js';
 import logger from '../../utils/logger.js';
 import Workspace from '../workspaces/Workspace.model.js';
+import workspaceService from '../workspaces/workspace.service.js';
 import { BadRequestError } from '../../middleware/errorHandler.js';
 
 /**
@@ -35,36 +36,42 @@ async function resolveWorkspaceRef(reference) {
  * Resolution order:
  *   1. X-FlowTask-Workspace header (slug or ObjectId)
  *   2. Payload's workspaceId field
- *   3. Reject if missing/invalid
+ *   3. Fall back to default workspace (FlowTask often sends department IDs
+ *      which don't map to ChatApp workspace IDs directly)
  */
 async function resolveWebhookWorkspace(req) {
   const wsHeader = req.headers['x-flowtask-workspace']?.toString().trim();
   const payloadWorkspaceRef = (req.body?.workspaceId || req.body?.data?.workspaceId)?.toString()?.trim();
 
-  if (!wsHeader && !payloadWorkspaceRef) {
-    throw new BadRequestError('Workspace context is required for webhooks (X-FlowTask-Workspace header or workspaceId payload).');
-  }
-
   let workspace = null;
 
   if (wsHeader) {
     workspace = await resolveWorkspaceRef(wsHeader);
-    if (!workspace) {
-      throw new BadRequestError('Invalid or inactive workspace in X-FlowTask-Workspace header.');
+    // Don't reject if header reference doesn't resolve — FlowTask may send
+    // a department ID that isn't a ChatApp workspace. Fall through to payload check.
+  }
+
+  if (!workspace && payloadWorkspaceRef) {
+    workspace = await resolveWorkspaceRef(payloadWorkspaceRef);
+  }
+
+  // Fallback to default workspace when FlowTask's workspaceId (often a department ID)
+  // doesn't match any ChatApp workspace.
+  if (!workspace) {
+    const defaultWorkspace = await workspaceService.ensureDefaultWorkspace();
+    if (defaultWorkspace?.isActive !== false) {
+      logger.info('Webhook workspace resolved to default workspace', {
+        wsHeader,
+        payloadWorkspaceRef,
+        defaultWorkspaceId: defaultWorkspace._id,
+        step: 'workspace_fallback_default',
+      });
+      workspace = defaultWorkspace;
     }
   }
 
-  if (payloadWorkspaceRef) {
-    const payloadWorkspace = await resolveWorkspaceRef(payloadWorkspaceRef);
-    if (!payloadWorkspace) {
-      throw new BadRequestError('Invalid or inactive workspaceId in webhook payload.');
-    }
-
-    if (workspace && workspace._id.toString() !== payloadWorkspace._id.toString()) {
-      throw new BadRequestError('Workspace mismatch between header and payload.');
-    }
-
-    workspace = payloadWorkspace;
+  if (!workspace) {
+    throw new BadRequestError('Could not resolve workspace for webhook (no valid reference or default workspace).');
   }
 
   return workspace;

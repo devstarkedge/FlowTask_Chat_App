@@ -3,8 +3,9 @@ import channelService from '../../channels/channel.service.js';
 import channelRepository from '../../channels/channel.repository.js';
 import messageService from '../../messages/message.service.js';
 import userRepository from '../../users/user.repository.js';
+import { emitToUser } from '../../../sockets/socketManager.js';
 import logger from '../../../utils/logger.js';
-import { FLOWTASK_EVENTS } from '../../../config/constants.js';
+import { FLOWTASK_EVENTS, SOCKET_EVENTS } from '../../../config/constants.js';
 
 /**
  * Department & Team Event Handler — handles FlowTask department/team lifecycle events.
@@ -34,6 +35,19 @@ export function registerDepartmentTeamEventHandlers() {
       const deptName = department.name || 'Unnamed Department';
 
       const channel = await channelService.getOrCreateDepartmentChannel(deptId, deptName, wsId);
+
+      // Broadcast channel:created so it appears in sidebar for relevant users
+      const populated = await channelRepository.findById(channel._id, { workspaceId: wsId });
+      if (populated) {
+        for (const member of populated.members || []) {
+          const uid = member.userId?._id?.toString() || member.userId?.toString();
+          if (uid) {
+            emitToUser(uid, SOCKET_EVENTS.CHANNEL_CREATED, {
+              channel: { _id: populated._id, name: populated.name, slug: populated.slug, type: populated.type },
+            }, wsId);
+          }
+        }
+      }
 
       const creator = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
       await messageService.sendSystemMessage(
@@ -135,6 +149,19 @@ export function registerDepartmentTeamEventHandlers() {
       const teamName = team.name || 'Unnamed Team';
 
       const channel = await channelService.getOrCreateTeamChannel(teamId, teamName, wsId);
+
+      // Broadcast channel:created so it appears in sidebar for relevant users
+      const populated = await channelRepository.findById(channel._id, { workspaceId: wsId });
+      if (populated) {
+        for (const member of populated.members || []) {
+          const uid = member.userId?._id?.toString() || member.userId?.toString();
+          if (uid) {
+            emitToUser(uid, SOCKET_EVENTS.CHANNEL_CREATED, {
+              channel: { _id: populated._id, name: populated.name, slug: populated.slug, type: populated.type },
+            }, wsId);
+          }
+        }
+      }
 
       const creator = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
       await messageService.sendSystemMessage(

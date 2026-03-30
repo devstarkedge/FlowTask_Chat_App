@@ -4,8 +4,9 @@ import channelService from '../../channels/channel.service.js';
 import messageService from '../../messages/message.service.js';
 import userRepository from '../../users/user.repository.js';
 import channelRepository from '../../channels/channel.repository.js';
+import { emitToChannel, emitToUser } from '../../../sockets/socketManager.js';
 import logger from '../../../utils/logger.js';
-import { FLOWTASK_EVENTS, MESSAGE_CONTENT_TYPES } from '../../../config/constants.js';
+import { FLOWTASK_EVENTS, SOCKET_EVENTS } from '../../../config/constants.js';
 
 function requireWorkspaceId(payload, eventName) {
   const wsId = payload?._workspaceId;
@@ -33,15 +34,31 @@ export function registerProjectEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.PROJECT_CREATED);
     if (!wsId) return;
 
-    const { board, userId } = payload;
+    const { board, userId, deliveryId } = payload;
 
     if (!board || !board._id) {
-      logger.warn('project.created: missing board data', { payload });
+      logger.warn('project.created: missing board data', { deliveryId, payload: Object.keys(payload) });
       return;
     }
 
+    logger.info('project.created: creating project channel', {
+      deliveryId,
+      boardId: board._id,
+      boardTitle: board.title || board.name,
+      workspaceId: wsId,
+      step: 'channel_creation_start',
+    });
+
     // Create project channel
     const channel = await channelService.createProjectChannel(board, userId, wsId);
+
+    logger.info('project.created: channel created', {
+      deliveryId,
+      channelId: channel._id,
+      slug: channel.slug,
+      boardId: board._id,
+      step: 'channel_created',
+    });
 
     // Sync board members if provided
     if (board.members?.length) {
@@ -51,20 +68,47 @@ export function registerProjectEventHandlers() {
 
       if (memberIds.length > 0) {
         await channelService.syncMembers(channel._id, memberIds, wsId);
+        logger.info('project.created: members synced', {
+          deliveryId,
+          channelId: channel._id,
+          memberCount: memberIds.length,
+          step: 'members_synced',
+        });
       }
     }
 
-    // Post welcome system message
+    // Broadcast channel:created to all members so it appears in sidebar instantly
+    const populatedChannel = await channelRepository.findById(channel._id, { workspaceId: wsId });
+    if (populatedChannel) {
+      for (const member of populatedChannel.members || []) {
+        const uid = member.userId?._id?.toString() || member.userId?.toString();
+        if (uid) {
+          emitToUser(uid, SOCKET_EVENTS.CHANNEL_CREATED, {
+            channel: {
+              _id: populatedChannel._id,
+              name: populatedChannel.name,
+              slug: populatedChannel.slug,
+              type: populatedChannel.type,
+              flowTaskRef: populatedChannel.flowTaskRef,
+              memberCount: populatedChannel.memberCount || populatedChannel.members?.length,
+            },
+          }, wsId);
+        }
+      }
+    }
+
+    // Post welcome system message (emits MESSAGE_CREATE via socket automatically)
     await messageService.sendSystemMessage(
       channel._id,
-      `📋 Project channel created for **${board.title}**. All project members will be automatically added here.`,
+      `📋 Project channel created for **${board.title || board.name}**. All project members will be automatically added here.`,
       { entityType: 'board', entityId: board._id },
       wsId,
     );
 
-    logger.info('project.created handled', {
+    logger.info('project.created: welcome message posted', {
+      deliveryId,
       channelId: channel._id,
-      boardId: board._id,
+      step: 'welcome_message_posted',
     });
 
     // Notify admin & managers channels
@@ -72,6 +116,13 @@ export function registerProjectEventHandlers() {
     const creatorName = creator?.name || 'Someone';
     const deptName = typeof board.department === 'object' ? board.department?.name : null;
     await botNotifier.onProjectCreated(board.title || board.name, creatorName, deptName, wsId);
+
+    logger.info('project.created: fully handled', {
+      deliveryId,
+      channelId: channel._id,
+      boardId: board._id,
+      step: 'project_created_complete',
+    });
   });
 
   // ─── project.updated ────────────────────────────────────────────────────

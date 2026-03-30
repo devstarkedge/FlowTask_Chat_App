@@ -31,7 +31,7 @@ class EventProcessor {
     const workspaceId = payload?._workspaceId;
 
     // 1. Idempotency check
-    const claim = await ProcessedEvent.claimEvent(deliveryId, eventName);
+    const claim = await ProcessedEvent.claimEvent(deliveryId, eventName, workspaceId);
 
     if (claim.status === 'duplicate') {
       logger.info('Duplicate event skipped', { deliveryId, eventName, workspaceId });
@@ -82,7 +82,7 @@ class EventProcessor {
       }
 
       // 3. Mark as completed (now safe — all handlers have settled)
-      await ProcessedEvent.markCompleted(deliveryId);
+      await ProcessedEvent.markCompleted(deliveryId, workspaceId);
 
       logger.info('Event processing completed', {
         deliveryId,
@@ -104,7 +104,7 @@ class EventProcessor {
         step: 'event_processing_error',
       });
 
-      await ProcessedEvent.markFailed(deliveryId, error);
+      await ProcessedEvent.markFailed(deliveryId, error, workspaceId);
 
       return { status: 'failed', statusCode: 500 };
     }

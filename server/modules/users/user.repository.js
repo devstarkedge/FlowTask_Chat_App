@@ -1,4 +1,5 @@
 import ChatUser from './ChatUser.model.js';
+import { BOT } from '../../config/constants.js';
 
 /**
  * User Repository — data access layer for ChatUser documents.
@@ -430,6 +431,29 @@ class UserRepository {
       { $set: { customStatus: status } },
       { new: true },
     ).exec();
+  }
+
+  /**
+   * Get or create the system bot user (cached after first call).
+   * @returns {Promise<ChatUser>}
+   */
+  async ensureBotUser() {
+    if (this._botUser) return this._botUser;
+
+    this._botUser = await ChatUser.findOne({ flowTaskUserId: BOT.SYSTEM_USER_ID }).exec();
+    if (this._botUser) return this._botUser;
+
+    this._botUser = await ChatUser.create({
+      authProvider: 'flowtask',
+      flowTaskUserId: BOT.SYSTEM_USER_ID,
+      name: BOT.DISPLAY_NAME,
+      email: 'bot@flowtask.system',
+      role: 'bot',
+      isActive: true,
+      emailVerified: true,
+      avatar: BOT.AVATAR,
+    });
+    return this._botUser;
   }
 
   /**

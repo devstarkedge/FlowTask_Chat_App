@@ -264,9 +264,10 @@ class MessageService {
    * Send a system message (bot, event notification).
    */
   async sendSystemMessage(channelId, content, flowTaskRef, workspaceId) {
+    const botUser = await userRepository.ensureBotUser();
     const messageData = {
       channelId,
-      authorId: null,
+      authorId: botUser._id,
       content,
       htmlContent: content,
       contentType: MESSAGE_CONTENT_TYPES.SYSTEM,

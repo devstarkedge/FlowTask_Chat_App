@@ -62,7 +62,7 @@ export function registerTaskEventHandlers() {
     }
 
     await messageService.sendSystemMessage(channel._id, msg, {
-      entityType: 'task',
+      entityType: 'card',
       entityId: card._id,
     }, wsId);
   });
@@ -95,7 +95,7 @@ export function registerTaskEventHandlers() {
     const msg = `🔄 ${userName} updated **${card.title}**: ${parts.join(', ')}`;
 
     await messageService.sendSystemMessage(channel._id, msg, {
-      entityType: 'task',
+      entityType: 'card',
       entityId: card._id,
     }, wsId);
   });
@@ -145,7 +145,7 @@ export function registerTaskEventHandlers() {
       await messageService.sendSystemMessage(
         channel._id,
         `👤 ${assigner?.name || 'Someone'} assigned **${card.title}** to ${assignee.name}`,
-        { entityType: 'task', entityId: card._id },
+        { entityType: 'card', entityId: card._id },
         wsId,
       );
     }
@@ -178,7 +178,7 @@ export function registerTaskEventHandlers() {
     await messageService.sendSystemMessage(
       channel._id,
       `💬 ${user?.name || 'Someone'} commented on **${card.title}**: "${preview}"`,
-      { entityType: 'task', entityId: card._id },
+      { entityType: 'card', entityId: card._id },
       wsId,
     );
   });
@@ -217,7 +217,7 @@ export function registerTaskEventHandlers() {
     await messageService.sendSystemMessage(
       channel._id,
       `${emoji} ${userName} changed **${card.title}** status: ${from} → ${to}`,
-      { entityType: 'task', entityId: card._id },
+      { entityType: 'card', entityId: card._id },
       wsId,
     );
 
@@ -261,7 +261,7 @@ export function registerTaskEventHandlers() {
     await messageService.sendSystemMessage(
       channel._id,
       `📅 ${userName} changed due date for **${card.title}**: ${oldDate} → ${newDate}${warning}`,
-      { entityType: 'task', entityId: card._id },
+      { entityType: 'card', entityId: card._id },
       wsId,
     );
   });
@@ -300,7 +300,7 @@ export function registerTaskEventHandlers() {
     await messageService.sendSystemMessage(
       channel._id,
       `⏱️ ${userName} logged **${durationStr}** on **${taskTitle}**${description}`,
-      { entityType: 'task', entityId: card?._id || timeEntry.cardId },
+      { entityType: 'card', entityId: card?._id || timeEntry.cardId },
       wsId,
     );
   });

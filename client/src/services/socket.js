@@ -278,6 +278,10 @@ export function connectSocket() {
   // ─── Channel Events ─────────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.CHANNEL_ADDED, ({ channel }) => {
     useChannelStore.getState().addChannel(channel)
+    // Subscribe to the new channel's message room so we receive real-time messages
+    if (socket && channel?._id) {
+      socket.emit('channel:join', channel._id)
+    }
   })
 
   socket.on(SOCKET_EVENTS.CHANNEL_REMOVED, ({ channelId }) => {

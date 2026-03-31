@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useChannelStore } from "../../stores/channelStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useChatStore } from "../../stores/chatStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 import {
   Hash,
   Lock,
@@ -58,6 +59,7 @@ export default function NavigationSidebar({
     useChannelStore();
   const { user } = useAuthStore();
   const { onlineUsers } = useChatStore();
+  const { switchWorkspace } = useWorkspaceStore();
   const [expandedSections, setExpandedSections] = useState({
     channels: true,
     privateChannels: true,
@@ -79,13 +81,13 @@ export default function NavigationSidebar({
   };
 
   const projectChannels = channels.filter(
-    (c) => c.type === "project" && !c.isArchived,
+    (c) => c.type === "project" && c.visibility !== "private" && !c.isArchived,
   );
   const publicChannels = channels.filter(
     (c) => c.type === "public" && !c.isArchived,
   );
   const privateChannels = channels.filter(
-    (c) => c.type === "private" && !c.isArchived,
+    (c) => (c.type === "private" || (c.visibility === "private" && c.type !== "dm" && c.type !== "system")) && !c.isArchived,
   );
   const dmChannels = useMemo(() => {
     const currentChatId = user?._id?.toString?.();
@@ -432,7 +434,16 @@ export default function NavigationSidebar({
         <CreateWorkspaceModal onClose={() => setShowCreateWorkspace(false)} />
       )}
       {showJoinWorkspace && (
-        <JoinWorkspaceModal onClose={() => setShowJoinWorkspace(false)} />
+        <JoinWorkspaceModal
+          onClose={() => setShowJoinWorkspace(false)}
+          onJoined={(workspace) => {
+            setShowJoinWorkspace(false);
+            if (workspace?._id) {
+              switchWorkspace(workspace._id);
+              navigate(`/chat/${workspace._id}`);
+            }
+          }}
+        />
       )}
       {showWorkspaceSettings && (
         <WorkspaceSettingsModal
@@ -466,7 +477,10 @@ function NavButton({ icon: Icon, label, onClick, badge }) {
 /* ─── Channel List Item ────────────────────────────────────────────────── */
 
 function ChannelListItem({ channel, isActive, unread, onClick, onlineUsers }) {
-  const Icon = CHANNEL_ICONS[channel.type] || Hash;
+  // Determine icon from visibility (not type) so Lock/Hash is always correct
+  let Icon = CHANNEL_ICONS[channel.type] || Hash;
+  if (channel.visibility === 'private') Icon = Lock;
+  else if (channel.visibility === 'public') Icon = Hash;
 
   return (
     <SidebarItem

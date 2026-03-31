@@ -341,21 +341,21 @@ class ChannelService {
     }
 
     // ── Verify workspace membership (ChatUser is global — workspace link is via WorkspaceMembership) ──
-    let membership = await workspaceRepository.getMembership(workspaceId, targetUser._id);
+    let membership = await workspaceRepository.getMembership(targetUser._id, workspaceId);
 
     if (!membership) {
       // Auto-add FlowTask users to workspace if they've been synced but not yet added as members
       if (targetUser.authProvider === 'flowtask' && targetUser.flowTaskUserId) {
         try {
-          await workspaceRepository.addMember(workspaceId, targetUser._id, CHANNEL_MEMBER_ROLES.MEMBER);
+          await workspaceRepository.addMember(targetUser._id, workspaceId, CHANNEL_MEMBER_ROLES.MEMBER);
           logger.info('Auto-added FlowTask user to workspace for DM', {
             userId: targetUser._id,
             workspaceId,
           });
-          membership = await workspaceRepository.getMembership(workspaceId, targetUser._id);
+          membership = await workspaceRepository.getMembership(targetUser._id, workspaceId);
         } catch (addError) {
           // Re-check membership in case of race condition (concurrent add)
-          membership = await workspaceRepository.getMembership(workspaceId, targetUser._id);
+          membership = await workspaceRepository.getMembership(targetUser._id, workspaceId);
           if (!membership) {
             logger.error('Failed to auto-add FlowTask user to workspace', {
               userId: targetUser._id,

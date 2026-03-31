@@ -38,6 +38,8 @@ class WorkspaceRepository {
   }
 
   // ─── Membership ──────────────────────────────────────────────────────
+  // NOTE: Model statics use signature (userId, workspaceId).
+  // Repository methods also use (userId, workspaceId) to match.
 
   async getUserWorkspaces(userId) {
     return WorkspaceMembership.findUserWorkspaces(userId);
@@ -47,23 +49,23 @@ class WorkspaceRepository {
     return WorkspaceMembership.findWorkspaceMembers(workspaceId, options);
   }
 
-  async isMember(workspaceId, userId) {
-    return WorkspaceMembership.isMember(workspaceId, userId);
+  async isMember(userId, workspaceId) {
+    return WorkspaceMembership.isMember(userId, workspaceId);
   }
 
-  async getUserRole(workspaceId, userId) {
-    return WorkspaceMembership.getUserRole(workspaceId, userId);
+  async getUserRole(userId, workspaceId) {
+    return WorkspaceMembership.getUserRole(userId, workspaceId);
   }
 
-  async addMember(workspaceId, userId, role, invitedBy = null) {
-    return WorkspaceMembership.addMember(workspaceId, userId, role, invitedBy);
+  async addMember(userId, workspaceId, role, invitedBy = null) {
+    return WorkspaceMembership.addMember(userId, workspaceId, role, invitedBy);
   }
 
-  async removeMember(workspaceId, userId) {
-    return WorkspaceMembership.removeMember(workspaceId, userId);
+  async removeMember(userId, workspaceId) {
+    return WorkspaceMembership.removeMember(userId, workspaceId);
   }
 
-  async updateMemberRole(workspaceId, userId, newRole) {
+  async updateMemberRole(userId, workspaceId, newRole) {
     return WorkspaceMembership.findOneAndUpdate(
       { workspaceId, userId, isActive: true },
       { role: newRole },
@@ -75,7 +77,7 @@ class WorkspaceRepository {
     return WorkspaceMembership.countMembers(workspaceId);
   }
 
-  async getMembership(workspaceId, userId) {
+  async getMembership(userId, workspaceId) {
     return WorkspaceMembership.findOne({
       workspaceId,
       userId,

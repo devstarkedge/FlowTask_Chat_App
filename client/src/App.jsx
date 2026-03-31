@@ -41,7 +41,7 @@ function App() {
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-3 border-t-transparent rounded-full animate-spin"
             style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }} />
-          <p style={{ color: 'var(--text-secondary)' }}>Connecting to FlowTask Chat...</p>
+          <p style={{ color: 'var(--text-secondary)' }}>Loading...</p>
         </div>
       </div>
     )

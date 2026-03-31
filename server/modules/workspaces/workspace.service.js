@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import mongoose from 'mongoose';
 import workspaceRepository from './workspace.repository.js';
 import { WORKSPACE_ROLES, WORKSPACE_LIMITS, DEFAULT_CHANNELS, CHANNEL_VISIBILITY, CHANNEL_MEMBER_ROLES } from '../../config/constants.js';
 import env from '../../config/environment.js';
@@ -26,11 +27,11 @@ class WorkspaceService {
     const existing = await workspaceRepository.findFlowTaskWorkspace();
     if (existing) {
       // Ensure user is a member
-      const isMember = await workspaceRepository.isMember(existing._id, creatorId);
+      const isMember = await workspaceRepository.isMember(creatorId, existing._id);
       if (!isMember) {
         await workspaceRepository.addMember(
-          existing._id,
           creatorId,
+          existing._id,
           WORKSPACE_ROLES.MEMBER,
         );
         logger.info('FlowTask user auto-added to workspace', {
@@ -72,6 +73,7 @@ class WorkspaceService {
   /**
    * Create a new workspace. Creator becomes the owner.
    * Auto-creates #general and #random default channels.
+   * Uses a MongoDB transaction so workspace + owner membership are atomic.
    */
   async createWorkspace(data, creatorId) {
     const { name, description, logo, plan = 'free', source = 'independent' } = data;
@@ -83,26 +85,37 @@ class WorkspaceService {
       throw new BadRequestError(`Workspace slug "${slug}" is already taken.`);
     }
 
-    // Create workspace
-    const workspace = await workspaceRepository.create({
-      name,
-      slug,
-      description,
-      logo,
-      plan,
-      source,
-      owner: creatorId,
-      inviteCode: crypto.randomBytes(16).toString('hex'),
-    });
+    // Atomic: workspace creation + owner membership
+    const session = await mongoose.startSession();
+    let workspace;
+    try {
+      await session.withTransaction(async () => {
+        const [ws] = await mongoose.model('Workspace').create([{
+          name,
+          slug,
+          description,
+          logo,
+          plan,
+          source,
+          owner: creatorId,
+          memberCount: 1,
+          inviteCode: crypto.randomBytes(16).toString('hex'),
+        }], { session });
+        workspace = ws;
 
-    // Add creator as owner member
-    await workspaceRepository.addMember(
-      workspace._id,
-      creatorId,
-      WORKSPACE_ROLES.OWNER,
-    );
+        await mongoose.model('WorkspaceMembership').create([{
+          userId: creatorId,
+          workspaceId: ws._id,
+          role: WORKSPACE_ROLES.OWNER,
+          isActive: true,
+          joinedAt: new Date(),
+        }], { session });
+      });
+    } finally {
+      await session.endSession();
+    }
 
-    // Auto-create default channels (#general, #random)
+    // Default channels are non-critical — create outside transaction
     await this._createDefaultChannels(workspace._id, creatorId);
 
     logger.info(`Workspace created: ${workspace.name} (${workspace.slug}) by user ${creatorId}`);
@@ -169,7 +182,7 @@ class WorkspaceService {
     const workspace = await this.getWorkspace(workspaceId);
 
     // Only owner/admin can update
-    const role = await workspaceRepository.getUserRole(workspaceId, requesterId);
+    const role = await workspaceRepository.getUserRole(requesterId, workspaceId);
     if (!role || ![WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN].includes(role)) {
       throw new ForbiddenError('Only workspace owner or admin can update settings.');
     }
@@ -229,12 +242,12 @@ class WorkspaceService {
     }
 
     // Check if already a member
-    const isMember = await workspaceRepository.isMember(workspaceId, userId);
+    const isMember = await workspaceRepository.isMember(userId, workspaceId);
     if (isMember) {
       throw new BadRequestError('User is already a member of this workspace.');
     }
 
-    const membership = await workspaceRepository.addMember(workspaceId, userId, role, invitedBy);
+    const membership = await workspaceRepository.addMember(userId, workspaceId, role, invitedBy);
     logger.info(`User ${userId} invited to workspace ${workspaceId} as ${role}`);
 
     return membership;
@@ -244,8 +257,8 @@ class WorkspaceService {
    * Remove a member from a workspace.
    */
   async removeMember(workspaceId, userId, requesterId) {
-    const requesterRole = await workspaceRepository.getUserRole(workspaceId, requesterId);
-    const targetRole = await workspaceRepository.getUserRole(workspaceId, userId);
+    const requesterRole = await workspaceRepository.getUserRole(requesterId, workspaceId);
+    const targetRole = await workspaceRepository.getUserRole(userId, workspaceId);
 
     if (!requesterRole) {
       throw new ForbiddenError('You are not a member of this workspace.');
@@ -266,7 +279,7 @@ class WorkspaceService {
       throw new ForbiddenError('Admins cannot remove other admins.');
     }
 
-    await workspaceRepository.removeMember(workspaceId, userId);
+    await workspaceRepository.removeMember(userId, workspaceId);
     logger.info(`User ${userId} removed from workspace ${workspaceId} by ${requesterId}`);
 
     return { message: 'Member removed successfully.' };
@@ -276,7 +289,7 @@ class WorkspaceService {
    * Update a member's role.
    */
   async updateMemberRole(workspaceId, userId, newRole, requesterId) {
-    const requesterRole = await workspaceRepository.getUserRole(workspaceId, requesterId);
+    const requesterRole = await workspaceRepository.getUserRole(requesterId, workspaceId);
 
     // Only owner can change roles
     if (requesterRole !== WORKSPACE_ROLES.OWNER) {
@@ -288,7 +301,7 @@ class WorkspaceService {
       throw new BadRequestError('Cannot change your own role.');
     }
 
-    return workspaceRepository.updateMemberRole(workspaceId, userId, newRole);
+    return workspaceRepository.updateMemberRole(userId, workspaceId, newRole);
   }
 
   /**
@@ -301,7 +314,7 @@ class WorkspaceService {
     }
 
     // Check if already a member
-    const isMember = await workspaceRepository.isMember(workspace._id, userId);
+    const isMember = await workspaceRepository.isMember(userId, workspace._id);
     if (isMember) {
       return { workspace, alreadyMember: true };
     }
@@ -317,8 +330,8 @@ class WorkspaceService {
     }
 
     const membership = await workspaceRepository.addMember(
-      workspace._id,
       userId,
+      workspace._id,
       WORKSPACE_ROLES.MEMBER,
     );
 
@@ -331,7 +344,7 @@ class WorkspaceService {
    * Regenerate the invite code for a workspace.
    */
   async regenerateInviteCode(workspaceId, requesterId) {
-    const role = await workspaceRepository.getUserRole(workspaceId, requesterId);
+    const role = await workspaceRepository.getUserRole(requesterId, workspaceId);
     if (!role || ![WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN].includes(role)) {
       throw new ForbiddenError('Only owner or admin can regenerate invite codes.');
     }
@@ -394,12 +407,12 @@ class WorkspaceService {
     // Check if user exists and already in workspace
     const existingUser = await ChatUser.findOne({ email: email.toLowerCase() }).lean();
     if (existingUser) {
-      const isMember = await workspaceRepository.isMember(workspaceId, existingUser._id);
+      const isMember = await workspaceRepository.isMember(existingUser._id, workspaceId);
       if (isMember) {
         throw new BadRequestError('This user is already a member of this workspace.');
       }
       // User exists but not in workspace — add directly
-      const membership = await workspaceRepository.addMember(workspaceId, existingUser._id, role, invitedBy);
+      const membership = await workspaceRepository.addMember(existingUser._id, workspaceId, role, invitedBy);
       await emailService.sendWorkspaceInviteEmail(
         email,
         workspace.name,
@@ -467,14 +480,14 @@ class WorkspaceService {
     }
 
     // Check if already a member
-    const isMember = await workspaceRepository.isMember(workspace._id, userId);
+    const isMember = await workspaceRepository.isMember(userId, workspace._id);
     if (isMember) {
       await WorkspaceInvite.markAccepted(token, userId);
       return { workspace, alreadyMember: true };
     }
 
     // Add as member with the invite's role
-    const membership = await workspaceRepository.addMember(workspace._id, userId, invite.role);
+    const membership = await workspaceRepository.addMember(userId, workspace._id, invite.role);
     await WorkspaceInvite.markAccepted(token, userId);
 
     logger.info(`User ${userId} accepted invite to workspace ${workspace.slug}`);
@@ -508,7 +521,7 @@ class WorkspaceService {
    */
   async getWorkspaceBilling(workspaceId, requesterId) {
     const workspace = await this.getWorkspace(workspaceId);
-    const role = await workspaceRepository.getUserRole(workspaceId, requesterId);
+    const role = await workspaceRepository.getUserRole(requesterId, workspaceId);
     if (!role || ![WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN].includes(role)) {
       throw new ForbiddenError('Only workspace owner or admin can view billing.');
     }
@@ -560,7 +573,7 @@ class WorkspaceService {
    * Leave a workspace (self-remove).
    */
   async leaveWorkspace(workspaceId, userId) {
-    const role = await workspaceRepository.getUserRole(workspaceId, userId);
+    const role = await workspaceRepository.getUserRole(userId, workspaceId);
 
     if (!role) {
       throw new BadRequestError('You are not a member of this workspace.');
@@ -572,7 +585,7 @@ class WorkspaceService {
       );
     }
 
-    await workspaceRepository.removeMember(workspaceId, userId);
+    await workspaceRepository.removeMember(userId, workspaceId);
     logger.info(`User ${userId} left workspace ${workspaceId}`);
 
     return { message: 'Left workspace successfully.' };

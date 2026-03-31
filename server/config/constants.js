@@ -290,7 +290,7 @@ export const EVENT_PROCESSING = Object.freeze({
 export const BOT = Object.freeze({
   SYSTEM_USER_ID: 'SYSTEM_BOT',
   DISPLAY_NAME: 'FlowTask Bot',
-  AVATAR: '/assets/bot-avatar.png',
+  AVATAR: '/bot_6819665.png',
   DEADLINE_CHECK_CRON: '0 9 * * *',       // Daily at 9 AM
   DEADLINE_WARNING_HOURS: 24,              // Warn for tasks due within 24h
 });

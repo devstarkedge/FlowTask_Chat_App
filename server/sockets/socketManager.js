@@ -480,7 +480,7 @@ export async function initializeSocket(httpServer, corsOptions) {
       try {
         // Verify membership in target workspace
         const { default: workspaceRepository } = await import('../modules/workspaces/workspace.repository.js');
-        const isMember = await workspaceRepository.isMember(newWorkspaceId, userId);
+        const isMember = await workspaceRepository.isMember(userId, newWorkspaceId);
         if (!isMember) {
           socket.emit('error', { message: 'Not a member of target workspace' });
           return;

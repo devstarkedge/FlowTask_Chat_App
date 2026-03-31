@@ -335,6 +335,10 @@ export const useWorkspaceStore = create(
       name: 'flowtask-workspace-storage',
       partialize: (state) => ({
         activeWorkspaceId: state.activeWorkspaceId,
+        // Persist workspace object so sidebar shows correct name after refresh
+        activeWorkspace: state.activeWorkspace
+          ? { _id: state.activeWorkspace._id, name: state.activeWorkspace.name, slug: state.activeWorkspace.slug, logo: state.activeWorkspace.logo }
+          : null,
       }),
     },
   ),

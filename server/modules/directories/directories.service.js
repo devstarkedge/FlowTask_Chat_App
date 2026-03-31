@@ -43,9 +43,9 @@ class DirectoriesService {
           try {
             if (!ftu._id || !ftu.email) continue;
             const synced = await userRepository.upsertFromFlowTask(ftu);
-            const isMember = await workspaceRepository.isMember(workspaceId, synced._id);
+            const isMember = await workspaceRepository.isMember(synced._id, workspaceId);
             if (!isMember) {
-              await workspaceRepository.addMember(workspaceId, synced._id, 'member');
+              await workspaceRepository.addMember(synced._id, workspaceId, 'member');
             }
           } catch (err) {
             logger.warn('Directories: failed to sync FlowTask user into workspace', {

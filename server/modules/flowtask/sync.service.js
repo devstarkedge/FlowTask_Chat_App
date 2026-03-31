@@ -54,11 +54,11 @@ class FlowTaskSyncService {
         const chatUser = await userRepository.upsertFromFlowTask(ftUser);
 
         // Ensure workspace membership
-        const isMember = await workspaceRepository.isMember(workspaceId, chatUser._id);
+        const isMember = await workspaceRepository.isMember(chatUser._id, workspaceId);
         if (!isMember) {
           await workspaceRepository.addMember(
-            workspaceId,
             chatUser._id,
+            workspaceId,
             WORKSPACE_ROLES.MEMBER,
           );
           report.created++;

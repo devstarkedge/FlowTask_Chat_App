@@ -122,7 +122,7 @@ export default function WorkspaceSwitcher({
             className="text-xl font-bold truncate"
             style={{ color: "var(--text-white)" }}
           >
-            {isSwitching ? "Switching..." : activeWorkspace?.name || "FlowTask"}
+            {isSwitching ? "Switching..." : activeWorkspace?.name || ""}
           </p>
         </div>
         <ChevronDown

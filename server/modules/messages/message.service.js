@@ -271,7 +271,7 @@ class MessageService {
       content,
       htmlContent: content,
       contentType: MESSAGE_CONTENT_TYPES.SYSTEM,
-      senderSnapshot: { name: 'System', avatar: null },
+      senderSnapshot: { name: botUser.name, avatar: botUser.avatar },
       ...(workspaceId && { workspaceId }),
     };
 

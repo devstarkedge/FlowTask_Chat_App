@@ -130,7 +130,11 @@ workspaceMembershipSchema.statics.getUserRole = async function (userId, workspac
  * @returns {Promise<WorkspaceMembership>}
  */
 workspaceMembershipSchema.statics.addMember = async function (userId, workspaceId, role = 'member', invitedBy = null) {
-  return this.findOneAndUpdate(
+  const existing = await this.findOne({ userId, workspaceId }).lean();
+  const wasInactive = existing && !existing.isActive;
+  const isNew = !existing;
+
+  const membership = await this.findOneAndUpdate(
     { userId, workspaceId },
     {
       $set: { role, isActive: true },
@@ -138,6 +142,14 @@ workspaceMembershipSchema.statics.addMember = async function (userId, workspaceI
     },
     { upsert: true, new: true },
   );
+
+  // Sync denormalized memberCount on Workspace when a new member is added
+  if (isNew || wasInactive) {
+    const { default: Workspace } = await import('./Workspace.model.js');
+    await Workspace.updateOne({ _id: workspaceId }, { $inc: { memberCount: 1 } });
+  }
+
+  return membership;
 };
 
 /**
@@ -146,12 +158,20 @@ workspaceMembershipSchema.statics.addMember = async function (userId, workspaceI
  * @param {string} workspaceId
  * @returns {Promise<WorkspaceMembership|null>}
  */
-workspaceMembershipSchema.statics.removeMember = function (userId, workspaceId) {
-  return this.findOneAndUpdate(
-    { userId, workspaceId },
+workspaceMembershipSchema.statics.removeMember = async function (userId, workspaceId) {
+  const membership = await this.findOneAndUpdate(
+    { userId, workspaceId, isActive: true },
     { $set: { isActive: false } },
     { new: true },
   );
+
+  // Sync denormalized memberCount on Workspace
+  if (membership) {
+    const { default: Workspace } = await import('./Workspace.model.js');
+    await Workspace.updateOne({ _id: workspaceId }, { $inc: { memberCount: -1 } });
+  }
+
+  return membership;
 };
 
 /**

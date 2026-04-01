@@ -1,9 +1,9 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 import {
   CHANNEL_TYPES,
   CHANNEL_VISIBILITY,
   CHANNEL_MEMBER_ROLES,
-} from '../../config/constants.js';
+} from "../../config/constants.js";
 
 const { Schema, model } = mongoose;
 
@@ -20,167 +20,184 @@ const { Schema, model } = mongoose;
  * DM channels are chat-owned and not mapped to FlowTask entities.
  */
 
-const channelMemberSchema = new Schema({
-  userId: {
-    type: Schema.Types.ObjectId,
-    ref: 'ChatUser',
-    required: true,
+const channelMemberSchema = new Schema(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "ChatUser",
+      required: true,
+    },
+    role: {
+      type: String,
+      enum: Object.values(CHANNEL_MEMBER_ROLES),
+      default: CHANNEL_MEMBER_ROLES.MEMBER,
+    },
+    joinedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    // Per-member notification preferences
+    notificationsEnabled: {
+      type: Boolean,
+      default: true,
+    },
   },
-  role: {
-    type: String,
-    enum: Object.values(CHANNEL_MEMBER_ROLES),
-    default: CHANNEL_MEMBER_ROLES.MEMBER,
-  },
-  joinedAt: {
-    type: Date,
-    default: Date.now,
-  },
-  // Per-member notification preferences
-  notificationsEnabled: {
-    type: Boolean,
-    default: true,
-  },
-}, { _id: false });
+  { _id: false },
+);
 
-const flowTaskRefSchema = new Schema({
-  entityType: {
-    type: String,
-    enum: ['board', 'department', 'team'],
-    required: true,
+const flowTaskRefSchema = new Schema(
+  {
+    entityType: {
+      type: String,
+      enum: ["board", "department", "team"],
+      required: true,
+    },
+    entityId: {
+      type: String,
+      required: true,
+    },
   },
-  entityId: {
-    type: String,
-    required: true,
-  },
-}, { _id: false });
+  { _id: false },
+);
 
-const channelSchema = new Schema({
-  // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────
-  workspaceId: {
-    type: Schema.Types.ObjectId,
-    ref: 'Workspace',
-    required: true,
-    index: true,
-  },
+const channelSchema = new Schema(
+  {
+    // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────
+    workspaceId: {
+      type: Schema.Types.ObjectId,
+      ref: "Workspace",
+      required: true,
+      index: true,
+    },
 
-  name: {
-    type: String,
-    required: true,
-    maxlength: 80,
-  },
-  slug: {
-    type: String,
-    required: true,
-    // unique per workspace — compound index below replaces global unique
-    lowercase: true,
-    maxlength: 80,
-  },
-  type: {
-    type: String,
-    enum: Object.values(CHANNEL_TYPES),
-    required: true,
-    // index: removed — covered by compound { type: 1, isArchived: 1 }
-  },
-  // Reference to the FlowTask entity this channel represents.
-  // Null for DM and system channels without a direct entity mapping.
-  flowTaskRef: {
-    type: flowTaskRefSchema,
-    default: null,
-  },
-  description: {
-    type: String,
-    maxlength: 500,
-    default: '',
-  },
-  topic: {
-    type: String,
-    maxlength: 250,
-    default: '',
-  },
-  members: [channelMemberSchema],
+    name: {
+      type: String,
+      required: true,
+      maxlength: 80,
+    },
+    slug: {
+      type: String,
+      required: true,
+      // unique per workspace — compound index below replaces global unique
+      lowercase: true,
+      maxlength: 80,
+    },
+    type: {
+      type: String,
+      enum: Object.values(CHANNEL_TYPES),
+      required: true,
+      // index: removed — covered by compound { type: 1, isArchived: 1 }
+    },
+    // Reference to the FlowTask entity this channel represents.
+    // Null for DM and system channels without a direct entity mapping.
+    flowTaskRef: {
+      type: flowTaskRefSchema,
+      default: null,
+    },
+    description: {
+      type: String,
+      maxlength: 500,
+      default: "",
+    },
+    topic: {
+      type: String,
+      maxlength: 250,
+      default: "",
+    },
+    members: [channelMemberSchema],
 
-  visibility: {
-    type: String,
-    enum: Object.values(CHANNEL_VISIBILITY),
-    default: CHANNEL_VISIBILITY.PUBLIC,
+    visibility: {
+      type: String,
+      enum: Object.values(CHANNEL_VISIBILITY),
+      default: CHANNEL_VISIBILITY.PUBLIC,
+    },
+    // For DM channels: participant FlowTask user IDs for quick lookup
+    dmParticipants: [
+      {
+        type: String,
+      },
+    ],
+    // Deterministic key for one-to-one DM uniqueness within a workspace.
+    dmKey: {
+      type: String,
+      default: null,
+    },
+    isArchived: {
+      type: Boolean,
+      default: false,
+      // index: removed — covered by compound { type: 1, isArchived: 1 }
+    },
+    archivedAt: {
+      type: Date,
+      default: null,
+    },
+    archivedReason: {
+      type: String,
+      default: null,
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: "ChatUser",
+      default: null,
+    },
+    // ─── Denormalized fields for sidebar performance ───
+    memberCount: {
+      type: Number,
+      default: 0,
+    },
+    lastMessageAt: {
+      type: Date,
+      default: null,
+      // index: removed — covered by compound { members.userId: 1, lastMessageAt: -1 }
+    },
+    lastMessagePreview: {
+      type: String,
+      maxlength: 200,
+      default: "",
+    },
+    pinnedMessageIds: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "Message",
+      },
+    ],
+    // Whether this channel is system-managed (created by FlowTask integration)
+    systemManaged: {
+      type: Boolean,
+      default: false,
+    },
+    // Admin override rules for system-managed channels
+    adminOverrides: {
+      allowRename: { type: Boolean, default: false },
+      allowArchive: { type: Boolean, default: false },
+      allowMemberEdit: { type: Boolean, default: false },
+    },
+    metadata: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
+    isAI: {
+      type: Boolean,
+      default: false,
+    },
   },
-  // For DM channels: participant FlowTask user IDs for quick lookup
-  dmParticipants: [{
-    type: String,
-  }],
-  // Deterministic key for one-to-one DM uniqueness within a workspace.
-  dmKey: {
-    type: String,
-    default: null,
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   },
-  isArchived: {
-    type: Boolean,
-    default: false,
-    // index: removed — covered by compound { type: 1, isArchived: 1 }
-  },
-  archivedAt: {
-    type: Date,
-    default: null,
-  },
-  archivedReason: {
-    type: String,
-    default: null,
-  },
-  createdBy: {
-    type: Schema.Types.ObjectId,
-    ref: 'ChatUser',
-    default: null,
-  },
-  // ─── Denormalized fields for sidebar performance ───
-  memberCount: {
-    type: Number,
-    default: 0,
-  },
-  lastMessageAt: {
-    type: Date,
-    default: null,
-    // index: removed — covered by compound { members.userId: 1, lastMessageAt: -1 }
-  },
-  lastMessagePreview: {
-    type: String,
-    maxlength: 200,
-    default: '',
-  },
-  pinnedMessageIds: [{
-    type: Schema.Types.ObjectId,
-    ref: 'Message',
-  }],
-  // Whether this channel is system-managed (created by FlowTask integration)
-  systemManaged: {
-    type: Boolean,
-    default: false,
-  },
-  // Admin override rules for system-managed channels
-  adminOverrides: {
-    allowRename: { type: Boolean, default: false },
-    allowArchive: { type: Boolean, default: false },
-    allowMemberEdit: { type: Boolean, default: false },
-  },
-  metadata: {
-    type: Schema.Types.Mixed,
-    default: {},
-  },
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true },
-});
+);
 
 // ─── Compound Indexes (all workspace-scoped) ────────────────────────────────
 // Workspace-scoped unique slug (replaces global unique)
 channelSchema.index({ workspaceId: 1, slug: 1 }, { unique: true });
 // Fast lookup by FlowTask entity within a workspace
 channelSchema.index(
-  { workspaceId: 1, 'flowTaskRef.entityType': 1, 'flowTaskRef.entityId': 1 },
+  { workspaceId: 1, "flowTaskRef.entityType": 1, "flowTaskRef.entityId": 1 },
   { sparse: true, unique: true },
 );
 // User's channel list sorted by recent activity within workspace
-channelSchema.index({ workspaceId: 1, 'members.userId': 1, lastMessageAt: -1 });
+channelSchema.index({ workspaceId: 1, "members.userId": 1, lastMessageAt: -1 });
 // DM participant lookup within workspace
 channelSchema.index({ workspaceId: 1, dmParticipants: 1 }, { sparse: true });
 // Ensure single DM per participant pair per workspace
@@ -190,7 +207,7 @@ channelSchema.index(
     unique: true,
     partialFilterExpression: {
       type: CHANNEL_TYPES.DM,
-      dmKey: { $type: 'string' },
+      dmKey: { $type: "string" },
     },
   },
 );
@@ -198,8 +215,8 @@ channelSchema.index(
 channelSchema.index({ workspaceId: 1, type: 1, isArchived: 1 });
 
 // ─── Pre-save hooks ──────────────────────────────────────────────────────────
-channelSchema.pre('save', function (next) {
-  if (this.isModified('members')) {
+channelSchema.pre("save", function (next) {
+  if (this.isModified("members")) {
     this.memberCount = this.members.length;
   }
   next();
@@ -211,7 +228,9 @@ channelSchema.methods.hasMember = function (userId) {
 };
 
 channelSchema.methods.getMemberRole = function (userId) {
-  const member = this.members.find((m) => m.userId.toString() === userId.toString());
+  const member = this.members.find(
+    (m) => m.userId.toString() === userId.toString(),
+  );
   return member?.role || null;
 };
 
@@ -220,17 +239,25 @@ channelSchema.methods.isOwner = function (userId) {
 };
 
 // ─── Static Methods ──────────────────────────────────────────────────────────
-channelSchema.statics.findByFlowTaskRef = function (entityType, entityId, workspaceId) {
+channelSchema.statics.findByFlowTaskRef = function (
+  entityType,
+  entityId,
+  workspaceId,
+) {
   const filter = {
-    'flowTaskRef.entityType': entityType,
-    'flowTaskRef.entityId': entityId,
+    "flowTaskRef.entityType": entityType,
+    "flowTaskRef.entityId": entityId,
   };
   if (workspaceId) filter.workspaceId = workspaceId;
   return this.findOne(filter);
 };
 
-channelSchema.statics.findUserChannels = function (userId, includeArchived = false, workspaceId) {
-  const filter = { 'members.userId': userId };
+channelSchema.statics.findUserChannels = function (
+  userId,
+  includeArchived = false,
+  workspaceId,
+) {
+  const filter = { "members.userId": userId };
   if (!includeArchived) filter.isArchived = false;
   if (workspaceId) filter.workspaceId = workspaceId;
   return this.find(filter).sort({ lastMessageAt: -1 });
@@ -246,6 +273,6 @@ channelSchema.statics.findDMChannel = function (participantIds, workspaceId) {
   return this.findOne(filter);
 };
 
-const Channel = model('Channel', channelSchema);
+const Channel = model("Channel", channelSchema);
 
 export default Channel;

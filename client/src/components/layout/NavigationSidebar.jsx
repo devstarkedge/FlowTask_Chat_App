@@ -8,7 +8,7 @@ import {
   Lock,
   MessageCircle,
   Users,
-  Plus,
+  Bot,
   Search,
   Volume2,
   X,
@@ -30,7 +30,11 @@ import CreateWorkspaceModal from "../workspace/CreateWorkspaceModal";
 import JoinWorkspaceModal from "../workspace/JoinWorkspaceModal";
 import WorkspaceSettingsModal from "../workspace/WorkspaceSettingsModal";
 import { formatDistanceToNowStrict } from "date-fns";
-import { getChannelPath, getDMPath, getDirectoriesPath } from "../../utils/chatRoutes";
+import {
+  getChannelPath,
+  getDMPath,
+  getDirectoriesPath,
+} from "../../utils/chatRoutes";
 import SidebarContainer from "./sidebar/SidebarContainer";
 import SidebarItem from "./sidebar/SidebarItem";
 import SidebarSection from "./sidebar/SidebarSection";
@@ -46,7 +50,7 @@ const CHANNEL_ICONS = {
 };
 
 export default function NavigationSidebar({
-  mode = 'home',
+  mode = "home",
   onClose,
   onToggleAllThreads,
   onToggleNotifications,
@@ -99,7 +103,9 @@ export default function NavigationSidebar({
           ? c.dmParticipants.map((p) => p?.toString?.() || String(p))
           : [];
         const recipientId =
-          c.dmRecipientId || participants.find((p) => p && !selfIds.has(p)) || null;
+          c.dmRecipientId ||
+          participants.find((p) => p && !selfIds.has(p)) ||
+          null;
         return { ...c, dmRecipientId: recipientId };
       });
   }, [channels, user]);
@@ -110,7 +116,7 @@ export default function NavigationSidebar({
     (c) => (c.type === "department" || c.type === "team") && !c.isArchived,
   );
 
-  const isDMMode = mode === 'dms';
+  const isDMMode = mode === "dms";
 
   const filteredChannels = (list) => {
     if (!searchQuery) return list;
@@ -137,14 +143,19 @@ export default function NavigationSidebar({
     setActiveChannel(channelId);
 
     if (workspaceId && channel) {
-      const nextPath = channel.type === 'dm'
-        ? getDMPath(workspaceId, channelId)
-        : getChannelPath(workspaceId, channelId);
+      const nextPath =
+        channel.type === "dm"
+          ? getDMPath(workspaceId, channelId)
+          : getChannelPath(workspaceId, channelId);
       navigate(nextPath);
     }
 
     onClose?.();
   };
+
+  const handleChatBot = () =>{
+    
+  }
 
   const header = (
     <>
@@ -183,7 +194,10 @@ export default function NavigationSidebar({
               border: "1px solid var(--border-primary)",
             }}
           >
-            <Search size={18} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+            <Search
+              size={18}
+              style={{ color: "var(--text-muted)", flexShrink: 0 }}
+            />
             <input
               type="text"
               placeholder="Search conversations..."
@@ -228,10 +242,7 @@ export default function NavigationSidebar({
 
   return (
     <>
-      <SidebarContainer
-        header={header}
-        aria-label="Channels sidebar"
-      >
+      <SidebarContainer header={header} aria-label="Channels sidebar">
         {/* Quick Nav Items (Home mode only) */}
         {!isDMMode && (
           <div className="px-3 pt-3 pb-2">
@@ -310,7 +321,10 @@ export default function NavigationSidebar({
                 />
               ))}
               {filteredChannels(systemChannels).length === 0 && (
-                <p className="text-xs px-3 py-2" style={{ color: "var(--text-muted)" }}>
+                <p
+                  className="text-xs px-3 py-2"
+                  style={{ color: "var(--text-muted)" }}
+                >
                   No channels yet
                 </p>
               )}
@@ -320,7 +334,9 @@ export default function NavigationSidebar({
           {!isDMMode && (
             <SidebarSection
               title="Channels"
-              count={[...publicChannels, ...projectChannels, ...deptChannels].length}
+              count={
+                [...publicChannels, ...projectChannels, ...deptChannels].length
+              }
               expanded={expandedSections.channels}
               onToggle={() => toggleSection("channels")}
               showAdd
@@ -343,8 +359,15 @@ export default function NavigationSidebar({
                   onlineUsers={onlineUsers}
                 />
               ))}
-              {filteredChannels([...publicChannels, ...projectChannels, ...deptChannels]).length === 0 && (
-                <p className="text-xs px-3 py-2" style={{ color: "var(--text-muted)" }}>
+              {filteredChannels([
+                ...publicChannels,
+                ...projectChannels,
+                ...deptChannels,
+              ]).length === 0 && (
+                <p
+                  className="text-xs px-3 py-2"
+                  style={{ color: "var(--text-muted)" }}
+                >
                   No channels yet
                 </p>
               )}
@@ -358,21 +381,23 @@ export default function NavigationSidebar({
               expanded={expandedSections.privateChannels}
               onToggle={() => toggleSection("privateChannels")}
             >
-              {sortChannels(filteredChannels(privateChannels)).map((channel) => (
-                <ChannelListItem
-                  key={channel._id}
-                  channel={channel}
-                  isActive={channel._id === activeChannelId}
-                  unread={unreads[channel._id] || 0}
-                  onClick={() => handleSelectChannel(channel._id)}
-                  onlineUsers={onlineUsers}
-                />
-              ))}
+              {sortChannels(filteredChannels(privateChannels)).map(
+                (channel) => (
+                  <ChannelListItem
+                    key={channel._id}
+                    channel={channel}
+                    isActive={channel._id === activeChannelId}
+                    unread={unreads[channel._id] || 0}
+                    onClick={() => handleSelectChannel(channel._id)}
+                    onlineUsers={onlineUsers}
+                  />
+                ),
+              )}
             </SidebarSection>
           )}
 
           <SidebarSection
-            title={isDMMode ? 'Direct messages' : 'Direct Messages'}
+            title={isDMMode ? "Direct messages" : "Direct Messages"}
             count={dmChannels.length}
             expanded={expandedSections.dms}
             onToggle={() => toggleSection("dms")}
@@ -391,8 +416,13 @@ export default function NavigationSidebar({
               />
             ))}
             {filteredChannels(dmChannels).length === 0 && (
-              <p className="text-xs px-3 py-2" style={{ color: "var(--text-muted)" }}>
-                {isDMMode ? "Start a direct message to begin private conversations." : "No conversations yet"}
+              <p
+                className="text-xs px-3 py-2"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {isDMMode
+                  ? "Start a direct message to begin private conversations."
+                  : "No conversations yet"}
               </p>
             )}
           </SidebarSection>
@@ -450,13 +480,15 @@ function NavButton({ icon: Icon, label, onClick, badge }) {
     <button
       onClick={onClick}
       className="sidebar-item"
-      style={{ padding: '8px 12px' }}
+      style={{ padding: "8px 12px" }}
     >
       <span className="sidebar-item-icon">
         <Icon size={18} style={{ opacity: 0.8 }} />
       </span>
       <span className="sidebar-item-content">
-        <span className="sidebar-item-label" style={{ fontWeight: 500 }}>{label}</span>
+        <span className="sidebar-item-label" style={{ fontWeight: 500 }}>
+          {label}
+        </span>
       </span>
       {badge > 0 && <span className="badge badge-red">{badge}</span>}
     </button>
@@ -515,7 +547,9 @@ function DMListItem({ channel, isActive, unread, onClick, onlineUsers }) {
               style={{
                 width: 10,
                 height: 10,
-                background: isAway ? "var(--status-away)" : "var(--status-online)",
+                background: isAway
+                  ? "var(--status-away)"
+                  : "var(--status-online)",
                 border: "2px solid var(--bg-sidebar)",
                 bottom: -1,
                 right: -1,
@@ -526,11 +560,18 @@ function DMListItem({ channel, isActive, unread, onClick, onlineUsers }) {
       }
       label={channel.name}
       sublabel={channel.lastMessagePreview || undefined}
-      meta={timeAgo && (
-        <span className="text-[11px]" style={{ color: isActive ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)' }}>
-          {timeAgo}
-        </span>
-      )}
+      meta={
+        timeAgo && (
+          <span
+            className="text-[11px]"
+            style={{
+              color: isActive ? "rgba(255,255,255,0.7)" : "var(--text-muted)",
+            }}
+          >
+            {timeAgo}
+          </span>
+        )
+      }
       isActive={isActive}
       isBold={unread > 0}
       badge={unread}

@@ -1,5 +1,5 @@
-import channelService from './channel.service.js';
-import asyncHandler from '../../middleware/asyncHandler.js';
+import channelService from "./channel.service.js";
+import asyncHandler from "../../middleware/asyncHandler.js";
 
 /**
  * Channel Controller — REST endpoints for channel operations.
@@ -10,7 +10,10 @@ import asyncHandler from '../../middleware/asyncHandler.js';
  * Get all channels for the authenticated user.
  */
 export const getChannels = asyncHandler(async (req, res) => {
-  const channels = await channelService.getChannelsForUser(req.user._id, req.workspaceId);
+  const channels = await channelService.getChannelsForUser(
+    req.user._id,
+    req.workspaceId,
+  );
 
   res.json({
     success: true,
@@ -23,7 +26,11 @@ export const getChannels = asyncHandler(async (req, res) => {
  * Get a single channel by ID.
  */
 export const getChannel = asyncHandler(async (req, res) => {
-  const channel = await channelService.getChannelById(req.params.id, req.user._id, req.workspaceId);
+  const channel = await channelService.getChannelById(
+    req.params.id,
+    req.user._id,
+    req.workspaceId,
+  );
 
   res.json({
     success: true,
@@ -36,7 +43,10 @@ export const getChannel = asyncHandler(async (req, res) => {
  * Get a channel by slug.
  */
 export const getChannelBySlug = asyncHandler(async (req, res) => {
-  const channel = await channelService.getChannelBySlug(req.params.slug, req.workspaceId);
+  const channel = await channelService.getChannelBySlug(
+    req.params.slug,
+    req.workspaceId,
+  );
 
   res.json({
     success: true,
@@ -54,14 +64,14 @@ export const createChannel = asyncHandler(async (req, res) => {
   if (!name || name.trim().length < 2) {
     return res.status(400).json({
       success: false,
-      error: { message: 'Channel name is required (min 2 characters)' },
+      error: { message: "Channel name is required (min 2 characters)" },
     });
   }
 
   if (name.trim().length > 80) {
     return res.status(400).json({
       success: false,
-      error: { message: 'Channel name must not exceed 80 characters' },
+      error: { message: "Channel name must not exceed 80 characters" },
     });
   }
 
@@ -100,7 +110,11 @@ export const updateChannel = asyncHandler(async (req, res) => {
  * Archive a channel.
  */
 export const archiveChannel = asyncHandler(async (req, res) => {
-  const channel = await channelService.archiveChannel(req.params.id, req.user._id, req.workspaceId);
+  const channel = await channelService.archiveChannel(
+    req.params.id,
+    req.user._id,
+    req.workspaceId,
+  );
 
   res.json({
     success: true,
@@ -124,18 +138,18 @@ export const createDM = asyncHandler(async (req, res) => {
   const { targetUserId } = req.body;
   const { _id: senderId } = req.user;
   const workspaceId = req.workspaceId;
-  const workspaceName = req.workspace?.name || '';
+  const workspaceName = req.workspace?.name || "";
 
   if (!targetUserId) {
     return res.status(400).json({
       success: false,
-      error: { message: 'targetUserId is required' },
+      error: { message: "targetUserId is required" },
     });
   }
 
   try {
     // ── Resolve & validate target user exists in this workspace ──
-    const flowTaskToken = req.flowTaskToken || req.headers['x-flowtask-token'];
+    const flowTaskToken = req.flowTaskToken || req.headers["x-flowtask-token"];
     const { chatUserId } = await channelService.resolveAndValidateDMTarget(
       targetUserId,
       workspaceId,
@@ -156,21 +170,21 @@ export const createDM = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     // Surface user-friendly forbidden errors to the client
-    if (error.name === 'ForbiddenError' || error.statusCode === 403) {
-      const logger = (await import('../../utils/logger.js')).default;
-      logger.warn('DM creation blocked', {
+    if (error.name === "ForbiddenError" || error.statusCode === 403) {
+      const logger = (await import("../../utils/logger.js")).default;
+      logger.warn("DM creation blocked", {
         senderId: senderId.toString(),
         targetUserId,
         workspaceId,
-        reason: 'target_not_in_workspace',
+        reason: "target_not_in_workspace",
         ip: req.ip,
-        userAgent: req.get('user-agent'),
+        userAgent: req.get("user-agent"),
       });
 
       return res.status(403).json({
         success: false,
         error: {
-          code: 'USER_NOT_IN_WORKSPACE',
+          code: "USER_NOT_IN_WORKSPACE",
           message: error.message,
         },
       });
@@ -189,11 +203,16 @@ export const addMember = asyncHandler(async (req, res) => {
   if (!userId) {
     return res.status(400).json({
       success: false,
-      error: { message: 'userId is required' },
+      error: { message: "userId is required" },
     });
   }
 
-  const channel = await channelService.addMember(req.params.id, userId, role, req.workspaceId);
+  const channel = await channelService.addMember(
+    req.params.id,
+    userId,
+    role,
+    req.workspaceId,
+  );
 
   res.json({
     success: true,
@@ -243,7 +262,7 @@ export const leaveChannel = asyncHandler(async (req, res) => {
  */
 export const searchChannels = asyncHandler(async (req, res) => {
   const channels = await channelService.searchChannels(
-    req.query.q || '',
+    req.query.q || "",
     req.user._id,
     req.workspaceId,
   );
@@ -271,5 +290,25 @@ export const getChannelMembers = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: { members, total: members.length },
+  });
+});
+
+export const createAIDM = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const workspaceId = req.workspaceId;
+
+  // 1 Check if AI DM already exists
+  let channel = await channelService.getAIDMChannel(userId, workspaceId);
+
+  // 2 Create if not exists
+  if (!channel) {
+    channel = await channelService.createAIDMChannel(userId, workspaceId);
+  }
+
+  res.json({
+    success: true,
+    data: {
+      channelId: channel._id,
+    },
   });
 });

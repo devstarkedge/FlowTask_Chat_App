@@ -1,17 +1,38 @@
-import Channel from './Channel.model.js';
-import ChannelMember from './ChannelMember.model.js';
-import channelRepository from './channel.repository.js';
-import userRepository from '../users/user.repository.js';
-import flowtaskService from '../flowtask/flowtask.service.js';
-import workspaceRepository from '../workspaces/workspace.repository.js';
-import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
-import directMessageService from '../dms/directMessage.service.js';
-import { emitToChannel, emitToUser, joinChannelRoom } from '../../sockets/socketManager.js';
-import { slugify, projectChannelSlug, departmentChannelSlug, teamChannelSlug, appendCollisionSuffix } from '../../utils/slugify.js';
-import { sanitizeHtml, stripHtml, truncate } from '../../utils/sanitize.js';
-import logger from '../../utils/logger.js';
-import { CHANNEL_TYPES, CHANNEL_VISIBILITY, SYSTEM_CHANNELS, SOCKET_EVENTS, CHANNEL_MEMBER_ROLES } from '../../config/constants.js';
-import { ValidationError, NotFoundError, ForbiddenError, ConflictError } from '../../middleware/errorHandler.js';
+import Channel from "./Channel.model.js";
+import ChannelMember from "./ChannelMember.model.js";
+import channelRepository from "./channel.repository.js";
+import userRepository from "../users/user.repository.js";
+import flowtaskService from "../flowtask/flowtask.service.js";
+import workspaceRepository from "../workspaces/workspace.repository.js";
+import WorkspaceMembership from "../workspaces/WorkspaceMembership.model.js";
+import directMessageService from "../dms/directMessage.service.js";
+import {
+  emitToChannel,
+  emitToUser,
+  joinChannelRoom,
+} from "../../sockets/socketManager.js";
+import {
+  slugify,
+  projectChannelSlug,
+  departmentChannelSlug,
+  teamChannelSlug,
+  appendCollisionSuffix,
+} from "../../utils/slugify.js";
+import { sanitizeHtml, stripHtml, truncate } from "../../utils/sanitize.js";
+import logger from "../../utils/logger.js";
+import {
+  CHANNEL_TYPES,
+  CHANNEL_VISIBILITY,
+  SYSTEM_CHANNELS,
+  SOCKET_EVENTS,
+  CHANNEL_MEMBER_ROLES,
+} from "../../config/constants.js";
+import {
+  ValidationError,
+  NotFoundError,
+  ForbiddenError,
+  ConflictError,
+} from "../../middleware/errorHandler.js";
 
 /**
  * Channel Service — business logic for channel CRUD, membership, and FlowTask entity mapping.
@@ -32,18 +53,28 @@ class ChannelService {
    */
   async createProjectChannel(board, creatorFlowTaskId, workspaceId) {
     if (!workspaceId) {
-      throw new ValidationError('workspaceId is required to create a project channel');
+      throw new ValidationError(
+        "workspaceId is required to create a project channel",
+      );
     }
 
     const boardId = board._id || board.id;
     const boardName = board.name || board.title;
-    const deptName = typeof board.department === 'object'
-      ? (board.department?.name || 'general')
-      : 'general';
+    const deptName =
+      typeof board.department === "object"
+        ? board.department?.name || "general"
+        : "general";
 
-    const existing = await channelRepository.findByFlowTaskRef('board', boardId, workspaceId);
+    const existing = await channelRepository.findByFlowTaskRef(
+      "board",
+      boardId,
+      workspaceId,
+    );
     if (existing) {
-      logger.info('Project channel already exists', { boardId, slug: existing.slug });
+      logger.info("Project channel already exists", {
+        boardId,
+        slug: existing.slug,
+      });
       return existing;
     }
 
@@ -65,19 +96,26 @@ class ChannelService {
       name: boardName,
       slug,
       type: CHANNEL_TYPES.PROJECT,
-      flowTaskRef: { entityType: 'board', entityId: boardId },
-      description: board.description ? truncate(stripHtml(board.description), 200) : '',
-      visibility: board.visibility === 'public'
-        ? CHANNEL_VISIBILITY.PUBLIC
-        : CHANNEL_VISIBILITY.PRIVATE,
+      flowTaskRef: { entityType: "board", entityId: boardId },
+      description: board.description
+        ? truncate(stripHtml(board.description), 200)
+        : "",
+      visibility:
+        board.visibility === "public"
+          ? CHANNEL_VISIBILITY.PUBLIC
+          : CHANNEL_VISIBILITY.PRIVATE,
       members,
       memberCount: members.length,
       workspaceId,
       systemManaged: true,
-      adminOverrides: { allowRename: false, allowArchive: false, allowMemberEdit: false },
+      adminOverrides: {
+        allowRename: false,
+        allowArchive: false,
+        allowMemberEdit: false,
+      },
     });
 
-    logger.info('Project channel created', {
+    logger.info("Project channel created", {
       channelId: channel._id,
       slug,
       boardId,
@@ -89,12 +127,22 @@ class ChannelService {
   /**
    * Create or get a department channel.
    */
-  async getOrCreateDepartmentChannel(departmentId, departmentName, workspaceId) {
+  async getOrCreateDepartmentChannel(
+    departmentId,
+    departmentName,
+    workspaceId,
+  ) {
     if (!workspaceId) {
-      throw new ValidationError('workspaceId is required to create a department channel');
+      throw new ValidationError(
+        "workspaceId is required to create a department channel",
+      );
     }
 
-    const existing = await channelRepository.findByFlowTaskRef('department', departmentId, workspaceId);
+    const existing = await channelRepository.findByFlowTaskRef(
+      "department",
+      departmentId,
+      workspaceId,
+    );
     if (existing) return existing;
 
     let slug = departmentChannelSlug(departmentName, departmentId);
@@ -106,14 +154,14 @@ class ChannelService {
       name: departmentName,
       slug,
       type: CHANNEL_TYPES.DEPARTMENT,
-      flowTaskRef: { entityType: 'department', entityId: departmentId },
+      flowTaskRef: { entityType: "department", entityId: departmentId },
       visibility: CHANNEL_VISIBILITY.PRIVATE,
       members: [],
       memberCount: 0,
       workspaceId,
     });
 
-    logger.info('Department channel created', {
+    logger.info("Department channel created", {
       channelId: channel._id,
       slug,
       departmentId,
@@ -127,10 +175,16 @@ class ChannelService {
    */
   async getOrCreateTeamChannel(teamId, teamName, workspaceId) {
     if (!workspaceId) {
-      throw new ValidationError('workspaceId is required to create a team channel');
+      throw new ValidationError(
+        "workspaceId is required to create a team channel",
+      );
     }
 
-    const existing = await channelRepository.findByFlowTaskRef('team', teamId, workspaceId);
+    const existing = await channelRepository.findByFlowTaskRef(
+      "team",
+      teamId,
+      workspaceId,
+    );
     if (existing) return existing;
 
     let slug = teamChannelSlug(teamName, teamId);
@@ -142,14 +196,18 @@ class ChannelService {
       name: teamName,
       slug,
       type: CHANNEL_TYPES.TEAM,
-      flowTaskRef: { entityType: 'team', entityId: teamId },
+      flowTaskRef: { entityType: "team", entityId: teamId },
       visibility: CHANNEL_VISIBILITY.PRIVATE,
       members: [],
       memberCount: 0,
       workspaceId,
     });
 
-    logger.info('Team channel created', { channelId: channel._id, slug, teamId });
+    logger.info("Team channel created", {
+      channelId: channel._id,
+      slug,
+      teamId,
+    });
     return channel;
   }
 
@@ -165,7 +223,9 @@ class ChannelService {
   async getOrCreateDM(user1Id, user2Id, workspaceId) {
     // ── Workspace is mandatory for DM creation (multi-tenant isolation) ──
     if (!workspaceId) {
-      throw new ValidationError('workspaceId is required to create a DM channel');
+      throw new ValidationError(
+        "workspaceId is required to create a DM channel",
+      );
     }
 
     const id1 = user1Id.toString();
@@ -173,7 +233,9 @@ class ChannelService {
 
     // ── Prevent self-DM ──
     if (id1 === id2) {
-      throw new ValidationError('Cannot create a DM conversation with yourself');
+      throw new ValidationError(
+        "Cannot create a DM conversation with yourself",
+      );
     }
 
     // ── Canonical ID ordering for deterministic dedup ──
@@ -184,18 +246,20 @@ class ChannelService {
     const existing = await channelRepository.findDMChannel(ids, workspaceId);
     if (existing) {
       // DM v2 foundation: ensure dedicated DM record mirrors legacy channel.
-      await directMessageService.ensureForChannel({
-        workspaceId,
-        memberIds: ids,
-        legacyChannelId: existing._id,
-        createdBy: user1Id,
-      }).catch((error) => {
-        logger.warn('Failed to ensure DM v2 record for existing channel', {
-          channelId: existing._id,
+      await directMessageService
+        .ensureForChannel({
           workspaceId,
-          error: error.message,
+          memberIds: ids,
+          legacyChannelId: existing._id,
+          createdBy: user1Id,
+        })
+        .catch((error) => {
+          logger.warn("Failed to ensure DM v2 record for existing channel", {
+            channelId: existing._id,
+            workspaceId,
+            error: error.message,
+          });
         });
-      });
       return existing;
     }
 
@@ -206,17 +270,27 @@ class ChannelService {
     ]);
 
     if (!user1 || !user2) {
-      throw new NotFoundError('One or both users not found');
+      throw new NotFoundError("One or both users not found");
     }
 
     // ── Verify both users are active members of this workspace ──
     const [membership1, membership2] = await Promise.all([
-      WorkspaceMembership.findOne({ userId: ids[0], workspaceId, isActive: true }).lean(),
-      WorkspaceMembership.findOne({ userId: ids[1], workspaceId, isActive: true }).lean(),
+      WorkspaceMembership.findOne({
+        userId: ids[0],
+        workspaceId,
+        isActive: true,
+      }).lean(),
+      WorkspaceMembership.findOne({
+        userId: ids[1],
+        workspaceId,
+        isActive: true,
+      }).lean(),
     ]);
 
     if (!membership1 || !membership2) {
-      throw new ForbiddenError('Both users must be active members of the workspace');
+      throw new ForbiddenError(
+        "Both users must be active members of the workspace",
+      );
     }
 
     let channel;
@@ -240,12 +314,14 @@ class ChannelService {
       if (error?.code === 11000) {
         const winner = await channelRepository.findDMChannel(ids, workspaceId);
         if (winner) {
-          await directMessageService.ensureForChannel({
-            workspaceId,
-            memberIds: ids,
-            legacyChannelId: winner._id,
-            createdBy: user1Id,
-          }).catch(() => {});
+          await directMessageService
+            .ensureForChannel({
+              workspaceId,
+              memberIds: ids,
+              legacyChannelId: winner._id,
+              createdBy: user1Id,
+            })
+            .catch(() => {});
           return winner;
         }
       }
@@ -257,29 +333,41 @@ class ChannelService {
     // find this DM channel after page refresh.
     const channelId = channel._id.toString();
     await Promise.all([
-      ChannelMember.addMember(channelId, ids[0], workspaceId, CHANNEL_MEMBER_ROLES.MEMBER),
-      ChannelMember.addMember(channelId, ids[1], workspaceId, CHANNEL_MEMBER_ROLES.MEMBER),
+      ChannelMember.addMember(
+        channelId,
+        ids[0],
+        workspaceId,
+        CHANNEL_MEMBER_ROLES.MEMBER,
+      ),
+      ChannelMember.addMember(
+        channelId,
+        ids[1],
+        workspaceId,
+        CHANNEL_MEMBER_ROLES.MEMBER,
+      ),
     ]);
 
     // DM v2 foundation: dual-write a dedicated DirectMessage record.
-    await directMessageService.ensureForChannel({
-      workspaceId,
-      memberIds: ids,
-      legacyChannelId: channel._id,
-      createdBy: user1Id,
-    }).catch((error) => {
-      logger.warn('Failed to ensure DM v2 record for newly created channel', {
-        channelId: channel._id,
+    await directMessageService
+      .ensureForChannel({
         workspaceId,
-        error: error.message,
+        memberIds: ids,
+        legacyChannelId: channel._id,
+        createdBy: user1Id,
+      })
+      .catch((error) => {
+        logger.warn("Failed to ensure DM v2 record for newly created channel", {
+          channelId: channel._id,
+          workspaceId,
+          error: error.message,
+        });
       });
-    });
 
     // Auto-join both users to the workspace-scoped channel room
     joinChannelRoom(ids[0], channel._id.toString(), workspaceId);
     joinChannelRoom(ids[1], channel._id.toString(), workspaceId);
 
-    logger.info('DM channel created', {
+    logger.info("DM channel created", {
       channelId: channel._id,
       participants: ids,
       workspaceId,
@@ -298,7 +386,12 @@ class ChannelService {
    * @param {string} workspaceName - Workspace display name (for error messages)
    * @returns {Promise<{ chatUserId: string, user: object }>}
    */
-  async resolveAndValidateDMTarget(targetUserId, workspaceId, workspaceName, flowTaskToken = null) {
+  async resolveAndValidateDMTarget(
+    targetUserId,
+    workspaceId,
+    workspaceName,
+    flowTaskToken = null,
+  ) {
     let targetUser = null;
 
     // Strategy 1: Try as a ChatUser _id (24-char hex ObjectId)
@@ -312,14 +405,18 @@ class ChannelService {
     }
 
     // Strategy 3: Fetch from FlowTask service if we have a token
-    if (!targetUser && flowTaskToken && !/^[0-9a-fA-F]{24}$/.test(targetUserId)) {
+    if (
+      !targetUser &&
+      flowTaskToken &&
+      !/^[0-9a-fA-F]{24}$/.test(targetUserId)
+    ) {
       try {
         const ftu = await flowtaskService.getUser(targetUserId, flowTaskToken);
         if (ftu && ftu._id && ftu.email) {
           targetUser = await userRepository.upsertFromFlowTask(ftu);
         }
       } catch (err) {
-        logger.warn('Failed to resolve target user via FlowTask API', {
+        logger.warn("Failed to resolve target user via FlowTask API", {
           targetUserId,
           error: err.message,
           workspaceId,
@@ -330,46 +427,59 @@ class ChannelService {
     // ── Target user does not exist in ChatApp ──
     if (!targetUser) {
       throw new NotFoundError(
-        `User '${targetUserId}' not found in workspace '${workspaceName || workspaceId}'.`
+        `User '${targetUserId}' not found in workspace '${workspaceName || workspaceId}'.`,
       );
     }
 
     if (!targetUser.isActive) {
       throw new ForbiddenError(
-        `${targetUser.name}'s account is deactivated in this workspace.`
+        `${targetUser.name}'s account is deactivated in this workspace.`,
       );
     }
 
     // ── Verify workspace membership (ChatUser is global — workspace link is via WorkspaceMembership) ──
-    let membership = await workspaceRepository.getMembership(targetUser._id, workspaceId);
+    let membership = await workspaceRepository.getMembership(
+      targetUser._id,
+      workspaceId,
+    );
 
     if (!membership) {
       // Auto-add FlowTask users to workspace if they've been synced but not yet added as members
-      if (targetUser.authProvider === 'flowtask' && targetUser.flowTaskUserId) {
+      if (targetUser.authProvider === "flowtask" && targetUser.flowTaskUserId) {
         try {
-          await workspaceRepository.addMember(targetUser._id, workspaceId, CHANNEL_MEMBER_ROLES.MEMBER);
-          logger.info('Auto-added FlowTask user to workspace for DM', {
+          await workspaceRepository.addMember(
+            targetUser._id,
+            workspaceId,
+            CHANNEL_MEMBER_ROLES.MEMBER,
+          );
+          logger.info("Auto-added FlowTask user to workspace for DM", {
             userId: targetUser._id,
             workspaceId,
           });
-          membership = await workspaceRepository.getMembership(targetUser._id, workspaceId);
+          membership = await workspaceRepository.getMembership(
+            targetUser._id,
+            workspaceId,
+          );
         } catch (addError) {
           // Re-check membership in case of race condition (concurrent add)
-          membership = await workspaceRepository.getMembership(targetUser._id, workspaceId);
+          membership = await workspaceRepository.getMembership(
+            targetUser._id,
+            workspaceId,
+          );
           if (!membership) {
-            logger.error('Failed to auto-add FlowTask user to workspace', {
+            logger.error("Failed to auto-add FlowTask user to workspace", {
               userId: targetUser._id,
               workspaceId,
               error: addError.message,
             });
             throw new ForbiddenError(
-              `Unable to add user '${targetUser.name}' to workspace '${workspaceName || workspaceId}'.`
+              `Unable to add user '${targetUser.name}' to workspace '${workspaceName || workspaceId}'.`,
             );
           }
         }
       } else {
         throw new ForbiddenError(
-          `User '${targetUser.name}' is not a member of workspace '${workspaceName || workspaceId}'.`
+          `User '${targetUser.name}' is not a member of workspace '${workspaceName || workspaceId}'.`,
         );
       }
     }
@@ -382,7 +492,7 @@ class ChannelService {
    */
   async createCustomChannel(data, creatorId, workspaceId) {
     if (!workspaceId) {
-      throw new ValidationError('workspaceId is required to create a channel');
+      throw new ValidationError("workspaceId is required to create a channel");
     }
 
     let slug = slugify(data.name);
@@ -405,7 +515,7 @@ class ChannelService {
       name: data.name,
       slug,
       type: CHANNEL_TYPES.PROJECT, // Custom channels use project type
-      description: data.description ? sanitizeHtml(data.description) : '',
+      description: data.description ? sanitizeHtml(data.description) : "",
       visibility: data.visibility || CHANNEL_VISIBILITY.PRIVATE,
       members,
       memberCount: members.length,
@@ -417,20 +527,38 @@ class ChannelService {
     const channelId = channel._id.toString();
     await Promise.all(
       members.map((m) =>
-        ChannelMember.addMember(channelId, m.userId, workspaceId, m.role)
-      )
+        ChannelMember.addMember(channelId, m.userId, workspaceId, m.role),
+      ),
     );
 
     // Join creator to channel room
-    joinChannelRoom(creatorId.toString(), channel._id.toString(), workspaceId?.toString());
+    joinChannelRoom(
+      creatorId.toString(),
+      channel._id.toString(),
+      workspaceId?.toString(),
+    );
 
     // Notify all added members
     for (const member of members) {
       if (member.userId.toString() !== creatorId.toString()) {
-        emitToUser(member.userId.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
-          channel: { _id: channel._id, name: channel.name, slug: channel.slug, type: channel.type },
-        }, workspaceId?.toString());
-        joinChannelRoom(member.userId.toString(), channel._id.toString(), workspaceId?.toString());
+        emitToUser(
+          member.userId.toString(),
+          SOCKET_EVENTS.CHANNEL_ADDED,
+          {
+            channel: {
+              _id: channel._id,
+              name: channel.name,
+              slug: channel.slug,
+              type: channel.type,
+            },
+          },
+          workspaceId?.toString(),
+        );
+        joinChannelRoom(
+          member.userId.toString(),
+          channel._id.toString(),
+          workspaceId?.toString(),
+        );
       }
     }
 
@@ -448,7 +576,10 @@ class ChannelService {
     let created = 0;
 
     for (const config of systemChannelConfigs) {
-      const existing = await channelRepository.findBySlug(config.slug, workspaceId);
+      const existing = await channelRepository.findBySlug(
+        config.slug,
+        workspaceId,
+      );
       if (existing) continue;
 
       await channelRepository.create({
@@ -456,9 +587,10 @@ class ChannelService {
         slug: config.slug,
         type: CHANNEL_TYPES.SYSTEM,
         description: config.description,
-        visibility: config.visibility === 'public'
-          ? CHANNEL_VISIBILITY.PUBLIC
-          : CHANNEL_VISIBILITY.PRIVATE,
+        visibility:
+          config.visibility === "public"
+            ? CHANNEL_VISIBILITY.PUBLIC
+            : CHANNEL_VISIBILITY.PRIVATE,
         members: [],
         memberCount: 0,
         ...(workspaceId && { workspaceId }),
@@ -478,13 +610,14 @@ class ChannelService {
    * Called during login/sync to create channels for existing projects.
    */
   async syncProjectChannelsForUser(token, chatUser, workspaceId) {
-    const flowTaskService = (await import('../flowtask/flowtask.service.js')).default;
+    const flowTaskService = (await import("../flowtask/flowtask.service.js"))
+      .default;
 
     let boards;
     try {
       boards = await flowTaskService.getUserBoards(token);
     } catch (error) {
-      logger.warn('Failed to fetch boards for channel sync', {
+      logger.warn("Failed to fetch boards for channel sync", {
         userId: chatUser._id,
         error: error.message,
       });
@@ -492,7 +625,7 @@ class ChannelService {
     }
 
     if (!boards || !Array.isArray(boards) || boards.length === 0) {
-      logger.debug('No boards found for user', { userId: chatUser._id });
+      logger.debug("No boards found for user", { userId: chatUser._id });
       return;
     }
 
@@ -528,13 +661,14 @@ class ChannelService {
 
         // Sync board members
         const memberIds = (board.members || [])
-          .map((m) => (typeof m === 'string' ? m : m._id || m.id))
+          .map((m) => (typeof m === "string" ? m : m._id || m.id))
           .filter(Boolean);
 
         // Add owner
-        const ownerId = typeof board.owner === 'string'
-          ? board.owner
-          : board.owner?._id || board.owner?.id;
+        const ownerId =
+          typeof board.owner === "string"
+            ? board.owner
+            : board.owner?._id || board.owner?.id;
         if (ownerId && !memberIds.includes(ownerId)) {
           memberIds.push(ownerId);
         }
@@ -544,11 +678,14 @@ class ChannelService {
           synced++;
         }
 
-        if (channel.createdAt && (Date.now() - channel.createdAt.getTime()) < 5000) {
+        if (
+          channel.createdAt &&
+          Date.now() - channel.createdAt.getTime() < 5000
+        ) {
           created++;
         }
       } catch (error) {
-        logger.error('Failed to sync project channel', {
+        logger.error("Failed to sync project channel", {
           boardId: board._id,
           boardName: board.name,
           error: error.message,
@@ -556,7 +693,7 @@ class ChannelService {
       }
     }
 
-    logger.info('[CHANNEL_SYNC] Project channels synced for user', {
+    logger.info("[CHANNEL_SYNC] Project channels synced for user", {
       userId: chatUser._id,
       workspaceId,
       totalBoards: boards.length,
@@ -571,10 +708,13 @@ class ChannelService {
    * Get all channels for a user with unread counts.
    */
   async getChannelsForUser(userId, workspaceId) {
-    const channels = await channelRepository.findByMember(userId, { workspaceId });
+    const channels = await channelRepository.findByMember(userId, {
+      workspaceId,
+    });
 
     // Get system public channels the user might not be a member of yet
-    const systemChannels = await channelRepository.findSystemChannels(workspaceId);
+    const systemChannels =
+      await channelRepository.findSystemChannels(workspaceId);
     const publicSystem = systemChannels.filter(
       (sc) =>
         sc.visibility === CHANNEL_VISIBILITY.PUBLIC &&
@@ -584,7 +724,7 @@ class ChannelService {
     const all = [...channels, ...publicSystem];
     const decorated = await this._decorateDMChannels(all, userId, workspaceId);
 
-    logger.debug?.('[CHANNEL_FETCH] Channels resolved for sidebar', {
+    logger.debug?.("[CHANNEL_FETCH] Channels resolved for sidebar", {
       userId,
       workspaceId,
       memberChannels: channels.length,
@@ -604,7 +744,9 @@ class ChannelService {
 
     const recipientIds = new Set();
     for (const dm of dmChannels) {
-      const participants = Array.isArray(dm.dmParticipants) ? dm.dmParticipants.map((p) => p?.toString()) : [];
+      const participants = Array.isArray(dm.dmParticipants)
+        ? dm.dmParticipants.map((p) => p?.toString())
+        : [];
       const recipientId = participants.find((p) => p && p !== currentId);
       if (recipientId) recipientIds.add(recipientId);
     }
@@ -620,14 +762,15 @@ class ChannelService {
       const participants = Array.isArray(channel.dmParticipants)
         ? channel.dmParticipants.map((p) => p?.toString())
         : [];
-      const recipientId = participants.find((p) => p && p !== currentId) || null;
+      const recipientId =
+        participants.find((p) => p && p !== currentId) || null;
       const recipient = recipientId ? byId.get(recipientId) : null;
 
       const raw = channel.toObject ? channel.toObject() : channel;
       return {
         ...raw,
         dmRecipientId: recipientId,
-        name: recipient?.name || raw.name || 'Direct message',
+        name: recipient?.name || raw.name || "Direct message",
         avatar: recipient?.avatar || raw.avatar || null,
       };
     });
@@ -637,9 +780,11 @@ class ChannelService {
    * Get a single channel by ID with access check.
    */
   async getChannelById(channelId, userId, workspaceId) {
-    const channel = await channelRepository.findById(channelId, { workspaceId });
+    const channel = await channelRepository.findById(channelId, {
+      workspaceId,
+    });
     if (!channel) {
-      throw new NotFoundError('Channel not found');
+      throw new NotFoundError("Channel not found");
     }
     return channel;
   }
@@ -650,7 +795,7 @@ class ChannelService {
   async getChannelBySlug(slug, workspaceId) {
     const channel = await channelRepository.findBySlug(slug, workspaceId);
     if (!channel) {
-      throw new NotFoundError('Channel not found');
+      throw new NotFoundError("Channel not found");
     }
     return channel;
   }
@@ -660,10 +805,17 @@ class ChannelService {
   /**
    * Add a member to a channel.
    */
-  async addMember(channelId, userId, role = CHANNEL_MEMBER_ROLES.MEMBER, workspaceId) {
-    const channel = await channelRepository.findById(channelId, { workspaceId });
-    if (!channel) throw new NotFoundError('Channel not found');
-    if (channel.isArchived) throw new ForbiddenError('Channel is archived');
+  async addMember(
+    channelId,
+    userId,
+    role = CHANNEL_MEMBER_ROLES.MEMBER,
+    workspaceId,
+  ) {
+    const channel = await channelRepository.findById(channelId, {
+      workspaceId,
+    });
+    if (!channel) throw new NotFoundError("Channel not found");
+    if (channel.isArchived) throw new ForbiddenError("Channel is archived");
 
     // Always go through repository to keep ChannelMember and embedded members in sync.
     const updated = await channelRepository.addMember(
@@ -674,28 +826,51 @@ class ChannelService {
     );
 
     // Notify the user and make their socket join the room
-    emitToUser(userId.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
-      channel: { _id: updated._id, name: updated.name, slug: updated.slug, type: updated.type },
-    }, channel.workspaceId?.toString());
-    joinChannelRoom(userId.toString(), channelId.toString(), channel.workspaceId?.toString());
+    emitToUser(
+      userId.toString(),
+      SOCKET_EVENTS.CHANNEL_ADDED,
+      {
+        channel: {
+          _id: updated._id,
+          name: updated.name,
+          slug: updated.slug,
+          type: updated.type,
+        },
+      },
+      channel.workspaceId?.toString(),
+    );
+    joinChannelRoom(
+      userId.toString(),
+      channelId.toString(),
+      channel.workspaceId?.toString(),
+    );
 
     // Notify channel
-    emitToChannel(channelId.toString(), SOCKET_EVENTS.MEMBER_JOINED, {
-      channelId,
-      userId,
-    }, channel.workspaceId?.toString());
+    emitToChannel(
+      channelId.toString(),
+      SOCKET_EVENTS.MEMBER_JOINED,
+      {
+        channelId,
+        userId,
+      },
+      channel.workspaceId?.toString(),
+    );
 
     // Persist channel invite notification
-    import('../notifications/notification.service.js').then(({ default: notificationService }) => {
-      notificationService.createChannelInviteNotification({
-        workspaceId: channel.workspaceId,
-        recipientId: userId,
-        channelId: channel._id,
-        channelName: channel.name,
-        inviterName: 'System',
-        inviterId: null,
-      }).catch(() => {});
-    });
+    import("../notifications/notification.service.js").then(
+      ({ default: notificationService }) => {
+        notificationService
+          .createChannelInviteNotification({
+            workspaceId: channel.workspaceId,
+            recipientId: userId,
+            channelId: channel._id,
+            channelName: channel.name,
+            inviterName: "System",
+            inviterId: null,
+          })
+          .catch(() => {});
+      },
+    );
 
     return updated;
   }
@@ -704,33 +879,48 @@ class ChannelService {
    * Add multiple members to a channel (bulk, for project sync).
    */
   async syncMembers(channelId, flowTaskUserIds, workspaceId) {
-    const channel = await channelRepository.findById(channelId, { workspaceId });
-    if (!channel) throw new NotFoundError('Channel not found');
+    const channel = await channelRepository.findById(channelId, {
+      workspaceId,
+    });
+    if (!channel) throw new NotFoundError("Channel not found");
 
-    const chatUsers = await userRepository.findByFlowTaskIds(flowTaskUserIds, workspaceId);
+    const chatUsers = await userRepository.findByFlowTaskIds(
+      flowTaskUserIds,
+      workspaceId,
+    );
     const chatUserIds = chatUsers.map((u) => u._id);
 
     // Filter out existing members
-    const newMembers = chatUserIds.filter(
-      (uid) => !channel.hasMember(uid),
-    );
+    const newMembers = chatUserIds.filter((uid) => !channel.hasMember(uid));
 
     if (newMembers.length === 0) return channel;
 
-    const updated = await channelRepository.addMembers(channelId, newMembers.map((uid) => ({
-      userId: uid,
-      role: CHANNEL_MEMBER_ROLES.MEMBER,
-    })));
+    const updated = await channelRepository.addMembers(
+      channelId,
+      newMembers.map((uid) => ({
+        userId: uid,
+        role: CHANNEL_MEMBER_ROLES.MEMBER,
+      })),
+    );
 
     // Notify and join rooms
     for (const uid of newMembers) {
-      emitToUser(uid.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
-        channel: { _id: updated._id, name: updated.name, slug: updated.slug },
-      }, channel.workspaceId?.toString());
-      joinChannelRoom(uid.toString(), channelId.toString(), channel.workspaceId?.toString());
+      emitToUser(
+        uid.toString(),
+        SOCKET_EVENTS.CHANNEL_ADDED,
+        {
+          channel: { _id: updated._id, name: updated.name, slug: updated.slug },
+        },
+        channel.workspaceId?.toString(),
+      );
+      joinChannelRoom(
+        uid.toString(),
+        channelId.toString(),
+        channel.workspaceId?.toString(),
+      );
     }
 
-    logger.info('Members synced to channel', {
+    logger.info("Members synced to channel", {
       channelId,
       added: newMembers.length,
     });
@@ -742,23 +932,41 @@ class ChannelService {
    * Remove a member from a channel.
    */
   async removeMember(channelId, userId, removedBy, workspaceId) {
-    const channel = await channelRepository.findById(channelId, { workspaceId });
-    if (!channel) throw new NotFoundError('Channel not found');
+    const channel = await channelRepository.findById(channelId, {
+      workspaceId,
+    });
+    if (!channel) throw new NotFoundError("Channel not found");
 
     if (!channel.hasMember(userId)) return channel;
 
     // Prevent removing the last owner unless it's a system action
     if (channel.getMemberRole(userId) === CHANNEL_MEMBER_ROLES.OWNER) {
-      const owners = channel.members.filter((m) => m.role === CHANNEL_MEMBER_ROLES.OWNER);
-      if (owners.length <= 1 && removedBy !== 'system') {
-        throw new ForbiddenError('Cannot remove the last channel owner');
+      const owners = channel.members.filter(
+        (m) => m.role === CHANNEL_MEMBER_ROLES.OWNER,
+      );
+      if (owners.length <= 1 && removedBy !== "system") {
+        throw new ForbiddenError("Cannot remove the last channel owner");
       }
     }
 
-    const updated = await channelRepository.removeMember(channelId, userId, channel.workspaceId);
+    const updated = await channelRepository.removeMember(
+      channelId,
+      userId,
+      channel.workspaceId,
+    );
 
-    emitToUser(userId.toString(), SOCKET_EVENTS.CHANNEL_REMOVED, { channelId }, channel.workspaceId?.toString());
-    emitToChannel(channelId.toString(), SOCKET_EVENTS.MEMBER_LEFT, { channelId, userId }, channel.workspaceId?.toString());
+    emitToUser(
+      userId.toString(),
+      SOCKET_EVENTS.CHANNEL_REMOVED,
+      { channelId },
+      channel.workspaceId?.toString(),
+    );
+    emitToChannel(
+      channelId.toString(),
+      SOCKET_EVENTS.MEMBER_LEFT,
+      { channelId, userId },
+      channel.workspaceId?.toString(),
+    );
 
     return updated;
   }
@@ -769,20 +977,28 @@ class ChannelService {
    * Update channel details (name, description, topic).
    */
   async updateChannel(channelId, updates, userId, workspaceId) {
-    const channel = await channelRepository.findById(channelId, { workspaceId });
-    if (!channel) throw new NotFoundError('Channel not found');
-    if (channel.isArchived) throw new ForbiddenError('Channel is archived');
+    const channel = await channelRepository.findById(channelId, {
+      workspaceId,
+    });
+    if (!channel) throw new NotFoundError("Channel not found");
+    if (channel.isArchived) throw new ForbiddenError("Channel is archived");
 
     // System-managed channel protection
     if (channel.systemManaged && userId !== null) {
       if (updates.name && !channel.adminOverrides?.allowRename) {
-        throw new ForbiddenError('Cannot rename a system-managed channel. Enable admin override first.');
+        throw new ForbiddenError(
+          "Cannot rename a system-managed channel. Enable admin override first.",
+        );
       }
       if (updates.slug && !channel.adminOverrides?.allowRename) {
-        throw new ForbiddenError('Cannot change the slug of a system-managed channel.');
+        throw new ForbiddenError(
+          "Cannot change the slug of a system-managed channel.",
+        );
       }
       if (updates.adminOverrides !== undefined) {
-        throw new ForbiddenError('Only system actions can modify admin overrides on system-managed channels.');
+        throw new ForbiddenError(
+          "Only system actions can modify admin overrides on system-managed channels.",
+        );
       }
     }
 
@@ -803,13 +1019,22 @@ class ChannelService {
       allowed.adminOverrides = updates.adminOverrides;
     }
 
-    const updated = await channelRepository.update(channelId, allowed, workspaceId);
-
-    emitToChannel(channelId.toString(), SOCKET_EVENTS.CHANNEL_UPDATED, {
+    const updated = await channelRepository.update(
       channelId,
-      updates: allowed,
-      updatedBy: userId,
-    }, channel.workspaceId?.toString());
+      allowed,
+      workspaceId,
+    );
+
+    emitToChannel(
+      channelId.toString(),
+      SOCKET_EVENTS.CHANNEL_UPDATED,
+      {
+        channelId,
+        updates: allowed,
+        updatedBy: userId,
+      },
+      channel.workspaceId?.toString(),
+    );
 
     return updated;
   }
@@ -818,27 +1043,40 @@ class ChannelService {
    * Archive a channel.
    */
   async archiveChannel(channelId, userId, workspaceId) {
-    const channel = await channelRepository.findById(channelId, { workspaceId });
-    if (!channel) throw new NotFoundError('Channel not found');
+    const channel = await channelRepository.findById(channelId, {
+      workspaceId,
+    });
+    if (!channel) throw new NotFoundError("Channel not found");
 
     if (channel.type === CHANNEL_TYPES.SYSTEM) {
-      throw new ForbiddenError('Cannot archive system channels');
+      throw new ForbiddenError("Cannot archive system channels");
     }
 
     // System-managed channel protection
-    if (channel.systemManaged && userId !== 'system' && !channel.adminOverrides?.allowArchive) {
-      throw new ForbiddenError('Cannot archive a system-managed channel. Enable admin override first.');
+    if (
+      channel.systemManaged &&
+      userId !== "system" &&
+      !channel.adminOverrides?.allowArchive
+    ) {
+      throw new ForbiddenError(
+        "Cannot archive a system-managed channel. Enable admin override first.",
+      );
     }
 
-    const updated = await channelRepository.archive(channelId, '', workspaceId);
+    const updated = await channelRepository.archive(channelId, "", workspaceId);
 
-    emitToChannel(channelId.toString(), SOCKET_EVENTS.CHANNEL_UPDATED, {
-      channelId,
-      updates: { isArchived: true },
-      archivedBy: userId,
-    }, channel.workspaceId?.toString());
+    emitToChannel(
+      channelId.toString(),
+      SOCKET_EVENTS.CHANNEL_UPDATED,
+      {
+        channelId,
+        updates: { isArchived: true },
+        archivedBy: userId,
+      },
+      channel.workspaceId?.toString(),
+    );
 
-    logger.info('Channel archived', { channelId, archivedBy: userId });
+    logger.info("Channel archived", { channelId, archivedBy: userId });
     return updated;
   }
 
@@ -858,8 +1096,11 @@ class ChannelService {
    * All members are deduplicated and enriched with user profile data.
    */
   async getAggregatedMembers(channelId, token, workspaceId) {
-    const channel = await channelRepository.findById(channelId, { populate: true, workspaceId });
-    if (!channel) throw new NotFoundError('Channel not found');
+    const channel = await channelRepository.findById(channelId, {
+      populate: true,
+      workspaceId,
+    });
+    if (!channel) throw new NotFoundError("Channel not found");
 
     // Start with channel members (always included)
     const memberMap = new Map(); // flowTaskUserId -> member info
@@ -877,9 +1118,9 @@ class ChannelService {
           email: user.email,
           avatar: user.avatar,
           role: user.role,
-          onlineStatus: user.onlineStatus || 'offline',
+          onlineStatus: user.onlineStatus || "offline",
           isActive: user.isActive !== false,
-          source: ['channel'],
+          source: ["channel"],
           channelRole: member.role,
         });
       }
@@ -892,7 +1133,9 @@ class ChannelService {
       token
     ) {
       try {
-        const flowTaskService = (await import('../flowtask/flowtask.service.js')).default;
+        const flowTaskService = (
+          await import("../flowtask/flowtask.service.js")
+        ).default;
         const boardId = channel.flowTaskRef.entityId;
 
         // Fetch board details (includes members array)
@@ -906,14 +1149,15 @@ class ChannelService {
 
         if (board) {
           // Board owner
-          const ownerId = typeof board.owner === 'string'
-            ? board.owner
-            : board.owner?._id || board.owner?.id;
+          const ownerId =
+            typeof board.owner === "string"
+              ? board.owner
+              : board.owner?._id || board.owner?.id;
           if (ownerId) flowTaskUserIds.add(ownerId.toString());
 
           // Board members
-          for (const m of (board.members || [])) {
-            const mid = typeof m === 'string' ? m : m._id || m.id;
+          for (const m of board.members || []) {
+            const mid = typeof m === "string" ? m : m._id || m.id;
             if (mid) flowTaskUserIds.add(mid.toString());
           }
         }
@@ -921,25 +1165,29 @@ class ChannelService {
         // Task assignees + members
         const cardList = Array.isArray(cards) ? cards : [];
         for (const card of cardList) {
-          for (const a of (card.assignees || [])) {
-            const aid = typeof a === 'string' ? a : a._id || a.id;
+          for (const a of card.assignees || []) {
+            const aid = typeof a === "string" ? a : a._id || a.id;
             if (aid) flowTaskUserIds.add(aid.toString());
           }
-          for (const m of (card.members || [])) {
-            const mid = typeof m === 'string' ? m : m._id || m.id;
+          for (const m of card.members || []) {
+            const mid = typeof m === "string" ? m : m._id || m.id;
             if (mid) flowTaskUserIds.add(mid.toString());
           }
         }
 
         // Resolve FlowTask user IDs to chat users
         if (flowTaskUserIds.size > 0) {
-          const chatUsers = await userRepository.findByFlowTaskIds([...flowTaskUserIds], channel.workspaceId);
+          const chatUsers = await userRepository.findByFlowTaskIds(
+            [...flowTaskUserIds],
+            channel.workspaceId,
+          );
           for (const chatUser of chatUsers) {
             const ftId = chatUser.flowTaskUserId;
             if (memberMap.has(ftId)) {
               // Already in map, just add source
               const existing = memberMap.get(ftId);
-              if (!existing.source.includes('board')) existing.source.push('board');
+              if (!existing.source.includes("board"))
+                existing.source.push("board");
             } else {
               memberMap.set(ftId, {
                 _id: chatUser._id,
@@ -948,16 +1196,16 @@ class ChannelService {
                 email: chatUser.email,
                 avatar: chatUser.avatar,
                 role: chatUser.role,
-                onlineStatus: chatUser.onlineStatus || 'offline',
+                onlineStatus: chatUser.onlineStatus || "offline",
                 isActive: chatUser.isActive !== false,
-                source: ['board'],
+                source: ["board"],
                 channelRole: null,
               });
             }
           }
         }
       } catch (error) {
-        logger.warn('Failed to aggregate FlowTask members', {
+        logger.warn("Failed to aggregate FlowTask members", {
           channelId,
           error: error.message,
         });
@@ -971,7 +1219,27 @@ class ChannelService {
       const aOrder = onlineOrder[a.onlineStatus] ?? 3;
       const bOrder = onlineOrder[b.onlineStatus] ?? 3;
       if (aOrder !== bOrder) return aOrder - bOrder;
-      return (a.name || '').localeCompare(b.name || '');
+      return (a.name || "").localeCompare(b.name || "");
+    });
+  }
+
+  async getAIDMChannel(userId, workspaceId) {
+    return Channel.findOne({
+      type: "dm",
+      isAI: true,
+      workspaceId,
+      "members.userId": userId,
+    });
+  }
+
+  async createAIDMChannel(userId, workspaceId) {
+    return Channel.create({
+      name: "ChatBot",
+      slug: `chatbot-${userId}`,
+      type: "dm",
+      isAI: true,
+      workspaceId,
+      members: [{ userId }],
     });
   }
 }

@@ -1,5 +1,5 @@
-import botService from './bot.service.js';
-import asyncHandler from '../../middleware/asyncHandler.js';
+import botService from "./bot.service.js";
+import asyncHandler from "../../middleware/asyncHandler.js";
 
 /**
  * Bot Controller — handles slash command HTTP endpoint.
@@ -9,13 +9,14 @@ import asyncHandler from '../../middleware/asyncHandler.js';
  * POST /api/chat/bot/command
  * Process a slash command.
  */
+
 export const processCommand = asyncHandler(async (req, res) => {
   const { command, channelId } = req.body;
 
   if (!command) {
     return res.status(400).json({
       success: false,
-      error: { message: 'command is required' },
+      error: { message: "command is required" },
     });
   }
 

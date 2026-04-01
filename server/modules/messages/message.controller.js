@@ -60,10 +60,15 @@ export const sendMessage = asyncHandler(async (req, res) => {
     mentions,
   } = req.body;
 
+  const channelId = req.params.channelId;
+  const userId = req.user._id;
+  const workspaceId = req.workspaceId;
+
+  console.log("Received message:", userId, content, channelId, workspaceId);
   // 1 Save user message
   const message = await messageService.sendMessage({
-    channelId: req.params.channelId,
-    authorId: req.user._id,
+    channelId,
+    authorId: userId,
     content,
     htmlContent,
     contentType,
@@ -72,24 +77,34 @@ export const sendMessage = asyncHandler(async (req, res) => {
     flowTaskRef,
     threadId,
     tempId,
-    workspaceId: req.workspaceId,
+    workspaceId,
     mentions,
   });
 
-  // 2 Check if this is AI channel
-  const channel = await channelRepository.findById(req.params.channelId);
+  console.log("Message saved:", message);
+  // 2 Get channel (IMPORTANT: workspaceId pass karo)
+  const channel = await channelRepository.findById(channelId, {
+    workspaceId,
+  });
 
-  // 3 If AI channel - send to Rasa
+  // 3 AI response (NON-BLOCKING )
   if (channel?.isAI && content) {
-    await botService.processAIMessage(content, {
-      userId: req.user._id,
-      channelId: req.params.channelId,
-      workspaceId: req.workspaceId,
-    });
+    botService
+      .processAIMessage(content, {
+        userId,
+        channelId,
+        workspaceId,
+      })
+      .catch((err) => {
+        console.error("AI error:", err.message);
+      });
   }
 
-  // 4 Return response
-  res.status(201).json({ success: true, data: { message } });
+  // 4 Return response immediately (fast UI)
+  res.status(201).json({
+    success: true,
+    data: { message },
+  });
 });
 
 /**

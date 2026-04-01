@@ -39,7 +39,7 @@ class BotService {
       // 2. Save bot message in chat
       await messageService.sendMessage({
         channelId,
-        authorId: null, // or BOT_ID
+        authorId: userId,
         content: botReply,
         contentType: "bot",
         workspaceId: context.workspaceId,

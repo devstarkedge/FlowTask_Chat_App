@@ -38,6 +38,7 @@ import {
 import SidebarContainer from "./sidebar/SidebarContainer";
 import SidebarItem from "./sidebar/SidebarItem";
 import SidebarSection from "./sidebar/SidebarSection";
+import api from "../../services/api";
 
 const CHANNEL_ICONS = {
   project: Hash,
@@ -91,24 +92,30 @@ export default function NavigationSidebar({
   const privateChannels = channels.filter(
     (c) => c.type === "private" && !c.isArchived,
   );
-  const dmChannels = useMemo(() => {
-    const currentChatId = user?._id?.toString?.();
-    const currentFlowTaskId = user?.flowTaskUserId?.toString?.();
-    const selfIds = new Set([currentChatId, currentFlowTaskId].filter(Boolean));
+const dmChannels = useMemo(() => {
+  const currentChatId = user?._id?.toString?.();
+  const currentFlowTaskId = user?.flowTaskUserId?.toString?.();
+  const selfIds = new Set([currentChatId, currentFlowTaskId].filter(Boolean));
 
-    return channels
-      .filter((c) => c.type === "dm" && !c.isArchived)
-      .map((c) => {
-        const participants = Array.isArray(c.dmParticipants)
-          ? c.dmParticipants.map((p) => p?.toString?.() || String(p))
-          : [];
-        const recipientId =
-          c.dmRecipientId ||
-          participants.find((p) => p && !selfIds.has(p)) ||
-          null;
-        return { ...c, dmRecipientId: recipientId };
-      });
-  }, [channels, user]);
+  return channels
+    .filter((c) => 
+      c.type === "dm" && 
+      !c.isArchived &&
+      !c.isAI   
+    )
+    .map((c) => {
+      const participants = Array.isArray(c.dmParticipants)
+        ? c.dmParticipants.map((p) => p?.toString?.() || String(p))
+        : [];
+
+      const recipientId =
+        c.dmRecipientId ||
+        participants.find((p) => p && !selfIds.has(p)) ||
+        null;
+
+      return { ...c, dmRecipientId: recipientId };
+    });
+}, [channels, user]);
   const systemChannels = channels.filter(
     (c) => c.type === "system" && !c.isArchived,
   );
@@ -153,9 +160,20 @@ export default function NavigationSidebar({
     onClose?.();
   };
 
-  const handleChatBot = () =>{
-    
-  }
+  const handleChatBot = async () => {
+    try {
+      const res = await api.post("/channels/ai-dm");
+
+      const channelId = res.data?.data?.channelId;
+      if (!channelId) return;
+
+      setActiveChannel(channelId);
+
+      navigate(getDMPath(workspaceId, channelId));
+    } catch (err) {
+      console.error("ChatBot error:", err);
+    }
+  };
 
   const header = (
     <>
@@ -405,6 +423,14 @@ export default function NavigationSidebar({
             onAdd={() => setShowUserPicker(true)}
             addTitle="Start direct message"
           >
+            {/* CHATBOT BUTTON */}
+            <SidebarItem
+              icon={<Bot size={18} />}
+              label="ChatBot"
+              onClick={handleChatBot}
+            />
+
+            {/* Existing DM list */}
             {sortChannels(filteredChannels(dmChannels), true).map((channel) => (
               <DMListItem
                 key={channel._id}
@@ -415,6 +441,7 @@ export default function NavigationSidebar({
                 onlineUsers={onlineUsers}
               />
             ))}
+
             {filteredChannels(dmChannels).length === 0 && (
               <p
                 className="text-xs px-3 py-2"

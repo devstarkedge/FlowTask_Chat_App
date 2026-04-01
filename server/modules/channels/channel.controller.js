@@ -305,6 +305,13 @@ export const createAIDM = asyncHandler(async (req, res) => {
     channel = await channelService.createAIDMChannel(userId, workspaceId);
   }
 
+  // 3 Ensure AI flag is set
+  if (!channel.isAI) {
+    channel.isAI = true;
+    await channel.save();
+  }
+
+  // 4 Response
   res.json({
     success: true,
     data: {

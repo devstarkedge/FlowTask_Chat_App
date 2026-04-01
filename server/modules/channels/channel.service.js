@@ -1225,23 +1225,25 @@ class ChannelService {
 
   async getAIDMChannel(userId, workspaceId) {
     return Channel.findOne({
+      workspaceId,
       type: "dm",
       isAI: true,
-      workspaceId,
       "members.userId": userId,
     });
   }
 
   async createAIDMChannel(userId, workspaceId) {
-    return Channel.create({
+    const channel = await Channel.create({
       name: "ChatBot",
-      slug: `chatbot-${userId}`,
+      slug: `ai-${userId}`,
       type: "dm",
       isAI: true,
-      workspaceId,
       members: [{ userId }],
+      memberCount: 1,
+      workspaceId,
     });
+
+    return channel;
   }
 }
-
 export default new ChannelService();

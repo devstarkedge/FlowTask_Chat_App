@@ -1,5 +1,6 @@
 import messageService from './message.service.js';
 import fileUploadService from '../../services/fileUpload.service.js';
+import { enqueueScheduledMessage } from '../../services/scheduledMessages.service.js';
 import asyncHandler from '../../middleware/asyncHandler.js';
 import mongoose from 'mongoose';
 import SavedMessage from './SavedMessage.model.js';
@@ -535,10 +536,13 @@ export const getSavedMessages = asyncHandler(async (req, res) => {
  * Schedule a message for future delivery.
  */
 export const scheduleMessage = asyncHandler(async (req, res) => {
-  const { content, htmlContent, threadId, scheduledAt } = req.body;
+  const { content, htmlContent, threadId, scheduledAt, attachments, mentions, fileReferences } = req.body;
 
-  if (!content || !content.trim()) {
-    return res.status(400).json({ success: false, error: { message: 'Message content is required' } });
+  // Require content OR attachments (mirrors sendMessage validation)
+  const hasContent = content && content.trim();
+  const hasAttachments = (attachments && attachments.length > 0) || (fileReferences && fileReferences.length > 0);
+  if (!hasContent && !hasAttachments) {
+    return res.status(400).json({ success: false, error: { message: 'Message must have content or attachments' } });
   }
 
   const schedDate = new Date(scheduledAt);
@@ -546,15 +550,31 @@ export const scheduleMessage = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, error: { message: 'scheduledAt must be a future date' } });
   }
 
+  // Normalise mentions shape from frontend ({userId, username}) → stored shape ({targetId, name, type})
+  const normMentions = (mentions || []).map((m) => ({
+    targetId: m.userId || m.targetId,
+    name: m.username || m.name || '',
+    type: m.type || 'user',
+  }));
+
   const scheduled = await ScheduledMessage.create({
     channelId: req.params.channelId,
     authorId: req.user._id,
     workspaceId: req.workspaceId,
-    content,
-    htmlContent: htmlContent || content,
+    content: content || '',
+    htmlContent: htmlContent || content || '',
     threadId: threadId || null,
     scheduledAt: schedDate,
+    attachments: attachments || [],
+    mentions: normMentions,
   });
+
+  // Enqueue BullMQ delayed job (no-op if Redis unavailable)
+  try {
+    await enqueueScheduledMessage(scheduled);
+  } catch {
+    // Polling fallback will pick it up
+  }
 
   res.status(201).json({ success: true, data: { scheduledMessage: scheduled } });
 });
@@ -593,4 +613,83 @@ export const cancelScheduledMessage = asyncHandler(async (req, res) => {
   await scheduled.save();
 
   res.json({ success: true, data: { scheduledMessage: scheduled } });
+});
+
+/**
+ * PATCH /api/chat/messages/reschedule/:id
+ * Reschedule a pending scheduled message.
+ */
+export const rescheduleMessage = asyncHandler(async (req, res) => {
+  const { scheduledAt } = req.body;
+
+  if (!scheduledAt) {
+    return res.status(400).json({ success: false, error: { message: 'scheduledAt is required' } });
+  }
+
+  const schedDate = new Date(scheduledAt);
+  if (isNaN(schedDate.getTime()) || schedDate <= new Date()) {
+    return res.status(400).json({ success: false, error: { message: 'scheduledAt must be a future date' } });
+  }
+
+  const scheduled = await ScheduledMessage.findOneAndUpdate(
+    {
+      _id: req.params.id,
+      authorId: req.user._id,
+      workspaceId: req.workspaceId,
+      status: 'pending',
+    },
+    { $set: { scheduledAt: schedDate } },
+    { new: true },
+  );
+
+  if (!scheduled) {
+    return res.status(404).json({ success: false, error: { message: 'Scheduled message not found or already sent' } });
+  }
+
+  res.json({ success: true, data: { scheduledMessage: scheduled } });
+});
+
+/**
+ * POST /api/chat/messages/send-now/:id
+ * Immediately send a pending scheduled message.
+ */
+export const sendScheduledNow = asyncHandler(async (req, res) => {
+  const scheduled = await ScheduledMessage.findOneAndUpdate(
+    {
+      _id: req.params.id,
+      authorId: req.user._id,
+      workspaceId: req.workspaceId,
+      status: 'pending',
+    },
+    { $set: { status: 'processing' } },
+    { new: true },
+  );
+
+  if (!scheduled) {
+    return res.status(404).json({ success: false, error: { message: 'Scheduled message not found or already sent' } });
+  }
+
+  try {
+    const message = await messageService.sendMessage({
+      channelId: scheduled.channelId,
+      authorId: scheduled.authorId,
+      content: scheduled.content,
+      htmlContent: scheduled.htmlContent,
+      threadId: scheduled.threadId,
+      workspaceId: scheduled.workspaceId,
+      attachments: scheduled.attachments || [],
+      mentions: (scheduled.mentions || []).map((m) => ({
+        userId: m.targetId,
+        username: m.name,
+        type: m.type,
+      })),
+    });
+
+    await ScheduledMessage.markSent(scheduled._id, message._id);
+
+    res.json({ success: true, data: { message, scheduledMessage: { ...scheduled.toObject(), status: 'sent' } } });
+  } catch (err) {
+    await ScheduledMessage.markFailed(scheduled._id, err.message);
+    res.status(500).json({ success: false, error: { message: 'Failed to send message' } });
+  }
 });

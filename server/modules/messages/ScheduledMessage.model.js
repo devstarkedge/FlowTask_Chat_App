@@ -59,6 +59,21 @@ const scheduledMessageSchema = new Schema({
     type: String,
     default: null,
   },
+  // Stored by value (not by ref) so attachments survive FileAsset cleanup
+  // between scheduling time and delivery time.
+  attachments: [{
+    fileId: { type: Schema.Types.ObjectId, ref: 'FileAsset' },
+    fileName: { type: String, maxlength: 255 },
+    mimeType: { type: String, maxlength: 100 },
+    fileSize: { type: Number },
+    url: { type: String },
+    thumbnailUrl: { type: String },
+  }],
+  mentions: [{
+    targetId: { type: String },
+    name: { type: String },
+    type: { type: String, enum: ['user', 'channel'], default: 'user' },
+  }],
 }, {
   timestamps: true,
 });

@@ -1,35 +1,61 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Clock, X } from 'lucide-react'
 import { scheduledMessageAPI } from '../../services/api'
 import toast from 'react-hot-toast'
 
-const QUICK_OPTIONS = [
-  { label: 'In 30 minutes', minutes: 30 },
-  { label: 'In 1 hour', minutes: 60 },
-  { label: 'In 3 hours', minutes: 180 },
-  { label: 'Tomorrow 9:00 AM', custom: true },
-]
+function getQuickOptions() {
+  const now = new Date()
+  const options = []
 
-export default function ScheduleMessageModal({ channelId, content, htmlContent, onClose, onScheduled }) {
+  // Later today at 4:00 PM — only show if before 3:30 PM
+  const laterToday = new Date(now)
+  laterToday.setHours(16, 0, 0, 0)
+  if (now.getHours() < 15 || (now.getHours() === 15 && now.getMinutes() < 30)) {
+    options.push({
+      label: `Later today (${laterToday.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })})`,
+      date: laterToday,
+    })
+  }
+
+  // Tomorrow morning at 9:00 AM
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  tomorrow.setHours(9, 0, 0, 0)
+  options.push({
+    label: `Tomorrow morning (${tomorrow.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} 9:00 AM)`,
+    date: tomorrow,
+  })
+
+  // Next Monday at 9:00 AM
+  const monday = new Date(now)
+  const dayOfWeek = monday.getDay()
+  const daysUntilMonday = dayOfWeek === 1 ? 7 : (8 - dayOfWeek) % 7
+  monday.setDate(monday.getDate() + daysUntilMonday)
+  monday.setHours(9, 0, 0, 0)
+  options.push({
+    label: `Next Monday (${monday.toLocaleDateString([], { month: 'short', day: 'numeric' })} 9:00 AM)`,
+    date: monday,
+  })
+
+  return options
+}
+
+export default function ScheduleMessageModal({
+  channelId,
+  content,
+  htmlContent,
+  attachments = [],
+  mentions = [],
+  threadId = null,
+  onClose,
+  onScheduled,
+}) {
   const [scheduledAt, setScheduledAt] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [minDate, setMinDate] = useState(() => new Date().toISOString().slice(0, 16))
+  const [minDate] = useState(() => new Date().toISOString().slice(0, 16))
+  const quickOptions = getQuickOptions()
 
-  useEffect(() => {
-    const timer = setInterval(() => setMinDate(new Date().toISOString().slice(0, 16)), 60_000)
-    return () => clearInterval(timer)
-  }, [])
-
-  const handleQuickOption = async (opt) => {
-    let date
-    if (opt.custom) {
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      tomorrow.setHours(9, 0, 0, 0)
-      date = tomorrow
-    } else {
-      date = new Date(Date.now() + opt.minutes * 60 * 1000)
-    }
+  const handleQuickOption = async (date) => {
     await submitSchedule(date.toISOString())
   }
 
@@ -53,6 +79,9 @@ export default function ScheduleMessageModal({ channelId, content, htmlContent, 
         content,
         htmlContent,
         scheduledAt: isoDate,
+        attachments,
+        mentions,
+        ...(threadId ? { threadId } : {}),
       })
       toast.success('Message scheduled')
       onScheduled?.()
@@ -89,10 +118,10 @@ export default function ScheduleMessageModal({ channelId, content, htmlContent, 
         <div className="px-5 py-4">
           {/* Quick Options */}
           <div className="flex flex-col gap-1.5 mb-4">
-            {QUICK_OPTIONS.map((opt) => (
+            {quickOptions.map((opt) => (
               <button
                 key={opt.label}
-                onClick={() => handleQuickOption(opt)}
+                onClick={() => handleQuickOption(opt.date)}
                 disabled={submitting}
                 className="text-left px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors"
                 style={{

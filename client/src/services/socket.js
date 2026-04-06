@@ -4,6 +4,7 @@ import { useChatStore } from '../stores/chatStore'
 import { useChannelStore } from '../stores/channelStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useNotificationStore } from '../stores/notificationStore'
+import { useDraftStore } from '../stores/draftStore'
 import { throttle } from '../utils/throttle'
 import logger from '../utils/logger'
 
@@ -345,6 +346,29 @@ export function connectSocket() {
     useNotificationStore.getState().addNotification(notification)
     // Also keep legacy in-memory notification for toast/badge
     useChatStore.getState().addNotification(notification)
+  })
+
+  // ─── Draft Events (cross-device sync) ────────────────────────────────
+  socket.on('draft:updated', ({ draft }) => {
+    if (!draft) return
+    useDraftStore.getState().setServerDraft(draft)
+  })
+
+  socket.on('draft:deleted', ({ channelId, threadId, workspaceId }) => {
+    useDraftStore.getState().removeServerDraft(channelId, threadId, workspaceId)
+  })
+
+  // ─── Scheduled Message Events ────────────────────────────────────────
+  socket.on('scheduledMessage:sent', ({ scheduledMessageId, message }) => {
+    // The scheduled message was sent successfully — add to chat if in the channel
+    if (message) {
+      useChatStore.getState().addMessage(message)
+    }
+    logger.log('[Socket] Scheduled message sent:', scheduledMessageId)
+  })
+
+  socket.on('scheduledMessage:failed', ({ scheduledMessageId, error }) => {
+    logger.error('[Socket] Scheduled message failed:', scheduledMessageId, error)
   })
 
   return socket

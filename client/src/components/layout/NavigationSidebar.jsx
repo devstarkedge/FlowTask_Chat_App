@@ -32,6 +32,8 @@ import JoinWorkspaceModal from "../workspace/JoinWorkspaceModal";
 import WorkspaceSettingsModal from "../workspace/WorkspaceSettingsModal";
 import { formatDistanceToNowStrict } from "date-fns";
 import { getChannelPath, getDMPath, getDirectoriesPath } from "../../utils/chatRoutes";
+import { useDraftStore } from "../../stores/draftStore";
+import { isContentEmpty } from "../../utils/draftUtils";
 import SidebarContainer from "./sidebar/SidebarContainer";
 import SidebarItem from "./sidebar/SidebarItem";
 import SidebarSection from "./sidebar/SidebarSection";
@@ -60,6 +62,15 @@ export default function NavigationSidebar({
   const { user } = useAuthStore();
   const { onlineUsers } = useChatStore();
   const { switchWorkspace } = useWorkspaceStore();
+  const drafts = useDraftStore((s) => s.drafts);
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+
+  const hasDraft = (channelId) => {
+    const key = `${activeWorkspaceId || 'global'}:${channelId}:root`;
+    const draft = drafts[key];
+    if (!draft) return false;
+    return !isContentEmpty(draft.html, draft.text);
+  };
   const [expandedSections, setExpandedSections] = useState({
     channels: true,
     privateChannels: true,
@@ -249,7 +260,7 @@ export default function NavigationSidebar({
                 onClick={() => onToggleAllThreads?.()}
               />
               <NavButton icon={Radio} label="Huddles" onClick={() => {}} />
-              <NavButton icon={Send} label="Drafts & Sent" onClick={() => {}} />
+              <NavButton icon={Send} label="Drafts & Sent" onClick={() => navigate(`/workspace/${workspaceId}/later`)} />
               <NavButton
                 icon={Compass}
                 label="Directories"
@@ -309,6 +320,7 @@ export default function NavigationSidebar({
                   unread={unreads[channel._id] || 0}
                   onClick={() => handleSelectChannel(channel._id)}
                   onlineUsers={onlineUsers}
+                  hasDraft={hasDraft(channel._id)}
                 />
               ))}
               {filteredChannels(systemChannels).length === 0 && (
@@ -343,6 +355,7 @@ export default function NavigationSidebar({
                   unread={unreads[channel._id] || 0}
                   onClick={() => handleSelectChannel(channel._id)}
                   onlineUsers={onlineUsers}
+                  hasDraft={hasDraft(channel._id)}
                 />
               ))}
               {filteredChannels([...publicChannels, ...projectChannels, ...deptChannels]).length === 0 && (
@@ -368,6 +381,7 @@ export default function NavigationSidebar({
                   unread={unreads[channel._id] || 0}
                   onClick={() => handleSelectChannel(channel._id)}
                   onlineUsers={onlineUsers}
+                  hasDraft={hasDraft(channel._id)}
                 />
               ))}
             </SidebarSection>
@@ -390,6 +404,7 @@ export default function NavigationSidebar({
                 unread={unreads[channel._id] || 0}
                 onClick={() => handleSelectChannel(channel._id)}
                 onlineUsers={onlineUsers}
+                hasDraft={hasDraft(channel._id)}
               />
             ))}
             {filteredChannels(dmChannels).length === 0 && (
@@ -476,7 +491,7 @@ function NavButton({ icon: Icon, label, onClick, badge }) {
 
 /* ─── Channel List Item ────────────────────────────────────────────────── */
 
-function ChannelListItem({ channel, isActive, unread, onClick, onlineUsers }) {
+function ChannelListItem({ channel, isActive, unread, onClick, onlineUsers, hasDraft }) {
   // Determine icon from visibility (not type) so Lock/Hash is always correct
   let Icon = CHANNEL_ICONS[channel.type] || Hash;
   if (channel.visibility === 'private') Icon = Lock;
@@ -486,8 +501,13 @@ function ChannelListItem({ channel, isActive, unread, onClick, onlineUsers }) {
     <SidebarItem
       icon={<Icon size={18} style={{ opacity: isActive ? 1 : 0.6 }} />}
       label={channel.name}
+      sublabel={hasDraft ? (
+        <span className="flex items-center gap-1" style={{ color: 'var(--accent-primary)', fontSize: 11 }}>
+          <span style={{ fontSize: 10 }}>✏️</span> Draft
+        </span>
+      ) : undefined}
       isActive={isActive}
-      isBold={unread > 0}
+      isBold={unread > 0 || hasDraft}
       badge={unread}
       onClick={onClick}
     />
@@ -496,7 +516,7 @@ function ChannelListItem({ channel, isActive, unread, onClick, onlineUsers }) {
 
 /* ─── DM List Item ─────────────────────────────────────────────────────── */
 
-function DMListItem({ channel, isActive, unread, onClick, onlineUsers }) {
+function DMListItem({ channel, isActive, unread, onClick, onlineUsers, hasDraft }) {
   const isOnline = onlineUsers?.has?.(channel.dmRecipientId);
   const isAway =
     isOnline && onlineUsers?.get?.(channel.dmRecipientId) === "away";
@@ -539,14 +559,18 @@ function DMListItem({ channel, isActive, unread, onClick, onlineUsers }) {
         </div>
       }
       label={channel.name}
-      sublabel={channel.lastMessagePreview || undefined}
+      sublabel={hasDraft ? (
+        <span className="flex items-center gap-1" style={{ color: 'var(--accent-primary)', fontSize: 11 }}>
+          <span style={{ fontSize: 10 }}>✏️</span> Draft
+        </span>
+      ) : (channel.lastMessagePreview || undefined)}
       meta={timeAgo && (
         <span className="text-[11px]" style={{ color: isActive ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)' }}>
           {timeAgo}
         </span>
       )}
       isActive={isActive}
-      isBold={unread > 0}
+      isBold={unread > 0 || hasDraft}
       badge={unread}
       onClick={onClick}
     />

@@ -252,7 +252,7 @@ export async function initializeSocket(httpServer, corsOptions) {
   io.on('connection', async (socket) => {
     const user = socket.chatUser;
     const userId = user._id.toString();
-    const wsId = socket.workspaceId;
+    let wsId = socket.workspaceId;
 
     logger.info('Socket connected', {
       metric: 'socket_lifecycle',
@@ -505,6 +505,7 @@ export async function initializeSocket(httpServer, corsOptions) {
 
         // Update workspace context
         socket.workspaceId = newWorkspaceId;
+        wsId = newWorkspaceId;
 
         // Re-join rooms for new workspace
         const newUserRoom = buildRoomName(newWorkspaceId, 'user', userId);

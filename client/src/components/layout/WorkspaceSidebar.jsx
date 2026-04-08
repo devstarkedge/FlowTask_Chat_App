@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Home, MessageSquare, Bell, FolderOpen, Clock, Wrench, Plus } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
+import { useDraftStore } from '../../stores/draftStore'
 import { Avatar } from '../chat/MemberAvatarGroup'
 // Tooltip removed for sidebar hover - using direct buttons to avoid popovers
 import CreateMenu from '../ui/CreateMenu'
@@ -26,6 +27,7 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   const { workspaceId } = useParams()
   const { user } = useAuthStore()
   const unreadNotifications = useNotificationStore((s) => s.unreadCount)
+  const draftCount = useDraftStore((s) => s.allDraftsForSidebar.length)
   const [showCreateMenu, setShowCreateMenu] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const createBtnRef = useRef(null)
@@ -155,6 +157,17 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
                 }}
               >
                 {unreadNotifications > 99 ? '99+' : unreadNotifications}
+              </span>
+            )}
+            {item.id === 'later' && draftCount > 0 && (
+              <span
+                className="absolute shadow-[0_0_0_2px_var(--bg-workspace-sidebar)] flex items-center justify-center rounded-full text-[10px] font-bold"
+                style={{
+                  top: '-4px', right: '-4px', minWidth: '16px', height: '16px', padding: '0 4px',
+                  background: 'var(--accent-primary)', color: 'white',
+                }}
+              >
+                {draftCount > 99 ? '99+' : draftCount}
               </span>
             )}
           </button>

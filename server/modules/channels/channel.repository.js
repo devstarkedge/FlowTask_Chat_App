@@ -1,6 +1,6 @@
 import Channel from './Channel.model.js';
 import ChannelMember from './ChannelMember.model.js';
-import { CHANNEL_TYPES } from '../../config/constants.js';
+import { CHANNEL_TYPES, CHANNEL_VISIBILITY } from '../../config/constants.js';
 import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
 import cache from '../../services/cache.service.js';
 
@@ -285,6 +285,21 @@ class ChannelRepository {
   async findByType(type, workspaceId) {
     const filter = injectWorkspaceFilter({ type, isArchived: false }, workspaceId);
     return Channel.find(filter).exec();
+  }
+
+  /**
+   * Find all non-archived public channels for a workspace.
+   * Used for auto-adding new workspace members to public channels.
+   * @param {string} workspaceId
+   * @returns {Promise<Channel[]>}
+   */
+  async findPublicChannels(workspaceId) {
+    if (!workspaceId) return [];
+    return Channel.find({
+      workspaceId,
+      visibility: CHANNEL_VISIBILITY.PUBLIC,
+      isArchived: false,
+    }).exec();
   }
 
   /**

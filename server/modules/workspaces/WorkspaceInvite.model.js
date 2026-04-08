@@ -70,8 +70,7 @@ workspaceInviteSchema.index(
   { workspaceId: 1, email: 1 },
   { unique: true, partialFilterExpression: { status: 'pending' } },
 );
-// Token lookup for accepting invites
-workspaceInviteSchema.index({ token: 1 });
+// Token lookup for accepting invites — index created automatically via unique:true on the field
 // TTL for auto-expiry (only pending invites not yet expired)
 workspaceInviteSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 

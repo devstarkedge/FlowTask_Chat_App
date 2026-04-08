@@ -240,6 +240,14 @@ export const SOCKET_EVENTS = Object.freeze({
   // Notifications
   NOTIFICATION: 'notification',
   NOTIFICATION_UNREAD_UPDATED: 'notification:unread:updated',
+
+  // Drafts
+  DRAFT_UPDATED: 'draft:updated',
+  DRAFT_DELETED: 'draft:deleted',
+
+  // Scheduled Messages
+  SCHEDULED_MESSAGE_SENT: 'scheduledMessage:sent',
+  SCHEDULED_MESSAGE_FAILED: 'scheduledMessage:failed',
 });
 
 // ─── Notification Types ──────────────────────────────────────────────────────

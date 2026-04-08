@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useChannelStore } from "../../stores/channelStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useChatStore } from "../../stores/chatStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 import {
   Hash,
   Lock,
@@ -35,6 +36,8 @@ import {
   getDMPath,
   getDirectoriesPath,
 } from "../../utils/chatRoutes";
+import { useDraftStore } from "../../stores/draftStore";
+import { isContentEmpty } from "../../utils/draftUtils";
 import SidebarContainer from "./sidebar/SidebarContainer";
 import SidebarItem from "./sidebar/SidebarItem";
 import SidebarSection from "./sidebar/SidebarSection";
@@ -63,6 +66,16 @@ export default function NavigationSidebar({
     useChannelStore();
   const { user } = useAuthStore();
   const { onlineUsers } = useChatStore();
+  const { switchWorkspace } = useWorkspaceStore();
+  const drafts = useDraftStore((s) => s.drafts);
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+
+  const hasDraft = (channelId) => {
+    const key = `${activeWorkspaceId || 'global'}:${channelId}:root`;
+    const draft = drafts[key];
+    if (!draft) return false;
+    return !isContentEmpty(draft.html, draft.text);
+  };
   const [expandedSections, setExpandedSections] = useState({
     channels: true,
     privateChannels: true,
@@ -84,13 +97,13 @@ export default function NavigationSidebar({
   };
 
   const projectChannels = channels.filter(
-    (c) => c.type === "project" && !c.isArchived,
+    (c) => c.type === "project" && c.visibility !== "private" && !c.isArchived,
   );
   const publicChannels = channels.filter(
     (c) => c.type === "public" && !c.isArchived,
   );
   const privateChannels = channels.filter(
-    (c) => c.type === "private" && !c.isArchived,
+    (c) => (c.type === "private" || (c.visibility === "private" && c.type !== "dm" && c.type !== "system")) && !c.isArchived,
   );
 const dmChannels = useMemo(() => {
   const currentChatId = user?._id?.toString?.();
@@ -276,7 +289,7 @@ const dmChannels = useMemo(() => {
                 onClick={() => onToggleAllThreads?.()}
               />
               <NavButton icon={Radio} label="Huddles" onClick={() => {}} />
-              <NavButton icon={Send} label="Drafts & Sent" onClick={() => {}} />
+              <NavButton icon={Send} label="Drafts & Sent" onClick={() => navigate(`/workspace/${workspaceId}/later`)} />
               <NavButton
                 icon={Compass}
                 label="Directories"
@@ -336,6 +349,7 @@ const dmChannels = useMemo(() => {
                   unread={unreads[channel._id] || 0}
                   onClick={() => handleSelectChannel(channel._id)}
                   onlineUsers={onlineUsers}
+                  hasDraft={hasDraft(channel._id)}
                 />
               ))}
               {filteredChannels(systemChannels).length === 0 && (
@@ -375,6 +389,7 @@ const dmChannels = useMemo(() => {
                   unread={unreads[channel._id] || 0}
                   onClick={() => handleSelectChannel(channel._id)}
                   onlineUsers={onlineUsers}
+                  hasDraft={hasDraft(channel._id)}
                 />
               ))}
               {filteredChannels([
@@ -399,6 +414,7 @@ const dmChannels = useMemo(() => {
               expanded={expandedSections.privateChannels}
               onToggle={() => toggleSection("privateChannels")}
             >
+
               {sortChannels(filteredChannels(privateChannels)).map(
                 (channel) => (
                   <ChannelListItem
@@ -411,6 +427,18 @@ const dmChannels = useMemo(() => {
                   />
                 ),
               )}
+=======
+              {sortChannels(filteredChannels(privateChannels)).map((channel) => (
+                <ChannelListItem
+                  key={channel._id}
+                  channel={channel}
+                  isActive={channel._id === activeChannelId}
+                  unread={unreads[channel._id] || 0}
+                  onClick={() => handleSelectChannel(channel._id)}
+                  onlineUsers={onlineUsers}
+                  hasDraft={hasDraft(channel._id)}
+                />
+              ))}
             </SidebarSection>
           )}
 
@@ -439,6 +467,7 @@ const dmChannels = useMemo(() => {
                 unread={unreads[channel._id] || 0}
                 onClick={() => handleSelectChannel(channel._id)}
                 onlineUsers={onlineUsers}
+                hasDraft={hasDraft(channel._id)}
               />
             ))}
 
@@ -489,7 +518,16 @@ const dmChannels = useMemo(() => {
         <CreateWorkspaceModal onClose={() => setShowCreateWorkspace(false)} />
       )}
       {showJoinWorkspace && (
-        <JoinWorkspaceModal onClose={() => setShowJoinWorkspace(false)} />
+        <JoinWorkspaceModal
+          onClose={() => setShowJoinWorkspace(false)}
+          onJoined={(workspace) => {
+            setShowJoinWorkspace(false);
+            if (workspace?._id) {
+              switchWorkspace(workspace._id);
+              navigate(`/chat/${workspace._id}`);
+            }
+          }}
+        />
       )}
       {showWorkspaceSettings && (
         <WorkspaceSettingsModal
@@ -524,15 +562,23 @@ function NavButton({ icon: Icon, label, onClick, badge }) {
 
 /* ─── Channel List Item ────────────────────────────────────────────────── */
 
-function ChannelListItem({ channel, isActive, unread, onClick, onlineUsers }) {
-  const Icon = CHANNEL_ICONS[channel.type] || Hash;
+function ChannelListItem({ channel, isActive, unread, onClick, onlineUsers, hasDraft }) {
+  // Determine icon from visibility (not type) so Lock/Hash is always correct
+  let Icon = CHANNEL_ICONS[channel.type] || Hash;
+  if (channel.visibility === 'private') Icon = Lock;
+  else if (channel.visibility === 'public') Icon = Hash;
 
   return (
     <SidebarItem
       icon={<Icon size={18} style={{ opacity: isActive ? 1 : 0.6 }} />}
       label={channel.name}
+      sublabel={hasDraft ? (
+        <span className="flex items-center gap-1" style={{ color: 'var(--accent-primary)', fontSize: 11 }}>
+          <span style={{ fontSize: 10 }}>✏️</span> Draft
+        </span>
+      ) : undefined}
       isActive={isActive}
-      isBold={unread > 0}
+      isBold={unread > 0 || hasDraft}
       badge={unread}
       onClick={onClick}
     />
@@ -541,7 +587,7 @@ function ChannelListItem({ channel, isActive, unread, onClick, onlineUsers }) {
 
 /* ─── DM List Item ─────────────────────────────────────────────────────── */
 
-function DMListItem({ channel, isActive, unread, onClick, onlineUsers }) {
+function DMListItem({ channel, isActive, unread, onClick, onlineUsers, hasDraft }) {
   const isOnline = onlineUsers?.has?.(channel.dmRecipientId);
   const isAway =
     isOnline && onlineUsers?.get?.(channel.dmRecipientId) === "away";
@@ -557,52 +603,70 @@ function DMListItem({ channel, isActive, unread, onClick, onlineUsers }) {
 
   return (
     <SidebarItem
-      icon={
-        <div className="relative shrink-0">
-          <Avatar
-            member={{
-              name: channel.name,
-              avatar: channel.avatar,
-              onlineStatus: isOnline ? (isAway ? "away" : "online") : "offline",
-            }}
-            size={28}
-            showStatus={false}
-          />
-          {isOnline && (
-            <span
-              className="absolute rounded-full"
-              style={{
-                width: 10,
-                height: 10,
-                background: isAway
-                  ? "var(--status-away)"
-                  : "var(--status-online)",
-                border: "2px solid var(--bg-sidebar)",
-                bottom: -1,
-                right: -1,
-              }}
-            />
-          )}
-        </div>
-      }
-      label={channel.name}
-      sublabel={channel.lastMessagePreview || undefined}
-      meta={
-        timeAgo && (
-          <span
-            className="text-[11px]"
-            style={{
-              color: isActive ? "rgba(255,255,255,0.7)" : "var(--text-muted)",
-            }}
-          >
-            {timeAgo}
-          </span>
-        )
-      }
-      isActive={isActive}
-      isBold={unread > 0}
-      badge={unread}
-      onClick={onClick}
-    />
+  icon={
+    <div className="relative shrink-0">
+      <Avatar
+        member={{
+          name: channel.name,
+          avatar: channel.avatar,
+          onlineStatus: isOnline ? (isAway ? "away" : "online") : "offline",
+        }}
+        size={28}
+        showStatus={false}
+      />
+      {isOnline && (
+        <span
+          className="absolute rounded-full"
+          style={{
+            width: 10,
+            height: 10,
+            background: isAway
+              ? "var(--status-away)"
+              : "var(--status-online)",
+            border: "2px solid var(--bg-sidebar)",
+            bottom: -1,
+            right: -1,
+          }}
+        />
+      )}
+    </div>
+  }
+  label={channel.name}
+
+  // ✅ FIXED: single sublabel
+  sublabel={
+    hasDraft ? (
+      <span
+        className="flex items-center gap-1"
+        style={{ color: "var(--accent-primary)", fontSize: 11 }}
+      >
+        <span style={{ fontSize: 10 }}>✏️</span> Draft
+      </span>
+    ) : (
+      channel.lastMessagePreview || undefined
+    )
+  }
+
+  // ✅ FIXED: single meta
+  meta={
+    timeAgo && (
+      <span
+        className="text-[11px]"
+        style={{
+          color: isActive
+            ? "rgba(255,255,255,0.7)"
+            : "var(--text-muted)",
+        }}
+      >
+        {timeAgo}
+      </span>
+    )
+  }
+
+  isActive={isActive}
+  isBold={unread > 0 || hasDraft}
+  badge={unread}
+  onClick={onClick}
+/>
   );
 }

@@ -150,11 +150,11 @@ const RichTextEditor = forwardRef(function RichTextEditor(
       },
       /** Set HTML content (for draft restore / editing) */
       setContent(html) {
-        editor?.commands.setContent(html || '', false)
+        editor?.commands.setContent(html || '', { emitUpdate: false })
       },
-      /** Clear the editor */
+      /** Clear the editor — emitUpdate=false to prevent triggering onUpdate/draft-save pipeline */
       clear() {
-        editor?.commands.clearContent(true)
+        editor?.commands.clearContent(false)
       },
       /** Focus the editor */
       focus(position = 'end') {

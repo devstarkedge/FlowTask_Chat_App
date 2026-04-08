@@ -129,13 +129,14 @@ class WorkspaceService {
    */
   async _createDefaultChannels(workspaceId, creatorId) {
     const { default: channelRepository } = await import('../channels/channel.repository.js');
+    const { default: ChannelMember } = await import('../channels/ChannelMember.model.js');
 
     for (const ch of DEFAULT_CHANNELS) {
       try {
         const exists = await channelRepository.findBySlug(ch.slug, workspaceId);
         if (exists) continue;
 
-        await channelRepository.create({
+        const channel = await channelRepository.create({
           name: ch.name,
           slug: ch.slug,
           type: ch.type,
@@ -143,8 +144,17 @@ class WorkspaceService {
           visibility: ch.visibility === 'public' ? CHANNEL_VISIBILITY.PUBLIC : CHANNEL_VISIBILITY.PRIVATE,
           members: [{ userId: creatorId, role: CHANNEL_MEMBER_ROLES.OWNER }],
           memberCount: 1,
+          createdBy: creatorId,
           workspaceId,
         });
+
+        // Write to ChannelMember collection (source of truth for findByMember)
+        await ChannelMember.addMember(
+          channel._id.toString(),
+          creatorId,
+          workspaceId.toString(),
+          CHANNEL_MEMBER_ROLES.OWNER,
+        );
 
         logger.info(`Default channel #${ch.slug} created for workspace ${workspaceId}`);
       } catch (err) {
@@ -250,6 +260,9 @@ class WorkspaceService {
     const membership = await workspaceRepository.addMember(userId, workspaceId, role, invitedBy);
     logger.info(`User ${userId} invited to workspace ${workspaceId} as ${role}`);
 
+    // Auto-add to all public channels in this workspace
+    await this._autoJoinPublicChannels(userId, workspaceId);
+
     return membership;
   }
 
@@ -336,6 +349,9 @@ class WorkspaceService {
     );
 
     logger.info(`User ${userId} joined workspace ${workspace.slug} via invite code`);
+
+    // Auto-add to all public channels in this workspace
+    await this._autoJoinPublicChannels(userId, workspace._id);
 
     return { workspace, membership, alreadyMember: false };
   }
@@ -490,6 +506,9 @@ class WorkspaceService {
     const membership = await workspaceRepository.addMember(userId, workspace._id, invite.role);
     await WorkspaceInvite.markAccepted(token, userId);
 
+    // Auto-add to all public channels in this workspace
+    await this._autoJoinPublicChannels(userId, workspace._id);
+
     logger.info(`User ${userId} accepted invite to workspace ${workspace.slug}`);
     return { workspace, membership, alreadyMember: false };
   }
@@ -567,6 +586,74 @@ class WorkspaceService {
     logger.info(`Workspace ${workspace.slug} plan changed from ${workspace.plan} to ${newPlan} by user ${requesterId}`);
 
     return updated;
+  }
+
+  /**
+   * Auto-add a user to all public channels in a workspace.
+   * Called when a user first joins a workspace (invite, invite code, or email accept).
+   * Non-critical — logs errors but does not fail the join operation.
+   * @private
+   */
+  async _autoJoinPublicChannels(userId, workspaceId) {
+    try {
+      const { default: channelRepository } = await import('../channels/channel.repository.js');
+      const { default: ChannelMember } = await import('../channels/ChannelMember.model.js');
+      const { default: Channel } = await import('../channels/Channel.model.js');
+      const { emitToUser, joinChannelRoom } = await import('../../sockets/socketManager.js');
+      const { SOCKET_EVENTS } = await import('../../config/constants.js');
+
+      const publicChannels = await channelRepository.findPublicChannels(workspaceId);
+      if (publicChannels.length === 0) return;
+
+      const wsId = workspaceId.toString();
+      const uid = userId.toString();
+
+      for (const channel of publicChannels) {
+        // Skip if user is already a member (idempotent, but avoid extra work)
+        if (channel.hasMember(userId)) continue;
+
+        const channelId = channel._id.toString();
+
+        // Upsert into ChannelMember collection (source of truth)
+        await ChannelMember.addMember(channelId, userId, wsId, CHANNEL_MEMBER_ROLES.MEMBER);
+
+        // Update embedded members array for backward compat
+        await Channel.findOneAndUpdate(
+          { _id: channel._id, 'members.userId': { $ne: userId } },
+          {
+            $push: { members: { userId, role: CHANNEL_MEMBER_ROLES.MEMBER, joinedAt: new Date() } },
+            $inc: { memberCount: 1 },
+          },
+        );
+
+        // Notify user's connected sockets
+        const channelPayload = {
+          _id: channel._id,
+          name: channel.name,
+          slug: channel.slug,
+          type: channel.type,
+          visibility: channel.visibility,
+          description: channel.description,
+          memberCount: (channel.memberCount || 0) + 1,
+          workspaceId: channel.workspaceId,
+          createdBy: channel.createdBy,
+        };
+        emitToUser(uid, SOCKET_EVENTS.CHANNEL_ADDED, { channel: channelPayload }, wsId);
+        joinChannelRoom(uid, channelId, wsId);
+      }
+
+      logger.info('[WORKSPACE_JOIN] Auto-added user to public channels', {
+        userId: uid,
+        workspaceId: wsId,
+        channelCount: publicChannels.length,
+      });
+    } catch (error) {
+      logger.error('[WORKSPACE_JOIN] Failed to auto-join public channels', {
+        userId,
+        workspaceId,
+        error: error.message,
+      });
+    }
   }
 
   /**

@@ -90,8 +90,9 @@ export const useWorkspaceStore = create(
           // 3. Clear notification state
           useNotificationStore.getState().clearNotifications()
 
-          // 4. Clear draft state to prevent workspace leakage
-          useDraftStore.getState().clearAllDrafts?.()
+          // 4. Reset draft sidebar state for clean workspace transition
+          // (local drafts are keyed by workspaceId — no leakage risk)
+          useDraftStore.getState().resetSidebarState?.()
 
           // 5. Update active workspace
           set({

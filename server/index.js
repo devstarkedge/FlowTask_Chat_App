@@ -26,6 +26,7 @@ import workspaceRoutes from './modules/workspaces/workspace.routes.js';
 import notificationRoutes from './modules/notifications/notification.routes.js';
 import adminRoutes from './modules/admin/admin.routes.js';
 import directoriesRoutes from './modules/directories/directories.routes.js';
+import draftRoutes from './modules/drafts/draft.routes.js';
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
 import eventBus from './services/eventBus.js';
 import channelService from './modules/channels/channel.service.js';
@@ -89,7 +90,16 @@ const corsOptions = {
 // CORS must be applied before Helmet and all routes — including an explicit
 // handler for OPTIONS preflight so browsers get the CORS headers back
 // even when the actual endpoint hasn't been reached yet.
-app.options('*', cors(corsOptions));
+// Handle OPTIONS preflight explicitly to avoid path-to-regexp parsing
+// issues when using wildcard route strings like '*' or '/*'. We invoke
+// the `cors` middleware directly for OPTIONS requests without registering
+// a route string so the router doesn't parse the path pattern.
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return cors(corsOptions)(req, res, next);
+  }
+  next();
+});
 app.use(cors(corsOptions));
 app.use(helmet({
   contentSecurityPolicy: {
@@ -235,6 +245,7 @@ app.use('/api/chat/users', userRoutes);
 app.use('/api/chat/notifications', notificationRoutes);
 app.use('/api/chat/admin', adminRoutes);
 app.use('/api/chat/directories', directoriesRoutes);
+app.use('/api/chat/drafts', draftRoutes);
 app.use('/api/chat', readReceiptRoutes);
 
 // ─── Static File Serving (Uploads) ───────────────────────────────────────────
@@ -252,7 +263,11 @@ app.use('/api/chat/uploads', express.static(path.resolve(env.UPLOAD_DIR), {
 }));
 
 // ─── 404 Catch-All ───────────────────────────────────────────────────────────
-app.all('/api/chat/*', (req, _res, next) => {
+// Use `app.use` with a mounted path to avoid path-to-regexp parsing errors
+// for wildcard route strings like '/api/chat/*'. This middleware runs after
+// all route registrations and returns a NotFoundError for unmatched
+// `/api/chat` requests.
+app.use('/api/chat', (req, _res, next) => {
   next(new NotFoundError(`Route ${req.method} ${req.originalUrl} not found`));
 });
 

@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback, useEffect, memo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { useChannelStore } from '../../stores/channelStore'
@@ -5,15 +6,17 @@ import { useDraftStore } from '../../stores/draftStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { messageAPI } from '../../services/api'
 import { emitTypingStart, emitTypingStop } from '../../services/socket'
+import useDraftAutoSave from '../../hooks/useDraftAutoSave'
 import {
   Send, Paperclip, Smile, Bold, Italic, Underline, Strikethrough,
   Code, Braces, List, ListOrdered, Quote, Link, X, FileText,
-  Loader2, Plus, AtSign, ChevronDown
+  Loader2, Plus, AtSign, ChevronDown, Clock
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import EmojiPicker from './EmojiPicker'
 import MentionDropdown from './MentionDropdown'
 import RichTextEditor from './RichTextEditor'
+import ScheduleMessageModal from './ScheduleMessageModal'
 
 // ─── Toolbar Button ──────────────────────────────────────────────────────────
 
@@ -146,15 +149,18 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   const [mentionType, setMentionType] = useState(null) // 'user' | 'channel' | null
   const [mentionQuery, setMentionQuery] = useState('')
 
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+
   const { sendMessage } = useChatStore()
-  const { setDraft, getDraft, clearDraft } = useDraftStore()
+  const { clearDraft } = useDraftStore()
 
   const editorRef = useRef(null)
   const fileInputRef = useRef(null)
   const containerRef = useRef(null)
   const typingTimeoutRef = useRef(null)
-  const draftTimerRef = useRef(null)
-  const lastChannelRef = useRef(channelId)
+
+  // ─── Draft Auto Save Hook ─────────────────────────────────────────
+  const { saveDraftDebounced, restoreDraft, saveDraftLocal } = useDraftAutoSave(channelId, threadId, editorRef)
 
   // ─── Format State Sync ───────────────────────────────────────────────────
 
@@ -174,52 +180,38 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     })
   }, [])
 
-  // ─── Draft Persistence ───────────────────────────────────────────────────
+  // ─── Draft Restore on channel change ──────────────────────────────────────
 
-  // Save draft on channel switch (leaving current channel)
-  useEffect(() => {
-    if (lastChannelRef.current && lastChannelRef.current !== channelId) {
-      const ed = editorRef.current
-      if (ed) {
-        const { html, text } = ed.getContent()
-        if (text.trim()) {
-          setDraft(lastChannelRef.current, html, text, activeWorkspaceId)
-        } else {
-          clearDraft(lastChannelRef.current, activeWorkspaceId)
-        }
-      }
+ useEffect(() => {
+  let cancelled = false
+  let rafId = null
+
+  const doRestore = async () => {
+    if (!editorRef.current?.getEditor?.()) {
+      if (!cancelled) rafId = requestAnimationFrame(doRestore)
+      return
     }
-    lastChannelRef.current = channelId
-  }, [channelId, setDraft, clearDraft, activeWorkspaceId])
 
-  // Restore draft when channel changes
-  useEffect(() => {
-    const ed = editorRef.current
-    if (!ed) return
-    const draft = getDraft(channelId, activeWorkspaceId)
-    if (draft?.html) {
-      ed.setContent(draft.html)
-      setHasContent(true)
-    } else {
-      ed.clear()
-      setHasContent(false)
+    if (cancelled) return
+
+    //  ADD DELAY HERE
+    await new Promise((res) => setTimeout(res, 100))
+
+    const hasContent = await restoreDraft()
+
+    if (!cancelled) {
+      setHasContent(!!hasContent)
+      requestAnimationFrame(() => editorRef.current?.focus())
     }
-    requestAnimationFrame(() => ed.focus())
-  }, [channelId, activeWorkspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
-  // Debounced draft save on content change
-  const saveDraftDebounced = useCallback(() => {
-    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
-    draftTimerRef.current = setTimeout(() => {
-      const ed = editorRef.current
-      if (!ed) return
-      const { html, text } = ed.getContent()
-      if (text.trim()) {
-        setDraft(channelId, html, text, activeWorkspaceId)
-      }
-    }, 800)
-  }, [channelId, setDraft, activeWorkspaceId])
+  doRestore()
 
+  return () => {
+    cancelled = true
+    if (rafId) cancelAnimationFrame(rafId)
+  }
+}, [channelId, activeWorkspaceId, restoreDraft])
   // ─── Typing ──────────────────────────────────────────────────────────────
 
   const handleTyping = useCallback(() => {
@@ -398,7 +390,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     ed.clear()
     setHasContent(false)
     setPendingFiles([])
-    clearDraft(submitChannelId, activeWorkspaceId)
+    clearDraft(submitChannelId, activeWorkspaceId, submitThreadId)
 
     emitTypingStop(submitChannelId)
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
@@ -726,22 +718,68 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
             />
           </div>
 
-          {/* Right side — send */}
-          <button
-            onClick={handleSubmit}
-            disabled={isDisabled}
-            className="slack-send-btn"
-            data-has-content={hasContent || pendingFiles.length > 0 || undefined}
-            aria-label="Send message"
-          >
-            {isUploading ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <Send size={16} />
-            )}
-          </button>
+          {/* Right side — schedule + send */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowScheduleModal(true)}
+              disabled={isDisabled}
+              className="slack-schedule-btn"
+              title="Schedule message"
+              aria-label="Schedule message"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 30,
+                height: 30,
+                borderRadius: 'var(--radius-md)',
+                border: 'none',
+                background: 'transparent',
+                color: (hasContent || pendingFiles.length > 0) ? 'var(--text-secondary)' : 'var(--text-muted)',
+                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                transition: 'var(--transition-fast)',
+                opacity: isDisabled ? 0.4 : 1,
+              }}
+              onMouseEnter={(e) => { if (!isDisabled) e.currentTarget.style.background = 'var(--bg-hover)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <Clock size={15} />
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isDisabled}
+              className="slack-send-btn"
+              data-has-content={hasContent || pendingFiles.length > 0 || undefined}
+              aria-label="Send message"
+            >
+              {isUploading ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Send size={16} />
+              )}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Schedule Message Modal */}
+      {showScheduleModal && (
+        <ScheduleMessageModal
+          channelId={channelId}
+          content={editorRef.current?.getContent()?.text || ''}
+          htmlContent={editorRef.current?.getContent()?.html || ''}
+          attachments={pendingFiles}
+          mentions={editorRef.current?.getContent()?.mentions || []}
+          threadId={threadId}
+          onClose={() => setShowScheduleModal(false)}
+          onScheduled={() => {
+            editorRef.current?.clear()
+            setHasContent(false)
+            setPendingFiles([])
+            clearDraft(channelId, activeWorkspaceId, threadId)
+          }}
+        />
+      )}
 
       {/* Hidden file input */}
       <input

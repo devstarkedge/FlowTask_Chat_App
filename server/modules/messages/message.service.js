@@ -246,6 +246,9 @@ class MessageService {
       this._notifyDMRecipient(populated, channel, authorId).catch(() => {});
     }
 
+    // Remove draft for this conversation (non-blocking)
+    this._removeDraftOnSend(authorId, channelId, actualThreadId, wsId).catch(() => {});
+
     // Log performance
     logMessageLatency(startTime, message._id.toString(), channelId.toString());
 
@@ -814,6 +817,18 @@ class MessageService {
         messageId: message._id,
         error: error.message,
       });
+    }
+  }
+
+  /**
+   * Remove draft when a message is sent (non-blocking).
+   */
+  async _removeDraftOnSend(authorId, channelId, threadId, workspaceId) {
+    try {
+      const draftService = (await import('../drafts/draft.service.js')).default;
+      await draftService.removeDraftByConversation(authorId, channelId, threadId, workspaceId);
+    } catch (err) {
+      logger.debug('Draft removal after send failed (non-critical)', { error: err.message });
     }
   }
 }

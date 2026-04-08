@@ -262,6 +262,18 @@ export const scheduledMessageAPI = {
   list: () => api.get('/messages/scheduled'),
   create: (channelId, data) => api.post(`/channels/${channelId}/scheduled-messages`, data),
   cancel: (id) => api.delete(`/messages/scheduled/${id}`),
+  reschedule: (id, scheduledAt) => api.patch(`/messages/reschedule/${id}`, { scheduledAt }),
+  sendNow: (id) => api.post(`/messages/send-now/${id}`),
+}
+
+// ─── Drafts ──────────────────────────────────────────────────────────────
+export const draftAPI = {
+  save: (data) => api.post('/drafts/save', data),
+  get: (channelId, threadId) => api.get(`/drafts/${channelId}`, { params: { threadId } }),
+  getAll: (params) => api.get('/drafts/all', { params }),
+  getCount: () => api.get('/drafts/count'),
+  delete: (id) => api.delete(`/drafts/${id}`),
+  sendDraft: (id) => api.post(`/drafts/${id}/send`),
 }
 
 // ─── Admin ───────────────────────────────────────────────────────────────

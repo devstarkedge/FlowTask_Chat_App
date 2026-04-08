@@ -157,11 +157,27 @@ export const updatePreferencesSchema = z.object({
 });
 
 export const scheduleMessageSchema = z.object({
-  content: z.string().min(1, 'Content is required').max(10000),
-  htmlContent: z.string().max(20000).optional(),
+  content: z.string().max(10000).optional().default(''),
+  htmlContent: z.string().max(50000).optional().default(''),
   threadId: z.string().optional(),
   scheduledAt: z.string().min(1, 'scheduledAt is required'),
-});
+  attachments: z.array(z.object({
+    fileName: z.string().max(255).optional(),
+    mimeType: z.string().max(100).optional(),
+    fileSize: z.number().int().positive().optional(),
+    url: z.string().optional(),
+    thumbnailUrl: z.string().optional(),
+  })).max(10).optional().default([]),
+  mentions: z.array(z.object({
+    userId: z.string().min(1),
+    username: z.string().optional(),
+    type: z.enum(['user', 'channel']).optional().default('user'),
+  })).max(50).optional().default([]),
+  fileReferences: z.array(objectId).max(10).optional(),
+}).refine(
+  (data) => (data.content && data.content.trim()) || (data.attachments && data.attachments.length > 0) || (data.fileReferences && data.fileReferences.length > 0),
+  { message: 'Message must have content or attachments' },
+);
 
 // ─── Workspaces ──────────────────────────────────────────────────────────────
 

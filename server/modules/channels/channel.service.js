@@ -489,11 +489,15 @@ class ChannelService {
 
   /**
    * Create a custom channel (user-initiated).
+   * Public channels auto-add all active workspace members.
+   * Private channels only include the creator (and optional memberIds).
    */
   async createCustomChannel(data, creatorId, workspaceId) {
     if (!workspaceId) {
       throw new ValidationError("workspaceId is required to create a channel");
     }
+
+    const visibility = data.visibility || CHANNEL_VISIBILITY.PRIVATE;
 
     let slug = slugify(data.name);
     if (await channelRepository.slugExists(slug, workspaceId)) {
@@ -502,7 +506,7 @@ class ChannelService {
 
     const members = [{ userId: creatorId, role: CHANNEL_MEMBER_ROLES.OWNER }];
 
-    // Add initial members if provided
+    // Add initial members if provided (for private channels or explicit invites)
     if (data.memberIds?.length) {
       for (const memberId of data.memberIds) {
         if (memberId.toString() !== creatorId.toString()) {
@@ -511,22 +515,33 @@ class ChannelService {
       }
     }
 
+    // Derive type from visibility (not always 'project')
+    const channelType = visibility === CHANNEL_VISIBILITY.PUBLIC
+      ? CHANNEL_TYPES.PUBLIC
+      : CHANNEL_TYPES.PRIVATE;
+
     const channel = await channelRepository.create({
       name: data.name,
       slug,
       type: CHANNEL_TYPES.PROJECT, // Custom channels use project type
       description: data.description ? sanitizeHtml(data.description) : "",
       visibility: data.visibility || CHANNEL_VISIBILITY.PRIVATE,
+      type: channelType,
+      description: data.description ? sanitizeHtml(data.description) : '',
+      visibility,
       members,
       memberCount: members.length,
-      ...(workspaceId && { workspaceId }),
+      createdBy: creatorId,
+      workspaceId,
     });
 
-    // Persist all members to ChannelMember collection (source of truth for
+    // Persist initial members to ChannelMember collection (source of truth for
     // findByMember which powers channel list on page refresh / reconnect).
     const channelId = channel._id.toString();
+    const wsId = workspaceId.toString();
     await Promise.all(
       members.map((m) =>
+
         ChannelMember.addMember(channelId, m.userId, workspaceId, m.role),
       ),
     );
@@ -537,10 +552,30 @@ class ChannelService {
       channel._id.toString(),
       workspaceId?.toString(),
     );
+        ChannelMember.addMember(channelId, m.userId, wsId, m.role)
+      
+    
 
-    // Notify all added members
+    // Build full channel payload for socket events (so frontend can render icons correctly)
+    const channelPayload = {
+      _id: channel._id,
+      name: channel.name,
+      slug: channel.slug,
+      type: channel.type,
+      visibility: channel.visibility,
+      description: channel.description,
+      memberCount: channel.memberCount,
+      workspaceId: channel.workspaceId,
+      createdBy: channel.createdBy,
+    };
+
+    // Join creator to channel room
+    joinChannelRoom(creatorId.toString(), channelId, wsId);
+
+    // Notify explicitly added members (for private channels or explicit invites)
     for (const member of members) {
       if (member.userId.toString() !== creatorId.toString()) {
+
         emitToUser(
           member.userId.toString(),
           SOCKET_EVENTS.CHANNEL_ADDED,
@@ -559,10 +594,89 @@ class ChannelService {
           channel._id.toString(),
           workspaceId?.toString(),
         );
+        emitToUser(member.userId.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
+          channel: channelPayload,
+        }, wsId);
+        joinChannelRoom(member.userId.toString(), channelId, wsId);
       }
     }
 
+    // PUBLIC CHANNEL: auto-add all workspace members
+    if (visibility === CHANNEL_VISIBILITY.PUBLIC) {
+      await this._autoPopulatePublicChannel(channel, creatorId, wsId, channelPayload);
+    }
+
     return channel;
+  }
+
+  /**
+   * Auto-add all active workspace members to a newly created public channel.
+   * Uses bulk upsert for dedup safety and performance.
+   * @private
+   */
+  async _autoPopulatePublicChannel(channel, creatorId, workspaceId, channelPayload) {
+    try {
+      const memberships = await WorkspaceMembership.find({
+        workspaceId,
+        isActive: true,
+      }).select('userId').lean();
+
+      // Filter out creator and any already-added members
+      const existingIds = new Set(channel.members.map((m) => m.userId.toString()));
+      const newMemberUserIds = memberships
+        .map((m) => m.userId.toString())
+        .filter((uid) => !existingIds.has(uid));
+
+      if (newMemberUserIds.length === 0) return;
+
+      // Bulk upsert into ChannelMember collection (dedup-safe)
+      const channelId = channel._id.toString();
+      const bulkOps = newMemberUserIds.map((uid) => ({
+        updateOne: {
+          filter: { channelId: channel._id, userId: uid },
+          update: {
+            $setOnInsert: { channelId: channel._id, userId: uid, joinedAt: new Date() },
+            $set: { isActive: true, workspaceId, role: CHANNEL_MEMBER_ROLES.MEMBER },
+          },
+          upsert: true,
+        },
+      }));
+      await ChannelMember.bulkWrite(bulkOps);
+
+      // Update embedded members array and memberCount atomically
+      const embeddedMembers = newMemberUserIds.map((uid) => ({
+        userId: uid,
+        role: CHANNEL_MEMBER_ROLES.MEMBER,
+        joinedAt: new Date(),
+      }));
+      await Channel.findOneAndUpdate(
+        { _id: channel._id },
+        {
+          $push: { members: { $each: embeddedMembers } },
+          $inc: { memberCount: newMemberUserIds.length },
+        },
+      );
+
+      // Notify each new member via socket and join them to channel room
+      for (const uid of newMemberUserIds) {
+        emitToUser(uid, SOCKET_EVENTS.CHANNEL_ADDED, { channel: channelPayload }, workspaceId);
+        joinChannelRoom(uid, channelId, workspaceId);
+      }
+
+      logger.info('[PUBLIC_CHANNEL] Auto-added workspace members', {
+        channelId,
+        channelName: channel.name,
+        workspaceId,
+        addedCount: newMemberUserIds.length,
+      });
+    } catch (error) {
+      // Non-critical — log but don't fail channel creation
+      logger.error('[PUBLIC_CHANNEL] Failed to auto-populate members', {
+        channelId: channel._id,
+        workspaceId,
+        error: error.message,
+      });
+    }
   }
 
   // ──────────────────── System Channel Bootstrap ────────────────────────────
@@ -712,6 +826,7 @@ class ChannelService {
       workspaceId,
     });
 
+
     // Get system public channels the user might not be a member of yet
     const systemChannels =
       await channelRepository.findSystemChannels(workspaceId);
@@ -721,14 +836,23 @@ class ChannelService {
         !channels.some((c) => c._id.toString() === sc._id.toString()),
     );
 
-    const all = [...channels, ...publicSystem];
+    // Include any public channels the user might not yet have a ChannelMember
+    // record for (e.g. race condition, legacy data, or first load after join).
+    const publicChannels = await channelRepository.findPublicChannels(workspaceId);
+    const existingIds = new Set(channels.map((c) => c._id.toString()));
+    const missingPublic = publicChannels
+      .filter((pc) => !existingIds.has(pc._id.toString()))
+      .map((pc) => (pc.toObject ? pc.toObject() : pc));
+
+
+    const all = [...channels, ...missingPublic];
     const decorated = await this._decorateDMChannels(all, userId, workspaceId);
 
     logger.debug?.("[CHANNEL_FETCH] Channels resolved for sidebar", {
       userId,
       workspaceId,
       memberChannels: channels.length,
-      publicSystem: publicSystem.length,
+      missingPublic: missingPublic.length,
       total: decorated.length,
     });
 
@@ -804,6 +928,7 @@ class ChannelService {
 
   /**
    * Add a member to a channel.
+   * Validates that the target user is an active workspace member (prevents cross-workspace injection).
    */
   async addMember(
     channelId,
@@ -817,15 +942,43 @@ class ChannelService {
     if (!channel) throw new NotFoundError("Channel not found");
     if (channel.isArchived) throw new ForbiddenError("Channel is archived");
 
+    const effectiveWsId = channel.workspaceId?.toString();
+
+    // Validate target user is an active workspace member
+    if (effectiveWsId) {
+      const isMember = await WorkspaceMembership.findOne({
+        userId,
+        workspaceId: effectiveWsId,
+        isActive: true,
+      }).lean();
+      if (!isMember) {
+        throw new ForbiddenError('User is not a member of this workspace');
+      }
+    }
+
     // Always go through repository to keep ChannelMember and embedded members in sync.
     const updated = await channelRepository.addMember(
       channelId,
       userId,
       role,
-      channel.workspaceId?.toString(),
+      effectiveWsId,
     );
 
+    // Send full channel payload so frontend can render icons, categorize, etc.
+    const channelPayload = {
+      _id: updated._id,
+      name: updated.name,
+      slug: updated.slug,
+      type: updated.type,
+      visibility: updated.visibility,
+      description: updated.description,
+      memberCount: updated.memberCount,
+      workspaceId: updated.workspaceId,
+      createdBy: updated.createdBy,
+    };
+
     // Notify the user and make their socket join the room
+
     emitToUser(
       userId.toString(),
       SOCKET_EVENTS.CHANNEL_ADDED,
@@ -844,6 +997,10 @@ class ChannelService {
       channelId.toString(),
       channel.workspaceId?.toString(),
     );
+    emitToUser(userId.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
+      channel: channelPayload,
+    }, effectiveWsId);
+    joinChannelRoom(userId.toString(), channelId.toString(), effectiveWsId);
 
     // Notify channel
     emitToChannel(
@@ -904,7 +1061,19 @@ class ChannelService {
     );
 
     // Notify and join rooms
+    const syncChannelPayload = {
+      _id: updated._id,
+      name: updated.name,
+      slug: updated.slug,
+      type: updated.type,
+      visibility: updated.visibility,
+      description: updated.description,
+      memberCount: updated.memberCount,
+      workspaceId: updated.workspaceId,
+      createdBy: updated.createdBy,
+    };
     for (const uid of newMembers) {
+
       emitToUser(
         uid.toString(),
         SOCKET_EVENTS.CHANNEL_ADDED,
@@ -918,6 +1087,10 @@ class ChannelService {
         channelId.toString(),
         channel.workspaceId?.toString(),
       );
+      emitToUser(uid.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
+        channel: syncChannelPayload,
+      }, channel.workspaceId?.toString());
+      joinChannelRoom(uid.toString(), channelId.toString(), channel.workspaceId?.toString());
     }
 
     logger.info("Members synced to channel", {

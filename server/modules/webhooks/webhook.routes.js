@@ -11,6 +11,5 @@ const router = Router();
  * No auth middleware — uses HMAC signature verification instead.
  */
 
-router.post('/flowtask', ...handleFlowTaskWebhook);
-
+router.post('/flowtask', handleFlowTaskWebhook);
 export default router;

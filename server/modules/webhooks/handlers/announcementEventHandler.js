@@ -7,51 +7,118 @@ import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SYSTEM_CHANNELS } from '../../../config/constants.js';
 
 /**
- * Announcement Event Handler — cross-posts FlowTask announcements to the announcements system channel.
- *
- * Events:
- *   announcement.created — Post announcement content to #announcements channel
+ * Announcement Event Handler — sync FlowTask announcements with ChatApp
  */
 
 export function registerAnnouncementEventHandlers() {
-  eventBus.register(FLOWTASK_EVENTS.ANNOUNCEMENT_CREATED, async (payload) => {
-    const { announcement, userId, _workspaceId: wsId } = payload;
 
-    if (!announcement) {
-      logger.warn('announcement.created: missing announcement data');
-      return;
-    }
+  /**
+   *  CREATE ANNOUNCEMENT
+   */
+  eventBus.register(
+    FLOWTASK_EVENTS.ANNOUNCEMENT_CREATED,
+    async (payload) => {
+      const { announcement, userId, _workspaceId: wsId } = payload;
 
-    // Find the announcements system channel
-    const channel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ANNOUNCEMENTS.slug, wsId);
-    if (!channel) {
-      logger.warn('announcement.created: #announcements channel not found');
-      return;
-    }
+      if (!announcement) {
+        logger.warn('announcement.created: missing announcement data');
+        return;
+      }
 
-    const author = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-    const authorName = author?.name || 'Admin';
+      const channel = await channelRepository.findBySlug(
+        SYSTEM_CHANNELS.ANNOUNCEMENTS.slug,
+        wsId
+      );
 
-    const title = announcement.title || 'Announcement';
-    const content = announcement.content || announcement.text || '';
+      if (!channel) {
+        logger.warn('announcement.created: #announcements channel not found');
+        return;
+      }
 
-    const msg = `📢 **${title}**\n\nBy ${authorName}\n\n${content}`;
+      
 
-    await messageService.sendSystemMessage(
-      channel._id,
-      msg,
-      { entityType: 'announcement', entityId: announcement._id },
-      wsId,
+      const author = userId
+        ? await userRepository.findByFlowTaskId(userId, wsId)
+        : null;
+
+      const authorName = author?.name || 'Admin';
+
+      const title = announcement.title || 'Announcement';
+      const description = announcement.description || '';
+      const expiry = announcement.expiry
+        ? `\n\nExpires on: ${new Date(announcement.expiry).toLocaleString()}`
+        : '';
+      const content = announcement.content || announcement.text || '';
+      const category = announcement.category
+        ? `Category: ${announcement.category}\n\n`
+        : '';
+
+      const msg = [
+        `📢 ${title}`,
+        `👤 Author: ${authorName}`,
+        description && `📝 ${description}`,
+        expiry && `⏳ Expires: ${expiry}`,
+        category && `🏷 ${category}`,
+        content && `📄 ${content}`,
+      ]
+        .filter(Boolean)
+        .join('  •  ');
+
+      const subscriberIds = announcement.subscriberIds || [];
+
+      await messageService.sendSystemMessage(
+        channel._id,
+        msg,
+        { entityType: 'announcement', entityId: announcement._id },
+        wsId,
+        subscriberIds
+      );
+
+      logger.info('announcement.created handled', {
+        channelId: channel._id,
+        announcementId: announcement._id,
+      });
+
+      await botNotifier.onAnnouncementCreated(title, authorName, wsId);
+    },
+    "announcementCreatedHandler"
+  );
+
+  /**
+   *  DELETE ANNOUNCEMENT
+   */
+ eventBus.register(FLOWTASK_EVENTS.ANNOUNCEMENT_DELETED, async (payload) => {
+  console.log(" DELETE HANDLER HIT", payload);
+
+  const { announcement, announcementId: directId, _workspaceId: wsId } = payload;
+
+  const announcementId =
+  directId ||
+  announcement?._id ||
+  announcement?.id;
+
+  if (!announcementId) {
+    logger.warn('announcement.deleted: missing announcementId', payload);
+    return;
+  }
+
+  try {
+    await messageService.deleteByFlowTaskRef(
+      'announcement',
+      announcementId,
+      wsId
     );
 
-    logger.info('announcement.created handled', {
-      channelId: channel._id,
-      announcementId: announcement._id,
+    logger.info('announcement.deleted handled', {
+      announcementId,
     });
+  } catch (err) {
+    logger.error('announcement.deleted failed', {
+      error: err.message,
+      announcementId,
+    });
+  }
+});
 
-    // Also notify admin channel
-    await botNotifier.onAnnouncementCreated(title, authorName, wsId);
-  });
-
-  logger.info('Announcement event handlers registered');
+  logger.info(' Announcement event handlers registered');
 }

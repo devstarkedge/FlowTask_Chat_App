@@ -55,12 +55,19 @@ class MessageRepository {
    * @param {string} [options.workspaceId]
    * @returns {Promise<Message[]>}
    */
-  async getChannelMessages(channelId, { cursor = null, limit = 80, direction = 'before', workspaceId } = {}) {
-    const filter = injectWorkspaceFilterRequired(
-      { channelId, threadId: null },
-      workspaceId,
-      'channel messages query',
-    );
+  async getChannelMessages(
+    channelId,
+    { cursor = null, limit = 80, direction = 'before', workspaceId, userId } = {}
+  ) {
+    const filter = {
+      channelId,
+      threadId: null,
+      ...(workspaceId && { workspaceId }),
+      $or: [
+        { visibleTo: { $exists: false } },
+        { visibleTo: userId }
+      ]
+    };
 
     if (cursor) {
       if (direction === 'before') {
@@ -82,8 +89,6 @@ class MessageRepository {
       })
       .lean();
 
-    // If loading "before" (older messages), we queried newest-first to get the 
-    // immediately preceding messages. We must reverse to restore chronological order.
     if (direction === 'before') {
       messages.reverse();
     }
@@ -424,16 +429,14 @@ class MessageRepository {
    * @param {string} entityId
    * @returns {Promise<Message[]>}
    */
-  async findByFlowTaskRef(entityType, entityId) {
-    return Message.find({
-      'flowTaskRef.entityType': entityType,
-      'flowTaskRef.entityId': entityId,
-      isDeleted: false,
-    })
-      .sort({ createdAt: 1 })
-      .populate('authorId', 'name email avatar flowTaskUserId')
-      .lean();
-  }
+async findByFlowTaskRef(entityType, entityId, workspaceId) {
+  return Message.find({
+    workspaceId,
+    'flowTaskRef.entityType': entityType,
+    'flowTaskRef.entityId': entityId,
+    isDeleted: false,
+  }).lean();
+}
 
   /**
    * Count messages in a channel after a given message ID.

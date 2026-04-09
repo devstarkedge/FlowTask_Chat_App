@@ -82,7 +82,6 @@ router.delete('/:id/reactions/:emoji', requireMessageAccess(), removeReaction);
 router.post('/:id/pin', requireMessageAccess(), pinMessage);
 router.delete('/:id/pin', requireMessageAccess(), unpinMessage);
 router.post('/:id/save', requireMessageAccess(), toggleSaveMessage);
-
 export default router;
 
 /**

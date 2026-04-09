@@ -266,8 +266,9 @@ class MessageService {
   /**
    * Send a system message (bot, event notification).
    */
-  async sendSystemMessage(channelId, content, flowTaskRef, workspaceId) {
+  async sendSystemMessage(channelId, content, flowTaskRef, workspaceId, visibleTo = []) {
     const botUser = await userRepository.ensureBotUser();
+
     const messageData = {
       channelId,
       authorId: botUser._id,
@@ -276,6 +277,7 @@ class MessageService {
       contentType: MESSAGE_CONTENT_TYPES.SYSTEM,
       senderSnapshot: { name: botUser.name, avatar: botUser.avatar },
       ...(workspaceId && { workspaceId }),
+      ...(visibleTo.length > 0 && { visibleTo })
     };
 
     if (flowTaskRef) {
@@ -288,7 +290,14 @@ class MessageService {
     channelRepository.updateLastMessage(channelId, preview, new Date(), workspaceId?.toString()).catch(() => {});
 
     const socketPayload = messageSocketPayload(message);
-    emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
+
+    if (visibleTo.length > 0) {
+      visibleTo.forEach(userId => {
+        emitToUser(userId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
+      });
+    } else {
+      emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
+    }
 
     return message;
   }
@@ -831,6 +840,36 @@ class MessageService {
       logger.debug('Draft removal after send failed (non-critical)', { error: err.message });
     }
   }
+
+    /**
+ * Delete messages linked to FlowTask entity (announcement, task, etc.)
+ */
+async deleteByFlowTaskRef(entityType, entityId, workspaceId) {
+  const messages = await messageRepository.findByFlowTaskRef(
+    entityType,
+    entityId,
+    workspaceId 
+  );
+
+  if (!messages || messages.length === 0) return;
+
+  for (const msg of messages) {
+    await messageRepository.softDelete(
+      msg._id,
+      null, // system delete
+      workspaceId
+    );
+
+    // emit socket event so UI updates
+    emitToChannel(msg.channelId.toString(), SOCKET_EVENTS.MESSAGE_DELETE, {
+      messageId: msg._id.toString(),
+      channelId: msg.channelId.toString(),
+      isDeleted: true,
+    }, workspaceId?.toString());
+  }
 }
+
+}
+
 
 export default new MessageService();

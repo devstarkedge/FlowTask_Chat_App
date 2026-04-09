@@ -633,7 +633,7 @@ function DMListItem({ channel, isActive, unread, onClick, onlineUsers, hasDraft 
   }
   label={channel.name}
 
-  // ✅ FIXED: single sublabel
+  // single sublabel
   sublabel={
     hasDraft ? (
       <span
@@ -647,7 +647,7 @@ function DMListItem({ channel, isActive, unread, onClick, onlineUsers, hasDraft 
     )
   }
 
-  // ✅ FIXED: single meta
+  // single meta
   meta={
     timeAgo && (
       <span

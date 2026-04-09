@@ -211,6 +211,10 @@ const messageSchema = new Schema({
     ref: 'ChatUser',
     default: null,
   },
+  visibleTo: [{
+  type: Schema.Types.ObjectId,
+  ref: 'ChatUser'
+}],
 }, {
   timestamps: true,
   toJSON: { virtuals: true },

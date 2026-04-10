@@ -895,24 +895,44 @@ async deleteByFlowTaskRef(entityType, entityId, workspaceId) {
   const messages = await messageRepository.findByFlowTaskRef(
     entityType,
     entityId,
-    workspaceId 
+    workspaceId
   );
 
   if (!messages || messages.length === 0) return;
 
   for (const msg of messages) {
-    await messageRepository.softDelete(
+    //  Get updated message (IMPORTANT)
+    const updatedMessage = await messageRepository.softDelete(
       msg._id,
       null, // system delete
       workspaceId
     );
 
-    // emit socket event so UI updates
-    emitToChannel(msg.channelId.toString(), SOCKET_EVENTS.MESSAGE_DELETE, {
-      messageId: msg._id.toString(),
-      channelId: msg.channelId.toString(),
-      isDeleted: true,
-    }, workspaceId?.toString());
+    if (!updatedMessage) continue;
+
+    const payload = {
+      message: updatedMessage
+    };
+
+    //  If message has visibility → send only to those users
+    if (updatedMessage.visibleTo && updatedMessage.visibleTo.length > 0) {
+      updatedMessage.visibleTo.forEach(userId => {
+        emitToUser(
+          userId.toString(),
+          SOCKET_EVENTS.MESSAGE_UPDATE,
+          payload,
+          workspaceId?.toString()
+        );
+      });
+    } else {
+      //  Public message → broadcast to channel
+      emitToChannel(
+        updatedMessage.channelId.toString(),
+        SOCKET_EVENTS.MESSAGE_UPDATE,
+        payload,
+        workspaceId?.toString()
+      );
+    }
   }
 }
 

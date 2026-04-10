@@ -68,7 +68,7 @@ class MessageRepository {
     ...(workspaceId && { workspaceId })
   };
 
-  //  ADMIN → see everything
+  //  ADMIN - see everything
   if (!isAdmin) {
     filter.$or = [
       { visibleTo: { $exists: false } },
@@ -248,18 +248,35 @@ class MessageRepository {
    */
   async softDelete(messageId, deletedBy, workspaceId) {
     const filter = injectWorkspaceFilter({ _id: messageId }, workspaceId);
-    return Message.findOneAndUpdate(
+
+    const updated = await Message.findOneAndUpdate(
       filter,
       {
         isDeleted: true,
         deletedAt: new Date(),
         deletedBy,
-        // Clear content for privacy but maintain record structure
+
+        // Keep consistent tombstone content
         content: '[Message deleted]',
         htmlContent: '<p>[Message deleted]</p>',
       },
-      { new: true },
-    ).exec();
+      { new: true }
+    )
+      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .lean();
+
+    if (!updated) return null;
+
+    //  Normalize IDs (VERY IMPORTANT for frontend matching)
+    updated._id = updated._id.toString();
+    updated.channelId = updated.channelId?.toString();
+    updated.workspaceId = updated.workspaceId?.toString();
+
+    if (updated.visibleTo) {
+      updated.visibleTo = updated.visibleTo.map(id => id.toString());
+    }
+
+    return updated;
   }
 
   /**

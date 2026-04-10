@@ -5,6 +5,7 @@ import messageService from '../../messages/message.service.js';
 import userRepository from '../../users/user.repository.js';
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SYSTEM_CHANNELS } from '../../../config/constants.js';
+import mongoose from 'mongoose';
 
 /**
  * Announcement Event Handler — sync FlowTask announcements with ChatApp
@@ -15,74 +16,101 @@ export function registerAnnouncementEventHandlers() {
   /**
    *  CREATE ANNOUNCEMENT
    */
-  eventBus.register(
-    FLOWTASK_EVENTS.ANNOUNCEMENT_CREATED,
-    async (payload) => {
-      const { announcement, userId, _workspaceId: wsId } = payload;
 
-      if (!announcement) {
-        logger.warn('announcement.created: missing announcement data');
-        return;
-      }
 
-      const channel = await channelRepository.findBySlug(
-        SYSTEM_CHANNELS.ANNOUNCEMENTS.slug,
-        wsId
-      );
+eventBus.register(
+  FLOWTASK_EVENTS.ANNOUNCEMENT_CREATED,
+  async (payload) => {
+    const { announcement, userId, _workspaceId: wsId } = payload;
 
-      if (!channel) {
-        logger.warn('announcement.created: #announcements channel not found');
-        return;
-      }
+    if (!announcement) {
+      logger.warn('announcement.created: missing announcement data');
+      return;
+    }
 
-      
+    const channel = await channelRepository.findBySlug(
+      SYSTEM_CHANNELS.ANNOUNCEMENTS.slug,
+      wsId
+    );
 
-      const author = userId
-        ? await userRepository.findByFlowTaskId(userId, wsId)
-        : null;
+    if (!channel) {
+      logger.warn('announcement.created: #announcements channel not found');
+      return;
+    }
 
-      const authorName = author?.name || 'Admin';
+    const author = userId
+      ? await userRepository.findByFlowTaskId(userId, wsId)
+      : null;
 
-      const title = announcement.title || 'Announcement';
-      const description = announcement.description || '';
-      const expiry = announcement.expiry
-        ? `\n\nExpires on: ${new Date(announcement.expiry).toLocaleString()}`
-        : '';
-      const content = announcement.content || announcement.text || '';
-      const category = announcement.category
-        ? `Category: ${announcement.category}\n\n`
-        : '';
+    const authorName = author?.name || 'Admin';
 
-      const msg = [
-        `📢 ${title}`,
-        `👤 Author: ${authorName}`,
-        description && `📝 ${description}`,
-        expiry && `⏳ Expires: ${expiry}`,
-        category && `🏷 ${category}`,
-        content && `📄 ${content}`,
-      ]
-        .filter(Boolean)
-        .join('  •  ');
+    const title = announcement.title || 'Announcement';
+    const description = announcement.description || '';
+    const expiry = announcement.expiry
+      ? `\n\nExpires on: ${new Date(announcement.expiry).toLocaleString()}`
+      : '';
+    const content = announcement.content || announcement.text || '';
+    const category = announcement.category
+      ? `Category: ${announcement.category}\n\n`
+      : '';
 
-      const subscriberIds = announcement.subscriberIds || [];
+    const msg = [
+      `📢 ${title}`,
+      `👤 Author: ${authorName}`,
+      description && `📝 ${description}`,
+      expiry && `⏳ Expires: ${expiry}`,
+      category && `🏷 ${category}`,
+      content && `📄 ${content}`,
+    ]
+      .filter(Boolean)
+      .join('  •  ');
 
-      await messageService.sendSystemMessage(
-        channel._id,
-        msg,
-        { entityType: 'announcement', entityId: announcement._id },
-        wsId,
-        subscriberIds
-      );
+    const subscriberIds =
+      announcement?.subscriberIds ||
+      payload?.subscriberIds ||
+      [];
 
-      logger.info('announcement.created handled', {
-        channelId: channel._id,
-        announcementId: announcement._id,
-      });
+    if (!subscriberIds.length) {
+      logger.warn("No subscribers → skipping announcement");
+      return;
+    }
 
-      await botNotifier.onAnnouncementCreated(title, authorName, wsId);
-    },
-    "announcementCreatedHandler"
-  );
+    //  Bulk fetch
+    const chatUsers = await userRepository.findByFlowTaskIds(
+      subscriberIds,
+      wsId
+    );
+
+    const chatUserIds = [...new Set(chatUsers.map(u => u._id))];
+
+    if (!chatUserIds.length) {
+      logger.warn("No matching Chat users found for subscribers");
+      return;
+    }
+
+    await messageService.sendSystemMessage(
+      channel._id,
+      msg,
+      { entityType: 'announcement', entityId: announcement._id },
+      wsId,
+      chatUserIds
+    );
+
+    await botNotifier.onAnnouncementCreated(
+      title,
+      authorName,
+      wsId,
+      chatUserIds
+    );
+
+    logger.info('announcement.created handled', {
+      channelId: channel._id,
+      announcementId: announcement._id,
+      users: chatUserIds.length
+    });
+  },
+  "announcementCreatedHandler"
+);
 
   /**
    *  DELETE ANNOUNCEMENT

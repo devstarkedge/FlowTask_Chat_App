@@ -25,6 +25,8 @@ export const getMessages = asyncHandler(async (req, res) => {
     req.params.channelId,
     req.query,
     req.workspaceId,
+    req.user.id,
+    req.user
   );
 
   res.json({ success: true, data: result });

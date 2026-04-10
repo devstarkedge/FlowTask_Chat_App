@@ -266,56 +266,103 @@ class MessageService {
   /**
    * Send a system message (bot, event notification).
    */
-  async sendSystemMessage(channelId, content, flowTaskRef, workspaceId, visibleTo = []) {
-    const botUser = await userRepository.ensureBotUser();
+  async sendSystemMessage(
+  channelId,
+  content,
+  flowTaskRef,
+  workspaceId,
+  visibleTo = []
+) {
+  const botUser = await userRepository.ensureBotUser();
 
-    const messageData = {
+  //  Normalize visibleTo (VERY IMPORTANT)
+ let normalizedVisibleTo = [];
+
+if (Array.isArray(visibleTo) && visibleTo.length > 0) {
+  normalizedVisibleTo = [...new Set(visibleTo.map(id => id.toString()))];
+}
+
+if (!normalizedVisibleTo.length) {
+  logger.warn(" Prevented system message with no recipients");
+  return null;
+}
+
+  const messageData = {
+    channelId,
+    authorId: botUser._id,
+    content,
+    htmlContent: content,
+    contentType: MESSAGE_CONTENT_TYPES.SYSTEM,
+    senderSnapshot: {
+      name: botUser.name,
+      avatar: botUser.avatar
+    },
+    ...(workspaceId && { workspaceId }),
+
+    //  Only add if valid users exist
+    visibleTo: normalizedVisibleTo
+  };
+
+  //  Attach FlowTask reference
+  if (flowTaskRef) {
+    messageData.flowTaskRef = flowTaskRef;
+  }
+
+  // 🔥 Debug log (helps track issues)
+  logger.info('sendSystemMessage', {
+    channelId,
+    hasVisibility: normalizedVisibleTo.length > 0,
+    visibleToCount: normalizedVisibleTo.length,
+    workspaceId
+  });
+
+  //  Save message
+  const message = await messageRepository.create(messageData);
+
+  //  Update channel preview
+  const preview = truncate(stripHtml(content), 100);
+  channelRepository
+    .updateLastMessage(
       channelId,
-      authorId: botUser._id,
-      content,
-      htmlContent: content,
-      contentType: MESSAGE_CONTENT_TYPES.SYSTEM,
-      senderSnapshot: { name: botUser.name, avatar: botUser.avatar },
-      ...(workspaceId && { workspaceId }),
-      ...(visibleTo.length > 0 && { visibleTo })
-    };
+      preview,
+      new Date(),
+      workspaceId?.toString()
+    )
+    .catch(() => {});
 
-    if (flowTaskRef) {
-      messageData.flowTaskRef = flowTaskRef;
-    }
+  const socketPayload = messageSocketPayload(message);
 
-    const message = await messageRepository.create(messageData);
-
-    const preview = truncate(stripHtml(content), 100);
-    channelRepository.updateLastMessage(channelId, preview, new Date(), workspaceId?.toString()).catch(() => {});
-
-    const socketPayload = messageSocketPayload(message);
-
-    if (visibleTo.length > 0) {
-      visibleTo.forEach(userId => {
-        emitToUser(userId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
+  //  Emit via socket
+    if (normalizedVisibleTo.length > 0) {
+      //  send only to specific users
+      normalizedVisibleTo.forEach(userId => {
+        emitToUser(
+          userId,
+          SOCKET_EVENTS.MESSAGE_CREATE,
+          { message: socketPayload },
+          workspaceId?.toString()
+        );
       });
     } else {
-      emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
+      logger.warn("🚨 Skipping broadcast — no visibleTo users");
     }
 
-    return message;
-  }
+  return message;
+}
 
   // ──────────────────── Get Messages ────────────────────────────────────────
 
   /**
    * Get messages for a channel with cursor-based pagination.
    */
-  async getChannelMessages(channelId, query = {}, workspaceId) {
+  async getChannelMessages(channelId, query = {}, workspaceId, userId, user) {
     const { limit, cursor } = parsePagination(query);
     const direction = query.direction || 'before';
 
     const messages = await messageRepository.getChannelMessages(
       channelId,
-      { limit, cursor, direction, workspaceId },
+      { limit, cursor, direction, workspaceId, userId,  isAdmin: user?.role === 'admin' },
     );
-
     return cursorPaginationResponse(messages, limit, '_id');
   }
 

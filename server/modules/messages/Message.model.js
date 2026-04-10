@@ -212,9 +212,10 @@ const messageSchema = new Schema({
     default: null,
   },
   visibleTo: [{
-  type: Schema.Types.ObjectId,
-  ref: 'ChatUser'
-}],
+    type: Schema.Types.ObjectId,
+    ref: 'ChatUser',
+    index: true
+  }],
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -246,6 +247,7 @@ messageSchema.index(
   { workspaceId: 1, channelId: 1, createdAt: -1, isDeleted: 1 },
   { partialFilterExpression: { isDeleted: false } },
 );
+messageSchema.index({ workspaceId: 1, channelId: 1, visibleTo: 1 });
 
 // ─── Virtuals ────────────────────────────────────────────────────────────────
 messageSchema.virtual('author', {

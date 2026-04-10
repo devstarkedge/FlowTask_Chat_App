@@ -1,6 +1,7 @@
 import Message from './Message.model.js';
 import MessageReaction from './MessageReaction.model.js';
 import { injectWorkspaceFilter, injectWorkspaceFilterRequired } from '../../middleware/workspaceContext.js';
+import mongoose from 'mongoose';
 
 /**
  * Message Repository — data access layer for Message documents.
@@ -55,46 +56,53 @@ class MessageRepository {
    * @param {string} [options.workspaceId]
    * @returns {Promise<Message[]>}
    */
-  async getChannelMessages(
+ async getChannelMessages(
+  channelId,
+  { cursor = null, limit = 80, direction = 'before', workspaceId, userId, isAdmin = false } = {}
+) {
+  const objectUserId = userId ? new mongoose.Types.ObjectId(userId) : null;
+
+  let filter = {
     channelId,
-    { cursor = null, limit = 80, direction = 'before', workspaceId, userId } = {}
-  ) {
-    const filter = {
-      channelId,
-      threadId: null,
-      ...(workspaceId && { workspaceId }),
-      $or: [
-        { visibleTo: { $exists: false } },
-        { visibleTo: userId }
-      ]
-    };
+    threadId: null,
+    ...(workspaceId && { workspaceId })
+  };
 
-    if (cursor) {
-      if (direction === 'before') {
-        filter._id = { $lt: cursor };
-      } else {
-        filter._id = { $gt: cursor };
-      }
-    }
-
-    const sortOrder = direction === 'after' ? 1 : -1;
-
-    const messages = await Message.find(filter)
-      .sort({ createdAt: sortOrder })
-      .limit(limit)
-      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
-      .populate({
-        path: 'fileReferences',
-        populate: { path: 'fileId' }
-      })
-      .lean();
-
-    if (direction === 'before') {
-      messages.reverse();
-    }
-
-    return messages;
+  //  ADMIN → see everything
+  if (!isAdmin) {
+    filter.$or = [
+      { visibleTo: { $exists: false } },
+      { visibleTo: { $size: 0 } },
+      ...(objectUserId
+        ? [{ visibleTo: { $in: [objectUserId] } }]
+        : [])
+    ];
   }
+
+  if (cursor) {
+    filter._id = direction === 'before'
+      ? { $lt: cursor }
+      : { $gt: cursor };
+  }
+
+  const sortOrder = direction === 'after' ? 1 : -1;
+
+  const messages = await Message.find(filter)
+    .sort({ _id: sortOrder })
+    .limit(limit)
+    .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+    .populate({
+      path: 'fileReferences',
+      populate: { path: 'fileId' }
+    })
+    .lean();
+
+  if (direction === 'before') {
+    messages.reverse();
+  }
+
+  return messages;
+}
 
   /**
    * Get message context around a target message in a channel.

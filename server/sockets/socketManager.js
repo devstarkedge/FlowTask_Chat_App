@@ -428,7 +428,7 @@ export async function initializeSocket(httpServer, corsOptions) {
     socket.on('typing:start', async ({ channelId }) => {
       if (await isSocketRateLimited(socket.id)) return;
 
-      const throttleKey = `${wsId || 'global'}-${userId}-${channelId}`;
+      const throttleKey = `${wsId }-${userId}-${channelId}`;
       const now = Date.now();
       const lastEmit = typingThrottleMap.get(throttleKey) || 0;
 
@@ -448,7 +448,7 @@ export async function initializeSocket(httpServer, corsOptions) {
     socket.on('typing:stop', async ({ channelId }) => {
       if (await isSocketRateLimited(socket.id)) return;
 
-      const throttleKey = `${wsId || 'global'}-${userId}-${channelId}`;
+      const throttleKey = `${wsId }-${userId}-${channelId}`;
       typingThrottleMap.delete(throttleKey);
 
       const typingRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;

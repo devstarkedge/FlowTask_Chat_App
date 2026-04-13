@@ -106,7 +106,9 @@ export default function DraftsSidebar() {
     }
 
     // Overlay local drafts — add if missing or replace if newer
-    const wsPrefix = `${activeWorkspaceId || 'global'}:`
+    if (!activeWorkspaceId) return []
+
+    const wsPrefix = `${activeWorkspaceId}:`
     for (const [key, ld] of Object.entries(localDrafts)) {
       if (!key.startsWith(wsPrefix)) continue
       if (isContentEmpty(ld.html, ld.text)) continue

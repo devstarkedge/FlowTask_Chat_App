@@ -33,78 +33,178 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef) {
 
   // ─── Save draft locally + queue server sync ───────────────────────
 
-  const saveDraftLocal = useCallback(() => {
-    const ed = editorRef?.current
-    if (!ed) return false
-    if (conversationId !== lastConversationRef.current) return false
-    const { html, text } = ed.getContent()
-    const trimmed = (text || '').trim()
+const saveDraftLocal = useCallback(() => {
+  const ed = editorRef?.current
+  if (!ed) return false
 
-    // Skip if content hasn't changed
-    if (trimmed === lastContentRef.current) return false
-    lastContentRef.current = trimmed
+  //  prevent saving without workspace
+  if (!activeWorkspaceId) return false
 
-    if (!isContentEmpty(html, text)) {
-      setDraft(conversationId, html, text, activeWorkspaceId, threadId)
-      return true
-    } else {
-      clearDraft(conversationId, activeWorkspaceId, threadId)
-      return false
-    }
-  }, [conversationId, threadId, activeWorkspaceId, setDraft, clearDraft, editorRef])
+  if (conversationId !== lastConversationRef.current) return false
+
+  const { html, text } = ed.getContent()
+  const trimmed = (text || '').trim()
+
+  // Skip if content hasn't changed
+  if (trimmed === lastContentRef.current) return false
+  lastContentRef.current = trimmed
+
+  if (!isContentEmpty(html, text)) {
+    setDraft(conversationId, html, text, activeWorkspaceId, threadId)
+    return true
+  } else {
+    clearDraft(conversationId, activeWorkspaceId, threadId)
+    return false
+  }
+}, [
+  conversationId,
+  threadId,
+  activeWorkspaceId,
+  setDraft,
+  clearDraft,
+  editorRef,
+])
+
 
   const syncToServer = useCallback(async () => {
-    const ed = editorRef?.current
-    if (!ed || !conversationId || !activeWorkspaceId) return
-    if (conversationId !== lastConversationRef.current) return
+  const ed = editorRef?.current
+  if (!ed || !conversationId || !activeWorkspaceId) return
+  if (conversationId !== lastConversationRef.current) return
 
-    const { html, text, mentions } = ed.getContent()
-    const trimmed = (text || '').trim()
-    const trimmedHtml = (html || '').trim()
+  const { html, text, mentions } = ed.getContent()
+  const trimmed = (text || '').trim()
+  const trimmedHtml = (html || '').trim()
 
-    try {
-      if (!isContentEmpty(trimmedHtml, trimmed)) {
-        const resp = await draftAPI.save({
-          channelId: conversationId,
-          threadId: threadId || null,
-          content: trimmed,
-          htmlContent: trimmedHtml,
-          mentions: mentions || [],
-        })
-        // Update server draft in store for sidebar/drafts-page sync
-        const savedDraft = resp?.data?.data?.draft
-        if (savedDraft) {
-          useDraftStore.getState().setServerDraft(savedDraft)
-        }
-        useDraftStore.getState().markDraftListStale()
+  try {
+    //  HANDLE EMPTY FIRST (CRITICAL)
+    if (isContentEmpty(trimmedHtml, trimmed)) {
+      let draft = getDraft(conversationId, activeWorkspaceId, threadId)
+
+      //  If we have serverId → delete directly
+      if (draft?.serverId) {
+        await draftAPI.delete(draft.serverId)
       } else {
-        // Empty content — try to delete server draft
-        const draft = getDraft(conversationId, activeWorkspaceId, threadId)
-        if (draft?.serverId) {
-          await draftAPI.delete(draft.serverId)
-          useDraftStore.getState().markDraftListStale()
+        //  Fallback: fetch from server and delete
+        try {
+          const { data } = await draftAPI.get(conversationId, threadId)
+          const serverDraft = data?.data?.draft
+          if (serverDraft?._id) {
+            await draftAPI.delete(serverDraft._id)
+          }
+        } catch {
+          // ignore errors (e.g. draft not found) - we still want to clear local
         }
       }
-    } catch {
-      // Server sync is best-effort; localStorage is the backup
+
+      //  Remove from local + sidebar immediately
+      useDraftStore.getState().removeServerDraft(
+        conversationId,
+        threadId,
+        activeWorkspaceId
+      )
+
+      useDraftStore.getState().markDraftListStale()
+
+      return //  STOP — DO NOT SAVE AFTER DELETE
     }
-  }, [conversationId, threadId, activeWorkspaceId, editorRef, getDraft])
+
+    //  NORMAL SAVE FLOW
+    const resp = await draftAPI.save({
+      channelId: conversationId,
+      threadId: threadId || null,
+      content: trimmed,
+      htmlContent: trimmedHtml,
+      mentions: mentions || [],
+    })
+
+    const savedDraft = resp?.data?.data?.draft
+    if (savedDraft) {
+      useDraftStore.getState().setServerDraft(savedDraft)
+    }
+
+    useDraftStore.getState().markDraftListStale()
+  } catch {
+    // best-effort (local still works)
+  }
+}, [
+  conversationId,
+  threadId,
+  activeWorkspaceId,
+  editorRef,
+  getDraft,
+])
 
   // ─── Debounced save on content change ─────────────────────────────
 
-  const saveDraftDebounced = useCallback(() => {
-    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
-    draftTimerRef.current = setTimeout(() => {
-      const didSave = saveDraftLocal()
+const saveDraftDebounced = useCallback(() => {
+  const ed = editorRef?.current
+  if (!ed) return
 
-      // Only queue server sync if local save actually persisted content
-      if (didSave) {
-        if (serverSyncTimerRef.current) clearTimeout(serverSyncTimerRef.current)
-        serverSyncTimerRef.current = setTimeout(syncToServer, 2200)
+  const { html, text } = ed.getContent()
+  const isEmpty = isContentEmpty(html, text)
+
+  // 🔥 EMPTY → DELETE IMMEDIATELY (NO DEBOUNCE)
+  if (isEmpty) {
+    clearTimeout(draftTimerRef.current)
+    clearTimeout(serverSyncTimerRef.current)
+
+    // ✅ get draft BEFORE clearing
+    const draft = getDraft(conversationId, activeWorkspaceId, threadId)
+
+    // ✅ delete from server (with fallback)
+    if (draft?.serverId) {
+      draftAPI.delete(draft.serverId).catch(() => {})
+    } else {
+      // 🔥 fallback (VERY IMPORTANT)
+      draftAPI.get(conversationId, threadId)
+        .then((res) => {
+          const serverDraft = res?.data?.data?.draft
+          if (serverDraft?._id) {
+            return draftAPI.delete(serverDraft._id)
+          }
+        })
+        .catch(() => {})
+    }
+
+    // ✅ clear local AFTER delete
+    clearDraft(conversationId, activeWorkspaceId, threadId)
+
+    // ✅ update UI instantly
+    useDraftStore.getState().removeServerDraft(
+      conversationId,
+      threadId,
+      activeWorkspaceId
+    )
+
+    useDraftStore.getState().markDraftListStale()
+
+    return
+  }
+
+  // 🧠 NORMAL TYPING FLOW (DEBOUNCED SAVE)
+  if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+
+  draftTimerRef.current = setTimeout(() => {
+    const didSave = saveDraftLocal()
+
+    if (didSave) {
+      if (serverSyncTimerRef.current) {
+        clearTimeout(serverSyncTimerRef.current)
       }
-    }, 800)
-  }, [saveDraftLocal, syncToServer])
 
+      serverSyncTimerRef.current = setTimeout(syncToServer, 1000)
+    }
+  }, 800)
+}, [
+  conversationId,
+  threadId,
+  activeWorkspaceId,
+  saveDraftLocal,
+  syncToServer,
+  getDraft,
+  clearDraft,
+  editorRef,
+])
   // ─── Flush all pending timers (call before channel switch) ────────
 
   const flushTimers = useCallback(() => {

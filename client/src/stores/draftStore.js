@@ -5,10 +5,9 @@ import { isContentEmpty } from '../utils/draftUtils'
 const DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
 export const getDraftKey = (channelId, workspaceId, threadId) => {
-  if (!channelId) return null
-  const wsKey = workspaceId || 'global'
+  if (!channelId || !workspaceId) return null
   const threadKey = threadId || 'root'
-  return `${wsKey}:${channelId}:${threadKey}`
+  return `${workspaceId}:${channelId}:${threadKey}`
 }
 
 export const useDraftStore = create(
@@ -52,15 +51,22 @@ export const useDraftStore = create(
       },
 
       clearDraft: (channelId, workspaceId, threadId) => {
-        const key = getDraftKey(channelId, workspaceId, threadId)
-        if (!key) return
-        set((state) => {
-          const newDrafts = { ...state.drafts }
-          delete newDrafts[key]
-          return { drafts: newDrafts }
-        })
-      },
+      const thread = threadId || 'root'
 
+      set((state) => {
+        const newDrafts = { ...state.drafts }
+
+        //  remove workspace draft
+        const workspaceKey = `${workspaceId}:${channelId}:${thread}`
+        delete newDrafts[workspaceKey]
+
+        //  remove global draft (MANUAL — no helper)
+        const globalKey = `global:${channelId}:${thread}`
+        delete newDrafts[globalKey]
+
+        return { drafts: newDrafts }
+      })
+    },
       // Set server-synced draft data (from API response)
       setServerDraft: (draft) => {
         if (!draft) return
@@ -126,12 +132,12 @@ export const useDraftStore = create(
 
       // Get count of local drafts as fallback
       getLocalDraftCount: (workspaceId) => {
-        const prefix = `${workspaceId || 'global'}:`
+        const prefix = `${workspaceId}:`
         return Object.keys(get().drafts).filter((k) => k.startsWith(prefix)).length
       },
 
       clearWorkspaceDrafts: (workspaceId) => {
-        const wsPrefix = `${workspaceId || 'global'}:`
+        const wsPrefix = `${workspaceId}:`
         set((state) => {
           const newDrafts = {}
           for (const [key, draft] of Object.entries(state.drafts)) {

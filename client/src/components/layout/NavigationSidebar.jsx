@@ -71,7 +71,7 @@ export default function NavigationSidebar({
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
 
   const hasDraft = (channelId) => {
-    const key = `${activeWorkspaceId || 'global'}:${channelId}:root`;
+    const key = `${activeWorkspaceId}:${channelId}:root`;
     const draft = drafts[key];
     if (!draft) return false;
     return !isContentEmpty(draft.html, draft.text);

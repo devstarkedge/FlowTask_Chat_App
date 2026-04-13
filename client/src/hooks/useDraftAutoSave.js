@@ -143,19 +143,19 @@ const saveDraftDebounced = useCallback(() => {
   const { html, text } = ed.getContent()
   const isEmpty = isContentEmpty(html, text)
 
-  // 🔥 EMPTY → DELETE IMMEDIATELY (NO DEBOUNCE)
+  //  EMPTY - DELETE IMMEDIATELY (NO DEBOUNCE)
   if (isEmpty) {
     clearTimeout(draftTimerRef.current)
     clearTimeout(serverSyncTimerRef.current)
 
-    // ✅ get draft BEFORE clearing
+    //  get draft BEFORE clearing
     const draft = getDraft(conversationId, activeWorkspaceId, threadId)
 
-    // ✅ delete from server (with fallback)
+    //  delete from server (with fallback)
     if (draft?.serverId) {
       draftAPI.delete(draft.serverId).catch(() => {})
     } else {
-      // 🔥 fallback (VERY IMPORTANT)
+      //  fallback 
       draftAPI.get(conversationId, threadId)
         .then((res) => {
           const serverDraft = res?.data?.data?.draft
@@ -166,10 +166,10 @@ const saveDraftDebounced = useCallback(() => {
         .catch(() => {})
     }
 
-    // ✅ clear local AFTER delete
+    // clear local AFTER delete
     clearDraft(conversationId, activeWorkspaceId, threadId)
 
-    // ✅ update UI instantly
+    //  update UI instantly
     useDraftStore.getState().removeServerDraft(
       conversationId,
       threadId,
@@ -181,7 +181,7 @@ const saveDraftDebounced = useCallback(() => {
     return
   }
 
-  // 🧠 NORMAL TYPING FLOW (DEBOUNCED SAVE)
+  //  NORMAL TYPING FLOW (DEBOUNCED SAVE)
   if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
 
   draftTimerRef.current = setTimeout(() => {
@@ -264,10 +264,10 @@ const restoreDraft = useCallback(async () => {
   let attempts = 0
 
   while (attempts < 3 && !draft) {
-    // 🔹 1. Try local first
+    //  1. Try local first
     draft = getDraft(conversationId, activeWorkspaceId, threadId)
 
-    // 🔹 2. Try server if not found
+    //  2. Try server if not found
     if (!draft && activeWorkspaceId) {
       try {
         const { data } = await draftAPI.get(conversationId, threadId)

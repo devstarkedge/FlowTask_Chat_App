@@ -33,9 +33,9 @@ export function buildAnnouncementUrl(announcementId) {
   const base = getBaseUrl()
   if (!base) return null
   if (announcementId) {
-    return `${base}/announcement?announcementId=${encodeURIComponent(announcementId)}`
+    return `${base}/announcements?open=${encodeURIComponent(announcementId)}`
   }
-  return `${base}/announcement`
+  return `${base}/announcements`
 }
 
 /**

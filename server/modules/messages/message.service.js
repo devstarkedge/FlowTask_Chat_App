@@ -276,17 +276,11 @@ class MessageService {
 ) {
   const botUser = await userRepository.ensureBotUser();
 
-  //  Normalize visibleTo (VERY IMPORTANT)
- let normalizedVisibleTo = [];
-
-if (Array.isArray(visibleTo) && visibleTo.length > 0) {
-  normalizedVisibleTo = [...new Set(visibleTo.map(id => id.toString()))];
-}
-
-if (!normalizedVisibleTo.length) {
-  logger.warn(" Prevented system message with no recipients");
-  return null;
-}
+  // Normalize visibleTo — empty array means "visible to all channel members"
+  let normalizedVisibleTo = [];
+  if (Array.isArray(visibleTo) && visibleTo.length > 0) {
+    normalizedVisibleTo = [...new Set(visibleTo.map(id => id.toString()))];
+  }
 
   const messageData = {
     channelId,
@@ -296,62 +290,48 @@ if (!normalizedVisibleTo.length) {
     contentType: activityMeta ? MESSAGE_CONTENT_TYPES.ACTIVITY : MESSAGE_CONTENT_TYPES.SYSTEM,
     senderSnapshot: {
       name: botUser.name,
-      avatar: botUser.avatar
+      avatar: botUser.avatar,
     },
     ...(workspaceId && { workspaceId }),
-
-    //  Only add if valid users exist
-    visibleTo: normalizedVisibleTo
+    // Empty array = visible to all channel members (DB query: visibleTo.$size:0 matches all)
+    // Non-empty array = restricted to specific users
+    visibleTo: normalizedVisibleTo,
   };
 
-  //  Attach FlowTask reference
   if (flowTaskRef) {
     messageData.flowTaskRef = flowTaskRef;
   }
 
-  // Attach activity metadata for premium UI rendering
   if (activityMeta) {
     messageData.activityMeta = activityMeta;
   }
 
-  // 🔥 Debug log (helps track issues)
   logger.info('sendSystemMessage', {
     channelId,
-    hasVisibility: normalizedVisibleTo.length > 0,
     visibleToCount: normalizedVisibleTo.length,
-    workspaceId
+    hasActivityMeta: !!activityMeta,
+    workspaceId,
   });
 
-  //  Save message
   const message = await messageRepository.create(messageData);
 
-  //  Update channel preview
   const preview = truncate(stripHtml(content), 100);
   channelRepository
-    .updateLastMessage(
-      channelId,
-      preview,
-      new Date(),
-      workspaceId?.toString()
-    )
+    .updateLastMessage(channelId, preview, new Date(), workspaceId?.toString())
     .catch(() => {});
 
   const socketPayload = messageSocketPayload(message);
 
-  //  Emit via socket
-    if (normalizedVisibleTo.length > 0) {
-      //  send only to specific users
-      normalizedVisibleTo.forEach(userId => {
-        emitToUser(
-          userId,
-          SOCKET_EVENTS.MESSAGE_CREATE,
-          { message: socketPayload },
-          workspaceId?.toString()
-        );
-      });
-    } else {
-      logger.warn("🚨 Skipping broadcast — no visibleTo users");
-    }
+  // Emit via socket
+  if (normalizedVisibleTo.length > 0) {
+    // Restricted visibility — send only to specific users
+    normalizedVisibleTo.forEach(uid => {
+      emitToUser(uid, SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
+    });
+  } else {
+    // Broadcast to entire channel (task events, general system messages)
+    emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
+  }
 
   return message;
 }

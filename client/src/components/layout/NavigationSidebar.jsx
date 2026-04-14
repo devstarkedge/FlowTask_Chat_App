@@ -288,7 +288,7 @@ const dmChannels = useMemo(() => {
                 label="Threads"
                 onClick={() => onToggleAllThreads?.()}
               />
-              <NavButton icon={Radio} label="Huddles" onClick={() => {}} />
+              {/* <NavButton icon={Radio} label="Huddles" onClick={() => {}} /> */}
               <NavButton icon={Send} label="Drafts & Sent" onClick={() => navigate(`/workspace/${workspaceId}/later`)} />
               <NavButton
                 icon={Compass}

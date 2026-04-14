@@ -277,12 +277,12 @@ export default function ChatHeader({
                   onClick={onTogglePins}
                 />
 
-                <HeaderBtn
+                {/* <HeaderBtn
                   icon={Headphones}
                   title="Huddle"
                   className="hide-mobile"
                   onClick={handleHuddleClick}
-                />
+                /> */}
 
                 <HeaderBtn
                   icon={Search}

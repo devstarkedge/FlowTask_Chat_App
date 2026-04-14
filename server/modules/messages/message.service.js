@@ -271,7 +271,8 @@ class MessageService {
   content,
   flowTaskRef,
   workspaceId,
-  visibleTo = []
+  visibleTo = [],
+  activityMeta = null
 ) {
   const botUser = await userRepository.ensureBotUser();
 
@@ -292,7 +293,7 @@ if (!normalizedVisibleTo.length) {
     authorId: botUser._id,
     content,
     htmlContent: content,
-    contentType: MESSAGE_CONTENT_TYPES.SYSTEM,
+    contentType: activityMeta ? MESSAGE_CONTENT_TYPES.ACTIVITY : MESSAGE_CONTENT_TYPES.SYSTEM,
     senderSnapshot: {
       name: botUser.name,
       avatar: botUser.avatar
@@ -306,6 +307,11 @@ if (!normalizedVisibleTo.length) {
   //  Attach FlowTask reference
   if (flowTaskRef) {
     messageData.flowTaskRef = flowTaskRef;
+  }
+
+  // Attach activity metadata for premium UI rendering
+  if (activityMeta) {
+    messageData.activityMeta = activityMeta;
   }
 
   // 🔥 Debug log (helps track issues)

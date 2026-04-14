@@ -159,6 +159,7 @@ const NORMALIZERS = {
     ...p,
     card: p.card || taskToCard(p.task),
     boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
     userId: p.userId || actorToUserId(p.actor),
   }),
 
@@ -166,6 +167,7 @@ const NORMALIZERS = {
     ...p,
     card: p.card || taskToCard(p.task),
     boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
     changes: p.changes || {},
     userId: p.userId || actorToUserId(p.actor),
   }),
@@ -175,6 +177,7 @@ const NORMALIZERS = {
     cardId: p.cardId || p.task?.id || p.task?._id,
     cardTitle: p.cardTitle || p.task?.title,
     boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
     userId: p.userId || actorToUserId(p.actor),
   }),
 
@@ -182,6 +185,7 @@ const NORMALIZERS = {
     ...p,
     card: p.card || taskToCard(p.task),
     boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
     assigneeId: p.assigneeId || p.assignees?.[0]?.userId || p.assignees?.[0]?.id,
     assignerId: p.assignerId || actorToUserId(p.actor),
   }),
@@ -191,6 +195,7 @@ const NORMALIZERS = {
     comment: p.comment,
     card: p.card || taskToCard(p.task),
     boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
     userId: p.userId || actorToUserId(p.actor),
   }),
 
@@ -198,6 +203,7 @@ const NORMALIZERS = {
     ...p,
     card: p.card || taskToCard(p.task),
     boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
     oldStatus: p.oldStatus,
     newStatus: p.newStatus,
     userId: p.userId || actorToUserId(p.actor),
@@ -207,6 +213,7 @@ const NORMALIZERS = {
     ...p,
     card: p.card || taskToCard(p.task),
     boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
     oldDueDate: p.oldDueDate,
     newDueDate: p.newDueDate,
     userId: p.userId || actorToUserId(p.actor),
@@ -217,6 +224,7 @@ const NORMALIZERS = {
     timeEntry: p.timeEntry,
     card: p.card || taskToCard(p.task),
     boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
     userId: p.userId || actorToUserId(p.actor),
   }),
 

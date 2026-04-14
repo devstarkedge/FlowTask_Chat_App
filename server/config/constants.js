@@ -76,6 +76,7 @@ export const MESSAGE_CONTENT_TYPES = Object.freeze({
   BOT: 'bot',
   FILE: 'file',
   TASK_UPDATE: 'task_update',
+  ACTIVITY: 'activity',
 });
 
 // ─── Attachment Sources ──────────────────────────────────────────────────────

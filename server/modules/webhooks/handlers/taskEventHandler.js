@@ -33,7 +33,7 @@ export function registerTaskEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_CREATED);
     if (!wsId) return;
 
-    const { card, boardId, userId } = payload;
+    const { card, boardId, userId, departmentId, project } = payload;
 
     if (!card || !boardId) return;
 
@@ -53,7 +53,7 @@ export function registerTaskEventHandlers() {
       )
       : null;
 
-    let msg = `📝 ${creatorName} created task: **${card.title}**${priority}`;
+    let msg = `${creatorName} created a new task: **${card.title}**${priority}`;
     if (assignee) {
       msg += ` → assigned to ${assignee.name}`;
     }
@@ -61,10 +61,22 @@ export function registerTaskEventHandlers() {
       msg += ` | Due: ${new Date(card.dueDate).toLocaleDateString()}`;
     }
 
+    const activityMeta = {
+      eventType: 'TASK_CREATED',
+      taskId: card._id || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle: card.title || null,
+      actorName: creatorName,
+      priority: card.priority || null,
+      category: card.category || null,
+    };
+
     await messageService.sendSystemMessage(channel._id, msg, {
       entityType: 'card',
       entityId: card._id,
-    }, wsId);
+    }, wsId, [], activityMeta);
   });
 
   // ─── task.updated ──────────────────────────────────────────────────────
@@ -72,7 +84,7 @@ export function registerTaskEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_UPDATED);
     if (!wsId) return;
 
-    const { card, boardId, changes, userId } = payload;
+    const { card, boardId, changes, userId, departmentId, project } = payload;
 
     if (!card || !boardId) return;
 
@@ -92,12 +104,22 @@ export function registerTaskEventHandlers() {
 
     if (parts.length === 0) return; // No meaningful changes to report
 
-    const msg = `🔄 ${userName} updated **${card.title}**: ${parts.join(', ')}`;
+    const msg = `${userName} updated **${card.title}**: ${parts.join(', ')}`;
+
+    const activityMeta = {
+      eventType: 'TASK_UPDATED',
+      taskId: card._id || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle: card.title || null,
+      actorName: userName,
+    };
 
     await messageService.sendSystemMessage(channel._id, msg, {
       entityType: 'card',
       entityId: card._id,
-    }, wsId);
+    }, wsId, [], activityMeta);
   });
 
   // ─── task.deleted ──────────────────────────────────────────────────────
@@ -105,7 +127,7 @@ export function registerTaskEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_DELETED);
     if (!wsId) return;
 
-    const { cardId, cardTitle, boardId, userId } = payload;
+    const { cardId, cardTitle, boardId, userId, departmentId, project } = payload;
 
     if (!boardId) return;
 
@@ -114,12 +136,25 @@ export function registerTaskEventHandlers() {
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const title = cardTitle || cardId || 'a task';
+    const userName = user?.name || 'Someone';
+
+    const activityMeta = {
+      eventType: 'TASK_DELETED',
+      taskId: cardId || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle: title,
+      actorName: userName,
+    };
 
     await messageService.sendSystemMessage(
       channel._id,
-      `🗑️ ${user?.name || 'Someone'} deleted task: **${title}**`,
+      `${userName} deleted task: **${title}**`,
       undefined,
       wsId,
+      [],
+      activityMeta,
     );
   });
 
@@ -128,7 +163,7 @@ export function registerTaskEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_ASSIGNED);
     if (!wsId) return;
 
-    const { card, boardId, assigneeId, assignerId } = payload;
+    const { card, boardId, assigneeId, assignerId, departmentId, project } = payload;
 
     if (!card || !assigneeId) return;
 
@@ -140,13 +175,28 @@ export function registerTaskEventHandlers() {
 
     if (!assignee) return;
 
+    const assignerName = assigner?.name || 'Someone';
+
     // Post in project channel
     if (channel) {
+      const activityMeta = {
+        eventType: 'TASK_ASSIGNED',
+        taskId: card._id || null,
+        projectId: boardId || null,
+        departmentId: departmentId || null,
+        projectName: project?.name || null,
+        taskTitle: card.title || null,
+        actorName: assignerName,
+        newValue: assignee.name,
+      };
+
       await messageService.sendSystemMessage(
         channel._id,
-        `👤 ${assigner?.name || 'Someone'} assigned **${card.title}** to ${assignee.name}`,
+        `${assignerName} assigned **${card.title}** to ${assignee.name}`,
         { entityType: 'card', entityId: card._id },
         wsId,
+        [],
+        activityMeta,
       );
     }
   });
@@ -156,7 +206,7 @@ export function registerTaskEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_COMMENTED);
     if (!wsId) return;
 
-    const { comment, card, boardId, userId } = payload;
+    const { comment, card, boardId, userId, departmentId, project } = payload;
 
     if (!comment || !card || !boardId) return;
 
@@ -164,6 +214,7 @@ export function registerTaskEventHandlers() {
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
+    const userName = user?.name || 'Someone';
     const commentText = typeof comment === 'string'
       ? comment
       : comment.text || comment.content || '';
@@ -175,11 +226,23 @@ export function registerTaskEventHandlers() {
       ? commentText.substring(0, 200) + '...'
       : commentText;
 
+    const activityMeta = {
+      eventType: 'TASK_COMMENTED',
+      taskId: card._id || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle: card.title || null,
+      actorName: userName,
+    };
+
     await messageService.sendSystemMessage(
       channel._id,
-      `💬 ${user?.name || 'Someone'} commented on **${card.title}**: "${preview}"`,
+      `${userName} commented on **${card.title}**: "${preview}"`,
       { entityType: 'card', entityId: card._id },
       wsId,
+      [],
+      activityMeta,
     );
   });
 
@@ -188,7 +251,7 @@ export function registerTaskEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_STATUS_CHANGED);
     if (!wsId) return;
 
-    const { card, boardId, oldStatus, newStatus, userId } = payload;
+    const { card, boardId, oldStatus, newStatus, userId, departmentId, project } = payload;
 
     if (!card || !boardId) return;
 
@@ -198,27 +261,28 @@ export function registerTaskEventHandlers() {
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const userName = user?.name || 'Someone';
 
-    // Status emoji mapping
-    const statusEmoji = {
-      completed: '✅',
-      done: '✅',
-      'in-progress': '🔄',
-      'in progress': '🔄',
-      review: '👀',
-      'in review': '👀',
-      todo: '📋',
-      blocked: '🚫',
-    };
-
-    const emoji = statusEmoji[(newStatus || '').toLowerCase()] || '🔄';
     const from = oldStatus || 'unknown';
     const to = newStatus || 'unknown';
 
+    const activityMeta = {
+      eventType: 'TASK_STATUS_CHANGED',
+      taskId: card._id || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle: card.title || null,
+      actorName: userName,
+      oldValue: from,
+      newValue: to,
+    };
+
     await messageService.sendSystemMessage(
       channel._id,
-      `${emoji} ${userName} changed **${card.title}** status: ${from} → ${to}`,
+      `${userName} changed **${card.title}** status: ${from} → ${to}`,
       { entityType: 'card', entityId: card._id },
       wsId,
+      [],
+      activityMeta,
     );
 
     // Auto-resolve thread if task is completed
@@ -241,7 +305,7 @@ export function registerTaskEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_DUE_DATE_CHANGED);
     if (!wsId) return;
 
-    const { card, boardId, oldDueDate, newDueDate, userId } = payload;
+    const { card, boardId, oldDueDate, newDueDate, userId, departmentId, project } = payload;
 
     if (!card || !boardId) return;
 
@@ -256,13 +320,27 @@ export function registerTaskEventHandlers() {
 
     // Check if overdue
     const isOverdue = newDueDate && new Date(newDueDate) < new Date();
-    const warning = isOverdue ? ' ⚠️ **OVERDUE**' : '';
+    const warning = isOverdue ? ' **OVERDUE**' : '';
+
+    const activityMeta = {
+      eventType: 'TASK_DUE_DATE_CHANGED',
+      taskId: card._id || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle: card.title || null,
+      actorName: userName,
+      oldValue: oldDate,
+      newValue: newDate,
+    };
 
     await messageService.sendSystemMessage(
       channel._id,
-      `📅 ${userName} changed due date for **${card.title}**: ${oldDate} → ${newDate}${warning}`,
+      `${userName} changed due date for **${card.title}**: ${oldDate} → ${newDate}${warning}`,
       { entityType: 'card', entityId: card._id },
       wsId,
+      [],
+      activityMeta,
     );
   });
 
@@ -274,7 +352,7 @@ export function registerTaskEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TIME_ENTRY_ADDED);
     if (!wsId) return;
 
-    const { timeEntry, card, boardId, userId } = payload;
+    const { timeEntry, card, boardId, userId, departmentId, project } = payload;
 
     if (!timeEntry || !boardId) return;
 
@@ -297,11 +375,24 @@ export function registerTaskEventHandlers() {
     const taskTitle = card?.title || timeEntry.cardTitle || 'a task';
     const description = timeEntry.description ? ` — "${timeEntry.description}"` : '';
 
+    const activityMeta = {
+      eventType: 'TIME_ENTRY_ADDED',
+      taskId: card?._id || timeEntry.cardId || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle: taskTitle,
+      actorName: userName,
+      newValue: durationStr,
+    };
+
     await messageService.sendSystemMessage(
       channel._id,
-      `⏱️ ${userName} logged **${durationStr}** on **${taskTitle}**${description}`,
+      `${userName} logged **${durationStr}** on **${taskTitle}**${description}`,
       { entityType: 'card', entityId: card?._id || timeEntry.cardId },
       wsId,
+      [],
+      activityMeta,
     );
   });
 

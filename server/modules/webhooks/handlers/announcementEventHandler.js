@@ -46,21 +46,13 @@ eventBus.register(
 
     const title = announcement.title || 'Announcement';
     const description = announcement.description || '';
-    const expiry = announcement.expiry
-      ? `\n\nExpires on: ${new Date(announcement.expiry).toLocaleString()}`
-      : '';
-    const content = announcement.content || announcement.text || '';
-    const category = announcement.category
-      ? `Category: ${announcement.category}\n\n`
-      : '';
+    const category = announcement.category || null;
 
     const msg = [
-      `📢 ${title}`,
-      `👤 Author: ${authorName}`,
-      description && `📝 ${description}`,
-      expiry && `⏳ Expires: ${expiry}`,
-      category && `🏷 ${category}`,
-      content && `📄 ${content}`,
+      `New announcement: **${title}**`,
+      `Author: ${authorName}`,
+      description && `${description}`,
+      category && `Category: ${category}`,
     ]
       .filter(Boolean)
       .join('  •  ');
@@ -88,12 +80,22 @@ eventBus.register(
       return;
     }
 
+    const activityMeta = {
+      eventType: 'ANNOUNCEMENT_CREATED',
+      announcementId: announcement._id || announcement.id || null,
+      announcementTitle: title,
+      actorName: authorName,
+      category: category,
+      priority: announcement.priority || null,
+    };
+
     await messageService.sendSystemMessage(
       channel._id,
       msg,
       { entityType: 'announcement', entityId: announcement._id },
       wsId,
-      chatUserIds
+      chatUserIds,
+      activityMeta
     );
 
     await botNotifier.onAnnouncementCreated(

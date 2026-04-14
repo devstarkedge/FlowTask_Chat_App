@@ -74,6 +74,30 @@ const flowTaskRefSchema = new Schema({
   entityId: { type: String },
 }, { _id: false });
 
+const activityMetaSchema = new Schema({
+  eventType: {
+    type: String,
+    enum: [
+      'TASK_CREATED', 'TASK_UPDATED', 'TASK_DELETED',
+      'TASK_ASSIGNED', 'TASK_COMMENTED', 'TASK_STATUS_CHANGED',
+      'TASK_DUE_DATE_CHANGED', 'TIME_ENTRY_ADDED',
+      'ANNOUNCEMENT_CREATED',
+    ],
+  },
+  taskId: { type: String, default: null },
+  projectId: { type: String, default: null },
+  departmentId: { type: String, default: null },
+  projectName: { type: String, default: null },
+  taskTitle: { type: String, default: null },
+  actorName: { type: String, default: null },
+  oldValue: { type: String, default: null },
+  newValue: { type: String, default: null },
+  announcementId: { type: String, default: null },
+  announcementTitle: { type: String, default: null },
+  category: { type: String, default: null },
+  priority: { type: String, default: null },
+}, { _id: false });
+
 const messageSchema = new Schema({
   // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────
   workspaceId: {
@@ -125,6 +149,11 @@ const messageSchema = new Schema({
   // Links message to a FlowTask entity (task, comment, etc.)
   flowTaskRef: {
     type: flowTaskRefSchema,
+    default: null,
+  },
+  // Structured metadata for activity/system messages (UI rendering context)
+  activityMeta: {
+    type: activityMetaSchema,
     default: null,
   },
   attachments: {

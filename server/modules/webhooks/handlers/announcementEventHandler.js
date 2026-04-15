@@ -84,6 +84,7 @@ eventBus.register(
       eventType: 'ANNOUNCEMENT_CREATED',
       announcementId: announcement._id || announcement.id || null,
       announcementTitle: title,
+      announcementDescription: description ? description.substring(0, 200) : null,
       actorName: authorName,
       category: category,
       priority: announcement.priority || null,

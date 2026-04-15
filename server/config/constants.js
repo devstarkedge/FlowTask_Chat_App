@@ -45,6 +45,14 @@ export const FLOWTASK_EVENTS = Object.freeze({
   // Attachment events
   ATTACHMENT_ADDED: 'ATTACHMENT_ADDED',
   ATTACHMENT_DELETED: 'ATTACHMENT_DELETED',
+  // Subtask events
+  SUBTASK_CREATED: 'SUBTASK_CREATED',
+  SUBTASK_COMPLETED: 'SUBTASK_COMPLETED',
+  SUBTASK_DELETED: 'SUBTASK_DELETED',
+  // Nano subtask events
+  NANO_CREATED: 'NANO_CREATED',
+  NANO_COMPLETED: 'NANO_COMPLETED',
+  NANO_DELETED: 'NANO_DELETED',
 });
 
 // ─── Channel Types ───────────────────────────────────────────────────────────

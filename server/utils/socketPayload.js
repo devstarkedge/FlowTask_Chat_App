@@ -30,6 +30,7 @@ export function messageSocketPayload(message, extras = {}) {
     isPinned: message.isPinned || false,
     isDeleted: message.isDeleted || false,
     flowTaskRef: message.flowTaskRef || null,
+    activityMeta: message.activityMeta || null,
     createdAt: message.createdAt,
     updatedAt: message.updatedAt,
     ...extras,

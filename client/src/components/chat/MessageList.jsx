@@ -4,7 +4,6 @@ import { useChatStore } from '../../stores/chatStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useAuthStore } from '../../stores/authStore'
 import MessageItem from './MessageItem'
-import ActivityMessage from './ActivityMessage'
 import AutoActivityMessage from './AutoActivityMessage'
 import { MessageCircle, ChevronDown } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
@@ -301,12 +300,9 @@ export default function MessageList({ messages, channelId, onOpenThread, onOpenP
           }
 
           if (isActivityMessage(item)) {
-            // Use premium card for messages with structured activityMeta,
-            // fall back to legacy ActivityMessage for older messages
-            const ActivityComp = item.activityMeta ? AutoActivityMessage : ActivityMessage
             return (
               <div style={{ padding: '2px 20px' }}>
-                <ActivityComp message={item} />
+                <AutoActivityMessage message={item} />
               </div>
             )
           }

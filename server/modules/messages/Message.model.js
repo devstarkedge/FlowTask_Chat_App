@@ -82,6 +82,9 @@ const activityMetaSchema = new Schema({
       'TASK_ASSIGNED', 'TASK_COMMENTED', 'TASK_STATUS_CHANGED',
       'TASK_DUE_DATE_CHANGED', 'TIME_ENTRY_ADDED',
       'ANNOUNCEMENT_CREATED',
+      'SUBTASK_CREATED', 'SUBTASK_COMPLETED', 'SUBTASK_DELETED',
+      'NANO_CREATED', 'NANO_COMPLETED', 'NANO_DELETED',
+      'ATTACHMENT_ADDED',
     ],
   },
   taskId: { type: String, default: null },
@@ -94,8 +97,17 @@ const activityMetaSchema = new Schema({
   newValue: { type: String, default: null },
   announcementId: { type: String, default: null },
   announcementTitle: { type: String, default: null },
+  announcementDescription: { type: String, default: null },
   category: { type: String, default: null },
   priority: { type: String, default: null },
+  // Field-level diffs for TASK_UPDATED: { title: {old, new}, priority: {old, new}, ... }
+  changedFields: { type: Schema.Types.Mixed, default: null },
+  // Subtask/nano hierarchy
+  subtaskTitle: { type: String, default: null },
+  parentTaskTitle: { type: String, default: null },
+  nanoTitle: { type: String, default: null },
+  // Attachment info
+  fileName: { type: String, default: null },
 }, { _id: false });
 
 const messageSchema = new Schema({

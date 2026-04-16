@@ -328,4 +328,76 @@ const NORMALIZERS = {
     teamId: p.teamId || p.team?.id || p.team?._id,
     memberId: p.memberId || p.member?.userId || p.member?.id,
   }),
+
+  // ─── Subtask Events ─────────────────────────────────────────────────────
+
+  [FLOWTASK_EVENTS.SUBTASK_CREATED]: (p) => ({
+    ...p,
+    subtask: p.subtask,
+    card: p.card || taskToCard(p.task),
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    userId: p.userId || actorToUserId(p.actor),
+  }),
+
+  [FLOWTASK_EVENTS.SUBTASK_COMPLETED]: (p) => ({
+    ...p,
+    subtask: p.subtask,
+    card: p.card || taskToCard(p.task),
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    userId: p.userId || actorToUserId(p.actor),
+  }),
+
+  [FLOWTASK_EVENTS.SUBTASK_DELETED]: (p) => ({
+    ...p,
+    subtask: p.subtask,
+    card: p.card || taskToCard(p.task),
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    userId: p.userId || actorToUserId(p.actor),
+  }),
+
+  // ─── Nano Subtask Events ────────────────────────────────────────────────
+
+  [FLOWTASK_EVENTS.NANO_CREATED]: (p) => ({
+    ...p,
+    nano: p.nano,
+    subtask: p.subtask,
+    card: p.card || taskToCard(p.task),
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    userId: p.userId || actorToUserId(p.actor),
+  }),
+
+  [FLOWTASK_EVENTS.NANO_COMPLETED]: (p) => ({
+    ...p,
+    nano: p.nano,
+    subtask: p.subtask,
+    card: p.card || taskToCard(p.task),
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    userId: p.userId || actorToUserId(p.actor),
+  }),
+
+  [FLOWTASK_EVENTS.NANO_DELETED]: (p) => ({
+    ...p,
+    nano: p.nano,
+    subtask: p.subtask,
+    card: p.card || taskToCard(p.task),
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    userId: p.userId || actorToUserId(p.actor),
+  }),
+
+  // ─── Attachment Events ──────────────────────────────────────────────────
+
+  [FLOWTASK_EVENTS.ATTACHMENT_ADDED]: (p) => ({
+    ...p,
+    attachment: p.attachment,
+    card: p.card || taskToCard(p.task),
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    userId: p.userId || actorToUserId(p.actor),
+  }),
 };

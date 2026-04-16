@@ -94,13 +94,47 @@ export function registerTaskEventHandlers() {
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const userName = user?.name || 'Someone';
 
-    // Build change summary
+    // Build change summary from field-level diffs
     const parts = [];
-    if (changes?.status) parts.push(`status → "${changes.status}"`);
-    if (changes?.priority) parts.push(`priority → "${changes.priority}"`);
-    if (changes?.dueDate) parts.push(`due date → ${new Date(changes.dueDate).toLocaleDateString()}`);
-    if (changes?.title) parts.push(`title → "${changes.title}"`);
-    if (changes?.listId) parts.push('moved to different list');
+    const changedFields = {};
+
+    if (changes?.status) {
+      const s = typeof changes.status === 'object' ? changes.status : { old: null, new: changes.status };
+      parts.push(`status: ${s.old || '?'} → ${s.new}`);
+      changedFields.status = s;
+    }
+    if (changes?.priority) {
+      const p = typeof changes.priority === 'object' ? changes.priority : { old: null, new: changes.priority };
+      parts.push(`priority: ${p.old || '?'} → ${p.new}`);
+      changedFields.priority = p;
+    }
+    if (changes?.title) {
+      const t = typeof changes.title === 'object' ? changes.title : { old: null, new: changes.title };
+      parts.push(`title: "${t.old || '?'}" → "${t.new}"`);
+      changedFields.title = t;
+    }
+    if (changes?.dueDate) {
+      const d = typeof changes.dueDate === 'object' ? changes.dueDate : { old: null, new: changes.dueDate };
+      parts.push(`due date: ${d.old || 'None'} → ${d.new || 'Removed'}`);
+      changedFields.dueDate = d;
+    }
+    if (changes?.startDate) {
+      const sd = typeof changes.startDate === 'object' ? changes.startDate : { old: null, new: changes.startDate };
+      parts.push(`start date: ${sd.old || 'None'} → ${sd.new || 'Removed'}`);
+      changedFields.startDate = sd;
+    }
+    if (changes?.description) {
+      parts.push('description updated');
+      changedFields.description = { old: 'Updated', new: 'Updated' };
+    }
+    if (changes?.labels) {
+      parts.push('labels updated');
+      changedFields.labels = typeof changes.labels === 'object' ? changes.labels : { old: [], new: [] };
+    }
+    if (changes?.listId) {
+      parts.push('moved to different list');
+      changedFields.listId = typeof changes.listId === 'object' ? changes.listId : { old: null, new: changes.listId };
+    }
 
     if (parts.length === 0) return; // No meaningful changes to report
 
@@ -114,6 +148,7 @@ export function registerTaskEventHandlers() {
       projectName: project?.name || null,
       taskTitle: card.title || null,
       actorName: userName,
+      changedFields: Object.keys(changedFields).length > 0 ? changedFields : null,
     };
 
     await messageService.sendSystemMessage(channel._id, msg, {
@@ -390,6 +425,268 @@ export function registerTaskEventHandlers() {
       channel._id,
       `${userName} logged **${durationStr}** on **${taskTitle}**${description}`,
       { entityType: 'card', entityId: card?._id || timeEntry.cardId },
+      wsId,
+      [],
+      activityMeta,
+    );
+  });
+
+  // ─── subtask.created ───────────────────────────────────────────────────
+  eventBus.register(FLOWTASK_EVENTS.SUBTASK_CREATED, async (payload) => {
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.SUBTASK_CREATED);
+    if (!wsId) return;
+
+    const { subtask, card, boardId, userId, departmentId, project } = payload;
+    if (!subtask || !boardId) return;
+
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    if (!channel) return;
+
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
+    const userName = user?.name || 'Someone';
+    const taskTitle = card?.title || payload.task?.title || 'a task';
+
+    const activityMeta = {
+      eventType: 'SUBTASK_CREATED',
+      taskId: card?._id || payload.task?.id || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle,
+      subtaskTitle: subtask.title || null,
+      parentTaskTitle: taskTitle,
+      actorName: userName,
+    };
+
+    await messageService.sendSystemMessage(
+      channel._id,
+      `${userName} created subtask **${subtask.title}** on **${taskTitle}**`,
+      { entityType: 'card', entityId: card?._id || payload.task?.id },
+      wsId,
+      [],
+      activityMeta,
+    );
+  });
+
+  // ─── subtask.completed ─────────────────────────────────────────────────
+  eventBus.register(FLOWTASK_EVENTS.SUBTASK_COMPLETED, async (payload) => {
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.SUBTASK_COMPLETED);
+    if (!wsId) return;
+
+    const { subtask, card, boardId, userId, departmentId, project } = payload;
+    if (!subtask || !boardId) return;
+
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    if (!channel) return;
+
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
+    const userName = user?.name || 'Someone';
+    const taskTitle = card?.title || payload.task?.title || 'a task';
+
+    const activityMeta = {
+      eventType: 'SUBTASK_COMPLETED',
+      taskId: card?._id || payload.task?.id || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle,
+      subtaskTitle: subtask.title || null,
+      parentTaskTitle: taskTitle,
+      actorName: userName,
+    };
+
+    await messageService.sendSystemMessage(
+      channel._id,
+      `${userName} completed subtask **${subtask.title}** on **${taskTitle}**`,
+      { entityType: 'card', entityId: card?._id || payload.task?.id },
+      wsId,
+      [],
+      activityMeta,
+    );
+  });
+
+  // ─── subtask.deleted ───────────────────────────────────────────────────
+  eventBus.register(FLOWTASK_EVENTS.SUBTASK_DELETED, async (payload) => {
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.SUBTASK_DELETED);
+    if (!wsId) return;
+
+    const { subtask, card, boardId, userId, departmentId, project } = payload;
+    if (!subtask || !boardId) return;
+
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    if (!channel) return;
+
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
+    const userName = user?.name || 'Someone';
+    const taskTitle = card?.title || payload.task?.title || 'a task';
+
+    const activityMeta = {
+      eventType: 'SUBTASK_DELETED',
+      taskId: card?._id || payload.task?.id || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle,
+      subtaskTitle: subtask.title || null,
+      parentTaskTitle: taskTitle,
+      actorName: userName,
+    };
+
+    await messageService.sendSystemMessage(
+      channel._id,
+      `${userName} deleted subtask **${subtask.title}** from **${taskTitle}**`,
+      undefined,
+      wsId,
+      [],
+      activityMeta,
+    );
+  });
+
+  // ─── nano.created ─────────────────────────────────────────────────────
+  eventBus.register(FLOWTASK_EVENTS.NANO_CREATED, async (payload) => {
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.NANO_CREATED);
+    if (!wsId) return;
+
+    const { nano, subtask, card, boardId, userId, departmentId, project } = payload;
+    if (!nano || !boardId) return;
+
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    if (!channel) return;
+
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
+    const userName = user?.name || 'Someone';
+    const taskTitle = card?.title || payload.task?.title || 'a task';
+
+    const activityMeta = {
+      eventType: 'NANO_CREATED',
+      taskId: card?._id || payload.task?.id || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle,
+      subtaskTitle: subtask?.title || null,
+      parentTaskTitle: taskTitle,
+      nanoTitle: nano.title || null,
+      actorName: userName,
+    };
+
+    await messageService.sendSystemMessage(
+      channel._id,
+      `${userName} created nano **${nano.title}** on subtask **${subtask?.title || '?'}** in **${taskTitle}**`,
+      { entityType: 'card', entityId: card?._id || payload.task?.id },
+      wsId,
+      [],
+      activityMeta,
+    );
+  });
+
+  // ─── nano.completed ───────────────────────────────────────────────────
+  eventBus.register(FLOWTASK_EVENTS.NANO_COMPLETED, async (payload) => {
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.NANO_COMPLETED);
+    if (!wsId) return;
+
+    const { nano, subtask, card, boardId, userId, departmentId, project } = payload;
+    if (!nano || !boardId) return;
+
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    if (!channel) return;
+
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
+    const userName = user?.name || 'Someone';
+    const taskTitle = card?.title || payload.task?.title || 'a task';
+
+    const activityMeta = {
+      eventType: 'NANO_COMPLETED',
+      taskId: card?._id || payload.task?.id || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle,
+      subtaskTitle: subtask?.title || null,
+      parentTaskTitle: taskTitle,
+      nanoTitle: nano.title || null,
+      actorName: userName,
+    };
+
+    await messageService.sendSystemMessage(
+      channel._id,
+      `${userName} completed nano **${nano.title}** on **${taskTitle}**`,
+      { entityType: 'card', entityId: card?._id || payload.task?.id },
+      wsId,
+      [],
+      activityMeta,
+    );
+  });
+
+  // ─── nano.deleted ─────────────────────────────────────────────────────
+  eventBus.register(FLOWTASK_EVENTS.NANO_DELETED, async (payload) => {
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.NANO_DELETED);
+    if (!wsId) return;
+
+    const { nano, subtask, card, boardId, userId, departmentId, project } = payload;
+    if (!nano || !boardId) return;
+
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    if (!channel) return;
+
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
+    const userName = user?.name || 'Someone';
+    const taskTitle = card?.title || payload.task?.title || 'a task';
+
+    const activityMeta = {
+      eventType: 'NANO_DELETED',
+      taskId: card?._id || payload.task?.id || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle,
+      subtaskTitle: subtask?.title || null,
+      parentTaskTitle: taskTitle,
+      nanoTitle: nano.title || null,
+      actorName: userName,
+    };
+
+    await messageService.sendSystemMessage(
+      channel._id,
+      `${userName} deleted nano **${nano.title}** from **${taskTitle}**`,
+      undefined,
+      wsId,
+      [],
+      activityMeta,
+    );
+  });
+
+  // ─── attachment.added ──────────────────────────────────────────────────
+  eventBus.register(FLOWTASK_EVENTS.ATTACHMENT_ADDED, async (payload) => {
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.ATTACHMENT_ADDED);
+    if (!wsId) return;
+
+    const { attachment, card, boardId, userId, departmentId, project } = payload;
+    if (!attachment || !boardId) return;
+
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    if (!channel) return;
+
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
+    const userName = user?.name || 'Someone';
+    const taskTitle = card?.title || payload.task?.title || 'a task';
+    const fileName = attachment.fileName || attachment.originalName || 'a file';
+
+    const activityMeta = {
+      eventType: 'ATTACHMENT_ADDED',
+      taskId: card?._id || payload.task?.id || null,
+      projectId: boardId,
+      departmentId: departmentId || null,
+      projectName: project?.name || null,
+      taskTitle,
+      fileName,
+      actorName: userName,
+    };
+
+    await messageService.sendSystemMessage(
+      channel._id,
+      `${userName} attached **${fileName}** to **${taskTitle}**`,
+      { entityType: 'card', entityId: card?._id || payload.task?.id },
       wsId,
       [],
       activityMeta,

@@ -227,6 +227,10 @@ export const notificationAPI = {
 }
 
 // ─── Workspaces ──────────────────────────────────────────────────────────
+export const searchAPI = {
+  global: (q) => api.get('/search', { params: { q } }),
+}
+
 export const workspaceAPI = {
   mine: () => api.get('/workspaces/mine'),
   create: (data) => api.post('/workspaces', data),

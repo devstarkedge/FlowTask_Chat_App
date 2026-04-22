@@ -18,6 +18,7 @@ import ChannelInfoPanel from '../chat/ChannelInfoPanel'
 import PreferencesModal from '../chat/PreferencesModal'
 import SearchPanel from '../chat/SearchPanel'
 import ProfileSidePanel from '../chat/ProfileSidePanel'
+import GlobalSearch from '../search/GlobalSearch'
 import { Avatar } from '../chat/MemberAvatarGroup'
 import { useProfileStore } from '../../stores/profileStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -124,6 +125,50 @@ export default function ChatLayout() {
   const topAvatarRef = useRef(null)
   const user = useAuthStore((s) => s.user)
 
+  const handleOpenSearchResult = useCallback((item) => {
+    if (!workspaceId) return
+
+    switch (item.type) {
+      case 'user':
+        useProfileStore.getState().openProfile({ _id: item.id })
+        break
+      case 'message':
+        if (item.channelType === 'dm') {
+          navigate(getDMPath(workspaceId, item.channelId, item.id))
+        } else {
+          navigate(getChannelPath(workspaceId, item.channelId, item.id))
+        }
+        break
+      case 'channel':
+        if (item.type === 'dm') {
+          navigate(getDMPath(workspaceId, item.id))
+        } else {
+          navigate(getChannelPath(workspaceId, item.id))
+        }
+        break
+      case 'file':
+        navigate(getFilesPath(workspaceId, item.referenceId))
+        break
+      case 'link':
+        if (item.channelType === 'dm') {
+          navigate(getDMPath(workspaceId, item.channelId, item.messageId))
+        } else {
+          navigate(getChannelPath(workspaceId, item.channelId, item.messageId))
+        }
+        break
+      case 'page':
+        if (item.path === 'profile') useProfileStore.getState().openProfile(user)
+        else if (item.path === 'settings') setShowTopPreferences(true)
+        else if (item.path === 'activity') setShowNotifications(true)
+        else if (item.path === 'threads') setShowAllThreads(true)
+        else if (item.path === 'starred') setShowSaved(true)
+        else navigate(`/workspace/${workspaceId}/${item.path}`)
+        break
+      default:
+        break
+    }
+  }, [workspaceId, navigate, user])
+
   // ─── Resizable Sidebar ───────────────────────────────────────────
   const [sidebarWidth, setSidebarWidth] = useState(getSavedSidebarWidth)
   const isResizingRef = useRef(false)
@@ -174,9 +219,16 @@ export default function ChatLayout() {
     }
   }, [sidebarCollapsed, sidebarWidth, persistWidth])
 
+  const globalSearchRef = useRef(null)
+
   // Keyboard shortcuts
   const shortcutHandlers = useMemo(() => ({
-    toggleSearch: () => { setShowSearch((s) => !s); setShowPins(false); setShowAllThreads(false); setShowNotifications(false) },
+    toggleSearch: () => {
+      globalSearchRef.current?.focus()
+      setShowPins(false)
+      setShowAllThreads(false)
+      setShowNotifications(false)
+    },
     toggleThreads: () => { setShowAllThreads((s) => !s); setShowSearch(false); setShowPins(false); setShowNotifications(false); closeThread(); useProfileStore.getState().closeProfile() },
     showShortcuts: () => setShowShortcuts((s) => !s),
     escape: () => {
@@ -610,18 +662,15 @@ export default function ChatLayout() {
       <div className="flex-1 flex flex-col min-w-0">
         <GlobalTopBar
           user={user}
+          workspaceId={workspaceId}
           avatarRef={topAvatarRef}
+          searchRef={globalSearchRef}
           unreadCount={unreadNotifications}
           onBack={() => navigate(-1)}
           onForward={() => navigate(1)}
-          onSearch={() => {
-            setShowSearch((s) => !s)
-            setShowPins(false)
-            setShowNotifications(false)
-          }}
+          onOpenSearchResult={handleOpenSearchResult}
           onNotifications={() => {
             setShowNotifications((s) => !s)
-            setShowSearch(false)
             setShowPins(false)
           }}
           onHelp={() => setShowShortcuts(true)}
@@ -809,11 +858,13 @@ export default function ChatLayout() {
 
 function GlobalTopBar({
   user,
+  workspaceId,
   avatarRef,
+  searchRef,
   unreadCount,
   onBack,
   onForward,
-  onSearch,
+  onOpenSearchResult,
   onNotifications,
   onHelp,
   onToggleUserMenu,
@@ -829,11 +880,14 @@ function GlobalTopBar({
         </button>
       </div>
 
-      <button className="app-topbar__search" onClick={onSearch}>
-        <Search size={16} />
-        <span>Search messages, files, and people</span>
-        <kbd>Ctrl K</kbd>
-      </button>
+      <div className="flex-1 max-w-[600px] px-4">
+        <GlobalSearch
+          ref={searchRef}
+          user={user}
+          workspaceId={workspaceId}
+          onOpenResult={onOpenSearchResult}
+        />
+      </div>
 
       <div className="app-topbar__actions">
         <button className="app-topbar__icon app-topbar__bell" onClick={onNotifications} aria-label="Notifications">

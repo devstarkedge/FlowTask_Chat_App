@@ -158,7 +158,8 @@ export const useWorkspaceStore = create(
       // ─── Delete workspace ─────────────────────────────────────────────
       deleteWorkspace: async (workspaceId) => {
         try {
-          await api.delete(`/workspaces/${workspaceId}`)
+          const res = await api.delete(`/workspaces/${workspaceId}`)
+
           set((state) => {
             const remaining = state.workspaces.filter((w) => w._id !== workspaceId)
             const isActive = state.activeWorkspaceId === workspaceId
@@ -168,9 +169,12 @@ export const useWorkspaceStore = create(
               activeWorkspace: isActive ? remaining[0] || null : state.activeWorkspace,
             }
           })
-          toast.success('Workspace deleted')
+
+          return res.data   
+
         } catch (error) {
-          toast.error(error.response?.data?.error?.message || 'Failed to delete workspace')
+          console.error("Delete API error:", error)
+
           throw error
         }
       },

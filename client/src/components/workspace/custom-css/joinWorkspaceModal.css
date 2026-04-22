@@ -1,0 +1,172 @@
+@keyframes jw-pop {
+    0% {
+        opacity: 0;
+        transform: scale(.94) translateY(20px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@keyframes jw-particle {
+
+    0%,
+    100% {
+        transform: translateY(0);
+        opacity: .4;
+    }
+
+    50% {
+        transform: translateY(-10px);
+        opacity: .9;
+    }
+}
+
+/* ───── MODAL CONTAINER ───── */
+
+.jw-modal {
+    width: 100%;
+    max-width: 480px;
+    border-radius: 20px;
+    overflow: hidden;
+    background: var(--bg-modal);
+    border: 1px solid var(--border-primary);
+    box-shadow:
+        0 40px 100px rgba(0, 0, 0, .45),
+        0 12px 32px rgba(0, 0, 0, .25);
+    animation: jw-pop .45s cubic-bezier(.22, 1, .36, 1);
+}
+
+/* ───── HEADER ───── */
+
+.jw-header {
+    position: relative;
+    padding: 20px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(135deg, rgba(52, 199, 89, .12), rgba(16, 185, 129, .08));
+    border-bottom: 1px solid var(--border-secondary);
+}
+
+.jw-title {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.jw-sub {
+    font-size: 12px;
+    margin-top: 4px;
+    color: var(--text-muted);
+}
+
+/* ───── BODY ───── */
+
+.jw-body {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+/* ───── INFO CARD ───── */
+
+.jw-info {
+    display: flex;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-secondary);
+}
+
+/* ───── INPUT ───── */
+
+.jw-input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border-primary);
+    background: var(--bg-tertiary);
+    color: var(--text-white);
+    font-size: 14px;
+    transition: all .2s ease;
+}
+
+.jw-input:focus {
+    border-color: var(--accent-green);
+    box-shadow: 0 0 0 3px rgba(52, 199, 89, .15);
+    transform: translateY(-1px);
+}
+
+/* ───── BUTTONS ───── */
+
+.jw-btn {
+    padding: 10px 18px;
+    border-radius: 12px;
+    font-size: 14px;
+    transition: all .15s ease;
+}
+
+.jw-cancel {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-secondary);
+}
+
+.jw-submit {
+    background: var(--accent-green);
+    color: white;
+}
+
+.jw-submit:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(52, 199, 89, .35);
+}
+
+.jw-submit:disabled {
+    opacity: .4;
+}
+
+/* ───── CLOSE BUTTON ───── */
+
+.jw-close {
+    transition: transform .2s ease;
+}
+
+.jw-close:hover {
+    transform: rotate(90deg);
+}
+
+.jw-overlay {
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(10px);
+}
+
+.jw-icon-box {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(52, 199, 89, 0.15);
+    box-shadow: 0 6px 14px rgba(52, 199, 89, .25);
+    color: var(--accent-green);
+}
+
+.jw-lock-icon {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.jw-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}

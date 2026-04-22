@@ -1,135 +1,150 @@
 import { useState, useRef, useEffect } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
-import { X, Loader2, LogIn } from 'lucide-react'
+import { X, Loader2, LogIn, Lock, Info, Check } from 'lucide-react'
+import useRipple from "../../hooks/useRipple";
+import toast from 'react-hot-toast'
+import './custom-css/joinWorkspaceModal.css'
 
-/**
- * JoinWorkspaceModal — join a workspace via invite code.
- */
 export default function JoinWorkspaceModal({ onClose, onJoined }) {
   const { joinByInviteCode, isLoading } = useWorkspaceStore()
-  const [inviteCode, setInviteCode] = useState('')
+  const [inviteCode, setInviteCode]     = useState('')
+  const [joined, setJoined]             = useState(false)
+
   const inputRef = useRef(null)
+  const [submitRef, triggerRipple] = useRipple()
+
+  useEffect(() => { inputRef.current?.focus() }, [])
 
   useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
-
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === 'Escape') onClose()
-    }
+    const handleKey = (e) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
   }, [onClose])
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
+    e?.preventDefault()
     if (!inviteCode.trim() || isLoading) return
-
+    setJoined(true)
     try {
       const workspace = await joinByInviteCode(inviteCode.trim())
       onJoined?.(workspace)
       onClose()
     } catch {
-      // Error handled by store
+      setJoined(false)
     }
   }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.6)' }}
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 sm:px-6 jw-overlay"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
+
+      {/* ── Modal shell ── */}
       <div
         role="dialog"
         aria-modal="true"
-        className="w-full max-w-md rounded-xl shadow-2xl overflow-hidden animate-fade-in"
-        style={{
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border-primary)',
-        }}
+        className="jw-modal"
       >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: '1px solid var(--border-primary)' }}
-        >
-          <div className="flex items-center gap-2">
-            <LogIn size={18} style={{ color: 'var(--accent-green)' }} />
-            <h2 className="text-base font-semibold" style={{ color: 'var(--text-white)' }}>
-              Join a Workspace
-            </h2>
+
+        {/* ── Header ── */}
+        <div className="jw-header">
+
+          {/* Floating orbs */}
+          {[...Array(5)].map((_, i) => (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                borderRadius: '50%',
+                pointerEvents: 'none',
+                left: `${10 + i * 18}%`,
+                top: `${20 + (i % 2) * 40}%`,
+                width: 5,
+                height: 5,
+                background: 'rgba(52,199,89,.3)',
+                animation: `jw-particle ${2.5 + i}s ease-in-out infinite`
+              }}
+            />
+          ))}
+
+          <div className="flex items-center gap-4">
+            <div className="jw-icon-box">
+              <LogIn size={16} />
+            </div>
+
+            <div>
+              <p className="jw-title">Join a workspace</p>
+              <p className="jw-sub">Enter your invite code below</p>
+            </div>
           </div>
+
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg transition-colors cursor-pointer"
-            style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            className="jw-close"
           >
-            <X size={18} />
+            <X size={14} />
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-              Invite Code
-            </label>
-            <input
-              ref={inputRef}
-              type="text"
-              value={inviteCode}
-              onChange={(e) => setInviteCode(e.target.value)}
-              placeholder="Enter invite code..."
-              className="w-full px-3 py-2.5 rounded-lg text-sm outline-none transition-colors font-mono tracking-wider"
-              style={{
-                background: 'var(--bg-tertiary)',
-                border: '1px solid var(--border-primary)',
-                color: 'var(--text-white)',
-              }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--accent-primary)')}
-              onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border-primary)')}
-            />
-            <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
-              Ask a workspace admin for the invite code.
+        {/* ── Body ── */}
+        <div className="jw-body">
+
+          {/* Info */}
+          <div className="jw-info jw-f1">
+            <Info size={14} />
+            <p>
+              Ask a workspace admin to share an invite code with you. Codes are case-sensitive.
             </p>
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
+          {/* Input */}
+          <div className="jw-f2 flex flex-col gap-2">
+            <label className="jw-label">
+              Invite Code
+            </label>
+
+            <div className="relative">
+              <input
+                ref={inputRef}
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
+                placeholder="e.g. WS-A1B2-C3D4"
+                className="jw-input pr-10"
+              />
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="jw-f3 flex justify-end gap-3">
+
             <button
-              type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors"
-              style={{
-                color: 'var(--text-secondary)',
-                background: 'var(--bg-tertiary)',
-                border: '1px solid var(--border-secondary)',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+              className="jw-btn jw-cancel"
             >
               Cancel
             </button>
+
             <button
-              type="submit"
+              ref={submitRef}
               disabled={!inviteCode.trim() || isLoading}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                background: 'var(--accent-green)',
-                color: 'white',
-                border: 'none',
-              }}
-              onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.opacity = '0.85' }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
+              onMouseDown={(e) => triggerRipple(e)}
+              onClick={handleSubmit}
+              className="jw-btn jw-submit jw-shimmer flex items-center gap-2"
             >
-              {isLoading && <Loader2 size={14} className="animate-spin" />}
-              Join Workspace
+              {isLoading ? (
+                <Loader2 size={14} className="jw-spin" />
+              ) : joined ? (
+                <Check size={14} />
+              ) : (
+                <LogIn size={14} />
+              )}
+              {isLoading ? 'Joining…' : 'Join workspace'}
             </button>
+
           </div>
-        </form>
+        </div>
       </div>
     </div>
   )

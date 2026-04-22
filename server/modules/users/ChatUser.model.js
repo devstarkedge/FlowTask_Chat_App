@@ -218,12 +218,12 @@ chatUserSchema.index({ departmentIds: 1, isActive: 1 });
 
 // ─── Pre-save: Hash password on change ───────────────────────────────────────
 chatUserSchema.pre('save', async function (next) {
-  if (!this.isModified('password') || !this.password) return next();
+  if (!this.isModified('password') || !this.password) return;
   try {
     this.password = await bcrypt.hash(this.password, SALT_ROUNDS);
     next();
   } catch (err) {
-    next(err);
+    console.error('Error hashing password:', err);
   }
 });
 

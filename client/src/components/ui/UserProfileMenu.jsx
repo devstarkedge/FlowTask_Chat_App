@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { Avatar } from '../chat/MemberAvatarGroup'
 import { Smile, Moon, BellOff, User, Settings, Download, LogOut } from 'lucide-react'
+import { useWorkspaceStore } from '../../stores/workspaceStore'
+import toast from 'react-hot-toast'
 
 export default function UserProfileMenu({ anchorRef, onClose, onOpenPreferences, onOpenSetStatus }) {
   const menuRef = useRef(null)
@@ -24,6 +26,72 @@ export default function UserProfileMenu({ anchorRef, onClose, onOpenPreferences,
     offline: 'Offline',
   }
   const userStatus = user?.status || 'online'
+
+  const handleLogout = () => {
+    toast((t) => (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 10
+        }}
+      >
+        <span style={{ fontWeight: 500 }}>
+          Are you sure you want to sign out?
+        </span>
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button
+            className="btn-ghost"
+            onClick={() => toast.dismiss(t.id)}
+          >
+            Cancel
+          </button>
+
+          <button
+            className="btn-danger"
+            onClick={async () => {
+              toast.dismiss(t.id)
+
+              setIsSigningOut(true)
+              const loadingToast = toast.loading("Signing out...")
+
+              try {
+                await logout()
+              } catch (err) {
+                console.error("Logout API failed:", err)
+              }
+
+              try {
+                localStorage.clear()
+                sessionStorage.clear()
+
+                useWorkspaceStore.getState().reset?.()
+                useAuthStore.getState().reset?.()
+
+                toast.dismiss(loadingToast)
+                toast.success("Signed out successfully 👋")
+
+                onClose?.()
+                window.location.href = "/login"
+
+              } catch (err) {
+                toast.dismiss(loadingToast)
+                toast.error("Something went wrong")
+              } finally {
+                setIsSigningOut(false)
+              }
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    ), {
+      duration: 5000
+    })
+  }
+
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -123,23 +191,19 @@ export default function UserProfileMenu({ anchorRef, onClose, onOpenPreferences,
       <div className="user-menu-divider" />
 
       <button
-        className="user-menu-item"
-        onClick={async () => {
-          setIsSigningOut(true)
-          try {
-            await logout()
-          } catch {
-            // logout failure is non-critical; close menu regardless
-          } finally {
-            onClose()
-          }
-        }}
-        disabled={isSigningOut}
-        style={{ color: 'var(--accent-red)', opacity: isSigningOut ? 0.6 : 1 }}
-      >
-        <LogOut size={16} />
-        <span>{isSigningOut ? 'Signing out…' : `Sign out of ${user?.name || 'workspace'}`}</span>
-      </button>
+      className="user-menu-item"
+      onClick={handleLogout}
+      disabled={isSigningOut}
+      style={{
+        color: 'var(--accent-red)',
+        opacity: isSigningOut ? 0.6 : 1
+      }}
+    >
+      <LogOut size={16} />
+      <span>
+        {isSigningOut ? 'Signing out…' : `Sign out of ${user?.name || 'workspace'}`}
+      </span>
+    </button>
     </div>,
     document.body,
   )

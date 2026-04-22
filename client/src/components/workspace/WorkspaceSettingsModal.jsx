@@ -1,767 +1,992 @@
-import { useState, useEffect, useMemo } from 'react'
-import { useWorkspaceStore } from '../../stores/workspaceStore'
-import { useAuthStore } from '../../stores/authStore'
+import { useState, useEffect, useMemo } from "react";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useAuthStore } from "../../stores/authStore";
 import {
-  X, Settings, Users, Link2, Copy, RefreshCw, Loader2,
-  Crown, Shield, UserMinus, ChevronDown, Trash2, Zap, Lock, Bell,
-} from 'lucide-react'
-import { Avatar } from '../chat/MemberAvatarGroup'
-import toast from 'react-hot-toast'
-import api from '../../services/api'
+  X,
+  Settings,
+  Users,
+  Link2,
+  Copy,
+  RefreshCw,
+  Loader2,
+  Crown,
+  Shield,
+  UserMinus,
+  ChevronDown,
+  Trash2,
+  Zap,
+  Lock,
+  Bell,
+  Check,
+  Sparkles,
+  AlertTriangle,
+} from "lucide-react";
+import { Avatar } from "../chat/MemberAvatarGroup";
+import toast from "react-hot-toast";
+import api from "../../services/api";
+import "./custom-css/workspaceSettingsModal.css";
 
+/* ─────────────────────────────────────────────────────────────────────────
+   CONSTANTS
+───────────────────────────────────────────────────────────────────────── */
 const TABS = [
-  { id: 'general', label: 'General', icon: Settings },
-  { id: 'members', label: 'Members', icon: Users },
-  { id: 'invite', label: 'Invite', icon: Link2 },
-  { id: 'integrations', label: 'Integrations', icon: Zap },
-  { id: 'security', label: 'Security', icon: Lock },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
-]
+  { id: "general", label: "General", icon: Settings },
+  { id: "members", label: "Members", icon: Users },
+  { id: "invite", label: "Invite", icon: Link2 },
+  { id: "integrations", label: "Integrations", icon: Zap },
+  { id: "security", label: "Security", icon: Lock },
+  { id: "notifications", label: "Notifications", icon: Bell },
+];
 
-const ROLE_LABELS = {
-  owner: { label: 'Owner', color: 'var(--accent-yellow)', icon: Crown },
-  admin: { label: 'Admin', color: 'var(--accent-purple)', icon: Shield },
-  member: { label: 'Member', color: 'var(--text-muted)', icon: null },
-  guest: { label: 'Guest', color: 'var(--text-muted)', icon: null },
-}
+const ROLE_CFG = {
+  owner: {
+    label: "Owner",
+    color: "#92400e",
+    bg: "#fffbeb",
+    border: "#fde68a",
+    dot: "#f59e0b",
+    icon: Crown,
+  },
+  admin: {
+    label: "Admin",
+    color: "#5b21b6",
+    bg: "#f5f3ff",
+    border: "#ddd6fe",
+    dot: "#8b5cf6",
+    icon: Shield,
+  },
+  member: {
+    label: "Member",
+    color: "#075985",
+    bg: "#f0f9ff",
+    border: "#bae6fd",
+    dot: "#38bdf8",
+    icon: null,
+  },
+  guest: {
+    label: "Guest",
+    color: "#374151",
+    bg: "#f9fafb",
+    border: "#e5e7eb",
+    dot: "#9ca3af",
+    icon: null,
+  },
+};
 
+/* ─────────────────────────────────────────────────────────────────────────
+   HELPERS
+───────────────────────────────────────────────────────────────────────── */
+const SectionLabel = ({ children }) => <p className="wsm-label">{children}</p>;
+
+/* ─────────────────────────────────────────────────────────────────────────
+   MAIN COMPONENT
+───────────────────────────────────────────────────────────────────────── */
 export default function WorkspaceSettingsModal({ onClose }) {
   const {
-    activeWorkspace, activeWorkspaceId, members,
-    fetchMembers, updateWorkspace, removeMember, updateMemberRole,
-    regenerateInviteCode, deleteWorkspace,
-  } = useWorkspaceStore()
-  const { user } = useAuthStore()
+    activeWorkspace,
+    activeWorkspaceId,
+    members,
+    fetchMembers,
+    updateWorkspace,
+    removeMember,
+    updateMemberRole,
+    regenerateInviteCode,
+    deleteWorkspace,
+  } = useWorkspaceStore();
+  const { user } = useAuthStore();
 
-  const [activeTab, setActiveTab] = useState('general')
-  const [name, setName] = useState(activeWorkspace?.name || '')
-  const [description, setDescription] = useState(activeWorkspace?.description || '')
-  const [isSaving, setIsSaving] = useState(false)
-  const [isRegenerating, setIsRegenerating] = useState(false)
+  const [activeTab, setActiveTab] = useState("general");
+  const [name, setName] = useState(activeWorkspace?.name || "");
+  const [description, setDescription] = useState(
+    activeWorkspace?.description || "",
+  );
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [tabKey, setTabKey] = useState(0);
 
   useEffect(() => {
-    if (activeWorkspaceId) fetchMembers()
-  }, [activeWorkspaceId, fetchMembers])
+    if (activeWorkspaceId) fetchMembers();
+  }, [activeWorkspaceId, fetchMembers]);
 
   useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
-  }, [onClose])
+    const h = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose]);
 
   const currentUserRole = useMemo(() => {
-    const membership = members.find(
-      (m) => (m.userId?._id || m.userId) === user?._id
-    )
-    return membership?.role || 'member'
-  }, [members, user])
+    const m = members.find((m) => (m.userId?._id || m.userId) === user?._id);
+    return m?.role || "member";
+  }, [members, user]);
 
-  const canManage = currentUserRole === 'owner' || currentUserRole === 'admin'
+  const canManage = currentUserRole === "owner" || currentUserRole === "admin";
 
   const handleSaveGeneral = async () => {
-    if (!name.trim() || isSaving) return
-    setIsSaving(true)
+    if (!name.trim() || isSaving) return;
+    setIsSaving(true);
     try {
       await updateWorkspace(activeWorkspaceId, {
         name: name.trim(),
         description: description.trim(),
-      })
-    } catch { /* handled by store */ }
-    setIsSaving(false)
-  }
+      });
+    } catch {}
+    setIsSaving(false);
+  };
 
   const handleRegenerate = async () => {
-    if (isRegenerating) return
-    setIsRegenerating(true)
+    if (isRegenerating) return;
+    setIsRegenerating(true);
     try {
-      await regenerateInviteCode()
-    } catch { /* handled */ }
-    setIsRegenerating(false)
-  }
+      await regenerateInviteCode();
+    } catch {}
+    setIsRegenerating(false);
+  };
 
   const handleCopyInviteCode = () => {
     if (activeWorkspace?.inviteCode) {
-      navigator.clipboard.writeText(activeWorkspace.inviteCode)
-      toast.success('Invite code copied!')
+      navigator.clipboard.writeText(activeWorkspace.inviteCode);
+      toast.success("Invite code copied!");
     }
-  }
+  };
 
   const handleDeleteWorkspace = async () => {
-    if (!confirm(`Delete "${activeWorkspace?.name}"? This cannot be undone.`)) return
+    if (!confirm(`Delete "${activeWorkspace?.name}"? This cannot be undone.`))
+      return;
     try {
-      await deleteWorkspace(activeWorkspaceId)
-      onClose()
-    } catch { /* handled */ }
-  }
+      await deleteWorkspace(activeWorkspaceId);
+      onClose();
+    } catch {}
+  };
+
+  const switchTab = (id) => {
+    setActiveTab(id);
+    setTabKey((k) => k + 1);
+  };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.6)' }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
+    <div className="wsm">
+      {/* ── Backdrop ── */}
       <div
-        role="dialog"
-        aria-modal="true"
-        className="w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col animate-fade-in"
-        style={{
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border-primary)',
-          maxHeight: '80vh',
-        }}
+        className="wsm-overlay wsm-overlay-bg"
+        onClick={(e) => e.target === e.currentTarget && onClose()}
       >
-        {/* Header */}
+        {/* ── Modal ── */}
         <div
-          className="flex items-center justify-between px-5 py-4 shrink-0"
-          style={{ borderBottom: '1px solid var(--border-primary)' }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="wsm-title"
+          className="wsm-modal wsm-shell"
         >
-          <h2 className="text-base font-semibold" style={{ color: 'var(--text-white)' }}>
-            Workspace Settings
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg transition-colors cursor-pointer"
-            style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          {/* ══ HEADER ══ */}
+          <div className="wsm-header">
+            <div className="wsm-header-left">
+              <div className="wsm-header-icon">
+                <Sparkles size={18} color="#fff" />
+              </div>
+              <div>
+                <p id="wsm-title" className="wsm-header-title">
+                  Workspace Settings
+                </p>
+                <p className="wsm-header-sub">
+                  {activeWorkspace?.name || "Manage your workspace"}
+                </p>
+              </div>
+            </div>
+            <button
+              className="wsm-close-btn"
+              onClick={onClose}
+              aria-label="Close settings"
+            >
+              <X size={15} />
+            </button>
+          </div>
+
+          {/* ══ TABS ══ */}
+          <div
+            className="wsm-tabs"
+            role="tablist"
+            aria-label="Settings sections"
           >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div
-          className="flex gap-0 px-5 shrink-0"
-          style={{ borderBottom: '1px solid var(--border-secondary)' }}
-        >
-          {TABS.map((tab) => {
-            const Icon = tab.icon
-            const isActive = activeTab === tab.id
-            return (
+            {TABS.map(({ id, label, icon: Icon }) => (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className="flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors cursor-pointer"
-                style={{
-                  color: isActive ? 'var(--accent-primary)' : 'var(--text-muted)',
-                  background: 'transparent',
-                  border: 'none',
-                  borderBottom: isActive ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                  marginBottom: '-1px',
-                }}
+                key={id}
+                role="tab"
+                aria-selected={activeTab === id}
+                className={`wsm-tab${activeTab === id ? " active" : ""}`}
+                onClick={() => switchTab(id)}
               >
-                <Icon size={14} />
-                {tab.label}
+                <Icon size={13} />
+                {label}
               </button>
-            )
-          })}
-        </div>
+            ))}
+          </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5" style={{ minHeight: 0 }}>
-          {activeTab === 'general' && (
-            <GeneralTab
-              name={name}
-              setName={setName}
-              description={description}
-              setDescription={setDescription}
-              canManage={canManage}
-              isSaving={isSaving}
-              onSave={handleSaveGeneral}
-              onDelete={handleDeleteWorkspace}
-              isOwner={currentUserRole === 'owner'}
-              workspace={activeWorkspace}
-            />
-          )}
-
-          {activeTab === 'members' && (
-            <MembersTab
-              members={members}
-              currentUserId={user?._id}
-              currentUserRole={currentUserRole}
-              canManage={canManage}
-              onRemove={removeMember}
-              onUpdateRole={updateMemberRole}
-            />
-          )}
-
-          {activeTab === 'invite' && (
-            <InviteTab
-              inviteCode={activeWorkspace?.inviteCode}
-              canManage={canManage}
-              isRegenerating={isRegenerating}
-              onCopy={handleCopyInviteCode}
-              onRegenerate={handleRegenerate}
-            />
-          )}
-
-          {activeTab === 'integrations' && (
-            <IntegrationsTab canManage={canManage} />
-          )}
-
-          {activeTab === 'security' && (
-            <SecurityTab canManage={canManage} />
-          )}
-
-          {activeTab === 'notifications' && (
-            <NotificationsTab />
-          )}
+          {/* ══ TAB CONTENT ══ */}
+          <div
+            key={tabKey}
+            className="wsm-content wsm-tab-body"
+            role="tabpanel"
+          >
+            {activeTab === "general" && (
+              <GeneralTab
+                name={name}
+                setName={setName}
+                description={description}
+                setDescription={setDescription}
+                canManage={canManage}
+                isSaving={isSaving}
+                onSave={handleSaveGeneral}
+                onDelete={handleDeleteWorkspace}
+                isOwner={currentUserRole === "owner"}
+                workspace={activeWorkspace}
+              />
+            )}
+            {activeTab === "members" && (
+              <MembersTab
+                members={members}
+                currentUserId={user?._id}
+                currentUserRole={currentUserRole}
+                canManage={canManage}
+                onRemove={removeMember}
+                onUpdateRole={updateMemberRole}
+              />
+            )}
+            {activeTab === "invite" && (
+              <InviteTab
+                inviteCode={activeWorkspace?.inviteCode}
+                canManage={canManage}
+                isRegenerating={isRegenerating}
+                onCopy={handleCopyInviteCode}
+                onRegenerate={handleRegenerate}
+              />
+            )}
+            {activeTab === "integrations" && (
+              <IntegrationsTab canManage={canManage} />
+            )}
+            {activeTab === "security" && <SecurityTab canManage={canManage} />}
+            {activeTab === "notifications" && <NotificationsTab />}
+          </div>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-// ─── General Tab ──────────────────────────────────────────────────────────
-function GeneralTab({ name, setName, description, setDescription, canManage, isSaving, onSave, onDelete, isOwner, workspace }) {
+/* ─────────────────────────────────────────────────────────────────────────
+   GENERAL TAB
+───────────────────────────────────────────────────────────────────────── */
+function GeneralTab({
+  name,
+  setName,
+  description,
+  setDescription,
+  canManage,
+  isSaving,
+  onSave,
+  onDelete,
+  isOwner,
+  workspace,
+}) {
   return (
-    <div className="space-y-6">
+    <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
       <div>
-        <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-          Workspace Name
-        </label>
+        <SectionLabel>Workspace Name</SectionLabel>
         <input
+          className="wsm-field"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={!canManage}
-          className="w-full px-3 py-2.5 rounded-lg text-sm outline-none disabled:opacity-60"
-          style={{
-            background: 'var(--bg-tertiary)',
-            border: '1px solid var(--border-primary)',
-            color: 'var(--text-white)',
-          }}
+          placeholder="e.g. Design Team"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-          Description
-        </label>
+        <SectionLabel>Description</SectionLabel>
         <textarea
+          className="wsm-field"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           disabled={!canManage}
           rows={3}
-          className="w-full px-3 py-2.5 rounded-lg text-sm outline-none resize-none disabled:opacity-60"
-          style={{
-            background: 'var(--bg-tertiary)',
-            border: '1px solid var(--border-primary)',
-            color: 'var(--text-white)',
-          }}
+          placeholder="What is this workspace for?"
+          style={{ resize: "none", lineHeight: 1.6 }}
         />
       </div>
 
-      <div className="flex items-center gap-3">
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          Slug: <span className="font-mono">{workspace?.slug || '—'}</span>
-          {' · '}
-          Plan: <span className="capitalize">{workspace?.plan || 'free'}</span>
-          {' · '}
-          Members: {workspace?.memberCount || 0}
-        </p>
+      {/* Meta chips */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {[
+          { label: "Slug", val: workspace?.slug || "—", dot: "#6366f1" },
+          { label: "Plan", val: workspace?.plan || "free", dot: "#8b5cf6" },
+          {
+            label: "Members",
+            val: workspace?.memberCount ?? 0,
+            dot: "#06b6d4",
+          },
+        ].map(({ label, val, dot }) => (
+          <span key={label} className="wsm-chip">
+            <span className="wsm-chip-dot" style={{ background: dot }} />
+            {label}:&nbsp;
+            <span className="wsm-chip-val wsm-mono">{String(val)}</span>
+          </span>
+        ))}
       </div>
 
       {canManage && (
-        <div className="flex items-center gap-3 pt-2">
+        <div>
           <button
+            className="wsm-btn-primary"
             onClick={onSave}
             disabled={!name.trim() || isSaving}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors disabled:opacity-50"
-            style={{ background: 'var(--accent-primary)', color: 'white', border: 'none' }}
           >
-            {isSaving && <Loader2 size={14} className="animate-spin" />}
-            Save Changes
+            {isSaving ? (
+              <Loader2 size={14} className="wsm-spin" />
+            ) : (
+              <span className="wsm-check">
+                <Check size={14} />
+              </span>
+            )}
+            {isSaving ? "Saving…" : "Save Changes"}
           </button>
         </div>
       )}
 
-      {isOwner && (
+      {/* Danger Zone */}
+      <div className="wsm-danger-zone">
         <div
-          className="pt-4 mt-4"
-          style={{ borderTop: '1px solid var(--border-secondary)' }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 14,
+          }}
         >
-          <h4 className="text-sm font-medium mb-2" style={{ color: 'var(--accent-red)' }}>
+          <AlertTriangle size={14} color="#f87171" />
+          <p className="wsm-label" style={{ color: "#f87171", margin: 0 }}>
             Danger Zone
-          </h4>
-          <button
-            onClick={onDelete}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors"
-            style={{
-              background: 'transparent',
-              color: 'var(--accent-red)',
-              border: '1px solid var(--accent-red)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--accent-red)'
-              e.currentTarget.style.color = 'white'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent'
-              e.currentTarget.style.color = 'var(--accent-red)'
-            }}
-          >
-            <Trash2 size={14} />
-            Delete Workspace
-          </button>
+          </p>
         </div>
-      )}
+        <p
+          style={{
+            fontSize: 12.5,
+            color: "#94a3b8",
+            marginBottom: 14,
+            lineHeight: 1.6,
+          }}
+        >
+          Once you delete a workspace, there is no going back. All channels,
+          messages and files will be permanently erased.
+        </p>
+        <button className="wsm-btn-danger" onClick={onDelete}>
+          <Trash2 size={14} />
+          Delete Workspace
+        </button>
+      </div>
     </div>
-  )
+  );
 }
 
-// ─── Members Tab ──────────────────────────────────────────────────────────
-function MembersTab({ members, currentUserId, currentUserRole, canManage, onRemove, onUpdateRole }) {
-  const [roleMenuId, setRoleMenuId] = useState(null)
+/* ─────────────────────────────────────────────────────────────────────────
+   MEMBERS TAB
+───────────────────────────────────────────────────────────────────────── */
+function MembersTab({
+  members,
+  currentUserId,
+  currentUserRole,
+  canManage,
+  onRemove,
+  onUpdateRole,
+}) {
+  const [roleMenuId, setRoleMenuId] = useState(null);
 
   return (
-    <div className="space-y-1">
-      <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>
-        {members.length} {members.length === 1 ? 'member' : 'members'}
-      </p>
+    <div>
+      {/* Header row */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 18,
+        }}
+      >
+        <SectionLabel>Team Members</SectionLabel>
+        <span
+          className="wsm-badge-in"
+          style={{
+            fontSize: 11.5,
+            fontWeight: 700,
+            color: "#4f46e5",
+            background: "#eef2ff",
+            padding: "4px 12px",
+            borderRadius: 20,
+            border: "1.5px solid #c7d2fe",
+            letterSpacing: ".01em",
+          }}
+        >
+          {members.length} {members.length === 1 ? "member" : "members"}
+        </span>
+      </div>
 
-      {members.map((m) => {
-        const memberUser = m.userId && typeof m.userId === 'object' ? m.userId : { _id: m.userId }
-        const memberId = memberUser._id || m.userId
-        const isCurrentUser = memberId === currentUserId
-        const roleInfo = ROLE_LABELS[m.role] || ROLE_LABELS.member
-        const RoleIcon = roleInfo.icon
+      <div className="wsm-card" style={{ padding: 8 }}>
+        {members.map((m, idx) => {
+          const memberUser =
+            m.userId && typeof m.userId === "object"
+              ? m.userId
+              : { _id: m.userId };
+          const memberId = memberUser._id || m.userId;
+          const isCurrentUser = memberId === currentUserId;
+          const role = ROLE_CFG[m.role] || ROLE_CFG.member;
+          const RoleIcon = role.icon;
 
-        return (
-          <div
-            key={m._id || memberId}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors"
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-          >
-            <Avatar member={memberUser} size={36} />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate" style={{ color: 'var(--text-white)' }}>
-                {memberUser.name || m.displayName || 'Unknown'}
-                {isCurrentUser && (
-                  <span className="ml-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                    (you)
-                  </span>
-                )}
-              </p>
-              <p className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>
-                {memberUser.email || ''}
-              </p>
-            </div>
+          return (
+            <div key={m._id || memberId}>
+              {idx > 0 && (
+                <div
+                  style={{ height: 1, background: "#f8fafc", margin: "3px 0" }}
+                />
+              )}
+              <div className="wsm-row-item wsm-member-row">
+                {/* Avatar */}
+                <Avatar member={memberUser} size={38} />
 
-            {/* Role badge */}
-            <div className="relative flex items-center gap-1.5">
-              <span
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full"
-                style={{
-                  background: `${roleInfo.color}15`,
-                  color: roleInfo.color,
-                }}
-              >
-                {RoleIcon && <RoleIcon size={10} />}
-                {roleInfo.label}
-              </span>
-
-              {/* Role / remove controls */}
-              {canManage && !isCurrentUser && m.role !== 'owner' && (
-                <div className="relative">
-                  <button
-                    onClick={() => setRoleMenuId(roleMenuId === memberId ? null : memberId)}
-                    className="p-1 rounded cursor-pointer"
-                    style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                {/* Info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p
+                    style={{
+                      fontSize: 13.5,
+                      fontWeight: 700,
+                      color: "#0f172a",
+                      display: "flex",
+                      alignItems: "center",
+                      overflow: "hidden",
+                    }}
                   >
-                    <ChevronDown size={14} />
-                  </button>
-
-                  {roleMenuId === memberId && (
-                    <div
-                      className="absolute right-0 top-full mt-1 w-40 rounded-lg shadow-xl z-50 overflow-hidden"
+                    <span
                       style={{
-                        background: 'var(--bg-secondary)',
-                        border: '1px solid var(--border-primary)',
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
                       }}
                     >
-                      {['admin', 'member', 'guest'].filter((r) => r !== m.role).map((role) => (
-                        <button
-                          key={role}
-                          onClick={() => {
-                            onUpdateRole(memberId, role)
-                            setRoleMenuId(null)
-                          }}
-                          className="w-full text-left px-3 py-2 text-sm cursor-pointer transition-colors"
-                          style={{ color: 'var(--text-secondary)', background: 'transparent', border: 'none' }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          Make {role}
-                        </button>
-                      ))}
+                      {memberUser.name || m.displayName || "Unknown"}
+                    </span>
+                    {isCurrentUser && (
+                      <span className="wsm-you-badge">you</span>
+                    )}
+                  </p>
+                  <p
+                    style={{
+                      fontSize: 11.5,
+                      color: "#94a3b8",
+                      marginTop: 2,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {memberUser.email || ""}
+                  </p>
+                </div>
+
+                {/* Role + actions */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span
+                    className="wsm-role-badge"
+                    style={{
+                      background: role.bg,
+                      color: role.color,
+                      border: `1.5px solid ${role.border}`,
+                    }}
+                  >
+                    <span
+                      className="wsm-role-dot"
+                      style={{ background: role.dot }}
+                    />
+                    {RoleIcon && <RoleIcon size={10} />}
+                    {role.label}
+                  </span>
+
+                  {canManage && !isCurrentUser && m.role !== "owner" && (
+                    <div style={{ position: "relative" }}>
                       <button
-                        onClick={() => {
-                          onRemove(memberId)
-                          setRoleMenuId(null)
-                        }}
-                        className="w-full text-left px-3 py-2 text-sm cursor-pointer transition-colors flex items-center gap-2"
-                        style={{ color: 'var(--accent-red)', background: 'transparent', border: 'none' }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        className="wsm-role-btn"
+                        onClick={() =>
+                          setRoleMenuId(
+                            roleMenuId === memberId ? null : memberId,
+                          )
+                        }
+                        aria-label="Change role"
                       >
-                        <UserMinus size={13} />
-                        Remove
+                        <ChevronDown
+                          size={13}
+                          style={{
+                            transition: "transform .18s",
+                            transform:
+                              roleMenuId === memberId
+                                ? "rotate(180deg)"
+                                : "none",
+                          }}
+                        />
                       </button>
+
+                      {roleMenuId === memberId && (
+                        <div className="wsm-dropdown wsm-slide-down">
+                          {["admin", "member", "guest"]
+                            .filter((r) => r !== m.role)
+                            .map((role) => (
+                              <button
+                                key={role}
+                                className="wsm-dropdown-item"
+                                onClick={() => {
+                                  onUpdateRole(memberId, role);
+                                  setRoleMenuId(null);
+                                }}
+                              >
+                                Make{" "}
+                                {role.charAt(0).toUpperCase() + role.slice(1)}
+                              </button>
+                            ))}
+                          <div className="wsm-dropdown-sep" />
+                          <button
+                            className="wsm-dropdown-item danger"
+                            onClick={() => {
+                              onRemove(memberId);
+                              setRoleMenuId(null);
+                            }}
+                          >
+                            <UserMinus size={12} />
+                            Remove member
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        )
-      })}
+          );
+        })}
+      </div>
     </div>
-  )
+  );
 }
 
-// ─── Invite Tab ───────────────────────────────────────────────────────────
-function InviteTab({ inviteCode, canManage, isRegenerating, onCopy, onRegenerate }) {
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState('member')
-  const [isSendingInvite, setIsSendingInvite] = useState(false)
-  const { activeWorkspaceId } = useWorkspaceStore()
+/* ─────────────────────────────────────────────────────────────────────────
+   INVITE TAB
+───────────────────────────────────────────────────────────────────────── */
+function InviteTab({
+  inviteCode,
+  canManage,
+  isRegenerating,
+  onCopy,
+  onRegenerate,
+}) {
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("member");
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const { activeWorkspaceId } = useWorkspaceStore();
 
-  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
-  const handleSendEmailInvite = async () => {
-    const email = inviteEmail.trim()
-    if (!email) return
+  const handleSend = async () => {
+    const email = inviteEmail.trim();
+    if (!email) return;
     if (!isValidEmail(email)) {
-      toast.error('Please enter a valid email address')
-      return
+      toast.error("Please enter a valid email address");
+      return;
     }
-    setIsSendingInvite(true)
+    setIsSendingInvite(true);
     try {
       await api.post(`/workspaces/${activeWorkspaceId}/invite-email`, {
         email,
         role: inviteRole,
-      })
-      toast.success(`Invite sent to ${email}`)
-      setInviteEmail('')
-    } catch (error) {
-      toast.error(error.response?.data?.error?.message || 'Failed to send invite')
+      });
+      toast.success(`Invite sent to ${email}`);
+      setInviteEmail("");
+    } catch (err) {
+      toast.error(
+        err.response?.data?.error?.message || "Failed to send invite",
+      );
     }
-    setIsSendingInvite(false)
-  }
+    setIsSendingInvite(false);
+  };
+
+  const handleCopy = () => {
+    onCopy();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2200);
+  };
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
       {/* Email invite */}
       {canManage && (
         <div>
-          <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-            Invite by Email
-          </label>
-          <div className="flex gap-2 mb-2">
+          <SectionLabel>Invite by Email</SectionLabel>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <input
+              className="wsm-field"
               type="email"
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSendEmailInvite()}
+              onKeyDown={(e) => e.key === "Enter" && handleSend()}
               placeholder="name@company.com"
-              className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none"
-              style={{
-                background: 'var(--bg-tertiary)',
-                border: '1px solid var(--border-primary)',
-                color: 'var(--text-white)',
-              }}
+              style={{ flex: "1 1 180px", minWidth: 0 }}
             />
             <select
+              className="wsm-field"
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value)}
-              className="px-2 py-2.5 rounded-lg text-sm outline-none cursor-pointer"
-              style={{
-                background: 'var(--bg-tertiary)',
-                border: '1px solid var(--border-primary)',
-                color: 'var(--text-white)',
-              }}
+              style={{ width: 110 }}
             >
               <option value="admin">Admin</option>
               <option value="member">Member</option>
               <option value="guest">Guest</option>
             </select>
             <button
-              onClick={handleSendEmailInvite}
+              className="wsm-btn-primary"
+              onClick={handleSend}
               disabled={!inviteEmail.trim() || isSendingInvite}
-              className="px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors disabled:opacity-50"
-              style={{ background: 'var(--accent-primary)', color: 'white', border: 'none' }}
+              style={{ flexShrink: 0 }}
             >
-              {isSendingInvite ? <Loader2 size={14} className="animate-spin" /> : 'Send'}
+              {isSendingInvite ? (
+                <Loader2 size={14} className="wsm-spin" />
+              ) : (
+                "Send Invite"
+              )}
             </button>
           </div>
         </div>
       )}
 
+      {/* Invite code */}
       <div>
-        <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-          Invite Code
-        </label>
-        <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
-          Share this code with people you'd like to invite.
+        <SectionLabel>Invite Code</SectionLabel>
+        <p
+          style={{
+            fontSize: 12.5,
+            color: "#94a3b8",
+            marginBottom: 16,
+            lineHeight: 1.6,
+          }}
+        >
+          Share this code with anyone you'd like to add. They can use it to join
+          this workspace directly.
         </p>
 
         {inviteCode ? (
-          <div className="flex items-center gap-2">
-            <div
-              className="flex-1 px-4 py-3 rounded-lg font-mono text-lg tracking-widest select-all"
-              style={{
-                background: 'var(--bg-tertiary)',
-                border: '1px solid var(--border-primary)',
-                color: 'var(--text-white)',
-                textAlign: 'center',
-                letterSpacing: '0.15em',
-              }}
-            >
-              {inviteCode}
-            </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12,  }}>
+            <div className="wsm-invite-code wsm-mono">{inviteCode}</div>
             <button
-              onClick={onCopy}
-              className="p-3 rounded-lg cursor-pointer transition-colors"
-              title="Copy invite code"
+              className="wsm-copy-btn"
+              onClick={handleCopy}
+              title={copied ? "Copied!" : "Copy code"}
               style={{
-                background: 'var(--bg-tertiary)',
-                border: '1px solid var(--border-primary)',
-                color: 'var(--text-secondary)',
+                border: `1.5px solid ${copied ? "#c7d2fe" : "#e2e8f0"}`,
+                background: copied ? "#eef2ff" : "#fff",
+                color: copied ? "#6366f1" : "#94a3b8",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
             >
-              <Copy size={16} />
+              {copied ? (
+                <span className="wsm-check">
+                  <Check size={18} />
+                </span>
+              ) : (
+                <Copy size={10} />
+              )}
             </button>
           </div>
         ) : (
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          <p style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
             No invite code generated yet.
           </p>
         )}
       </div>
 
       {canManage && (
-        <button
-          onClick={onRegenerate}
-          disabled={isRegenerating}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors disabled:opacity-50"
-          style={{
-            background: 'var(--bg-tertiary)',
-            color: 'var(--text-secondary)',
-            border: '1px solid var(--border-secondary)',
-          }}
-          onMouseEnter={(e) => {
-            if (!e.currentTarget.disabled) e.currentTarget.style.background = 'var(--bg-hover)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'var(--bg-tertiary)'
-          }}
-        >
-          {isRegenerating ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <RefreshCw size={14} />
-          )}
-          {inviteCode ? 'Regenerate Code' : 'Generate Invite Code'}
-        </button>
+        <div>
+          <button
+            className="wsm-btn-ghost"
+            onClick={onRegenerate}
+            disabled={isRegenerating}
+          >
+            {isRegenerating ? (
+              <Loader2 size={14} className="wsm-spin" />
+            ) : (
+              <RefreshCw size={14} />
+            )}
+            {inviteCode ? "Regenerate Code" : "Generate Invite Code"}
+          </button>
+        </div>
       )}
     </div>
-  )
+  );
 }
 
-// ─── Integrations Tab ─────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────
+   INTEGRATIONS TAB
+───────────────────────────────────────────────────────────────────────── */
 function IntegrationsTab({ canManage }) {
-  const [flowTaskConnected] = useState(!!import.meta.env.VITE_FLOWTASK_ENABLED)
-  const [autoChannels, setAutoChannels] = useState(true)
-  const [syncMembers, setSyncMembers] = useState(true)
+  const [flowTaskConnected] = useState(!!import.meta.env.VITE_FLOWTASK_ENABLED);
+  const [autoChannels, setAutoChannels] = useState(true);
+  const [syncMembers, setSyncMembers] = useState(true);
+
+  const connected = flowTaskConnected;
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
       <div>
-        <h4 className="text-sm font-medium mb-3" style={{ color: 'var(--text-white)' }}>
-          FlowTask Integration
-        </h4>
-        <div
-          className="flex items-center justify-between p-3 rounded-lg"
-          style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-secondary)' }}
-        >
-          <div className="flex items-center gap-3">
+        <SectionLabel>Connected Apps</SectionLabel>
+        <div className="wsm-integration-card">
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
               style={{
-                background: flowTaskConnected ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: connected ? "#f0fdf4" : "#fef2f2",
+                border: `1.5px solid ${connected ? "#bbf7d0" : "#fecaca"}`,
               }}
             >
-              <Zap size={16} style={{ color: flowTaskConnected ? '#10b981' : '#ef4444' }} />
+              <Zap size={18} color={connected ? "#16a34a" : "#dc2626"} />
             </div>
             <div>
-              <p className="text-sm font-medium" style={{ color: 'var(--text-white)' }}>FlowTask</p>
-              <p className="text-[11px]" style={{ color: flowTaskConnected ? '#10b981' : '#ef4444' }}>
-                {flowTaskConnected ? 'Connected' : 'Not connected'}
+              <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+                FlowTask
+              </p>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: connected ? "#16a34a" : "#dc2626",
+                  marginTop: 3,
+                  fontWeight: 500,
+                }}
+              >
+                {connected ? "✓ Connected & syncing" : "Not connected"}
               </p>
             </div>
           </div>
           <span
-            className="px-2 py-0.5 rounded-full text-[11px] font-medium"
+            className="wsm-status-pill"
             style={{
-              background: flowTaskConnected ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-              color: flowTaskConnected ? '#10b981' : '#ef4444',
+              background: connected ? "#f0fdf4" : "#fef2f2",
+              color: connected ? "#16a34a" : "#dc2626",
+              border: `1.5px solid ${connected ? "#bbf7d0" : "#fecaca"}`,
             }}
           >
-            {flowTaskConnected ? 'Active' : 'Inactive'}
+            {connected ? "Active" : "Inactive"}
           </span>
         </div>
       </div>
 
-      {flowTaskConnected && (
-        <>
-          <SettingsToggle
-            label="Auto-create project channels"
-            description="Automatically create channels for new FlowTask projects"
-            checked={autoChannels}
-            onChange={setAutoChannels}
-            disabled={!canManage}
-          />
-          <SettingsToggle
-            label="Sync team members"
-            description="Automatically add FlowTask project members to channels"
-            checked={syncMembers}
-            onChange={setSyncMembers}
-            disabled={!canManage}
-          />
-        </>
+      {connected && (
+        <div>
+          <SectionLabel>Sync Options</SectionLabel>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <SettingsToggle
+              label="Auto-create project channels"
+              description="Automatically create channels for new FlowTask projects"
+              checked={autoChannels}
+              onChange={setAutoChannels}
+              disabled={!canManage}
+            />
+            <SettingsToggle
+              label="Sync team members"
+              description="Automatically add FlowTask project members to channels"
+              checked={syncMembers}
+              onChange={setSyncMembers}
+              disabled={!canManage}
+            />
+          </div>
+        </div>
       )}
     </div>
-  )
+  );
 }
 
-// ─── Security Tab ─────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────
+   SECURITY TAB
+───────────────────────────────────────────────────────────────────────── */
 function SecurityTab({ canManage }) {
-  const [requireVerification, setRequireVerification] = useState(true)
-  const [sessionTimeout, setSessionTimeout] = useState('7d')
+  const [requireVerification, setRequireVerification] = useState(true);
+  const [sessionTimeout, setSessionTimeout] = useState("7d");
 
   return (
-    <div className="space-y-6">
-      <SettingsToggle
-        label="Require email verification"
-        description="New members must verify their email before accessing the workspace"
-        checked={requireVerification}
-        onChange={setRequireVerification}
-        disabled={!canManage}
-      />
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <div>
+        <SectionLabel>Access Controls</SectionLabel>
+        <SettingsToggle
+          label="Require email verification"
+          description="New members must verify their email before accessing the workspace"
+          checked={requireVerification}
+          onChange={setRequireVerification}
+          disabled={!canManage}
+        />
+      </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-          Session Timeout
-        </label>
+        <SectionLabel>Session Timeout</SectionLabel>
         <select
+          className="wsm-field"
           value={sessionTimeout}
           onChange={(e) => setSessionTimeout(e.target.value)}
           disabled={!canManage}
-          className="w-full px-3 py-2.5 rounded-lg text-sm outline-none cursor-pointer disabled:opacity-60"
-          style={{
-            background: 'var(--bg-tertiary)',
-            border: '1px solid var(--border-primary)',
-            color: 'var(--text-white)',
-          }}
+          style={{ maxWidth: 300 }}
         >
           <option value="1d">1 day</option>
           <option value="7d">7 days</option>
           <option value="30d">30 days</option>
-          <option value="never">Never</option>
+          <option value="never">Never expire</option>
         </select>
       </div>
 
-      <div
-        className="p-3 rounded-lg"
-        style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-secondary)' }}
-      >
-        <div className="flex items-center gap-2 mb-1">
-          <Shield size={14} style={{ color: 'var(--text-muted)' }} />
-          <p className="text-sm font-medium" style={{ color: 'var(--text-white)' }}>Two-Factor Authentication</p>
+      <div>
+        <SectionLabel>Two-Factor Authentication</SectionLabel>
+        <div className="wsm-banner">
+          <div className="wsm-banner-icon">
+            <Shield size={16} color="#fff" />
+          </div>
+          <div>
+            <p
+              style={{
+                fontSize: 13.5,
+                fontWeight: 700,
+                color: "#3730a3",
+                marginBottom: 4,
+              }}
+            >
+              2FA Enforcement
+            </p>
+            <p style={{ fontSize: 12.5, color: "#6366f1", lineHeight: 1.6 }}>
+              Coming soon — enforce two-factor authentication for all workspace
+              members to improve account security.
+            </p>
+          </div>
         </div>
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Coming soon — enforce 2FA for all workspace members.</p>
       </div>
     </div>
-  )
+  );
 }
 
-// ─── Notifications Tab ────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────
+   NOTIFICATIONS TAB
+───────────────────────────────────────────────────────────────────────── */
 function NotificationsTab() {
-  const [notifyMentions, setNotifyMentions] = useState(true)
-  const [notifyDMs, setNotifyDMs] = useState(true)
-  const [notifyThreads, setNotifyThreads] = useState(true)
-  const [notifyTasks, setNotifyTasks] = useState(true)
+  const [notifyMentions, setNotifyMentions] = useState(true);
+  const [notifyDMs, setNotifyDMs] = useState(true);
+  const [notifyThreads, setNotifyThreads] = useState(true);
+  const [notifyTasks, setNotifyTasks] = useState(true);
+
+  const items = [
+    {
+      label: "@Mentions",
+      desc: "Notify when someone mentions you",
+      val: notifyMentions,
+      set: setNotifyMentions,
+    },
+    {
+      label: "Direct messages",
+      desc: "Notify for new direct messages",
+      val: notifyDMs,
+      set: setNotifyDMs,
+    },
+    {
+      label: "Thread replies",
+      desc: "Notify when someone replies to your thread",
+      val: notifyThreads,
+      set: setNotifyThreads,
+    },
+    {
+      label: "Task updates",
+      desc: "Notify for FlowTask task assignments and updates",
+      val: notifyTasks,
+      set: setNotifyTasks,
+    },
+  ];
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-        Configure default notification preferences for this workspace.
-      </p>
-      <SettingsToggle
-        label="@Mentions"
-        description="Notify when someone mentions you"
-        checked={notifyMentions}
-        onChange={setNotifyMentions}
-      />
-      <SettingsToggle
-        label="Direct messages"
-        description="Notify for new direct messages"
-        checked={notifyDMs}
-        onChange={setNotifyDMs}
-      />
-      <SettingsToggle
-        label="Thread replies"
-        description="Notify when someone replies to your thread"
-        checked={notifyThreads}
-        onChange={setNotifyThreads}
-      />
-      <SettingsToggle
-        label="Task updates"
-        description="Notify for FlowTask task assignments and updates"
-        checked={notifyTasks}
-        onChange={setNotifyTasks}
-      />
-    </div>
-  )
-}
-
-// ─── Shared Toggle Component ──────────────────────────────────────────────
-function SettingsToggle({ label, description, checked, onChange, disabled }) {
-  return (
-    <div
-      className="flex items-center justify-between p-3 rounded-lg"
-      style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-secondary)', opacity: disabled ? 0.6 : 1 }}
-    >
-      <div className="flex-1 min-w-0 mr-3">
-        <p className="text-sm font-medium" style={{ color: 'var(--text-white)' }}>{label}</p>
-        {description && <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{description}</p>}
-      </div>
-      <button
-        onClick={() => !disabled && onChange(!checked)}
-        disabled={disabled}
-        className="relative shrink-0 cursor-pointer disabled:cursor-not-allowed"
+    <div>
+      <SectionLabel>Notification Preferences</SectionLabel>
+      <p
         style={{
-          background: checked ? 'var(--accent-primary)' : 'var(--bg-primary)',
-          border: `1px solid ${checked ? 'var(--accent-primary)' : 'var(--border-primary)'}`,
-          borderRadius: 12, width: 40, height: 22, padding: 0,
+          fontSize: 12.5,
+          color: "#94a3b8",
+          marginBottom: 18,
+          lineHeight: 1.6,
         }}
       >
-        <div
+        Configure default notification settings for all members in this
+        workspace.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {items.map(({ label, desc, val, set }) => (
+          <SettingsToggle
+            key={label}
+            label={label}
+            description={desc}
+            checked={val}
+            onChange={set}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SETTINGS TOGGLE (shared)
+───────────────────────────────────────────────────────────────────────── */
+function SettingsToggle({ label, description, checked, onChange, disabled }) {
+  return (
+    <div className="wsm-toggle-wrap" style={{ opacity: disabled ? 0.5 : 1 }}>
+      <div style={{ flex: 1, minWidth: 0, marginRight: 18 }}>
+        <p
           style={{
-            position: 'absolute', top: 2, left: checked ? 20 : 2,
-            width: 16, height: 16, borderRadius: '50%',
-            background: 'white', transition: 'left 0.2s',
+            fontSize: 13.5,
+            fontWeight: 700,
+            color: "#0f172a",
+            letterSpacing: "-.01em",
           }}
-        />
+        >
+          {label}
+        </p>
+        {description && (
+          <p
+            style={{
+              fontSize: 12,
+              color: "#94a3b8",
+              marginTop: 3,
+              lineHeight: 1.5,
+            }}
+          >
+            {description}
+          </p>
+        )}
+      </div>
+      <button
+        className="wsm-toggle-track"
+        onClick={() => !disabled && onChange(!checked)}
+        disabled={disabled}
+        aria-checked={checked}
+        role="switch"
+        style={{
+          background: checked
+            ? "linear-gradient(135deg,#6366f1,#4f46e5)"
+            : "#e2e8f0",
+          boxShadow: checked ? "0 2px 10px rgba(99,102,241,.4)" : "none",
+        }}
+      >
+        <div className="wsm-toggle-thumb" style={{ left: checked ? 24 : 4 }} />
       </button>
     </div>
-  )
+  );
 }

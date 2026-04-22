@@ -1,0 +1,138 @@
+/* ───── ANIMATIONS ───── */
+
+@keyframes jw-pop {
+    0% {
+        opacity: 0;
+        transform: scale(.94) translateY(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@keyframes jw-particle {
+    0%, 100% {
+        transform: translateY(0);
+        opacity: .4;
+    }
+    50% {
+        transform: translateY(-10px);
+        opacity: .9;
+    }
+}
+
+/* ───── MODAL CONTAINER ───── */
+
+.jw-modal {
+    width: 100%;
+    max-width: 480px;
+    border-radius: var(--radius-2xl);
+    overflow: hidden;
+
+    background: var(--bg-modal);
+    border: 1px solid var(--border-primary);
+    box-shadow: var(--shadow-modal);
+
+    animation: jw-pop .45s cubic-bezier(.22, 1, .36, 1);
+}
+
+/* ───── HEADER ───── */
+
+.jw-header {
+    position: relative;
+    padding: 20px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    /* replaced hardcoded gradient */
+    background: var(--bg-active);
+    border-bottom: 1px solid var(--border-secondary);
+}
+
+.jw-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.jw-sub {
+    font-size: 12px;
+    margin-top: 4px;
+    color: var(--text-muted);
+}
+
+/* ───── BODY ───── */
+
+.jw-body {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* ───── INFO CARD ───── */
+
+.jw-info {
+    display: flex;
+    gap: 10px;
+    padding: 12px;
+
+    border-radius: var(--radius-lg);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-secondary);
+}
+
+/* ❌ REMOVED:
+   .jw-input
+   .jw-btn
+   .jw-submit
+   .jw-cancel
+   → replaced with global:
+   input-field, btn-primary, btn-ghost
+*/
+
+/* ───── ICON BOX ───── */
+
+.jw-icon-box {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background: var(--bg-active);
+    color: var(--accent-green);
+}
+
+/* ───── CLOSE BUTTON ───── */
+
+.jw-close {
+    transition: transform .2s ease;
+}
+
+.jw-close:hover {
+    transform: rotate(90deg);
+}
+
+/* ───── LABEL ───── */
+
+.jw-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* ───── LOCK ICON ───── */
+
+.jw-lock-icon {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+}

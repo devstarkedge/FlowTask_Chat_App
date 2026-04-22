@@ -310,12 +310,13 @@ export async function initializeSocket(httpServer, corsOptions) {
     const presencePayload = {
       userId,
       flowTaskUserId: user.flowTaskUserId,
-      name: user.name,
-      avatar: user.avatar,
+      name: currentUser ? currentUser.name : user.name,
+      avatar: currentUser ? currentUser.avatar : user.avatar,
     };
+    const presenceEvent = currentUser?.onlineStatus === 'away' ? SOCKET_EVENTS.USER_AWAY : SOCKET_EVENTS.USER_ONLINE;
     for (const channelId of initialChannelIds) {
       const chRoom = buildRoomName(wsId, 'channel', channelId);
-      io.to(chRoom).emit(SOCKET_EVENTS.USER_ONLINE, presencePayload);
+      io.to(chRoom).emit(presenceEvent, presencePayload);
     }
 
     // ─── Client Events (with rate limiting) ──────────────────────────
@@ -522,16 +523,18 @@ export async function initializeSocket(httpServer, corsOptions) {
           socket.join(buildRoomName(newWorkspaceId, 'channel', channelId));
         }
 
-        // Broadcast online to NEW workspace channels
+        // Broadcast presence to NEW workspace channels
         const onlinePayload = {
           userId,
           flowTaskUserId: user.flowTaskUserId,
           name: user.name,
           avatar: user.avatar,
         };
+        const freshUser = await userRepository.findById(userId);
+        const presenceEvent = freshUser?.onlineStatus === 'away' ? SOCKET_EVENTS.USER_AWAY : SOCKET_EVENTS.USER_ONLINE;
         for (const channelId of initialChannelIds) {
           const chRoom = buildRoomName(newWorkspaceId, 'channel', channelId);
-          io.to(chRoom).emit(SOCKET_EVENTS.USER_ONLINE, onlinePayload);
+          io.to(chRoom).emit(presenceEvent, onlinePayload);
         }
 
         socket.emit('workspace:switched', { workspaceId: newWorkspaceId });

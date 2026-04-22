@@ -112,6 +112,23 @@ export const useAuthStore = create((set, get) => ({
   },
 
   // ─── Logout ───────────────────────────────────────────────────────
+  setPresence: async (status) => {
+    try {
+      // Optimistic update
+      set((state) => ({ user: { ...state.user, onlineStatus: status } }))
+      
+      const { userAPI } = await import('../services/api')
+      const { emitPresenceUpdate } = await import('../services/socket')
+      
+      await userAPI.setPresence(status)
+      emitPresenceUpdate(status)
+    } catch (error) {
+      console.error('Failed to update presence:', error)
+      // fetchUser to revert optimistic update
+      get().fetchUser()
+    }
+  },
+
   logout: () => {
     const refreshToken = get().refreshToken
     // Fire-and-forget server logout

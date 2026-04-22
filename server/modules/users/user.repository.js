@@ -211,14 +211,11 @@ class UserRepository {
     );
   }
 
-  /**
-   * Update user's online status.
-   * @param {string} userId - ChatUser _id
-   * @param {string} status - 'online' | 'away' | 'dnd' | 'offline'
-   * @returns {Promise<ChatUser|null>}
-   */
   async setOnlineStatus(userId, status) {
     const update = { onlineStatus: status };
+    if (status === 'online' || status === 'away') {
+      update.manualPresence = status;
+    }
     if (status === 'offline') {
       update.lastSeenAt = new Date();
     }
@@ -232,11 +229,14 @@ class UserRepository {
    * @returns {Promise<ChatUser|null>}
    */
   async addSocketId(userId, socketId) {
+    const user = await ChatUser.findById(userId);
+    const newStatus = user && user.manualPresence === 'away' ? 'away' : 'online';
+
     return ChatUser.findByIdAndUpdate(
       userId,
       {
         $addToSet: { socketIds: socketId },
-        $set: { onlineStatus: 'online' },
+        $set: { onlineStatus: newStatus },
       },
       { new: true },
     );

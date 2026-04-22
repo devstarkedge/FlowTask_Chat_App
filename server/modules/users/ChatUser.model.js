@@ -192,6 +192,11 @@ const chatUserSchema = new Schema({
     enum: ['online', 'away', 'dnd', 'offline'],
     default: 'offline',
   },
+  manualPresence: {
+    type: String,
+    enum: ['online', 'away'],
+    default: 'online',
+  },
   lastSeenAt: {
     type: Date,
     default: null,

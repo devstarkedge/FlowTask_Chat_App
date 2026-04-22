@@ -8,7 +8,7 @@ import toast from 'react-hot-toast'
 
 export default function UserProfileMenu({ anchorRef, onClose, onOpenPreferences, onOpenSetStatus }) {
   const menuRef = useRef(null)
-  const { user, logout } = useAuthStore()
+  const { user, logout, setPresence } = useAuthStore()
   const [isSigningOut, setIsSigningOut] = useState(false)
 
   const STATUS_COLORS = {
@@ -25,7 +25,8 @@ export default function UserProfileMenu({ anchorRef, onClose, onOpenPreferences,
     dnd: 'Do not disturb',
     offline: 'Offline',
   }
-  const userStatus = user?.status || 'online'
+  const userStatus = user?.onlineStatus || 'online'
+  const isAway = userStatus === 'away' || userStatus === 'offline' || userStatus === 'dnd'
 
   const handleLogout = () => {
     toast((t) => (
@@ -152,9 +153,16 @@ export default function UserProfileMenu({ anchorRef, onClose, onOpenPreferences,
 
       <div className="user-menu-divider" />
 
-      <button className="user-menu-item" onClick={onClose}>
-        <Moon size={16} style={{ color: 'var(--text-muted)' }} />
-        <span>Set yourself as away</span>
+      <button className="user-menu-item" onClick={() => {
+        onClose();
+        setPresence(isAway ? 'online' : 'away');
+      }}>
+        {isAway ? (
+          <Smile size={16} style={{ color: 'var(--status-online)' }} />
+        ) : (
+          <Moon size={16} style={{ color: 'var(--text-muted)' }} />
+        )}
+        <span>{isAway ? 'Set yourself as active' : 'Set yourself as away'}</span>
       </button>
 
       <button className="user-menu-item" onClick={onClose}>

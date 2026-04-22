@@ -20,28 +20,20 @@ export default function DirectoriesPanel() {
   return (
     <section className="flex-1 min-w-0 flex flex-col h-full" style={{ background: 'var(--bg-primary)' }}>
       {/* Header */}
-      <div
-        className="shrink-0 px-5 pt-5 pb-0"
-        style={{ borderBottom: '1px solid var(--border-secondary)' }}
-      >
-        <h1 className="text-xl font-bold mb-4" style={{ color: 'var(--text-white)' }}>
+      <div className="page-header">
+        <h1 className="text-xl font-bold mb-0" style={{ color: 'var(--text-white)' }}>
           Directories
         </h1>
         {/* Tabs */}
-        <div className="flex gap-1 overflow-x-auto scrollbar-none -mb-px">
+        <div className="page-tabs overflow-x-auto scrollbar-none -mb-px" style={{ paddingTop: 8, paddingBottom: 8 }}>
           {TABS.map((tab) => {
             const isActive = activeTab === tab.id
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors cursor-pointer shrink-0"
-                style={{
-                  color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                  background: 'transparent',
-                  border: 'none',
-                  borderBottom: isActive ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                }}
+                className={`tab-button ${isActive ? 'active' : ''} flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors shrink-0`}
+                style={{ color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)', background: 'transparent' }}
               >
                 <tab.icon size={16} />
                 <span>{tab.label}</span>

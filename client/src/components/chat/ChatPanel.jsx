@@ -50,7 +50,7 @@ export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onT
   const isDMChannel = channel?.type === 'dm'
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-[#f0f2fa]">
+    <div className="flex-1 flex flex-col min-w-0 chat-panel-shell">
       <ChatHeader
         channel={channel}
         onToggleSearch={onToggleSearch}
@@ -64,7 +64,7 @@ export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onT
       {connectionStatus === 'connecting' && (
         <div
           className="flex items-center justify-center gap-2 py-1.5 text-xs font-medium animate-fade-in"
-          style={{ background: 'var(--accent-yellow)', color: '#000' }}
+          style={{ background: 'var(--warning-color)', color: 'var(--text-inverse)' }}
         >
           <Loader2 size={12} className="animate-spin" />
           Reconnecting...
@@ -73,7 +73,7 @@ export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onT
       {connectionStatus === 'disconnected' && (
         <div
           className="flex items-center justify-center gap-2 py-1.5 text-xs font-medium animate-fade-in"
-          style={{ background: 'var(--accent-red)', color: '#fff' }}
+          style={{ background: 'var(--danger-color)', color: '#ffffff' }}
         >
           <WifiOff size={12} />
           Connection lost. Trying to reconnect...

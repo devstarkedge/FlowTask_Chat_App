@@ -211,10 +211,10 @@ export default function DraftsSidebar() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="panel">
       {/* Header */}
-      <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border-primary)' }}>
-        <h2 className="font-semibold text-sm mb-2" style={{ color: 'var(--text-primary)' }}>
+      <div className="panel-header">
+        <h2 className="font-semibold text-sm mb-0" style={{ color: 'var(--text-primary)' }}>
           <FileEdit size={15} className="inline mr-1.5" style={{ verticalAlign: '-2px' }} />
           Drafts
           {mergedDrafts.length > 0 && (
@@ -228,7 +228,7 @@ export default function DraftsSidebar() {
         </h2>
 
         {/* Search */}
-        <div className="relative">
+        <div className="panel-search" style={{ flex: 1 }}>
           <Search
             size={14}
             className="absolute left-2.5 top-1/2 -translate-y-1/2"
@@ -239,34 +239,26 @@ export default function DraftsSidebar() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search drafts..."
-            className="w-full text-xs py-1.5 pl-8 pr-3 rounded-md"
-            style={{
-              background: 'var(--bg-input)',
-              border: '1px solid var(--border-secondary)',
-              color: 'var(--text-primary)',
-            }}
+            className="panel-search-input"
           />
         </div>
       </div>
 
       {/* Draft List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="panel-body">
         {filteredDrafts.length === 0 ? (
-          <div className="text-center py-10 px-4" style={{ color: 'var(--text-muted)' }}>
+          <div className="panel-empty">
             <FileEdit size={32} className="mx-auto mb-2 opacity-40" />
             <p className="text-sm font-medium">No drafts</p>
             <p className="text-xs mt-1">Start typing in any chat to create a draft</p>
           </div>
         ) : (
-          <div className="py-1">
+          <div className="panel-list">
             {filteredDrafts.map((draft) => (
               <div
                 key={draft._id || draft._key}
                 onClick={() => handleNavigate(draft)}
-                className="group px-4 py-2.5 cursor-pointer transition-colors"
-                style={{ borderBottom: '1px solid var(--border-secondary)' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                className="panel-item cursor-pointer transition-colors"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-medium truncate" style={{ color: 'var(--text-secondary)' }}>
@@ -290,14 +282,12 @@ export default function DraftsSidebar() {
                 </p>
 
                 {/* Actions (visible on hover) */}
-                <div className="hidden group-hover:flex items-center gap-1">
+                <div className="panel-item-actions items-center">
                   <button
                     onClick={(e) => handleSendNow(e, draft)}
                     disabled={sendingId === draft._id}
                     className="p-1 rounded transition-colors"
                     style={{ color: 'var(--accent-green, #22c55e)', background: 'transparent', border: 'none' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-active)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                     title="Send now"
                   >
                     {sendingId === draft._id
@@ -308,8 +298,6 @@ export default function DraftsSidebar() {
                     onClick={(e) => handleDelete(e, draft)}
                     className="p-1 rounded transition-colors"
                     style={{ color: 'var(--accent-red)', background: 'transparent', border: 'none' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-active)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                     title="Delete draft"
                   >
                     <Trash2 size={12} />

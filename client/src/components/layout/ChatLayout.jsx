@@ -8,14 +8,19 @@ import { emitPresenceUpdate } from '../../services/socket'
 import ErrorBoundary from '../ErrorBoundary'
 import WorkspaceSidebar from './WorkspaceSidebar'
 import NavigationSidebar from './NavigationSidebar'
+import UserProfileMenu from '../ui/UserProfileMenu'
+import SetStatusModal from '../chat/SetStatusModal'
 import ActivityContextSidebar from './context/ActivityContextSidebar'
 import FilesContextSidebar from './context/FilesContextSidebar'
 import ChatPanel from '../chat/ChatPanel'
 import ThreadPanel from '../chat/ThreadPanel'
 import ChannelInfoPanel from '../chat/ChannelInfoPanel'
+import PreferencesModal from '../chat/PreferencesModal'
 import SearchPanel from '../chat/SearchPanel'
 import ProfileSidePanel from '../chat/ProfileSidePanel'
+import { Avatar } from '../chat/MemberAvatarGroup'
 import { useProfileStore } from '../../stores/profileStore'
+import { useAuthStore } from '../../stores/authStore'
 import FilePreviewModal from '../chat/FilePreviewModal'
 import PinnedMessagesPanel from '../chat/PinnedMessagesPanel'
 import AllThreadsPanel from '../chat/AllThreadsPanel'
@@ -31,7 +36,7 @@ import {
   getDMPath,
 } from '../../utils/chatRoutes'
 import { getNotificationText, normalizeNotification } from '../../utils/notificationFormat'
-import { Activity, ChevronRight, Download, File, FileText, Info } from 'lucide-react'
+import { Activity, ArrowLeft, ArrowRight, Bell, ChevronRight, CircleHelp, Download, File, FileText, Info, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const HomePage = lazy(() => import('../../pages/HomePage'))
@@ -95,6 +100,7 @@ export default function ChatLayout() {
   const { fetchChannels, activeChannelId, channels, showInfoPanel, setActiveChannel, unreads } = useChannelStore()
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const notifications = useNotificationStore((s) => s.notifications)
+  const unreadNotifications = useNotificationStore((s) => s.unreadCount)
   const location = useLocation()
   const navigate = useNavigate()
   const { workspaceId } = useParams()
@@ -112,6 +118,11 @@ export default function ChatLayout() {
   const [showNotifications, setShowNotifications] = useState(false)
   const [showSaved, setShowSaved] = useState(false)
   const [filesForModule, setFilesForModule] = useState([])
+  const [showTopUserMenu, setShowTopUserMenu] = useState(false)
+  const [showTopPreferences, setShowTopPreferences] = useState(false)
+  const [showTopSetStatus, setShowTopSetStatus] = useState(false)
+  const topAvatarRef = useRef(null)
+  const user = useAuthStore((s) => s.user)
 
   // ─── Resizable Sidebar ───────────────────────────────────────────
   const [sidebarWidth, setSidebarWidth] = useState(getSavedSidebarWidth)
@@ -596,7 +607,28 @@ export default function ChatLayout() {
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex min-w-0">
+      <div className="flex-1 flex flex-col min-w-0">
+        <GlobalTopBar
+          user={user}
+          avatarRef={topAvatarRef}
+          unreadCount={unreadNotifications}
+          onBack={() => navigate(-1)}
+          onForward={() => navigate(1)}
+          onSearch={() => {
+            setShowSearch((s) => !s)
+            setShowPins(false)
+            setShowNotifications(false)
+          }}
+          onNotifications={() => {
+            setShowNotifications((s) => !s)
+            setShowSearch(false)
+            setShowPins(false)
+          }}
+          onHelp={() => setShowShortcuts(true)}
+          onToggleUserMenu={() => setShowTopUserMenu((s) => !s)}
+        />
+
+        <div className="flex-1 flex min-w-0">
         <ErrorBoundary name="Content">
           {(() => {
             if (isActivityRoute) {
@@ -654,6 +686,7 @@ export default function ChatLayout() {
             )
           })()}
         </ErrorBoundary>
+        </div>
       </div>
 
       {/* Thread Panel */}
@@ -748,7 +781,82 @@ export default function ChatLayout() {
       {showShortcuts && (
         <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
       )}
+
+      {showTopUserMenu && (
+        <UserProfileMenu
+          anchorRef={topAvatarRef}
+          onClose={() => setShowTopUserMenu(false)}
+          onOpenPreferences={() => {
+            setShowTopUserMenu(false)
+            setShowTopPreferences(true)
+          }}
+          onOpenSetStatus={() => {
+            setShowTopUserMenu(false)
+            setShowTopSetStatus(true)
+          }}
+        />
+      )}
+
+      {showTopPreferences && (
+        <PreferencesModal onClose={() => setShowTopPreferences(false)} />
+      )}
+      {showTopSetStatus && (
+        <SetStatusModal onClose={() => setShowTopSetStatus(false)} />
+      )}
     </div>
+  )
+}
+
+function GlobalTopBar({
+  user,
+  avatarRef,
+  unreadCount,
+  onBack,
+  onForward,
+  onSearch,
+  onNotifications,
+  onHelp,
+  onToggleUserMenu,
+}) {
+  return (
+    <header className="app-topbar">
+      <div className="app-topbar__history">
+        <button className="app-topbar__icon" onClick={onBack} aria-label="Go back">
+          <ArrowLeft size={16} />
+        </button>
+        <button className="app-topbar__icon" onClick={onForward} aria-label="Go forward">
+          <ArrowRight size={16} />
+        </button>
+      </div>
+
+      <button className="app-topbar__search" onClick={onSearch}>
+        <Search size={16} />
+        <span>Search messages, files, and people</span>
+        <kbd>Ctrl K</kbd>
+      </button>
+
+      <div className="app-topbar__actions">
+        <button className="app-topbar__icon app-topbar__bell" onClick={onNotifications} aria-label="Notifications">
+          <Bell size={17} />
+          {unreadCount > 0 && <span>{unreadCount > 99 ? '99+' : unreadCount}</span>}
+        </button>
+        <button className="app-topbar__icon" onClick={onHelp} aria-label="Keyboard shortcuts">
+          <CircleHelp size={17} />
+        </button>
+        <button
+          ref={avatarRef}
+          className="app-topbar__avatar"
+          onClick={onToggleUserMenu}
+          aria-label="Open user menu"
+        >
+          <Avatar
+            member={{ name: user?.name || '?', avatar: user?.avatar, onlineStatus: 'online' }}
+            size={30}
+            showStatus={false}
+          />
+        </button>
+      </div>
+    </header>
   )
 }
 
@@ -933,7 +1041,7 @@ function FilesMainPane({ selectedFile, files, onPreview, onDownload, onOpenInCha
               <button
                 onClick={onOpenInChat}
                 className="px-2.5 py-1.5 rounded-md text-xs font-medium cursor-pointer"
-                style={{ border: 'none', background: 'var(--accent-primary)', color: '#fff' }}
+                style={{ border: 'none', background: 'var(--accent-primary)', color: '#ffffff' }}
               >
                 Open in chat
               </button>

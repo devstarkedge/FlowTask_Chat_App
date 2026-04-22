@@ -146,7 +146,7 @@ const MessageItem = memo(
         : { _id: message.authorId, name: authorName, avatar: authorAvatar };
     const time = format(new Date(message.createdAt), "h:mm a");
     const deletedText = isOwn ? "You deleted this message" : "This message was deleted";
-    const deletedTextColor = isOwn ? "var(--text-muted)" : "rgba(226, 232, 240, 0.92)";
+    const deletedTextColor = isOwn ? "var(--text-muted)" : "var(--text-secondary)";
 
     const handleEdit = () => {
       if (editContent.trim() && editContent !== message.content) {
@@ -605,7 +605,7 @@ const MessageItem = memo(
                         className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer transition-all"
                         style={{
                           background: hasReacted
-                            ? "rgba(18, 100, 163, 0.3)"
+                            ? "color-mix(in srgb, var(--accent-color) 22%, transparent)"
                             : "var(--bg-hover)",
                           border: `1px solid ${hasReacted ? "var(--accent-primary)" : "var(--border-secondary)"}`,
                           color: "var(--text-primary)",
@@ -819,7 +819,7 @@ function ActionButton({ icon: Icon, title, onClick, danger, color, size = 16 }) 
     <button
       className="p-2 rounded-md cursor-pointer transition-colors"
       style={{
-        color: color || (danger ? "var(--accent-red)" : "#070534"),
+        color: color || (danger ? "var(--danger-color)" : "var(--text-secondary)"),
         background: "transparent",
         border: "none",
       }}

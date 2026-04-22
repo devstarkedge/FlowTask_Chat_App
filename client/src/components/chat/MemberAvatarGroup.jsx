@@ -1,4 +1,4 @@
-import { useState } from 'react'
+// Avatar component — no hover tooltips by design
 
 const COLORS = [
   '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3',
@@ -14,8 +14,7 @@ function getColor(name) {
   return COLORS[Math.abs(hash) % COLORS.length]
 }
 
-function Avatar({ member, size = 28, showStatus = false, tooltipPosition = 'bottom' }) {
-  const [showTooltip, setShowTooltip] = useState(false)
+function Avatar({ member, size = 28, showStatus = false }) {
   const safeMember = member || {}
   const isOnline = safeMember.onlineStatus === 'online'
   const isAway = safeMember.onlineStatus === 'away'
@@ -24,11 +23,7 @@ function Avatar({ member, size = 28, showStatus = false, tooltipPosition = 'bott
   const statusSize = Math.max(8, size * 0.3)
 
   return (
-    <div
-      className="relative inline-flex shrink-0"
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
-    >
+    <div className="relative inline-flex shrink-0">
       {safeMember.avatar ? (
         <img
           src={safeMember.avatar}
@@ -64,26 +59,24 @@ function Avatar({ member, size = 28, showStatus = false, tooltipPosition = 'bott
         />
       )}
 
-      {showTooltip && (
-        <div
-          className="absolute z-50 px-2.5 py-1.5 rounded-md text-xs whitespace-nowrap pointer-events-none shadow-xl"
+      {safeMember.customStatus?.emoji && (
+        <span
+          className="absolute rounded-full"
           style={{
-            background: '#1a1d21',
-            border: '1px solid var(--border-primary)',
-            color: 'var(--text-white)',
-            ...(tooltipPosition === 'bottom'
-              ? { top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 6 }
-              : { bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 6 }),
+            minWidth: Math.max(14, size * 0.45),
+            height: Math.max(14, size * 0.45),
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: Math.max(10, size * 0.35),
+            background: 'transparent',
+            border: '2px solid var(--bg-primary)',
+            bottom: -4,
+            left: -4,
           }}
         >
-          <p className="font-semibold">{safeMember.name || 'Unknown'}</p>
-          {safeMember.role && (
-            <p style={{ color: 'var(--text-muted)', marginTop: 1 }}>{safeMember.role}</p>
-          )}
-          <p style={{ color: isOnline ? '#44b700' : isAway ? '#ffa726' : 'var(--text-muted)', marginTop: 1 }}>
-            {isOnline ? '● Online' : isAway ? '● Away' : '○ Offline'}
-          </p>
-        </div>
+          <span style={{ lineHeight: 1 }}>{safeMember.customStatus.emoji}</span>
+        </span>
       )}
     </div>
   )

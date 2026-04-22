@@ -44,24 +44,9 @@ export default function SavedMessagesPanel({ onClose, onJumpToMessage }) {
   }
 
   return (
-    <div
-      className="flex flex-col border-l shrink-0 animate-slide-in-right"
-      style={{
-        width: 380,
-        maxWidth: '100vw',
-        borderColor: 'var(--border-primary)',
-        background: 'var(--bg-secondary)',
-        height: '100%',
-      }}
-    >
+    <div className="panel animate-slide-in-right" style={{ width: 380, maxWidth: '100vw' }}>
       {/* Header */}
-      <div
-        className="flex items-center gap-2 px-4 shrink-0"
-        style={{
-          height: 'var(--header-height)',
-          borderBottom: '1px solid var(--border-primary)',
-        }}
-      >
+      <div className="panel-header">
         <Bookmark size={16} style={{ color: 'var(--accent-primary)' }} />
         <h3 className="font-semibold text-sm flex-1" style={{ color: 'var(--text-primary)' }}>
           Saved Messages
@@ -76,21 +61,19 @@ export default function SavedMessagesPanel({ onClose, onJumpToMessage }) {
           onClick={onClose}
           className="p-1.5 rounded-md cursor-pointer transition-colors"
           style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
         >
           <X size={16} />
         </button>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="panel-body">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-muted)' }} />
           </div>
         ) : savedMessages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+          <div className="panel-empty">
             <Bookmark size={32} style={{ color: 'var(--text-muted)', opacity: 0.4 }} />
             <p className="text-sm mt-3" style={{ color: 'var(--text-muted)' }}>
               No saved messages yet
@@ -100,57 +83,54 @@ export default function SavedMessagesPanel({ onClose, onJumpToMessage }) {
             </p>
           </div>
         ) : (
-          savedMessages.map((saved) => {
-            const msg = saved.messageId
-            if (!msg) return null
-            const author = msg.senderSnapshot || msg.authorId || {}
-            return (
-              <div
-                key={saved._id}
-                className="px-4 py-3 cursor-pointer transition-colors"
-                style={{ borderBottom: '1px solid var(--border-secondary)' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                onClick={() => onJumpToMessage?.({ channelId: msg.channelId, _id: msg._id })}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Avatar
-                    member={{ name: author.name || 'Unknown', avatar: author.avatar }}
-                    size={20}
-                    showStatus={false}
-                  />
-                  <span className="text-xs font-semibold" style={{ color: 'var(--text-white)' }}>
-                    {author.name || 'Unknown'}
-                  </span>
-                  <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                    {(() => { const d = new Date(msg.createdAt); return isNaN(d.getTime()) ? '' : format(d, 'MMM d, h:mm a') })()}
-                  </span>
-                  <div className="flex-1" />
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleUnsave(msg._id) }}
-                    className="p-1 rounded cursor-pointer transition-colors"
-                    style={{ color: 'var(--accent-primary)', background: 'transparent', border: 'none' }}
-                    title="Remove from saved"
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <Bookmark size={13} />
-                  </button>
+          <div className="panel-list">
+            {savedMessages.map((saved) => {
+              const msg = saved.messageId
+              if (!msg) return null
+              const author = msg.senderSnapshot || msg.authorId || {}
+              return (
+                <div
+                  key={saved._id}
+                  className="panel-item cursor-pointer transition-colors"
+                  onClick={() => onJumpToMessage?.({ channelId: msg.channelId, _id: msg._id })}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Avatar
+                      member={{ name: author.name || 'Unknown', avatar: author.avatar }}
+                      size={20}
+                      showStatus={false}
+                    />
+                    <span className="text-xs font-semibold" style={{ color: 'var(--text-white)' }}>
+                      {author.name || 'Unknown'}
+                    </span>
+                    <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                      {(() => { const d = new Date(msg.createdAt); return isNaN(d.getTime()) ? '' : format(d, 'MMM d, h:mm a') })()}
+                    </span>
+                    <div className="flex-1" />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleUnsave(msg._id) }}
+                      className="p-1 rounded cursor-pointer transition-colors"
+                      style={{ color: 'var(--accent-primary)', background: 'transparent', border: 'none' }}
+                      title="Remove from saved"
+                    >
+                      <Bookmark size={13} />
+                    </button>
+                  </div>
+                  {msg.htmlContent ? (
+                    <div
+                      className="text-[13px] line-clamp-3"
+                      style={{ color: 'var(--text-primary)' }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.htmlContent) }}
+                    />
+                  ) : (
+                    <p className="text-[13px] line-clamp-3" style={{ color: 'var(--text-primary)' }}>
+                      {msg.content || 'Attachment'}
+                    </p>
+                  )}
                 </div>
-                {msg.htmlContent ? (
-                  <div
-                    className="text-[13px] line-clamp-3"
-                    style={{ color: 'var(--text-primary)' }}
-                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.htmlContent) }}
-                  />
-                ) : (
-                  <p className="text-[13px] line-clamp-3" style={{ color: 'var(--text-primary)' }}>
-                    {msg.content || 'Attachment'}
-                  </p>
-                )}
-              </div>
-            )
-          })
+              )
+            })}
+          </div>
         )}
       </div>
     </div>

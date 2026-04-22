@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuthStore } from '../../stores/authStore'
-import { useThemeStore } from '../../stores/themeStore'
 import { Avatar } from '../chat/MemberAvatarGroup'
 import { Smile, Moon, BellOff, User, Settings, Download, LogOut } from 'lucide-react'
 
-export default function UserProfileMenu({ anchorRef, onClose }) {
+export default function UserProfileMenu({ anchorRef, onClose, onOpenPreferences, onOpenSetStatus }) {
   const menuRef = useRef(null)
   const { user, logout } = useAuthStore()
-  const { theme, toggleTheme } = useThemeStore()
   const [isSigningOut, setIsSigningOut] = useState(false)
 
   const STATUS_COLORS = {
@@ -41,10 +39,14 @@ export default function UserProfileMenu({ anchorRef, onClose }) {
   const rect = anchorRef.current?.getBoundingClientRect()
   if (!rect) return null
 
-  const style = {
-    bottom: window.innerHeight - rect.top + 8,
-    left: rect.right + 8,
-  }
+  const menuWidth = 280
+  const opensUp = rect.top > window.innerHeight / 2
+  const left = rect.left < 96
+    ? rect.right + 8
+    : Math.min(Math.max(8, rect.right - menuWidth), window.innerWidth - menuWidth - 8)
+  const style = opensUp
+    ? { bottom: window.innerHeight - rect.top + 8, left }
+    : { top: rect.bottom + 8, left }
 
   return createPortal(
     <div ref={menuRef} className="user-menu" style={style}>
@@ -63,11 +65,19 @@ export default function UserProfileMenu({ anchorRef, onClose }) {
             <span className="w-2 h-2 rounded-full" style={{ background: STATUS_COLORS[userStatus] || 'var(--status-online)' }} />
             <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{STATUS_LABELS[userStatus] || 'Active'}</span>
           </div>
+          {user?.customStatus?.emoji || user?.customStatus?.text ? (
+            <div style={{ marginTop: 6 }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                {user.customStatus.emoji ? <span style={{ marginRight: 6 }}>{user.customStatus.emoji}</span> : null}
+                <span>{user.customStatus.text}</span>
+              </span>
+            </div>
+          ) : null}
         </div>
       </div>
 
       {/* Status */}
-      <button className="user-menu-item" onClick={onClose}>
+      <button className="user-menu-item" onClick={() => { onClose(); onOpenSetStatus && onOpenSetStatus() }}>
         <Smile size={16} style={{ color: 'var(--text-muted)' }} />
         <span>Update your status</span>
       </button>
@@ -93,13 +103,13 @@ export default function UserProfileMenu({ anchorRef, onClose }) {
 
       <button
         className="user-menu-item"
-        onClick={() => { toggleTheme(); onClose() }}
+        onClick={() => {
+          onOpenPreferences?.()
+          onClose()
+        }}
       >
         <Settings size={16} style={{ color: 'var(--text-muted)' }} />
         <span>Preferences</span>
-        <span className="text-[11px] ml-auto" style={{ color: 'var(--text-muted)' }}>
-          {theme === 'dark' ? 'Dark' : 'Light'}
-        </span>
       </button>
 
       <div className="user-menu-divider" />

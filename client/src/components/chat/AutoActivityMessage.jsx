@@ -287,21 +287,21 @@ export default function AutoActivityMessage({ message }) {
 
 function StatusPill({ status }) {
   const STATUS_COLORS = {
-    'planning':     { bg: 'rgba(99, 102, 241, 0.10)', text: '#818cf8' },
-    'todo':         { bg: 'rgba(99, 102, 241, 0.10)', text: '#818cf8' },
-    'to do':        { bg: 'rgba(99, 102, 241, 0.10)', text: '#818cf8' },
-    'to-do':        { bg: 'rgba(99, 102, 241, 0.10)', text: '#818cf8' },
-    'in-progress':  { bg: 'rgba(59, 130, 246, 0.10)', text: '#60a5fa' },
-    'in progress':  { bg: 'rgba(59, 130, 246, 0.10)', text: '#60a5fa' },
-    'review':       { bg: 'rgba(168, 85, 247, 0.10)', text: '#c084fc' },
-    'in review':    { bg: 'rgba(168, 85, 247, 0.10)', text: '#c084fc' },
-    'completed':    { bg: 'rgba(34, 197, 94, 0.10)',  text: '#4ade80' },
-    'done':         { bg: 'rgba(34, 197, 94, 0.10)',  text: '#4ade80' },
-    'on-hold':      { bg: 'rgba(245, 158, 11, 0.10)', text: '#fbbf24' },
-    'blocked':      { bg: 'rgba(239, 68, 68, 0.10)',  text: '#f87171' },
+    planning:       { bg: 'color-mix(in srgb, var(--accent-color) 12%, transparent)', text: 'var(--accent-color)' },
+    todo:           { bg: 'color-mix(in srgb, var(--accent-color) 12%, transparent)', text: 'var(--accent-color)' },
+    'to do':        { bg: 'color-mix(in srgb, var(--accent-color) 12%, transparent)', text: 'var(--accent-color)' },
+    'to-do':        { bg: 'color-mix(in srgb, var(--accent-color) 12%, transparent)', text: 'var(--accent-color)' },
+    'in-progress':  { bg: 'color-mix(in srgb, var(--accent-color) 14%, transparent)', text: 'var(--accent-color)' },
+    'in progress':  { bg: 'color-mix(in srgb, var(--accent-color) 14%, transparent)', text: 'var(--accent-color)' },
+    review:         { bg: 'color-mix(in srgb, var(--accent-purple) 13%, transparent)', text: 'var(--accent-purple)' },
+    'in review':    { bg: 'color-mix(in srgb, var(--accent-purple) 13%, transparent)', text: 'var(--accent-purple)' },
+    completed:      { bg: 'color-mix(in srgb, var(--success-color) 13%, transparent)', text: 'var(--success-color)' },
+    done:           { bg: 'color-mix(in srgb, var(--success-color) 13%, transparent)', text: 'var(--success-color)' },
+    'on-hold':      { bg: 'color-mix(in srgb, var(--warning-color) 16%, transparent)', text: 'var(--warning-color)' },
+    blocked:        { bg: 'color-mix(in srgb, var(--danger-color) 13%, transparent)', text: 'var(--danger-color)' },
   }
   const normalized = (status || '').toLowerCase()
-  const c = STATUS_COLORS[normalized] || { bg: 'rgba(99, 102, 241, 0.10)', text: '#818cf8' }
+  const c = STATUS_COLORS[normalized] || { bg: 'color-mix(in srgb, var(--accent-color) 12%, transparent)', text: 'var(--accent-color)' }
 
   return (
     <span className="status-pill" style={{ background: c.bg, color: c.text }}>
@@ -312,12 +312,12 @@ function StatusPill({ status }) {
 
 function PriorityBadge({ priority }) {
   const PRIORITY_COLORS = {
-    high:   { bg: 'rgba(239, 68, 68, 0.10)', text: '#f87171' },
-    medium: { bg: 'rgba(245, 158, 11, 0.10)', text: '#fbbf24' },
-    low:    { bg: 'rgba(34, 197, 94, 0.10)',  text: '#4ade80' },
+    high:   { bg: 'color-mix(in srgb, var(--danger-color) 13%, transparent)', text: 'var(--danger-color)' },
+    medium: { bg: 'color-mix(in srgb, var(--warning-color) 16%, transparent)', text: 'var(--warning-color)' },
+    low:    { bg: 'color-mix(in srgb, var(--success-color) 13%, transparent)', text: 'var(--success-color)' },
   }
   const normalized = (priority || '').toLowerCase()
-  const c = PRIORITY_COLORS[normalized] || { bg: 'rgba(99, 102, 241, 0.10)', text: '#818cf8' }
+  const c = PRIORITY_COLORS[normalized] || { bg: 'color-mix(in srgb, var(--accent-color) 12%, transparent)', text: 'var(--accent-color)' }
 
   return (
     <span className="status-pill" style={{ background: c.bg, color: c.text }}>

@@ -422,7 +422,7 @@ export const updatePreferences = asyncHandler(async (req, res) => {
   const { default: userRepository } = await import('../users/user.repository.js');
 
   const allowedFields = [
-    'theme', 'notificationSound', 'desktopNotifications',
+    'theme', 'sidebarTheme', 'customTheme', 'notificationSound', 'desktopNotifications',
     'sidebarCollapsed', 'compactMode',
   ];
 

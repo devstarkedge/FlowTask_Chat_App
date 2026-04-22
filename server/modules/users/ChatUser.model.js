@@ -26,6 +26,17 @@ const chatPreferencesSchema = new Schema({
     enum: ['light', 'dark', 'system'],
     default: 'system',
   },
+  sidebarTheme: {
+    type: String,
+    enum: ['aubergine', 'purple', 'blue', 'green', 'graphite', 'custom'],
+    default: 'aubergine',
+  },
+  customTheme: {
+    sidebarBg: { type: String, default: '#3f0e40' },
+    sidebarText: { type: String, default: '#f8edf7' },
+    accentColor: { type: String, default: '#1264a3' },
+    sidebarActive: { type: String, default: '#1164a3' },
+  },
   notificationSound: {
     type: Boolean,
     default: true,

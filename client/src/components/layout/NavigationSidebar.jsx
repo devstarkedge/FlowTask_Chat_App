@@ -10,7 +10,6 @@ import {
   MessageCircle,
   Users,
   Bot,
-  Search,
   Volume2,
   X,
   MessageSquareText,
@@ -82,8 +81,7 @@ export default function NavigationSidebar({
     dms: true,
     system: true,
   });
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showSearch, setShowSearch] = useState(false);
+  
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showUserPicker, setShowUserPicker] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
@@ -139,10 +137,7 @@ const dmChannels = useMemo(() => {
   const isDMMode = mode === "dms";
 
   const filteredChannels = (list) => {
-    if (!searchQuery) return list;
-    return list.filter((c) =>
-      c.name?.toLowerCase().includes(searchQuery.toLowerCase()),
-    );
+    return list;
   };
 
   const sortChannels = (list, isDMSort = false) => {
@@ -215,59 +210,7 @@ const dmChannels = useMemo(() => {
         )}
       </div>
 
-      {/* Search */}
-      <div className="mt-3">
-        {showSearch ? (
-          <div
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg"
-            style={{
-              background: "var(--bg-input)",
-              border: "1px solid var(--border-primary)",
-            }}
-          >
-            <Search
-              size={18}
-              style={{ color: "var(--text-muted)", flexShrink: 0 }}
-            />
-            <input
-              type="text"
-              placeholder="Search conversations..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 bg-transparent border-none outline-none text-sm"
-              style={{ color: "var(--text-primary)" }}
-              autoFocus
-            />
-            <button
-              onClick={() => {
-                setShowSearch(false);
-                setSearchQuery("");
-              }}
-              className="p-1 rounded cursor-pointer"
-              style={{
-                color: "var(--text-muted)",
-                background: "transparent",
-                border: "none",
-              }}
-            >
-              <X size={14} />
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowSearch(true)}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm cursor-pointer transition-all"
-            style={{
-              color: "var(--text-muted)",
-              background: "var(--bg-hover)",
-              border: "1px solid var(--border-secondary)",
-            }}
-          >
-            <Search size={16} />
-            <span>Search...</span>
-          </button>
-        )}
-      </div>
+      {/* search removed per design */}
     </>
   );
 
@@ -277,12 +220,7 @@ const dmChannels = useMemo(() => {
         {/* Quick Nav Items (Home mode only) */}
         {!isDMMode && (
           <div className="px-3 pt-3 pb-2">
-            <div
-              style={{
-                borderTop: "1px solid var(--border-secondary)",
-                borderBottom: "1px solid var(--border-secondary)",
-              }}
-            >
+            <div>
               <NavButton
                 icon={MessageSquareText}
                 label="Threads"
@@ -303,13 +241,12 @@ const dmChannels = useMemo(() => {
                 className="rounded-md"
                 style={{
                   background: "var(--bg-active)",
-                  border: "1px solid var(--border-secondary)",
                   padding: "2px",
                 }}
               >
                 <NavButton
                   icon={Bookmark}
-                  label="Starred"
+                  label="Saved"
                   onClick={() => onToggleSaved?.()}
                 />
               </div>
@@ -318,7 +255,6 @@ const dmChannels = useMemo(() => {
                 className="rounded-md"
                 style={{
                   background: "var(--bg-active)",
-                  border: "1px solid var(--border-secondary)",
                   padding: "2px",
                 }}
               >
@@ -415,19 +351,6 @@ const dmChannels = useMemo(() => {
               onToggle={() => toggleSection("privateChannels")}
             >
 
-              {sortChannels(filteredChannels(privateChannels)).map(
-                (channel) => (
-                  <ChannelListItem
-                    key={channel._id}
-                    channel={channel}
-                    isActive={channel._id === activeChannelId}
-                    unread={unreads[channel._id] || 0}
-                    onClick={() => handleSelectChannel(channel._id)}
-                    onlineUsers={onlineUsers}
-                  />
-                ),
-              )}
-=======
               {sortChannels(filteredChannels(privateChannels)).map((channel) => (
                 <ChannelListItem
                   key={channel._id}
@@ -486,10 +409,7 @@ const dmChannels = useMemo(() => {
 
         {/* Apps footer */}
         {!isDMMode && (
-          <div
-            className="px-4 py-3 shrink-0 mt-auto"
-            style={{ borderTop: "1px solid var(--border-secondary)" }}
-          >
+          <div className="px-4 py-3 shrink-0 mt-auto">
             <NavButton icon={AppWindow} label="Apps" onClick={() => {}} />
           </div>
         )}

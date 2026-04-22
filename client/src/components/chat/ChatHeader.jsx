@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
-import { Hash, Lock, Users, MessageCircle, Search, Info, Menu, Pin, FileText, Star, Headphones,Plus,MoreVertical, MoreHorizontal } from 'lucide-react'
+import { Hash, Lock, Users, MessageCircle, Search, Info, Menu, Pin, FileText, Star, Headphones, Plus, MoreVertical } from 'lucide-react'
 import MemberAvatarGroup from './MemberAvatarGroup'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
@@ -97,9 +97,8 @@ export default function ChatHeader({
 
   return (
     <div
-      className="shrink-0 select-none bg-white"
+      className="shrink-0 select-none chat-header"
       style={{
-        borderBottom: "1px solid transparent",
         position: "sticky",
         top: 0,
         zIndex: 20,
@@ -112,11 +111,11 @@ export default function ChatHeader({
           onClick={onOpenMobileSidebar}
           className="mobile-menu-btn p-2 rounded-lg cursor-pointer transition-colors"
           style={{
-            color: "#8A92A6",
+            color: "var(--text-muted)",
             background: "transparent",
             border: "none",
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "#EEF1FF")}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-hover)")}
           onMouseLeave={(e) =>
             (e.currentTarget.style.background = "transparent")
           }
@@ -126,14 +125,14 @@ export default function ChatHeader({
 
         {/* Channel Name & Details */}
         <div
-          className="flex flex-col min-w-0 cursor-pointer group py-1.5 px-2 -ml-2 rounded-xl hover:bg-[#F7F8FC] transition-colors"
+          className="chat-header__channel-trigger flex flex-col min-w-0 cursor-pointer group py-1.5 px-2 -ml-2 rounded-lg transition-colors"
           onClick={toggleInfoPanel}
         >
           <div className="flex items-center gap-2">
-            <Icon size={20} style={{ color: "#4F46E5", flexShrink: 0 }} />
+            <Icon size={20} style={{ color: "var(--accent-color)", flexShrink: 0 }} />
             <h2
               className="font-bold text-[20px] truncate group-hover:underline"
-              style={{ color: "#1F2A44" }}
+              style={{ color: "var(--text-primary)" }}
             >
               {channel.name || channel.slug}
             </h2>
@@ -141,17 +140,17 @@ export default function ChatHeader({
             <button
               className="p-1 rounded cursor-pointer transition-colors shrink-0 hide-mobile z-10 ml-1"
               style={{
-                color: isStarred ? "#F59E0B" : "#8A92A6",
+                color: isStarred ? "var(--warning-color)" : "var(--text-muted)",
                 background: "transparent",
                 border: "none",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = "#EEF1FF";
-                e.currentTarget.style.color = "#F59E0B";
+                e.currentTarget.style.background = "var(--surface-hover)";
+                e.currentTarget.style.color = "var(--warning-color)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = "transparent";
-                e.currentTarget.style.color = isStarred ? "#F59E0B" : "#8A92A6";
+                e.currentTarget.style.color = isStarred ? "var(--warning-color)" : "var(--text-muted)";
               }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -171,8 +170,8 @@ export default function ChatHeader({
               style={{ paddingLeft: "28px" }}
             >
               <span
-                className="text-[13px] font-medium group-hover:text-[#1F2A44] transition-colors"
-                style={{ color: "#8A92A6" }}
+                className="text-[13px] font-medium transition-colors"
+                style={{ color: "var(--text-muted)" }}
               >
                 {members.length} member{members.length !== 1 ? "s" : ""}
               </span>
@@ -183,7 +182,7 @@ export default function ChatHeader({
         {/* Topic — editable on click */}
         {!isDM && (
           <div className="flex items-center hide-mobile">
-            <div className="w-px h-8 mx-4" style={{ background: "#E2E8F0" }} />
+            <div className="w-px h-8 mx-4" style={{ background: "var(--border-color)" }} />
             {editingTopic ? (
               <input
                 ref={topicInputRef}
@@ -199,17 +198,17 @@ export default function ChatHeader({
                 placeholder="Add a topic"
                 className="text-[15px] bg-transparent outline-none px-2 py-1 rounded"
                 style={{
-                  color: "#1F2A44",
+                  color: "var(--text-primary)",
                   maxWidth: 300,
-                  border: "1px solid #93A4FC",
+                  border: "1px solid var(--accent-color)",
                 }}
               />
             ) : (
               <span
                 role="button"
                 tabIndex={0}
-                className="text-[15px] truncate cursor-pointer hover:underline px-2 py-1 rounded transition-colors hover:bg-[#F7F8FC]"
-                style={{ color: "#8A92A6", maxWidth: 300 }}
+                className="chat-header__topic text-[15px] truncate cursor-pointer hover:underline px-2 py-1 rounded transition-colors"
+                style={{ color: "var(--text-muted)", maxWidth: 300 }}
                 onClick={handleTopicClick}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -227,7 +226,7 @@ export default function ChatHeader({
       </div>
       {/* Tabs & Actions row as Pill-style Toolbar */}
       <div className="px-6 pb-4">
-        <div className="flex items-center justify-between bg-[#F3F4F8] px-3 h-14 shadow-sm relative">
+        <div className="chat-header__toolbar flex items-center justify-between px-3 h-14 relative">
           <div className="flex items-center gap-2 md:gap-3 min-w-0 overflow-x-auto no-scrollbar">
             {HEADER_TABS.map((tab) => {
               const TabIcon = tab.icon;
@@ -236,11 +235,7 @@ export default function ChatHeader({
                 <button
                   key={tab.id}
                   onClick={() => onTabChange?.(tab.id)}
-                  className={`flex items-center justify-center gap-1 p-6 h-10 w-30 rounded text-[15px] font-semibold transition-all ${
-                    isActive
-                      ? "bg-[#94A1F7] text-white shadow-sm"
-                      : "bg-[#ECEEF5] text-[#2C3A8C] hover:bg-[#E2E5EF]"
-                  }`}
+                  className={`chat-header__tab flex items-center justify-center gap-1 p-6 h-10 w-30 rounded text-[15px] font-semibold transition-all ${isActive ? "is-active" : ""}`}
                   title={tab.label}
                 >
                   <TabIcon size={18} />
@@ -253,7 +248,7 @@ export default function ChatHeader({
               );
             })}
             <button
-              className={`flex items-center justify-center gap-1 h-10 rounded-xl bg-[#D8DBE8] text-[#1F2A44] font-semibold hover:bg-[#CDD1E0] transition-all ${
+              className={`chat-header__add-tab flex items-center justify-center gap-1 h-10 rounded-lg font-semibold transition-all ${
                 isConstrained ? "w-10 px-0" : "w-36 px-6 text-nowrap"
               }`}
               title="Add New Tab"
@@ -296,18 +291,17 @@ export default function ChatHeader({
               icon={MoreVertical}
               title="More"
               onClick={() => setShowMoreActions(!showMoreActions)}
-              className={showMoreActions ? "bg-[#E5E7EB]" : ""}
+              className={showMoreActions ? "is-active" : ""}
             />
 
             {showMoreActions && (
               <div
-                className="absolute top-full right-0 mt-2 w-56 bg-white rounded-xl shadow-2xl border border-[#E2E8F0] py-2 z-50 animate-fade-in-up"
-                style={{ filter: "drop-shadow(0 15px 30px rgba(0,0,0,0.12))" }}
+                className="chat-header__menu absolute top-full right-0 mt-2 w-56 rounded-lg py-2 z-50 animate-fade-in-up"
               >
                 {isConstrained && (
                   <>
                     <button
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#F7F8FC] transition-colors text-left group"
+                      className="chat-header__menu-item w-full flex items-center gap-3 px-4 py-3 transition-colors text-left group"
                       onClick={() => {
                         onTogglePins();
                         setShowMoreActions(false);
@@ -315,14 +309,14 @@ export default function ChatHeader({
                     >
                       <Pin
                         size={18}
-                        className="text-[#8A92A6] group-hover:text-[#4F46E5]"
+                        style={{ color: "var(--text-muted)" }}
                       />
                       <div className="flex flex-col">
-                        <span className="text-[14px] font-semibold text-[#1F2A44]">
+                        <span className="text-[14px] font-semibold" style={{ color: "var(--text-primary)" }}>
                           Pinned Messages
                         </span>
                         {pinnedMessages.length > 0 && (
-                          <span className="text-[11px] text-[#8A92A6]">
+                          <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
                             {pinnedMessages.length} items pinned
                           </span>
                         )}
@@ -330,7 +324,7 @@ export default function ChatHeader({
                     </button>
 
                     <button
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#F7F8FC] transition-colors text-left group"
+                      className="chat-header__menu-item w-full flex items-center gap-3 px-4 py-3 transition-colors text-left group"
                       onClick={() => {
                         onToggleSearch();
                         setShowMoreActions(false);
@@ -338,15 +332,15 @@ export default function ChatHeader({
                     >
                       <Search
                         size={18}
-                        className="text-[#8A92A6] group-hover:text-[#4F46E5]"
+                        style={{ color: "var(--text-muted)" }}
                       />
-                      <span className="text-[14px] font-semibold text-[#1F2A44]">
+                      <span className="text-[14px] font-semibold" style={{ color: "var(--text-primary)" }}>
                         Search Messages
                       </span>
                     </button>
 
                     <button
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#F7F8FC] transition-colors text-left group md:hidden"
+                      className="chat-header__menu-item w-full flex items-center gap-3 px-4 py-3 transition-colors text-left group md:hidden"
                       onClick={() => {
                         handleHuddleClick();
                         setShowMoreActions(false);
@@ -354,19 +348,19 @@ export default function ChatHeader({
                     >
                       <Headphones
                         size={18}
-                        className="text-[#8A92A6] group-hover:text-[#4F46E5]"
+                        style={{ color: "var(--text-muted)" }}
                       />
-                      <span className="text-[14px] font-semibold text-[#1F2A44]">
+                      <span className="text-[14px] font-semibold" style={{ color: "var(--text-primary)" }}>
                         Huddle
                       </span>
                     </button>
 
-                    <div className="h-px bg-[#E2E8F0] my-2 mx-2" />
+                    <div className="h-px my-2 mx-2" style={{ background: "var(--border-color)" }} />
                   </>
                 )}
 
                 <button
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#F7F8FC] transition-colors text-left group"
+                  className="chat-header__menu-item w-full flex items-center gap-3 px-4 py-3 transition-colors text-left group"
                   onClick={() => {
                     toggleInfoPanel();
                     setShowMoreActions(false);
@@ -374,9 +368,9 @@ export default function ChatHeader({
                 >
                   <Info
                     size={18}
-                    className="text-[#8A92A6] group-hover:text-[#4F46E5]"
+                    style={{ color: "var(--text-muted)" }}
                   />
-                  <span className="text-[14px] font-semibold text-[#1F2A44]">
+                  <span className="text-[14px] font-semibold" style={{ color: "var(--text-primary)" }}>
                     Channel Details
                   </span>
                 </button>
@@ -394,9 +388,9 @@ function HeaderBtn({ icon: Icon, title, label, onClick, className = "" }) {
     <button
       onClick={onClick}
       title={title}
-      className={`shrink-0 flex items-center justify-center gap-2 ${
+      className={`chat-header__icon-btn shrink-0 flex items-center justify-center gap-2 ${
         label ? "px-4" : "w-10"
-      } h-10 rounded-lg cursor-pointer transition-all bg-transparent hover:bg-[#E5E7EB] text-[#4F5B76] ${className}`}>
+      } h-10 rounded-lg cursor-pointer transition-all ${className}`}>
       <Icon size={20} />
       {label && (
         <span className="text-[14px] font-bold hide-mobile ml-0.5">

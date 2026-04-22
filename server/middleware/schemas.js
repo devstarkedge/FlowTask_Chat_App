@@ -150,6 +150,13 @@ export const refreshTokenSchema = z.object({
 
 export const updatePreferencesSchema = z.object({
   theme: z.enum(['dark', 'light', 'system']).optional(),
+  sidebarTheme: z.enum(['aubergine', 'purple', 'blue', 'green', 'graphite', 'custom']).optional(),
+  customTheme: z.object({
+    sidebarBg: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+    sidebarText: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+    accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+    sidebarActive: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  }).optional(),
   notificationSound: z.boolean().optional(),
   desktopNotifications: z.boolean().optional(),
   sidebarCollapsed: z.boolean().optional(),

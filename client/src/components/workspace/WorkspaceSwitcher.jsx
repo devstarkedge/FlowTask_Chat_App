@@ -96,8 +96,8 @@ export default function WorkspaceSwitcher({
       {/* Trigger */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2.5 min-w-0 w-full cursor-pointer"
-        style={{ background: "transparent", border: "none", padding: 0 }}
+        className="workspace-switcher-trigger flex items-center gap-2.5 min-w-0 w-full cursor-pointer"
+        style={{ background: "transparent", border: "none", padding: 0, outline: 'none' }}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
       >
@@ -118,10 +118,7 @@ export default function WorkspaceSwitcher({
             ))}
         </div>
         <div className="min-w-0 flex-1">
-          <p
-            className="text-xl font-bold truncate"
-            style={{ color: "var(--text-white)" }}
-          >
+          <p className="workspace-switcher-title text-xl font-bold truncate">
             {isSwitching ? "Switching..." : activeWorkspace?.name || ""}
           </p>
         </div>
@@ -187,7 +184,7 @@ export default function WorkspaceSwitcher({
                   <div className="flex-1 min-w-0">
                     <p
                       className="text-lg font-medium truncate"
-                      style={{ color: "var(--text-white)" }}
+                      style={{ color: "var(--text-primary)" }}
                     >
                       {ws.name}
                     </p>

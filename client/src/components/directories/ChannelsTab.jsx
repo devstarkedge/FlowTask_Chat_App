@@ -93,10 +93,7 @@ export default function ChannelsTab() {
   return (
     <div className="flex flex-col h-full">
       {/* Banner */}
-      <div
-        className="px-5 py-4 flex items-center justify-between gap-4"
-        style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-secondary)' }}
-      >
+      <div className="panel-header px-5 py-4">
         <div>
           <p className="text-sm font-semibold" style={{ color: 'var(--text-white)' }}>
             Organize your team's conversations
@@ -118,21 +115,15 @@ export default function ChannelsTab() {
       </div>
 
       {/* Filters */}
-      <div
-        className="shrink-0 px-5 py-3 flex flex-wrap items-center gap-3"
-        style={{ borderBottom: '1px solid var(--border-secondary)' }}
-      >
-        <div
-          className="flex items-center gap-2 rounded-md px-3 py-1.5 flex-1 min-w-45"
-          style={{ background: 'var(--bg-input)', border: '1px solid var(--border-primary)' }}
-        >
+      <div className="shrink-0 px-5 py-3 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 rounded-md px-3 py-1.5 flex-1 min-w-45 panel-search">
           <Search size={15} style={{ color: 'var(--text-muted)' }} />
           <input
             type="text"
             value={search}
             onChange={handleSearchInput}
             placeholder="Search channels"
-            className="flex-1 bg-transparent border-none outline-none text-sm"
+            className="flex-1 bg-transparent border-none outline-none text-sm panel-search-input"
             style={{ color: 'var(--text-primary)' }}
           />
         </div>
@@ -177,10 +168,7 @@ export default function ChannelsTab() {
             itemContent={(index, ch) => (
               <div
                 onClick={() => navigate(getChannelPath(activeWorkspaceId, ch._id))}
-                className="flex items-center gap-3 mx-2 px-4 py-3 rounded-lg transition-colors cursor-pointer"
-                style={{ background: 'transparent' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover, var(--bg-card))')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                className="panel-item flex items-center gap-3 mx-2 px-4 py-3 rounded-lg transition-colors cursor-pointer"
               >
                 {/* Icon */}
                 {ch.isPrivate ? (

@@ -36,20 +36,9 @@ export default function AllThreadsPanel({ onClose, onOpenThread }) {
   }, [allThreads])
 
   return (
-    <div
-      className="flex flex-col h-full animate-slide-in-right"
-      style={{
-        width: 'var(--thread-panel-width)',
-        minWidth: 'var(--thread-panel-width)',
-        borderLeft: '1px solid var(--border-primary)',
-        background: 'var(--bg-primary)',
-      }}
-    >
+    <div className="panel animate-slide-in-right" style={{ width: 'var(--thread-panel-width)', minWidth: 'var(--thread-panel-width)', borderLeft: '1px solid var(--border-primary)', background: 'var(--bg-primary)' }}>
       {/* Header */}
-      <div
-        className="flex items-center justify-between px-4 py-3 shrink-0"
-        style={{ borderBottom: '1px solid var(--border-primary)' }}
-      >
+      <div className="panel-header">
         <div className="flex items-center gap-2">
           <MessageSquareText size={18} style={{ color: 'var(--accent-primary)' }} />
           <h2 className="text-sm font-semibold" style={{ color: 'var(--text-white)' }}>
@@ -76,7 +65,7 @@ export default function AllThreadsPanel({ onClose, onOpenThread }) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="panel-body">
         {allThreadsLoading && sortedThreads.length === 0 && (
           <div className="flex items-center justify-center py-12">
             <Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-muted)' }} />
@@ -99,7 +88,7 @@ export default function AllThreadsPanel({ onClose, onOpenThread }) {
           </div>
         )}
 
-        <div className="px-3 py-2 flex flex-col gap-1">
+        <div className="panel-list px-3 py-2">
           {sortedThreads.map((thread) => (
             <ThreadCard
               key={thread._id}
@@ -147,19 +136,7 @@ function ThreadCard({ thread, channel, currentUser, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="w-full text-left rounded-lg p-3 transition-all cursor-pointer"
-      style={{
-        background: 'transparent',
-        border: '1px solid var(--border-secondary)',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'var(--bg-hover)'
-        e.currentTarget.style.borderColor = 'var(--border-primary)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'transparent'
-        e.currentTarget.style.borderColor = 'var(--border-secondary)'
-      }}
+      className="w-full text-left rounded-lg p-3 transition-all cursor-pointer panel-item"
     >
       {/* Channel tag */}
       <div className="flex items-center gap-1 mb-2">

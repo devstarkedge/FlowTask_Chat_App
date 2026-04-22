@@ -8,6 +8,8 @@ import { Avatar } from '../chat/MemberAvatarGroup'
 // Tooltip removed for sidebar hover - using direct buttons to avoid popovers
 import CreateMenu from '../ui/CreateMenu'
 import UserProfileMenu from '../ui/UserProfileMenu'
+import PreferencesModal from '../chat/PreferencesModal'
+import SetStatusModal from '../chat/SetStatusModal'
 import HoverPreview from './HoverPreview'
 import useHoverPanelController from './hooks/useHoverPanelController'
 import { CHAT_FEATURE_FLAGS } from '../../config/featureFlags'
@@ -30,6 +32,8 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   const draftCount = useDraftStore((s) => s.allDraftsForSidebar.length)
   const [showCreateMenu, setShowCreateMenu] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showPreferences, setShowPreferences] = useState(false)
+  const [showSetStatus, setShowSetStatus] = useState(false)
   const createBtnRef = useRef(null)
   const avatarBtnRef = useRef(null)
   const {
@@ -99,6 +103,7 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
       if (e.key === 'Escape') {
         setShowCreateMenu(false)
         setShowUserMenu(false)
+        setShowPreferences(false)
         closeNow()
       }
     }
@@ -228,7 +233,22 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
         <UserProfileMenu
           anchorRef={avatarBtnRef}
           onClose={() => setShowUserMenu(false)}
+          onOpenPreferences={() => {
+            setShowUserMenu(false)
+            setShowPreferences(true)
+          }}
+          onOpenSetStatus={() => {
+            setShowUserMenu(false)
+            setShowSetStatus(true)
+          }}
         />
+      )}
+
+      {showPreferences && (
+        <PreferencesModal onClose={() => setShowPreferences(false)} />
+      )}
+      {showSetStatus && (
+        <SetStatusModal onClose={() => setShowSetStatus(false)} />
       )}
     </>
   )

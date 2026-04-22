@@ -1,6 +1,7 @@
 import { useEffect, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
+import { useThemeStore } from './stores/themeStore'
 
 // Eager load workspace layout (most common route)
 import WorkspaceLayout from './components/layout/WorkspaceLayout'
@@ -27,6 +28,7 @@ function PageFallback() {
 
 function App() {
   const { user, isInitialized } = useAuthStore()
+  const hydrateFromPreferences = useThemeStore((s) => s.hydrateFromPreferences)
 
   useEffect(() => {
     const state = useAuthStore.getState()
@@ -34,6 +36,12 @@ function App() {
       state.fetchUser().catch(() => {})
     }
   }, [])
+
+  useEffect(() => {
+    if (user?.chatPreferences) {
+      hydrateFromPreferences(user.chatPreferences)
+    }
+  }, [hydrateFromPreferences, user?.chatPreferences])
 
   if (!isInitialized) {
     return (

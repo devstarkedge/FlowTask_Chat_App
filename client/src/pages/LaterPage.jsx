@@ -22,21 +22,12 @@ export default function LaterPage() {
       </div>
 
       {/* Tab bar */}
-      <div
-        className="flex gap-1 px-4 py-2"
-        style={{ borderBottom: '1px solid var(--border-primary)' }}
-      >
+      <div className="page-tabs">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
-            style={{
-              background: activeTab === tab.id ? 'var(--bg-active)' : 'transparent',
-              color: activeTab === tab.id ? 'var(--text-primary)' : 'var(--text-muted)',
-              border: 'none',
-              cursor: 'pointer',
-            }}
+            className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
           >
             <tab.icon size={14} />
             {tab.label}
@@ -45,7 +36,7 @@ export default function LaterPage() {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="page-body">
         {activeTab === 'drafts' ? <DraftsSidebar /> : <ScheduledMessagesList onCountChange={setScheduledCount} />}
       </div>
     </div>

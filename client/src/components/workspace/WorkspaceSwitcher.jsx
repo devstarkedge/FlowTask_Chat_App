@@ -16,12 +16,10 @@ import api from '../../services/api'
 /** Avatar gradient pool — mapped by workspace index */
 const AVATAR_GRADIENTS = [
   'linear-gradient(135deg, var(--accent-primary), var(--accent-purple))',
-  'linear-gradient(135deg, #f59e0b, #ef4444)',
-  'linear-gradient(135deg, #10b981, #3b82f6)',
-  'linear-gradient(135deg, #8b5cf6, #ec4899)',
-  'linear-gradient(135deg, #06b6d4, var(--accent-primary))',
-  'linear-gradient(135deg, #f97316, #eab308)',
-  'linear-gradient(135deg, #14b8a6, var(--accent-primary))',
+  'linear-gradient(135deg, var(--accent-yellow), var(--accent-red))',
+  'linear-gradient(135deg, var(--accent-green), var(--accent-primary))',
+  'linear-gradient(135deg, var(--accent-purple), var(--accent-pink, #ec4899))',
+  'linear-gradient(135deg, var(--accent-cyan), var(--accent-primary))',
 ]
  
 /** Floating orbs in the dropdown header — purely decorative */

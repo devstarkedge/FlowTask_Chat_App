@@ -110,8 +110,15 @@ export default function ResetPasswordPage() {
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={(e) =>{
+                  let value = e.target.value
+                  value = value.replace(/\s/g, "")
+                  setNewPassword(value)
+                }}
                 placeholder="Enter new password"
+                onKeyDown={(e) => {
+                    if (e.key === " ") e.preventDefault();
+                  }}
                 className="input-field"
                 style={{ paddingRight: 40 }}
                 required
@@ -134,8 +141,15 @@ export default function ResetPasswordPage() {
             <input
               type="password"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={(e) =>{ 
+                let value = e.target.value
+                value = value.replace(/\s/g, "")
+                setConfirmPassword(value)
+              }}
               placeholder="Confirm new password"
+              onKeyDown={(e) => {
+                if (e.key === " ") e.preventDefault();
+              }}
               className="input-field"
               required
             />

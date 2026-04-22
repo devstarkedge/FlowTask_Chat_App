@@ -1,12 +1,20 @@
-import { useState } from 'react'
-import { useAuthStore } from '../stores/authStore'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState } from "react";
+import { useAuthStore } from "../stores/authStore";
+import { Link, useNavigate } from "react-router-dom";
 import {
-  Eye, EyeOff, MessageCircle, ArrowRight, Check,
-  Sparkles, Shield, Zap, Users, Lock,
-} from 'lucide-react'
-import toast from 'react-hot-toast'
-import { motion, AnimatePresence } from 'framer-motion'
+  Eye,
+  EyeOff,
+  MessageCircle,
+  ArrowRight,
+  Check,
+  Sparkles,
+  Shield,
+  Zap,
+  Users,
+  Lock,
+} from "lucide-react";
+import toast from "react-hot-toast";
+import { motion, AnimatePresence } from "framer-motion";
 
 const STYLE = `
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -321,105 +329,193 @@ const STYLE = `
     .rp-card    { padding:20px; }
     .rp-checks  { grid-template-columns:1fr; }
   }
-`
+`;
 
 /* ─────────────────────────────────────────────────────────────────────────
    CONSTANTS  —  lighter blob colors for a pastel mesh on white
 ───────────────────────────────────────────────────────────────────────── */
 const BLOBS = [
-  { w:700, h:700, bg:'#a5b4fc', top:'-220px',  left:'-220px', dur:'14s', delay:'0s'  },
-  { w:580, h:580, bg:'#c4b5fd', bottom:'-100px', right:'-160px',dur:'18s', delay:'3s'  },
-  { w:420, h:420, bg:'#67e8f9', top:'45%',      right:'22%',   dur:'22s', delay:'7s'  },
-]
+  {
+    w: 700,
+    h: 700,
+    bg: "#a5b4fc",
+    top: "-220px",
+    left: "-220px",
+    dur: "14s",
+    delay: "0s",
+  },
+  {
+    w: 580,
+    h: 580,
+    bg: "#c4b5fd",
+    bottom: "-100px",
+    right: "-160px",
+    dur: "18s",
+    delay: "3s",
+  },
+  {
+    w: 420,
+    h: 420,
+    bg: "#67e8f9",
+    top: "45%",
+    right: "22%",
+    dur: "22s",
+    delay: "7s",
+  },
+];
 
 const FEATURES = [
-  { icon:Shield,   label:'Secure & private',        desc:'End-to-end encrypted messages and files.',        color:'#6366f1', bg:'rgba(99,102,241,.1)'  },
-  { icon:Zap,      label:'Real-time collaboration', desc:'Instant messages, threads, and live presence.',   color:'#d97706', bg:'rgba(217,119,6,.1)'   },
-  { icon:Users,    label:'Unlimited members',        desc:'Invite your whole team with no seat limits.',     color:'#059669', bg:'rgba(5,150,105,.1)'   },
-  { icon:Sparkles, label:'Smart integrations',      desc:'Connect FlowTask, GitHub, Slack, and more.',     color:'#7c3aed', bg:'rgba(124,58,237,.1)'  },
-]
+  {
+    icon: Shield,
+    label: "Secure & private",
+    desc: "End-to-end encrypted messages and files.",
+    color: "#6366f1",
+    bg: "rgba(99,102,241,.1)",
+  },
+  {
+    icon: Zap,
+    label: "Real-time collaboration",
+    desc: "Instant messages, threads, and live presence.",
+    color: "#d97706",
+    bg: "rgba(217,119,6,.1)",
+  },
+  {
+    icon: Users,
+    label: "Unlimited members",
+    desc: "Invite your whole team with no seat limits.",
+    color: "#059669",
+    bg: "rgba(5,150,105,.1)",
+  },
+  {
+    icon: Sparkles,
+    label: "Smart integrations",
+    desc: "Connect FlowTask, GitHub, Slack, and more.",
+    color: "#7c3aed",
+    bg: "rgba(124,58,237,.1)",
+  },
+];
 
 /* ─────────────────────────────────────────────────────────────────────────
    HELPERS — strength calculation
 ───────────────────────────────────────────────────────────────────────── */
 function getStrength(pass) {
-  if (!pass) return { pct: 0, color: 'transparent', label: '' }
-  let score = 0
-  if (pass.length >= 8)        score++
-  if (/[A-Z]/.test(pass))      score++
-  if (/\d/.test(pass))         score++
-  if (/[^A-Za-z0-9]/.test(pass)) score++
+  if (!pass) return { pct: 0, color: "transparent", label: "" };
+  let score = 0;
+  if (pass.length >= 8) score++;
+  if (/[A-Z]/.test(pass)) score++;
+  if (/\d/.test(pass)) score++;
+  if (/[^A-Za-z0-9]/.test(pass)) score++;
   const map = [
-    { pct: 18,  color: '#ef4444', label: 'Weak'     },
-    { pct: 42,  color: '#f59e0b', label: 'Fair'     },
-    { pct: 68,  color: '#3b82f6', label: 'Good'     },
-    { pct: 100, color: '#10b981', label: 'Strong'   },
-  ]
-  return map[Math.min(score - 1, 3)] ?? map[0]
+    { pct: 18, color: "#ef4444", label: "Weak" },
+    { pct: 42, color: "#f59e0b", label: "Fair" },
+    { pct: 68, color: "#3b82f6", label: "Good" },
+    { pct: 100, color: "#10b981", label: "Strong" },
+  ];
+  return map[Math.min(score - 1, 3)] ?? map[0];
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
    FRAMER VARIANTS  (unchanged)
 ───────────────────────────────────────────────────────────────────────── */
 const stagger = {
-  hidden:  {},
-  visible: { transition: { staggerChildren: .09, delayChildren: .08 } },
-}
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.09, delayChildren: 0.08 } },
+};
 const fadeUp = {
-  hidden:  { opacity: 0, y: 14 },
-  visible: { opacity: 1, y: 0, transition: { duration: .28, ease: [.22,1,.36,1] } },
-}
+  hidden: { opacity: 0, y: 14 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] },
+  },
+};
 const fadeLeft = {
-  hidden:  { opacity: 0, x: 16 },
-  visible: { opacity: 1, x: 0,  transition: { duration: .3,  ease: [.22,1,.36,1] } },
-}
+  hidden: { opacity: 0, x: 16 },
+  visible: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] },
+  },
+};
 const checkVariants = {
-  hidden:  { scale: 0, rotate: -20 },
-  visible: { scale: 1, rotate: 0, transition: { delay:.06, duration:.35, ease:[.22,1,.36,1] } },
-}
+  hidden: { scale: 0, rotate: -20 },
+  visible: {
+    scale: 1,
+    rotate: 0,
+    transition: { delay: 0.06, duration: 0.35, ease: [0.22, 1, 0.36, 1] },
+  },
+};
 const successCard = {
-  hidden:  { opacity: 0, scale: .88, y: 20 },
-  visible: { opacity: 1, scale: 1,   y: 0,  transition: { duration: .4, ease: [.22,1,.36,1] } },
-}
+  hidden: { opacity: 0, scale: 0.88, y: 20 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] },
+  },
+};
 
 /* ─────────────────────────────────────────────────────────────────────────
    COMPONENT
 ───────────────────────────────────────────────────────────────────────── */
 export default function RegisterPage() {
-  const { register, isLoading, error, clearError } = useAuthStore()
-  const navigate = useNavigate()
+  const { register, isLoading, error, clearError } = useAuthStore();
+  const navigate = useNavigate();
 
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' })
-  const [showPassword, setShowPassword] = useState(false)
-  const [success, setSuccess] = useState(false)
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   const updateField = (field) => (e) => {
-    let value = e.target.value
-    if (field === 'email') value = value.replace(/\s/g, '').toLowerCase()
-    setForm((f) => ({ ...f, [field]: value }))
-    clearError()
-  }
+    let value = e.target.value;
+    if (field === "name") value = value.replace(/\s{2,}/g, " ");
+    if (field === "email") value = value.replace(/\s/g, "").toLowerCase();
+    if (field === "password" || field === "confirmPassword")
+      value = value.replace(/\s/g, "");
+    setForm((f) => ({ ...f, [field]: value }));
+    clearError();
+  };
 
   const passwordChecks = [
-    { label: 'At least 8 characters', ok: form.password.length >= 8              },
-    { label: 'Contains uppercase',    ok: /[A-Z]/.test(form.password)             },
-    { label: 'Contains number',       ok: /\d/.test(form.password)                },
-    { label: 'Passwords match',       ok: !!form.password && !!form.confirmPassword && form.password === form.confirmPassword },
-  ]
-  const allChecks = passwordChecks.every((c) => c.ok)
+    { label: "At least 8 characters", ok: form.password.length >= 8 },
+    { label: "Contains uppercase", ok: /[A-Z]/.test(form.password) },
+    { label: "Contains number", ok: /\d/.test(form.password) },
+    {
+      label: "Passwords match",
+      ok:
+        !!form.password &&
+        !!form.confirmPassword &&
+        form.password === form.confirmPassword,
+    },
+  ];
+  const allChecks = passwordChecks.every((c) => c.ok);
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    clearError()
-    if (!allChecks) { toast.error('Please fix password requirements'); return }
+    e.preventDefault();
+    clearError();
+    if (!allChecks) {
+      toast.error("Please fix password requirements");
+      return;
+    }
     try {
-      await register({ name: form.name, email: form.email, password: form.password })
-      setSuccess(true)
-      toast.success('Account created! Check your email.')
-    } catch { /* error set in store */ }
-  }
+      await register({
+        name: form.name,
+        email: form.email,
+        password: form.password,
+      });
+      setSuccess(true);
+      toast.success("Account created! Check your email.");
+    } catch {
+      /* error set in store */
+    }
+  };
 
-  const strength = getStrength(form.password)
+  const strength = getStrength(form.password);
 
   /* ─────────────────────────────────────────────────────────────────────
      SUCCESS STATE
@@ -431,7 +527,21 @@ export default function RegisterPage() {
         <div className="rp-success-page">
           <div className="rp-mesh">
             {BLOBS.map((b, i) => (
-              <div key={i} className="rp-mesh-blob" style={{ width:b.w, height:b.h, background:b.bg, top:b.top, bottom:b.bottom, left:b.left, right:b.right, '--dur':b.dur, '--delay':b.delay }} />
+              <div
+                key={i}
+                className="rp-mesh-blob"
+                style={{
+                  width: b.w,
+                  height: b.h,
+                  background: b.bg,
+                  top: b.top,
+                  bottom: b.bottom,
+                  left: b.left,
+                  right: b.right,
+                  "--dur": b.dur,
+                  "--delay": b.delay,
+                }}
+              />
             ))}
           </div>
 
@@ -441,17 +551,41 @@ export default function RegisterPage() {
             initial="hidden"
             animate="visible"
           >
-            <motion.div className="rp-success-ring" variants={checkVariants} initial="hidden" animate="visible">
+            <motion.div
+              className="rp-success-ring"
+              variants={checkVariants}
+              initial="hidden"
+              animate="visible"
+            >
               <Check size={32} color="#fff" strokeWidth={3} />
             </motion.div>
 
-            <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:.22 }}>
-              <p style={{ fontSize:24, fontWeight:800, color:'#18181b', letterSpacing:'-.03em', marginBottom:10 }}>
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.22 }}
+            >
+              <p
+                style={{
+                  fontSize: 24,
+                  fontWeight: 800,
+                  color: "#18181b",
+                  letterSpacing: "-.03em",
+                  marginBottom: 10,
+                }}
+              >
                 Account created! 🎉
               </p>
-              <p style={{ fontSize:14, color:'#71717a', lineHeight:1.7, marginBottom:28 }}>
-                We've sent a verification email to{' '}
-                <strong style={{ color:'#6366f1' }}>{form.email}</strong>.
+              <p
+                style={{
+                  fontSize: 14,
+                  color: "#71717a",
+                  lineHeight: 1.7,
+                  marginBottom: 28,
+                }}
+              >
+                We've sent a verification email to{" "}
+                <strong style={{ color: "#6366f1" }}>{form.email}</strong>.
                 Please verify your email to sign in.
               </p>
               <Link to="/login" className="rp-go-btn">
@@ -462,7 +596,7 @@ export default function RegisterPage() {
           </motion.div>
         </div>
       </div>
-    )
+    );
   }
 
   /* ─────────────────────────────────────────────────────────────────────
@@ -475,7 +609,21 @@ export default function RegisterPage() {
       {/* ── Animated mesh bg ── */}
       <div className="rp-mesh">
         {BLOBS.map((b, i) => (
-          <div key={i} className="rp-mesh-blob" style={{ width:b.w, height:b.h, background:b.bg, top:b.top, bottom:b.bottom, left:b.left, right:b.right, '--dur':b.dur, '--delay':b.delay }} />
+          <div
+            key={i}
+            className="rp-mesh-blob"
+            style={{
+              width: b.w,
+              height: b.h,
+              background: b.bg,
+              top: b.top,
+              bottom: b.bottom,
+              left: b.left,
+              right: b.right,
+              "--dur": b.dur,
+              "--delay": b.delay,
+            }}
+          />
         ))}
       </div>
 
@@ -489,15 +637,16 @@ export default function RegisterPage() {
             <span className="rp-logo-name">FlowTask Chat</span>
           </Link>
           <p className="rp-nav-link">
-            Already have an account?{' '}
-            <Link to="/login"><strong>Sign in</strong></Link>
+            Already have an account?{" "}
+            <Link to="/login">
+              <strong>Sign in</strong>
+            </Link>
           </p>
         </div>
       </nav>
 
       {/* ── Layout ── */}
       <div className="rp-layout">
-
         {/* ══ LEFT — FORM ══ */}
         <motion.div
           className="rp-form-col"
@@ -511,44 +660,47 @@ export default function RegisterPage() {
           </motion.div>
 
           <motion.h1 variants={fadeUp} className="rp-heading">
-            Create your<br />account
+            Create your
+            <br />
+            account
           </motion.h1>
 
           <motion.p variants={fadeUp} className="rp-subheading">
-            Join thousands of teams already using FlowTask Chat to communicate and collaborate faster.
+            Join thousands of teams already using FlowTask Chat to communicate
+            and collaborate faster.
           </motion.p>
 
           {/* ── Card ── */}
           <motion.div variants={fadeUp} className="rp-card">
-
             {/* Error */}
             <AnimatePresence>
               {error && (
                 <motion.div
                   key="err"
-                  initial={{ opacity:0, height:0, marginBottom:0 }}
-                  animate={{ opacity:1, height:'auto', marginBottom:20 }}
-                  exit={{ opacity:0, height:0, marginBottom:0 }}
-                  transition={{ duration:.2 }}
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: "auto", marginBottom: 20 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  transition={{ duration: 0.2 }}
                   className="rp-error"
                 >
-                  <Lock size={13} style={{ flexShrink:0, marginTop:1 }} />
+                  <Lock size={13} style={{ flexShrink: 0, marginTop: 1 }} />
                   {error}
                 </motion.div>
               )}
             </AnimatePresence>
 
             <form onSubmit={handleSubmit}>
-
               {/* ── Full name ── */}
               <div className="rp-field">
-                <label htmlFor="rp-name" className="rp-label">Full Name</label>
+                <label htmlFor="rp-name" className="rp-label">
+                  Full Name
+                </label>
                 <input
                   id="rp-name"
                   className="rp-input"
                   type="text"
                   value={form.name}
-                  onChange={updateField('name')}
+                  onChange={updateField("name")}
                   placeholder="John Doe"
                   maxLength={30}
                   required
@@ -557,38 +709,46 @@ export default function RegisterPage() {
 
               {/* ── Email ── */}
               <div className="rp-field">
-                <label htmlFor="rp-email" className="rp-label">Email Address</label>
+                <label htmlFor="rp-email" className="rp-label">
+                  Email Address
+                </label>
                 <input
                   id="rp-email"
                   className="rp-input"
                   type="email"
                   value={form.email}
-                  onChange={updateField('email')}
+                  onChange={updateField("email")}
                   placeholder="you@company.com"
-                  onKeyDown={(e) => { if (e.key === ' ') e.preventDefault() }}
+                  onKeyDown={(e) => {
+                    if (e.key === " ") e.preventDefault();
+                  }}
                   required
                 />
               </div>
 
               {/* ── Password ── */}
               <div className="rp-field">
-                <label htmlFor="rp-password" className="rp-label">Password</label>
+                <label htmlFor="rp-password" className="rp-label">
+                  Password
+                </label>
                 <div className="rp-input-wrap">
                   <input
                     id="rp-password"
                     className="rp-input"
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword ? "text" : "password"}
                     value={form.password}
-                    onChange={updateField('password')}
+                    onChange={updateField("password")}
                     placeholder="Create a strong password"
-                    style={{ paddingRight:44 }}
+                    style={{ paddingRight: 44 }}
                     required
                   />
                   <button
                     type="button"
                     className="rp-eye-btn"
                     onClick={() => setShowPassword(!showPassword)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -598,17 +758,23 @@ export default function RegisterPage() {
                 <AnimatePresence>
                   {form.password && (
                     <motion.div
-                      initial={{ opacity:0, scaleY:0 }}
-                      animate={{ opacity:1, scaleY:1 }}
-                      exit={{ opacity:0, scaleY:0 }}
-                      style={{ transformOrigin:'top' }}
+                      initial={{ opacity: 0, scaleY: 0 }}
+                      animate={{ opacity: 1, scaleY: 1 }}
+                      exit={{ opacity: 0, scaleY: 0 }}
+                      style={{ transformOrigin: "top" }}
                     >
                       <div className="rp-strength-track">
                         <motion.div
                           className="rp-strength-fill"
-                          initial={{ width:0 }}
-                          animate={{ width:`${strength.pct}%`, background:strength.color }}
-                          transition={{ duration:.35, ease:[.22,1,.36,1] }}
+                          initial={{ width: 0 }}
+                          animate={{
+                            width: `${strength.pct}%`,
+                            background: strength.color,
+                          }}
+                          transition={{
+                            duration: 0.35,
+                            ease: [0.22, 1, 0.36, 1],
+                          }}
                         />
                       </div>
                     </motion.div>
@@ -618,13 +784,15 @@ export default function RegisterPage() {
 
               {/* ── Confirm password ── */}
               <div className="rp-field">
-                <label htmlFor="rp-confirm" className="rp-label">Confirm Password</label>
+                <label htmlFor="rp-confirm" className="rp-label">
+                  Confirm Password
+                </label>
                 <input
                   id="rp-confirm"
-                  className={`rp-input${form.confirmPassword && form.confirmPassword !== form.password ? ' error' : ''}`}
+                  className={`rp-input${form.confirmPassword && form.confirmPassword !== form.password ? " error" : ""}`}
                   type="password"
                   value={form.confirmPassword}
-                  onChange={updateField('confirmPassword')}
+                  onChange={updateField("confirmPassword")}
                   placeholder="Confirm your password"
                   required
                 />
@@ -634,17 +802,25 @@ export default function RegisterPage() {
               <AnimatePresence>
                 {form.password && (
                   <motion.div
-                    initial={{ opacity:0, y:-6, height:0 }}
-                    animate={{ opacity:1, y:0, height:'auto' }}
-                    exit={{ opacity:0, y:-6, height:0 }}
-                    transition={{ duration:.22 }}
-                    style={{ marginBottom:20 }}
+                    initial={{ opacity: 0, y: -6, height: 0 }}
+                    animate={{ opacity: 1, y: 0, height: "auto" }}
+                    exit={{ opacity: 0, y: -6, height: 0 }}
+                    transition={{ duration: 0.22 }}
+                    style={{ marginBottom: 20 }}
                   >
                     <div className="rp-checks">
                       {passwordChecks.map(({ label, ok }) => (
-                        <div key={label} className="rp-check-item" style={{ color: ok ? '#059669' : '#a1a1aa' }}>
-                          <div className={`rp-check-dot ${ok ? 'ok' : 'fail'}`}>
-                            {ok && <span className="rp-check"><Check size={9} color="#fff" strokeWidth={3} /></span>}
+                        <div
+                          key={label}
+                          className="rp-check-item"
+                          style={{ color: ok ? "#059669" : "#a1a1aa" }}
+                        >
+                          <div className={`rp-check-dot ${ok ? "ok" : "fail"}`}>
+                            {ok && (
+                              <span className="rp-check">
+                                <Check size={9} color="#fff" strokeWidth={3} />
+                              </span>
+                            )}
                           </div>
                           {label}
                         </div>
@@ -659,18 +835,29 @@ export default function RegisterPage() {
                 type="submit"
                 disabled={isLoading || !allChecks}
                 className="rp-submit rp-shimmer-btn"
-                whileHover={isLoading || !allChecks ? {} : {
-                  y: -2,
-                  boxShadow: '0 8px 28px rgba(99,102,241,.48), 0 18px 44px rgba(99,102,241,.22)',
-                }}
-                whileTap={isLoading || !allChecks ? {} : { y:0, scale:.98 }}
+                whileHover={
+                  isLoading || !allChecks
+                    ? {}
+                    : {
+                        y: -2,
+                        boxShadow:
+                          "0 8px 28px rgba(99,102,241,.48), 0 18px 44px rgba(99,102,241,.22)",
+                      }
+                }
+                whileTap={isLoading || !allChecks ? {} : { y: 0, scale: 0.98 }}
               >
                 {isLoading ? (
                   <>
-                    <div className="rp-spin" style={{
-                      width:17, height:17, border:'2.5px solid rgba(255,255,255,.35)',
-                      borderTopColor:'rgba(255,255,255,.9)', borderRadius:'50%',
-                    }} />
+                    <div
+                      className="rp-spin"
+                      style={{
+                        width: 17,
+                        height: 17,
+                        border: "2.5px solid rgba(255,255,255,.35)",
+                        borderTopColor: "rgba(255,255,255,.9)",
+                        borderRadius: "50%",
+                      }}
+                    />
                     Creating account…
                   </>
                 ) : (
@@ -680,7 +867,6 @@ export default function RegisterPage() {
                   </>
                 )}
               </motion.button>
-
             </form>
           </motion.div>
         </motion.div>
@@ -693,16 +879,19 @@ export default function RegisterPage() {
           animate="visible"
         >
           <motion.p variants={fadeLeft} className="rp-aside-heading">
-            Everything your<br />team needs
+            Everything your
+            <br />
+            team needs
           </motion.p>
           <motion.p variants={fadeLeft} className="rp-aside-sub">
-            FlowTask Chat brings real-time messaging, file sharing, and project tools into one beautiful workspace.
+            FlowTask Chat brings real-time messaging, file sharing, and project
+            tools into one beautiful workspace.
           </motion.p>
 
           <motion.div variants={fadeLeft} className="rp-feature-list">
             {FEATURES.map(({ icon: Icon, label, desc, color, bg }) => (
               <div key={label} className="rp-feature">
-                <div className="rp-feature-icon" style={{ background:bg }}>
+                <div className="rp-feature-icon" style={{ background: bg }}>
                   <Icon size={16} color={color} />
                 </div>
                 <div>
@@ -714,7 +903,7 @@ export default function RegisterPage() {
           </motion.div>
 
           <motion.div variants={fadeLeft} className="rp-trust">
-            {['Free forever', 'No spam', 'Cancel anytime'].map((t) => (
+            {["Free forever", "No spam", "Cancel anytime"].map((t) => (
               <span key={t} className="rp-trust-badge">
                 <Check size={11} color="#10b981" strokeWidth={3} />
                 {t}
@@ -722,8 +911,7 @@ export default function RegisterPage() {
             ))}
           </motion.div>
         </motion.div>
-
       </div>
     </div>
-  )
+  );
 }

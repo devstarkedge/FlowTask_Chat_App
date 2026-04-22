@@ -2063,6 +2063,7 @@ body {
 
 .wss-root {
   position: relative;
+  width: 100%;
 }
 
 .wss-trigger {
@@ -2173,15 +2174,19 @@ body {
 
 .wss-menu {
   position: absolute;
+  top: calc(100% + 6px);
   left: 0;
-  top: calc(100% + 10px);
-  width: clamp(260px, 90vw, 340px);
-  border-radius: var(--radius-2xl);
-  overflow: hidden;
-  z-index: 100;
+
+  width: 100%;        /* 🔥 key line */
+  min-width: 100%;    /* ensures no shrink */
+  
   background: var(--bg-modal);
   border: 1px solid var(--border-primary);
+  border-radius: 14px;
+
   box-shadow: var(--shadow-modal);
+  z-index: 100;
+  overflow: hidden;
 }
 
 .wss-header-band {

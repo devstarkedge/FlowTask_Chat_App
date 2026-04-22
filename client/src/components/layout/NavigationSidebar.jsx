@@ -192,7 +192,7 @@ const dmChannels = useMemo(() => {
     <>
       {/* Workspace Header */}
       <div
-        className="flex items-center justify-between"
+        className="w-full flex items-center justify-between"
         style={{ minHeight: 32 }}
       >
         <WorkspaceSwitcher

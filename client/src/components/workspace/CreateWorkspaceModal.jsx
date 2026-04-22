@@ -109,7 +109,7 @@ export default function CreateWorkspaceModal({ onClose, onCreated }) {
           style={{
             position:'fixed', inset:0, zIndex:50,
             display:'flex', alignItems:'center', justifyContent:'center', padding:16,
-            background:'rgba(2,6,23,.52)', backdropFilter:'blur(10px)',
+            background:'var(--bg-overlay, rgba(0,0,0,0.5))', backdropFilter:'blur(10px)',
           }}
           onClick={(e) => e.target === e.currentTarget && onClose()}
         >
@@ -151,10 +151,10 @@ export default function CreateWorkspaceModal({ onClose, onCreated }) {
                     transition={{ delay: .18 }}
                     style={{ textAlign:'center' }}
                   >
-                    <p style={{ fontSize:18, fontWeight:800, color:'#1e1b4b', letterSpacing:'-.03em' }}>
+                    <p style={{ fontSize:18, fontWeight:800, color:'var(--text-primary)', letterSpacing:'-.03em' }}>
                       Workspace created!
                     </p>
-                    <p style={{ fontSize:13, color:'#818cf8', marginTop:4, fontWeight:500 }}>
+                    <p style={{ fontSize:13, color:'var(--accent-primary)', marginTop:4, fontWeight:500 }}>
                       Setting everything up…
                     </p>
                   </motion.div>

@@ -6,6 +6,7 @@ import UnderlineExt from '@tiptap/extension-underline'
 import LinkExt from '@tiptap/extension-link'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
+import { splitListItem } from '@tiptap/pm/schema-list'
 
 const lowlight = createLowlight(common)
 
@@ -100,6 +101,35 @@ const RichTextEditor = forwardRef(function RichTextEditor(
           event.preventDefault()
           onSubmit?.()
           return true
+        }
+
+        // Shift+Enter inside a list: split the list item to continue the list
+        // instead of inserting a hard break (<br>)
+        if (event.key === 'Enter' && event.shiftKey) {
+          const { state, dispatch } = _view
+          const { $from } = state.selection
+
+          // Walk up the document tree to check if the cursor is inside a listItem
+          let inListItem = false
+          for (let d = $from.depth; d > 0; d--) {
+            if ($from.node(d).type.name === 'listItem') {
+              inListItem = true
+              break
+            }
+          }
+
+          if (inListItem) {
+            const listItemType = state.schema.nodes.listItem
+            if (listItemType) {
+              // splitListItem creates a new list item at the cursor position
+              const cmd = splitListItem(listItemType)
+              if (cmd(state, dispatch)) {
+                event.preventDefault()
+                return true
+              }
+            }
+          }
+          // If not in a list, fall through to default TipTap behavior (hard break)
         }
 
         return false

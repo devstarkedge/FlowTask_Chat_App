@@ -8,7 +8,6 @@ import { emitPresenceUpdate } from '../../services/socket'
 import ErrorBoundary from '../ErrorBoundary'
 import WorkspaceSidebar from './WorkspaceSidebar'
 import NavigationSidebar from './NavigationSidebar'
-import UserProfileMenu from '../ui/UserProfileMenu'
 import SetStatusModal from '../chat/SetStatusModal'
 import ActivityContextSidebar from './context/ActivityContextSidebar'
 import FilesContextSidebar from './context/FilesContextSidebar'
@@ -19,7 +18,7 @@ import PreferencesModal from '../chat/PreferencesModal'
 import SearchPanel from '../chat/SearchPanel'
 import ProfileSidePanel from '../chat/ProfileSidePanel'
 import GlobalSearch from '../search/GlobalSearch'
-import { Avatar } from '../chat/MemberAvatarGroup'
+// Avatar/profile removed from topbar per UI request
 import { useProfileStore } from '../../stores/profileStore'
 import { useAuthStore } from '../../stores/authStore'
 import FilePreviewModal from '../chat/FilePreviewModal'
@@ -119,10 +118,9 @@ export default function ChatLayout() {
   const [showNotifications, setShowNotifications] = useState(false)
   const [showSaved, setShowSaved] = useState(false)
   const [filesForModule, setFilesForModule] = useState([])
-  const [showTopUserMenu, setShowTopUserMenu] = useState(false)
   const [showTopPreferences, setShowTopPreferences] = useState(false)
   const [showTopSetStatus, setShowTopSetStatus] = useState(false)
-  const topAvatarRef = useRef(null)
+  // top user menu and avatar removed
   const user = useAuthStore((s) => s.user)
 
   const handleOpenSearchResult = useCallback((item) => {
@@ -663,7 +661,6 @@ export default function ChatLayout() {
         <GlobalTopBar
           user={user}
           workspaceId={workspaceId}
-          avatarRef={topAvatarRef}
           searchRef={globalSearchRef}
           unreadCount={unreadNotifications}
           onBack={() => navigate(-1)}
@@ -674,7 +671,6 @@ export default function ChatLayout() {
             setShowPins(false)
           }}
           onHelp={() => setShowShortcuts(true)}
-          onToggleUserMenu={() => setShowTopUserMenu((s) => !s)}
         />
 
         <div className="flex-1 flex min-w-0">
@@ -831,20 +827,7 @@ export default function ChatLayout() {
         <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
       )}
 
-      {showTopUserMenu && (
-        <UserProfileMenu
-          anchorRef={topAvatarRef}
-          onClose={() => setShowTopUserMenu(false)}
-          onOpenPreferences={() => {
-            setShowTopUserMenu(false)
-            setShowTopPreferences(true)
-          }}
-          onOpenSetStatus={() => {
-            setShowTopUserMenu(false)
-            setShowTopSetStatus(true)
-          }}
-        />
-      )}
+      {/* Top user profile menu removed */}
 
       {showTopPreferences && (
         <PreferencesModal onClose={() => setShowTopPreferences(false)} />
@@ -859,7 +842,6 @@ export default function ChatLayout() {
 function GlobalTopBar({
   user,
   workspaceId,
-  avatarRef,
   searchRef,
   unreadCount,
   onBack,
@@ -867,7 +849,6 @@ function GlobalTopBar({
   onOpenSearchResult,
   onNotifications,
   onHelp,
-  onToggleUserMenu,
 }) {
   return (
     <header className="app-topbar">
@@ -897,18 +878,7 @@ function GlobalTopBar({
         <button className="app-topbar__icon" onClick={onHelp} aria-label="Keyboard shortcuts">
           <CircleHelp size={17} />
         </button>
-        <button
-          ref={avatarRef}
-          className="app-topbar__avatar"
-          onClick={onToggleUserMenu}
-          aria-label="Open user menu"
-        >
-          <Avatar
-            member={{ name: user?.name || '?', avatar: user?.avatar, onlineStatus: 'online' }}
-            size={30}
-            showStatus={false}
-          />
-        </button>
+        {/* profile avatar removed from topbar */}
       </div>
     </header>
   )

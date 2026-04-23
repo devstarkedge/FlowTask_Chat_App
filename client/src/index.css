@@ -2202,21 +2202,16 @@ body {
 }
 
 .wss-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-
-  width: 100%;        /* 🔥 key line */
-  min-width: 100%;    /* ensures no shrink */
-  
+  position: fixed;          /*  fixed instead of absolute */
+  width: 350px;             /*  fixed width, never shrinks */
   background: var(--bg-modal);
   border: 1px solid var(--border-primary);
   border-radius: 14px;
-
   box-shadow: var(--shadow-modal);
-  z-index: 100;
+  z-index: 1000;            /*  higher z-index to float above everything */
   overflow: hidden;
 }
+
 
 .wss-header-band {
   position: relative;
@@ -5108,3 +5103,4 @@ textarea:focus-visible,
     animation: fadeIn 200ms ease;
   }
 }
+

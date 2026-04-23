@@ -9,288 +9,12 @@ import {
   Zap,
   Shield,
   Users,
-  Loader2,
   Sparkles,
   Lock,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
-
-const STYLE = `
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-
-  .lp * { font-family:'Plus Jakarta Sans',system-ui,sans-serif; box-sizing:border-box; }
-
-  /* ── keyframes ── */
-  @keyframes lpMesh    { 0%,100%{transform:translate(0,0) scale(1)}
-                          33%   {transform:translate(24px,-16px) scale(1.08)}
-                          66%   {transform:translate(-18px,12px) scale(.94)} }
-  @keyframes lpSpin    { to{transform:rotate(360deg)} }
-  @keyframes lpShimmer { from{transform:translateX(-130%) skewX(-14deg)}
-                         to  {transform:translateX(230%) skewX(-14deg)} }
-  @keyframes lpFadeUp  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-
-  /* ── shimmer btn ── */
-  .lp-shimmer-btn::after {
-    content:''; position:absolute; inset:0;
-    background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);
-    transform:translateX(-130%) skewX(-14deg);
-  }
-  .lp-shimmer-btn:hover:not(:disabled)::after { animation:lpShimmer .6s ease forwards; }
-
-  /* ── page ── */
-  .lp-page {
-    min-height:100vh; position:relative; overflow:hidden;
-    background:#f5f4f0; display:flex; flex-direction:column;
-  }
-
-  /* ── mesh bg ── */
-  .lp-mesh { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
-  .lp-mesh-blob {
-    position:absolute; border-radius:50%; filter:blur(90px); opacity:.13;
-    animation:lpMesh var(--dur,14s) var(--delay,0s) ease-in-out infinite;
-  }
-
-  /* ── nav ── */
-  .lp-nav {
-    position:sticky; top:0; z-index:50; flex-shrink:0;
-    background:rgba(245,244,240,.82); backdrop-filter:blur(14px);
-    border-bottom:1px solid rgba(0,0,0,.07);
-  }
-  .lp-nav-inner {
-    max-width:1200px; margin:0 auto; padding:0 28px;
-    display:flex; align-items:center; justify-content:space-between; height:62px;
-  }
-  .lp-logo {
-    display:flex; align-items:center; gap:10px; text-decoration:none;
-    transition:opacity .15s;
-  }
-  .lp-logo:hover { opacity:.78; }
-  .lp-logo-icon {
-    width:34px; height:34px; border-radius:10px;
-    background:linear-gradient(135deg,#6366f1,#8b5cf6);
-    display:flex; align-items:center; justify-content:center;
-    box-shadow:0 4px 14px rgba(99,102,241,.3);
-  }
-  .lp-logo-name { font-size:17px; font-weight:800; color:#18181b; letter-spacing:-.02em; }
-  .lp-nav-link {
-    font-size:13.5px; font-weight:600; color:#71717a;
-    text-decoration:none; transition:color .15s;
-  }
-  .lp-nav-link:hover { color:#3f3f46; }
-  .lp-nav-link strong { color:#6366f1; }
-
-  /* ── layout ── */
-  .lp-layout {
-    flex:1; display:grid; grid-template-columns:1fr 1fr;
-    max-width:1100px; margin:0 auto; width:100%;
-    padding:48px 28px 80px; gap:64px; align-items:center;
-    position:relative; z-index:1;
-  }
-  @media(max-width:900px) {
-    .lp-layout { grid-template-columns:1fr; gap:40px; padding:32px 20px 64px; }
-    .lp-aside  { display:none; }
-  }
-
-  /* ── form column ── */
-  .lp-form-col { width:100%; max-width:440px; margin:0 auto; }
-
-  /* eyebrow */
-  .lp-eyebrow {
-    display:inline-flex; align-items:center; gap:7px;
-    padding:5px 13px; border-radius:20px; margin-bottom:18px;
-    background:rgba(99,102,241,.09); border:1px solid rgba(99,102,241,.2);
-    font-size:11.5px; font-weight:700; color:#6366f1; letter-spacing:.04em;
-  }
-
-  /* headings */
-  .lp-heading {
-    font-size:32px; font-weight:800; color:#18181b; line-height:1.12;
-    letter-spacing:-.04em; margin-bottom:10px;
-  }
-  .lp-subheading { font-size:14.5px; color:#71717a; line-height:1.65; margin-bottom:28px; }
-
-  /* ── card ── */
-  .lp-card {
-    background:#ffffff;
-    border:1px solid rgba(0,0,0,.07);
-    border-radius:20px; padding:28px;
-    box-shadow:0 4px 6px rgba(0,0,0,.04),
-               0 16px 40px rgba(0,0,0,.07),
-               0 1px 0 rgba(255,255,255,.9) inset;
-    position:relative; overflow:hidden;
-  }
-  .lp-card::before {
-    content:''; position:absolute; top:0; left:0; right:0; height:2px;
-    background:linear-gradient(90deg, transparent, rgba(99,102,241,.5) 40%, rgba(139,92,246,.5) 60%, transparent);
-  }
-
-  /* ── tabs ── */
-  .lp-tabs {
-    display:flex; gap:4px; padding:4px; border-radius:12px;
-    background:#f4f4f5; border:1px solid rgba(0,0,0,.06);
-    margin-bottom:24px;
-  }
-  .lp-tab {
-    flex:1; padding:8px 12px; border-radius:9px; border:none;
-    font-size:13px; font-weight:600; cursor:pointer;
-    font-family:'Plus Jakarta Sans',system-ui,sans-serif;
-    transition:background .18s, color .18s, box-shadow .18s;
-  }
-  .lp-tab.active {
-    background:#ffffff; color:#18181b;
-    box-shadow:0 1px 4px rgba(0,0,0,.1), 0 0 0 1px rgba(0,0,0,.06);
-  }
-  .lp-tab.inactive { background:transparent; color:#a1a1aa; }
-  .lp-tab.inactive:hover { color:#71717a; }
-
-  /* ── error ── */
-  .lp-error {
-    padding:12px 16px; border-radius:12px; font-size:13px; margin-bottom:20px;
-    background:rgba(220,38,38,.06); border:1px solid rgba(220,38,38,.2); color:#dc2626;
-    display:flex; align-items:flex-start; gap:8px; line-height:1.5;
-  }
-
-  /* ── field ── */
-  .lp-field { margin-bottom:18px; }
-  .lp-label {
-    display:flex; align-items:center; gap:6px;
-    font-size:10.5px; font-weight:800; text-transform:uppercase;
-    letter-spacing:.09em; color:#a1a1aa; margin-bottom:8px;
-  }
-  .lp-label::after { content:''; flex:1; height:1px; background:rgba(0,0,0,.06); }
-
-  /* inline label row (password + forgot) */
-  .lp-label-row {
-    display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;
-  }
-  .lp-label-row .lp-label { margin-bottom:0; flex:1; }
-  .lp-forgot {
-    font-size:12px; font-weight:600; color:#6366f1;
-    text-decoration:none; transition:color .15s; white-space:nowrap;
-  }
-  .lp-forgot:hover { color:#4f46e5; text-decoration:underline; }
-
-  /* inputs */
-  .lp-input {
-    width:100%; padding:12px 16px;
-    border-radius:12px; font-size:14px; font-weight:500;
-    background:#f9f9fb; border:1.5px solid #e4e4e7;
-    color:#18181b; outline:none;
-    font-family:'Plus Jakarta Sans',system-ui,sans-serif;
-    box-shadow:inset 0 1px 2px rgba(0,0,0,.04);
-    transition:border-color .16s, box-shadow .16s, background .16s, transform .12s;
-  }
-  .lp-input::placeholder { color:#d4d4d8; font-weight:400; }
-  .lp-input:focus {
-    border-color:rgba(99,102,241,.6);
-    background:#fafaff;
-    box-shadow:0 0 0 4px rgba(99,102,241,.1), inset 0 1px 2px rgba(0,0,0,.03);
-    transform:translateY(-1px);
-  }
-
-  /* textarea token */
-  .lp-textarea {
-    width:100%; padding:12px 16px; resize:none;
-    border-radius:12px; font-size:12px; font-weight:500; font-family:monospace;
-    background:#f9f9fb; border:1.5px solid #e4e4e7;
-    color:#18181b; outline:none; line-height:1.6;
-    box-shadow:inset 0 1px 2px rgba(0,0,0,.04);
-    transition:border-color .16s, box-shadow .16s, background .16s;
-  }
-  .lp-textarea::placeholder { color:#d4d4d8; font-family:'Plus Jakarta Sans',system-ui,sans-serif; font-size:13px; }
-  .lp-textarea:focus {
-    border-color:rgba(99,102,241,.6); background:#fafaff;
-    box-shadow:0 0 0 4px rgba(99,102,241,.1), inset 0 1px 2px rgba(0,0,0,.03);
-  }
-  .lp-hint { font-size:11px; color:#a1a1aa; margin-top:6px; }
-
-  /* eye btn */
-  .lp-input-wrap { position:relative; }
-  .lp-eye-btn {
-    position:absolute; right:12px; top:50%; transform:translateY(-50%);
-    background:transparent; border:none; cursor:pointer; color:#a1a1aa;
-    padding:4px; border-radius:6px; transition:color .15s;
-    display:flex; align-items:center; justify-content:center;
-  }
-  .lp-eye-btn:hover { color:#6b7280; }
-
-  /* ── submit btn ── */
-  .lp-submit {
-    width:100%; padding:14px 24px; border-radius:13px; border:none;
-    font-size:15px; font-weight:700; cursor:pointer; letter-spacing:-.01em;
-    display:flex; align-items:center; justify-content:center; gap:9px;
-    background:linear-gradient(135deg,#6366f1,#4f46e5 50%,#7c3aed);
-    color:#fff; position:relative; overflow:hidden;
-    box-shadow:0 4px 14px rgba(99,102,241,.35), 0 8px 28px rgba(99,102,241,.18);
-    font-family:'Plus Jakarta Sans',system-ui,sans-serif;
-    transition:transform .14s, box-shadow .14s, opacity .14s;
-  }
-  .lp-submit:hover:not(:disabled) {
-    transform:translateY(-2px);
-    box-shadow:0 8px 24px rgba(99,102,241,.45), 0 18px 44px rgba(99,102,241,.22);
-  }
-  .lp-submit:active:not(:disabled) { transform:translateY(0); }
-  .lp-submit:disabled { opacity:.4; cursor:not-allowed; }
-  .lp-spin { animation:lpSpin .85s linear infinite; }
-
-  /* register link */
-  .lp-register { text-align:center; font-size:13.5px; color:#71717a; margin-top:18px; }
-  .lp-register a { color:#6366f1; font-weight:700; text-decoration:none; transition:color .15s; }
-  .lp-register a:hover { color:#4f46e5; text-decoration:underline; }
-
-  /* ── ASIDE ── */
-  .lp-aside { padding-left:8px; }
-  .lp-aside-heading {
-    font-size:28px; font-weight:800; color:#18181b; letter-spacing:-.03em;
-    line-height:1.2; margin-bottom:10px;
-  }
-  .lp-aside-sub { font-size:14px; color:#71717a; line-height:1.7; margin-bottom:32px; }
-
-  .lp-feature-list { display:flex; flex-direction:column; gap:12px; margin-bottom:36px; }
-  .lp-feature {
-    display:flex; align-items:flex-start; gap:14px;
-    padding:14px 16px; border-radius:14px;
-    background:#ffffff; border:1px solid rgba(0,0,0,.07);
-    box-shadow:0 2px 6px rgba(0,0,0,.04);
-    transition:border-color .15s, background .15s, box-shadow .15s, transform .15s;
-  }
-  .lp-feature:hover {
-    background:#fafaff; border-color:rgba(99,102,241,.22);
-    box-shadow:0 4px 16px rgba(99,102,241,.1); transform:translateY(-1px);
-  }
-  .lp-feature-icon {
-    width:36px; height:36px; border-radius:10px; flex-shrink:0;
-    display:flex; align-items:center; justify-content:center;
-  }
-  .lp-feature-title { font-size:14px; font-weight:700; color:#27272a; margin-bottom:2px; }
-  .lp-feature-desc  { font-size:12.5px; color:#71717a; line-height:1.55; }
-
-  /* trust badges */
-  .lp-trust { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-  .lp-trust-badge {
-    display:inline-flex; align-items:center; gap:6px;
-    padding:6px 12px; border-radius:20px; font-size:12px; font-weight:600;
-    background:#ffffff; border:1px solid rgba(0,0,0,.08); color:#71717a;
-    box-shadow:0 1px 3px rgba(0,0,0,.04);
-  }
-
-  /* ── auto-login loader ── */
-  .lp-auto-loader {
-    min-height:100vh; display:flex; align-items:center; justify-content:center;
-    background:#f5f4f0; flex-direction:column; gap:16px;
-  }
-  .lp-auto-spin {
-    width:40px; height:40px; border:3px solid #e4e4e7;
-    border-top-color:#6366f1; border-radius:50%;
-    animation:lpSpin .85s linear infinite;
-  }
-
-  @media(max-width:480px) {
-    .lp-heading { font-size:26px; }
-    .lp-card    { padding:20px; }
-  }
-`;
+import "./custom-css/loginPage.css";
 
 /* ─────────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -426,13 +150,12 @@ export default function LoginPage() {
   if (autoLoginInProgress) {
     return (
       <div className="lp">
-        <style>{STYLE}</style>
         <div className="lp-auto-loader">
           <div className="lp-auto-spin" />
           <p
             style={{
               fontSize: 15,
-              color: "#71717a",
+              color: "var(--text-muted)",
               fontFamily: "Plus Jakarta Sans,system-ui,sans-serif",
             }}
           >
@@ -474,9 +197,7 @@ export default function LoginPage() {
   ───────────────────────────────────────────────────────────────────── */
   return (
     <div className="lp">
-      <style>{STYLE}</style>
-
-      {/* ── Mesh bg ── */}
+      {/* ── Mesh bg ──*/}
       <div className="lp-mesh">
         {BLOBS.map((b, i) => (
           <div
@@ -497,7 +218,7 @@ export default function LoginPage() {
         ))}
       </div>
 
-      {/* ── Nav ── */}
+      {/* ── Nav ──  */}
       <nav className="lp-nav">
         <div className="lp-nav-inner">
           <Link to="/" className="lp-logo">
@@ -540,13 +261,11 @@ export default function LoginPage() {
             left off.
           </motion.p>
 
-          {/* ── Card ── */}
           <motion.div variants={fadeUp} className="lp-card">
-            {/* Tabs — only when FlowTask is enabled */}
             {flowtaskEnabled && (
-              <div className="lp-tabs">
+              <div className="chat-header-tabs" style={{ marginBottom: 24 }}>
                 <button
-                  className={`lp-tab ${activeTab === "flowtask" ? "active" : "inactive"}`}
+                  className={`chat-header-tab ${activeTab === "flowtask" ? "is-active" : ""}`}
                   onClick={() => {
                     setActiveTab("flowtask");
                     clearError();
@@ -555,7 +274,7 @@ export default function LoginPage() {
                   FlowTask SSO
                 </button>
                 <button
-                  className={`lp-tab ${activeTab === "native" ? "active" : "inactive"}`}
+                  className={`chat-header-tab ${activeTab === "native" ? "is-active" : ""}`}
                   onClick={() => {
                     setActiveTab("native");
                     clearError();
@@ -566,7 +285,6 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Error */}
             <AnimatePresence>
               {error && (
                 <motion.div
@@ -575,7 +293,15 @@ export default function LoginPage() {
                   animate={{ opacity: 1, height: "auto", marginBottom: 20 }}
                   exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="lp-error"
+                  className="activity-message"
+                  style={{
+                    borderLeftColor: "var(--accent-red)",
+                    background: "rgba(220,38,38,.06)",
+                    color: "var(--accent-red)",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 8,
+                  }}
                 >
                   <Lock size={13} style={{ flexShrink: 0, marginTop: 1 }} />
                   {error}
@@ -594,16 +320,28 @@ export default function LoginPage() {
                   exit="hidden"
                   onSubmit={handleFlowTaskLogin}
                 >
-                  <div className="lp-field">
+                  <div style={{ marginBottom: 18 }}>
                     <label className="lp-label">FlowTask JWT Token</label>
                     <textarea
-                      className="lp-textarea"
+                      className="input-field"
+                      style={{
+                        resize: "none",
+                        fontFamily: "monospace",
+                        fontSize: 12,
+                        lineHeight: 1.6,
+                      }}
                       rows={3}
                       value={flowtaskToken}
                       onChange={(e) => setFlowtaskToken(e.target.value)}
                       placeholder="Paste your FlowTask JWT token here…"
                     />
-                    <p className="lp-hint">
+                    <p
+                      style={{
+                        fontSize: 11,
+                        color: "var(--text-muted)",
+                        marginTop: 6,
+                      }}
+                    >
                       Get your token from FlowTask → Settings → API Access
                     </p>
                   </div>
@@ -655,26 +393,23 @@ export default function LoginPage() {
                   exit="hidden"
                   onSubmit={handleNativeLogin}
                 >
-                  {/* Email */}
-                  <div className="lp-field">
+                  {/* Email field */}
+                  <div style={{ marginBottom: 18 }}>
                     <label htmlFor="lp-email" className="lp-label">
                       Email Address
                     </label>
                     <input
                       id="lp-email"
-                      className="lp-input"
+                      className="input-field"
                       type="email"
                       value={email}
-                      onChange={(e) => {
-                        let v = e.target.value
-                          .replace(/\s/g, "") //  remove ALL spaces
-                          .toLowerCase(); //  normalize
-                        setEmail(v);
-                      }}
+                      onChange={(e) =>
+                        setEmail(
+                          e.target.value.replace(/\s/g, "").toLowerCase(),
+                        )
+                      }
                       onKeyDown={(e) => {
-                        if (e.key === " ") {
-                          e.preventDefault(); //  block space completely
-                        }
+                        if (e.key === " ") e.preventDefault();
                       }}
                       placeholder="you@company.com"
                       autoComplete="email"
@@ -682,8 +417,8 @@ export default function LoginPage() {
                     />
                   </div>
 
-                  {/* Password */}
-                  <div className="lp-field">
+                  {/* Password field */}
+                  <div style={{ marginBottom: 18 }}>
                     <div className="lp-label-row">
                       <label htmlFor="lp-password" className="lp-label">
                         Password
@@ -692,21 +427,17 @@ export default function LoginPage() {
                         Forgot password?
                       </Link>
                     </div>
-                    <div className="lp-input-wrap">
+                    <div style={{ position: "relative" }}>
                       <input
                         id="lp-password"
-                        className="lp-input"
+                        className="input-field"
                         type={showPassword ? "text" : "password"}
                         value={password}
-                        onChange={(e) => {
-                          let v = e.target.value
-                            .replace(/\s/g, "") //  remove ALL spaces
-                            setPassword(v);
-                        }}
+                        onChange={(e) =>
+                          setPassword(e.target.value.replace(/\s/g, ""))
+                        }
                         onKeyDown={(e) => {
-                          if (e.key === " ") {
-                            e.preventDefault(); //  block space completely
-                          }
+                          if (e.key === " ") e.preventDefault();
                         }}
                         placeholder="Enter your password"
                         style={{ paddingRight: 44 }}
@@ -768,7 +499,9 @@ export default function LoginPage() {
               )}
             </AnimatePresence>
           </motion.div>
+          {/* end card */}
         </motion.div>
+        {/* end form col */}
 
         {/* ══ RIGHT — ASIDE ══ */}
         <motion.div
@@ -813,6 +546,7 @@ export default function LoginPage() {
           </motion.div>
         </motion.div>
       </div>
+      {/* end layout */}
     </div>
   );
 }

@@ -1,12 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
-.lp * {
+.rp * {
     font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
     box-sizing: border-box;
 }
 
 /* ── keyframes ── */
-@keyframes lpMesh {
+@keyframes rpMesh {
 
     0%,
     100% {
@@ -22,13 +22,13 @@
     }
 }
 
-@keyframes lpSpin {
+@keyframes rpSpin {
     to {
         transform: rotate(360deg)
     }
 }
 
-@keyframes lpShimmer {
+@keyframes rpShimmer {
     from {
         transform: translateX(-130%) skewX(-14deg)
     }
@@ -38,8 +38,22 @@
     }
 }
 
+@keyframes rpCheckIn {
+    0% {
+        transform: scale(0) rotate(-20deg)
+    }
+
+    65% {
+        transform: scale(1.28) rotate(4deg)
+    }
+
+    100% {
+        transform: scale(1) rotate(0)
+    }
+}
+
 /* ── shimmer btn ── */
-.lp-shimmer-btn::after {
+.rp-shimmer-btn::after {
     content: '';
     position: absolute;
     inset: 0;
@@ -47,12 +61,12 @@
     transform: translateX(-130%) skewX(-14deg);
 }
 
-.lp-shimmer-btn:hover:not(:disabled)::after {
-    animation: lpShimmer .6s ease forwards;
+.rp-shimmer-btn:hover:not(:disabled)::after {
+    animation: rpShimmer .6s ease forwards;
 }
 
-/* ── page ── */
-.lp-page {
+/* ── page (light bg) ── */
+.rp-page {
     min-height: 100vh;
     position: relative;
     overflow: hidden;
@@ -62,7 +76,7 @@
 }
 
 /* ── mesh bg ── */
-.lp-mesh {
+.rp-mesh {
     position: fixed;
     inset: 0;
     pointer-events: none;
@@ -70,16 +84,16 @@
     overflow: hidden;
 }
 
-.lp-mesh-blob {
+.rp-mesh-blob {
     position: absolute;
     border-radius: 50%;
     filter: blur(90px);
     opacity: .13;
-    animation: lpMesh var(--dur, 14s) var(--delay, 0s) ease-in-out infinite;
+    animation: rpMesh var(--dur, 14s) var(--delay, 0s) ease-in-out infinite;
 }
 
-/* ── nav (page-specific light bg override) ── */
-.lp-nav {
+/* ── nav (light bg override — no global match) ── */
+.rp-nav {
     position: sticky;
     top: 0;
     z-index: 50;
@@ -89,7 +103,7 @@
     border-bottom: 1px solid rgba(0, 0, 0, .07);
 }
 
-.lp-nav-inner {
+.rp-nav-inner {
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 28px;
@@ -99,7 +113,7 @@
     height: 62px;
 }
 
-.lp-logo {
+.rp-logo {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -107,11 +121,11 @@
     transition: opacity .15s;
 }
 
-.lp-logo:hover {
+.rp-logo:hover {
     opacity: .78;
 }
 
-.lp-logo-icon {
+.rp-logo-icon {
     width: 34px;
     height: 34px;
     border-radius: 10px;
@@ -122,14 +136,14 @@
     box-shadow: 0 4px 14px rgba(99, 102, 241, .3);
 }
 
-.lp-logo-name {
+.rp-logo-name {
     font-size: 17px;
     font-weight: 800;
     color: #18181b;
     letter-spacing: -.02em;
 }
 
-.lp-nav-link {
+.rp-nav-link {
     font-size: 13.5px;
     font-weight: 600;
     color: #71717a;
@@ -137,16 +151,16 @@
     transition: color .15s;
 }
 
-.lp-nav-link:hover {
+.rp-nav-link:hover {
     color: #3f3f46;
 }
 
-.lp-nav-link strong {
+.rp-nav-link strong {
     color: #6366f1;
 }
 
 /* ── layout ── */
-.lp-layout {
+.rp-layout {
     flex: 1;
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -155,31 +169,31 @@
     width: 100%;
     padding: 48px 28px 80px;
     gap: 64px;
-    align-items: start;
+    align-items: center;
     position: relative;
     z-index: 1;
 }
 
 @media(max-width:900px) {
-    .lp-layout {
+    .rp-layout {
         grid-template-columns: 1fr;
         gap: 40px;
         padding: 32px 20px 64px;
     }
 
-    .lp-aside {
+    .rp-aside {
         display: none;
     }
 }
 
-.lp-form-col {
+.rp-form-col {
     width: 100%;
     max-width: 440px;
     margin: 0 auto;
 }
 
 /* ── eyebrow pill ── */
-.lp-eyebrow {
+.rp-eyebrow {
     display: inline-flex;
     align-items: center;
     gap: 7px;
@@ -195,7 +209,7 @@
 }
 
 /* ── headings ── */
-.lp-heading {
+.rp-heading {
     font-size: 32px;
     font-weight: 800;
     color: #18181b;
@@ -204,15 +218,15 @@
     margin-bottom: 10px;
 }
 
-.lp-subheading {
+.rp-subheading {
     font-size: 14.5px;
     color: #71717a;
     line-height: 1.65;
     margin-bottom: 28px;
 }
 
-/* ── card (light-theme specific gradient top border) ── */
-.lp-card {
+/* ── card (light-theme, gradient top border) ── */
+.rp-card {
     background: #ffffff;
     border: 1px solid rgba(0, 0, 0, .07);
     border-radius: 20px;
@@ -222,7 +236,7 @@
     overflow: hidden;
 }
 
-.lp-card::before {
+.rp-card::before {
     content: '';
     position: absolute;
     top: 0;
@@ -232,8 +246,8 @@
     background: linear-gradient(90deg, transparent, rgba(99, 102, 241, .5) 40%, rgba(139, 92, 246, .5) 60%, transparent);
 }
 
-/* ── label style ── */
-.lp-label {
+/* ── field label (no global equivalent — has ::after rule) ── */
+.rp-label {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -245,42 +259,15 @@
     margin-bottom: 8px;
 }
 
-.lp-label::after {
+.rp-label::after {
     content: '';
     flex: 1;
     height: 1px;
     background: rgba(0, 0, 0, .06);
 }
 
-.lp-label-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-}
-
-.lp-label-row .lp-label {
-    margin-bottom: 0;
-    flex: 1;
-}
-
-/* ── forgot link ── */
-.lp-forgot {
-    font-size: 12px;
-    font-weight: 600;
-    color: #6366f1;
-    text-decoration: none;
-    transition: color .15s;
-    white-space: nowrap;
-}
-
-.lp-forgot:hover {
-    color: #4f46e5;
-    text-decoration: underline;
-}
-
 /* ── eye toggle btn ── */
-.lp-eye-btn {
+.rp-eye-btn {
     position: absolute;
     right: 12px;
     top: 50%;
@@ -297,12 +284,69 @@
     justify-content: center;
 }
 
-.lp-eye-btn:hover {
+.rp-eye-btn:hover {
     color: #6b7280;
 }
 
-/* ── submit btn (gradient, shimmer — no global equivalent) ── */
-.lp-submit {
+/* ── strength meter ── */
+.rp-strength-track {
+    height: 3px;
+    border-radius: 3px;
+    background: #e4e4e7;
+    overflow: hidden;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+.rp-strength-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width .35s cubic-bezier(.22, 1, .36, 1), background .3s;
+}
+
+/* ── password checks grid ── */
+.rp-checks {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+    margin-bottom: 6px;
+}
+
+.rp-check-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11.5px;
+    font-weight: 500;
+    transition: color .2s;
+}
+
+.rp-check-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .2s, box-shadow .2s;
+}
+
+.rp-check-dot.ok {
+    background: linear-gradient(135deg, #10b981, #059669);
+    box-shadow: 0 2px 6px rgba(16, 185, 129, .35);
+}
+
+.rp-check-dot.fail {
+    background: #e4e4e7;
+}
+
+.rp-check {
+    animation: rpCheckIn .32s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+/* ── submit btn (gradient + shimmer — no global match) ── */
+.rp-submit {
     width: 100%;
     padding: 14px 24px;
     border-radius: 13px;
@@ -324,30 +368,30 @@
     transition: transform .14s, box-shadow .14s, opacity .14s;
 }
 
-.lp-submit:hover:not(:disabled) {
+.rp-submit:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 8px 24px rgba(99, 102, 241, .45), 0 18px 44px rgba(99, 102, 241, .22);
 }
 
-.lp-submit:active:not(:disabled) {
+.rp-submit:active:not(:disabled) {
     transform: translateY(0);
 }
 
-.lp-submit:disabled {
+.rp-submit:disabled {
     opacity: .4;
     cursor: not-allowed;
 }
 
-.lp-spin {
-    animation: lpSpin .85s linear infinite;
+.rp-spin {
+    animation: rpSpin .85s linear infinite;
 }
 
 /* ── aside ── */
-.lp-aside {
+.rp-aside {
     padding-left: 8px;
 }
 
-.lp-aside-heading {
+.rp-aside-heading {
     font-size: 28px;
     font-weight: 800;
     color: #18181b;
@@ -356,21 +400,21 @@
     margin-bottom: 10px;
 }
 
-.lp-aside-sub {
+.rp-aside-sub {
     font-size: 14px;
     color: #71717a;
     line-height: 1.7;
     margin-bottom: 32px;
 }
 
-.lp-feature-list {
+.rp-feature-list {
     display: flex;
     flex-direction: column;
     gap: 12px;
     margin-bottom: 36px;
 }
 
-.lp-feature {
+.rp-feature {
     display: flex;
     align-items: flex-start;
     gap: 14px;
@@ -382,14 +426,14 @@
     transition: border-color .15s, background .15s, box-shadow .15s, transform .15s;
 }
 
-.lp-feature:hover {
+.rp-feature:hover {
     background: #fafaff;
     border-color: rgba(99, 102, 241, .22);
     box-shadow: 0 4px 16px rgba(99, 102, 241, .1);
     transform: translateY(-1px);
 }
 
-.lp-feature-icon {
+.rp-feature-icon {
     width: 36px;
     height: 36px;
     border-radius: 10px;
@@ -399,28 +443,28 @@
     justify-content: center;
 }
 
-.lp-feature-title {
+.rp-feature-title {
     font-size: 14px;
     font-weight: 700;
     color: #27272a;
     margin-bottom: 2px;
 }
 
-.lp-feature-desc {
+.rp-feature-desc {
     font-size: 12.5px;
     color: #71717a;
     line-height: 1.55;
 }
 
 /* ── trust badges ── */
-.lp-trust {
+.rp-trust {
     display: flex;
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
 }
 
-.lp-trust-badge {
+.rp-trust-badge {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -434,32 +478,91 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, .04);
 }
 
-/* ── auto-login loader ── */
-.lp-auto-loader {
+/* ── success page ── */
+.rp-success-page {
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
     background: #f5f4f0;
-    flex-direction: column;
-    gap: 16px;
+    position: relative;
+    overflow: hidden;
 }
 
-.lp-auto-spin {
-    width: 40px;
-    height: 40px;
-    border: 3px solid #e4e4e7;
-    border-top-color: #6366f1;
+.rp-success-card {
+    text-align: center;
+    max-width: 420px;
+    padding: 48px 40px;
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, .07);
+    border-radius: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .1), 0 2px 6px rgba(0, 0, 0, .05);
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+}
+
+.rp-success-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(16, 185, 129, .55), transparent);
+}
+
+.rp-success-ring {
+    width: 72px;
+    height: 72px;
     border-radius: 50%;
-    animation: lpSpin .85s linear infinite;
+    margin: 0 auto 20px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 10px 32px rgba(16, 185, 129, .4);
+}
+
+/* ── go to login btn ── */
+.rp-go-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 28px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: #fff;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, .35);
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    transition: transform .14s, box-shadow .14s;
+}
+
+.rp-go-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, .45);
+}
+
+/* ── input error state ── */
+.rp-input-error {
+    border-color: rgba(220, 38, 38, .45) !important;
 }
 
 @media(max-width:480px) {
-    .lp-heading {
+    .rp-heading {
         font-size: 26px;
     }
 
-    .lp-card {
+    .rp-card {
         padding: 20px;
+    }
+
+    .rp-checks {
+        grid-template-columns: 1fr;
     }
 }

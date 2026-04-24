@@ -1,3 +1,40 @@
+[data-theme="light"] .chat-header__star {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+}
+
+[data-theme="dark"] .chat-header__star {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+}
+
+.chat-header__star:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-color);
+}
+
+.chat-header__star.is-active {
+  background: rgba(236,178,46,0.12); /* subtle yellow */
+  color: var(--warning-color);
+  border-color: rgba(236,178,46,0.16);
+}
+
+.chat-header__star.is-active svg { fill: currentColor; }
+
 @import "tailwindcss";
 
 @theme inline {
@@ -819,6 +856,121 @@ body {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
   padding: 20px;
   width: 420px;
+}
+
+/* Compact Keyboard Shortcuts Modal */
+.shortcuts-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay-bg);
+  backdrop-filter: blur(6px);
+  animation: fadeIn 120ms ease;
+}
+
+.shortcuts-modal {
+  width: min(520px, 92%);
+  max-width: 520px;
+  border-radius: 10px;
+  background: var(--bg-modal);
+  border: 1px solid var(--border-primary);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.28);
+  overflow: hidden;
+}
+
+.shortcuts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.shortcuts-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.shortcuts-close {
+  padding: 6px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.shortcuts-close:hover,
+.shortcuts-close:focus {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.shortcuts-list {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 44vh;
+  overflow: auto;
+}
+
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.shortcuts-desc {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.shortcuts-keys {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.kbd-shortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 22px;
+  text-align: center;
+}
+
+.shortcuts-footer {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-primary);
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .shortcuts-modal { width: 96%; }
+  .shortcuts-header { padding: 8px 10px; }
+  .shortcuts-list { padding: 8px 10px; }
+  .kbd-shortcut { padding: 3px 5px; font-size: 11px; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -1856,7 +2008,7 @@ body {
   display: block;
   font-size: 14px;
   font-weight: 400;
-  color: var(--text-white);
+  color: inherit;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2105,11 +2257,12 @@ body {
   background: transparent;
   border: none;
   cursor: pointer;
+  color: color-mix(in srgb, var(--sidebar-text) 82%, transparent);
   transition: background var(--transition-fast);
 }
 
 .wss-trigger:hover {
-  background: var(--bg-hover);
+  background: var(--sidebar-hover, var(--bg-hover));
 }
 
 .wss-trigger:focus-visible {
@@ -2165,7 +2318,7 @@ body {
 .wss-trigger__name {
   font-size: 15px;
   font-weight: 800;
-  color: var(--text-white);
+  color: inherit;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2177,6 +2330,7 @@ body {
 .wss-trigger__plan {
   font-size: 10.5px;
   color: var(--text-muted);
+  color: color-mix(in srgb, var(--sidebar-text) 60%, transparent);
   text-transform: capitalize;
   margin-top: 1px;
   line-height: 1;
@@ -2996,6 +3150,52 @@ body {
   margin-left: auto;
   margin-top: 6px;
   flex-shrink: 0;
+}
+
+/* Notification panel specific tweaks */
+.notification-panel .read-all-btn {
+  color: var(--accent-primary);
+  background: transparent;
+  border: none;
+  padding: 6px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  border-radius: var(--radius-md);
+}
+.notification-panel .read-all-btn:hover,
+.notification-panel .read-all-btn:focus {
+  background: var(--bg-hover);
+  color: var(--text-white);
+  outline: none;
+}
+.notification-panel .close-btn {
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+}
+.notification-panel .close-btn:hover,
+.notification-panel .close-btn:focus {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+/* Make avatars circular in notification items */
+.notification-item-avatar img,
+.notification-item-avatar > div {
+  border-radius: 9999px !important;
+  overflow: hidden;
+}
+
+/* Allow notification titles to wrap to two lines for readability */
+.notification-item-title {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Responsive toast */
@@ -4088,10 +4288,12 @@ textarea:focus-visible,
 }
 
 .chat-header__toolbar {
-  background: var(--surface-secondary);
-  border: 1px solid var(--border-secondary);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xs);
+  /* Make toolbar minimal to support Slack-like slim tabs */
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
 .chat-header__tab,
@@ -4136,6 +4338,179 @@ textarea:focus-visible,
 
 .chat-header__menu-item:hover {
   background: var(--surface-hover);
+}
+
+/* Slim Slack-like Tab Bar */
+:root {
+  --tab-height: 36px;
+  --tab-padding-x: 12px;
+  --tab-font-size: 13px;
+  --tab-gap: 8px;
+  --tab-underline-height: 2px;
+}
+
+.slim-tabbar {
+  display: flex;
+  align-items: center;
+  gap: var(--tab-gap);
+  padding: 4px 0 6px 0;
+  min-height: var(--tab-height);
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+
+.slim-tabbar.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.slim-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--tab-padding-x);
+  height: var(--tab-height);
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  font-size: var(--tab-font-size);
+  font-weight: 500;
+  border-radius: calc(var(--radius-sm));
+  position: relative;
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.slim-tab__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.slim-tab__label {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.slim-tab:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.slim-tab--compact .slim-tab__label,
+.slim-tab.slim-tab--compact .slim-tab__label {
+  display: none;
+}
+
+.slim-tab--active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.slim-tab::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: -6px;
+  width: 40%;
+  height: var(--tab-underline-height);
+  background: transparent;
+  border-radius: 2px;
+  transition: background var(--transition-fast), opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.slim-tab--active::after {
+  background: var(--accent-color);
+}
+
+.slim-tab:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(0,0,0,0.05);
+}
+
+.slim-tab--add {
+  opacity: 0.95;
+}
+
+/* Mobile: allow horizontal scrolling and touch targets remain usable */
+@media (max-width: 640px) {
+  .slim-tabbar { gap: 6px; padding-left: 6px; }
+  .slim-tab { padding: 0 10px; }
+}
+
+/* Channel member count pill (Slack-like) */
+.channel-member-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-primary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1;
+  min-width: 36px;
+  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.channel-member-pill__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.channel-member-pill__count { display: inline-block; color: var(--text-primary); font-weight: 600; font-size: 13px; }
+
+.channel-member-pill.is-empty { opacity: 0.95; }
+.channel-member-pill.is-empty .channel-member-pill__count { color: var(--text-muted); }
+.channel-member-pill.is-empty .channel-member-pill__icon { color: var(--text-muted); }
+
+.channel-member-pill:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.channel-member-pill:active {
+  transform: translateY(1px);
+}
+
+.channel-member-pill:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-color) 10%, transparent);
+}
+
+@media (max-width: 640px) {
+  .channel-member-pill { height: 28px; padding: 0 8px; }
+}
+
+/* Slack-exact pill tweaks per theme */
+[data-theme="light"] .channel-member-pill {
+  background: #ffffff;
+  border-color: #e6e9ef;
+  box-shadow: 0 1px 0 rgba(16, 24, 32, 0.04);
+}
+
+[data-theme="dark"] .channel-member-pill {
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.06);
+}
+
+[data-theme="light"] .channel-member-pill__icon {
+  background: #f4f6f9;
+}
+
+[data-theme="dark"] .channel-member-pill__icon {
+  background: rgba(255,255,255,0.02);
 }
 
 .slack-composer {

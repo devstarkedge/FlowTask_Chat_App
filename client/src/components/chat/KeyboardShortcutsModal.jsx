@@ -58,63 +58,38 @@ export default function KeyboardShortcutsModal({ onClose }) {
   }, [onClose])
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.6)' }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
+    <div className="shortcuts-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={modalRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="shortcuts-title"
-        className="w-full max-w-sm rounded-xl shadow-2xl"
-        style={{
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border-primary)',
-        }}
+        className="shortcuts-modal"
       >
         {/* Header */}
-        <div
-          className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: '1px solid var(--border-primary)' }}
-        >
-          <div className="flex items-center gap-2">
+        <div className="shortcuts-header">
+          <div className="shortcuts-title">
             <Keyboard size={18} style={{ color: 'var(--accent-primary)' }} />
-            <h2 id="shortcuts-title" className="text-base font-semibold" style={{ color: 'var(--text-white)' }}>
-              Keyboard Shortcuts
-            </h2>
+            <h2 id="shortcuts-title">Keyboard Shortcuts</h2>
           </div>
           <button
             ref={closeBtnRef}
             onClick={onClose}
             aria-label="Close keyboard shortcuts"
-            className="p-1.5 rounded-lg transition-colors cursor-pointer hover:[background:var(--bg-hover)] focus:[background:var(--bg-hover)] focus:outline-none"
-            style={{ color: 'var(--text-muted)' }}
+            className="shortcuts-close"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* Shortcuts List */}
-        <div className="px-5 py-4 space-y-2.5">
+        <div className="shortcuts-list">
           {SHORTCUTS.map(({ keys, description }) => (
-            <div key={description} className="flex items-center justify-between">
-              <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                {description}
-              </span>
-              <div className="flex items-center gap-1">
+            <div key={description} className="shortcuts-row">
+              <span className="shortcuts-desc">{description}</span>
+              <div className="shortcuts-keys">
                 {keys.map((key) => (
-                  <kbd
-                    key={key}
-                    className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[11px] font-mono font-medium min-w-6"
-                    style={{
-                      background: 'var(--bg-tertiary)',
-                      border: '1px solid var(--border-primary)',
-                      color: 'var(--text-muted)',
-                      boxShadow: '0 1px 0 var(--border-secondary)',
-                    }}
-                  >
+                  <kbd key={key} className="kbd-shortcut">
                     {key}
                   </kbd>
                 ))}
@@ -124,13 +99,8 @@ export default function KeyboardShortcutsModal({ onClose }) {
         </div>
 
         {/* Footer hint */}
-        <div
-          className="px-5 py-3 text-center"
-          style={{ borderTop: '1px solid var(--border-primary)' }}
-        >
-          <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-            On macOS, use ⌘ instead of Ctrl
-          </p>
+        <div className="shortcuts-footer">
+          <p>On macOS, use ⌘ instead of Ctrl</p>
         </div>
       </div>
     </div>

@@ -53,7 +53,7 @@ export default function NotificationPanel({ onClose, onSelectNotification }) {
 
   return (
     <div
-      className="flex flex-col h-full animate-slide-in-right"
+      className="notification-panel flex flex-col h-full animate-slide-in-right"
       style={{
         width: 'var(--thread-panel-width)',
         minWidth: 'var(--thread-panel-width)',
@@ -63,7 +63,7 @@ export default function NotificationPanel({ onClose, onSelectNotification }) {
     >
       {/* Header */}
       <div
-        className="flex items-center justify-between px-4 py-3 shrink-0"
+        className="notification-panel-header flex items-center justify-between px-4 py-3 shrink-0"
         style={{ borderBottom: '1px solid var(--border-primary)' }}
       >
         <div className="flex items-center gap-2">
@@ -87,15 +87,9 @@ export default function NotificationPanel({ onClose, onSelectNotification }) {
           {unreadCount > 0 && (
             <button
               onClick={markAllAsRead}
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium cursor-pointer transition-colors"
+              className="read-all-btn flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium cursor-pointer transition-colors"
               title="Mark all as read"
-              style={{
-                color: 'var(--accent-primary)',
-                background: 'transparent',
-                border: 'none',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              aria-label="Mark all notifications as read"
             >
               <CheckCheck size={14} />
               Read all
@@ -103,10 +97,8 @@ export default function NotificationPanel({ onClose, onSelectNotification }) {
           )}
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md cursor-pointer transition-colors"
-            style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            className="close-btn p-1.5 rounded-md cursor-pointer transition-colors"
+            aria-label="Close notifications"
           >
             <X size={16} />
           </button>

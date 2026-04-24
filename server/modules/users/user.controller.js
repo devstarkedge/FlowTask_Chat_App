@@ -230,3 +230,43 @@ export const searchUsers = asyncHandler(async (req, res) => {
   const users = await userService.searchUsers(q, parsedLimit, req.workspaceId);
   res.json({ success: true, data: users });
 });
+
+/**
+ * Pause notifications (DND)
+ * POST /users/dnd/pause
+ * Body: { duration?: string, endsAt?: ISOString }
+ */
+export const pauseNotifications = asyncHandler(async (req, res) => {
+  const payload = req.body || {}
+  const user = await userService.pauseNotifications(req.user._id, payload)
+  res.json({ success: true, data: { dnd: user.chatPreferences?.dnd || {} } })
+})
+
+/**
+ * Resume notifications immediately (clear manual DND)
+ * POST /users/dnd/resume
+ */
+export const resumeNotifications = asyncHandler(async (req, res) => {
+  const user = await userService.resumeNotifications(req.user._id)
+  res.json({ success: true, data: { dnd: user.chatPreferences?.dnd || {} } })
+})
+
+/**
+ * Get current DND status for the authenticated user
+ * GET /users/dnd/status
+ */
+export const getDndStatus = asyncHandler(async (req, res) => {
+  const status = await userService.getDndStatus(req.user._id)
+  res.json({ success: true, data: status })
+})
+
+/**
+ * Save recurring DND schedule
+ * POST /users/dnd/schedule
+ * Body: { enabled, startHour, endHour, timezone }
+ */
+export const saveDndSchedule = asyncHandler(async (req, res) => {
+  const schedule = req.body || {}
+  const user = await userService.saveDndSchedule(req.user._id, schedule)
+  res.json({ success: true, data: { dndSchedule: user.chatPreferences?.dndSchedule || {} } })
+})

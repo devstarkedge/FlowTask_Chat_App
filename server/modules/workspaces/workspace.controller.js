@@ -42,11 +42,18 @@ export const getMyWorkspaces = asyncHandler(async (req, res) => {
   const memberships = await workspaceService.getUserWorkspaces(req.user._id);
   const workspaces = memberships
     .filter((m) => m.workspaceId && m.workspaceId.isActive !== false)
-    .map((m) => ({
-      ...m.workspaceId,
-      role: m.role,
-      joinedAt: m.joinedAt,
-    }));
+    .map((m) => {
+      const ws = { ...m.workspaceId };
+      // Only owners/admins should receive the inviteCode via the workspace list
+      if (!['owner', 'admin'].includes(m.role)) {
+        delete ws.inviteCode;
+      }
+      return {
+        ...ws,
+        role: m.role,
+        joinedAt: m.joinedAt,
+      };
+    });
   res.json({ success: true, data: { workspaces } });
 });
 

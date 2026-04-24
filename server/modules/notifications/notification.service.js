@@ -3,6 +3,7 @@ import { emitToUser } from '../../sockets/socketManager.js';
 import { SOCKET_EVENTS } from '../../config/constants.js';
 import logger from '../../utils/logger.js';
 import userRepository from '../users/user.repository.js';
+import { shouldDeliverNotification } from './dnd.gateway.js';
 
 /**
  * Notification Service — business logic for creating, retrieving,
@@ -80,15 +81,13 @@ class NotificationService {
     });
 
     // Emit real-time notification to the recipient's personal room
-    // Suppress socket emit if user is in DND mode (notification is still persisted)
+    // Use the centralized DND gateway to decide whether to emit.
     let suppressEmit = false;
     try {
-      const recipient = await userRepository.findById(recipientId);
-      if (recipient && this._isInDND(recipient)) {
-        suppressEmit = true;
-      }
+      const deliver = await shouldDeliverNotification(recipientId, senderId);
+      suppressEmit = !deliver;
     } catch (err) {
-      logger.warn('Failed to check DND status for notification', { recipientId, error: err.message });
+      logger.warn('Failed to run DND gateway for notification', { recipientId, error: err.message });
     }
 
     if (!suppressEmit) {

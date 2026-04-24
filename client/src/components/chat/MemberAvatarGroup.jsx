@@ -18,6 +18,7 @@ function Avatar({ member, size = 28, showStatus = false }) {
   const safeMember = member || {}
   const isOnline = safeMember.onlineStatus === 'online'
   const isAway = safeMember.onlineStatus === 'away'
+  const isDnd = safeMember.onlineStatus === 'dnd' || (!!safeMember.chatPreferences && !!safeMember.chatPreferences.dnd && safeMember.chatPreferences.dnd.enabled)
   const bgColor = getColor(safeMember.name)
   const initials = (safeMember.name || '?')[0].toUpperCase()
   const statusSize = Math.max(8, size * 0.3)
@@ -45,13 +46,13 @@ function Avatar({ member, size = 28, showStatus = false }) {
         </div>
       )}
 
-      {showStatus && (isOnline || isAway) && (
+      {showStatus && (isOnline || isAway || isDnd) && (
         <span
           className="absolute rounded-full border-2"
           style={{
             width: statusSize,
             height: statusSize,
-            background: isOnline ? '#44b700' : '#ffa726',
+            background: isOnline ? '#44b700' : (isDnd ? 'var(--status-dnd)' : '#ffa726'),
             borderColor: 'var(--bg-primary)',
             bottom: -2,
             right: -2,
@@ -78,6 +79,26 @@ function Avatar({ member, size = 28, showStatus = false }) {
           <span style={{ lineHeight: 1 }}>{safeMember.customStatus.emoji}</span>
         </span>
       )}
+          {showStatus && isDnd && (
+            <span
+              title="Do Not Disturb"
+              className="absolute rounded-full"
+              style={{
+                minWidth: Math.max(14, size * 0.45),
+                height: Math.max(14, size * 0.45),
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: Math.max(10, size * 0.35),
+                background: 'transparent',
+                border: '2px solid var(--bg-primary)',
+                top: -4,
+                right: -4,
+              }}
+            >
+              <span style={{ lineHeight: 1 }}>💤</span>
+            </span>
+          )}
     </div>
   )
 }

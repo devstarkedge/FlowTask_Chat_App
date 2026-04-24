@@ -64,7 +64,6 @@ const workspaceSchema = new Schema({
   slug: {
     type: String,
     required: true,
-    unique: true,
     lowercase: true,
     maxlength: 50,
     trim: true,
@@ -142,7 +141,7 @@ const workspaceSchema = new Schema({
 });
 
 // ─── Indexes ─────────────────────────────────────────────────────────────────
-// slug is already unique — primary lookup path
+// slug is unique among active workspaces — primary lookup path
 // owner for "my workspaces" queries
 workspaceSchema.index({ owner: 1 });
 // Active workspaces sorted by name for listing
@@ -151,6 +150,9 @@ workspaceSchema.index({ 'billing.stripeCustomerId': 1 }, { sparse: true });
 workspaceSchema.index({ 'billing.stripeSubscriptionId': 1 }, { sparse: true });
 // FlowTask integration lookup
 workspaceSchema.index({ 'settings.flowtaskIntegration.enabled': 1, isActive: 1 }, { sparse: true });
+
+// Partial unique index: only enforce slug uniqueness for active workspaces.
+workspaceSchema.index({ slug: 1 }, { unique: true, partialFilterExpression: { isActive: true } });
 
 // ─── Instance Methods ────────────────────────────────────────────────────────
 

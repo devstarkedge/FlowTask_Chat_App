@@ -28,6 +28,8 @@ router.post('/:id/leave', protect, resolveWorkspace, ctrl.leaveWorkspace);
 
 // ─── Invite Code ─────────────────────────────────────────────────────────────
 router.post('/:id/invite-code/regenerate', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.regenerateInviteCode);
+// Compatibility alias used by the client: POST /workspaces/:id/invite-code
+router.post('/:id/invite-code', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.regenerateInviteCode);
 // ─── Email Invites ─────────────────────────────────────────────────────────────────
 router.post('/:id/invite-email', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.inviteByEmail);
 router.get('/:id/invites', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.getPendingInvites);

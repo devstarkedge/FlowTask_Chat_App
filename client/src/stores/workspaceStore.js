@@ -61,6 +61,28 @@ export const useWorkspaceStore = create(
         }
       },
 
+      // Fetch a single workspace by id and update store (used to load inviteCode)
+      fetchWorkspace: async (workspaceId) => {
+        if (!workspaceId) return null
+        try {
+          const { data } = await api.get(`/workspaces/${workspaceId}`)
+          const workspace = data.data?.workspace || data.data
+          if (!workspace) return null
+
+          set((state) => ({
+            workspaces: state.workspaces.map((w) => (w._id === workspace._id ? { ...w, ...workspace } : w)),
+            activeWorkspace: state.activeWorkspaceId === workspace._id
+              ? { ...state.activeWorkspace, ...workspace }
+              : state.activeWorkspace,
+          }))
+
+          return workspace
+        } catch (error) {
+          logger.error('Failed to fetch workspace:', error)
+          return null
+        }
+      },
+
       // ─── Switch workspace ──────────────────────────────────────────────
       switchWorkspace: async (workspaceId) => {
         const { activeWorkspaceId, workspaces } = get()

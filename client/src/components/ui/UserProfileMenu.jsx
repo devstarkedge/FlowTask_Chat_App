@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import './UserProfileMenu.css'
 import { createPortal } from 'react-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { Avatar } from '../chat/MemberAvatarGroup'
-import { Smile, Moon, BellOff, User, Settings, Download, LogOut } from 'lucide-react'
+import { Smile, Moon, BellOff, User, Settings, Download, LogOut, HelpCircle } from 'lucide-react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import toast from 'react-hot-toast'
+import { dndAPI } from '../../services/api'
 
 export default function UserProfileMenu({ anchorRef, onClose, onOpenPreferences, onOpenSetStatus }) {
   const menuRef = useRef(null)
@@ -25,8 +27,64 @@ export default function UserProfileMenu({ anchorRef, onClose, onOpenPreferences,
     dnd: 'Do not disturb',
     offline: 'Offline',
   }
-  const userStatus = user?.onlineStatus || 'online'
+  // Prefer showing DND presence when manual DND is active
+  const userStatus = (user?.chatPreferences?.dnd?.enabled) ? 'dnd' : (user?.onlineStatus || 'online')
   const isAway = userStatus === 'away' || userStatus === 'offline' || userStatus === 'dnd'
+
+  const [showPauseMenu, setShowPauseMenu] = useState(false)
+  const [dndState, setDndState] = useState({ enabled: false, endAt: null })
+  const [customEndsAt, setCustomEndsAt] = useState('')
+  const [showCustom, setShowCustom] = useState(false)
+  const [allowVip, setAllowVip] = useState(false)
+
+  useEffect(() => {
+    // Fetch current DND status on mount
+    let mounted = true
+    ;(async () => {
+      try {
+        const { data } = await dndAPI.status()
+        if (!mounted) return
+        const d = data.data.dnd || { enabled: false, endAt: null }
+        setDndState(d)
+        setAllowVip(Boolean(d.vipUsers && d.vipUsers.length > 0))
+      } catch (err) {
+        // ignore
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
+
+  const applyPause = async (payload) => {
+    try {
+      const { data } = await dndAPI.pause(payload)
+      setDndState(data.data.dnd || { enabled: true })
+      try {
+        await useAuthStore.getState().fetchUser()
+      } catch (err) {
+        // ignore refresh errors
+      }
+      setShowPauseMenu(false)
+      toast.success('Notifications paused')
+    } catch (err) {
+      toast.error('Failed to pause notifications')
+    }
+  }
+
+  const handleResume = async () => {
+    try {
+      const { data } = await dndAPI.resume()
+      setDndState(data.data.dnd || { enabled: false })
+      try {
+        await useAuthStore.getState().fetchUser()
+      } catch (err) {
+        // ignore
+      }
+      setShowPauseMenu(false)
+      toast.success('Notifications resumed')
+    } catch (err) {
+      toast.error('Failed to resume notifications')
+    }
+  }
 
   const handleLogout = () => {
     toast((t) => (
@@ -120,14 +178,14 @@ export default function UserProfileMenu({ anchorRef, onClose, onOpenPreferences,
   return createPortal(
     <div ref={menuRef} className="user-menu" style={style}>
       {/* Header */}
-      <div className="user-menu-header">
+          <div className="user-menu-header">
         <Avatar
           member={{ name: user?.name || '?', avatar: user?.avatar, onlineStatus: userStatus }}
           size={40}
           showStatus={true}
         />
         <div className="min-w-0">
-          <p className="text-sm font-bold truncate" style={{ color: 'var(--text-white)' }}>
+          <p className="text-sm font-bold truncate" style={{ color: 'var(--text-primary)' }}>
             {user?.name || 'User'}
           </p>
           <div className="flex items-center gap-1.5">
@@ -165,10 +223,89 @@ export default function UserProfileMenu({ anchorRef, onClose, onOpenPreferences,
         <span>{isAway ? 'Set yourself as active' : 'Set yourself as away'}</span>
       </button>
 
-      <button className="user-menu-item" onClick={onClose}>
-        <BellOff size={16} style={{ color: 'var(--text-muted)' }} />
-        <span>Pause notifications</span>
-      </button>
+        <div style={{ position: 'relative' }}>
+        <button className={`user-menu-item ${showPauseMenu ? 'is-active' : ''}`} onClick={() => setShowPauseMenu((s) => !s)}>
+          <BellOff size={16} style={{ color: 'var(--text-muted)' }} />
+          <span>{dndState?.enabled ? 'Notifications paused' : 'Pause notifications'}</span>
+        </button>
+
+        {showPauseMenu && (
+          <div
+            className="user-menu-popup"
+            style={{ position: 'absolute', left: '100%', top: '50%', transform: 'translateY(-50%)', marginLeft: 0 }}
+          >
+            <div className="user-submenu">
+              <div className="user-submenu-header">
+                <div className="user-submenu-title">Pause notifications...</div>
+                <button className="help-icon" title="Pause notifications help">
+                  <HelpCircle size={16} />
+                </button>
+              </div>
+
+              {dndState?.enabled ? (
+                <div>
+                  <button className="user-submenu-item" onClick={handleResume}>
+                    <span>Resume notifications</span>
+                  </button>
+                  {dndState.endAt ? (
+                    <div className="section-note">
+                      Notifications paused until {new Date(dndState.endAt).toLocaleString()}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div>
+                  <button className="user-submenu-item" onClick={() => { applyPause({ duration: '30m' }) }}>{'For 30 minutes'}</button>
+                  <button className="user-submenu-item" onClick={() => { applyPause({ duration: '1h' }) }}>{'For 1 hour'}</button>
+                  <button className="user-submenu-item" onClick={() => { applyPause({ duration: '2h' }) }}>{'For 2 hours'}</button>
+                  <button className="user-submenu-item" onClick={() => { applyPause({ duration: 'tomorrow' }) }}>{'Until tomorrow'}</button>
+                  <button className="user-submenu-item" onClick={() => { applyPause({ duration: 'next_week' }) }}>{'Until next week'}</button>
+                  <button className="user-submenu-item" onClick={() => setShowCustom((s) => !s)}>{'Custom...'}</button>
+
+                  {showCustom && (
+                    <div className="p-2">
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Custom date & time</label>
+                      <input className="input-field w-full" type="datetime-local" value={customEndsAt} onChange={(e) => setCustomEndsAt(e.target.value)} />
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <button className="btn" onClick={() => {
+                          if (!customEndsAt) return toast.error('Select a date/time')
+                          const iso = new Date(customEndsAt).toISOString()
+                          applyPause({ endsAt: iso })
+                        }}>Set</button>
+                        <button className="btn-ghost" onClick={() => setCustomEndsAt('')}>Clear</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="submenu-divider" />
+
+              <div className="appearance-toggle-row" style={{ padding: '10px' }}>
+                <div style={{ width: 22 }}>
+                  <span className="w-5 h-5 rounded-full" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Always allow VIP messages</p>
+                  <span style={{ display: 'block', marginTop: 4, fontSize: 12, color: 'var(--text-muted)' }}>Still get notified when VIPs send messages.</span>
+                </div>
+                <div style={{ marginLeft: 8 }}>
+                  <button className={`appearance-switch ${allowVip ? 'is-on' : ''}`} disabled title={allowVip ? 'VIP allowed' : 'VIP not allowed'}>
+                    <span />
+                  </button>
+                </div>
+              </div>
+
+              <div className="submenu-divider" />
+
+              <button className="user-submenu-item schedule-link" onClick={() => { setShowPauseMenu(false); onOpenPreferences && onOpenPreferences() }}>
+                <span>Set a notification schedule</span>
+                <span className="new-badge">NEW</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="user-menu-divider" />
 

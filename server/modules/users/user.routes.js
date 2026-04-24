@@ -7,6 +7,10 @@ import {
   getOnlineUsers,
   searchUsers,
   getDMContacts,
+  pauseNotifications,
+  resumeNotifications,
+  getDndStatus,
+  saveDndSchedule,
 } from './user.controller.js';
 import { protect } from '../auth/auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
@@ -34,6 +38,12 @@ router.get('/online', protect, resolveWorkspace, getOnlineUsers);
 // Custom status
 router.put('/status', protect, setCustomStatus);
 router.delete('/status', protect, clearCustomStatus);
+
+// DND / Pause Notifications
+router.post('/dnd/pause', protect, pauseNotifications);
+router.post('/dnd/resume', protect, resumeNotifications);
+router.get('/dnd/status', protect, getDndStatus);
+router.post('/dnd/schedule', protect, saveDndSchedule);
 
 // Presence
 router.put('/presence', protect, setPresence);

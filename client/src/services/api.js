@@ -218,6 +218,14 @@ export const userAPI = {
   setPresence: (status) => api.put('/users/presence', { status }),  // DM contacts: merged FlowTask + ChatApp users with availability badges
   getDMContacts: (search) => api.get('/users/dm-contacts', { params: { search } }),}
 
+// DND / Pause Notifications
+export const dndAPI = {
+  pause: (payload) => api.post('/users/dnd/pause', payload),
+  resume: () => api.post('/users/dnd/resume'),
+  status: () => api.get('/users/dnd/status'),
+  saveSchedule: (payload) => api.post('/users/dnd/schedule', payload),
+}
+
 // ─── Notifications ───────────────────────────────────────────────────────
 export const notificationAPI = {
   list: (params) => api.get('/notifications', { params }),

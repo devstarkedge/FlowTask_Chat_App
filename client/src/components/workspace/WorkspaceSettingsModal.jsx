@@ -87,6 +87,7 @@ export default function WorkspaceSettingsModal({ onClose }) {
     activeWorkspaceId,
     members,
     fetchMembers,
+    fetchWorkspace,
     updateWorkspace,
     removeMember,
     updateMemberRole,
@@ -164,6 +165,15 @@ export default function WorkspaceSettingsModal({ onClose }) {
     setActiveTab(id);
     setTabKey((k) => k + 1);
   };
+
+  useEffect(() => {
+    // When opening the Invite tab, ensure owners/admins have the latest inviteCode
+    if (activeTab === 'invite' && canManage && activeWorkspaceId) {
+      if (!activeWorkspace?.inviteCode) {
+        fetchWorkspace(activeWorkspaceId).catch(() => {})
+      }
+    }
+  }, [activeTab, canManage, activeWorkspaceId, activeWorkspace?.inviteCode, fetchWorkspace]);
 
   return (
     <div className="wsm">

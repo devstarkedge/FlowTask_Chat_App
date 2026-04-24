@@ -1,0 +1,81 @@
+.user-menu .user-menu-popup {
+  /* ensure popup sits flush to the active menu item (no extra gap) */
+  margin-left: 0 !important;
+}
+
+.user-menu .user-submenu {
+  background: var(--bg-modal);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: var(--shadow-modal);
+  padding: 6px 0;
+  min-width: 240px;
+  animation: fadeInScale 120ms ease;
+}
+
+.user-menu .user-submenu-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.user-menu .user-submenu-title { color: var(--text-muted); font-size: 13px; }
+
+.user-menu .user-submenu .user-submenu-item,
+.user-menu .user-submenu .user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  color: var(--text-primary);
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0; /* flush rows — no pill/card look */
+  font-size: 14px;
+}
+
+.user-menu .user-submenu .user-submenu-item:hover,
+.user-menu .user-submenu .user-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.user-menu .user-submenu .user-submenu-item + .user-submenu-item,
+.user-menu .user-submenu .user-menu-item + .user-menu-item {
+  border-top: 1px solid var(--border-secondary);
+}
+
+.user-menu .user-submenu .section-note {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 8px 12px;
+  margin: 6px 0;
+}
+
+.user-menu .user-submenu .appearance-toggle-row {
+  padding: 10px 12px;
+  background: transparent;
+  border-radius: 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.user-menu .user-submenu .appearance-toggle-row .appearance-switch { margin-left: 8px; }
+
+.user-menu .user-submenu .help-icon { background: transparent; border: none; color: var(--text-muted); }
+
+.user-menu .user-menu-item { position: relative; }
+
+/* prefer the popup notch to be drawn by the popup itself */
+.user-menu .user-menu-item.is-active::after { display: none; }
+
+.user-menu .user-menu-popup::before {
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+  box-shadow: var(--shadow-xs);
+}

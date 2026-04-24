@@ -4,6 +4,7 @@ import messageService from '../messages/message.service.js';
 import channelRepository from '../channels/channel.repository.js';
 import userRepository from '../users/user.repository.js';
 import { emitToUser } from '../../sockets/socketManager.js';
+import { shouldDeliverNotification } from '../notifications/dnd.gateway.js';
 import logger from '../../utils/logger.js';
 import { SOCKET_EVENTS, BOT } from '../../config/constants.js';
 
@@ -140,12 +141,26 @@ export async function postDeadlineWarning(channelId, card, assignee, workspaceId
 
   // Also notify the assignee directly
   if (assignee) {
-    emitToUser(assignee._id.toString(), SOCKET_EVENTS.NOTIFICATION, {
-      type: 'deadline_warning',
-      channelId,
-      taskTitle: card.title,
-      dueDate: card.dueDate,
-      hoursLeft,
-    }, workspaceId?.toString());
+    try {
+      const deliver = await shouldDeliverNotification(assignee._id, null);
+      if (deliver) {
+        emitToUser(assignee._id.toString(), SOCKET_EVENTS.NOTIFICATION, {
+          type: 'deadline_warning',
+          channelId,
+          taskTitle: card.title,
+          dueDate: card.dueDate,
+          hoursLeft,
+        }, workspaceId?.toString());
+      }
+    } catch (err) {
+      // If gateway fails, fall back to emitting the notification
+      emitToUser(assignee._id.toString(), SOCKET_EVENTS.NOTIFICATION, {
+        type: 'deadline_warning',
+        channelId,
+        taskTitle: card.title,
+        dueDate: card.dueDate,
+        hoursLeft,
+      }, workspaceId?.toString());
+    }
   }
 }

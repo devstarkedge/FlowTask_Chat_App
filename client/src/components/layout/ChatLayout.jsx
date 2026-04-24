@@ -85,15 +85,36 @@ function formatSize(bytes) {
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
-function downloadFile(url, name) {
-  const a = document.createElement('a')
-  a.href = url
-  a.setAttribute('download', name || 'download')
-  a.rel = 'noopener noreferrer'
-  a.style.display = 'none'
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+async function downloadFile(url, name) {
+  if (!url) return
+
+  try {
+    const res = await fetch(url, { mode: 'cors' })
+    if (!res.ok) {
+      // If fetch failed, fallback to opening the URL in a new tab
+      window.open(url, '_blank')
+      return
+    }
+
+    const blob = await res.blob()
+    const blobUrl = window.URL.createObjectURL(blob)
+
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.setAttribute('download', name || 'download')
+    a.rel = 'noopener noreferrer'
+    a.style.display = 'none'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+
+    // Release memory
+    window.URL.revokeObjectURL(blobUrl)
+  } catch (err) {
+    console.error('Download failed:', err)
+    // Best-effort fallback: open in new tab
+    try { window.open(url, '_blank') } catch (e) { /* ignore */ }
+  }
 }
 
 export default function ChatLayout() {

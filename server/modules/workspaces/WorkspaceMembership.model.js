@@ -78,7 +78,7 @@ workspaceMembershipSchema.index({ userId: 1, isActive: 1 });
  */
 workspaceMembershipSchema.statics.findUserWorkspaces = function (userId) {
   return this.find({ userId, isActive: true })
-    .populate('workspaceId', 'name slug logo description plan isActive memberCount')
+    .populate('workspaceId', 'name slug logo description plan isActive memberCount inviteCode')
     .sort({ joinedAt: 1 })
     .lean();
 };

@@ -11,6 +11,7 @@ import toast from 'react-hot-toast'
 import { fileAPI } from '../../../services/api'
 import SidebarContainer from '../sidebar/SidebarContainer'
 import SidebarItem from '../sidebar/SidebarItem'
+import WorkspaceSwitcher from '../../workspace/WorkspaceSwitcher'
 
 function formatSize(bytes) {
   if (!bytes) return '0 B'
@@ -144,50 +145,56 @@ export default function FilesContextSidebar({
 
   const header = (
     <div>
-      <div className="flex items-center gap-2 mb-3">
-        <FileText size={18} style={{ color: 'var(--accent-primary)' }} />
-        <h1 className="text-sm font-semibold" style={{ color: 'var(--text-white)' }}>
-          Files
-        </h1>
-        <span
-          className="text-[11px] px-1.5 py-0.5 rounded-full font-semibold"
-          style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)' }}
-        >
-          {files.length}
-        </span>
+      <div className="w-full flex items-center justify-between" style={{ minHeight: 32 }}>
+        <WorkspaceSwitcher />
       </div>
 
-      {/* Search Bar */}
-      <div
-        className="flex items-center gap-2 px-3 py-2 rounded-lg"
-        style={{ border: '1px solid var(--border-secondary)', background: 'var(--bg-primary)' }}
-      >
-        <Search size={15} style={{ color: 'var(--text-muted)' }} />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by filename"
-          className="flex-1 bg-transparent border-none outline-none text-sm"
-          style={{ color: 'var(--text-primary)' }}
-        />
-      </div>
-
-      {/* Kind Filters */}
-      <div className="flex items-center gap-2 mt-3">
-        {['all', 'image', 'video', 'file'].map((value) => (
-          <button
-            key={value}
-            onClick={() => setKind(value)}
-            className="text-xs px-2.5 py-1.5 rounded-md font-medium cursor-pointer"
-            style={{
-              border: 'none',
-              background: kind === value ? 'var(--accent-primary)' : 'var(--bg-hover)',
-              color: kind === value ? '#fff' : 'var(--text-secondary)',
-            }}
+      <div className="mt-2">
+        <div className="flex items-center gap-2 mb-3">
+          <FileText size={18} style={{ color: 'var(--accent-primary)' }} />
+          <h1 className="text-sm font-semibold" style={{ color: 'var(--text-white)' }}>
+            Files
+          </h1>
+          <span
+            className="text-[11px] px-1.5 py-0.5 rounded-full font-semibold"
+            style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)' }}
           >
-            {value === 'all' ? 'All' : value === 'file' ? 'Docs' : `${value[0].toUpperCase()}${value.slice(1)}s`}
-          </button>
-        ))}
+            {files.length}
+          </span>
+        </div>
+
+        {/* Search Bar */}
+        <div
+          className="flex items-center gap-2 px-3 py-2 rounded-lg"
+          style={{ border: '1px solid var(--border-secondary)', background: 'var(--bg-primary)' }}
+        >
+          <Search size={15} style={{ color: 'var(--text-muted)' }} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by filename"
+            className="flex-1 bg-transparent border-none outline-none text-sm"
+            style={{ color: 'var(--text-primary)' }}
+          />
+        </div>
+
+        {/* Kind Filters */}
+        <div className="flex items-center gap-2 mt-3">
+          {['all', 'image', 'video', 'file'].map((value) => (
+            <button
+              key={value}
+              onClick={() => setKind(value)}
+              className="text-xs px-2.5 py-1.5 rounded-md font-medium cursor-pointer"
+              style={{
+                border: 'none',
+                background: kind === value ? 'var(--accent-primary)' : 'var(--bg-hover)',
+                color: kind === value ? '#fff' : 'var(--text-secondary)',
+              }}
+            >
+              {value === 'all' ? 'All' : value === 'file' ? 'Docs' : `${value[0].toUpperCase()}${value.slice(1)}s`}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )

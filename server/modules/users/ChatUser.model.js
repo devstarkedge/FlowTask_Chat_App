@@ -62,6 +62,14 @@ const chatPreferencesSchema = new Schema({
     }, { _id: false }),
     default: new Map(),
   },
+  // Manual DND state (Pause Notifications)
+  dnd: {
+    enabled: { type: Boolean, default: false },
+    // UTC timestamp when manual DND should end. Null when not scheduled.
+    endAt: { type: Date, default: null },
+    // VIP users whose messages bypass DND (array of ChatUser ObjectId)
+    vipUsers: [{ type: Schema.Types.ObjectId, ref: 'ChatUser' }],
+  },
   // DND schedule — suppress all notifications during these hours (user's local time)
   dndSchedule: {
     enabled: { type: Boolean, default: false },

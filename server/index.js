@@ -33,6 +33,7 @@ import eventBus from './services/eventBus.js';
 import channelService from './modules/channels/channel.service.js';
 import workspaceService from './modules/workspaces/workspace.service.js';
 import { startDeadlineWarningCron, stopDeadlineWarningCron } from './modules/bot/deadlineWarning.js';
+import { startDNDScheduler, stopDNDScheduler } from './services/dndScheduler.service.js';
 import fileCleanupService from './services/fileCleanup.service.js';
 import fileUploadService from './services/fileUpload.service.js';
 import webhookRetryService from './services/webhookRetry.service.js';
@@ -313,6 +314,9 @@ async function startServer() {
       webhookRetryService.start();
     }
 
+    // 7d. Start DND scheduler (clears expired manual DND and applies recurring schedules)
+    startDNDScheduler();
+
     // 8. Start memory usage monitor
     memoryMonitorTimer = setInterval(() => {
       const mem = process.memoryUsage();
@@ -375,6 +379,7 @@ async function shutdown(signal) {
 
   // 3. Stop cron jobs
   stopDeadlineWarningCron();
+  stopDNDScheduler();
 
   // 3b. Stop webhook retry service
   if (env.FLOWTASK_ENABLED) {

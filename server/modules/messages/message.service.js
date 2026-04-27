@@ -238,13 +238,17 @@ class MessageService {
     // Update unread counts for other members
     this._incrementUnreadForChannel(channelId, authorId, wsId).catch(() => {});
 
-    // Notify mentioned users
-    this._notifyMentions(processedMentions, populated, channel).catch(() => {});
-
-    // Notify DM recipient with persistent notification
-    if (channel.type === CHANNEL_TYPES.DM) {
-      this._notifyDMRecipient(populated, channel, authorId).catch(() => {});
-    }
+    // ── Unified Notification Engine ──────────────────────────────────────
+    // The engine handles ALL notification logic: mentions, DMs, thread replies,
+    // keyword triggers, presence-based suppression, priority, and push delivery.
+    import('../../services/notificationEngine.js').then(({ default: notificationEngine }) => {
+      notificationEngine.processMessage(populated, channel, {
+        threadId: actualThreadId || null,
+        mentions: processedMentions,
+      }).catch((err) => {
+        logger.error('Notification engine failed', { messageId: message._id, error: err.message });
+      });
+    }).catch(() => {});
 
     // Remove draft for this conversation (non-blocking)
     this._removeDraftOnSend(authorId, channelId, actualThreadId, wsId).catch(() => {});

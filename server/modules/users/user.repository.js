@@ -280,6 +280,53 @@ class UserRepository {
   }
 
   /**
+   * Add a web-push subscription to a user's preferences (avoid duplicates by endpoint).
+   * @param {string} userId
+   * @param {object} subscription
+   * @returns {Promise<ChatUser|null>}
+   */
+  async addPushSubscription(userId, subscription) {
+    if (!subscription || !subscription.endpoint) return null;
+    // Remove any existing subscription with the same endpoint to avoid duplicates
+    // caused by fluctuating fields like expirationTime failing $addToSet exact matches
+    await ChatUser.findByIdAndUpdate(userId, {
+      $pull: { 'chatPreferences.pushSubscriptions': { endpoint: subscription.endpoint } }
+    }).exec();
+
+    // Add the new subscription
+    return ChatUser.findByIdAndUpdate(
+      userId,
+      { $push: { 'chatPreferences.pushSubscriptions': subscription } },
+      { new: true },
+    ).exec();
+  }
+
+  /**
+   * Remove a push subscription by endpoint.
+   * @param {string} userId
+   * @param {string} endpoint
+   * @returns {Promise<ChatUser|null>}
+   */
+  async removePushSubscription(userId, endpoint) {
+    if (!endpoint) return null;
+    return ChatUser.findByIdAndUpdate(
+      userId,
+      { $pull: { 'chatPreferences.pushSubscriptions': { endpoint } } },
+      { new: true },
+    ).exec();
+  }
+
+  /**
+   * Get push subscriptions for a user.
+   * @param {string} userId
+   * @returns {Promise<Array>}
+   */
+  async getPushSubscriptions(userId) {
+    const user = await ChatUser.findById(userId).select('chatPreferences.pushSubscriptions').lean();
+    return user?.chatPreferences?.pushSubscriptions || [];
+  }
+
+  /**
    * Find user by department.
    * @param {string} departmentId
    * @returns {Promise<ChatUser[]>}

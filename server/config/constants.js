@@ -252,6 +252,15 @@ export const SOCKET_EVENTS = Object.freeze({
   NOTIFICATION: 'notification',
   NOTIFICATION_UNREAD_UPDATED: 'notification:unread:updated',
 
+  // Notification sync (multi-device)
+  NOTIFICATION_DISMISS: 'notification:dismiss',
+  NOTIFICATION_READ_SYNC: 'notification:read:sync',
+  NOTIFICATION_PREFERENCES_UPDATED: 'notification:preferences:updated',
+
+  // Window focus tracking (for presence-based notification suppression)
+  WINDOW_FOCUS: 'window:focus',
+  WINDOW_BLUR: 'window:blur',
+
   // Drafts
   DRAFT_UPDATED: 'draft:updated',
   DRAFT_DELETED: 'draft:deleted',
@@ -269,6 +278,39 @@ export const NOTIFICATION_TYPES = Object.freeze({
   TASK_UPDATE: 'task_update',
   SYSTEM: 'system',
   THREAD_REPLY: 'thread_reply',
+  GROUP_MESSAGE: 'group_message',
+  CHANNEL_MESSAGE: 'channel_message',
+  KEYWORD_MATCH: 'keyword_match',
+  BOT_ALERT: 'bot_alert',
+  WORKSPACE_INVITE: 'workspace_invite',
+  ROLE_CHANGE: 'role_change',
+  SECURITY_ALERT: 'security_alert',
+  CALL_INVITE: 'call_invite',
+});
+
+// ─── Notification Priorities ─────────────────────────────────────────────────
+export const NOTIFICATION_PRIORITIES = Object.freeze({
+  HIGH: 'high',
+  MEDIUM: 'medium',
+  LOW: 'low',
+});
+
+// ─── Notification Categories (for filtering in UI) ──────────────────────────
+export const NOTIFICATION_CATEGORIES = Object.freeze({
+  DM: 'dm',
+  MENTION: 'mention',
+  THREAD_REPLY: 'thread_reply',
+  CHANNEL_MESSAGE: 'channel_message',
+  BOT: 'bot',
+  SYSTEM: 'system',
+  CALL_INVITE: 'call_invite',
+});
+
+// ─── Notification Bundling ───────────────────────────────────────────────────
+export const NOTIFICATION_BUNDLING = Object.freeze({
+  BUNDLE_WINDOW_MS: 2 * 60 * 1000,  // 2-minute window for batching low-priority
+  MAX_BUNDLE_SIZE: 50,               // Max notifications per bundle
+  BUNDLE_QUEUE_NAME: 'notification-bundle',
 });
 
 // ─── Pagination Defaults ─────────────────────────────────────────────────────

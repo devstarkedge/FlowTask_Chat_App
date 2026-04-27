@@ -28,6 +28,8 @@ import adminRoutes from './modules/admin/admin.routes.js';
 import directoriesRoutes from './modules/directories/directories.routes.js';
 import draftRoutes from './modules/drafts/draft.routes.js';
 import searchRoutes from './modules/search/search.routes.js';
+import debugRoutes from './modules/debug/debug.routes.js';
+import pushRoutes from './modules/push/push.routes.js';
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
 import eventBus from './services/eventBus.js';
 import channelService from './modules/channels/channel.service.js';
@@ -250,6 +252,10 @@ app.use('/api/chat/directories', directoriesRoutes);
 app.use('/api/chat/drafts', draftRoutes);
 app.use('/api/chat/search', searchRoutes);
 app.use('/api/chat', readReceiptRoutes);
+// Debug routes (local dev only)
+app.use('/api/chat/debug', debugRoutes);
+// Push subscription management
+app.use('/api/chat/push', pushRoutes);
 
 // ─── Static File Serving (Uploads) ───────────────────────────────────────────
 app.use('/api/chat/uploads', express.static(path.resolve(env.UPLOAD_DIR), {

@@ -232,6 +232,21 @@ export const notificationAPI = {
   markAsRead: (id) => api.post(`/notifications/${id}/read`),
   markAllAsRead: () => api.post('/notifications/read-all'),
   getUnreadCount: () => api.get('/notifications/unread-count'),
+  // Filtered notification history
+  getHistory: (params) => api.get('/notifications/history', { params }),
+  // Notification preferences
+  getPreferences: () => api.get('/notifications/preferences'),
+  updatePreferences: (prefs) => api.put('/notifications/preferences', prefs),
+  updateChannelPreference: (channelId, pref) => api.put(`/notifications/preferences/channel/${channelId}`, pref),
+  removeChannelPreference: (channelId, section) => api.delete(`/notifications/preferences/channel/${channelId}`, { data: { section } }),
+  pauseNotifications: (data) => api.put('/notifications/preferences/pause', data),
+  resumeNotifications: () => api.post('/notifications/preferences/resume'),
+  updateKeywords: (keywords) => api.put('/notifications/preferences/keywords', { keywords }),
+  updateVIPUsers: (vipUsers) => api.put('/notifications/preferences/vip', { vipUsers }),
+  // Push management
+  dismissPush: (notificationId) => api.post('/push/dismiss', { notificationId }),
+  registerFCMToken: (data) => api.post('/push/fcm-token', data),
+  removeFCMToken: (token) => api.delete('/push/fcm-token', { data: { token } }),
 }
 
 // ─── Workspaces ──────────────────────────────────────────────────────────

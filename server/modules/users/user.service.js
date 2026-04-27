@@ -260,7 +260,11 @@ class UserService {
     if (!query || query.trim().length < 1) {
       return [];
     }
-    return userRepository.search(query.trim(), limit, workspaceId);
+    const q = query.trim();
+    if (typeof workspaceId === 'undefined') {
+      return userRepository.search(q, limit);
+    }
+    return userRepository.search(q, limit, workspaceId);
   }
 }
 

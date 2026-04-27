@@ -348,6 +348,23 @@ export function connectSocket() {
     useChatStore.getState().addNotification(notification)
   })
 
+  // ─── Multi-Device Notification Sync ──────────────────────────────────
+  socket.on('notification:dismiss', ({ notificationId }) => {
+    if (notificationId) {
+      useNotificationStore.getState().dismissNotification(notificationId)
+    }
+  })
+
+  socket.on('notification:read:sync', ({ notificationId, channelId }) => {
+    useNotificationStore.getState().syncReadState({ notificationId, channelId })
+  })
+
+  socket.on('notification:preferences:updated', ({ preferences }) => {
+    if (preferences) {
+      useNotificationStore.getState().applyPreferences(preferences)
+    }
+  })
+
   // ─── Draft Events (cross-device sync) ────────────────────────────────
   socket.on('draft:updated', ({ draft }) => {
     if (!draft) return

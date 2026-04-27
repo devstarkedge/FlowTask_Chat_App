@@ -114,6 +114,15 @@ const env = Object.freeze({
   DEFAULT_WORKSPACE_NAME: process.env.DEFAULT_WORKSPACE_NAME || 'FlowTask',
   WORKSPACE_SUBDOMAIN_ENABLED: process.env.WORKSPACE_SUBDOMAIN_ENABLED === 'true',
   SOCKET_REQUIRE_WORKSPACE: process.env.SOCKET_REQUIRE_WORKSPACE === 'true',
+  // Web Push (VAPID)
+  VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY || '',
+  VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || '',
+  VAPID_SUBJECT: process.env.VAPID_SUBJECT || (process.env.SMTP_FROM ? `mailto:${process.env.SMTP_FROM}` : 'mailto:admin@localhost'),
+
+  // Firebase Cloud Messaging (FCM)
+  FCM_SERVER_KEY: process.env.FCM_SERVER_KEY || '',
+  FIREBASE_SERVICE_ACCOUNT: process.env.FIREBASE_SERVICE_ACCOUNT || '',
+  GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS || '',
 });
 
 export default env;

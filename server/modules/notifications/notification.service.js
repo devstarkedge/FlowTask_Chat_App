@@ -4,6 +4,7 @@ import { SOCKET_EVENTS } from '../../config/constants.js';
 import logger from '../../utils/logger.js';
 import userRepository from '../users/user.repository.js';
 import { shouldDeliverNotification } from './dnd.gateway.js';
+import pushService from '../../services/push.service.js';
 
 /**
  * Notification Service — business logic for creating, retrieving,
@@ -113,6 +114,24 @@ class NotificationService {
           createdAt: notification.createdAt,
         },
       }, workspaceId?.toString());
+    }
+
+    // Also attempt web push if desktopNotifications setting is enabled
+    try {
+      const recipient = await userRepository.findById(recipientId);
+      const desktopEnabled = recipient?.chatPreferences?.desktopNotifications;
+      if (desktopEnabled) {
+        const payload = {
+          title: notification.title,
+          body: notification.body,
+          data: { notificationId: notification._id, workspaceId },
+        };
+        pushService.sendToUser(recipientId.toString(), payload).catch((err) => {
+          logger.warn('Push send failed', { recipientId, error: err?.message || err })
+        })
+      }
+    } catch (err) {
+      logger.warn('Failed to evaluate push sending for notification', { recipientId, error: err.message })
     }
 
     return notification;

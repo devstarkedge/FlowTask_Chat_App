@@ -78,4 +78,5 @@
   top: 50%;
   transform: translateY(-50%) rotate(45deg);
   box-shadow: var(--shadow-xs);
+  pointer-events: none;
 }

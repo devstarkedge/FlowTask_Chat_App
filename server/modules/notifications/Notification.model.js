@@ -21,8 +21,38 @@ const notificationSchema = new Schema({
   },
   type: {
     type: String,
-    enum: ['mention', 'dm', 'channel_invite', 'task_update', 'system', 'thread_reply'],
+    enum: [
+      'mention', 'dm', 'channel_invite', 'task_update', 'system', 'thread_reply',
+      'group_message', 'channel_message', 'keyword_match', 'bot_alert',
+      'workspace_invite', 'role_change', 'security_alert', 'call_invite',
+    ],
     required: true,
+  },
+  // Notification priority for delivery decisions
+  priority: {
+    type: String,
+    enum: ['high', 'medium', 'low'],
+    default: 'medium',
+  },
+  // Category for filtering in notification center
+  category: {
+    type: String,
+    enum: ['dm', 'mention', 'thread_reply', 'channel_message', 'bot', 'system', 'call_invite'],
+    default: 'system',
+  },
+  // Bundle key for grouping multiple notifications (e.g. "channel:{channelId}")
+  bundleKey: {
+    type: String,
+    default: null,
+  },
+  isBundled: {
+    type: Boolean,
+    default: false,
+  },
+  bundleCount: {
+    type: Number,
+    default: 1,
+    min: 1,
   },
   title: {
     type: String,  
@@ -88,11 +118,32 @@ const notificationSchema = new Schema({
     maxlength: 500,
     default: '',
   },
+  // Structured deep-link data for exact navigation on click
+  deepLink: {
+    workspaceId: { type: Schema.Types.ObjectId, default: null },
+    channelId: { type: Schema.Types.ObjectId, default: null },
+    messageId: { type: Schema.Types.ObjectId, default: null },
+    threadId: { type: Schema.Types.ObjectId, default: null },
+    type: {
+      type: String,
+      enum: ['channel', 'dm', 'thread', 'workspace', 'task'],
+      default: 'channel',
+    },
+  },
   isRead: {
     type: Boolean,
     default: false,
   },
   readAt: {
+    type: Date,
+    default: null,
+  },
+  // Push delivery tracking
+  pushSentAt: {
+    type: Date,
+    default: null,
+  },
+  pushDismissedAt: {
     type: Date,
     default: null,
   },

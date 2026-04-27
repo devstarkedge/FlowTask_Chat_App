@@ -50,7 +50,36 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
     setRotation(0)
   }
 
-  const downloadUrl = currentFile.url || '#'
+  const downloadUrl = currentFile.secureUrl || currentFile.url || '#'
+
+  const handleDownload = async (e) => {
+    if (e && e.preventDefault) e.preventDefault()
+    if (e && e.stopPropagation) e.stopPropagation()
+
+    const url = currentFile.secureUrl || currentFile.url
+    const filename = currentFile.originalName || currentFile.fileName || 'download'
+    if (!url) return
+
+    try {
+      const res = await fetch(url, { mode: 'cors' })
+      if (!res.ok) throw new Error('Network response was not ok')
+      const blob = await res.blob()
+      const blobUrl = window.URL.createObjectURL(blob)
+
+      const a = document.createElement('a')
+      a.style.display = 'none'
+      a.href = blobUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(blobUrl)
+    } catch (err) {
+      console.error('Download failed, opening in new tab as fallback:', err)
+      // Fallback: open the resource in a new tab/window
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+  }
 
   return (
     <div className="file-preview-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -90,9 +119,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
               <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
             </>
           )}
-          <a href={downloadUrl} download target="_blank" rel="noopener noreferrer">
-            <ToolbarBtn icon={Download} />
-          </a>
+          <ToolbarBtn icon={Download} onClick={handleDownload} />
           <ToolbarBtn icon={X} onClick={onClose} />
         </div>
       </div>
@@ -190,16 +217,14 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
               Preview not available for this file type
             </p>
-            <a
-              href={downloadUrl}
-              download
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={handleDownload}
               className="btn-primary"
               style={{ marginTop: 8 }}
             >
               <Download size={14} /> Download
-            </a>
+            </button>
           </div>
         )}
       </div>

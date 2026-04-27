@@ -86,6 +86,31 @@ const chatPreferencesSchema = new Schema({
     // Delay before sending email (batch window) — in minutes
     delayMinutes: { type: Number, default: 5, min: 1, max: 60 },
   },
+  // Web Push Subscriptions (for browser push notifications)
+  pushSubscriptions: [{
+    endpoint: { type: String, required: true },
+    keys: {
+      p256dh: { type: String, required: true },
+      auth: { type: String, required: true },
+    },
+    browser: { type: String, default: null },
+    createdAt: { type: Date, default: Date.now },
+    lastSeenAt: { type: Date, default: null },
+  }],
+  // Firebase Cloud Messaging tokens (for mobile/desktop push)
+  fcmTokens: [{
+    token: { type: String, required: true },
+    deviceId: { type: String, default: null },
+    platform: {
+      type: String,
+      enum: ['web', 'android', 'ios', 'desktop'],
+      default: 'web',
+    },
+    createdAt: { type: Date, default: Date.now },
+    lastSeenAt: { type: Date, default: null },
+  }],
+  // Currently viewed channel (for presence-based notification suppression)
+  activeWindowChannel: { type: String, default: null },
 }, { _id: false });
 
 const chatUserSchema = new Schema({

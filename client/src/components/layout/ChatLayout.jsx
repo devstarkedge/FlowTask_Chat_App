@@ -4,7 +4,8 @@ import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useNotificationStore } from '../../stores/notificationStore'
-import { emitPresenceUpdate } from '../../services/socket'
+import { emitPresenceUpdate, getSocket } from '../../services/socket'
+import usePushSubscription from '../../hooks/usePushSubscription'
 import ErrorBoundary from '../ErrorBoundary'
 import WorkspaceSidebar from './WorkspaceSidebar'
 import NavigationSidebar from './NavigationSidebar'
@@ -288,6 +289,32 @@ export default function ChatLayout() {
     }
   }, [resetIdleTimer])
 
+  // ─── Push Notification Subscription ─────────────────────────────────
+  usePushSubscription({ enabled: !!user })
+
+  // ─── Window Focus/Blur → notify backend which channel is visible ────
+  useEffect(() => {
+    const handleFocus = () => {
+      const channelId = useChannelStore.getState().activeChannelId
+      if (channelId) {
+        getSocket()?.emit('window:focus', { channelId })
+      }
+    }
+    const handleBlur = () => {
+      getSocket()?.emit('window:blur', {})
+    }
+
+    window.addEventListener('focus', handleFocus)
+    window.addEventListener('blur', handleBlur)
+    // Emit initial focus state
+    if (document.hasFocus()) handleFocus()
+
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('blur', handleBlur)
+    }
+  }, [])
+
   useEffect(() => {
     if (activeWorkspaceId) {
       fetchChannels(activeWorkspaceId)
@@ -357,6 +384,13 @@ export default function ChatLayout() {
     if (routeConversationId === activeChannelId) return
     setActiveChannel(routeConversationId)
   }, [routeConversationId, activeChannelId, setActiveChannel])
+
+  // Notify backend of active channel change for push suppression
+  useEffect(() => {
+    if (activeChannelId && document.hasFocus()) {
+      getSocket()?.emit('window:focus', { channelId: activeChannelId })
+    }
+  }, [activeChannelId])
 
   // Highlight target messages when URL includes message context.
   const lastRouteMessageRef = useRef(null)

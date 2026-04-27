@@ -545,6 +545,69 @@ export async function initializeSocket(httpServer, corsOptions) {
       }
     });
 
+    // ─── Window Focus Tracking (for notification suppression) ─────────
+    // Client reports which channelId is currently visible so the
+    // notification engine can skip push when user is already viewing that chat.
+    socket.on(SOCKET_EVENTS.WINDOW_FOCUS, async ({ channelId }) => {
+      if (await isSocketRateLimited(socket.id)) return;
+      if (!channelId) return;
+
+      try {
+        socket.activeChannelId = channelId;
+        await userRepository.update(userId, {
+          'chatPreferences.activeWindowChannel': channelId,
+        });
+      } catch (err) {
+        logger.debug('window:focus update failed', { userId, error: err?.message });
+      }
+    });
+
+    socket.on(SOCKET_EVENTS.WINDOW_BLUR, async () => {
+      if (await isSocketRateLimited(socket.id)) return;
+
+      try {
+        socket.activeChannelId = null;
+        await userRepository.update(userId, {
+          'chatPreferences.activeWindowChannel': null,
+        });
+      } catch (err) {
+        logger.debug('window:blur update failed', { userId, error: err?.message });
+      }
+    });
+
+    // ─── Notification Sync (multi-device) ────────────────────────────
+    // When a notification is dismissed on one device, broadcast to all
+    // other devices so they can also clear it.
+    socket.on(SOCKET_EVENTS.NOTIFICATION_DISMISS, async ({ notificationId }) => {
+      if (await isSocketRateLimited(socket.id)) return;
+      if (!notificationId) return;
+
+      try {
+        // Broadcast to all other sockets of this user
+        const personalRoom = buildRoomName(wsId, 'user', userId);
+        socket.to(personalRoom).emit(SOCKET_EVENTS.NOTIFICATION_DISMISS, {
+          notificationId,
+        });
+      } catch (err) {
+        logger.debug('notification:dismiss broadcast failed', { userId, error: err?.message });
+      }
+    });
+
+    // When a notification is read on one device, sync across all devices
+    socket.on(SOCKET_EVENTS.NOTIFICATION_READ_SYNC, async ({ notificationId, channelId: readChannelId }) => {
+      if (await isSocketRateLimited(socket.id)) return;
+
+      try {
+        const personalRoom = buildRoomName(wsId, 'user', userId);
+        socket.to(personalRoom).emit(SOCKET_EVENTS.NOTIFICATION_READ_SYNC, {
+          notificationId,
+          channelId: readChannelId,
+        });
+      } catch (err) {
+        logger.debug('notification:read:sync broadcast failed', { userId, error: err?.message });
+      }
+    });
+
     // ─── Disconnection ───────────────────────────────────────────────
     socket.on('disconnect', async (reason) => {
       logger.info('Socket disconnected', {

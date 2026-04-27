@@ -16,6 +16,24 @@ function requireWorkspaceId(payload, eventName) {
   return wsId;
 }
 
+function resolveActorName(payload, chatUser) {
+  if (chatUser && chatUser.name) return chatUser.name;
+  const candidate = (
+    payload?.userName ||
+    payload?.createdByName ||
+    payload?.createdBy?.name ||
+    payload?.actor?.name ||
+    payload?.user?.name ||
+    payload?.user?.displayName ||
+    payload?.card?.createdByName ||
+    payload?.card?.createdBy?.name ||
+    payload?.comment?.authorName ||
+    payload?.createdBy ||
+    null
+  );
+  return candidate || 'Someone';
+}
+
 /**
  * Task Event Handler — handles FlowTask card/task lifecycle events.
  *
@@ -44,7 +62,7 @@ export function registerTaskEventHandlers() {
     }
 
     const creator = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-    const creatorName = creator?.name || 'Someone';
+    const creatorName = resolveActorName(payload, creator);
 
     const priority = card.priority ? ` [${card.priority}]` : '';
     const assignee = card.assignedTo
@@ -92,7 +110,7 @@ export function registerTaskEventHandlers() {
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-    const userName = user?.name || 'Someone';
+    const userName = resolveActorName(payload, user);
 
     // Build change summary from field-level diffs
     const parts = [];
@@ -171,7 +189,7 @@ export function registerTaskEventHandlers() {
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const title = cardTitle || cardId || 'a task';
-    const userName = user?.name || 'Someone';
+    const userName = resolveActorName(payload, user);
 
     const activityMeta = {
       eventType: 'TASK_DELETED',
@@ -210,7 +228,7 @@ export function registerTaskEventHandlers() {
 
     if (!assignee) return;
 
-    const assignerName = assigner?.name || 'Someone';
+    const assignerName = resolveActorName(payload, assigner);
 
     // Post in project channel
     if (channel) {
@@ -249,7 +267,7 @@ export function registerTaskEventHandlers() {
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-    const userName = user?.name || 'Someone';
+    const userName = resolveActorName(payload, user);
     const commentText = typeof comment === 'string'
       ? comment
       : comment.text || comment.content || '';
@@ -294,7 +312,7 @@ export function registerTaskEventHandlers() {
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-    const userName = user?.name || 'Someone';
+    const userName = resolveActorName(payload, user);
 
     const from = oldStatus || 'unknown';
     const to = newStatus || 'unknown';
@@ -348,7 +366,7 @@ export function registerTaskEventHandlers() {
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-    const userName = user?.name || 'Someone';
+    const userName = resolveActorName(payload, user);
 
     const oldDate = oldDueDate ? new Date(oldDueDate).toLocaleDateString() : 'none';
     const newDate = newDueDate ? new Date(newDueDate).toLocaleDateString() : 'removed';
@@ -395,7 +413,7 @@ export function registerTaskEventHandlers() {
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-    const userName = user?.name || 'Someone';
+    const userName = resolveActorName(payload, user);
 
     // Format duration
     const minutes = timeEntry.duration || timeEntry.minutes || 0;
@@ -443,7 +461,7 @@ export function registerTaskEventHandlers() {
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-    const userName = user?.name || 'Someone';
+    const userName = resolveActorName(payload, user);
     const taskTitle = card?.title || payload.task?.title || 'a task';
 
     const activityMeta = {
@@ -480,7 +498,7 @@ export function registerTaskEventHandlers() {
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-    const userName = user?.name || 'Someone';
+    const userName = resolveActorName(payload, user);
     const taskTitle = card?.title || payload.task?.title || 'a task';
 
     const activityMeta = {
@@ -517,7 +535,7 @@ export function registerTaskEventHandlers() {
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-    const userName = user?.name || 'Someone';
+    const userName = resolveActorName(payload, user);
     const taskTitle = card?.title || payload.task?.title || 'a task';
 
     const activityMeta = {

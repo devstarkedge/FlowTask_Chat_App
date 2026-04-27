@@ -222,7 +222,16 @@ export default function ChatLayout() {
 
       switch (item.type) {
         case "user":
-          useProfileStore.getState().openProfile({ _id: item.id });
+          useProfileStore.getState().openProfile({
+            _id: item.id,
+            name: item.name,
+            email: item.email,
+            avatar: item.avatar,
+            role: item.role,
+            onlineStatus: item.status,
+            customStatus: item.customStatus,
+            flowTaskUserId: item.flowTaskUserId,
+          });
           break;
         case "message":
           if (item.channelType === "dm") {
@@ -232,11 +241,10 @@ export default function ChatLayout() {
           }
           break;
         case "channel":
-          if (item.type === "dm") {
-            navigate(getDMPath(workspaceId, item.id));
-          } else {
-            navigate(getChannelPath(workspaceId, item.id));
-          }
+          navigate(getChannelPath(workspaceId, item.id));
+          break;
+        case "dm":
+          navigate(getDMPath(workspaceId, item.id));
           break;
         case "file":
           navigate(getFilesPath(workspaceId, item.referenceId));

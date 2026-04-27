@@ -67,6 +67,10 @@ fileReferenceSchema.index(
   { unique: true, partialFilterExpression: { threadId: { $type: 'objectId' } } }
 );
 
+// Index messageId alone to accelerate population queries that lookup
+// FileReference documents by messageId (populates use messageId $in [...])
+fileReferenceSchema.index({ messageId: 1 });
+
 const FileReference = model('FileReference', fileReferenceSchema);
 
 export default FileReference;

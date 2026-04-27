@@ -14,6 +14,7 @@ import {
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import toast from "react-hot-toast";
 import { useProfileStore } from "../../stores/profileStore";
+import { useUIStore } from "../../stores/uiStore";
 
 export default function UserProfileMenu({
   anchorRef,
@@ -25,6 +26,7 @@ export default function UserProfileMenu({
   const { user, logout, setPresence } = useAuthStore();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const { profileUser, openProfile } = useProfileStore();
+  const openDownloads = useUIStore((s) => s.openDownloads);
 
   const STATUS_COLORS = {
     online: "var(--status-online)",
@@ -44,60 +46,62 @@ export default function UserProfileMenu({
   const isAway =
     userStatus === "away" || userStatus === "offline" || userStatus === "dnd";
 
-  const [showPauseMenu, setShowPauseMenu] = useState(false)
-  const [dndState, setDndState] = useState({ enabled: false, endAt: null })
-  const [customEndsAt, setCustomEndsAt] = useState('')
-  const [showCustom, setShowCustom] = useState(false)
-  const [allowVip, setAllowVip] = useState(false)
+  const [showPauseMenu, setShowPauseMenu] = useState(false);
+  const [dndState, setDndState] = useState({ enabled: false, endAt: null });
+  const [customEndsAt, setCustomEndsAt] = useState("");
+  const [showCustom, setShowCustom] = useState(false);
+  const [allowVip, setAllowVip] = useState(false);
 
   useEffect(() => {
     // Fetch current DND status on mount
-    let mounted = true
-    ;(async () => {
+    let mounted = true;
+    (async () => {
       try {
-        const { data } = await dndAPI.status()
-        if (!mounted) return
-        const d = data.data.dnd || { enabled: false, endAt: null }
-        setDndState(d)
-        setAllowVip(Boolean(d.vipUsers && d.vipUsers.length > 0))
+        const { data } = await dndAPI.status();
+        if (!mounted) return;
+        const d = data.data.dnd || { enabled: false, endAt: null };
+        setDndState(d);
+        setAllowVip(Boolean(d.vipUsers && d.vipUsers.length > 0));
       } catch (err) {
         // ignore
       }
-    })()
-    return () => { mounted = false }
-  }, [])
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const applyPause = async (payload) => {
     try {
-      const { data } = await dndAPI.pause(payload)
-      setDndState(data.data.dnd || { enabled: true })
+      const { data } = await dndAPI.pause(payload);
+      setDndState(data.data.dnd || { enabled: true });
       try {
-        await useAuthStore.getState().fetchUser()
+        await useAuthStore.getState().fetchUser();
       } catch (err) {
         // ignore refresh errors
       }
-      setShowPauseMenu(false)
-      toast.success('Notifications paused')
+      setShowPauseMenu(false);
+      toast.success("Notifications paused");
     } catch (err) {
-      toast.error('Failed to pause notifications')
+      toast.error("Failed to pause notifications");
     }
-  }
+  };
 
   const handleResume = async () => {
     try {
-      const { data } = await dndAPI.resume()
-      setDndState(data.data.dnd || { enabled: false })
+      const { data } = await dndAPI.resume();
+      setDndState(data.data.dnd || { enabled: false });
       try {
-        await useAuthStore.getState().fetchUser()
+        await useAuthStore.getState().fetchUser();
       } catch (err) {
         // ignore
       }
-      setShowPauseMenu(false)
-      toast.success('Notifications resumed')
+      setShowPauseMenu(false);
+      toast.success("Notifications resumed");
     } catch (err) {
-      toast.error('Failed to resume notifications')
+      toast.error("Failed to resume notifications");
     }
-  }
+  };
 
   const handleLogout = () => {
     toast(
@@ -197,7 +201,7 @@ export default function UserProfileMenu({
   return createPortal(
     <div ref={menuRef} className="user-menu" style={style}>
       {/* Header */}
-          <div className="user-menu-header">
+      <div className="user-menu-header">
         <Avatar
           member={{
             name: user?.name || "?",
@@ -305,7 +309,14 @@ export default function UserProfileMenu({
 
       <div className="user-menu-divider" />
 
-      <button className="user-menu-item" onClick={onClose}>
+      <button
+        className="user-menu-item"
+        onClick={() => {
+          console.log("Opening downloads modal...");
+          openDownloads();
+          onClose();
+        }}
+      >
         <Download size={16} style={{ color: "var(--text-muted)" }} />
         <span>Downloads</span>
         <span

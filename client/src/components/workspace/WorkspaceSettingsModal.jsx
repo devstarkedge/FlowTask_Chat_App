@@ -24,7 +24,7 @@ import {
 import { Avatar } from "../chat/MemberAvatarGroup";
 import toast from "react-hot-toast";
 import api from "../../services/api";
-import "./custom-css/workspaceSettingsModal.css";
+import "./custom-css/WorkspaceSettingsModal.css";
 
 /* ─────────────────────────────────────────────────────────────────────────
    CONSTANTS

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { createElement } from 'react'
 import { messageAPI, threadAPI, botAPI } from '../services/api'
 import { useAuthStore } from './authStore'
+import { useChannelStore } from './channelStore'
 import toast from 'react-hot-toast'
 import logger from '../utils/logger'
 import { CHAT_FEATURE_FLAGS } from '../config/featureFlags'
@@ -364,7 +365,6 @@ export const useChatStore = create((set, get) => ({
         get().addMessage(optimisticMessage)
         // Update sidebar ordering + preview for the sender's own message immediately
         // (Recipients get this via the message:create socket event handler in socket.js)
-        const { useChannelStore } = await import('./channelStore')
         useChannelStore.getState().handleNewMessage(optimisticMessage)
       }
 

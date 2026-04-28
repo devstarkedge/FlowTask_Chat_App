@@ -3,74 +3,80 @@ import { RateLimitError } from './errorHandler.js';
 import env from '../config/environment.js';
 import logger from '../utils/logger.js';
 
-/**
- * Build a Redis store for rate limiting (multi-instance safe).
- * Falls back to in-memory if Redis is not configured.
- */
+// Single shared Redis store constructor (created asynchronously once)
 let _redisStoreConstructor = null;
-async function getRedisStore(windowMs) {
-  if (!env.REDIS_URL) return undefined; // Fall back to in-memory
+let _redisInitPromise = null;
 
-  if (!_redisStoreConstructor) {
+async function initRedisStoreOnce() {
+  if (!env.REDIS_URL) return;
+  if (_redisInitPromise) return _redisInitPromise;
+
+  _redisInitPromise = (async () => {
     try {
       const { RedisStore } = await import('rate-limit-redis');
       const { createClient } = await import('redis');
       const client = createClient({ url: env.REDIS_URL });
       client.on('error', (err) => logger.error('Rate limiter Redis error', { error: err.message }));
       await client.connect();
-      _redisStoreConstructor = (prefix, windowMs) =>
+      _redisStoreConstructor = (prefix) =>
         new RedisStore({
           sendCommand: (...args) => client.sendCommand(args),
           prefix: `rl:${prefix}:`,
           resetExpiryOnChange: false,
         });
-      logger.info('Rate limiter using Redis store');
+      logger.info('Rate limiter Redis store initialized');
     } catch (err) {
       logger.warn('Redis rate-limit store unavailable, using in-memory', { error: err.message });
-      return undefined;
+      _redisStoreConstructor = null;
     }
-  }
-  return _redisStoreConstructor;
+  })();
+
+  return _redisInitPromise;
 }
 
 /**
  * Rate limiter factory.
- * Uses Redis store when REDIS_URL is configured (multi-instance safe),
- * falls back to in-memory for single-instance / development.
+ * Creates the `express-rate-limit` instance at initialization (synchronously)
+ * and, if Redis is configured, attempts to initialize a Redis-backed store
+ * asynchronously and swap the limiter when ready.
  *
- * @param {{ windowMs: number, max: number, prefix?: string }} options
- * @returns {Function} Express middleware
+ * This avoids creating the limiter inside a request handler (which triggers
+ * express-rate-limit validation errors).
  */
 export function createRateLimiter({ windowMs, max, prefix = 'default' }) {
-  let store = undefined;
-  let storeInitialized = false;
-  let cachedLimiter = null;
-
-  return async (req, res, next) => {
-    if (!storeInitialized && env.REDIS_URL) {
-      try {
-        const builder = await getRedisStore(windowMs);
-        if (builder) store = builder(prefix, windowMs);
-      } catch { /* fall back to in-memory */ }
-      storeInitialized = true;
-    }
-
-    if (!cachedLimiter) {
-      cachedLimiter = rateLimit({
-        windowMs,
-        max,
-        standardHeaders: true,
-        legacyHeaders: false,
-        store: store || undefined,
-        keyGenerator: (req) => req.user?._id?.toString() || req.ip,
-        handler: (_req, _res, next) => {
-          next(new RateLimitError(`Rate limit exceeded. Max ${max} requests per ${windowMs / 1000}s.`));
-        },
-      });
-    }
-
-    cachedLimiter(req, res, next);
+  const baseOptions = {
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => req.user?._id?.toString() || req.ip,
+    handler: (_req, _res, next) => {
+      next(new RateLimitError(`Rate limit exceeded. Max ${max} requests per ${windowMs / 1000}s.`));
+    },
   };
+
+  // Create an in-memory limiter synchronously at initialization.
+  let limiter = rateLimit(baseOptions);
+
+  // If Redis is configured, initialize it asynchronously and replace the limiter
+  // with a Redis-backed one once ready. This is done outside of request handling.
+  if (env.REDIS_URL) {
+    (async () => {
+      try {
+        await initRedisStoreOnce();
+        if (_redisStoreConstructor) {
+          const store = _redisStoreConstructor(prefix, windowMs);
+          limiter = rateLimit({ ...baseOptions, store });
+          logger.info(`Rate limiter using Redis store for prefix ${prefix}`);
+        }
+      } catch (err) {
+        logger.warn('Failed to initialize Redis rate limiter', { prefix, error: err.message });
+      }
+    })();
+  }
+
+  // Return middleware that delegates to the (possibly swapped) limiter.
+  return (req, res, next) => limiter(req, res, next);
 }
 
 // ─── Pre-built Auth Rate Limiters ────────────────────────────────────────────

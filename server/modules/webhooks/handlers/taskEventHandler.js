@@ -711,5 +711,111 @@ export function registerTaskEventHandlers() {
     );
   });
 
+  // ─── task.assigned — Auto-join assignee to board's channel ─────────────
+  eventBus.register(FLOWTASK_EVENTS.TASK_ASSIGNED, async (payload) => {
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_ASSIGNED);
+    if (!wsId) return;
+
+    const { card, boardId, assigneeId, assigneeName } = payload;
+    if (!boardId || !assigneeId) return;
+
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    if (!channel) return;
+
+    const chatUser = await userRepository.findByFlowTaskId(assigneeId, wsId);
+    if (!chatUser) {
+      logger.debug('task.assigned: assignee not in ChatApp (faded user)', { assigneeId, boardId });
+      return;
+    }
+
+    // Auto-add to channel if not already a member
+    if (!channel.hasMember(chatUser._id)) {
+      try {
+        const channelService = (await import('../../channels/channel.service.js')).default;
+        await channelService.addMember(channel._id, chatUser._id, 'member', wsId);
+        logger.info('task.assigned: auto-joined user to channel', {
+          userId: chatUser._id, channelId: channel._id, boardId,
+        });
+      } catch (err) {
+        logger.warn('task.assigned: failed to auto-join user', { error: err.message });
+      }
+    }
+
+    // Post system message
+    const userName = resolveActorName(payload, chatUser);
+    const taskTitle = card?.title || 'a task';
+    const activityMeta = {
+      eventType: 'TASK_ASSIGNED',
+      taskId: card?._id || null,
+      projectId: boardId,
+      taskTitle,
+      assigneeName: assigneeName || chatUser.name,
+      actorName: userName,
+    };
+
+    await messageService.sendSystemMessage(
+      channel._id,
+      `**${assigneeName || chatUser.name}** was assigned to **${taskTitle}**`,
+      { entityType: 'card', entityId: card?._id },
+      wsId,
+      [],
+      activityMeta,
+    );
+  });
+
+  // ─── subtask.assigned — Auto-join to parent board's channel ───────────
+  eventBus.register(FLOWTASK_EVENTS.SUBTASK_ASSIGNED, async (payload) => {
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.SUBTASK_ASSIGNED);
+    if (!wsId) return;
+
+    const { subtask, boardId, assigneeId } = payload;
+    if (!boardId || !assigneeId) return;
+
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    if (!channel) return;
+
+    const chatUser = await userRepository.findByFlowTaskId(assigneeId, wsId);
+    if (!chatUser) return;
+
+    if (!channel.hasMember(chatUser._id)) {
+      try {
+        const channelService = (await import('../../channels/channel.service.js')).default;
+        await channelService.addMember(channel._id, chatUser._id, 'member', wsId);
+        logger.info('subtask.assigned: auto-joined user to channel', {
+          userId: chatUser._id, channelId: channel._id,
+        });
+      } catch (err) {
+        logger.warn('subtask.assigned: failed to auto-join user', { error: err.message });
+      }
+    }
+  });
+
+  // ─── nano.assigned — Auto-join to parent board's channel ──────────────
+  eventBus.register(FLOWTASK_EVENTS.NANO_ASSIGNED, async (payload) => {
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.NANO_ASSIGNED);
+    if (!wsId) return;
+
+    const { nano, boardId, assigneeId } = payload;
+    if (!boardId || !assigneeId) return;
+
+    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    if (!channel) return;
+
+    const chatUser = await userRepository.findByFlowTaskId(assigneeId, wsId);
+    if (!chatUser) return;
+
+    if (!channel.hasMember(chatUser._id)) {
+      try {
+        const channelService = (await import('../../channels/channel.service.js')).default;
+        await channelService.addMember(channel._id, chatUser._id, 'member', wsId);
+        logger.info('nano.assigned: auto-joined user to channel', {
+          userId: chatUser._id, channelId: channel._id,
+        });
+      } catch (err) {
+        logger.warn('nano.assigned: failed to auto-join user', { error: err.message });
+      }
+    }
+  });
+
   logger.info('Task event handlers registered');
 }

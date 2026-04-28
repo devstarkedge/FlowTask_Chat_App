@@ -53,6 +53,9 @@ export const FLOWTASK_EVENTS = Object.freeze({
   NANO_CREATED: 'NANO_CREATED',
   NANO_COMPLETED: 'NANO_COMPLETED',
   NANO_DELETED: 'NANO_DELETED',
+  // Assignment events (for auto-join propagation)
+  SUBTASK_ASSIGNED: 'SUBTASK_ASSIGNED',
+  NANO_ASSIGNED: 'NANO_ASSIGNED',
 });
 
 // ─── Channel Types ───────────────────────────────────────────────────────────
@@ -268,6 +271,9 @@ export const SOCKET_EVENTS = Object.freeze({
   // Scheduled Messages
   SCHEDULED_MESSAGE_SENT: 'scheduledMessage:sent',
   SCHEDULED_MESSAGE_FAILED: 'scheduledMessage:failed',
+
+  // FlowTask Sync
+  USER_ACTIVATED: 'user:activated',
 });
 
 // ─── Notification Types ──────────────────────────────────────────────────────
@@ -286,6 +292,8 @@ export const NOTIFICATION_TYPES = Object.freeze({
   ROLE_CHANGE: 'role_change',
   SECURITY_ALERT: 'security_alert',
   CALL_INVITE: 'call_invite',
+  CHANNEL_AUTO_CREATED: 'channel_auto_created',
+  USER_ACTIVATED: 'user_activated',
 });
 
 // ─── Notification Priorities ─────────────────────────────────────────────────

@@ -335,6 +335,112 @@ class FlowTaskService {
     cache.clear();
     logger.info('FlowTask API cache cleared');
   }
+
+  /**
+   * Get all subtasks for a board with assignee data.
+   * @param {string} boardId
+   * @param {string} token
+   * @returns {Promise<Array>}
+   */
+  async getSubtasksByBoard(boardId, token) {
+    try {
+      const res = await this._request(`/api/subtasks?board=${boardId}&select=assignees,task,title`, token);
+      return res.data || res || [];
+    } catch (error) {
+      logger.warn('FlowTask getSubtasksByBoard failed', { boardId, error: error.message });
+      return [];
+    }
+  }
+
+  /**
+   * Get all nano-subtasks for a board with assignee data.
+   * @param {string} boardId
+   * @param {string} token
+   * @returns {Promise<Array>}
+   */
+  async getNanosByBoard(boardId, token) {
+    try {
+      const res = await this._request(`/api/subtask-nanos?board=${boardId}&select=assignees,subtask,task,title`, token);
+      return res.data || res || [];
+    } catch (error) {
+      logger.warn('FlowTask getNanosByBoard failed', { boardId, error: error.message });
+      return [];
+    }
+  }
+
+  /**
+   * Aggregate ALL unique user IDs from a board's full hierarchy:
+   *   board.owner + board.members + card.assignees + card.members
+   *   + subtask.assignees + nano.assignees
+   *
+   * Uses Promise.allSettled to ensure partial failure doesn't block the result.
+   *
+   * @param {string} boardId
+   * @param {string} token
+   * @returns {Promise<{ memberIds: Set<string>, sources: Map<string, string[]> }>}
+   *   - memberIds: Set of all unique FlowTask user ID strings
+   *   - sources: Map of userId → array of source labels (board, task, subtask, nano)
+   */
+  async getBoardDeepMembers(boardId, token) {
+    const memberIds = new Set();
+    const sources = new Map(); // userId → ['board', 'task', ...]
+
+    const addMember = (id, source) => {
+      const idStr = (typeof id === 'string' ? id : id?._id || id?.id || '').toString();
+      if (!idStr) return;
+      memberIds.add(idStr);
+      if (!sources.has(idStr)) sources.set(idStr, []);
+      const s = sources.get(idStr);
+      if (!s.includes(source)) s.push(source);
+    };
+
+    const [boardResult, cardsResult, subtasksResult, nanosResult] = await Promise.allSettled([
+      this.getBoard(boardId, token),
+      this.getBoardCards(boardId, token),
+      this.getSubtasksByBoard(boardId, token),
+      this.getNanosByBoard(boardId, token),
+    ]);
+
+    // Board members + owner
+    if (boardResult.status === 'fulfilled' && boardResult.value) {
+      const board = boardResult.value;
+      if (board.owner) addMember(board.owner, 'board');
+      for (const m of board.members || []) addMember(m, 'board');
+    }
+
+    // Card assignees + members
+    if (cardsResult.status === 'fulfilled') {
+      const cards = Array.isArray(cardsResult.value) ? cardsResult.value : [];
+      for (const card of cards) {
+        for (const a of card.assignees || []) addMember(a, 'task');
+        for (const m of card.members || []) addMember(m, 'task');
+      }
+    }
+
+    // Subtask assignees
+    if (subtasksResult.status === 'fulfilled') {
+      const subtasks = Array.isArray(subtasksResult.value) ? subtasksResult.value : [];
+      for (const st of subtasks) {
+        for (const a of st.assignees || []) addMember(a, 'subtask');
+      }
+    }
+
+    // Nano assignees
+    if (nanosResult.status === 'fulfilled') {
+      const nanos = Array.isArray(nanosResult.value) ? nanosResult.value : [];
+      for (const n of nanos) {
+        for (const a of n.assignees || []) addMember(a, 'nano');
+      }
+    }
+
+    logger.debug('getBoardDeepMembers complete', {
+      boardId,
+      totalMembers: memberIds.size,
+    });
+
+    return { memberIds, sources };
+  }
 }
 
 export default new FlowTaskService();
+

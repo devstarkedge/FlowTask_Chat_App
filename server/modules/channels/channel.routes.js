@@ -13,6 +13,8 @@ import {
   searchChannels,
   getChannelMembers,
   createAIDM,
+  pinChannel,
+  starChannel,
 } from "./channel.controller.js";
 import { protect, requireChannelAccess } from "../auth/auth.middleware.js";
 import { resolveWorkspace } from "../../middleware/workspaceContext.js";
@@ -84,6 +86,8 @@ router.delete(
   removeMember,
 );
 router.post("/:id/leave", requireChannelAccess(), leaveChannel);
+router.put("/:id/pin", requireChannelAccess(), pinChannel);
+router.put("/:id/star", requireChannelAccess(), starChannel);
 
 router.post("/ai-dm", createAIDM);
 export default router;

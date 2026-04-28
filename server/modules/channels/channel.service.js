@@ -1,5 +1,6 @@
 import Channel from "./Channel.model.js";
 import ChannelMember from "./ChannelMember.model.js";
+import ChannelPin from "./ChannelPin.model.js";
 import channelRepository from "./channel.repository.js";
 import userRepository from "../users/user.repository.js";
 import flowtaskService from "../flowtask/flowtask.service.js";
@@ -60,10 +61,9 @@ class ChannelService {
 
     const boardId = board._id || board.id;
     const boardName = board.name || board.title;
-    const deptName =
-      typeof board.department === "object"
-        ? board.department?.name || "general"
-        : "general";
+    const deptObj = typeof board.department === 'object' ? board.department : null;
+    const deptName = deptObj?.name || 'general';
+    const deptId = deptObj?._id || deptObj?.id || (typeof board.department === 'string' ? board.department : null);
 
     const existing = await channelRepository.findByFlowTaskRef(
       "board",
@@ -113,6 +113,9 @@ class ChannelService {
         allowArchive: false,
         allowMemberEdit: false,
       },
+      departmentRef: deptId
+        ? { departmentId: deptId.toString(), departmentName: deptName }
+        : { departmentId: null, departmentName: null },
     });
 
     logger.info("Project channel created", {
@@ -523,9 +526,6 @@ class ChannelService {
     const channel = await channelRepository.create({
       name: data.name,
       slug,
-      type: CHANNEL_TYPES.PROJECT, // Custom channels use project type
-      description: data.description ? sanitizeHtml(data.description) : "",
-      visibility: data.visibility || CHANNEL_VISIBILITY.PRIVATE,
       type: channelType,
       description: data.description ? sanitizeHtml(data.description) : '',
       visibility,
@@ -541,20 +541,9 @@ class ChannelService {
     const wsId = workspaceId.toString();
     await Promise.all(
       members.map((m) =>
-
-        ChannelMember.addMember(channelId, m.userId, workspaceId, m.role),
+        ChannelMember.addMember(channelId, m.userId, wsId, m.role),
       ),
     );
-
-    // Join creator to channel room
-    joinChannelRoom(
-      creatorId.toString(),
-      channel._id.toString(),
-      workspaceId?.toString(),
-    );
-        ChannelMember.addMember(channelId, m.userId, wsId, m.role)
-      
-    
 
     // Build full channel payload for socket events (so frontend can render icons correctly)
     const channelPayload = {
@@ -575,25 +564,6 @@ class ChannelService {
     // Notify explicitly added members (for private channels or explicit invites)
     for (const member of members) {
       if (member.userId.toString() !== creatorId.toString()) {
-
-        emitToUser(
-          member.userId.toString(),
-          SOCKET_EVENTS.CHANNEL_ADDED,
-          {
-            channel: {
-              _id: channel._id,
-              name: channel.name,
-              slug: channel.slug,
-              type: channel.type,
-            },
-          },
-          workspaceId?.toString(),
-        );
-        joinChannelRoom(
-          member.userId.toString(),
-          channel._id.toString(),
-          workspaceId?.toString(),
-        );
         emitToUser(member.userId.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
           channel: channelPayload,
         }, wsId);
@@ -848,15 +818,31 @@ class ChannelService {
     const all = [...channels, ...missingPublic];
     const decorated = await this._decorateDMChannels(all, userId, workspaceId);
 
-    logger.debug?.("[CHANNEL_FETCH] Channels resolved for sidebar", {
+    // Merge per-user pin/star state
+    const pins = await ChannelPin.getPinsForUser(userId, workspaceId);
+    const pinMap = new Map(pins.map((p) => [p.channelId.toString(), p]));
+
+    const withPins = decorated.map((ch) => {
+      const raw = ch.toObject ? ch.toObject() : ch;
+      const pin = pinMap.get(raw._id.toString());
+      return {
+        ...raw,
+        isPinned: pin?.isPinned || false,
+        isStarred: pin?.isStarred || false,
+        pinnedOrder: pin?.pinnedOrder || 0,
+      };
+    });
+
+    logger.debug?.('[CHANNEL_FETCH] Channels resolved for sidebar', {
       userId,
       workspaceId,
       memberChannels: channels.length,
       missingPublic: missingPublic.length,
-      total: decorated.length,
+      total: withPins.length,
+      pinned: pins.filter((p) => p.isPinned).length,
     });
 
-    return decorated;
+    return withPins;
   }
 
   async _decorateDMChannels(channels, currentUserId, workspaceId) {
@@ -902,6 +888,7 @@ class ChannelService {
 
   /**
    * Get a single channel by ID with access check.
+   * Uses permission engine for default-deny access control.
    */
   async getChannelById(channelId, userId, workspaceId) {
     const channel = await channelRepository.findById(channelId, {
@@ -910,6 +897,18 @@ class ChannelService {
     if (!channel) {
       throw new NotFoundError("Channel not found");
     }
+
+    // Permission-based access check (default-deny)
+    if (userId) {
+      const user = await userRepository.findById(userId);
+      if (user) {
+        const permissionEngine = (await import("../../services/permissionEngine.js")).default;
+        if (!permissionEngine.canAccessChannel(user, channel)) {
+          throw new ForbiddenError("Access denied to this channel");
+        }
+      }
+    }
+
     return channel;
   }
 
@@ -978,25 +977,6 @@ class ChannelService {
     };
 
     // Notify the user and make their socket join the room
-
-    emitToUser(
-      userId.toString(),
-      SOCKET_EVENTS.CHANNEL_ADDED,
-      {
-        channel: {
-          _id: updated._id,
-          name: updated.name,
-          slug: updated.slug,
-          type: updated.type,
-        },
-      },
-      channel.workspaceId?.toString(),
-    );
-    joinChannelRoom(
-      userId.toString(),
-      channelId.toString(),
-      channel.workspaceId?.toString(),
-    );
     emitToUser(userId.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
       channel: channelPayload,
     }, effectiveWsId);
@@ -1073,20 +1053,6 @@ class ChannelService {
       createdBy: updated.createdBy,
     };
     for (const uid of newMembers) {
-
-      emitToUser(
-        uid.toString(),
-        SOCKET_EVENTS.CHANNEL_ADDED,
-        {
-          channel: { _id: updated._id, name: updated.name, slug: updated.slug },
-        },
-        channel.workspaceId?.toString(),
-      );
-      joinChannelRoom(
-        uid.toString(),
-        channelId.toString(),
-        channel.workspaceId?.toString(),
-      );
       emitToUser(uid.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
         channel: syncChannelPayload,
       }, channel.workspaceId?.toString());
@@ -1311,42 +1277,9 @@ class ChannelService {
         ).default;
         const boardId = channel.flowTaskRef.entityId;
 
-        // Fetch board details (includes members array)
-        const [board, cards] = await Promise.all([
-          flowTaskService.getBoard(boardId, token).catch(() => null),
-          flowTaskService.getBoardCards(boardId, token).catch(() => []),
-        ]);
-
-        // Collect all FlowTask user IDs from board + cards
-        const flowTaskUserIds = new Set();
-
-        if (board) {
-          // Board owner
-          const ownerId =
-            typeof board.owner === "string"
-              ? board.owner
-              : board.owner?._id || board.owner?.id;
-          if (ownerId) flowTaskUserIds.add(ownerId.toString());
-
-          // Board members
-          for (const m of board.members || []) {
-            const mid = typeof m === "string" ? m : m._id || m.id;
-            if (mid) flowTaskUserIds.add(mid.toString());
-          }
-        }
-
-        // Task assignees + members
-        const cardList = Array.isArray(cards) ? cards : [];
-        for (const card of cardList) {
-          for (const a of card.assignees || []) {
-            const aid = typeof a === "string" ? a : a._id || a.id;
-            if (aid) flowTaskUserIds.add(aid.toString());
-          }
-          for (const m of card.members || []) {
-            const mid = typeof m === "string" ? m : m._id || m.id;
-            if (mid) flowTaskUserIds.add(mid.toString());
-          }
-        }
+        // Use deep member extraction (board + cards + subtasks + nanos)
+        const { memberIds: flowTaskUserIds, sources: ftSources } =
+          await flowTaskService.getBoardDeepMembers(boardId, token);
 
         // Resolve FlowTask user IDs to chat users
         if (flowTaskUserIds.size > 0) {
@@ -1354,13 +1287,17 @@ class ChannelService {
             [...flowTaskUserIds],
             channel.workspaceId,
           );
+          const resolvedFtIds = new Set(chatUsers.map((u) => u.flowTaskUserId));
+
+          // Add registered ChatApp users
           for (const chatUser of chatUsers) {
             const ftId = chatUser.flowTaskUserId;
+            const memberSources = ftSources.get(ftId) || ['board'];
             if (memberMap.has(ftId)) {
-              // Already in map, just add source
               const existing = memberMap.get(ftId);
-              if (!existing.source.includes("board"))
-                existing.source.push("board");
+              for (const s of memberSources) {
+                if (!existing.source.includes(s)) existing.source.push(s);
+              }
             } else {
               memberMap.set(ftId, {
                 _id: chatUser._id,
@@ -1371,9 +1308,57 @@ class ChannelService {
                 role: chatUser.role,
                 onlineStatus: chatUser.onlineStatus || "offline",
                 isActive: chatUser.isActive !== false,
-                source: ["board"],
+                registrationStatus: "active",
+                source: memberSources,
                 channelRole: null,
               });
+            }
+          }
+
+          // Add faded users (FlowTask users not registered in ChatApp)
+          for (const ftId of flowTaskUserIds) {
+            if (!resolvedFtIds.has(ftId) && !memberMap.has(ftId)) {
+              const memberSources = ftSources.get(ftId) || ['board'];
+              memberMap.set(ftId, {
+                _id: null,
+                flowTaskUserId: ftId,
+                name: null,       // Will be resolved from FlowTask user data if available
+                email: null,
+                avatar: null,
+                role: null,
+                onlineStatus: "offline",
+                isActive: false,
+                registrationStatus: "faded",
+                source: memberSources,
+                channelRole: null,
+              });
+            }
+          }
+
+          // Try to enrich faded users with FlowTask user details
+          const fadedIds = [...memberMap.values()]
+            .filter((m) => m.registrationStatus === "faded" && !m.name)
+            .map((m) => m.flowTaskUserId);
+
+          if (fadedIds.length > 0) {
+            try {
+              const ftUsers = await flowTaskService.getUsers(token);
+              const ftUserMap = new Map();
+              for (const u of (ftUsers || [])) {
+                const uid = (u._id || u.id || '').toString();
+                if (uid) ftUserMap.set(uid, u);
+              }
+              for (const ftId of fadedIds) {
+                const ftUser = ftUserMap.get(ftId);
+                if (ftUser && memberMap.has(ftId)) {
+                  const m = memberMap.get(ftId);
+                  m.name = ftUser.name || 'Unknown User';
+                  m.email = ftUser.email || null;
+                  m.avatar = ftUser.avatar || null;
+                }
+              }
+            } catch {
+              // Non-critical: faded users will show without names
             }
           }
         }
@@ -1386,7 +1371,16 @@ class ChannelService {
       }
     }
 
+    // Mark existing channel members as 'active' if not already set
+    for (const m of memberMap.values()) {
+      if (!m.registrationStatus) m.registrationStatus = 'active';
+    }
+
     return [...memberMap.values()].sort((a, b) => {
+      // Active users first, then faded
+      if (a.registrationStatus !== b.registrationStatus) {
+        return a.registrationStatus === 'active' ? -1 : 1;
+      }
       // Online first, then alphabetical
       const onlineOrder = { online: 0, away: 1, dnd: 2, offline: 3 };
       const aOrder = onlineOrder[a.onlineStatus] ?? 3;
@@ -1417,6 +1411,43 @@ class ChannelService {
     });
 
     return channel;
+  }
+
+  // ──────────────────── Pin / Star ─────────────────────────────────────────
+
+  /**
+   * Toggle pin state for a channel (per-user).
+   */
+  async togglePinChannel(userId, channelId, workspaceId) {
+    const channel = await channelRepository.findById(channelId, { workspaceId });
+    if (!channel) throw new NotFoundError('Channel not found');
+
+    const result = await ChannelPin.togglePin(userId, channelId, workspaceId);
+
+    // Emit to the user so other tabs update
+    emitToUser(userId.toString(), SOCKET_EVENTS.CHANNEL_UPDATED, {
+      channelId: channelId.toString(),
+      updates: { isPinned: result.isPinned },
+    }, workspaceId?.toString());
+
+    return result;
+  }
+
+  /**
+   * Toggle star state for a channel (per-user).
+   */
+  async toggleStarChannel(userId, channelId, workspaceId) {
+    const channel = await channelRepository.findById(channelId, { workspaceId });
+    if (!channel) throw new NotFoundError('Channel not found');
+
+    const result = await ChannelPin.toggleStar(userId, channelId, workspaceId);
+
+    emitToUser(userId.toString(), SOCKET_EVENTS.CHANNEL_UPDATED, {
+      channelId: channelId.toString(),
+      updates: { isStarred: result.isStarred },
+    }, workspaceId?.toString());
+
+    return result;
   }
 }
 export default new ChannelService();

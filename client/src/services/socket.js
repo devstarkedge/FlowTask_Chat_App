@@ -63,6 +63,8 @@ const SOCKET_EVENTS = {
   MEMBER_JOINED: 'channel:member_joined',
   MEMBER_LEFT: 'channel:member_left',
   CHANNEL_MEMBERS_UPDATED: 'channel:members:updated',
+  CHANNEL_CREATED: 'channel:created',
+  USER_ACTIVATED: 'user:activated',
 
   // Threads
   THREAD_CREATED: 'thread:created',
@@ -309,6 +311,25 @@ export function connectSocket() {
   })
 
   socket.on(SOCKET_EVENTS.CHANNEL_MEMBERS_UPDATED, ({ channelId }) => {
+    const activeId = useChannelStore.getState().activeChannelId
+    if (channelId === activeId) {
+      useChannelStore.getState().fetchMembers(channelId)
+    }
+  })
+
+  // ─── FlowTask Sync Events ─────────────────────────────────────────
+  // Handles real-time channel creation from FlowTask board syncs
+  socket.on(SOCKET_EVENTS.CHANNEL_CREATED, ({ channel }) => {
+    if (channel) {
+      useChannelStore.getState().addChannel(channel)
+      if (socket && channel._id) {
+        socket.emit('channel:join', channel._id)
+      }
+    }
+  })
+
+  // Handles faded → active user transitions (re-fetches member list)
+  socket.on(SOCKET_EVENTS.USER_ACTIVATED, ({ userId, channelId }) => {
     const activeId = useChannelStore.getState().activeChannelId
     if (channelId === activeId) {
       useChannelStore.getState().fetchMembers(channelId)

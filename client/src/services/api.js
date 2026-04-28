@@ -149,6 +149,8 @@ export const channelAPI = {
   leave: (id) => api.post(`/channels/${id}/leave`),
   search: (q) => api.get('/channels/search', { params: { q } }),
   getMembers: (id) => api.get(`/channels/${id}/members`),
+  pin: (id) => api.put(`/channels/${id}/pin`),
+  star: (id) => api.put(`/channels/${id}/star`),
 }
 
 // ─── Messages ────────────────────────────────────────────────────────────

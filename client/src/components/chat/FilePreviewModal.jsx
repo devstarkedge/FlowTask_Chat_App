@@ -96,15 +96,27 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <FileTypeIcon mimeType={mime} />
           <div>
-            <p style={{ color: 'white', fontWeight: 600, fontSize: 14 }}>
-              {currentFile.originalName || currentFile.fileName || 'File'}
-            </p>
-            {currentFile.fileSize && (
-              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
-                {formatFileSize(currentFile.fileSize)}
+              <p style={{ color: 'white', fontWeight: 600, fontSize: 14 }}>
+                {currentFile.originalName || currentFile.fileName || 'File'}
               </p>
-            )}
-          </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4 }}>
+                {currentFile.fileSize && (
+                  <span style={{ color: 'rgba(255,255,255,0.72)', fontSize: 12 }}>
+                    {formatFileSize(currentFile.fileSize)}
+                  </span>
+                )}
+                {currentFile.uploadedBy?.name && (
+                  <span style={{ color: 'rgba(255,255,255,0.68)', fontSize: 12 }}>
+                    Uploaded by {currentFile.uploadedBy.name}
+                  </span>
+                )}
+                {currentFile.uploadedAt && (
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
+                    {new Date(currentFile.uploadedAt).toLocaleString()}
+                  </span>
+                )}
+              </div>
+            </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

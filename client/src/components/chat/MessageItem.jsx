@@ -23,7 +23,9 @@ import {
   Forward,
   Link2,
   MoreVertical,
+  ChevronDown
 } from "lucide-react";
+import SlackFileCard from './SlackFileCard'
 import { Avatar } from "./MemberAvatarGroup";
 import EmojiPicker from "./EmojiPicker";
 import { sanitizeHtml } from "../../utils/sanitize";
@@ -181,6 +183,30 @@ const MessageItem = memo(
             .filter(Boolean)
         : message.attachments || [];
 
+    // Download helper (tries blob download then fallback to opening URL)
+    const downloadFile = async (f) => {
+      const url = f?.secureUrl || f?.url
+      const fileName = f?.originalName || f?.fileName || 'download'
+      if (!url) return
+      try {
+        const res = await fetch(url)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const blob = await res.blob()
+        const objectUrl = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = objectUrl
+        a.setAttribute('download', fileName)
+        a.rel = 'noopener noreferrer'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+      } catch (err) {
+        // fallback: open in new tab
+        try { window.open(url, '_blank') } catch { /* noop */ }
+      }
+    }
+
     // System messages (plain separator style)
     if (isSystem) {
       return (
@@ -259,12 +285,12 @@ const MessageItem = memo(
         }}
       >
         <div
-          className={`flex items-end gap-2 px-4 pb-0 ${isOwn ? "flex-row-reverse" : ""}`}
+          className={`flex items-start gap-2 px-4 pb-0 ${isOwn ? "flex-row-reverse" : ""}`}
         >
-          {/* Avatar — only on first/solo message of a group */}
+          {/* Gutter Column — keeps alignment for grouped messages; shows timestamp on hover in compact mode */}
           <div
-            className="shrink-0 self-end"
-            style={{ width: 34, marginBottom: 2 }}
+            className="shrink-0"
+            style={{ width: 36 }}
           >
             {!compact ? (
               <div
@@ -277,15 +303,14 @@ const MessageItem = memo(
                     avatar: authorAvatar,
                     onlineStatus: "offline",
                   }}
-                  size={34}
+                  size={36}
                   showStatus={false}
                 />
               </div>
             ) : (
-              // Invisible gutter keeps alignment; show timestamp on hover
               <span
                 className="flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ color: "var(--text-muted)", height: 34, fontSize: 10 }}
+                style={{ color: "var(--text-muted)", height: 36, fontSize: 10 }}
               >
                 {format(new Date(message.createdAt), "h:mm")}
               </span>
@@ -429,150 +454,41 @@ const MessageItem = memo(
                 </span>
               )}
 
-              {/* Attachments */}
+              {/* Attachments (Slack-style cards) */}
               {!isDeleted && derivedAttachments.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {derivedAttachments.map((att, idx) =>
-                    isImage(att.mimeType) ? (
-                      <div
-                        key={att._id || idx}
-                        className="rounded-lg overflow-hidden cursor-pointer transition-opacity hover:opacity-90"
-                        style={{
-                          border: "1px solid var(--border-primary)",
-                          maxWidth: 320,
-                        }}
-                        onClick={() =>
-                          onOpenFilePreview?.(att, derivedAttachments)
-                        }
+                <div className="mt-2 flex flex-col gap-1.5">
+                  {derivedAttachments.length > 1 ? (
+                    <div className="flex items-center gap-2 text-[13px] font-medium mb-1" style={{ color: "inherit", opacity: 0.85 }}>
+                      <span className="cursor-pointer flex items-center gap-1 hover:underline">
+                        {derivedAttachments.length} files <ChevronDown size={14} style={{ opacity: 0.7 }} />
+                      </span>
+                      <span style={{ opacity: 0.4 }}>|</span>
+                      <span 
+                        className="cursor-pointer flex items-center gap-1 hover:underline"
+                        onClick={() => derivedAttachments.forEach(downloadFile)}
                       >
-                        <img
-                          src={att.thumbnailUrl || att.url}
-                          alt={att.originalName}
-                          className="max-h-60 object-cover"
-                          loading="lazy"
-                        />
-                        <div
-                          className="flex items-center gap-2 px-2 py-1 text-xs"
-                          style={{
-                            background: "var(--bg-secondary)",
-                            color: "var(--text-muted)",
-                          }}
-                        >
-                          <span className="truncate flex-1">
-                            {att.originalName}
-                          </span>
-                          <span>{formatFileSize(att.fileSize)}</span>
-                        </div>
-                      </div>
-                    ) : isVideo(att.mimeType) ? (
-                      <div
-                        key={att._id || idx}
-                        className="file-card"
-                        onClick={() =>
-                          onOpenFilePreview?.(att, derivedAttachments)
-                        }
-                      >
-                        <Film
-                          size={24}
-                          style={{
-                            color: "var(--accent-purple)",
-                            flexShrink: 0,
-                          }}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p
-                            className="text-sm font-medium truncate"
-                            style={{ color: "var(--text-primary)" }}
-                          >
-                            {att.originalName}
-                          </p>
-                          <p
-                            className="text-[11px]"
-                            style={{ color: "var(--text-muted)" }}
-                          >
-                            {formatFileSize(att.fileSize)}
-                          </p>
-                        </div>
-                        <Download
-                          size={14}
-                          style={{ color: "var(--text-muted)" }}
-                        />
-                      </div>
-                    ) : isAudio(att.mimeType) ? (
-                      <div
-                        key={att._id || idx}
-                        className="file-card"
-                        onClick={() =>
-                          onOpenFilePreview?.(att, derivedAttachments)
-                        }
-                      >
-                        <Music
-                          size={24}
-                          style={{
-                            color: "var(--accent-green)",
-                            flexShrink: 0,
-                          }}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p
-                            className="text-sm font-medium truncate"
-                            style={{ color: "var(--text-primary)" }}
-                          >
-                            {att.originalName}
-                          </p>
-                          <p
-                            className="text-[11px]"
-                            style={{ color: "var(--text-muted)" }}
-                          >
-                            {formatFileSize(att.fileSize)}
-                          </p>
-                        </div>
-                        <Download
-                          size={14}
-                          style={{ color: "var(--text-muted)" }}
-                        />
-                      </div>
-                    ) : (
-                      <div
-                        key={att._id || idx}
-                        className="file-card"
-                        onClick={() =>
-                          onOpenFilePreview?.(att, derivedAttachments)
-                        }
-                      >
-                        {(() => {
-                          const FIcon = fileIcon(att.mimeType);
-                          return (
-                            <FIcon
-                              size={24}
-                              style={{
-                                color: "var(--accent-primary)",
-                                flexShrink: 0,
-                              }}
-                            />
-                          );
-                        })()}
-                        <div className="min-w-0 flex-1">
-                          <p
-                            className="text-sm font-medium truncate"
-                            style={{ color: "var(--text-primary)" }}
-                          >
-                            {att.originalName}
-                          </p>
-                          <p
-                            className="text-[11px]"
-                            style={{ color: "var(--text-muted)" }}
-                          >
-                            {formatFileSize(att.fileSize)}
-                          </p>
-                        </div>
-                        <Download
-                          size={14}
-                          style={{ color: "var(--text-muted)" }}
-                        />
-                      </div>
-                    ),
+                        <Download size={14} style={{ opacity: 0.7 }} /> Download all
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-[13px] font-medium mb-1" style={{ color: "inherit", opacity: 0.85 }}>
+                      <span className="cursor-pointer flex items-center gap-1 hover:underline">
+                        {derivedAttachments[0].originalName || derivedAttachments[0].fileName || derivedAttachments[0].name || 'File'} <ChevronDown size={14} style={{ opacity: 0.7 }} />
+                      </span>
+                    </div>
                   )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {derivedAttachments.map((att, idx) => (
+                      <SlackFileCard
+                        key={att._id || att.referenceId || idx}
+                        file={att}
+                        onOpen={(f) => onOpenFilePreview?.(f, derivedAttachments)}
+                        onDownload={downloadFile}
+                        isSingle={derivedAttachments.length === 1}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
 

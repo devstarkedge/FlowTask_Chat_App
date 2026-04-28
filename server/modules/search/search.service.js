@@ -180,7 +180,8 @@ function searchChannels(query, regex, channels) {
       slug: channel.slug,
       description: channel.description,
       topic: channel.topic,
-      type: channel.type,
+      channelType: channel.type,
+      type: 'channel',
       visibility: channel.visibility,
       memberCount: channel.memberCount || 0,
       lastMessageAt: channel.lastMessageAt,
@@ -284,8 +285,8 @@ function searchPages(query) {
     .slice(0, 6), (item) => scoreText(query, item.label, item.path, ...(item.keywords || [])));
 }
 
-function buildTopMatches({ users, channels, messages, files, links, pages }) {
-  return [...users, ...channels, ...messages, ...files, ...links, ...pages]
+function buildTopMatches({ users, channels, messages, files, links, pages, dms = [] }) {
+  return [...users, ...channels, ...messages, ...files, ...links, ...pages, ...dms]
     .sort((a, b) => (b.rank || 0) - (a.rank || 0))
     .slice(0, 6);
 }
@@ -317,12 +318,16 @@ export async function globalSearch({ query, userId, workspaceId }) {
     Promise.resolve(searchPages(q)),
   ]);
 
+  const dms = channelResults.filter(c => c.channelType === 'dm').map(c => ({ ...c, type: 'dm' }));
+  const regularChannels = channelResults.filter(c => c.channelType !== 'dm');
+
   return {
     query: q,
-    topMatches: buildTopMatches({ users, channels: channelResults, messages, files, links, pages }),
+    topMatches: buildTopMatches({ users, channels: regularChannels, messages, files, links, pages, dms }),
     users,
     messages,
-    channels: channelResults,
+    channels: regularChannels,
+    dms,
     files,
     links,
     pages,

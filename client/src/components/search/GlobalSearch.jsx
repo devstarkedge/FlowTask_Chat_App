@@ -39,6 +39,7 @@ const EMPTY_RESULTS = {
   users: [],
   messages: [],
   channels: [],
+  dms: [],
   files: [],
   links: [],
   pages: [],
@@ -49,6 +50,7 @@ const SECTION_CONFIG = [
   { key: 'users', title: 'People' },
   { key: 'messages', title: 'Messages' },
   { key: 'channels', title: 'Channels' },
+  { key: 'dms', title: 'Direct Messages' },
   { key: 'files', title: 'Files' },
   { key: 'links', title: 'Links' },
   { key: 'pages', title: 'Quick Navigation' },
@@ -524,6 +526,8 @@ function getIcon(item) {
       ) : (
         <Hash size={16} />
       )
+    case 'dm':
+      return <Lock size={16} />
     case 'file':
       return getFileIcon(item.mimeType)
     case 'link':
@@ -567,6 +571,8 @@ function getTitle(item) {
       return item.visibility === 'private'
         ? `🔒 ${item.name || item.slug}`
         : `# ${item.name || item.slug}`
+    case 'dm':
+      return `🔒 ${item.name || item.slug || 'Direct Message'}`
     case 'file':
       return item.name || 'Untitled file'
     case 'link':
@@ -592,6 +598,7 @@ function getSubtitle(item) {
         .filter(Boolean)
         .join(' ')
     case 'channel':
+    case 'dm':
       return [
         item.topic || item.description,
         item.memberCount != null ? `${item.memberCount} members` : null,

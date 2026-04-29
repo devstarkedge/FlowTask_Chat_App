@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Download, ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight, FileText, Film, Music, File } from 'lucide-react'
+import { useDownloadStore } from "../../stores/downloadStore";
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp']
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
@@ -10,6 +11,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
   const containerRef = useRef(null)
+  const addDownload = useDownloadStore((s) => s.addDownload);
 
   useEffect(() => {
     if (file && files.length > 0) {
@@ -52,34 +54,38 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
 
   const downloadUrl = currentFile.secureUrl || currentFile.url || '#'
 
-  const handleDownload = async (e) => {
-    if (e && e.preventDefault) e.preventDefault()
-    if (e && e.stopPropagation) e.stopPropagation()
-
-    const url = currentFile.secureUrl || currentFile.url
-    const filename = currentFile.originalName || currentFile.fileName || 'download'
-    if (!url) return
+  const handleDownload = async (file) => {
+    const fileName = file.fileName || file.name || "download";
+    const downloadUrl = file.url || file.secureUrl;
 
     try {
-      const res = await fetch(url, { mode: 'cors' })
-      if (!res.ok) throw new Error('Network response was not ok')
-      const blob = await res.blob()
-      const blobUrl = window.URL.createObjectURL(blob)
+      //  store update (centralized)
+      addDownload({
+        name: fileName,
+        url: downloadUrl,
+        size: file.fileSize || file.size,
+        type: file.mimeType || file.type,
+      });
 
-      const a = document.createElement('a')
-      a.style.display = 'none'
-      a.href = blobUrl
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(blobUrl)
+      //  download logic
+      const res = await fetch(downloadUrl);
+      const blob = await res.blob();
+
+      const objectUrl = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = fileName;
+
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      URL.revokeObjectURL(objectUrl);
     } catch (err) {
-      console.error('Download failed, opening in new tab as fallback:', err)
-      // Fallback: open the resource in a new tab/window
-      window.open(url, '_blank', 'noopener,noreferrer')
+      console.error("Download failed", err);
     }
-  }
+  };
 
   return (
     <div className="file-preview-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>

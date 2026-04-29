@@ -7,7 +7,6 @@ export const useDownloadStore = create(
       downloads: [],
 
       addDownload: (file) => {
-        console.log("ADDING:", file);
         const exists = get().downloads.find(
           (d) => d.url === (file.url || file.secureUrl),
         );

@@ -114,65 +114,6 @@ function FileIcon({ name, mime, size = 16 }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   DOWNLOAD BUTTON with state machine
-───────────────────────────────────────────────────────────────────────── */
-// function DownloadBtn({ url, fileName }) {
-//   const addDownload = useDownloadStore((s) => s.addDownload);
-//   const [state, setState] = useState("idle");
-
-//   const handleDownload = async (e) => {
-//     e.stopPropagation();
-//     if (state !== "idle") return;
-
-//     setState("downloading");
-
-//     try {
-//       addDownload({
-//         name: fileName,
-//         url: url,
-//         size: "—",
-//         type: "file",
-//       });
-
-//       const response = await fetch(url);
-//       const blob = await response.blob();
-
-//       const blobUrl = window.URL.createObjectURL(blob);
-
-//       const link = document.createElement("a");
-//       link.href = blobUrl;
-//       link.download = fileName || "file";
-
-//       document.body.appendChild(link);
-//       link.click();
-//       document.body.removeChild(link);
-
-//       window.URL.revokeObjectURL(blobUrl);
-
-//       setState("done");
-//       setTimeout(() => setState("idle"), 2500);
-//     } catch {
-//       setState("idle");
-//     }
-//   };
-
-//   return (
-//     <button
-//       className={`dl-action-btn${state === "downloading" ? " downloading" : state === "done" ? " done" : ""}`}
-//       onClick={handleDownload}
-//       title="Download"
-//       aria-label="Download file"
-//     >
-//       {state === "done" ? (
-//         <Check size={13} strokeWidth={3} />
-//       ) : (
-//         <Download size={13} />
-//       )}
-//     </button>
-//   );
-// }
-
 /* need Check icon */
 function Check({ size, strokeWidth }) {
   return (
@@ -336,7 +277,6 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
 
           {/* ══ BODY ══ */}
           <div className="dl-body">
-            {/* ✅ ONLY DOWNLOADS */}
             {downloads.length === 0 ? (
               <EmptyState
                 icon={Download}

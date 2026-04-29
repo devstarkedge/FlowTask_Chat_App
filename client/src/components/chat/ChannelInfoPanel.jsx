@@ -279,35 +279,6 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                 </span>
                 <span className="cip-count-badge">{members.length}</span>
               </div>
-
-              {isAdmin && !isDM && (
-                <button
-                  onClick={() => setShowAddMember(true)}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "var(--accent-primary)",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                    padding: "2px 6px",
-                    borderRadius: "var(--radius-sm)",
-                    transition: "background 0.15s",
-                  }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = "var(--bg-active)")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = "transparent")
-                  }
-                >
-                  <UserPlus size={12} />
-                  Add
-                </button>
-              )}
             </div>
 
             {/* Online members */}

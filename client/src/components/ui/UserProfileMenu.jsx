@@ -115,7 +115,7 @@ export default function UserProfileMenu({
           }}
         >
           <span style={{ fontWeight: 500 }}>
-            Are you sure you want to sign out?
+            Are you sure you want to sign out? This will permanently delete your downloads and drafts.
           </span>
 
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -392,7 +392,6 @@ export default function UserProfileMenu({
       <button
         className="user-menu-item"
         onClick={() => {
-          console.log("Opening downloads modal...");
           openDownloads();
           onClose();
         }}

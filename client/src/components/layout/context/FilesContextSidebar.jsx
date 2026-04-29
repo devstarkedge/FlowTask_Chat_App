@@ -789,7 +789,11 @@ export default function FilesContextSidebar({
     <>
       {/* Workspace switcher */}
       <div className="fcs-ws-wrap">
-        <WorkspaceSwitcher />
+        <WorkspaceSwitcher
+          onOpenCreate={() => setShowCreateWorkspace(true)}
+          onOpenJoin={() => setShowJoinWorkspace(true)}
+          onOpenSettings={() => setShowWorkspaceSettings(true)}
+        />
       </div>
 
       {/* Title row */}

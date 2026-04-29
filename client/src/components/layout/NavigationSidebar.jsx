@@ -373,7 +373,8 @@ const dmChannels = useMemo(() => {
             showAdd
             onAdd={() => setShowUserPicker(true)}
             addTitle="Start direct message"
-          >
+          > 
+          
             {/* CHATBOT BUTTON */}
             <SidebarItem
               icon={<Bot size={18} />}

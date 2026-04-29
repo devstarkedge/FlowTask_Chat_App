@@ -222,7 +222,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
             {/* Leave  */}
             {!isSystem && (
               <button
-                onClick={() => setConfirmLeave(true)}
+                onClick={handleLeave}
                 className="btn-danger"
                 style={{ fontSize: 12, padding: "6px 12px", gap: 6 }}
                 title="Leave channel"
@@ -247,7 +247,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
           )}
 
           {/* Topic block */}
-          {channel.topic && (
+          {/* {channel.topic && (
             <div className="cip-info-block">
               <div className="cip-info-label">
                 <Hash size={10} />
@@ -255,7 +255,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
               </div>
               <p className="cip-info-text">{channel.topic}</p>
             </div>
-          )}
+          )} */}
 
           {/* ── Members section ── */}
           <div>
@@ -468,7 +468,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
         </div>
 
         {/* ══ CONFIRM LEAVE OVERLAY ══ */}
-        {confirmLeave && (
+        {/* {confirmLeave && (
           <div className="cip-confirm-overlay">
             <div className="cip-confirm-card">
               <div className="cip-confirm-icon">
@@ -516,7 +516,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
               </div>
             </div>
           </div>
-        )}
+        )} */}
 
         {/* ══ MODALS ══ */}
         {showEditModal && (

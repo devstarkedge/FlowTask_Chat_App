@@ -5343,7 +5343,6 @@ body {
   --text-primary: #f4f4f5;
   --text-secondary: #c7c7ca;
   --text-muted: #9a9da2;
-  --text-white: var(--text-primary);
   --text-link: #8ab4f8;
   --text-inverse: #1d1c1d;
   --border-color: #363a40;

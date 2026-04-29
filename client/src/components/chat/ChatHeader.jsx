@@ -165,7 +165,7 @@ export default function ChatHeader({
         </div>
 
         {/* Topic — editable on click (placed before right actions so actions align right) */}
-        {!isDM && (
+        {/* {!isDM && (
           <div className="flex items-center hide-mobile">
             <div className="w-px h-8 mx-4" style={{ background: 'var(--border-color)' }} />
             {editingTopic ? (
@@ -207,7 +207,7 @@ export default function ChatHeader({
               </span>
             )}
           </div>
-        )}
+        )} */}
 
         {/* Right-aligned actions: member count, pin, search, more (top row) */}
         <div className="absolute right-6 top-3 flex items-center gap-2" ref={moreMenuRef}>

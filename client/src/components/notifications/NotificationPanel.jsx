@@ -159,7 +159,7 @@ export default function NotificationPanel({ onClose, onSelectNotification }) {
 
         {/* Filter Tabs */}
         <div
-          className="notif-filter-tabs flex items-center gap-1 px-3 py-2 shrink-0"
+          className="notif-filter-tabs flex items-center gap-3 px-3 py-2 shrink-0"
           style={{ borderBottom: '1px solid var(--border-primary)' }}
         >
           {FILTER_TABS.map((tab) => {

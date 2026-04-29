@@ -104,7 +104,7 @@ function quickPages() {
   return [
     { id: 'profile', label: 'Profile', type: 'page', path: 'profile', iconKey: 'user' },
     { id: 'settings', label: 'Settings', type: 'page', path: 'settings', iconKey: 'settings' },
-    { id: 'notifications', label: 'Notifications', type: 'page', path: 'activity', iconKey: 'bell' },
+    // { id: 'notifications', label: 'Notifications', type: 'page', path: 'activity', iconKey: 'bell' },
     { id: 'threads', label: 'Threads', type: 'page', path: 'threads', iconKey: 'message' },
     { id: 'starred', label: 'Starred', type: 'page', path: 'starred', iconKey: 'star' },
     { id: 'directories', label: 'Directories', type: 'page', path: 'directories', iconKey: 'users' },

@@ -113,7 +113,9 @@ const env = Object.freeze({
   DEFAULT_WORKSPACE_SLUG: process.env.DEFAULT_WORKSPACE_SLUG || 'flowtask',
   DEFAULT_WORKSPACE_NAME: process.env.DEFAULT_WORKSPACE_NAME || 'FlowTask',
   WORKSPACE_SUBDOMAIN_ENABLED: process.env.WORKSPACE_SUBDOMAIN_ENABLED === 'true',
-  SOCKET_REQUIRE_WORKSPACE: process.env.SOCKET_REQUIRE_WORKSPACE === 'true',
+  // When true, all socket emits/joins must include a workspace context.
+  // Default to strict mode in production to avoid accidental cross-tenant leaks.
+  SOCKET_REQUIRE_WORKSPACE: (process.env.SOCKET_REQUIRE_WORKSPACE === 'true') || IS_PRODUCTION,
   // Web Push (VAPID)
   VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY || '',
   VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || '',

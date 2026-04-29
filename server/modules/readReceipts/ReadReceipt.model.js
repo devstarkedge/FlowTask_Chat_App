@@ -80,7 +80,7 @@ readReceiptSchema.statics.markChannelAsRead = async function (userId, channelId,
       unreadMentionCount: 0,
       workspaceId,
     },
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: 'after' },
   );
 };
 

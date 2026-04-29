@@ -798,10 +798,37 @@ function resolveScopedRoom(workspaceId, type, entityId, context) {
 }
 
 /**
+ * Get the approximate occupancy (number of sockets) in a resolved room.
+ * Returns 0 if Socket.IO isn't initialized or the room doesn't exist.
+ */
+export function getRoomOccupancy(workspaceId, type, entityId) {
+  try {
+    const room = resolveScopedRoom(workspaceId, type, entityId, 'getRoomOccupancy');
+    if (!room || !io) return 0;
+    const s = io.sockets.adapter.rooms.get(room);
+    return s ? s.size : 0;
+  } catch (err) {
+    logger.warn('getRoomOccupancy failed', { error: err.message, workspaceId, type, entityId });
+    return 0;
+  }
+}
+
+/**
  * Emit event to all connected clients.
  */
 export function emitToAll(event, data) {
   if (!io) return;
+
+  // In strict workspace mode, unscoped global emits are disallowed to
+  // prevent accidental cross-workspace/tenant leaks. Fail-closed: no-op and log.
+  if (env.SOCKET_REQUIRE_WORKSPACE) {
+    logger.warn('Blocked emitToAll due to strict workspace mode', {
+      metric: 'socket_workspace_guard',
+      event: event,
+    });
+    return;
+  }
+
   io.emit(event, data);
 }
 

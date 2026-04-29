@@ -51,7 +51,7 @@ export const updatePreferences = asyncHandler(async (req, res) => {
   const updated = await NotificationPreference.findOneAndUpdate(
     { userId, workspaceId },
     { $set: updateData },
-    { new: true, upsert: true },
+    { upsert: true, returnDocument: 'after' },
   );
 
   // Broadcast preference change to all user's devices
@@ -193,7 +193,7 @@ export const updateVIPUsers = asyncHandler(async (req, res) => {
   const updated = await NotificationPreference.findOneAndUpdate(
     { userId, workspaceId },
     { $set: { vipUsers } },
-    { new: true, upsert: true },
+    { upsert: true, returnDocument: 'after' },
   );
 
   res.json({ success: true, data: updated });

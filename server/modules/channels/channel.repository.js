@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Channel from './Channel.model.js';
 import ChannelMember from './ChannelMember.model.js';
 import { CHANNEL_TYPES, CHANNEL_VISIBILITY } from '../../config/constants.js';
@@ -132,28 +133,51 @@ class ChannelRepository {
    * @returns {Promise<Channel>}
    */
   async addMember(channelId, userId, role = 'member', workspaceId) {
-    // Invalidate user's channel list cache
-    await cache.delPattern(`channels:user:${userId}:*`);
+    // Use a MongoDB transaction to keep ChannelMember and embedded Channel.members in sync
+    const session = await mongoose.startSession();
+    let resultChannel = null;
+    try {
+      session.startTransaction();
 
-    // Write to ChannelMember collection (source of truth)
-    if (workspaceId) {
-      await ChannelMember.addMember(channelId, userId, workspaceId, role);
+      // Write to ChannelMember collection (source of truth)
+      if (workspaceId) {
+        await ChannelMember.findOneAndUpdate(
+          { channelId, userId },
+          {
+            $setOnInsert: { channelId, userId, joinedAt: new Date() },
+            $set: { isActive: true, workspaceId, role },
+          },
+          { upsert: true, returnDocument: 'after', session },
+        );
+      }
+
+      // Also update embedded array for backward compat (only if not present)
+      resultChannel = await Channel.findOneAndUpdate(
+        {
+          _id: channelId,
+          'members.userId': { $ne: userId },
+        },
+        {
+          $push: { members: { userId, role, joinedAt: new Date() } },
+          $inc: { memberCount: 1 },
+        },
+        { returnDocument: 'after', session },
+      );
+
+      await session.commitTransaction();
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      throw err;
     }
 
-    // Also update embedded array for backward compat
-    const updated = await Channel.findOneAndUpdate(
-      {
-        _id: channelId,
-        'members.userId': { $ne: userId },
-      },
-      {
-        $push: { members: { userId, role, joinedAt: new Date() } },
-        $inc: { memberCount: 1 },
-      },
-      { new: true },
-    );
+    session.endSession();
+
+    // Invalidate user's channel list cache AFTER successful commit
+    await cache.delPattern(`channels:user:${userId}:*`);
+
     // If user was already in embedded array, return the channel as-is
-    return updated || Channel.findById(channelId);
+    return resultChannel || Channel.findById(channelId);
   }
 
   /**
@@ -164,21 +188,42 @@ class ChannelRepository {
    * @returns {Promise<Channel>}
    */
   async removeMember(channelId, userId, workspaceId) {
-    // Invalidate user's channel list cache
+    // Use transaction to ensure both ChannelMember and embedded array are consistent
+    const session = await mongoose.startSession();
+    let updated = null;
+    try {
+      session.startTransaction();
+
+      // Soft-remove from ChannelMember collection
+      await ChannelMember.findOneAndUpdate(
+        { channelId, userId },
+        { $set: { isActive: false } },
+        { new: true, session },
+      );
+
+      // Only decrement if member was actually in the embedded array
+      updated = await Channel.findOneAndUpdate(
+        { _id: channelId, 'members.userId': userId },
+        {
+          $pull: { members: { userId } },
+          $inc: { memberCount: -1 },
+        },
+        { new: true, session },
+      );
+
+      await session.commitTransaction();
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      throw err;
+    }
+
+    session.endSession();
+
+    // Invalidate user's channel list cache AFTER commit
     await cache.delPattern(`channels:user:${userId}:*`);
 
-    // Soft-remove from ChannelMember collection
-    await ChannelMember.removeMember(channelId, userId);
-
-    // Only decrement if member was actually in the embedded array
-    return Channel.findOneAndUpdate(
-      { _id: channelId, 'members.userId': userId },
-      {
-        $pull: { members: { userId } },
-        $inc: { memberCount: -1 },
-      },
-      { new: true },
-    );
+    return updated;
   }
 
   /**
@@ -189,7 +234,7 @@ class ChannelRepository {
    */
   async update(channelId, updates, workspaceId) {
     const filter = injectWorkspaceFilter({ _id: channelId }, workspaceId);
-    return Channel.findOneAndUpdate(filter, updates, { new: true }).exec();
+    return Channel.findOneAndUpdate(filter, updates, { returnDocument: 'after' }).exec();
   }
 
   /**
@@ -207,7 +252,7 @@ class ChannelRepository {
         archivedAt: new Date(),
         archivedReason: reason,
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).exec();
   }
 
@@ -345,35 +390,50 @@ class ChannelRepository {
       }));
 
     if (newMembers.length === 0) return channel;
+    // Use a transaction to write ChannelMember bulk ops and embedded update atomically
+    const session = await mongoose.startSession();
+    let result = null;
+    try {
+      session.startTransaction();
 
-    // Invalidate channel list cache for all new members
-    await Promise.all(newMembers.map((m) => cache.delPattern(`channels:user:${m.userId}:*`)));
-
-    // Write to ChannelMember collection
-    const workspaceId = channel.workspaceId;
-    if (workspaceId) {
-      const bulkOps = newMembers.map((m) => ({
-        updateOne: {
-          filter: { channelId, userId: m.userId },
-          update: {
-            $setOnInsert: { channelId, userId: m.userId, joinedAt: m.joinedAt },
-            $set: { isActive: true, workspaceId, role: m.role },
+      // Write to ChannelMember collection
+      const workspaceId = channel.workspaceId;
+      if (workspaceId) {
+        const bulkOps = newMembers.map((m) => ({
+          updateOne: {
+            filter: { channelId, userId: m.userId },
+            update: {
+              $setOnInsert: { channelId, userId: m.userId, joinedAt: m.joinedAt },
+              $set: { isActive: true, workspaceId, role: m.role },
+            },
+            upsert: true,
           },
-          upsert: true,
+        }));
+        await ChannelMember.bulkWrite(bulkOps, { session });
+      }
+
+      // Atomically update embedded array — only add members not yet present
+      result = await Channel.findOneAndUpdate(
+        { _id: channelId },
+        {
+          $push: { members: { $each: newMembers } },
+          $inc: { memberCount: newMembers.length },
         },
-      }));
-      await ChannelMember.bulkWrite(bulkOps);
+        { returnDocument: 'after', session },
+      );
+
+      await session.commitTransaction();
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      throw err;
     }
 
-    // Atomically update embedded array — only add members not yet present
-    const result = await Channel.findOneAndUpdate(
-      { _id: channelId },
-      {
-        $push: { members: { $each: newMembers } },
-        $inc: { memberCount: newMembers.length },
-      },
-      { new: true },
-    );
+    session.endSession();
+
+    // Invalidate channel list cache for all new members AFTER successful commit
+    await Promise.all(newMembers.map((m) => cache.delPattern(`channels:user:${m.userId}:*`)));
+
     return result;
   }
 }

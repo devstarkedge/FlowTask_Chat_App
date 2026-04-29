@@ -36,7 +36,7 @@ class DirectMessageRepository {
     return DirectMessage.findOneAndUpdate(
       filter,
       { $set: { legacyChannelId } },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 
@@ -54,7 +54,7 @@ class DirectMessageRepository {
           lastActivityAt: new Date(),
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 }

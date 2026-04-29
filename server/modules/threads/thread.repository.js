@@ -177,7 +177,7 @@ class ThreadRepository {
     return Thread.findByIdAndUpdate(
       threadId,
       { title },
-      { new: true },
+      { returnDocument: 'after' },
     ).exec();
   }
 

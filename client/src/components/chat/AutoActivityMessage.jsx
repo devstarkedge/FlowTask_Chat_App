@@ -16,6 +16,7 @@ const EVENT_CONFIG = {
   TIME_ENTRY_ADDED:      { label: 'logged time',               accent: 'var(--accent-orange)' },
   ANNOUNCEMENT_CREATED:  { label: 'posted an announcement',    accent: 'var(--accent-primary)' },
   SUBTASK_CREATED:       { label: 'added subtask',             accent: 'var(--accent-primary)' },
+  SUBTASK_UPDATED:       { label: 'updated subtask',           accent: 'var(--accent-primary)' },
   SUBTASK_COMPLETED:     { label: 'completed subtask',         accent: 'var(--accent-green, #22c55e)' },
   SUBTASK_DELETED:       { label: 'deleted subtask',           accent: 'var(--accent-red)' },
   NANO_CREATED:          { label: 'added checklist item',      accent: 'var(--accent-primary)' },

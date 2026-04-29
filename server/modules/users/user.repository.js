@@ -97,7 +97,7 @@ class UserRepository {
     return ChatUser.findByIdAndUpdate(userId, {
       $set: { emailVerified: true },
       $unset: { verificationToken: 1, verificationExpiry: 1 },
-    }, { new: true }).exec();
+    }, { returnDocument: 'after' }).exec();
   }
 
   /**
@@ -123,7 +123,7 @@ class UserRepository {
   async addRefreshToken(userId, tokenData) {
     return ChatUser.findByIdAndUpdate(userId, {
       $push: { refreshTokens: tokenData },
-    }, { new: true }).exec();
+    }, { returnDocument: 'after' }).exec();
   }
 
   /**
@@ -135,7 +135,7 @@ class UserRepository {
   async removeRefreshToken(userId, tokenHash) {
     return ChatUser.findByIdAndUpdate(userId, {
       $pull: { refreshTokens: { tokenHash } },
-    }, { new: true }).exec();
+    }, { returnDocument: 'after' }).exec();
   }
 
   /**
@@ -146,7 +146,7 @@ class UserRepository {
   async clearAllRefreshTokens(userId) {
     return ChatUser.findByIdAndUpdate(userId, {
       $set: { refreshTokens: [] },
-    }, { new: true }).exec();
+    }, { returnDocument: 'after' }).exec();
   }
 
   /**
@@ -207,7 +207,7 @@ class UserRepository {
           chatPreferences: {},
         },
       },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
   }
 
@@ -219,7 +219,7 @@ class UserRepository {
     if (status === 'offline') {
       update.lastSeenAt = new Date();
     }
-    return ChatUser.findByIdAndUpdate(userId, update, { new: true }).exec();
+    return ChatUser.findByIdAndUpdate(userId, update, { returnDocument: 'after' }).exec();
   }
 
   /**
@@ -238,7 +238,7 @@ class UserRepository {
         $addToSet: { socketIds: socketId },
         $set: { onlineStatus: newStatus },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 
@@ -253,7 +253,7 @@ class UserRepository {
     const user = await ChatUser.findByIdAndUpdate(
       userId,
       { $pull: { socketIds: socketId } },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (user && user.socketIds.length === 0) {
@@ -276,7 +276,7 @@ class UserRepository {
     for (const [key, value] of Object.entries(preferences)) {
       setFields[`chatPreferences.${key}`] = value;
     }
-    return ChatUser.findByIdAndUpdate(userId, { $set: setFields }, { new: true }).exec();
+    return ChatUser.findByIdAndUpdate(userId, { $set: setFields }, { returnDocument: 'after' }).exec();
   }
 
   /**
@@ -297,7 +297,7 @@ class UserRepository {
     return ChatUser.findByIdAndUpdate(
       userId,
       { $push: { 'chatPreferences.pushSubscriptions': subscription } },
-      { new: true },
+      { returnDocument: 'after' },
     ).exec();
   }
 
@@ -312,7 +312,7 @@ class UserRepository {
     return ChatUser.findByIdAndUpdate(
       userId,
       { $pull: { 'chatPreferences.pushSubscriptions': { endpoint } } },
-      { new: true },
+      { returnDocument: 'after' },
     ).exec();
   }
 
@@ -438,7 +438,7 @@ class UserRepository {
     return ChatUser.findOneAndUpdate(
       { flowTaskUserId },
       { isActive: false, onlineStatus: 'offline', socketIds: [] },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 
@@ -476,7 +476,7 @@ class UserRepository {
     return ChatUser.findByIdAndUpdate(
       userId,
       { $set: { customStatus: status } },
-      { new: true },
+      { returnDocument: 'after' },
     ).exec();
   }
 
@@ -512,7 +512,7 @@ class UserRepository {
     return ChatUser.findByIdAndUpdate(
       userId,
       { $set: { customStatus: { emoji: null, text: null, expiresAt: null } } },
-      { new: true },
+      { returnDocument: 'after' },
     ).exec();
   }
 }

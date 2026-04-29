@@ -2,7 +2,7 @@ import messageRepository from './message.repository.js';
 import channelRepository from '../channels/channel.repository.js';
 import threadRepository from '../threads/thread.repository.js';
 import userRepository from '../users/user.repository.js';
-import { emitToChannel, emitToUser } from '../../sockets/socketManager.js';
+import { emitToChannel, emitToUser, getRoomOccupancy } from '../../sockets/socketManager.js';
 import { sanitizeHtml, stripHtml, truncate, extractMentions } from '../../utils/sanitize.js';
 import { parsePagination, buildCursorFilter, cursorPaginationResponse } from '../../utils/pagination.js';
 import { messageSocketPayload, reactionSocketPayload, deleteSocketPayload } from '../../utils/socketPayload.js';
@@ -318,6 +318,22 @@ class MessageService {
   });
 
   const message = await messageRepository.create(messageData);
+
+  // Diagnostic: log created system message and room occupancy to help debug
+  try {
+    const roomOcc = getRoomOccupancy(workspaceId?.toString(), 'channel', channelId.toString());
+    logger.info('sendSystemMessage: created', {
+      messageId: message._id?.toString(),
+      channelId,
+      workspaceId: workspaceId?.toString(),
+      visibleToCount: normalizedVisibleTo.length,
+      flowTaskRef: message.flowTaskRef || null,
+      activityMeta: message.activityMeta || null,
+      roomOccupancy: roomOcc,
+    });
+  } catch (err) {
+    logger.warn('sendSystemMessage: room occupancy check failed', { error: err.message });
+  }
 
   const preview = truncate(stripHtml(content), 100);
   channelRepository

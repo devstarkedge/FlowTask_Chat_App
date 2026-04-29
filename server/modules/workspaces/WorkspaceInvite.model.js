@@ -107,7 +107,7 @@ workspaceInviteSchema.statics.markAccepted = function (token, userId) {
   return this.findOneAndUpdate(
     { token, status: 'pending' },
     { $set: { status: 'accepted', acceptedAt: new Date(), acceptedBy: userId } },
-    { new: true },
+    { returnDocument: 'after' },
   );
 };
 
@@ -118,7 +118,7 @@ workspaceInviteSchema.statics.revoke = function (inviteId, workspaceId) {
   return this.findOneAndUpdate(
     { _id: inviteId, workspaceId, status: 'pending' },
     { $set: { status: 'revoked' } },
-    { new: true },
+    { returnDocument: 'after' },
   );
 };
 

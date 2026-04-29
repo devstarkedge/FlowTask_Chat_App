@@ -242,7 +242,7 @@ export async function registerFCMToken(userId, { token, deviceId, platform }) {
         lastSeenAt: new Date(),
       },
     },
-  }, { new: true })
+  }, { returnDocument: 'after' })
 }
 
 /**
@@ -252,7 +252,7 @@ export async function removeFCMToken(userId, token) {
   const ChatUser = (await import('../modules/users/ChatUser.model.js')).default
   return ChatUser.findByIdAndUpdate(userId, {
     $pull: { 'chatPreferences.fcmTokens': { token } },
-  }, { new: true })
+  }, { returnDocument: 'after' })
 }
 
 // ─── Multi-Device Push Management ────────────────────────────────────────────

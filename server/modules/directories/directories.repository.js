@@ -188,7 +188,7 @@ class DirectoriesRepository {
     return UserGroup.findOneAndUpdate(
       { _id: groupId, workspaceId, isActive: true },
       { $set: updates },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 
@@ -199,7 +199,7 @@ class DirectoriesRepository {
     return UserGroup.findOneAndUpdate(
       { _id: groupId, workspaceId, isActive: true },
       { $set: { isActive: false } },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 

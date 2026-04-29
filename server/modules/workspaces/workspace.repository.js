@@ -30,11 +30,11 @@ class WorkspaceRepository {
   }
 
   async update(id, updateData) {
-    return Workspace.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+    return Workspace.findByIdAndUpdate(id, updateData, { returnDocument: 'after', runValidators: true });
   }
 
   async deactivate(id) {
-    return Workspace.findByIdAndUpdate(id, { isActive: false }, { new: true });
+    return Workspace.findByIdAndUpdate(id, { isActive: false }, { returnDocument: 'after' });
   }
 
   // ─── Membership ──────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ class WorkspaceRepository {
     return WorkspaceMembership.findOneAndUpdate(
       { workspaceId, userId, isActive: true },
       { role: newRole },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 

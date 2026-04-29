@@ -27,6 +27,7 @@
     display: flex; align-items: flex-end; justify-content: center;
     padding: 0 0 24px;
     background: var(--overlay-bg, rgba(0,0,0,.55));
+    -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
     animation: dlOverlay .2s ease both;
   }
@@ -137,10 +138,15 @@
   /* ── scrollable body ── */
   .dl-body {
     flex: 1; overflow-y: auto; padding: 10px 10px 14px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+  @supports (scrollbar-color: auto) {
+    .dl-body { scrollbar-color: var(--scrollbar-thumb) transparent; }
+  }
+  @supports (scrollbar-width: thin) {
+    .dl-body { scrollbar-width: thin; }
   }
   .dl-body::-webkit-scrollbar { width: 4px }
+  .dl-body::-webkit-scrollbar-track { background: transparent }
   .dl-body::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px }
 
   /* ── section label ── */
@@ -231,7 +237,7 @@
     opacity: 1;
     color: var(--accent-green, #059669);
     background: color-mix(in srgb, var(--accent-green, #059669) 10%, var(--bg-secondary));
-    border-color: color-mix(in srgb, var(--accent-green, #059669) 35%, var(--border-primary));
+    border-color: var(--border-primary);
     animation: dlCheckPop .3s cubic-bezier(.22,1,.36,1) both;
   }
 

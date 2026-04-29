@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
+import path from 'path'
 
 export default ({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
@@ -11,8 +12,8 @@ export default ({ mode }) => {
   // Set them in: Render → Chat Frontend → Environment before deploying.
   if (mode === 'production') {
     const requiredVars = [
-      { key: 'VITE_API_BASE_URL', hint: 'https://flowtask-chat-app.onrender.com/api/chat' },
-      { key: 'VITE_SOCKET_URL',   hint: 'https://flowtask-chat-app.onrender.com' },
+      { key: 'VITE_API_BASE_URL', hint: 'https://chat-app-api-cyyl.onrender.com/api/chat' },
+      { key: 'VITE_SOCKET_URL',   hint: 'https://chat-app-api-cyyl.onrender.com' },
     ]
     const issues = []
     for (const { key, hint } of requiredVars) {
@@ -67,6 +68,32 @@ export default ({ mode }) => {
           // visible in the browser DevTools console. Only strip verbose logs.
           pure_funcs: ['console.log', 'console.debug', 'console.info'],
           drop_debugger: true,
+        },
+      },
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              // Prefer explicit heavy-libs chunking for predictability
+              if (id.includes('lucide-react')) return 'lucide'
+              if (id.includes('@tiptap') || id.includes('tiptap')) return 'tiptap'
+              if (id.includes('framer-motion')) return 'framer'
+              if (id.includes('react-virtuoso')) return 'virtuoso'
+              if (id.includes('socket.io-client')) return 'socketio'
+
+              // Generic per-package chunking: place each node_module package into its own chunk
+              const modulesPath = id.split(`node_modules${path.sep}`)[1] || id.split('node_modules/')[1]
+              if (modulesPath) {
+                const parts = modulesPath.split(/[/\\\\]/)
+                let pkg = parts[0]
+                if (pkg.startsWith('@') && parts.length > 1) pkg = `${pkg}/${parts[1]}`
+                const name = pkg.replace('@', '').replace('/', '-')
+                return `vendor-${name}`
+              }
+
+              return 'vendor'
+            }
+          },
         },
       },
     },

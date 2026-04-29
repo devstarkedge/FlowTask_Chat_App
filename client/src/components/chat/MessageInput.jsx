@@ -623,44 +623,38 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
         {/* Attachment Previews */}
         {allPreviewFiles.length > 0 && (
-          <div className="slack-attachment-previews">
+          <div className="slack-input-previews">
             {allPreviewFiles.map((file) => {
               const isImg = file.mimeType?.startsWith('image/')
               const thumbSrc = file.preview || file.thumbnailUrl || file.secureUrl || file.url
               const name = file.name || file.originalName || 'File'
-              const size = file.size || file.fileSize
               const key = file.localId || file._id || file.idx
 
               return (
-                <div key={key} className="slack-file-preview">
+                <div key={key} className="slack-input-preview">
                   {isImg && thumbSrc ? (
-                    <div className="slack-file-preview-thumb">
+                    <div className="slack-input-preview-thumb">
                       <img src={thumbSrc} alt={name} loading="lazy" />
                     </div>
                   ) : (
-                    <div className="slack-file-preview-icon">
-                      <FileText size={18} />
+                    <div className="slack-input-preview-icon">
+                      <FileText size={24} />
                     </div>
                   )}
-                  <div className="slack-file-preview-info">
-                    <p className="slack-file-preview-name">{name}</p>
-                    {size && <p className="slack-file-preview-size">{formatFileSize(size)}</p>}
-                  </div>
                   {file.uploading && (
-                    <div className="slack-file-preview-loading">
+                    <div className="slack-input-preview-loading">
                       <div className="slack-upload-progress">
                         <div
                           className="slack-upload-progress-bar"
                           style={{ width: `${file.progress || 0}%` }}
                         />
                       </div>
-                      <span className="slack-upload-progress-text">{file.progress || 0}%</span>
                     </div>
                   )}
                   {!file.uploading && (
                     <button
                       onClick={() => file.isPending ? removePendingFile(file.idx) : removeUploadingFile(file.localId)}
-                      className="slack-file-preview-remove"
+                      className="slack-input-preview-remove"
                       aria-label="Remove file"
                     >
                       <X size={12} />

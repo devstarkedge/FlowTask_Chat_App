@@ -319,3 +319,37 @@ export const createAIDM = asyncHandler(async (req, res) => {
     },
   });
 });
+
+/**
+ * PUT /api/chat/channels/:id/pin
+ * Toggle pin state for a channel (per-user).
+ */
+export const pinChannel = asyncHandler(async (req, res) => {
+  const result = await channelService.togglePinChannel(
+    req.user._id,
+    req.params.id,
+    req.workspaceId,
+  );
+
+  res.json({
+    success: true,
+    data: result,
+  });
+});
+
+/**
+ * PUT /api/chat/channels/:id/star
+ * Toggle star state for a channel (per-user).
+ */
+export const starChannel = asyncHandler(async (req, res) => {
+  const result = await channelService.toggleStarChannel(
+    req.user._id,
+    req.params.id,
+    req.workspaceId,
+  );
+
+  res.json({
+    success: true,
+    data: result,
+  });
+});

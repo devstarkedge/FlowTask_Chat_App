@@ -176,6 +176,11 @@ const channelSchema = new Schema(
       type: Schema.Types.Mixed,
       default: {},
     },
+    // ─── Department categorization (from FlowTask board.department) ───
+    departmentRef: {
+      departmentId: { type: String, default: null },
+      departmentName: { type: String, default: null },
+    },
     isAI: {
       type: Boolean,
       default: false,
@@ -213,6 +218,8 @@ channelSchema.index(
 );
 // Type + archive filter within workspace
 channelSchema.index({ workspaceId: 1, type: 1, isArchived: 1 });
+// Department-scoped channel lookup
+channelSchema.index({ workspaceId: 1, 'departmentRef.departmentId': 1 }, { sparse: true });
 
 // ─── Pre-save hooks ──────────────────────────────────────────────────────────
 channelSchema.pre("save", function (next) {

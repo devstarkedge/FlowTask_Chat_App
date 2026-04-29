@@ -308,6 +308,81 @@ export const useChannelStore = create(
     }
   },
 
+  // ─── Pin / Star ─────────────────────────────────────────────────────
+
+  pinChannel: async (channelId) => {
+    // Optimistic update
+    set((state) => ({
+      channels: state.channels.map((c) =>
+        c._id === channelId ? { ...c, isPinned: !c.isPinned } : c,
+      ),
+    }))
+    try {
+      await channelAPI.pin(channelId)
+    } catch (error) {
+      // Revert
+      set((state) => ({
+        channels: state.channels.map((c) =>
+          c._id === channelId ? { ...c, isPinned: !c.isPinned } : c,
+        ),
+      }))
+      toast.error('Failed to pin channel')
+    }
+  },
+
+  starChannel: async (channelId) => {
+    set((state) => ({
+      channels: state.channels.map((c) =>
+        c._id === channelId ? { ...c, isStarred: !c.isStarred } : c,
+      ),
+    }))
+    try {
+      await channelAPI.star(channelId)
+    } catch (error) {
+      set((state) => ({
+        channels: state.channels.map((c) =>
+          c._id === channelId ? { ...c, isStarred: !c.isStarred } : c,
+        ),
+      }))
+      toast.error('Failed to star channel')
+    }
+  },
+
+  // ─── Selectors ─────────────────────────────────────────────────────
+
+  getPinnedChannels: () => {
+    return get().channels
+      .filter((c) => c.isPinned)
+      .sort((a, b) => (a.pinnedOrder || 0) - (b.pinnedOrder || 0))
+  },
+
+  getStarredChannels: () => {
+    return get().channels.filter((c) => c.isStarred)
+  },
+
+  getDMChannels: () => {
+    return get().channels.filter((c) => c.type === 'dm')
+  },
+
+  /**
+   * Group project channels by department for sidebar rendering.
+   * Returns: { [departmentName]: Channel[] }
+   */
+  getDepartmentGroups: () => {
+    const projectChannels = get().channels.filter((c) => c.type === 'project')
+    const groups = {}
+    for (const ch of projectChannels) {
+      const dept = ch.departmentRef?.departmentName || 'Other'
+      if (!groups[dept]) groups[dept] = []
+      groups[dept].push(ch)
+    }
+    // Sort each group by name
+    for (const dept of Object.keys(groups)) {
+      groups[dept].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    }
+    return groups
+  },
+
   // ─── Unread with lastReadMessageId ──────────────────────────────────
   lastReadByChannel: {},
 }),

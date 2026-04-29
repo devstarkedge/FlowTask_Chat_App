@@ -1508,6 +1508,111 @@ body {
   border-top: 1px solid var(--border-secondary);
 }
 
+/* ─── Input Composer Attachment Previews (Minimal Square Cards) ─────────────── */
+
+.slack-input-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-secondary);
+}
+
+.slack-input-preview {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-secondary);
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  animation: fadeInScale 150ms ease;
+  transition: box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.slack-input-preview:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  border-color: var(--border-focus);
+}
+
+.slack-input-preview-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--radius-lg) - 1px);
+  overflow: hidden;
+}
+
+.slack-input-preview-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.slack-input-preview-icon {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--radius-lg) - 1px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+}
+
+.slack-input-preview-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  border-radius: calc(var(--radius-lg) - 1px);
+  padding: 0 8px;
+}
+
+.slack-input-preview-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 100ms ease;
+  padding: 0;
+  opacity: 0;
+  transform: scale(0.8);
+  z-index: 10;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.slack-input-preview:hover .slack-input-preview-remove {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.slack-input-preview-remove:hover {
+  background: var(--accent-red);
+  color: white;
+  border-color: var(--accent-red);
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 .slack-file-preview {
   position: relative;
   display: flex;
@@ -1639,6 +1744,115 @@ body {
   background: var(--accent-red);
   color: white;
   border-color: var(--accent-red);
+}
+
+/* ─── Attachment Download Button (hidden until hover) ─────────────────── */
+.slack-file-preview { position: relative; }
+
+.slack-file-preview .slack-file-download {
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+}
+
+.slack-file-preview:hover .slack-file-download,
+.slack-file-preview:focus-within .slack-file-download {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.slack-file-download {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-muted);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+  transition: opacity 120ms ease, transform 120ms ease, background 120ms ease;
+  cursor: pointer;
+}
+
+.slack-file-download:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.slack-image-attachment {
+  position: relative;
+}
+
+.slack-image-attachment .slack-image-attachment-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.15) 100%);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.slack-image-attachment:hover .slack-image-attachment-overlay,
+.slack-image-attachment:focus-within .slack-image-attachment-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.slack-image-attachment .slack-file-download {
+  top: 8px;
+  right: 8px;
+  background: rgba(255,255,255,0.9);
+  border: none;
+  color: #333;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.slack-image-attachment .slack-file-download:hover {
+  background: #ffffff;
+  transform: scale(1.05);
+}
+
+.slack-file-download .slack-download-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  background: rgba(0,0,0,0.86);
+  color: #fff;
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 100ms ease, transform 120ms ease;
+  box-shadow: var(--shadow-md);
+  z-index: 40;
+}
+
+.slack-file-download .slack-download-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  background: rgba(0,0,0,0.86);
+  clip-path: polygon(50% 0, 0 100%, 100% 100%);
+}
+
+.slack-file-download:hover .slack-download-tooltip,
+.slack-file-download:focus .slack-download-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 /* ─── Action Bar ──────────────────────────────────────────────────────────── */

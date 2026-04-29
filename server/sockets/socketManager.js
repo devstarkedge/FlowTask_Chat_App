@@ -358,7 +358,9 @@ export async function initializeSocket(httpServer, corsOptions) {
           return;
         }
 
-        if (user.role === 'admin') {
+        // Permission engine: users with VIEW_ALL_CHANNELS capability can join any channel
+        const { default: permissionEngine } = await import('../services/permissionEngine.js');
+        if (permissionEngine.canViewAllChannels(user, { workspaceId: wsId })) {
           const joinRoom = buildRoomName(wsId, 'channel', channelId);
           socket.join(joinRoom);
           return;

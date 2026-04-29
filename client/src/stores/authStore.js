@@ -1,7 +1,7 @@
 import { create } from 'zustand'
-import { authAPI } from '../services/api'
+import { authAPI, userAPI } from '../services/api'
 import { useChannelStore } from './channelStore'
-import { connectSocket, disconnectSocket } from '../services/socket'
+import { connectSocket, disconnectSocket, emitPresenceUpdate } from '../services/socket'
 import { useWorkspaceStore } from './workspaceStore'
 import logger from '../utils/logger'
 
@@ -116,10 +116,7 @@ export const useAuthStore = create((set, get) => ({
     try {
       // Optimistic update
       set((state) => ({ user: { ...state.user, onlineStatus: status } }))
-      
-      const { userAPI } = await import('../services/api')
-      const { emitPresenceUpdate } = await import('../services/socket')
-      
+
       await userAPI.setPresence(status)
       emitPresenceUpdate(status)
     } catch (error) {

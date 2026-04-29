@@ -35,9 +35,11 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
 
   if (!channel) return null;
 
-  const members = membersByChannel[channel._id] || [];
-  const onlineMembers = members.filter((m) => m.onlineStatus === "online");
-  const offlineMembers = members.filter((m) => m.onlineStatus !== "online");
+  const members        = membersByChannel[channel._id] || []
+  const activeMembers  = members.filter((m) => m.registrationStatus !== 'faded')
+  const fadedMembers   = members.filter((m) => m.registrationStatus === 'faded')
+  const onlineMembers  = activeMembers.filter((m) => m.onlineStatus === 'online')
+  const offlineMembers = activeMembers.filter((m) => m.onlineStatus !== 'online')
 
   const myMembership = members.find((m) => m._id === user?._id);
   const isOwner =
@@ -346,6 +348,27 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                           !isSystem
                         }
                         onRemove={() => handleRemoveMember(member._id)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Faded/Unregistered members */}
+            {fadedMembers.length > 0 && (
+              <div>
+                <div className="cip-members-section-label" style={{ marginTop: (onlineMembers.length > 0 || offlineMembers.length > 0) ? 12 : 0, color: 'var(--text-muted)' }}>
+                  <span className="dot" style={{ background: 'var(--border-secondary)' }} />
+                  Unregistered (FlowTask) — {fadedMembers.length}
+                </div>
+                <div className="panel-list">
+                  {fadedMembers.map((member) => (
+                    <div key={member.flowTaskUserId} className="panel-item" style={{ padding: '6px 8px', borderRadius: 'var(--radius-md)' }}>
+                      <MemberItem
+                        member={member}
+                        onOpenProfile={onOpenProfile}
+                        canRemove={false}
                       />
                     </div>
                   ))}

@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import EmojiPicker from 'emoji-picker-react';
+import { useState, useRef, useEffect, lazy, Suspense } from 'react';
+const EmojiPicker = lazy(() => import('emoji-picker-react'));
 
 export default function EmojiPickerComponent({ onSelect, onClose, position = 'top' }) {
   const pickerRef = useRef(null);
@@ -39,19 +39,21 @@ export default function EmojiPickerComponent({ onSelect, onClose, position = 'to
         marginTop: position === 'bottom' ? 8 : 0,
       }}
     >
-      <EmojiPicker
-        onEmojiClick={onEmojiClick}
-        autoFocusSearch={true}
-        width={320}
-        height={400}
-        searchPlaceholder="Search emoji..."
-        previewConfig={{
-          showPreview: false
-        }}
-        skinTonesDisabled
-        searchDisabled={false}
-        emojiStyle="native"
-      />
+      <Suspense fallback={<div style={{width:320,height:20}} /> }>
+        <EmojiPicker
+          onEmojiClick={onEmojiClick}
+          autoFocusSearch={true}
+          width={320}
+          height={400}
+          searchPlaceholder="Search emoji..."
+          previewConfig={{
+            showPreview: false
+          }}
+          skinTonesDisabled
+          searchDisabled={false}
+          emojiStyle="native"
+        />
+      </Suspense>
     </div>
   );
 }

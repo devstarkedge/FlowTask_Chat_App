@@ -182,41 +182,17 @@ class FlowTaskSyncService {
       return report;
     }
 
-    // Collect all unique FlowTask user IDs from the board hierarchy
-    const memberFlowTaskIds = new Set();
-
+    // Use deep member extraction (board + cards + subtasks + nanos)
+    let memberFlowTaskIds;
     try {
-      // Fetch board details (includes owner + members)
-      const board = await flowTaskService.getBoard(boardId, token);
-      if (!board) return report;
-
-      // Board owner
-      const ownerId = typeof board.owner === 'string' ? board.owner : board.owner?._id;
-      if (ownerId) memberFlowTaskIds.add(ownerId.toString());
-
-      // Board members
-      for (const m of (board.members || [])) {
-        const mid = typeof m === 'string' ? m : m._id;
-        if (mid) memberFlowTaskIds.add(mid.toString());
-      }
-
-      // Card assignees
-      const cards = await flowTaskService.getBoardCards(boardId, token).catch(() => []);
-      for (const card of (cards || [])) {
-        for (const a of (card.assignees || [])) {
-          const aid = typeof a === 'string' ? a : a._id;
-          if (aid) memberFlowTaskIds.add(aid.toString());
-        }
-        for (const m of (card.members || [])) {
-          const mid = typeof m === 'string' ? m : m._id;
-          if (mid) memberFlowTaskIds.add(mid.toString());
-        }
-      }
+      const result = await flowTaskService.getBoardDeepMembers(boardId, token);
+      memberFlowTaskIds = result.memberIds;
     } catch (err) {
-      logger.warn('[SYNC] Failed to fetch full board data for member sync', {
+      logger.warn('[SYNC] Failed to fetch deep board members', {
         boardId,
         error: err.message,
       });
+      return report;
     }
 
     report.total = memberFlowTaskIds.size;

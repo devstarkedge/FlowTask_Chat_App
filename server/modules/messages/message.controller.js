@@ -746,7 +746,7 @@ export const rescheduleMessage = asyncHandler(async (req, res) => {
       status: 'pending',
     },
     { $set: { scheduledAt: schedDate } },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!scheduled) {
@@ -769,7 +769,7 @@ export const sendScheduledNow = asyncHandler(async (req, res) => {
       status: 'pending',
     },
     { $set: { status: 'processing' } },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!scheduled) {

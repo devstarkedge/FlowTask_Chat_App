@@ -6,6 +6,22 @@ import channelRepository from '../channels/channel.repository.js';
 import { WORKSPACE_ROLES } from '../../config/constants.js';
 import logger from '../../utils/logger.js';
 
+function normalizeEntityId(value) {
+  if (!value) return null;
+  if (typeof value === 'object') {
+    if (value._id) return value._id.toString();
+    if (value.id) return value.id.toString();
+    try { const s = value.toString(); if (s && s !== '[object Object]') return s; } catch {}
+    return null;
+  }
+  if (typeof value === 'string') {
+    const idMatch = value.match(/[0-9a-fA-F]{24}/);
+    if (idMatch) return idMatch[0];
+    return value;
+  }
+  try { return String(value); } catch { return null; }
+}
+
 /**
  * FlowTask Sync Service — orchestrates bulk synchronization between
  * FlowTask and ChatApp. Used for initial workspace setup and daily
@@ -177,7 +193,8 @@ class FlowTaskSyncService {
     const report = { added: 0, total: 0 };
 
     // Find the channel for this board
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, workspaceId);
+    const normalizedBoardId = normalizeEntityId(boardId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, workspaceId);
     if (!channel) {
       return report;
     }

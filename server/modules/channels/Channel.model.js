@@ -222,11 +222,11 @@ channelSchema.index({ workspaceId: 1, type: 1, isArchived: 1 });
 channelSchema.index({ workspaceId: 1, 'departmentRef.departmentId': 1 }, { sparse: true });
 
 // ─── Pre-save hooks ──────────────────────────────────────────────────────────
-channelSchema.pre("save", function (next) {
+channelSchema.pre("save", function () {
   if (this.isModified("members")) {
     this.memberCount = this.members.length;
   }
-  next();
+  
 });
 
 // ─── Instance Methods ────────────────────────────────────────────────────────
@@ -251,9 +251,25 @@ channelSchema.statics.findByFlowTaskRef = function (
   entityId,
   workspaceId,
 ) {
+  // Normalize entityId: allow string, ObjectId, or full board object
+  let normalizedId = entityId;
+  try {
+    if (normalizedId && typeof normalizedId === 'object') {
+      if (normalizedId._id) normalizedId = normalizedId._id.toString();
+      else if (normalizedId.id) normalizedId = normalizedId.id.toString();
+      else {
+        // Fall back to toString if it yields a sensible representation
+        const s = normalizedId.toString();
+        normalizedId = s && s !== '[object Object]' ? s : null;
+      }
+    }
+  } catch (err) {
+    normalizedId = null;
+  }
+
   const filter = {
     "flowTaskRef.entityType": entityType,
-    "flowTaskRef.entityId": entityId,
+    "flowTaskRef.entityId": normalizedId,
   };
   if (workspaceId) filter.workspaceId = workspaceId;
   return this.findOne(filter);

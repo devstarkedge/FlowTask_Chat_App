@@ -90,7 +90,7 @@ channelMemberSchema.statics.addMember = async function (channelId, userId, works
       $setOnInsert: { channelId, userId, joinedAt: new Date() },
       $set: { isActive: true, workspaceId, role },
     },
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: 'after' },
   );
 };
 
@@ -98,7 +98,7 @@ channelMemberSchema.statics.removeMember = async function (channelId, userId) {
   return this.findOneAndUpdate(
     { channelId, userId },
     { $set: { isActive: false } },
-    { new: true },
+    { returnDocument: 'after' },
   );
 };
 

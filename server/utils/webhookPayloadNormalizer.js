@@ -340,6 +340,15 @@ const NORMALIZERS = {
     userId: p.userId || actorToUserId(p.actor),
   }),
 
+  [FLOWTASK_EVENTS.SUBTASK_UPDATED]: (p) => ({
+    ...p,
+    subtask: p.subtask,
+    card: p.card || taskToCard(p.task),
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    userId: p.userId || actorToUserId(p.actor),
+  }),
+
   [FLOWTASK_EVENTS.SUBTASK_COMPLETED]: (p) => ({
     ...p,
     subtask: p.subtask,

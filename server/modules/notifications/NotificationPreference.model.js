@@ -167,7 +167,7 @@ notificationPreferenceSchema.statics.updateGlobal = function (userId, workspaceI
   return this.findOneAndUpdate(
     { userId, workspaceId },
     { $set: setFields },
-    { new: true, upsert: true },
+    { upsert: true, returnDocument: 'after' },
   );
 };
 
@@ -182,7 +182,7 @@ notificationPreferenceSchema.statics.setPause = function (userId, workspaceId, p
   return this.findOneAndUpdate(
     { userId, workspaceId },
     { $set: setFields },
-    { new: true, upsert: true },
+    { upsert: true, returnDocument: 'after' },
   );
 };
 
@@ -196,7 +196,7 @@ notificationPreferenceSchema.statics.setChannelOverride = function (
   return this.findOneAndUpdate(
     { userId, workspaceId },
     { $set: { [key]: override } },
-    { new: true, upsert: true },
+    { upsert: true, returnDocument: 'after' },
   );
 };
 
@@ -210,7 +210,7 @@ notificationPreferenceSchema.statics.removeChannelOverride = function (
   return this.findOneAndUpdate(
     { userId, workspaceId },
     { $unset: { [key]: 1 } },
-    { new: true },
+    { returnDocument: 'after' },
   );
 };
 
@@ -224,7 +224,7 @@ notificationPreferenceSchema.statics.setKeywords = function (userId, workspaceId
   return this.findOneAndUpdate(
     { userId, workspaceId },
     { $set: { keywords: cleaned } },
-    { new: true, upsert: true },
+    { upsert: true, returnDocument: 'after' },
   );
 };
 

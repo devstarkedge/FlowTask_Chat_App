@@ -198,6 +198,18 @@ class CacheService {
     await this.delPattern(`ws:${workspaceId}:*`);
   }
 
+  /**
+   * Flush the entire cache backend (Redis or in-memory).
+   * Tests and maintenance scripts can use this to reset state.
+   */
+  async flush() {
+    this._ensureInitialized();
+    if (this.backend && typeof this.backend.flush === 'function') {
+      return this.backend.flush();
+    }
+    return;
+  }
+
   getStatus() {
     return {
       type: this.type,

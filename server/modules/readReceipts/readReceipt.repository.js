@@ -44,7 +44,7 @@ class ReadReceiptRepository {
         unreadMentionCount: 0,
         workspaceId,
       },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
   }
 
@@ -92,7 +92,7 @@ class ReadReceiptRepository {
     return ReadReceipt.findOneAndUpdate(
       filter,
       { $setOnInsert: { unreadCount: 0, unreadMentionCount: 0, workspaceId } },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
   }
 

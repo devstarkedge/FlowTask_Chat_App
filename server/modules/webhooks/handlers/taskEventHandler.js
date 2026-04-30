@@ -8,9 +8,9 @@ import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS } from '../../../config/constants.js';
 
 function requireWorkspaceId(payload, eventName) {
-  const wsId = payload?._workspaceId;
+  const wsId = payload?._workspaceId || payload?.workspaceId || payload?.data?.workspaceId;
   if (!wsId) {
-    logger.warn(`${eventName}: missing _workspaceId, skipping event`);
+    logger.warn(`${eventName}: missing workspace id (no _workspaceId/workspaceId), skipping event`);
     return null;
   }
   return wsId;
@@ -34,6 +34,31 @@ function resolveActorName(payload, chatUser) {
   return candidate || 'Someone';
 }
 
+function normalizeEntityId(value) {
+  if (!value) return null;
+  // If it's an object (e.g., populated board doc or ObjectId), prefer _id or id
+  if (typeof value === 'object') {
+    if (value._id) return value._id.toString();
+    if (value.id) return value.id.toString();
+    try {
+      const s = value.toString();
+      if (s && s !== '[object Object]') return s;
+    } catch (err) {
+      return null;
+    }
+    return null;
+  }
+
+  // If it's a string, try to extract a 24-hex ObjectId if present (handles logged object literals)
+  if (typeof value === 'string') {
+    const idMatch = value.match(/[0-9a-fA-F]{24}/);
+    if (idMatch) return idMatch[0];
+    return value;
+  }
+
+  try { return String(value); } catch { return null; }
+}
+
 /**
  * Task Event Handler — handles FlowTask card/task lifecycle events.
  *
@@ -52,12 +77,16 @@ export function registerTaskEventHandlers() {
     if (!wsId) return;
 
     const { card, boardId, userId, departmentId, project } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
 
-    if (!card || !boardId) return;
+    if (!card || !normalizedBoardId) {
+      logger.warn('task.created: missing card or boardId, skipping', { deliveryId: payload.deliveryId, boardId });
+      return;
+    }
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) {
-      logger.debug('task.created: no project channel', { boardId });
+      logger.debug('task.created: no project channel', { boardId: normalizedBoardId });
       return;
     }
 
@@ -82,7 +111,7 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'TASK_CREATED',
       taskId: card._id || null,
-      projectId: boardId,
+      projectId: normalizedBoardId,
       departmentId: departmentId || null,
       projectName: project?.name || null,
       taskTitle: card.title || null,
@@ -101,12 +130,12 @@ export function registerTaskEventHandlers() {
   eventBus.register(FLOWTASK_EVENTS.TASK_UPDATED, async (payload) => {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_UPDATED);
     if (!wsId) return;
-
     const { card, boardId, changes, userId, departmentId, project } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
 
-    if (!card || !boardId) return;
+    if (!card || !normalizedBoardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -161,7 +190,7 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'TASK_UPDATED',
       taskId: card._id || null,
-      projectId: boardId,
+      projectId: normalizedBoardId,
       departmentId: departmentId || null,
       projectName: project?.name || null,
       taskTitle: card.title || null,
@@ -179,12 +208,12 @@ export function registerTaskEventHandlers() {
   eventBus.register(FLOWTASK_EVENTS.TASK_DELETED, async (payload) => {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_DELETED);
     if (!wsId) return;
-
     const { cardId, cardTitle, boardId, userId, departmentId, project } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
 
-    if (!boardId) return;
+    if (!normalizedBoardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -194,7 +223,7 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'TASK_DELETED',
       taskId: cardId || null,
-      projectId: boardId,
+      projectId: normalizedBoardId,
       departmentId: departmentId || null,
       projectName: project?.name || null,
       taskTitle: title,
@@ -215,15 +244,15 @@ export function registerTaskEventHandlers() {
   eventBus.register(FLOWTASK_EVENTS.TASK_ASSIGNED, async (payload) => {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_ASSIGNED);
     if (!wsId) return;
-
     const { card, boardId, assigneeId, assignerId, departmentId, project } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
 
     if (!card || !assigneeId) return;
 
     const [assignee, assigner, channel] = await Promise.all([
       userRepository.findByFlowTaskId(assigneeId, wsId),
       assignerId ? userRepository.findByFlowTaskId(assignerId, wsId) : null,
-      boardId ? channelRepository.findByFlowTaskRef('board', boardId, wsId) : null,
+      normalizedBoardId ? channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId) : null,
     ]);
 
     if (!assignee) return;
@@ -235,7 +264,7 @@ export function registerTaskEventHandlers() {
       const activityMeta = {
         eventType: 'TASK_ASSIGNED',
         taskId: card._id || null,
-        projectId: boardId || null,
+        projectId: normalizedBoardId || boardId || null,
         departmentId: departmentId || null,
         projectName: project?.name || null,
         taskTitle: card.title || null,
@@ -258,12 +287,12 @@ export function registerTaskEventHandlers() {
   eventBus.register(FLOWTASK_EVENTS.TASK_COMMENTED, async (payload) => {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_COMMENTED);
     if (!wsId) return;
-
     const { comment, card, boardId, userId, departmentId, project } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
 
-    if (!comment || !card || !boardId) return;
+    if (!comment || !card || !normalizedBoardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -282,7 +311,7 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'TASK_COMMENTED',
       taskId: card._id || null,
-      projectId: boardId,
+      projectId: normalizedBoardId,
       departmentId: departmentId || null,
       projectName: project?.name || null,
       taskTitle: card.title || null,
@@ -303,12 +332,12 @@ export function registerTaskEventHandlers() {
   eventBus.register(FLOWTASK_EVENTS.TASK_STATUS_CHANGED, async (payload) => {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_STATUS_CHANGED);
     if (!wsId) return;
-
     const { card, boardId, oldStatus, newStatus, userId, departmentId, project } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
 
-    if (!card || !boardId) return;
+    if (!card || !normalizedBoardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -320,7 +349,7 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'TASK_STATUS_CHANGED',
       taskId: card._id || null,
-      projectId: boardId,
+      projectId: normalizedBoardId,
       departmentId: departmentId || null,
       projectName: project?.name || null,
       taskTitle: card.title || null,
@@ -357,12 +386,12 @@ export function registerTaskEventHandlers() {
   eventBus.register(FLOWTASK_EVENTS.TASK_DUE_DATE_CHANGED, async (payload) => {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_DUE_DATE_CHANGED);
     if (!wsId) return;
-
     const { card, boardId, oldDueDate, newDueDate, userId, departmentId, project } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
 
-    if (!card || !boardId) return;
+    if (!card || !normalizedBoardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -378,7 +407,7 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'TASK_DUE_DATE_CHANGED',
       taskId: card._id || null,
-      projectId: boardId,
+      projectId: normalizedBoardId,
       departmentId: departmentId || null,
       projectName: project?.name || null,
       taskTitle: card.title || null,
@@ -404,12 +433,12 @@ export function registerTaskEventHandlers() {
   eventBus.register(FLOWTASK_EVENTS.TIME_ENTRY_ADDED, async (payload) => {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TIME_ENTRY_ADDED);
     if (!wsId) return;
-
     const { timeEntry, card, boardId, userId, departmentId, project } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
 
-    if (!timeEntry || !boardId) return;
+    if (!timeEntry || !normalizedBoardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -431,7 +460,7 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'TIME_ENTRY_ADDED',
       taskId: card?._id || timeEntry.cardId || null,
-      projectId: boardId,
+      projectId: normalizedBoardId,
       departmentId: departmentId || null,
       projectName: project?.name || null,
       taskTitle: taskTitle,
@@ -454,11 +483,18 @@ export function registerTaskEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.SUBTASK_CREATED);
     if (!wsId) return;
 
-    const { subtask, card, boardId, userId, departmentId, project } = payload;
-    if (!subtask || !boardId) return;
+    const { subtask, card, boardId, userId, departmentId, project, deliveryId } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
+    if (!subtask || !normalizedBoardId) {
+      logger.warn('SUBTASK_CREATED: missing subtask or boardId, skipping', { deliveryId, boardId, keys: Object.keys(payload || {}) });
+      return;
+    }
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
-    if (!channel) return;
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
+    if (!channel) {
+      logger.warn('SUBTASK_CREATED: no project channel found for board', { deliveryId: payload.deliveryId, boardId: normalizedBoardId, workspaceId: wsId });
+      return;
+    }
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const userName = resolveActorName(payload, user);
@@ -467,14 +503,16 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'SUBTASK_CREATED',
       taskId: card?._id || payload.task?.id || null,
-      projectId: boardId,
-      departmentId: departmentId || null,
+      projectId: normalizedBoardId,
+      departmentId: departmentId || project?.departmentId || null,
       projectName: project?.name || null,
       taskTitle,
       subtaskTitle: subtask.title || null,
       parentTaskTitle: taskTitle,
       actorName: userName,
     };
+
+    logger.info('SUBTASK_CREATED: sending system message', { deliveryId: payload.deliveryId, channelId: channel._id?.toString(), boardId, workspaceId: wsId, activityMeta });
 
     await messageService.sendSystemMessage(
       channel._id,
@@ -492,9 +530,10 @@ export function registerTaskEventHandlers() {
     if (!wsId) return;
 
     const { subtask, card, boardId, userId, departmentId, project } = payload;
-    if (!subtask || !boardId) return;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
+    if (!subtask || !normalizedBoardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -504,7 +543,7 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'SUBTASK_COMPLETED',
       taskId: card?._id || payload.task?.id || null,
-      projectId: boardId,
+      projectId: normalizedBoardId,
       departmentId: departmentId || null,
       projectName: project?.name || null,
       taskTitle,
@@ -529,9 +568,10 @@ export function registerTaskEventHandlers() {
     if (!wsId) return;
 
     const { subtask, card, boardId, userId, departmentId, project } = payload;
-    if (!subtask || !boardId) return;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
+    if (!subtask || !normalizedBoardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -541,7 +581,7 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'SUBTASK_DELETED',
       taskId: card?._id || payload.task?.id || null,
-      projectId: boardId,
+      projectId: normalizedBoardId,
       departmentId: departmentId || null,
       projectName: project?.name || null,
       taskTitle,
@@ -560,15 +600,62 @@ export function registerTaskEventHandlers() {
     );
   });
 
+  // ─── subtask.updated ─────────────────────────────────────────────────
+  eventBus.register(FLOWTASK_EVENTS.SUBTASK_UPDATED, async (payload) => {
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.SUBTASK_UPDATED);
+    if (!wsId) return;
+
+    const { subtask, card, boardId, userId, departmentId, project, deliveryId } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
+    if (!subtask || !normalizedBoardId) {
+      logger.warn('SUBTASK_UPDATED: missing subtask or boardId, skipping', { deliveryId, boardId, keys: Object.keys(payload || {}) });
+      return;
+    }
+
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
+    if (!channel) {
+      logger.warn('SUBTASK_UPDATED: no project channel found for board', { deliveryId: payload.deliveryId, boardId: normalizedBoardId, workspaceId: wsId });
+      return;
+    }
+
+    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
+    const userName = resolveActorName(payload, user);
+    const taskTitle = card?.title || payload.task?.title || 'a task';
+
+    const activityMeta = {
+      eventType: 'SUBTASK_UPDATED',
+      taskId: card?._id || payload.task?.id || null,
+      projectId: normalizedBoardId,
+      departmentId: departmentId || project?.departmentId || null,
+      projectName: project?.name || null,
+      taskTitle,
+      subtaskTitle: subtask.title || null,
+      parentTaskTitle: taskTitle,
+      actorName: userName,
+    };
+
+    logger.info('SUBTASK_UPDATED: sending system message', { deliveryId: payload.deliveryId, channelId: channel._id?.toString(), boardId: normalizedBoardId, workspaceId: wsId, activityMeta });
+
+    await messageService.sendSystemMessage(
+      channel._id,
+      `${userName} updated subtask **${subtask.title}** on **${taskTitle}**`,
+      { entityType: 'card', entityId: card?._id || payload.task?.id },
+      wsId,
+      [],
+      activityMeta,
+    );
+  });
+
   // ─── nano.created ─────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.NANO_CREATED, async (payload) => {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.NANO_CREATED);
     if (!wsId) return;
 
     const { nano, subtask, card, boardId, userId, departmentId, project } = payload;
-    if (!nano || !boardId) return;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
+    if (!nano || !normalizedBoardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -578,8 +665,8 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'NANO_CREATED',
       taskId: card?._id || payload.task?.id || null,
-      projectId: boardId,
-      departmentId: departmentId || null,
+      projectId: normalizedBoardId,
+      departmentId: departmentId || project?.departmentId || null,
       projectName: project?.name || null,
       taskTitle,
       subtaskTitle: subtask?.title || null,
@@ -604,9 +691,10 @@ export function registerTaskEventHandlers() {
     if (!wsId) return;
 
     const { nano, subtask, card, boardId, userId, departmentId, project } = payload;
-    if (!nano || !boardId) return;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
+    if (!nano || !normalizedBoardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -616,7 +704,7 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'NANO_COMPLETED',
       taskId: card?._id || payload.task?.id || null,
-      projectId: boardId,
+      projectId: normalizedBoardId,
       departmentId: departmentId || null,
       projectName: project?.name || null,
       taskTitle,
@@ -642,9 +730,10 @@ export function registerTaskEventHandlers() {
     if (!wsId) return;
 
     const { nano, subtask, card, boardId, userId, departmentId, project } = payload;
-    if (!nano || !boardId) return;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
+    if (!nano || !normalizedBoardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -654,7 +743,7 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'NANO_DELETED',
       taskId: card?._id || payload.task?.id || null,
-      projectId: boardId,
+      projectId: normalizedBoardId,
       departmentId: departmentId || null,
       projectName: project?.name || null,
       taskTitle,
@@ -679,10 +768,14 @@ export function registerTaskEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.ATTACHMENT_ADDED);
     if (!wsId) return;
 
-    const { attachment, card, boardId, userId, departmentId, project } = payload;
-    if (!attachment || !boardId) return;
+    const { attachment, card, boardId, userId, departmentId, project, deliveryId } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
+    if (!attachment || !normalizedBoardId) {
+      logger.warn('ATTACHMENT_ADDED: missing attachment or boardId, skipping', { deliveryId, boardId, keys: Object.keys(payload || {}) });
+      return;
+    }
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -693,13 +786,16 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'ATTACHMENT_ADDED',
       taskId: card?._id || payload.task?.id || null,
-      projectId: boardId,
-      departmentId: departmentId || null,
+      projectId: normalizedBoardId,
+      departmentId: departmentId || project?.departmentId || null,
       projectName: project?.name || null,
       taskTitle,
       fileName,
       actorName: userName,
     };
+
+    // Log which IDs are present so client deep-link issues can be diagnosed
+    logger.info('ATTACHMENT_ADDED: activityMeta built', { deliveryId: payload.deliveryId, channelId: channel._id?.toString(), taskId: activityMeta.taskId, projectId: activityMeta.projectId, departmentId: activityMeta.departmentId });
 
     await messageService.sendSystemMessage(
       channel._id,
@@ -717,14 +813,15 @@ export function registerTaskEventHandlers() {
     if (!wsId) return;
 
     const { card, boardId, assigneeId, assigneeName } = payload;
-    if (!boardId || !assigneeId) return;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
+    if (!normalizedBoardId || !assigneeId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const chatUser = await userRepository.findByFlowTaskId(assigneeId, wsId);
     if (!chatUser) {
-      logger.debug('task.assigned: assignee not in ChatApp (faded user)', { assigneeId, boardId });
+      logger.debug('task.assigned: assignee not in ChatApp (faded user)', { assigneeId, boardId: normalizedBoardId });
       return;
     }
 
@@ -734,7 +831,7 @@ export function registerTaskEventHandlers() {
         const channelService = (await import('../../channels/channel.service.js')).default;
         await channelService.addMember(channel._id, chatUser._id, 'member', wsId);
         logger.info('task.assigned: auto-joined user to channel', {
-          userId: chatUser._id, channelId: channel._id, boardId,
+          userId: chatUser._id, channelId: channel._id, boardId: normalizedBoardId,
         });
       } catch (err) {
         logger.warn('task.assigned: failed to auto-join user', { error: err.message });
@@ -747,7 +844,7 @@ export function registerTaskEventHandlers() {
     const activityMeta = {
       eventType: 'TASK_ASSIGNED',
       taskId: card?._id || null,
-      projectId: boardId,
+      projectId: normalizedBoardId,
       taskTitle,
       assigneeName: assigneeName || chatUser.name,
       actorName: userName,
@@ -769,9 +866,10 @@ export function registerTaskEventHandlers() {
     if (!wsId) return;
 
     const { subtask, boardId, assigneeId } = payload;
-    if (!boardId || !assigneeId) return;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
+    if (!normalizedBoardId || !assigneeId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const chatUser = await userRepository.findByFlowTaskId(assigneeId, wsId);
@@ -782,7 +880,7 @@ export function registerTaskEventHandlers() {
         const channelService = (await import('../../channels/channel.service.js')).default;
         await channelService.addMember(channel._id, chatUser._id, 'member', wsId);
         logger.info('subtask.assigned: auto-joined user to channel', {
-          userId: chatUser._id, channelId: channel._id,
+          userId: chatUser._id, channelId: channel._id, boardId: normalizedBoardId,
         });
       } catch (err) {
         logger.warn('subtask.assigned: failed to auto-join user', { error: err.message });
@@ -796,9 +894,10 @@ export function registerTaskEventHandlers() {
     if (!wsId) return;
 
     const { nano, boardId, assigneeId } = payload;
-    if (!boardId || !assigneeId) return;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
+    if (!normalizedBoardId || !assigneeId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const chatUser = await userRepository.findByFlowTaskId(assigneeId, wsId);
@@ -809,7 +908,7 @@ export function registerTaskEventHandlers() {
         const channelService = (await import('../../channels/channel.service.js')).default;
         await channelService.addMember(channel._id, chatUser._id, 'member', wsId);
         logger.info('nano.assigned: auto-joined user to channel', {
-          userId: chatUser._id, channelId: channel._id,
+          userId: chatUser._id, channelId: channel._id, boardId: normalizedBoardId,
         });
       } catch (err) {
         logger.warn('nano.assigned: failed to auto-join user', { error: err.message });

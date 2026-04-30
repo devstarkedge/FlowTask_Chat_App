@@ -194,7 +194,7 @@ notificationSchema.statics.markRead = function (notificationId, recipientId, wor
   return this.findOneAndUpdate(
     { _id: notificationId, recipientId, workspaceId },
     { $set: { isRead: true, readAt: new Date() } },
-    { new: true },
+    { returnDocument: 'after' },
   );
 };
 

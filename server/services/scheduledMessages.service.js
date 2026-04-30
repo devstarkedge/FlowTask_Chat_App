@@ -29,7 +29,7 @@ async function processScheduledMessage(scheduled) {
     const claimed = await ScheduledMessage.findOneAndUpdate(
       { _id: scheduled._id, status: 'pending' },
       { $set: { status: 'processing' } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!claimed) return; // Another instance claimed it
 

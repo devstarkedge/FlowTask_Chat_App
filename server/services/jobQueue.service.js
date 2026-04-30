@@ -77,13 +77,18 @@ export async function addJob(name, data, opts = {}) {
   }
 
   if (entry.sync) {
-    // Synchronous fallback — execute immediately
+    // Synchronous fallback — execute immediately and propagate processor result
     try {
-      await entry.processor({ data, id: `sync-${Date.now()}` });
+      const jobWrapper = { data, id: `sync-${Date.now()}` };
+      const result = await entry.processor(jobWrapper);
+      // If the processor returned a value (e.g. the event-bus processor returns
+      // the handler settlement result), propagate it. Otherwise return a
+      // sentinel indicating the job was processed synchronously.
+      return result || { processedSync: true };
     } catch (err) {
       logger.error(`Sync job failed: ${name}`, { error: err.message });
+      return { processedSync: true, error: err.message };
     }
-    return null;
   }
 
   return entry.queue.add(name, data, opts);

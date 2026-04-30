@@ -155,7 +155,7 @@ export const changeUserRole = asyncHandler(async (req, res) => {
   const user = await ChatUser.findByIdAndUpdate(
     req.params.userId,
     { role },
-    { new: true },
+    { returnDocument: 'after' },
   ).select('name email role');
 
   if (!user) {
@@ -194,7 +194,7 @@ export const deactivateUser = asyncHandler(async (req, res) => {
   const user = await ChatUser.findByIdAndUpdate(
     req.params.userId,
     { isActive: false, onlineStatus: 'offline' },
-    { new: true },
+    { returnDocument: 'after' },
   ).select('name email isActive');
 
   if (!user) {
@@ -217,7 +217,7 @@ export const activateUser = asyncHandler(async (req, res) => {
   const user = await ChatUser.findByIdAndUpdate(
     req.params.userId,
     { isActive: true },
-    { new: true },
+    { returnDocument: 'after' },
   ).select('name email isActive');
 
   if (!user) {
@@ -263,7 +263,7 @@ export const archiveChannel = asyncHandler(async (req, res) => {
   const channel = await Channel.findOneAndUpdate(
     { _id: req.params.channelId, workspaceId: req.workspaceId },
     { isArchived: true, archivedAt: new Date(), archivedReason: req.body.reason || 'Archived by admin' },
-    { new: true },
+    { returnDocument: 'after' },
   ).select('name slug isArchived');
 
   if (!channel) {
@@ -281,7 +281,7 @@ export const unarchiveChannel = asyncHandler(async (req, res) => {
   const channel = await Channel.findOneAndUpdate(
     { _id: req.params.channelId, workspaceId: req.workspaceId },
     { isArchived: false, archivedAt: null, archivedReason: null },
-    { new: true },
+    { returnDocument: 'after' },
   ).select('name slug isArchived');
 
   if (!channel) {
@@ -354,7 +354,7 @@ export const updateSettings = asyncHandler(async (req, res) => {
   const workspace = await Workspace.findByIdAndUpdate(
     req.workspaceId,
     { $set: update },
-    { new: true },
+    { returnDocument: 'after' },
   ).lean();
 
   res.json({ success: true, data: { workspace } });

@@ -140,7 +140,7 @@ workspaceMembershipSchema.statics.addMember = async function (userId, workspaceI
       $set: { role, isActive: true },
       $setOnInsert: { joinedAt: new Date(), invitedBy },
     },
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: 'after' },
   );
 
   // Sync denormalized memberCount on Workspace when a new member is added
@@ -162,7 +162,7 @@ workspaceMembershipSchema.statics.removeMember = async function (userId, workspa
   const membership = await this.findOneAndUpdate(
     { userId, workspaceId, isActive: true },
     { $set: { isActive: false } },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   // Sync denormalized memberCount on Workspace

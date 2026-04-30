@@ -231,7 +231,7 @@ class MessageRepository {
    */
   async update(messageId, updates, workspaceId) {
     const filter = injectWorkspaceFilter({ _id: messageId }, workspaceId);
-    return Message.findOneAndUpdate(filter, updates, { new: true })
+    return Message.findOneAndUpdate(filter, updates, { returnDocument: 'after' })
       .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
       .populate({
         path: 'fileReferences',
@@ -260,7 +260,7 @@ class MessageRepository {
         content: '[Message deleted]',
         htmlContent: '<p>[Message deleted]</p>',
       },
-      { new: true }
+      { returnDocument: 'after' }
     )
       .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
       .lean();
@@ -290,7 +290,7 @@ class MessageRepository {
     return Message.findOneAndUpdate(
       filter,
       { isPinned: true, pinnedBy, pinnedAt: new Date() },
-      { new: true },
+      { returnDocument: 'after' },
     ).exec();
   }
 
@@ -304,7 +304,7 @@ class MessageRepository {
     return Message.findOneAndUpdate(
       filter,
       { isPinned: false, pinnedBy: null, pinnedAt: null },
-      { new: true },
+      { returnDocument: 'after' },
     ).exec();
   }
 
@@ -360,7 +360,7 @@ class MessageRepository {
         $push: { 'reactions.$.userIds': userId },
         $inc: { 'reactions.$.count': 1 },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (result) return result;
@@ -376,7 +376,7 @@ class MessageRepository {
           reactions: { emoji, userIds: [userId], count: 1 },
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     // If both updates returned null, user already reacted — return as-is
@@ -405,7 +405,7 @@ class MessageRepository {
         $pull: { 'reactions.$.userIds': userId },
         $inc: { 'reactions.$.count': -1 },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!message) return null;

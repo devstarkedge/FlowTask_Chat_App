@@ -1,5 +1,8 @@
 import { EventEmitter } from 'events';
 import logger from '../utils/logger.js';
+import env from '../config/environment.js';
+import { registerQueue, addJob } from './jobQueue.service.js';
+import ProcessedEvent from '../modules/flowtask/ProcessedEvent.model.js';
 
 /**
  * In-process event bus for decoupling webhook ingestion from event handlers.
@@ -67,28 +70,23 @@ class EventBus extends EventEmitter {
 
     logger.info(`Registered event handler: ${handlerName} → ${eventName}`);
   }
-
   /**
-   * Emit an event to all registered handlers and await their results.
-   * Returns a Promise that resolves when all handlers have settled.
-   * @param {string} eventName
-   * @param {object} payload
-   * @returns {Promise<{settled: PromiseSettledResult[]}>}
+   * Internal local dispatch — invokes registered handlers in-process.
+   * Separated so we can optionally route events through a distributed queue.
    */
-  async dispatch(eventName, payload) {
+  async _dispatchLocal(eventName, payload) {
     const handlerCount = this.listenerCount(eventName);
     if (handlerCount === 0) {
       logger.warn(`No handlers registered for event: ${eventName}`);
       return { settled: [] };
     }
 
-    logger.info(`Dispatching event`, {
+    logger.info(`Dispatching event (local)`, {
       event: eventName,
       handlers: handlerCount,
       deliveryId: payload?.deliveryId,
     });
 
-    // Collect handler promises — handlers are wrapped async functions
     const handlerPromises = [];
     const listeners = this.listeners(eventName);
     for (const listener of listeners) {
@@ -101,6 +99,46 @@ class EventBus extends EventEmitter {
       logger.warn(`${failures.length}/${settled.length} handlers failed for ${eventName}`);
     }
     return { settled };
+  }
+
+  /**
+   * Dispatch an event. When Redis/BullMQ is available this enqueues the event
+   * into the distributed `event-bus` queue so other instances can process it.
+   * Falls back to in-process handler invocation when queueing is not available.
+   */
+  async dispatch(eventName, payload) {
+    // Attempt to enqueue to distributed queue first
+    try {
+      const jobResult = await addJob('event-bus', { eventName, payload });
+      if (jobResult) {
+        // Bull Job object (queued in Redis) — has an id property and no settled result
+        if (jobResult.id && !jobResult.settled) {
+          logger.debug('EventBus: enqueued event', { eventName, deliveryId: payload?.deliveryId });
+          return { queued: true };
+        }
+
+        // Processor executed synchronously and returned a settled result
+        if (jobResult.settled) {
+          logger.debug('EventBus: processed sync via queue processor', { eventName, deliveryId: payload?.deliveryId });
+          return jobResult;
+        }
+
+        // Sync sentinel from addJob — propagate result if present
+        if (jobResult.processedSync) {
+          logger.debug('EventBus: processed sync via queue processor (sentinel)', { eventName, deliveryId: payload?.deliveryId });
+          return jobResult.result || { settled: [] };
+        }
+
+        // Unknown truthy result — treat as queued
+        logger.debug('EventBus: enqueued event (unknown job result)', { eventName, deliveryId: payload?.deliveryId });
+        return { queued: true };
+      }
+    } catch (err) {
+      logger.warn('EventBus: enqueue failed, falling back to local dispatch', { error: err.message });
+    }
+
+    // Fallback to local synchronous dispatch
+    return this._dispatchLocal(eventName, payload);
   }
 
   /**
@@ -121,5 +159,32 @@ class EventBus extends EventEmitter {
 
 // Singleton instance
 const eventBus = new EventBus();
+
+// Register distributed event-bus queue processor (will be no-op if Redis not configured)
+try {
+  registerQueue('event-bus', async (job) => {
+    const { eventName, payload } = job.data || {};
+    if (!eventName) return;
+
+    // Dispatch locally and capture settlement results
+    const result = await eventBus._dispatchLocal(eventName, payload);
+
+    // If this job came from a webhook with a deliveryId, mark the processed event completed
+    const deliveryId = payload?.deliveryId;
+    const workspaceId = payload?._workspaceId || payload?.workspaceId;
+    if (deliveryId) {
+      try {
+        await ProcessedEvent.markCompleted(deliveryId, workspaceId);
+      } catch (err) {
+        logger.error('EventBus worker: failed to mark ProcessedEvent completed', { deliveryId, error: err.message });
+      }
+    }
+
+    return result;
+  }, { concurrency: 5 });
+  logger.info('EventBus: registered distributed event-bus queue (if Redis available)');
+} catch (err) {
+  logger.warn('EventBus: failed to register event-bus queue', { error: err.message });
+}
 
 export default eventBus;

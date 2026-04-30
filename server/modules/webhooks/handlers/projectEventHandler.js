@@ -17,6 +17,22 @@ function requireWorkspaceId(payload, eventName) {
   return wsId;
 }
 
+function normalizeEntityId(value) {
+  if (!value) return null;
+  if (typeof value === 'object') {
+    if (value._id) return value._id.toString();
+    if (value.id) return value.id.toString();
+    try { const s = value.toString(); if (s && s !== '[object Object]') return s; } catch {}
+    return null;
+  }
+  if (typeof value === 'string') {
+    const idMatch = value.match(/[0-9a-fA-F]{24}/);
+    if (idMatch) return idMatch[0];
+    return value;
+  }
+  try { return String(value); } catch { return null; }
+}
+
 /**
  * Project Event Handler — handles project/board lifecycle events.
  *
@@ -194,10 +210,11 @@ export function registerProjectEventHandlers() {
     if (!wsId) return;
 
     const { boardId, userId } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.board?._id);
 
-    if (!boardId) return;
+    if (!normalizedBoardId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     // Post notification before archiving
@@ -221,10 +238,11 @@ export function registerProjectEventHandlers() {
     if (!wsId) return;
 
     const { boardId, memberId, userId } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.board?._id);
 
-    if (!boardId || !memberId) return;
+    if (!normalizedBoardId || !memberId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     await channelService.syncMembers(channel._id, [memberId], wsId);
@@ -249,10 +267,11 @@ export function registerProjectEventHandlers() {
     if (!wsId) return;
 
     const { boardId, memberId, userId } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.board?._id);
 
-    if (!boardId || !memberId) return;
+    if (!normalizedBoardId || !memberId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     const member = await userRepository.findByFlowTaskId(memberId, wsId);
@@ -274,10 +293,11 @@ export function registerProjectEventHandlers() {
     if (!wsId) return;
 
     const { boardId, memberId, role, userId } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.board?._id);
 
-    if (!boardId || !memberId) return;
+    if (!normalizedBoardId || !memberId) return;
 
-    const channel = await channelRepository.findByFlowTaskRef('board', boardId, wsId);
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
     await channelService.syncMembers(channel._id, [memberId], wsId);

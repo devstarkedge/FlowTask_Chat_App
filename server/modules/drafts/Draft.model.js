@@ -82,7 +82,7 @@ draftSchema.statics.upsertDraft = function (filter, update) {
   return this.findOneAndUpdate(
     filter,
     { $set: update, $setOnInsert: { createdAt: new Date() } },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
   );
 };
 

@@ -74,7 +74,7 @@ class WebhookRetryService {
       const updated = await ProcessedEvent.findOneAndUpdate(
         { _id: event._id, status: 'failed' },
         { $set: { status: 'processing' }, $inc: { attempts: 1 } },
-        { new: true },
+        { returnDocument: 'after' },
       );
       if (!updated) return; // Already picked up by another process
 

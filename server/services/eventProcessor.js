@@ -68,15 +68,30 @@ class EventProcessor {
 
       const dispatchResult = await eventBus.dispatch(eventName, dispatchPayload);
 
+      // If the event was enqueued for async processing (Redis/BullMQ), leave
+      // it in the processing state — the worker will mark completion.
+      if (dispatchResult && dispatchResult.queued) {
+        logger.info('Event enqueued for async processing', {
+          deliveryId,
+          eventName,
+          workspaceId,
+          step: 'event_enqueued',
+        });
+        return { status: 'queued', statusCode: 202 };
+      }
+
+      // Otherwise expect a settled result from synchronous dispatch.
+      const settled = dispatchResult?.settled || [];
+
       // Check if any handlers failed
-      const failures = dispatchResult.settled.filter((r) => r.status === 'rejected');
+      const failures = settled.filter((r) => r.status === 'rejected');
       if (failures.length > 0) {
         logger.warn('Some event handlers failed', {
           deliveryId,
           eventName,
           workspaceId,
           failedCount: failures.length,
-          totalCount: dispatchResult.settled.length,
+          totalCount: settled.length,
           step: 'handler_partial_failure',
         });
       }
@@ -88,7 +103,7 @@ class EventProcessor {
         deliveryId,
         eventName,
         workspaceId,
-        handlerCount: dispatchResult.settled.length,
+        handlerCount: settled.length,
         failedCount: failures.length,
         step: 'event_processing_complete',
       });

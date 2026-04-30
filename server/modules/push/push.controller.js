@@ -88,7 +88,7 @@ export const dismissNotification = asyncHandler(async (req, res) => {
   const notification = await Notification.findOneAndUpdate(
     { _id: notificationId, recipientId: userId, workspaceId },
     { $set: { pushDismissedAt: new Date() } },
-    { new: true },
+    { returnDocument: 'after' },
   )
 
   if (!notification) {

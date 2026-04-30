@@ -731,44 +731,120 @@ const MessageItem = memo(
 export default MessageItem;
 
 function ActionButton({ icon: Icon, title, onClick, danger, color, size = 16 }) {
+  const [pressed, setPressed] = useState(false);
+  const [ripple, setRipple] = useState(null);
+
+  const handleClick = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setRipple({ x, y, id: Date.now() });
+    setPressed(true);
+    setTimeout(() => setPressed(false), 150);
+    setTimeout(() => setRipple(null), 500);
+    onClick?.(e);
+  };
+
   return (
-    <button
-      className="p-2 rounded-md cursor-pointer transition-colors"
-      style={{
-        color: color || (danger ? "var(--danger-color)" : "var(--text-secondary)"),
-        background: "transparent",
-        border: "none",
-      }}
-      onClick={onClick}
-      title={title}
-      onMouseEnter={(e) =>
-        (e.currentTarget.style.background = "var(--bg-hover)")
-      }
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-    >
-      <Icon size={size} />
-    </button>
+    <>
+      <button
+        className={`ab-btn ${danger ? "danger" : "normal"}`}
+        onClick={handleClick}
+        title={title}
+        aria-label={title}
+        style={{
+          color: color || (danger ? "var(--accent-red, #e5534b)" : "var(--text-secondary)"),
+        }}
+      >
+        {ripple && (
+          <span
+            key={ripple.id}
+            className="ab-ripple-circle"
+            style={{
+              left: ripple.x - 12,
+              top: ripple.y - 12,
+              background: danger
+                ? "color-mix(in srgb, var(--accent-red, #e5534b) 40%, transparent)"
+                : "color-mix(in srgb, var(--text-secondary) 30%, transparent)",
+            }}
+          />
+        )}
+        <span className="ab-icon-wrap">
+          <Icon size={size} strokeWidth={1.75} />
+        </span>
+      </button>
+    </>
   );
 }
 
 function MoreMenuItem({ icon: Icon, label, onClick, danger }) {
+  const [isActive, setIsActive] = useState(false);
+
   return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-2.5 w-full px-3 py-1.5 text-[13px] cursor-pointer transition-colors text-left"
-      style={{
-        color: danger ? "var(--accent-red)" : "var(--text-primary)",
-        background: "transparent",
-        border: "none",
-      }}
-      onMouseEnter={(e) =>
-        (e.currentTarget.style.background = "var(--bg-hover)")
-      }
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-    >
-      <Icon size={15} style={{ opacity: 0.7 }} />
-      <span>{label}</span>
-    </button>
+    <>
+      <style>{`
+        @keyframes mmi-slide-in {
+          0% { opacity: 0; transform: translateX(-6px); }
+          100% { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes mmi-icon-nudge {
+          0% { transform: translateX(0); }
+          40% { transform: translateX(3px); }
+          100% { transform: translateX(0); }
+        }
+        .mmi-btn {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          padding: 6px 12px;
+          font-size: 13px;
+          font-family: inherit;
+          cursor: pointer;
+          background: transparent;
+          border: none;
+          text-align: left;
+          border-radius: 6px;
+          margin: 1px 4px;
+          width: calc(100% - 8px);
+          transition: background 110ms ease, color 110ms ease, transform 100ms ease;
+          animation: mmi-slide-in 160ms ease both;
+          position: relative;
+          overflow: hidden;
+        }
+        .mmi-btn:hover { transform: translateX(2px); }
+        .mmi-btn:hover .mmi-icon { animation: mmi-icon-nudge 220ms ease forwards; }
+        .mmi-btn:active { transform: scale(0.98) translateX(1px); transition-duration: 60ms; }
+        .mmi-btn.danger:hover {
+          background: color-mix(in srgb, var(--accent-red, #e5534b) 10%, transparent);
+          color: var(--accent-red, #e5534b) !important;
+        }
+        .mmi-btn.normal:hover { background: var(--bg-hover); }
+        .mmi-label {
+          letter-spacing: -0.01em;
+          flex: 1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .mmi-icon { flex-shrink: 0; transition: opacity 110ms ease; }
+      `}</style>
+
+      <button
+        className={`mmi-btn ${danger ? "danger" : "normal"}`}
+        onClick={onClick}
+        onMouseDown={() => setIsActive(true)}
+        onMouseUp={() => setIsActive(false)}
+        onMouseLeave={() => setIsActive(false)}
+        style={{
+          color: danger ? "var(--accent-red, #e5534b)" : "var(--text-primary)",
+        }}
+      >
+        <span className="mmi-icon" style={{ opacity: danger ? 0.85 : 0.65 }}>
+          <Icon size={14} strokeWidth={1.75} />
+        </span>
+        <span className="mmi-label">{label}</span>
+      </button>
+    </>
   );
 }
 

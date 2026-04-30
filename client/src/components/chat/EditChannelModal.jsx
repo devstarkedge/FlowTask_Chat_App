@@ -495,10 +495,10 @@ export default function EditChannelModal({ channel, onClose }) {
                 </motion.div>
               )}
 
-              <SectionDivider label="Details" />
+              {/* <SectionDivider label="Details" /> */}
 
               {/* ── Topic ── */}
-              <motion.div variants={item}>
+              {/* <motion.div variants={item}>
                 <div style={{ display: 'flex', alignItems: 'baseline',
                   justifyContent: 'space-between', marginBottom: 7 }}>
                   <FieldLabel hint="optional">Topic</FieldLabel>
@@ -529,7 +529,7 @@ export default function EditChannelModal({ channel, onClose }) {
                     }}
                   />
                 </InputWrap>
-              </motion.div>
+              </motion.div> */}
 
               {/* ── Description ── */}
               <motion.div variants={item}>

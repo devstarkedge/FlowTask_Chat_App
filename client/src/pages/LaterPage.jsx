@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Clock, FileEdit, Calendar } from 'lucide-react'
+import { Clock, PencilLine, ClockFading  } from 'lucide-react'
 import DraftsSidebar from '../components/chat/DraftsSidebar'
 import ScheduledMessagesList from '../components/chat/ScheduledMessagesList'
 import { useDraftStore } from '../stores/draftStore'
@@ -10,8 +10,8 @@ export default function LaterPage() {
   const draftCount = useDraftStore((s) => s.allDraftsForSidebar.length)
 
   const TABS = [
-    { id: 'drafts', label: draftCount > 0 ? `Drafts (${draftCount})` : 'Drafts', icon: FileEdit },
-    { id: 'scheduled', label: scheduledCount > 0 ? `Scheduled (${scheduledCount})` : 'Scheduled', icon: Calendar },
+    { id: 'drafts', label: draftCount > 0 ? `Drafts (${draftCount})` : 'Drafts', icon: PencilLine },
+    { id: 'scheduled', label: scheduledCount > 0 ? `Scheduled (${scheduledCount})` : 'Scheduled', icon: ClockFading  },
   ]
 
   return (

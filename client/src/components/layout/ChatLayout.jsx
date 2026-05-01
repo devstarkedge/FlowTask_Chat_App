@@ -121,7 +121,7 @@ const LAYOUT_STYLES = `
   border-bottom: 1px solid var(--border-color, var(--border-primary));
   flex-shrink: 0;
   position: relative;
-  z-index: 10;
+  z-index: 100;
 }
 
 .cl-topbar__nav {

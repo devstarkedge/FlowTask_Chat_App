@@ -109,21 +109,53 @@ const MessageItem = memo(
     const [showReactionPicker, setShowReactionPicker] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
     const messageRef = useRef(null);
+    const moreMenuRef = useRef(null);
 
-    // Close action bar + reaction picker + more menu when clicking outside the message
+    // Close reaction picker when clicking outside the message or pressing Escape
     useEffect(() => {
-      if (!showReactionPicker && !showMoreMenu) return;
+      if (!showReactionPicker) return;
       const handleClickOutside = (e) => {
         if (messageRef.current && !messageRef.current.contains(e.target)) {
           setShowReactionPicker(false);
-          setShowMoreMenu(false);
+          setShowActions(false);
+        }
+      };
+      const handleEscape = (e) => {
+        if (e.key === "Escape") {
+          setShowReactionPicker(false);
           setShowActions(false);
         }
       };
       document.addEventListener("mousedown", handleClickOutside);
-      return () =>
+      document.addEventListener("keydown", handleEscape);
+      return () => {
         document.removeEventListener("mousedown", handleClickOutside);
-    }, [showReactionPicker, showMoreMenu]);
+        document.removeEventListener("keydown", handleEscape);
+      };
+    }, [showReactionPicker]);
+
+    // Close More Actions menu when clicking outside the menu or pressing Escape
+    useEffect(() => {
+      if (!showMoreMenu) return;
+      const handleClickOutsideMenu = (e) => {
+        if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
+          setShowMoreMenu(false);
+          setShowActions(false);
+        }
+      };
+      const handleEscapeMenu = (e) => {
+        if (e.key === "Escape") {
+          setShowMoreMenu(false);
+          setShowActions(false);
+        }
+      };
+      document.addEventListener("mousedown", handleClickOutsideMenu);
+      document.addEventListener("keydown", handleEscapeMenu);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutsideMenu);
+        document.removeEventListener("keydown", handleEscapeMenu);
+      };
+    }, [showMoreMenu]);
 
     const isOwn =
       message.authorId?._id === user?._id || message.authorId === user?._id;
@@ -613,6 +645,7 @@ const MessageItem = memo(
           {/* More Actions Menu */}
           {showMoreMenu && (
             <div
+              ref={moreMenuRef}
               className="absolute z-20 w-48 rounded-md shadow-lg py-1"
               style={{
                 background: "var(--bg-secondary)",

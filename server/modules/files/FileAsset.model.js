@@ -70,7 +70,7 @@ const fileAssetSchema = new Schema({
   }, // Dimensions, duration, etc.
   status: {
     type: String,
-    enum: ['uploading', 'available', 'archived', 'deleted'],
+    enum: ['uploading', 'available', 'failed', 'archived', 'deleted'],
     default: 'available',
   }
 }, {

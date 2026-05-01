@@ -139,6 +139,7 @@ export function requireChannelAccess() {
 
       // Import here to avoid circular dependency
       const { default: channelRepository } = await import('../channels/channel.repository.js');
+      const { default: ChannelMember } = await import('../channels/ChannelMember.model.js');
 
       const channel = await channelRepository.findById(channelId, {
         workspaceId: req.workspaceId,
@@ -173,7 +174,12 @@ export function requireChannelAccess() {
       }
 
       // Other private channels: require membership
-      if (!channel.hasMember(req.user._id)) {
+      const isEmbeddedMember = channel.hasMember(req.user._id);
+      const isPersistedMember = isEmbeddedMember
+        ? true
+        : await ChannelMember.isMember(channelId, req.user._id);
+
+      if (!isPersistedMember) {
         return next(new ForbiddenError('Not a member of this channel'));
       }
 

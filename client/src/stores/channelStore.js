@@ -91,11 +91,17 @@ export const useChannelStore = create(
     set({ isMembersLoading: true })
     try {
       const { data } = await channelAPI.getMembers(channelId)
+      const memberCount = data.data.memberCount ?? data.data.total ?? data.data.members?.length ?? 0
       set((state) => ({
         membersByChannel: {
           ...state.membersByChannel,
           [channelId]: data.data.members,
         },
+        channels: state.channels.map((channel) =>
+          channel._id === channelId
+            ? { ...channel, memberCount }
+            : channel,
+        ),
         isMembersLoading: false,
       }))
     } catch (error) {

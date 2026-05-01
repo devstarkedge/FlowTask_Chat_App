@@ -96,6 +96,7 @@ export default function ChatHeader({
     Icon = Lock
   }
   const members = membersByChannel[channel._id] || []
+  const memberCount = channel.memberCount ?? members.length
   const isDM = channel.type === 'dm'
 
   const handleTopicClick = () => {
@@ -214,7 +215,7 @@ export default function ChatHeader({
           {!isConstrained && (
             <>
               <ChannelMemberCount
-                count={members.length}
+                count={memberCount}
                 onClick={(e) => {
                   e.stopPropagation()
                   toggleInfoPanel()

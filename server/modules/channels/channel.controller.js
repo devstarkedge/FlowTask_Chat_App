@@ -1,6 +1,10 @@
 import channelService from "./channel.service.js";
 import asyncHandler from "../../middleware/asyncHandler.js";
 
+function isSystemManagedProjectChannel(channel) {
+  return channel?.type === "project" && channel?.systemManaged;
+}
+
 /**
  * Channel Controller — REST endpoints for channel operations.
  */
@@ -200,6 +204,17 @@ export const createDM = asyncHandler(async (req, res) => {
 export const addMember = asyncHandler(async (req, res) => {
   const { userId, role } = req.body;
 
+  if (isSystemManagedProjectChannel(req.channel)) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: "PROJECT_CHANNEL_MEMBERS_MANAGED",
+        message:
+          "Project channel members are synced from FlowTask and cannot be changed manually",
+      },
+    });
+  }
+
   if (!userId) {
     return res.status(400).json({
       success: false,
@@ -225,6 +240,17 @@ export const addMember = asyncHandler(async (req, res) => {
  * Remove a member from a channel.
  */
 export const removeMember = asyncHandler(async (req, res) => {
+  if (isSystemManagedProjectChannel(req.channel)) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: "PROJECT_CHANNEL_MEMBERS_MANAGED",
+        message:
+          "Project channel members are synced from FlowTask and cannot be changed manually",
+      },
+    });
+  }
+
   const channel = await channelService.removeMember(
     req.params.id,
     req.params.userId,
@@ -243,6 +269,17 @@ export const removeMember = asyncHandler(async (req, res) => {
  * Leave a channel (self-remove).
  */
 export const leaveChannel = asyncHandler(async (req, res) => {
+  if (isSystemManagedProjectChannel(req.channel)) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: "PROJECT_CHANNEL_MEMBERS_MANAGED",
+        message:
+          "Project channel members are synced from FlowTask and cannot be changed manually",
+      },
+    });
+  }
+
   const channel = await channelService.removeMember(
     req.params.id,
     req.user._id,
@@ -275,9 +312,7 @@ export const searchChannels = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/chat/channels/:id/members
- * Get aggregated members for a channel.
- * For project channels: board members + task assignees + channel members (deduplicated).
- * For other channels: channel members.
+ * Get persisted members for a channel.
  */
 export const getChannelMembers = asyncHandler(async (req, res) => {
   const token = req.flowTaskToken;
@@ -289,7 +324,7 @@ export const getChannelMembers = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    data: { members, total: members.length },
+    data: { members, total: members.length, memberCount: members.length },
   });
 });
 

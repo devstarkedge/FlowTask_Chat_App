@@ -629,6 +629,7 @@ export default function ChatLayout() {
 
   const {
     fetchChannels,
+    fetchMembers,
     activeChannelId,
     channels,
     showInfoPanel,
@@ -986,9 +987,16 @@ export default function ChatLayout() {
   }, [workspaceId, legacyDmMessageRoute, legacyDmRoute, navigate]);
 
   useEffect(() => {
-    if (!routeConversationId || routeConversationId === activeChannelId) return;
+    if (!routeConversationId) return;
+
+    const currentActiveChannelId = useChannelStore.getState().activeChannelId;
+    if (routeConversationId === currentActiveChannelId) {
+      fetchMembers(routeConversationId);
+      return;
+    }
+
     setActiveChannel(routeConversationId);
-  }, [routeConversationId, activeChannelId, setActiveChannel]);
+  }, [routeConversationId, workspaceId, fetchMembers, setActiveChannel]);
   useEffect(() => {
     if (activeChannelId && document.hasFocus())
       getSocket()?.emit("window:focus", { channelId: activeChannelId });

@@ -33,6 +33,31 @@ function normalizeEntityId(value) {
   try { return String(value); } catch { return null; }
 }
 
+function collectProjectMemberIds(payload) {
+  const candidates = payload?.memberIds
+    || payload?.members
+    || payload?.project?.members
+    || payload?.board?.members
+    || [];
+
+  return [...new Set(
+    candidates
+      .map((member) => {
+        if (!member) return null;
+        if (typeof member === 'string') return member;
+        return member.userId || member._id || member.id || null;
+      })
+      .filter(Boolean)
+      .map((memberId) => memberId.toString()),
+  )];
+}
+
+function collectProjectOwnerId(payload) {
+  return normalizeEntityId(
+    payload?.ownerId || payload?.project?.owner || payload?.board?.owner,
+  );
+}
+
 /**
  * Project Event Handler — handles project/board lifecycle events.
  *
@@ -76,21 +101,20 @@ export function registerProjectEventHandlers() {
       step: 'channel_created',
     });
 
-    // Sync board members if provided
-    if (board.members?.length) {
-      const memberIds = board.members
-        .map((m) => (typeof m === 'string' ? m : m.user || m._id))
-        .filter(Boolean);
+    const memberIds = collectProjectMemberIds(payload);
+    const ownerId = collectProjectOwnerId(payload) || userId;
 
-      if (memberIds.length > 0) {
-        await channelService.syncMembers(channel._id, memberIds, wsId);
-        logger.info('project.created: members synced', {
-          deliveryId,
-          channelId: channel._id,
-          memberCount: memberIds.length,
-          step: 'members_synced',
-        });
-      }
+    if (memberIds.length > 0 || ownerId) {
+      await channelService.reconcileProjectMembers(channel._id, memberIds, wsId, {
+        ownerFlowTaskId: ownerId,
+      });
+      logger.info('project.created: members reconciled', {
+        deliveryId,
+        channelId: channel._id,
+        memberCount: memberIds.length,
+        ownerId,
+        step: 'members_reconciled',
+      });
     }
 
     // Broadcast channel:created to all members so it appears in sidebar instantly
@@ -239,13 +263,21 @@ export function registerProjectEventHandlers() {
 
     const { boardId, memberId, userId } = payload;
     const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.board?._id);
+    const memberIds = collectProjectMemberIds(payload);
+    const ownerId = collectProjectOwnerId(payload);
 
     if (!normalizedBoardId || !memberId) return;
 
     const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
-    await channelService.syncMembers(channel._id, [memberId], wsId);
+    if (memberIds.length > 0 || ownerId) {
+      await channelService.reconcileProjectMembers(channel._id, memberIds, wsId, {
+        ownerFlowTaskId: ownerId,
+      });
+    } else {
+      await channelService.syncMembers(channel._id, [memberId], wsId);
+    }
 
     // Post join message
     const member = await userRepository.findByFlowTaskId(memberId, wsId);
@@ -268,6 +300,8 @@ export function registerProjectEventHandlers() {
 
     const { boardId, memberId, userId } = payload;
     const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.board?._id);
+    const memberIds = collectProjectMemberIds(payload);
+    const ownerId = collectProjectOwnerId(payload);
 
     if (!normalizedBoardId || !memberId) return;
 
@@ -275,9 +309,15 @@ export function registerProjectEventHandlers() {
     if (!channel) return;
 
     const member = await userRepository.findByFlowTaskId(memberId, wsId);
-    if (member) {
+    if (memberIds.length > 0 || ownerId) {
+      await channelService.reconcileProjectMembers(channel._id, memberIds, wsId, {
+        ownerFlowTaskId: ownerId,
+      });
+    } else if (member) {
       await channelService.removeMember(channel._id, member._id, 'system');
+    }
 
+    if (member) {
       await messageService.sendSystemMessage(
         channel._id,
         `👤 ${member.name} was removed from the project`,
@@ -294,13 +334,21 @@ export function registerProjectEventHandlers() {
 
     const { boardId, memberId, role, userId } = payload;
     const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.board?._id);
+    const memberIds = collectProjectMemberIds(payload);
+    const ownerId = collectProjectOwnerId(payload);
 
     if (!normalizedBoardId || !memberId) return;
 
     const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
-    await channelService.syncMembers(channel._id, [memberId], wsId);
+    if (memberIds.length > 0 || ownerId) {
+      await channelService.reconcileProjectMembers(channel._id, memberIds, wsId, {
+        ownerFlowTaskId: ownerId,
+      });
+    } else {
+      await channelService.syncMembers(channel._id, [memberId], wsId);
+    }
 
     const member = await userRepository.findByFlowTaskId(memberId, wsId);
     const assignedBy = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;

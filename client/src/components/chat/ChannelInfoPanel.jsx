@@ -7,14 +7,13 @@ import {
   Settings,
   UserPlus,
   LogOut,
-  ChevronDown,
   Info,
   Globe,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import SectionHeader from "./SectionHeader";
 import MemberItem from "./MemberItem";
 import { useChannelStore } from "../../stores/channelStore";
-import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
 import EditChannelModal from "./EditChannelModal";
 import AddMemberModal from "./AddMemberModal";
@@ -31,15 +30,16 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
   const { user } = useAuthStore();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [confirmLeave, setConfirmLeave] = useState(false);
 
   if (!channel) return null;
 
   const members        = membersByChannel[channel._id] || []
+  const memberCount    = channel.memberCount ?? members.length
   const activeMembers  = members.filter((m) => m.registrationStatus !== 'faded')
   const fadedMembers   = members.filter((m) => m.registrationStatus === 'faded')
   const onlineMembers  = activeMembers.filter((m) => m.onlineStatus === 'online')
   const offlineMembers = activeMembers.filter((m) => m.onlineStatus !== 'online')
+  const isResolvingMembers = memberCount > 0 && members.length === 0
 
   const myMembership = members.find((m) => m._id === user?._id);
   const isOwner =
@@ -48,8 +48,14 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
     isOwner || myMembership?.channelRole === "admin" || user?.role === "admin";
   const isDM = channel.type === "dm";
   const isSystem = channel.type === "system";
+  const isSystemManagedProject =
+    channel.type === "project" && channel.systemManaged;
   const isPrivate =
     channel.visibility === "private" || channel.type === "private";
+  const canManageMembership =
+    isAdmin && !isDM && !isSystem && !isSystemManagedProject;
+  const canLeaveChannel = !isSystem && !isSystemManagedProject;
+  const canEditChannel = !isDM && isAdmin && !isSystemManagedProject;
 
   const handleRemoveMember = async (memberId) => {
     const confirmRemove = window.confirm(
@@ -151,7 +157,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
             <div className="cip-stats">
               <span className="cip-stat-pill">
                 <Users size={11} />
-                {members.length} member{members.length !== 1 ? "s" : ""}
+                {memberCount} member{memberCount !== 1 ? "s" : ""}
               </span>
               {onlineMembers.length > 0 && (
                 <span className="cip-stat-pill online">
@@ -184,7 +190,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
         {(!isDM || isAdmin) && (
           <div className="cip-actions">
             {/* Add member  */}
-            {isAdmin && !isDM && (
+            {canManageMembership && (
               <button
                 onClick={() => setShowAddMember(true)}
                 className="btn-ghost"
@@ -202,7 +208,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
             )}
 
             {/* Edit  */}
-            {!isDM && isAdmin && (
+            {canEditChannel && (
               <button
                 onClick={() => setShowEditModal(true)}
                 className="btn-ghost"
@@ -220,7 +226,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
             )}
 
             {/* Leave  */}
-            {!isSystem && (
+            {canLeaveChannel && (
               <button
                 onClick={handleLeave}
                 className="btn-danger"
@@ -279,7 +285,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                 >
                   Members
                 </span>
-                <span className="cip-count-badge">{members.length}</span>
+                <span className="cip-count-badge">{memberCount}</span>
               </div>
             </div>
 
@@ -304,7 +310,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                         member={member}
                         onOpenProfile={onOpenProfile}
                         canRemove={
-                          isAdmin &&
+                          canManageMembership &&
                           member._id !== user?._id &&
                           !isDM &&
                           !isSystem
@@ -342,7 +348,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                         member={member}
                         onOpenProfile={onOpenProfile}
                         canRemove={
-                          isAdmin &&
+                          canManageMembership &&
                           member._id !== user?._id &&
                           !isDM &&
                           !isSystem
@@ -377,7 +383,32 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
             )}
 
             {/* Empty state */}
-            {members.length === 0 && !isMembersLoading && (
+            {isResolvingMembers && (
+              <div className="cip-empty">
+                <div className="cip-empty-icon">
+                  {isMembersLoading ? (
+                    <div className="cip-spinner" />
+                  ) : (
+                    <Users size={22} style={{ color: "var(--text-muted)" }} />
+                  )}
+                </div>
+                <p
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--text-secondary)",
+                    margin: 0,
+                  }}
+                >
+                  Loading members...
+                </p>
+                <span className="cip-empty-subtext">
+                  Fetching the latest channel roster
+                </span>
+              </div>
+            )}
+
+            {memberCount === 0 && !isMembersLoading && (
               <div className="cip-empty">
                 <div className="cip-empty-icon">
                   <Users size={22} style={{ color: "var(--text-muted)" }} />

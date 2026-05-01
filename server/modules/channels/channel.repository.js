@@ -22,8 +22,50 @@ class ChannelRepository {
    * @returns {Promise<Channel>}
    */
   async create(data) {
-    const channel = new Channel(data);
-    return channel.save();
+    const session = await mongoose.startSession();
+    let channel = null;
+
+    try {
+      session.startTransaction();
+
+      channel = new Channel(data);
+      await channel.save({ session });
+
+      if (channel.workspaceId && Array.isArray(channel.members) && channel.members.length > 0) {
+        await ChannelMember.bulkWrite(
+          channel.members
+            .filter((member) => member?.userId)
+            .map((member) => ({
+              updateOne: {
+                filter: { channelId: channel._id, userId: member.userId },
+                update: {
+                  $setOnInsert: {
+                    channelId: channel._id,
+                    userId: member.userId,
+                    joinedAt: member.joinedAt || new Date(),
+                  },
+                  $set: {
+                    workspaceId: channel.workspaceId,
+                    role: member.role || 'member',
+                    notificationsEnabled: member.notificationsEnabled !== false,
+                    isActive: true,
+                  },
+                },
+                upsert: true,
+              },
+            })),
+          { ordered: false, session },
+        );
+      }
+
+      await session.commitTransaction();
+      return channel;
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
   }
 
   /**
@@ -80,6 +122,47 @@ class ChannelRepository {
     // Try ChannelMember collection first
     if (workspaceId) {
       const channelIds = await ChannelMember.getChannelIdsForUser(userId, workspaceId);
+      const embeddedChannels = await Channel.findUserChannels(userId, includeArchived, workspaceId).lean();
+      const channelIdSet = new Set(channelIds.map(String));
+
+      const missingEmbeddedChannels = embeddedChannels.filter(
+        (channel) => !channelIdSet.has(channel._id.toString()),
+      );
+
+      if (missingEmbeddedChannels.length > 0) {
+        await ChannelMember.bulkWrite(
+          missingEmbeddedChannels
+            .map((channel) => {
+              const embeddedMember = (channel.members || []).find(
+                (member) => member.userId?.toString() === userId.toString(),
+              );
+              if (!embeddedMember) return null;
+
+              return {
+                updateOne: {
+                  filter: { channelId: channel._id, userId },
+                  update: {
+                    $setOnInsert: {
+                      channelId: channel._id,
+                      userId,
+                      joinedAt: embeddedMember.joinedAt || new Date(),
+                    },
+                    $set: {
+                      workspaceId: channel.workspaceId,
+                      role: embeddedMember.role || 'member',
+                      notificationsEnabled: embeddedMember.notificationsEnabled !== false,
+                      isActive: true,
+                    },
+                  },
+                  upsert: true,
+                },
+              };
+            })
+            .filter(Boolean),
+          { ordered: false },
+        );
+      }
+
       if (channelIds.length > 0) {
         const filter = { _id: { $in: channelIds } };
         if (!includeArchived) filter.isArchived = false;
@@ -87,25 +170,18 @@ class ChannelRepository {
           .sort({ lastMessageAt: -1 })
           .lean();
 
-        // Also check for DM channels via embedded members that may not have
-        // ChannelMember entries yet (pre-fix DMs). Merge without duplicates.
-        const channelIdSet = new Set(channelIds.map(String));
-        const dmFilter = {
-          type: CHANNEL_TYPES.DM,
-          'members.userId': userId,
-          _id: { $nin: [...channelIdSet] },
-        };
-        if (!includeArchived) dmFilter.isArchived = false;
-        if (workspaceId) dmFilter.workspaceId = workspaceId;
-        const extraDMs = await Channel.find(dmFilter)
-          .sort({ lastMessageAt: -1 })
-          .lean();
-        if (extraDMs.length > 0) {
-          channels = [...channels, ...extraDMs];
+        if (missingEmbeddedChannels.length > 0) {
+          channels = [...channels, ...missingEmbeddedChannels];
         }
 
-        return channels;
+        return channels.sort((a, b) => {
+          const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+          const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+          return bTime - aTime;
+        });
       }
+
+      return embeddedChannels;
     }
 
     // Fallback to embedded array query
@@ -367,6 +443,192 @@ class ChannelRepository {
    */
   async getMemberIds(channelId) {
     return ChannelMember.getMemberIds(channelId);
+  }
+
+  /**
+   * List active members for a channel.
+   * Uses ChannelMember as the primary source and repairs legacy embedded
+   * memberships if the collection has not been backfilled yet.
+   * @param {string} channelId
+   * @param {object} [options]
+   * @param {string} [options.workspaceId]
+   * @returns {Promise<Array>}
+   */
+  async listActiveMembers(channelId, { workspaceId } = {}) {
+    let docs = await ChannelMember.find({ channelId, isActive: true })
+      .populate('userId', 'name email avatar onlineStatus flowTaskUserId role isActive')
+      .sort({ joinedAt: 1, createdAt: 1 })
+      .exec();
+
+    if (docs.length > 0) {
+      return docs;
+    }
+
+    const channel = await this.findById(channelId, {
+      populate: true,
+      workspaceId,
+    });
+
+    if (!channel) {
+      return [];
+    }
+
+    if (!channel.workspaceId || !Array.isArray(channel.members) || channel.members.length === 0) {
+      return [];
+    }
+
+    await ChannelMember.bulkWrite(
+      channel.members
+        .filter((member) => member?.userId)
+        .map((member) => ({
+          updateOne: {
+            filter: { channelId: channel._id, userId: member.userId._id || member.userId },
+            update: {
+              $setOnInsert: {
+                channelId: channel._id,
+                userId: member.userId._id || member.userId,
+                joinedAt: member.joinedAt || new Date(),
+              },
+              $set: {
+                workspaceId: channel.workspaceId,
+                role: member.role || 'member',
+                notificationsEnabled: member.notificationsEnabled !== false,
+                isActive: true,
+              },
+            },
+            upsert: true,
+          },
+        })),
+      { ordered: false },
+    );
+
+    docs = await ChannelMember.find({ channelId, isActive: true })
+      .populate('userId', 'name email avatar onlineStatus flowTaskUserId role isActive')
+      .sort({ joinedAt: 1, createdAt: 1 })
+      .exec();
+
+    return docs;
+  }
+
+  /**
+   * Reconcile a channel to an exact active member set.
+   * Writes ChannelMember as the source of truth and mirrors the result to the
+   * embedded members array plus denormalized memberCount.
+   * @param {string} channelId
+   * @param {Array<{userId: string, role?: string}>} desiredMembers
+   * @param {string} [workspaceId]
+   * @returns {Promise<Channel|null>}
+   */
+  async reconcileMembers(channelId, desiredMembers, workspaceId) {
+    const channel = await this.findById(channelId, { workspaceId });
+    if (!channel) return null;
+
+    const dedupedDesired = [];
+    const desiredByUserId = new Map();
+
+    for (const member of desiredMembers || []) {
+      const userId = member?.userId?.toString?.() || (member?.userId ? String(member.userId) : null);
+      if (!userId || desiredByUserId.has(userId)) continue;
+
+      const normalized = {
+        userId,
+        role: member.role || 'member',
+      };
+      desiredByUserId.set(userId, normalized);
+      dedupedDesired.push(normalized);
+    }
+
+    const activeMembers = await ChannelMember.find({ channelId, isActive: true }).lean();
+    const activeByUserId = new Map(
+      activeMembers.map((member) => [member.userId.toString(), member]),
+    );
+    const embeddedByUserId = new Map(
+      (channel.members || []).map((member) => [member.userId.toString(), member]),
+    );
+
+    const session = await mongoose.startSession();
+
+    try {
+      session.startTransaction();
+
+      if (dedupedDesired.length > 0) {
+        await ChannelMember.bulkWrite(
+          dedupedDesired.map((member) => {
+            const existing = activeByUserId.get(member.userId) || embeddedByUserId.get(member.userId);
+            return {
+              updateOne: {
+                filter: { channelId, userId: member.userId },
+                update: {
+                  $setOnInsert: {
+                    channelId,
+                    userId: member.userId,
+                    joinedAt: existing?.joinedAt || new Date(),
+                  },
+                  $set: {
+                    workspaceId: workspaceId || channel.workspaceId,
+                    role: member.role,
+                    notificationsEnabled: existing?.notificationsEnabled !== false,
+                    isActive: true,
+                  },
+                },
+                upsert: true,
+              },
+            };
+          }),
+          { ordered: false, session },
+        );
+      }
+
+      const usersToDeactivate = activeMembers
+        .map((member) => member.userId.toString())
+        .filter((userId) => !desiredByUserId.has(userId));
+
+      if (usersToDeactivate.length > 0) {
+        await ChannelMember.updateMany(
+          { channelId, userId: { $in: usersToDeactivate } },
+          { $set: { isActive: false } },
+          { session },
+        );
+      }
+
+      const mirroredMembers = dedupedDesired.map((member) => {
+        const existing = activeByUserId.get(member.userId) || embeddedByUserId.get(member.userId);
+        return {
+          userId: member.userId,
+          role: member.role,
+          joinedAt: existing?.joinedAt || new Date(),
+          notificationsEnabled: existing?.notificationsEnabled !== false,
+        };
+      });
+
+      await Channel.updateOne(
+        { _id: channelId },
+        {
+          $set: {
+            members: mirroredMembers,
+            memberCount: mirroredMembers.length,
+          },
+        },
+        { session },
+      );
+
+      await session.commitTransaction();
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
+
+    const affectedUserIds = new Set([
+      ...activeMembers.map((member) => member.userId.toString()),
+      ...dedupedDesired.map((member) => member.userId.toString()),
+    ]);
+    await Promise.all(
+      [...affectedUserIds].map((userId) => cache.delPattern(`channels:user:${userId}:*`)),
+    );
+
+    return this.findById(channelId, { workspaceId });
   }
 
   /**

@@ -180,9 +180,8 @@ class FlowTaskSyncService {
   }
 
   /**
-   * Sync members from a FlowTask board to the corresponding ChatApp channel.
-   * Includes: board owner, board members, card assignees, subtask assignees,
-   * and nanoSubtask assignees.
+  * Sync project members from a FlowTask board to the corresponding ChatApp channel.
+  * Strict project channels mirror the board owner plus board members only.
    *
    * @param {string} boardId - FlowTask board ID
    * @param {string} workspaceId - ChatApp workspace ID
@@ -199,39 +198,43 @@ class FlowTaskSyncService {
       return report;
     }
 
-    // Use deep member extraction (board + cards + subtasks + nanos)
-    let memberFlowTaskIds;
+    let board;
     try {
-      const result = await flowTaskService.getBoardDeepMembers(boardId, token);
-      memberFlowTaskIds = result.memberIds;
+      board = await flowTaskService.getBoard(boardId, token);
     } catch (err) {
-      logger.warn('[SYNC] Failed to fetch deep board members', {
+      logger.warn('[SYNC] Failed to fetch board members', {
         boardId,
         error: err.message,
       });
       return report;
     }
 
+    const memberFlowTaskIds = new Set(
+      (board?.members || [])
+        .map((member) => (typeof member === 'string' ? member : member?._id || member?.id))
+        .filter(Boolean)
+        .map((memberId) => memberId.toString()),
+    );
+    const ownerFlowTaskId = normalizeEntityId(board?.owner);
+    if (ownerFlowTaskId) {
+      memberFlowTaskIds.add(ownerFlowTaskId);
+    }
+
     report.total = memberFlowTaskIds.size;
 
-    // Resolve FlowTask IDs to ChatUser IDs and add to channel
-    for (const ftUserId of memberFlowTaskIds) {
-      try {
-        const chatUser = await userRepository.findByFlowTaskId(ftUserId);
-        if (!chatUser) continue;
+    const existingMembers = await channelRepository.listActiveMembers(channel._id, {
+      workspaceId,
+    });
+    const existingCount = existingMembers.length;
 
-        if (!channel.hasMember(chatUser._id)) {
-          await channelService.addMember(channel._id, chatUser._id).catch(() => {});
-          report.added++;
-        }
-      } catch (err) {
-        logger.debug('[SYNC] Failed to add member to channel', {
-          flowTaskUserId: ftUserId,
-          channelId: channel._id,
-          error: err.message,
-        });
-      }
-    }
+    await channelService.reconcileProjectMembers(
+      channel._id,
+      [...memberFlowTaskIds],
+      workspaceId,
+      { ownerFlowTaskId },
+    );
+
+    report.added = Math.max(report.total - existingCount, 0);
 
     return report;
   }

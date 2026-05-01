@@ -758,7 +758,9 @@ class ChannelService {
         }
 
         if (memberIds.length > 0) {
-          await this.syncMembers(channel._id, memberIds, workspaceId);
+          await this.reconcileProjectMembers(channel._id, memberIds, workspaceId, {
+            ownerFlowTaskId: ownerId,
+          });
           synced++;
         }
 
@@ -903,7 +905,12 @@ class ChannelService {
       const user = await userRepository.findById(userId);
       if (user) {
         const permissionEngine = (await import("../../services/permissionEngine.js")).default;
-        if (!permissionEngine.canAccessChannel(user, channel)) {
+        const canAccessChannel = permissionEngine.canAccessChannel(user, channel);
+        const isPersistedMember = canAccessChannel
+          ? true
+          : await ChannelMember.isMember(channelId, userId);
+
+        if (!canAccessChannel && !isPersistedMember) {
           throw new ForbiddenError("Access denied to this channel");
         }
       }
@@ -1068,6 +1075,126 @@ class ChannelService {
   }
 
   /**
+   * Reconcile a project channel to the exact FlowTask project member set.
+   * This is the persistent source-of-truth path used for project channels.
+   */
+  async reconcileProjectMembers(
+    channelId,
+    flowTaskUserIds,
+    workspaceId,
+    { ownerFlowTaskId = null } = {},
+  ) {
+    const channel = await channelRepository.findById(channelId, {
+      workspaceId,
+    });
+    if (!channel) throw new NotFoundError("Channel not found");
+
+    const effectiveWorkspaceId = channel.workspaceId?.toString() || workspaceId;
+    const desiredFlowTaskIds = new Set();
+
+    for (const flowTaskUserId of flowTaskUserIds || []) {
+      if (!flowTaskUserId) continue;
+      desiredFlowTaskIds.add(flowTaskUserId.toString());
+    }
+    if (ownerFlowTaskId) {
+      desiredFlowTaskIds.add(ownerFlowTaskId.toString());
+    }
+
+    const existingMembers = await channelRepository.listActiveMembers(channelId, {
+      workspaceId: effectiveWorkspaceId,
+    });
+    const existingUserIds = new Set(
+      existingMembers
+        .map((member) => member.userId?._id?.toString() || member.userId?.toString())
+        .filter(Boolean),
+    );
+
+    const chatUsers = desiredFlowTaskIds.size > 0
+      ? await userRepository.findByFlowTaskIds(
+          [...desiredFlowTaskIds],
+          effectiveWorkspaceId,
+        )
+      : [];
+
+    const desiredMembers = chatUsers.map((user) => ({
+      userId: user._id,
+      role:
+        channel.createdBy?.toString() === user._id.toString()
+          ? CHANNEL_MEMBER_ROLES.OWNER
+          : CHANNEL_MEMBER_ROLES.MEMBER,
+    }));
+
+    const desiredUserIds = new Set(
+      desiredMembers.map((member) => member.userId.toString()),
+    );
+
+    const updated = await channelRepository.reconcileMembers(
+      channelId,
+      desiredMembers,
+      effectiveWorkspaceId,
+    );
+
+    const syncChannelPayload = updated
+      ? {
+          _id: updated._id,
+          name: updated.name,
+          slug: updated.slug,
+          type: updated.type,
+          visibility: updated.visibility,
+          description: updated.description,
+          memberCount: updated.memberCount,
+          workspaceId: updated.workspaceId,
+          createdBy: updated.createdBy,
+        }
+      : null;
+
+    for (const user of chatUsers) {
+      const userId = user._id.toString();
+      if (existingUserIds.has(userId) || !syncChannelPayload) continue;
+
+      emitToUser(
+        userId,
+        SOCKET_EVENTS.CHANNEL_ADDED,
+        { channel: syncChannelPayload },
+        effectiveWorkspaceId,
+      );
+      joinChannelRoom(userId, channelId.toString(), effectiveWorkspaceId);
+    }
+
+    for (const userId of existingUserIds) {
+      if (desiredUserIds.has(userId)) continue;
+
+      emitToUser(
+        userId,
+        SOCKET_EVENTS.CHANNEL_REMOVED,
+        { channelId },
+        effectiveWorkspaceId,
+      );
+    }
+
+    emitToChannel(
+      channelId.toString(),
+      SOCKET_EVENTS.CHANNEL_MEMBERS_UPDATED,
+      {
+        channelId,
+        memberCount: updated?.memberCount || desiredMembers.length,
+      },
+      effectiveWorkspaceId,
+    );
+
+    logger.info("Project channel members reconciled", {
+      channelId,
+      desired: desiredMembers.length,
+      added: [...desiredUserIds].filter((userId) => !existingUserIds.has(userId))
+        .length,
+      removed: [...existingUserIds].filter((userId) => !desiredUserIds.has(userId))
+        .length,
+    });
+
+    return updated;
+  }
+
+  /**
    * Remove a member from a channel.
    */
   async removeMember(channelId, userId, removedBy, workspaceId) {
@@ -1226,31 +1353,29 @@ class ChannelService {
     return channelRepository.search(query, userId, 20, workspaceId);
   }
 
-  // ──────────────────── Aggregated Members ──────────────────────────────────
+  // ──────────────────── Channel Members ─────────────────────────────────────
 
   /**
-   * Get aggregated members for a channel.
-   * For project channels: combines board members, task assignees, and channel members.
-   * For other channels: returns channel members only.
-   * All members are deduplicated and enriched with user profile data.
+   * Get persisted members for a channel from the ChatApp database.
+   * Project channels are reconciled from FlowTask, but the database remains the
+   * runtime source of truth for refresh-safe rendering.
    */
   async getAggregatedMembers(channelId, token, workspaceId) {
     const channel = await channelRepository.findById(channelId, {
-      populate: true,
       workspaceId,
     });
     if (!channel) throw new NotFoundError("Channel not found");
 
-    // Start with channel members (always included)
-    const memberMap = new Map(); // flowTaskUserId -> member info
+    const members = await channelRepository.listActiveMembers(channelId, {
+      workspaceId: channel.workspaceId?.toString() || workspaceId,
+    });
 
-    // Add channel members
-    for (const member of channel.members) {
-      const user = member.userId; // populated
-      if (!user) continue;
-      const ftId = user.flowTaskUserId || user._id.toString();
-      if (!memberMap.has(ftId)) {
-        memberMap.set(ftId, {
+    return members
+      .map((member) => {
+        const user = member.userId;
+        if (!user) return null;
+
+        return {
           _id: user._id,
           flowTaskUserId: user.flowTaskUserId,
           name: user.name,
@@ -1259,128 +1384,14 @@ class ChannelService {
           role: user.role,
           onlineStatus: user.onlineStatus || "offline",
           isActive: user.isActive !== false,
+          registrationStatus: "active",
           source: ["channel"],
           channelRole: member.role,
-        });
-      }
-    }
-
-    // For project channels, fetch board members + task assignees from FlowTask
-    if (
-      channel.type === CHANNEL_TYPES.PROJECT &&
-      channel.flowTaskRef?.entityId &&
-      token
-    ) {
-      try {
-        const flowTaskService = (
-          await import("../flowtask/flowtask.service.js")
-        ).default;
-        const boardId = channel.flowTaskRef.entityId;
-
-        // Use deep member extraction (board + cards + subtasks + nanos)
-        const { memberIds: flowTaskUserIds, sources: ftSources } =
-          await flowTaskService.getBoardDeepMembers(boardId, token);
-
-        // Resolve FlowTask user IDs to chat users
-        if (flowTaskUserIds.size > 0) {
-          const chatUsers = await userRepository.findByFlowTaskIds(
-            [...flowTaskUserIds],
-            channel.workspaceId,
-          );
-          const resolvedFtIds = new Set(chatUsers.map((u) => u.flowTaskUserId));
-
-          // Add registered ChatApp users
-          for (const chatUser of chatUsers) {
-            const ftId = chatUser.flowTaskUserId;
-            const memberSources = ftSources.get(ftId) || ['board'];
-            if (memberMap.has(ftId)) {
-              const existing = memberMap.get(ftId);
-              for (const s of memberSources) {
-                if (!existing.source.includes(s)) existing.source.push(s);
-              }
-            } else {
-              memberMap.set(ftId, {
-                _id: chatUser._id,
-                flowTaskUserId: chatUser.flowTaskUserId,
-                name: chatUser.name,
-                email: chatUser.email,
-                avatar: chatUser.avatar,
-                role: chatUser.role,
-                onlineStatus: chatUser.onlineStatus || "offline",
-                isActive: chatUser.isActive !== false,
-                registrationStatus: "active",
-                source: memberSources,
-                channelRole: null,
-              });
-            }
-          }
-
-          // Add faded users (FlowTask users not registered in ChatApp)
-          for (const ftId of flowTaskUserIds) {
-            if (!resolvedFtIds.has(ftId) && !memberMap.has(ftId)) {
-              const memberSources = ftSources.get(ftId) || ['board'];
-              memberMap.set(ftId, {
-                _id: null,
-                flowTaskUserId: ftId,
-                name: null,       // Will be resolved from FlowTask user data if available
-                email: null,
-                avatar: null,
-                role: null,
-                onlineStatus: "offline",
-                isActive: false,
-                registrationStatus: "faded",
-                source: memberSources,
-                channelRole: null,
-              });
-            }
-          }
-
-          // Try to enrich faded users with FlowTask user details
-          const fadedIds = [...memberMap.values()]
-            .filter((m) => m.registrationStatus === "faded" && !m.name)
-            .map((m) => m.flowTaskUserId);
-
-          if (fadedIds.length > 0) {
-            try {
-              const ftUsers = await flowTaskService.getUsers(token);
-              const ftUserMap = new Map();
-              for (const u of (ftUsers || [])) {
-                const uid = (u._id || u.id || '').toString();
-                if (uid) ftUserMap.set(uid, u);
-              }
-              for (const ftId of fadedIds) {
-                const ftUser = ftUserMap.get(ftId);
-                if (ftUser && memberMap.has(ftId)) {
-                  const m = memberMap.get(ftId);
-                  m.name = ftUser.name || 'Unknown User';
-                  m.email = ftUser.email || null;
-                  m.avatar = ftUser.avatar || null;
-                }
-              }
-            } catch {
-              // Non-critical: faded users will show without names
-            }
-          }
-        }
-      } catch (error) {
-        logger.warn("Failed to aggregate FlowTask members", {
-          channelId,
-          error: error.message,
-        });
-        // Fall through with channel members only
-      }
-    }
-
-    // Mark existing channel members as 'active' if not already set
-    for (const m of memberMap.values()) {
-      if (!m.registrationStatus) m.registrationStatus = 'active';
-    }
-
-    return [...memberMap.values()].sort((a, b) => {
-      // Active users first, then faded
-      if (a.registrationStatus !== b.registrationStatus) {
-        return a.registrationStatus === 'active' ? -1 : 1;
-      }
+          joinedAt: member.joinedAt,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => {
       // Online first, then alphabetical
       const onlineOrder = { online: 0, away: 1, dnd: 2, offline: 3 };
       const aOrder = onlineOrder[a.onlineStatus] ?? 3;

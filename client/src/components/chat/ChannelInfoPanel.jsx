@@ -446,7 +446,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
             )}
 
             {/* Loading skeleton */}
-            {isMembersLoading && members.length === 0 && (
+            {!isMembersLoading && !isResolvingMembers && (memberCount === 0 || memberCount == null) && members.length === 0 && (
               <div
                 style={{
                   display: "flex",

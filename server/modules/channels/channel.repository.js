@@ -543,7 +543,9 @@ class ChannelRepository {
       activeMembers.map((member) => [member.userId.toString(), member]),
     );
     const embeddedByUserId = new Map(
-      (channel.members || []).map((member) => [member.userId.toString(), member]),
+      (channel.members || [])
+        .filter((member) => member && member.userId != null)
+        .map((member) => [member.userId.toString(), member]),
     );
 
     const session = await mongoose.startSession();

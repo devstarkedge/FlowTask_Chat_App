@@ -5,6 +5,7 @@ import { useEffect } from 'react'
  *
  * @param {object} handlers - Map of action names to handler functions.
  *   - toggleSearch: Ctrl+K or Cmd+K
+ *   - toggleLocalSearch: Ctrl+F or Cmd+F
  *   - toggleThreads: Ctrl+Shift+H or Cmd+Shift+H
  *   - escape: Escape (when not in an input)
  *   - showShortcuts: Ctrl+/ or Cmd+/
@@ -20,6 +21,13 @@ export function useKeyboardShortcuts(handlers = {}) {
       if (isMod && e.key === 'k') {
         e.preventDefault()
         handlers.toggleSearch?.()
+        return
+      }
+
+      // Ctrl/Cmd + F — Toggle contextual channel search
+      if (isMod && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        handlers.toggleLocalSearch?.()
         return
       }
 
@@ -54,6 +62,7 @@ export function useKeyboardShortcuts(handlers = {}) {
  */
 export const SHORTCUTS = [
   { keys: ['Ctrl', 'K'], description: 'Search messages' },
+  { keys: ['Ctrl', 'F'], description: 'Search in current channel' },
   { keys: ['Ctrl', 'Shift', 'H'], description: 'All threads' },
   { keys: ['Ctrl', '/'], description: 'Keyboard shortcuts' },
   { keys: ['Esc'], description: 'Close panel' },

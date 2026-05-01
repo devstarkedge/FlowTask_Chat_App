@@ -859,6 +859,32 @@ export async function joinChannelRoom(userId, channelId, workspaceId) {
 }
 
 /**
+ * Remove a specific user's sockets from a channel room.
+ * Used when removing members from channels programmatically.
+ * @param {string} userId
+ * @param {string} channelId
+ * @param {string} [workspaceId]
+ */
+export async function leaveChannelRoom(userId, channelId, workspaceId) {
+  if (!io) return;
+  try {
+    const userRoom = resolveScopedRoom(workspaceId, 'user', userId, 'leaveChannelRoom.userRoom');
+    const channelRoom = resolveScopedRoom(workspaceId, 'channel', channelId, 'leaveChannelRoom.channelRoom');
+    if (!userRoom || !channelRoom) return;
+    const socketList = await io.in(userRoom).fetchSockets();
+    for (const socket of socketList) {
+      socket.leave(channelRoom);
+    }
+  } catch (error) {
+    logger.error('Failed to leave channel room programmatically', {
+      userId,
+      channelId,
+      error: error.message,
+    });
+  }
+}
+
+/**
  * Get Socket.IO instance.
  */
 export function getIO() {

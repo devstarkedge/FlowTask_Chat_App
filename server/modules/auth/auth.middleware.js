@@ -222,6 +222,8 @@ export function requireMessageAccess() {
       const channel = await channelRepository.findById(message.channelId, {
         workspaceId: req.workspaceId,
       });
+
+      const { default: ChannelMember } = await import('../channels/ChannelMember.model.js');
       if (!channel) {
         const { NotFoundError } = await import('../../middleware/errorHandler.js');
         return next(new NotFoundError('Channel not found'));
@@ -241,8 +243,16 @@ export function requireMessageAccess() {
         return next();
       }
 
-      // Check membership
-      if (!channel.hasMember(req.user._id)) {
+      // Check membership with embedded-members fallback to ChannelMember source of truth
+      const channelId = message.channelId?._id?.toString?.() || message.channelId?.toString?.() || null;
+      const isEmbeddedMember = channel.hasMember(req.user._id);
+      const isPersistedMember = isEmbeddedMember
+        ? true
+        : channelId
+          ? await ChannelMember.isMember(channelId, req.user._id)
+          : false;
+
+      if (!isPersistedMember) {
         return next(new ForbiddenError('Not a member of this channel'));
       }
 

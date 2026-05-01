@@ -225,7 +225,11 @@ class FlowTaskSyncService {
     const existingMembers = await channelRepository.listActiveMembers(channel._id, {
       workspaceId,
     });
-    const existingCount = existingMembers.length;
+    const existingMemberIds = new Set(
+      existingMembers
+        .map((member) => member.userId?._id?.toString?.() || member.userId?.toString?.() || null)
+        .filter(Boolean),
+    );
 
     await channelService.reconcileProjectMembers(
       channel._id,
@@ -234,7 +238,9 @@ class FlowTaskSyncService {
       { ownerFlowTaskId },
     );
 
-    report.added = Math.max(report.total - existingCount, 0);
+    report.added = [...memberFlowTaskIds].filter(
+      (memberId) => !existingMemberIds.has(memberId.toString()),
+    ).length;
 
     return report;
   }

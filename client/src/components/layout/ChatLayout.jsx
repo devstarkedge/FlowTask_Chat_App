@@ -29,9 +29,8 @@ import ChatPanel from "../chat/ChatPanel";
 import ThreadPanel from "../chat/ThreadPanel";
 import ChannelInfoPanel from "../chat/ChannelInfoPanel";
 import PreferencesModal from "../chat/PreferencesModal";
-import SearchPanel from "../chat/SearchPanel";
 import ProfileSidePanel from "../chat/ProfileSidePanel";
-import GlobalSearch from "../search/GlobalSearch";
+import UnifiedSearch from "../search/UnifiedSearch";
 import { useProfileStore } from "../../stores/profileStore";
 import { useAuthStore } from "../../stores/authStore";
 import FilePreviewModal from "../chat/FilePreviewModal";
@@ -47,6 +46,7 @@ import {
   getFilesPath,
   getChannelPath,
   getDMPath,
+  getSearchPath,
 } from "../../utils/chatRoutes";
 import {
   getNotificationText,
@@ -76,6 +76,9 @@ import {
 import toast from "react-hot-toast";
 import DownloadsModalWrapper from "../modals/DownloadsModalWrapper";
 import { useDownloadStore } from "../../stores/downloadStore";
+import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
+
+const EMPTY_LIST = [];
 
 /* ─── Injected styles ─────────────────────────────────────────────────────── */
 const LAYOUT_STYLES = `
@@ -172,6 +175,24 @@ const LAYOUT_STYLES = `
   transform: scale(1.06);
 }
 .cl-topbar__action-btn:active { transform: scale(0.95); }
+
+@media (max-width: 1024px) {
+  .cl-topbar {
+    grid-template-columns: auto minmax(160px, 520px) auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .cl-topbar {
+    grid-template-columns: auto 1fr auto;
+    gap: 8px;
+    padding: 0 10px;
+  }
+
+  .cl-topbar__search-wrap {
+    display: none;
+  }
+}
 
 .cl-notif-badge {
   position: absolute;
@@ -577,6 +598,7 @@ const PAGE_ROUTES = {
   home: lazy(() => import("../../pages/HomePage")),
   later: lazy(() => import("../../pages/LaterPage")),
   tools: lazy(() => import("../../pages/ToolsPage")),
+  search: lazy(() => import("../../pages/SearchResultsPage")),
   directories: lazy(() => import("../directories/DirectoriesPanel")),
 };
 
@@ -645,7 +667,7 @@ export default function ChatLayout() {
   const activeThread = useChatStore((s) => s.activeThread);
   const openThreadAction = useChatStore((s) => s.openThread);
   const closeThread = useChatStore((s) => s.closeThread);
-  const [showSearch, setShowSearch] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [showPins, setShowPins] = useState(false);
   const [showAllThreads, setShowAllThreads] = useState(false);
   const profileUser = useProfileStore((s) => s.profileUser);
@@ -660,238 +682,7 @@ export default function ChatLayout() {
   const [showTopSetStatus, setShowTopSetStatus] = useState(false);
   const addDownload = useDownloadStore((state) => state.addDownload);
   const user = useAuthStore((s) => s.user);
-
-  const handleDownload = async (file) => {
-    const fileName = file.fileName || file.name || "download";
-    const downloadUrl = file.url || file.secureUrl;
-    try {
-      addDownload({
-        name: fileName,
-        url: downloadUrl,
-        size: file.fileSize || file.size,
-        type: file.mimeType || file.type,
-      });
-      const res = await fetch(downloadUrl);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(objectUrl);
-    } catch (err) {
-      console.error("Download failed", err);
-    }
-  };
-
-  const handleOpenSearchResult = useCallback(
-    (item) => {
-      if (!workspaceId) return;
-      switch (item.type) {
-        case "user":
-          useProfileStore
-            .getState()
-            .openProfile({
-              _id: item.id,
-              name: item.name,
-              email: item.email,
-              avatar: item.avatar,
-              role: item.role,
-              onlineStatus: item.status,
-              customStatus: item.customStatus,
-              flowTaskUserId: item.flowTaskUserId,
-            });
-          break;
-        case "message":
-          navigate(
-            item.channelType === "dm"
-              ? getDMPath(workspaceId, item.channelId, item.id)
-              : getChannelPath(workspaceId, item.channelId, item.id),
-          );
-          break;
-        case "channel":
-          navigate(getChannelPath(workspaceId, item.id));
-          break;
-        case "dm":
-          navigate(getDMPath(workspaceId, item.id));
-          break;
-        case "file":
-          navigate(getFilesPath(workspaceId, item.referenceId));
-          break;
-        case "link":
-          navigate(
-            item.channelType === "dm"
-              ? getDMPath(workspaceId, item.channelId, item.messageId)
-              : getChannelPath(workspaceId, item.channelId, item.messageId),
-          );
-          break;
-        case "page":
-          if (item.path === "profile")
-            useProfileStore.getState().openProfile(user);
-          else if (item.path === "settings") setShowTopPreferences(true);
-          else if (item.path === "activity") setShowNotifications(true);
-          else if (item.path === "threads") setShowAllThreads(true);
-          else if (item.path === "starred") setShowSaved(true);
-          else navigate(`/workspace/${workspaceId}/${item.path}`);
-          break;
-        default:
-          break;
-      }
-    },
-    [workspaceId, navigate, user],
-  );
-
-  // Resizable Sidebar
-  const [sidebarWidth, setSidebarWidth] = useState(getSavedSidebarWidth);
-  const isResizingRef = useRef(false);
-  const [isResizing, setIsResizing] = useState(false);
-  const widthBeforeCollapseRef = useRef(SIDEBAR_DEFAULT);
-  const sidebarCollapsed = sidebarWidth === SIDEBAR_COLLAPSED;
-  const persistWidth = useCallback((w) => {
-    try {
-      localStorage.setItem(SIDEBAR_STORAGE_KEY, String(w));
-    } catch {}
-  }, []);
-
-  const handleResizeStart = useCallback(
-    (e) => {
-      e.preventDefault();
-      isResizingRef.current = true;
-      setIsResizing(true);
-      const startX = e.clientX,
-        startW = sidebarCollapsed ? SIDEBAR_MIN : sidebarWidth;
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-      const onMove = (ev) => {
-        const delta = ev.clientX - startX;
-        setSidebarWidth(
-          Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startW + delta)),
-        );
-      };
-      const onUp = () => {
-        isResizingRef.current = false;
-        setIsResizing(false);
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-        document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup", onUp);
-        setSidebarWidth((w) => {
-          persistWidth(w);
-          return w;
-        });
-      };
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
-    },
-    [sidebarWidth, sidebarCollapsed, persistWidth],
-  );
-
-  const handleResizeDoubleClick = useCallback(() => {
-    if (sidebarCollapsed) {
-      const r = widthBeforeCollapseRef.current;
-      setSidebarWidth(r);
-      persistWidth(r);
-    } else {
-      widthBeforeCollapseRef.current = sidebarWidth;
-      setSidebarWidth(SIDEBAR_COLLAPSED);
-      persistWidth(SIDEBAR_COLLAPSED);
-    }
-  }, [sidebarCollapsed, sidebarWidth, persistWidth]);
-
   const globalSearchRef = useRef(null);
-
-  const shortcutHandlers = useMemo(
-    () => ({
-      toggleSearch: () => {
-        globalSearchRef.current?.focus();
-        setShowPins(false);
-        setShowAllThreads(false);
-        setShowNotifications(false);
-      },
-      toggleThreads: () => {
-        setShowAllThreads((s) => !s);
-        setShowSearch(false);
-        setShowPins(false);
-        setShowNotifications(false);
-        closeThread();
-        useProfileStore.getState().closeProfile();
-      },
-      showShortcuts: () => setShowShortcuts((s) => !s),
-      escape: () => {
-        if (showShortcuts) setShowShortcuts(false);
-        else if (showSearch) setShowSearch(false);
-        else if (showPins) setShowPins(false);
-        else if (showSaved) setShowSaved(false);
-        else if (showNotifications) setShowNotifications(false);
-        else if (showAllThreads) setShowAllThreads(false);
-        else if (profileUser) useProfileStore.getState().closeProfile();
-      },
-    }),
-    [
-      showShortcuts,
-      showSearch,
-      showPins,
-      showSaved,
-      showAllThreads,
-      showNotifications,
-      profileUser,
-      closeThread,
-    ],
-  );
-  useKeyboardShortcuts(shortcutHandlers);
-
-  const idleTimerRef = useRef(null);
-  const isIdleRef = useRef(false);
-  const resetIdleTimer = useCallback(() => {
-    if (isIdleRef.current) {
-      isIdleRef.current = false;
-      emitPresenceUpdate("online");
-    }
-    clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(
-      () => {
-        isIdleRef.current = true;
-        emitPresenceUpdate("away");
-      },
-      5 * 60 * 1000,
-    );
-  }, []);
-  useEffect(() => {
-    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
-    events.forEach((e) =>
-      window.addEventListener(e, resetIdleTimer, { passive: true }),
-    );
-    resetIdleTimer();
-    return () => {
-      events.forEach((e) => window.removeEventListener(e, resetIdleTimer));
-      clearTimeout(idleTimerRef.current);
-    };
-  }, [resetIdleTimer]);
-
-  usePushSubscription({ enabled: !!user });
-
-  useEffect(() => {
-    const handleFocus = () => {
-      const cId = useChannelStore.getState().activeChannelId;
-      if (cId) getSocket()?.emit("window:focus", { channelId: cId });
-    };
-    const handleBlur = () => {
-      getSocket()?.emit("window:blur", {});
-    };
-    window.addEventListener("focus", handleFocus);
-    window.addEventListener("blur", handleBlur);
-    if (document.hasFocus()) handleFocus();
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-      window.removeEventListener("blur", handleBlur);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (activeWorkspaceId) fetchChannels(activeWorkspaceId);
-  }, [fetchChannels, activeWorkspaceId]);
 
   const channelMessageRoute = matchPath(
     "/workspace/:workspaceId/channel/:channelId/message/:messageId",
@@ -955,6 +746,315 @@ export default function ChatLayout() {
   const isActivityRoute = !!(activityRoute || activityWithSelectionRoute);
   const isFilesRoute = !!(filesRoute || filesWithSelectionRoute);
   const isDMRoute = !!(dmsHomeRoute || dmsRoute || dmsMessageRoute);
+  const localSearchConversationId = routeConversationId || activeChannelId || null;
+  const localSearchChannel = useMemo(
+    () => channels.find((candidate) => candidate._id === localSearchConversationId) || null,
+    [channels, localSearchConversationId],
+  );
+  const legacyLocalSearchMessages = useChatStore((state) => (
+    localSearchConversationId
+      ? state.messagesByChannel[localSearchConversationId] || EMPTY_LIST
+      : EMPTY_LIST
+  ));
+  const localSearchMessageIds = useChatStore((state) => (
+    localSearchConversationId
+      ? state.channelMessageIds[localSearchConversationId] || EMPTY_LIST
+      : EMPTY_LIST
+  ));
+  const localSearchMessagesById = useChatStore((state) => state.messagesById);
+  const localSearchMessages = useMemo(() => {
+    if (!CHAT_FEATURE_FLAGS.normalizedMessageStore) return legacyLocalSearchMessages;
+    if (!localSearchMessageIds.length) return EMPTY_LIST;
+    return localSearchMessageIds
+      .map((id) => localSearchMessagesById[id])
+      .filter(Boolean);
+  }, [legacyLocalSearchMessages, localSearchMessageIds, localSearchMessagesById]);
+
+  const openDirectMessageFromSearch = useCallback(
+    async (targetUserId) => {
+      if (!workspaceId || !targetUserId) return;
+      if (targetUserId === user?._id) {
+        useProfileStore.getState().openProfile(user);
+        return;
+      }
+
+      try {
+        const channel = await useChannelStore.getState().createDM(targetUserId);
+        if (channel?._id) {
+          navigate(getDMPath(workspaceId, channel._id));
+        }
+      } catch {
+        // createDM already handles user-facing toasts.
+      }
+    },
+    [navigate, user, workspaceId],
+  );
+
+  const handleDownload = async (file) => {
+    const fileName = file.fileName || file.name || "download";
+    const downloadUrl = file.url || file.secureUrl;
+    try {
+      addDownload({
+        name: fileName,
+        url: downloadUrl,
+        size: file.fileSize || file.size,
+        type: file.mimeType || file.type,
+      });
+      const res = await fetch(downloadUrl);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      console.error("Download failed", err);
+    }
+  };
+
+  const handleOpenSearchResult = useCallback(
+    (item) => {
+      if (!workspaceId) return;
+      switch (item.type) {
+        case "user":
+          void openDirectMessageFromSearch(item.id);
+          break;
+        case "message":
+          navigate(
+            item.channelType === "dm"
+              ? getDMPath(workspaceId, item.channelId, item.id)
+              : getChannelPath(workspaceId, item.channelId, item.id),
+          );
+          break;
+        case "channel":
+          navigate(getChannelPath(workspaceId, item.id));
+          break;
+        case "dm":
+          navigate(getDMPath(workspaceId, item.id));
+          break;
+        case "file":
+          navigate(getFilesPath(workspaceId, item.referenceId));
+          break;
+        case "link":
+          navigate(
+            item.channelType === "dm"
+              ? getDMPath(workspaceId, item.channelId, item.messageId)
+              : getChannelPath(workspaceId, item.channelId, item.messageId),
+          );
+          break;
+        case "page":
+          if (item.path === "profile")
+            useProfileStore.getState().openProfile(user);
+          else if (item.path === "settings") setShowTopPreferences(true);
+          else if (item.path === "activity") setShowNotifications(true);
+          else if (item.path === "threads") setShowAllThreads(true);
+          else if (item.path === "starred") setShowSaved(true);
+          else navigate(`/workspace/${workspaceId}/${item.path}`);
+          break;
+        default:
+          break;
+      }
+    },
+    [workspaceId, navigate, user, openDirectMessageFromSearch],
+  );
+
+  const closeSearch = useCallback(() => {
+    globalSearchRef.current?.close();
+    setIsSearchOpen(false);
+  }, []);
+
+  const openGlobalSearch = useCallback(() => {
+    globalSearchRef.current?.open({ mode: "global" });
+    setShowPins(false);
+    setShowAllThreads(false);
+    setShowNotifications(false);
+    setShowSaved(false);
+    useProfileStore.getState().closeProfile();
+    closeThread();
+  }, [closeThread]);
+
+  const toggleLocalSearch = useCallback(() => {
+    if (!localSearchConversationId) return;
+    globalSearchRef.current?.open({
+      mode: localSearchChannel?.type === "dm" ? "dm" : "channel",
+      channelId: localSearchConversationId,
+    });
+    setShowPins(false);
+    setShowAllThreads(false);
+    setShowNotifications(false);
+    setShowSaved(false);
+    useProfileStore.getState().closeProfile();
+    closeThread();
+  }, [closeThread, localSearchChannel?.type, localSearchConversationId]);
+
+  const openLocalSearchResultsPage = useCallback(
+    (query, scopeId) => {
+      if (!workspaceId || !scopeId || !query?.trim()) return;
+      navigate(getSearchPath(workspaceId, scopeId, query.trim()));
+      closeSearch();
+    },
+    [closeSearch, navigate, workspaceId],
+  );
+
+  // Resizable Sidebar
+  const [sidebarWidth, setSidebarWidth] = useState(getSavedSidebarWidth);
+  const isResizingRef = useRef(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const widthBeforeCollapseRef = useRef(SIDEBAR_DEFAULT);
+  const sidebarCollapsed = sidebarWidth === SIDEBAR_COLLAPSED;
+  const persistWidth = useCallback((w) => {
+    try {
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, String(w));
+    } catch {}
+  }, []);
+
+  const handleResizeStart = useCallback(
+    (e) => {
+      e.preventDefault();
+      isResizingRef.current = true;
+      setIsResizing(true);
+      const startX = e.clientX,
+        startW = sidebarCollapsed ? SIDEBAR_MIN : sidebarWidth;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      const onMove = (ev) => {
+        const delta = ev.clientX - startX;
+        setSidebarWidth(
+          Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startW + delta)),
+        );
+      };
+      const onUp = () => {
+        isResizingRef.current = false;
+        setIsResizing(false);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        setSidebarWidth((w) => {
+          persistWidth(w);
+          return w;
+        });
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [sidebarWidth, sidebarCollapsed, persistWidth],
+  );
+
+  const handleResizeDoubleClick = useCallback(() => {
+    if (sidebarCollapsed) {
+      const r = widthBeforeCollapseRef.current;
+      setSidebarWidth(r);
+      persistWidth(r);
+    } else {
+      widthBeforeCollapseRef.current = sidebarWidth;
+      setSidebarWidth(SIDEBAR_COLLAPSED);
+      persistWidth(SIDEBAR_COLLAPSED);
+    }
+  }, [sidebarCollapsed, sidebarWidth, persistWidth]);
+
+  const shortcutHandlers = useMemo(
+    () => ({
+      toggleSearch: () => {
+        openGlobalSearch();
+      },
+      toggleLocalSearch: () => {
+        if (!localSearchConversationId) return;
+        toggleLocalSearch();
+      },
+      toggleThreads: () => {
+        setShowAllThreads((s) => !s);
+        closeSearch();
+        setShowPins(false);
+        setShowNotifications(false);
+        closeThread();
+        useProfileStore.getState().closeProfile();
+      },
+      showShortcuts: () => setShowShortcuts((s) => !s),
+      escape: () => {
+        if (showShortcuts) setShowShortcuts(false);
+        else if (isSearchOpen) closeSearch();
+        else if (showPins) setShowPins(false);
+        else if (showSaved) setShowSaved(false);
+        else if (showNotifications) setShowNotifications(false);
+        else if (showAllThreads) setShowAllThreads(false);
+        else if (profileUser) useProfileStore.getState().closeProfile();
+      },
+    }),
+    [
+      closeSearch,
+      showShortcuts,
+      isSearchOpen,
+      showPins,
+      showSaved,
+      showAllThreads,
+      showNotifications,
+      openGlobalSearch,
+      profileUser,
+      closeThread,
+      localSearchConversationId,
+      toggleLocalSearch,
+    ],
+  );
+  useKeyboardShortcuts(shortcutHandlers);
+
+  const idleTimerRef = useRef(null);
+  const isIdleRef = useRef(false);
+  const resetIdleTimer = useCallback(() => {
+    if (isIdleRef.current) {
+      isIdleRef.current = false;
+      emitPresenceUpdate("online");
+    }
+    clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(
+      () => {
+        isIdleRef.current = true;
+        emitPresenceUpdate("away");
+      },
+      5 * 60 * 1000,
+    );
+  }, []);
+  useEffect(() => {
+    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
+    events.forEach((e) =>
+      window.addEventListener(e, resetIdleTimer, { passive: true }),
+    );
+    resetIdleTimer();
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, resetIdleTimer));
+      clearTimeout(idleTimerRef.current);
+    };
+  }, [resetIdleTimer]);
+
+  usePushSubscription({ enabled: !!user });
+
+  useEffect(() => {
+    const handleFocus = () => {
+      const cId = useChannelStore.getState().activeChannelId;
+      if (cId) getSocket()?.emit("window:focus", { channelId: cId });
+    };
+    const handleBlur = () => {
+      getSocket()?.emit("window:blur", {});
+    };
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("blur", handleBlur);
+    if (document.hasFocus()) handleFocus();
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeWorkspaceId) fetchChannels(activeWorkspaceId);
+  }, [fetchChannels, activeWorkspaceId]);
+
+  useEffect(() => {
+    closeSearch();
+  }, [closeSearch, localSearchConversationId]);
 
   const selectedNotification = useMemo(
     () => notifications.find((n) => n._id === activityNotificationId) || null,
@@ -1252,7 +1352,7 @@ export default function ChatLayout() {
               mode={isDMRoute ? "dms" : "home"}
               onToggleAllThreads={() => {
                 setShowAllThreads((s) => !s);
-                setShowSearch(false);
+                  closeSearch();
                 setShowPins(false);
                 setShowNotifications(false);
                 setShowSaved(false);
@@ -1262,7 +1362,7 @@ export default function ChatLayout() {
               onToggleNotifications={() => {
                 setShowNotifications((s) => !s);
                 setShowAllThreads(false);
-                setShowSearch(false);
+                  closeSearch();
                 setShowPins(false);
                 setShowSaved(false);
                 useProfileStore.getState().closeProfile();
@@ -1271,7 +1371,7 @@ export default function ChatLayout() {
               onToggleSaved={() => {
                 setShowSaved((s) => !s);
                 setShowAllThreads(false);
-                setShowSearch(false);
+                  closeSearch();
                 setShowPins(false);
                 setShowNotifications(false);
                 useProfileStore.getState().closeProfile();
@@ -1322,7 +1422,7 @@ export default function ChatLayout() {
                     setShowNotifications((s) => !s);
                     setShowMobileSidebar(false);
                     setShowAllThreads(false);
-                    setShowSearch(false);
+                    closeSearch();
                     setShowPins(false);
                     useProfileStore.getState().closeProfile();
                     closeThread();
@@ -1339,10 +1439,13 @@ export default function ChatLayout() {
           user={user}
           workspaceId={workspaceId}
           searchRef={globalSearchRef}
+          messages={localSearchMessages}
           unreadCount={unreadNotifications}
           onBack={() => navigate(-1)}
           onForward={() => navigate(1)}
           onOpenSearchResult={handleOpenSearchResult}
+          onOpenResultsPage={openLocalSearchResultsPage}
+          onOpenChange={setIsSearchOpen}
           onNotifications={() => {
             setShowNotifications((s) => !s);
             setShowPins(false);
@@ -1399,14 +1502,12 @@ export default function ChatLayout() {
               return activeChannelId ? (
                 <ChatPanel
                   channelId={activeChannelId}
+                  workspaceId={workspaceId}
                   onOpenThread={openThread}
-                  onToggleSearch={() => {
-                    setShowSearch((s) => !s);
-                    setShowPins(false);
-                  }}
+                  onToggleSearch={toggleLocalSearch}
                   onTogglePins={() => {
                     setShowPins((s) => !s);
-                    setShowSearch(false);
+                    closeSearch();
                   }}
                   onOpenProfile={openProfile}
                   onOpenFilePreview={openFilePreview}
@@ -1431,7 +1532,6 @@ export default function ChatLayout() {
       {showInfoPanel &&
         activeChannel &&
         !activeThread &&
-        !showSearch &&
         !showPins &&
         !profileUser && (
           <ErrorBoundary name="Channel Info" compact>
@@ -1485,19 +1585,6 @@ export default function ChatLayout() {
           />
         </ErrorBoundary>
       )}
-      {showSearch && (
-        <ErrorBoundary name="Search" compact>
-          <SearchPanel
-            channelId={activeChannelId}
-            onClose={() => setShowSearch(false)}
-            onJumpToMessage={(msg) => {
-              if (msg.channelId !== activeChannelId)
-                useChannelStore.getState().setActiveChannel(msg.channelId);
-              setShowSearch(false);
-            }}
-          />
-        </ErrorBoundary>
-      )}
       {previewFile && (
         <FilePreviewModal
           file={previewFile}
@@ -1528,10 +1615,13 @@ function GlobalTopBar({
   user,
   workspaceId,
   searchRef,
+  messages,
   unreadCount,
   onBack,
   onForward,
   onOpenSearchResult,
+  onOpenResultsPage,
+  onOpenChange,
   onNotifications,
   onHelp,
 }) {
@@ -1567,11 +1657,14 @@ function GlobalTopBar({
       </div>
 
       <div className="cl-topbar__search-wrap">
-        <GlobalSearch
+        <UnifiedSearch
           ref={searchRef}
           user={user}
           workspaceId={workspaceId}
+          messages={messages}
           onOpenResult={onOpenSearchResult}
+          onOpenResultsPage={onOpenResultsPage}
+          onOpenChange={onOpenChange}
         />
       </div>
 

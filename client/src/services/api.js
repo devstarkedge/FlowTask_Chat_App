@@ -252,8 +252,23 @@ export const notificationAPI = {
 }
 
 // ─── Workspaces ──────────────────────────────────────────────────────────
+function buildSearchParams({ q = '', scope = null, limit = null, cursor = null } = {}) {
+  const params = { q }
+
+  if (scope) params.scope = scope
+  if (limit != null) params.limit = limit
+  if (cursor) params.cursor = cursor
+
+  return params
+}
+
 export const searchAPI = {
-  global: (q) => api.get('/search', { params: { q } }),
+  search: ({ q = '', scope = null, limit = null, cursor = null, signal = undefined } = {}) =>
+    api.get('/search', {
+      params: buildSearchParams({ q, scope, limit, cursor }),
+      signal,
+    }),
+  global: (q, options = {}) => searchAPI.search({ q, ...options }),
 }
 
 export const workspaceAPI = {

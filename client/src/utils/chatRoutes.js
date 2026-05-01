@@ -14,6 +14,14 @@ export function getFilesPath(workspaceId, fileRefId = null) {
     : `${workspaceBasePath(workspaceId)}/files`
 }
 
+export function getSearchPath(workspaceId, scopeId = null, query = '') {
+  const params = new URLSearchParams()
+  if (scopeId) params.set('scope', scopeId)
+  if (query) params.set('q', query)
+  const suffix = params.toString()
+  return `${workspaceBasePath(workspaceId)}/search${suffix ? `?${suffix}` : ''}`
+}
+
 export function getDMPath(workspaceId, dmId, messageId = null) {
   const base = `${workspaceBasePath(workspaceId)}/dms/${dmId}`
   return messageId ? `${base}/message/${messageId}` : base

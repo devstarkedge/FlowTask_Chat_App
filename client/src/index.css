@@ -37,19 +37,6 @@
 
 @import "tailwindcss";
 
-@theme inline {
-  --color-bg-primary: var(--bg-primary);
-  --color-bg-secondary: var(--bg-secondary);
-  --color-surface-primary: var(--surface-primary);
-  --color-surface-secondary: var(--surface-secondary);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-muted: var(--text-muted);
-  --color-border: var(--border-color);
-  --color-sidebar: var(--sidebar-bg);
-  --color-accent: var(--accent-color);
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════ */
 /*  DESIGN TOKENS                                                            */
 /* ═══════════════════════════════════════════════════════════════════════════ */

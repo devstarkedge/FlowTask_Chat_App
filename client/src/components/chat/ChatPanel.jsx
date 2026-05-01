@@ -12,7 +12,17 @@ import { CHAT_FEATURE_FLAGS } from '../../config/featureFlags'
 
 const EMPTY_LIST = []
 
-export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onTogglePins, onOpenProfile, onOpenFilePreview, onOpenMobileSidebar, onSaveMessage }) {
+export default function ChatPanel({
+  channelId,
+  workspaceId,
+  onOpenThread,
+  onToggleSearch,
+  onTogglePins,
+  onOpenProfile,
+  onOpenFilePreview,
+  onOpenMobileSidebar,
+  onSaveMessage,
+}) {
   const channel = useChannelStore((s) => s.channels.find((c) => c._id === channelId))
   const fetchMessages = useChatStore((s) => s.fetchMessages)
   const legacyMessages = useChatStore((s) => s.messagesByChannel[channelId] || EMPTY_LIST)
@@ -50,7 +60,7 @@ export default function ChatPanel({ channelId, onOpenThread, onToggleSearch, onT
   const isDMChannel = channel?.type === 'dm'
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 chat-panel-shell">
+    <div className="flex-1 flex flex-col min-w-0 chat-panel-shell relative">
       <ChatHeader
         channel={channel}
         onToggleSearch={onToggleSearch}

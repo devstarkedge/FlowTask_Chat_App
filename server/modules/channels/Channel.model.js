@@ -199,7 +199,13 @@ channelSchema.index({ workspaceId: 1, slug: 1 }, { unique: true });
 // Fast lookup by FlowTask entity within a workspace
 channelSchema.index(
   { workspaceId: 1, "flowTaskRef.entityType": 1, "flowTaskRef.entityId": 1 },
-  { sparse: true, unique: true },
+  {
+    unique: true,
+    partialFilterExpression: {
+      "flowTaskRef.entityType": { $type: "string" },
+      "flowTaskRef.entityId": { $type: "string" },
+    },
+  },
 );
 // User's channel list sorted by recent activity within workspace
 channelSchema.index({ workspaceId: 1, "members.userId": 1, lastMessageAt: -1 });

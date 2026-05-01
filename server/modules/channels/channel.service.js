@@ -11,6 +11,7 @@ import {
   emitToChannel,
   emitToUser,
   joinChannelRoom,
+  leaveChannelRoom,
 } from "../../sockets/socketManager.js";
 import {
   slugify,
@@ -1170,6 +1171,7 @@ class ChannelService {
         { channelId },
         effectiveWorkspaceId,
       );
+      await leaveChannelRoom(userId, channelId.toString(), effectiveWorkspaceId);
     }
 
     emitToChannel(

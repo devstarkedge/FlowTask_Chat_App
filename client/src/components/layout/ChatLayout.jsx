@@ -76,500 +76,7 @@ import {
 import toast from "react-hot-toast";
 import DownloadsModalWrapper from "../modals/DownloadsModalWrapper";
 import { useDownloadStore } from "../../stores/downloadStore";
-
-/* ─── Injected styles ─────────────────────────────────────────────────────── */
-const LAYOUT_STYLES = `
-@keyframes cl-fadeUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes cl-fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes cl-scaleIn {
-  from { opacity: 0; transform: scale(0.94); }
-  to   { opacity: 1; transform: scale(1); }
-}
-@keyframes cl-shimmer {
-  0%   { background-position: -400% 0; }
-  100% { background-position:  400% 0; }
-}
-@keyframes cl-spin {
-  to { transform: rotate(360deg); }
-}
-@keyframes cl-pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.6; transform: scale(0.85); }
-}
-@keyframes cl-float {
-  0%, 100% { transform: translateY(0px); }
-  50%       { transform: translateY(-6px); }
-}
-
-/* ════════════════════════
-   GLOBAL TOP BAR
-════════════════════════ */
-.cl-topbar {
-  height: 48px;
-  display: grid;
-  grid-template-columns: auto minmax(180px, 640px) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 0 14px;
-  background: var(--surface-primary, var(--bg-primary));
-  border-bottom: 1px solid var(--border-color, var(--border-primary));
-  flex-shrink: 0;
-  position: relative;
-  z-index: 100;
-}
-
-.cl-topbar__nav {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.cl-topbar__nav-btn {
-  width: 30px; height: 30px;
-  border-radius: 8px; border: none;
-  background: transparent;
-  color: var(--text-muted);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  transition: background 140ms ease, color 140ms ease, transform 160ms cubic-bezier(0.34,1.56,0.64,1);
-}
-.cl-topbar__nav-btn:hover {
-  background: var(--surface-hover, var(--bg-hover));
-  color: var(--text-primary);
-  transform: scale(1.08);
-}
-.cl-topbar__nav-btn:active { transform: scale(0.95); }
-
-.cl-topbar__search-wrap {
-  flex: 1;
-  max-width: 640px;
-}
-
-.cl-topbar__actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  justify-content: flex-end;
-}
-.cl-topbar__action-btn {
-  position: relative;
-  width: 32px; height: 32px;
-  border-radius: 8px; border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  transition: background 140ms ease, color 140ms ease, transform 160ms cubic-bezier(0.34,1.56,0.64,1);
-}
-.cl-topbar__action-btn:hover {
-  background: var(--surface-hover, var(--bg-hover));
-  color: var(--text-primary);
-  transform: scale(1.06);
-}
-.cl-topbar__action-btn:active { transform: scale(0.95); }
-
-.cl-notif-badge {
-  position: absolute;
-  top: 1px; right: 1px;
-  min-width: 16px; height: 16px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: var(--danger-color, #e01e5a);
-  color: #fff;
-  font-size: 9.5px; font-weight: 900;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 0 2px var(--surface-primary, var(--bg-primary));
-  line-height: 1;
-  animation: cl-scaleIn 200ms cubic-bezier(0.34,1.56,0.64,1);
-}
-
-/* Bell shake on new notification */
-.cl-topbar__action-btn.has-notif svg {
-  animation: cl-bellShake 500ms ease;
-}
-@keyframes cl-bellShake {
-  0%,100% { transform: rotate(0); }
-  20%      { transform: rotate(-14deg); }
-  40%      { transform: rotate(12deg); }
-  60%      { transform: rotate(-8deg); }
-  80%      { transform: rotate(6deg); }
-}
-
-/* ════════════════════════
-   LOADING SPINNER
-════════════════════════ */
-.cl-spinner {
-  width: 32px; height: 32px;
-  border: 3px solid var(--border-secondary, rgba(255,255,255,0.12));
-  border-top-color: var(--accent-color, var(--accent-primary));
-  border-radius: 50%;
-  animation: cl-spin 700ms linear infinite;
-}
-
-/* ════════════════════════
-   WELCOME SCREEN
-════════════════════════ */
-.cl-welcome {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  animation: cl-fadeUp 400ms ease both;
-}
-.cl-welcome__card {
-  max-width: 420px;
-  width: 100%;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-}
-.cl-welcome__orb {
-  width: 72px; height: 72px;
-  border-radius: 20px;
-  display: flex; align-items: center; justify-content: center;
-  margin-bottom: 22px;
-  background: linear-gradient(135deg, var(--accent-color, var(--accent-primary)) 0%, var(--accent-purple, #7c3aed) 100%);
-  box-shadow:
-    0 12px 32px color-mix(in srgb, var(--accent-color, var(--accent-primary)) 35%, transparent),
-    0 4px 12px rgba(0,0,0,0.15);
-  animation: cl-float 3s ease-in-out infinite;
-}
-.cl-welcome__title {
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  color: var(--text-white, var(--text-primary));
-  margin: 0 0 10px;
-  line-height: 1.2;
-}
-.cl-welcome__desc {
-  font-size: 14px;
-  line-height: 1.65;
-  color: var(--text-secondary);
-  margin: 0 0 28px;
-  max-width: 320px;
-}
-.cl-welcome__pills {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 24px;
-}
-.cl-welcome__pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid var(--border-secondary, rgba(255,255,255,0.1));
-  color: var(--text-secondary);
-  background: var(--bg-secondary, rgba(255,255,255,0.04));
-  letter-spacing: -0.01em;
-}
-.cl-welcome__pill-dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  animation: cl-pulse-dot 2.2s ease infinite;
-}
-.cl-welcome__mobile-btn {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 9px 18px;
-  border-radius: 10px;
-  border: 1px solid var(--border-primary);
-  background: var(--bg-secondary, var(--bg-hover));
-  color: var(--text-secondary);
-  font-size: 13px; font-weight: 600;
-  cursor: pointer; font-family: inherit;
-  transition: background 140ms ease, transform 160ms ease;
-  margin-bottom: 20px;
-}
-.cl-welcome__mobile-btn:hover { background: var(--bg-hover); transform: translateY(-1px); }
-@media (max-width: 768px) { .cl-welcome__mobile-btn { display: flex; } }
-
-/* ════════════════════════
-   EMPTY / SELECT PANES
-════════════════════════ */
-.cl-empty-pane {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-  animation: cl-fadeUp 320ms ease both;
-}
-.cl-empty-pane__inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  text-align: center;
-  max-width: 280px;
-}
-.cl-empty-pane__icon-wrap {
-  width: 60px; height: 60px;
-  border-radius: 18px;
-  display: flex; align-items: center; justify-content: center;
-  margin-bottom: 4px;
-  border: 1px solid var(--border-secondary, rgba(255,255,255,0.08));
-  background: var(--bg-secondary, rgba(255,255,255,0.04));
-}
-.cl-empty-pane__title {
-  font-size: 15px; font-weight: 700;
-  color: var(--text-white, var(--text-primary));
-  letter-spacing: -0.02em;
-  margin: 0;
-}
-.cl-empty-pane__sub {
-  font-size: 13px;
-  color: var(--text-muted);
-  line-height: 1.55;
-  margin: 0;
-}
-.cl-empty-pane__mobile-btn {
-  display: none;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: 9px;
-  border: 1px solid var(--border-primary);
-  background: var(--bg-hover);
-  color: var(--text-secondary);
-  font-size: 12px; font-weight: 600;
-  cursor: pointer; font-family: inherit;
-  margin-bottom: 4px;
-  transition: background 140ms ease;
-}
-.cl-empty-pane__mobile-btn:hover { background: var(--bg-secondary); }
-@media (max-width: 768px) { .cl-empty-pane__mobile-btn { display: flex; } }
-
-/* ════════════════════════
-   PANE BREADCRUMB BAR
-════════════════════════ */
-.cl-breadcrumb-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 16px;
-  height: 44px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--border-primary, var(--border-color));
-  background: var(--surface-primary, var(--bg-secondary));
-}
-.cl-breadcrumb-bar__left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  min-width: 0;
-  flex: 1;
-}
-.cl-breadcrumb-bar__label {
-  color: var(--text-muted);
-  font-weight: 500;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.cl-breadcrumb-bar__arrow {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-.cl-breadcrumb-bar__name {
-  color: var(--text-white, var(--text-primary));
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ════════════════════════
-   FILE ACTION BUTTONS
-════════════════════════ */
-.cl-file-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.cl-file-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 6px 12px;
-  border-radius: 8px; border: none;
-  font-size: 12px; font-weight: 600;
-  cursor: pointer; font-family: inherit;
-  white-space: nowrap;
-  transition: background 140ms ease, color 140ms ease, transform 160ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 140ms ease;
-}
-.cl-file-btn:hover { transform: translateY(-1px); }
-.cl-file-btn:active { transform: scale(0.97); }
-.cl-file-btn--ghost {
-  background: var(--surface-secondary, var(--bg-hover));
-  color: var(--text-secondary);
-  border: 1px solid var(--border-secondary);
-}
-.cl-file-btn--ghost:hover { background: var(--surface-hover, var(--bg-hover)); color: var(--text-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-.cl-file-btn--primary {
-  background: var(--accent-color, var(--accent-primary));
-  color: #fff;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-color, var(--accent-primary)) 35%, transparent);
-}
-.cl-file-btn--primary:hover {
-  background: color-mix(in srgb, var(--accent-color, var(--accent-primary)) 88%, #000);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent-color, var(--accent-primary)) 42%, transparent);
-}
-
-/* ════════════════════════
-   FILE PREVIEW AREA
-════════════════════════ */
-.cl-file-preview-shell {
-  flex: 1;
-  overflow: hidden;
-  padding: 16px;
-  animation: cl-fadeIn 250ms ease;
-}
-.cl-file-preview-card {
-  height: 100%;
-  border-radius: 14px;
-  border: 1px solid var(--border-secondary, var(--border-primary));
-  background: var(--surface-secondary, var(--bg-secondary));
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-}
-.cl-file-preview-card__header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-secondary);
-  background: var(--surface-primary, var(--bg-primary));
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-.cl-file-preview-card__icon {
-  width: 32px; height: 32px;
-  border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.cl-file-preview-card__title {
-  font-size: 13px; font-weight: 700;
-  color: var(--text-white, var(--text-primary));
-  letter-spacing: -0.01em;
-}
-.cl-file-preview-card__meta {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 1px;
-}
-.cl-file-preview-card__body {
-  flex: 1;
-  overflow: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: var(--bg-primary);
-}
-.cl-file-preview-card__body img {
-  max-width: 100%; max-height: 100%;
-  border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.16);
-  object-fit: contain;
-}
-.cl-file-preview-card__body video,
-.cl-file-preview-card__body audio {
-  max-width: 100%;
-  border-radius: 10px;
-}
-
-.cl-file-no-preview {
-  display: flex; flex-direction: column; align-items: center;
-  gap: 12px; text-align: center;
-}
-.cl-file-no-preview__icon {
-  width: 64px; height: 64px; border-radius: 18px;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--bg-secondary, var(--bg-hover));
-  border: 1px solid var(--border-secondary);
-}
-.cl-file-no-preview__title {
-  font-size: 14px; font-weight: 600;
-  color: var(--text-secondary);
-  margin: 0;
-}
-.cl-file-no-preview__sub {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin: 0;
-}
-
-/* ════════════════════════
-   ACTIVITY PANE CONTEXT
-════════════════════════ */
-.cl-activity-context-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 16px;
-  height: 36px;
-  font-size: 12px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--border-secondary);
-  background: color-mix(in srgb, var(--accent-color, var(--accent-primary)) 6%, var(--surface-primary, var(--bg-secondary)));
-}
-.cl-activity-context-bar__tag {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 8px; border-radius: 999px;
-  font-size: 11px; font-weight: 700;
-  background: color-mix(in srgb, var(--accent-color, var(--accent-primary)) 14%, transparent);
-  color: var(--accent-color, var(--accent-primary));
-  border: 1px solid color-mix(in srgb, var(--accent-color, var(--accent-primary)) 25%, transparent);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.cl-activity-context-bar__name {
-  color: var(--text-secondary);
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-
-/* ════════════════════════
-   RESPONSIVE HELPERS
-════════════════════════ */
-@media (max-width: 768px) {
-  .cl-topbar { grid-template-columns: auto 1fr auto; gap: 8px; padding: 0 10px; }
-  .cl-file-actions { gap: 4px; }
-  .cl-file-btn span { display: none; }
-  .cl-file-btn { padding: 6px 8px; }
-}
-`;
-
-function useLayoutStylesInjected() {
-  const ref = useRef(false);
-  useEffect(() => {
-    if (ref.current) return;
-    ref.current = true;
-    if (document.getElementById("cl-layout-styles")) return;
-    const el = document.createElement("style");
-    el.id = "cl-layout-styles";
-    el.textContent = LAYOUT_STYLES;
-    document.head.appendChild(el);
-  }, []);
-}
+import PinnedBar from "../chat/PinnedBar";
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 
@@ -625,8 +132,6 @@ function formatSize(bytes) {
 /* ─── Main ChatLayout ─────────────────────────────────────────────────────── */
 
 export default function ChatLayout() {
-  useLayoutStylesInjected();
-
   const {
     fetchChannels,
     activeChannelId,
@@ -690,18 +195,16 @@ export default function ChatLayout() {
       if (!workspaceId) return;
       switch (item.type) {
         case "user":
-          useProfileStore
-            .getState()
-            .openProfile({
-              _id: item.id,
-              name: item.name,
-              email: item.email,
-              avatar: item.avatar,
-              role: item.role,
-              onlineStatus: item.status,
-              customStatus: item.customStatus,
-              flowTaskUserId: item.flowTaskUserId,
-            });
+          useProfileStore.getState().openProfile({
+            _id: item.id,
+            name: item.name,
+            email: item.email,
+            avatar: item.avatar,
+            role: item.role,
+            onlineStatus: item.status,
+            customStatus: item.customStatus,
+            flowTaskUserId: item.flowTaskUserId,
+          });
           break;
         case "message":
           navigate(
@@ -1389,22 +892,25 @@ export default function ChatLayout() {
                   </Suspense>
                 );
               return activeChannelId ? (
-                <ChatPanel
-                  channelId={activeChannelId}
-                  onOpenThread={openThread}
-                  onToggleSearch={() => {
-                    setShowSearch((s) => !s);
-                    setShowPins(false);
-                  }}
-                  onTogglePins={() => {
-                    setShowPins((s) => !s);
-                    setShowSearch(false);
-                  }}
-                  onOpenProfile={openProfile}
-                  onOpenFilePreview={openFilePreview}
-                  onOpenMobileSidebar={() => setShowMobileSidebar(true)}
-                  onSaveMessage={handleSaveMessage}
-                />
+                <>
+                  <PinnedBar />
+                  <ChatPanel
+                    channelId={activeChannelId}
+                    onOpenThread={openThread}
+                    onToggleSearch={() => {
+                      setShowSearch((s) => !s);
+                      setShowPins(false);
+                    }}
+                    onTogglePins={() => {
+                      setShowPins((s) => !s);
+                      setShowSearch(false);
+                    }}
+                    onOpenProfile={openProfile}
+                    onOpenFilePreview={openFilePreview}
+                    onOpenMobileSidebar={() => setShowMobileSidebar(true)}
+                    onSaveMessage={handleSaveMessage}
+                  />
+                </>
               ) : (
                 <WelcomeScreen
                   onOpenMobileSidebar={() => setShowMobileSidebar(true)}
@@ -1438,6 +944,15 @@ export default function ChatLayout() {
           <PinnedMessagesPanel
             channelId={activeChannelId}
             onClose={() => setShowPins(false)}
+            onJumpToMessage={(msg) => {
+              if (msg.channelId !== activeChannelId) {
+                useChannelStore.getState().setActiveChannel(msg.channelId);
+              }
+
+              navigate(getChannelPath(workspaceId, msg.channelId, msg._id));
+
+              setShowPins(false);
+            }}
           />
         </ErrorBoundary>
       )}

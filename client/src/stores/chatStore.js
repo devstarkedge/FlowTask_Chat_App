@@ -1,113 +1,121 @@
-import { create } from 'zustand'
-import { createElement } from 'react'
-import { messageAPI, threadAPI, botAPI } from '../services/api'
-import { useAuthStore } from './authStore'
-import { useChannelStore } from './channelStore'
-import toast from 'react-hot-toast'
-import logger from '../utils/logger'
-import { CHAT_FEATURE_FLAGS } from '../config/featureFlags'
-import MentionToast from '../components/notifications/MentionToast'
-import { normalizeNotification } from '../utils/notificationFormat'
+import { create } from "zustand";
+import { createElement } from "react";
+import { messageAPI, threadAPI, botAPI } from "../services/api";
+import { useAuthStore } from "./authStore";
+import { useChannelStore } from "./channelStore";
+import toast from "react-hot-toast";
+import logger from "../utils/logger";
+import { CHAT_FEATURE_FLAGS } from "../config/featureFlags";
+import MentionToast from "../components/notifications/MentionToast";
+import { normalizeNotification } from "../utils/notificationFormat";
 import {
   loadChannelMessagesFromCache,
   saveChannelMessagesToCache,
   clearMessageCache,
-} from '../services/messageCache'
+} from "../services/messageCache";
 
 // ─── LRU Message Cache ─────────────────────────────────────────────────────
 // Prevent unbounded memory growth by evicting least-recently-used channels.
-const MAX_CACHED_CHANNELS = 10
-const channelAccessOrder = [] // Most-recently-accessed at end
-const hydratedChannels = new Set()
-const hydrationInFlight = new Set()
-const pendingPersistByChannel = new Map()
-let persistTimer = null
+const MAX_CACHED_CHANNELS = 10;
+const channelAccessOrder = []; // Most-recently-accessed at end
+const hydratedChannels = new Set();
+const hydrationInFlight = new Set();
+const pendingPersistByChannel = new Map();
+let persistTimer = null;
 
 function touchChannel(channelId) {
-  const idx = channelAccessOrder.indexOf(channelId)
-  if (idx !== -1) channelAccessOrder.splice(idx, 1)
-  channelAccessOrder.push(channelId)
+  const idx = channelAccessOrder.indexOf(channelId);
+  if (idx !== -1) channelAccessOrder.splice(idx, 1);
+  channelAccessOrder.push(channelId);
 }
 
 function getChannelsToEvict() {
-  if (channelAccessOrder.length <= MAX_CACHED_CHANNELS) return []
-  return channelAccessOrder.splice(0, channelAccessOrder.length - MAX_CACHED_CHANNELS)
+  if (channelAccessOrder.length <= MAX_CACHED_CHANNELS) return [];
+  return channelAccessOrder.splice(
+    0,
+    channelAccessOrder.length - MAX_CACHED_CHANNELS,
+  );
 }
 
 function buildNormalizedChannel(messages = []) {
-  const ids = []
-  const byId = {}
+  const ids = [];
+  const byId = {};
 
   for (const message of messages) {
-    if (!message?._id) continue
-    ids.push(message._id)
-    byId[message._id] = message
+    if (!message?._id) continue;
+    ids.push(message._id);
+    byId[message._id] = message;
   }
 
-  return { ids, byId }
+  return { ids, byId };
 }
 
 function mergeChronologicalMessages(existing = [], incoming = []) {
-  const map = new Map()
+  const map = new Map();
 
   for (const message of existing) {
-    if (message?._id) map.set(message._id, message)
+    if (message?._id) map.set(message._id, message);
   }
 
   for (const message of incoming) {
-    if (message?._id) map.set(message._id, message)
+    if (message?._id) map.set(message._id, message);
   }
 
-  return Array.from(map.values()).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+  );
 }
 
 function flushChannelPersists() {
-  const entries = Array.from(pendingPersistByChannel.entries())
-  pendingPersistByChannel.clear()
-  persistTimer = null
+  const entries = Array.from(pendingPersistByChannel.entries());
+  pendingPersistByChannel.clear();
+  persistTimer = null;
 
   for (const [channelId, messages] of entries) {
-    void saveChannelMessagesToCache(channelId, messages)
+    void saveChannelMessagesToCache(channelId, messages);
   }
 }
 
 function scheduleChannelPersist(channelId, messages) {
-  if (!CHAT_FEATURE_FLAGS.indexedDbCache) return
-  if (!channelId) return
+  if (!CHAT_FEATURE_FLAGS.indexedDbCache) return;
+  if (!channelId) return;
 
-  pendingPersistByChannel.set(channelId, Array.isArray(messages) ? messages : [])
+  pendingPersistByChannel.set(
+    channelId,
+    Array.isArray(messages) ? messages : [],
+  );
 
-  if (persistTimer) return
-  persistTimer = setTimeout(flushChannelPersists, 450)
+  if (persistTimer) return;
+  persistTimer = setTimeout(flushChannelPersists, 450);
 }
 
 function buildThreadReplyIndex(replies = []) {
-  const ids = []
-  const byId = {}
+  const ids = [];
+  const byId = {};
 
   for (const reply of replies) {
-    if (!reply?._id) continue
-    ids.push(reply._id)
-    byId[reply._id] = reply
+    if (!reply?._id) continue;
+    ids.push(reply._id);
+    byId[reply._id] = reply;
   }
 
-  return { ids, byId }
+  return { ids, byId };
 }
 
 function nowMs() {
-  return (typeof performance !== 'undefined' && performance.now)
+  return typeof performance !== "undefined" && performance.now
     ? performance.now()
-    : Date.now()
+    : Date.now();
 }
 
 function logSlowMutation(metricName, startedAt, meta = {}) {
-  if (!CHAT_FEATURE_FLAGS.perfDebug) return
-  const duration = nowMs() - startedAt
-  if (duration < 6) return
-  logger.debug('[ChatPerf]', metricName, {
+  if (!CHAT_FEATURE_FLAGS.perfDebug) return;
+  const duration = nowMs() - startedAt;
+  if (duration < 6) return;
+  logger.debug("[ChatPerf]", metricName, {
     durationMs: Number(duration.toFixed(2)),
     ...meta,
-  })
+  });
 }
 
 export const useChatStore = create((set, get) => ({
@@ -122,6 +130,8 @@ export const useChatStore = create((set, get) => ({
 
   highlightMessageId: null,
   setHighlightMessageId: (id) => set({ highlightMessageId: id }),
+  scrollToMessageId: null,
+  setScrollToMessageId: (id) => set({ scrollToMessageId: id }),
 
   // Pinned messages keyed by channelId
   pinnedMessagesByChannel: {},
@@ -152,83 +162,84 @@ export const useChatStore = create((set, get) => ({
   notifications: [],
 
   // Connection status for reconnect indicator
-  connectionStatus: 'disconnected', // 'connected' | 'connecting' | 'disconnected'
+  connectionStatus: "disconnected", // 'connected' | 'connecting' | 'disconnected'
 
   // Active thread (persisted to sessionStorage for refresh survival)
-  activeThread: JSON.parse(sessionStorage.getItem('chat_activeThread') || 'null'),
+  activeThread: JSON.parse(
+    sessionStorage.getItem("chat_activeThread") || "null",
+  ),
 
   openThread: (thread) => {
-    set({ activeThread: thread })
+    set({ activeThread: thread });
     try {
-      sessionStorage.setItem('chat_activeThread', JSON.stringify(thread))
+      sessionStorage.setItem("chat_activeThread", JSON.stringify(thread));
     } catch {
       // Ignore session storage failures in private browsing or restricted environments.
     }
   },
 
   closeThread: () => {
-    set({ activeThread: null })
-    sessionStorage.removeItem('chat_activeThread')
+    set({ activeThread: null });
+    sessionStorage.removeItem("chat_activeThread");
   },
 
   selectMessagesForChannel: (channelId) => {
-    if (!channelId) return []
-    const state = get()
+    if (!channelId) return [];
+    const state = get();
 
     if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-      const ids = state.channelMessageIds[channelId] || []
-      if (ids.length === 0) return []
-      return ids
-        .map((id) => state.messagesById[id])
-        .filter(Boolean)
+      const ids = state.channelMessageIds[channelId] || [];
+      if (ids.length === 0) return [];
+      return ids.map((id) => state.messagesById[id]).filter(Boolean);
     }
 
-    return state.messagesByChannel[channelId] || []
+    return state.messagesByChannel[channelId] || [];
   },
 
   selectThreadReplies: (rootMessageId) => {
-    if (!rootMessageId) return []
-    const state = get()
+    if (!rootMessageId) return [];
+    const state = get();
 
     if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-      const ids = state.threadReplyIdsByRoot[rootMessageId] || []
-      if (ids.length === 0) return []
-      return ids
-        .map((id) => state.threadRepliesById[id])
-        .filter(Boolean)
+      const ids = state.threadReplyIdsByRoot[rootMessageId] || [];
+      if (ids.length === 0) return [];
+      return ids.map((id) => state.threadRepliesById[id]).filter(Boolean);
     }
 
-    return state.threadRepliesByRoot[rootMessageId] || []
+    return state.threadRepliesByRoot[rootMessageId] || [];
   },
 
   selectThreadHasMore: (rootMessageId) => {
-    if (!rootMessageId) return false
-    return get().threadHasMore[rootMessageId] ?? false
+    if (!rootMessageId) return false;
+    return get().threadHasMore[rootMessageId] ?? false;
   },
 
   selectMessageByIdOrChannel: (messageId, channelId) => {
-    if (!messageId) return null
-    const state = get()
+    if (!messageId) return null;
+    const state = get();
 
     if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-      return state.messagesById[messageId] || null
+      return state.messagesById[messageId] || null;
     }
 
-    return state.messagesByChannel[channelId]?.find((m) => m._id === messageId) || null
+    return (
+      state.messagesByChannel[channelId]?.find((m) => m._id === messageId) ||
+      null
+    );
   },
 
   // ─── Messages ────────────────────────────────────────────────────────
   fetchMessages: async (channelId, options = {}) => {
     // Debounce guard: prevent duplicate fetches for the same channel
-    const fetchKey = `${channelId}-${options.cursor || 'initial'}`
-    const fetching = get()._fetchingChannels
-    if (fetching.has(fetchKey)) return
-    fetching.add(fetchKey)
+    const fetchKey = `${channelId}-${options.cursor || "initial"}`;
+    const fetching = get()._fetchingChannels;
+    if (fetching.has(fetchKey)) return;
+    fetching.add(fetchKey);
 
     // LRU tracking
-    touchChannel(channelId)
+    touchChannel(channelId);
 
-    set({ isLoadingMessages: true })
+    set({ isLoadingMessages: true });
 
     // Stale-while-revalidate: hydrate from IndexedDB first for instant rendering.
     if (
@@ -237,82 +248,90 @@ export const useChatStore = create((set, get) => ({
       !hydratedChannels.has(channelId) &&
       !hydrationInFlight.has(channelId)
     ) {
-      hydrationInFlight.add(channelId)
+      hydrationInFlight.add(channelId);
       try {
-        const cachedMessages = await loadChannelMessagesFromCache(channelId)
+        const cachedMessages = await loadChannelMessagesFromCache(channelId);
         if (cachedMessages.length > 0) {
           set((state) => {
-            const existingMessages = state.messagesByChannel[channelId] || []
-            const merged = mergeChronologicalMessages(existingMessages, cachedMessages)
+            const existingMessages = state.messagesByChannel[channelId] || [];
+            const merged = mergeChronologicalMessages(
+              existingMessages,
+              cachedMessages,
+            );
             return {
               messagesByChannel: {
                 ...state.messagesByChannel,
                 [channelId]: merged,
               },
-            }
-          })
+            };
+          });
         }
       } finally {
-        hydratedChannels.add(channelId)
-        hydrationInFlight.delete(channelId)
+        hydratedChannels.add(channelId);
+        hydrationInFlight.delete(channelId);
       }
     }
 
     try {
-      const { data } = await messageAPI.list(channelId, options)
-      const messages = data.data.items || []
-      const hasMore = data.data.hasMore ?? false
+      const { data } = await messageAPI.list(channelId, options);
+      const messages = data.data.items || [];
+      const hasMore = data.data.hasMore ?? false;
 
       set((state) => {
-        const existingMessages = state.messagesByChannel[channelId] || []
-        
+        const existingMessages = state.messagesByChannel[channelId] || [];
+
         // Defensive fix: Ensure incoming messages are always Oldest -> Newest
-        const sortedIncoming = [...messages].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-        
-        let merged
+        const sortedIncoming = [...messages].sort(
+          (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+        );
+
+        let merged;
         if (options.cursor) {
           // Loading older messages: prepend new ones, but filter out duplicates
-          const existingIds = new Set(existingMessages.map(m => m._id))
-          const uniqueNew = sortedIncoming.filter(m => !existingIds.has(m._id))
-          merged = [...uniqueNew, ...existingMessages]
+          const existingIds = new Set(existingMessages.map((m) => m._id));
+          const uniqueNew = sortedIncoming.filter(
+            (m) => !existingIds.has(m._id),
+          );
+          merged = [...uniqueNew, ...existingMessages];
         } else {
           // Initial load: prefer fresh messages, keep only RECENT pending local messages (< 30s old)
-          const freshIds = new Set(sortedIncoming.map(m => m._id))
-          const thirtySecsAgo = Date.now() - 30000
-          const uniqueExisting = existingMessages.filter(m =>
-            !freshIds.has(m._id) &&
-            m.pending &&
-            m.channelId === channelId &&
-            new Date(m.createdAt).getTime() > thirtySecsAgo
-          )
-          merged = [...sortedIncoming, ...uniqueExisting]
+          const freshIds = new Set(sortedIncoming.map((m) => m._id));
+          const thirtySecsAgo = Date.now() - 30000;
+          const uniqueExisting = existingMessages.filter(
+            (m) =>
+              !freshIds.has(m._id) &&
+              m.pending &&
+              m.channelId === channelId &&
+              new Date(m.createdAt).getTime() > thirtySecsAgo,
+          );
+          merged = [...sortedIncoming, ...uniqueExisting];
         }
 
         // Final safety check: enforce strict chronological order
-        merged.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+        merged.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
         const newMessagesByChannel = {
           ...state.messagesByChannel,
           [channelId]: merged,
-        }
+        };
 
         // Evict LRU channels to keep memory bounded
-        const toEvict = getChannelsToEvict()
+        const toEvict = getChannelsToEvict();
         for (const evictId of toEvict) {
-          delete newMessagesByChannel[evictId]
+          delete newMessagesByChannel[evictId];
         }
 
         return {
           messagesByChannel: newMessagesByChannel,
           hasMore: { ...state.hasMore, [channelId]: hasMore },
           isLoadingMessages: false,
-        }
-      })
+        };
+      });
     } catch (error) {
-      set({ isLoadingMessages: false })
-      logger.error('Failed to fetch messages:', error)
+      set({ isLoadingMessages: false });
+      logger.error("Failed to fetch messages:", error);
     } finally {
-      fetching.delete(fetchKey)
+      fetching.delete(fetchKey);
     }
   },
 
@@ -321,18 +340,18 @@ export const useChatStore = create((set, get) => ({
    * Flow: generate tempId → show instantly → send to server → reconcile on ACK
    */
   sendMessage: async (channelId, content, options = {}) => {
-    let tempId = null
+    let tempId = null;
     try {
       // Check if it's a slash command (not optimistic)
-      if (content.trim().startsWith('/flowtask')) {
-        const command = content.trim().replace(/^\/flowtask\s*/i, '')
-        const { data } = await botAPI.command(command, channelId)
-        return data.data
+      if (content.trim().startsWith("/flowtask")) {
+        const command = content.trim().replace(/^\/flowtask\s*/i, "");
+        const { data } = await botAPI.command(command, channelId);
+        return data.data;
       }
 
-      const user = useAuthStore.getState().user
-      tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      const isThreadReply = !!options.threadId
+      const user = useAuthStore.getState().user;
+      tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const isThreadReply = !!options.threadId;
 
       // Create optimistic message to show immediately
       const optimisticMessage = {
@@ -340,9 +359,12 @@ export const useChatStore = create((set, get) => ({
         channelId,
         content,
         htmlContent: options.htmlContent || content,
-        contentType: 'text',
+        contentType: "text",
         authorId: user,
-        senderSnapshot: { name: user?.name || 'You', avatar: user?.avatar || null },
+        senderSnapshot: {
+          name: user?.name || "You",
+          avatar: user?.avatar || null,
+        },
         attachments: options.attachments || [],
         fileReferences: options.fileReferences || [],
         mentions: [],
@@ -356,16 +378,16 @@ export const useChatStore = create((set, get) => ({
         pending: true,
         failed: false,
         threadId: options.threadId || null,
-      }
+      };
 
       // Show optimistic message immediately — thread replies go to thread store
       if (isThreadReply) {
-        get().addThreadReply(options.threadId, optimisticMessage)
+        get().addThreadReply(options.threadId, optimisticMessage);
       } else {
-        get().addMessage(optimisticMessage)
+        get().addMessage(optimisticMessage);
         // Update sidebar ordering + preview for the sender's own message immediately
         // (Recipients get this via the message:create socket event handler in socket.js)
-        useChannelStore.getState().handleNewMessage(optimisticMessage)
+        useChannelStore.getState().handleNewMessage(optimisticMessage);
       }
 
       // Send to server with tempId for ACK reconciliation
@@ -374,38 +396,38 @@ export const useChatStore = create((set, get) => ({
         htmlContent: options.htmlContent || undefined,
         tempId,
         ...options,
-      })
+      });
 
       // Server ACK will arrive via socket and reconcile via reconcileMessage()
       // But if ACK hasn't arrived yet, reconcile from HTTP response
-      const serverMessage = data.data.message
+      const serverMessage = data.data.message;
       if (isThreadReply) {
-        get().reconcileThreadReply(options.threadId, tempId, serverMessage)
+        get().reconcileThreadReply(options.threadId, tempId, serverMessage);
         // Increment reply count on root message in main chat
-        get().incrementReplyCount(options.threadId, channelId)
+        get().incrementReplyCount(options.threadId, channelId);
       } else {
-        get().reconcileMessage(tempId, serverMessage)
+        get().reconcileMessage(tempId, serverMessage);
       }
 
-      return serverMessage
+      return serverMessage;
     } catch (error) {
       // Mark the optimistic message as failed
       if (tempId && options.threadId) {
-        get().markThreadReplyFailed(tempId, options.threadId)
+        get().markThreadReplyFailed(tempId, options.threadId);
       } else if (tempId) {
-        get().markMessageFailed(tempId, channelId)
+        get().markMessageFailed(tempId, channelId);
       }
-      toast.error('Failed to send message')
-      throw error
+      toast.error("Failed to send message");
+      throw error;
     }
   },
 
   editMessage: async (messageId, content) => {
     try {
-      const { data } = await messageAPI.edit(messageId, content)
-      const message = data.data.message
+      const { data } = await messageAPI.edit(messageId, content);
+      const message = data.data.message;
       set((state) => {
-        const channelMsgs = state.messagesByChannel[message.channelId] || []
+        const channelMsgs = state.messagesByChannel[message.channelId] || [];
         return {
           messagesByChannel: {
             ...state.messagesByChannel,
@@ -413,20 +435,20 @@ export const useChatStore = create((set, get) => ({
               m._id === messageId ? message : m,
             ),
           },
-        }
-      })
+        };
+      });
     } catch {
-      toast.error('Failed to edit message')
+      toast.error("Failed to edit message");
     }
   },
 
   deleteMessage: async (messageId, channelId) => {
     try {
-      await messageAPI.delete(messageId)
+      await messageAPI.delete(messageId);
       // Use soft delete locally to show tombstone
-      get().softDeleteMessage(messageId, channelId)
+      get().softDeleteMessage(messageId, channelId);
     } catch {
-      toast.error('Failed to delete message')
+      toast.error("Failed to delete message");
     }
   },
 
@@ -434,48 +456,52 @@ export const useChatStore = create((set, get) => ({
   addMessage: (message) => {
     set((state) => {
       // Never add thread replies to main chat timeline
-      if (message.threadId) return state
-      const channelId = message.channelId
-      const existing = state.messagesByChannel[channelId] || []
+      if (message.threadId) return state;
+      const channelId = message.channelId;
+      const existing = state.messagesByChannel[channelId] || [];
       // Avoid duplicates
-      if (existing.some((m) => m._id === message._id)) return state
-      const merged = [...existing, message].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      if (existing.some((m) => m._id === message._id)) return state;
+      const merged = [...existing, message].sort(
+        (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+      );
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
           [channelId]: merged,
         },
-      }
-    })
+      };
+    });
   },
 
   /**
    * Merge a message window into a channel cache (used by deep-link context loading).
    */
   upsertChannelMessages: (channelId, messages = []) => {
-    if (!channelId || !Array.isArray(messages) || messages.length === 0) return
+    if (!channelId || !Array.isArray(messages) || messages.length === 0) return;
 
     set((state) => {
-      const existing = state.messagesByChannel[channelId] || []
-      const map = new Map(existing.map((m) => [m._id, m]))
+      const existing = state.messagesByChannel[channelId] || [];
+      const map = new Map(existing.map((m) => [m._id, m]));
 
       for (const message of messages) {
-        if (!message?._id) continue
+        if (!message?._id) continue;
         map.set(message._id, {
           ...map.get(message._id),
           ...message,
-        })
+        });
       }
 
-      const merged = Array.from(map.values()).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      const merged = Array.from(map.values()).sort(
+        (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+      );
 
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
           [channelId]: merged,
         },
-      }
-    })
+      };
+    });
   },
 
   /**
@@ -483,28 +509,29 @@ export const useChatStore = create((set, get) => ({
    * Replaces tempId with real _id and clears pending state.
    */
   reconcileMessage: (tempId, serverMessage) => {
-    if (!tempId || !serverMessage) return
+    if (!tempId || !serverMessage) return;
 
     set((state) => {
-      const channelId = serverMessage.channelId || state.messageChannelById[tempId]
-      if (!channelId) return state
-      const existing = state.messagesByChannel[channelId] || []
+      const channelId =
+        serverMessage.channelId || state.messageChannelById[tempId];
+      if (!channelId) return state;
+      const existing = state.messagesByChannel[channelId] || [];
 
       // Check if already reconciled (edge case: both HTTP response and socket ACK arrive)
-      if (existing.some(m => m._id === serverMessage._id)) {
+      if (existing.some((m) => m._id === serverMessage._id)) {
         // Just remove the temp message
-        const nextChannelMessages = existing.filter(m => m._id !== tempId)
+        const nextChannelMessages = existing.filter((m) => m._id !== tempId);
 
         if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-          const nextMessagesById = { ...state.messagesById }
-          const nextMessageChannelById = { ...state.messageChannelById }
-          delete nextMessagesById[tempId]
-          delete nextMessageChannelById[tempId]
+          const nextMessagesById = { ...state.messagesById };
+          const nextMessageChannelById = { ...state.messageChannelById };
+          delete nextMessagesById[tempId];
+          delete nextMessageChannelById[tempId];
           nextMessagesById[serverMessage._id] = {
             ...(nextMessagesById[serverMessage._id] || {}),
             ...serverMessage,
-          }
-          nextMessageChannelById[serverMessage._id] = channelId
+          };
+          nextMessageChannelById[serverMessage._id] = channelId;
 
           return {
             messagesByChannel: {
@@ -513,7 +540,7 @@ export const useChatStore = create((set, get) => ({
             },
             messagesById: nextMessagesById,
             messageChannelById: nextMessageChannelById,
-          }
+          };
         }
 
         return {
@@ -521,28 +548,28 @@ export const useChatStore = create((set, get) => ({
             ...state.messagesByChannel,
             [channelId]: nextChannelMessages,
           },
-        }
+        };
       }
 
       // Replace temp message with server message
-      const nextChannelMessages = existing.map(m =>
+      const nextChannelMessages = existing.map((m) =>
         m._id === tempId
           ? { ...serverMessage, pending: false, failed: false }
           : m,
-      )
+      );
 
       if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-        const nextMessagesById = { ...state.messagesById }
-        const nextMessageChannelById = { ...state.messageChannelById }
-        delete nextMessagesById[tempId]
-        delete nextMessageChannelById[tempId]
+        const nextMessagesById = { ...state.messagesById };
+        const nextMessageChannelById = { ...state.messageChannelById };
+        delete nextMessagesById[tempId];
+        delete nextMessageChannelById[tempId];
         nextMessagesById[serverMessage._id] = {
           ...(nextMessagesById[serverMessage._id] || {}),
           ...serverMessage,
           pending: false,
           failed: false,
-        }
-        nextMessageChannelById[serverMessage._id] = channelId
+        };
+        nextMessageChannelById[serverMessage._id] = channelId;
 
         return {
           messagesByChannel: {
@@ -551,7 +578,7 @@ export const useChatStore = create((set, get) => ({
           },
           messagesById: nextMessagesById,
           messageChannelById: nextMessageChannelById,
-        }
+        };
       }
 
       return {
@@ -559,8 +586,8 @@ export const useChatStore = create((set, get) => ({
           ...state.messagesByChannel,
           [channelId]: nextChannelMessages,
         },
-      }
-    })
+      };
+    });
   },
 
   /**
@@ -568,15 +595,18 @@ export const useChatStore = create((set, get) => ({
    */
   markMessageFailed: (tempId, channelId) => {
     set((state) => {
-      const resolvedChannelId = channelId || state.messageChannelById[tempId]
-      if (!resolvedChannelId) return state
-      const existing = state.messagesByChannel[resolvedChannelId] || []
+      const resolvedChannelId = channelId || state.messageChannelById[tempId];
+      if (!resolvedChannelId) return state;
+      const existing = state.messagesByChannel[resolvedChannelId] || [];
 
-      const nextChannelMessages = existing.map(m =>
+      const nextChannelMessages = existing.map((m) =>
         m._id === tempId ? { ...m, pending: false, failed: true } : m,
-      )
+      );
 
-      if (CHAT_FEATURE_FLAGS.normalizedMessageStore && state.messagesById[tempId]) {
+      if (
+        CHAT_FEATURE_FLAGS.normalizedMessageStore &&
+        state.messagesById[tempId]
+      ) {
         return {
           messagesByChannel: {
             ...state.messagesByChannel,
@@ -594,7 +624,7 @@ export const useChatStore = create((set, get) => ({
             ...state.messageChannelById,
             [tempId]: resolvedChannelId,
           },
-        }
+        };
       }
 
       return {
@@ -602,20 +632,20 @@ export const useChatStore = create((set, get) => ({
           ...state.messagesByChannel,
           [resolvedChannelId]: nextChannelMessages,
         },
-      }
-    })
+      };
+    });
   },
 
   /**
    * Retry sending a failed message.
    */
   retryMessage: async (tempId, channelId) => {
-    const messages = get().messagesByChannel[channelId] || []
-    const failedMsg = messages.find(m => m._id === tempId && m.failed)
-    if (!failedMsg) return
+    const messages = get().messagesByChannel[channelId] || [];
+    const failedMsg = messages.find((m) => m._id === tempId && m.failed);
+    if (!failedMsg) return;
 
     // Remove the failed message
-    get().removeMessage(tempId, channelId)
+    get().removeMessage(tempId, channelId);
 
     // Resend
     try {
@@ -624,7 +654,7 @@ export const useChatStore = create((set, get) => ({
         htmlContent: failedMsg.htmlContent,
         fileReferences: failedMsg.fileReferences,
         attachments: failedMsg.attachments,
-      })
+      });
     } catch {
       // Error already handled in sendMessage
     }
@@ -632,18 +662,19 @@ export const useChatStore = create((set, get) => ({
 
   updateMessage: (message) => {
     set((state) => {
-      const channelId = message.channelId || state.messageChannelById[message._id]
-      if (!channelId) return state
-      const existing = state.messagesByChannel[channelId] || []
+      const channelId =
+        message.channelId || state.messageChannelById[message._id];
+      if (!channelId) return state;
+      const existing = state.messagesByChannel[channelId] || [];
 
-      let replaced = false
+      let replaced = false;
       const updatedChannelMessages = existing.map((m) => {
-        if (m._id !== message._id) return m
-        replaced = true
-        return message
-      })
+        if (m._id !== message._id) return m;
+        replaced = true;
+        return message;
+      });
 
-      if (!replaced) return state
+      if (!replaced) return state;
 
       if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
         return {
@@ -662,7 +693,7 @@ export const useChatStore = create((set, get) => ({
             ...state.messageChannelById,
             [message._id]: channelId,
           },
-        }
+        };
       }
 
       return {
@@ -670,30 +701,33 @@ export const useChatStore = create((set, get) => ({
           ...state.messagesByChannel,
           [channelId]: updatedChannelMessages,
         },
-      }
-    })
+      };
+    });
   },
 
   removeMessage: (messageId, channelId) => {
     set((state) => {
-      const resolvedChannelId = channelId || state.messageChannelById[messageId]
-      if (!resolvedChannelId) return state
-      const existing = state.messagesByChannel[resolvedChannelId] || []
-      const nextChannelMessages = existing.filter((m) => m._id !== messageId)
+      const resolvedChannelId =
+        channelId || state.messageChannelById[messageId];
+      if (!resolvedChannelId) return state;
+      const existing = state.messagesByChannel[resolvedChannelId] || [];
+      const nextChannelMessages = existing.filter((m) => m._id !== messageId);
 
       if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-        const nextMessagesById = { ...state.messagesById }
-        const nextMessageChannelById = { ...state.messageChannelById }
-        const nextChannelMessageIds = { ...state.channelMessageIds }
+        const nextMessagesById = { ...state.messagesById };
+        const nextMessageChannelById = { ...state.messageChannelById };
+        const nextChannelMessageIds = { ...state.channelMessageIds };
 
-        delete nextMessagesById[messageId]
-        delete nextMessageChannelById[messageId]
+        delete nextMessagesById[messageId];
+        delete nextMessageChannelById[messageId];
 
-        const nextIds = (nextChannelMessageIds[resolvedChannelId] || []).filter((id) => id !== messageId)
+        const nextIds = (nextChannelMessageIds[resolvedChannelId] || []).filter(
+          (id) => id !== messageId,
+        );
         if (nextIds.length > 0) {
-          nextChannelMessageIds[resolvedChannelId] = nextIds
+          nextChannelMessageIds[resolvedChannelId] = nextIds;
         } else {
-          delete nextChannelMessageIds[resolvedChannelId]
+          delete nextChannelMessageIds[resolvedChannelId];
         }
 
         return {
@@ -704,7 +738,7 @@ export const useChatStore = create((set, get) => ({
           messagesById: nextMessagesById,
           messageChannelById: nextMessageChannelById,
           channelMessageIds: nextChannelMessageIds,
-        }
+        };
       }
 
       return {
@@ -712,8 +746,8 @@ export const useChatStore = create((set, get) => ({
           ...state.messagesByChannel,
           [resolvedChannelId]: nextChannelMessages,
         },
-      }
-    })
+      };
+    });
   },
 
   /**
@@ -721,24 +755,25 @@ export const useChatStore = create((set, get) => ({
    */
   softDeleteMessage: (messageId, channelId) => {
     set((state) => {
-      const resolvedChannelId = channelId || state.messageChannelById[messageId]
-      if (!resolvedChannelId) return state
-      const existing = state.messagesByChannel[resolvedChannelId] || []
+      const resolvedChannelId =
+        channelId || state.messageChannelById[messageId];
+      if (!resolvedChannelId) return state;
+      const existing = state.messagesByChannel[resolvedChannelId] || [];
 
-      let deletedMessage = null
+      let deletedMessage = null;
       const updatedChannelMessages = existing.map((m) => {
-        if (m._id !== messageId) return m
+        if (m._id !== messageId) return m;
         deletedMessage = {
           ...m,
           isDeleted: true,
-          content: '',
-          htmlContent: '',
+          content: "",
+          htmlContent: "",
           deletedAt: new Date().toISOString(),
-        }
-        return deletedMessage
-      })
+        };
+        return deletedMessage;
+      });
 
-      if (!deletedMessage) return state
+      if (!deletedMessage) return state;
 
       if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
         return {
@@ -757,7 +792,7 @@ export const useChatStore = create((set, get) => ({
             ...state.messageChannelById,
             [messageId]: resolvedChannelId,
           },
-        }
+        };
       }
 
       return {
@@ -765,49 +800,53 @@ export const useChatStore = create((set, get) => ({
           ...state.messagesByChannel,
           [resolvedChannelId]: updatedChannelMessages,
         },
-      }
-    })
+      };
+    });
   },
 
   /**
    * Update message delivery status (DM-only: sent → delivered → seen).
    */
-  updateMessageStatus: (channelId, messageId, messageIds, status, timestamps = {}) => {
+  updateMessageStatus: (
+    channelId,
+    messageId,
+    messageIds,
+    status,
+    timestamps = {},
+  ) => {
     set((state) => {
-      const startedAt = nowMs()
-      if (!channelId) return state
-      const existing = state.messagesByChannel[channelId] || []
-      const idsToUpdate = messageIds || (messageId ? [messageId] : [])
-      if (idsToUpdate.length === 0) return state
+      const startedAt = nowMs();
+      if (!channelId) return state;
+      const existing = state.messagesByChannel[channelId] || [];
+      const idsToUpdate = messageIds || (messageId ? [messageId] : []);
+      if (idsToUpdate.length === 0) return state;
 
-      const idSet = new Set(idsToUpdate)
+      const idSet = new Set(idsToUpdate);
 
       const updatedChannelMessages = existing.map((m) =>
-        idSet.has(m._id)
-          ? { ...m, status, ...timestamps }
-          : m
-      )
+        idSet.has(m._id) ? { ...m, status, ...timestamps } : m,
+      );
 
       if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-        const nextMessagesById = { ...state.messagesById }
-        let hasNormalizedChange = false
+        const nextMessagesById = { ...state.messagesById };
+        let hasNormalizedChange = false;
 
         for (const id of idsToUpdate) {
-          const existingEntity = nextMessagesById[id]
-          if (!existingEntity) continue
-          hasNormalizedChange = true
+          const existingEntity = nextMessagesById[id];
+          if (!existingEntity) continue;
+          hasNormalizedChange = true;
           nextMessagesById[id] = {
             ...existingEntity,
             status,
             ...timestamps,
-          }
+          };
         }
 
-        logSlowMutation('updateMessageStatus', startedAt, {
+        logSlowMutation("updateMessageStatus", startedAt, {
           channelId,
           updatedCount: idsToUpdate.length,
           normalized: true,
-        })
+        });
 
         return {
           messagesByChannel: {
@@ -815,76 +854,77 @@ export const useChatStore = create((set, get) => ({
             [channelId]: updatedChannelMessages,
           },
           ...(hasNormalizedChange ? { messagesById: nextMessagesById } : {}),
-        }
+        };
       }
 
-      logSlowMutation('updateMessageStatus', startedAt, {
+      logSlowMutation("updateMessageStatus", startedAt, {
         channelId,
         updatedCount: idsToUpdate.length,
         normalized: false,
-      })
+      });
 
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
           [channelId]: updatedChannelMessages,
         },
-      }
-    })
+      };
+    });
   },
 
   // ─── Thread Replies ─────────────────────────────────────────────────
   fetchThreadReplies: async (rootMessageId, options = {}) => {
     // Normalize: if an object is passed instead of a plain ID string, extract ._id
-    const resolvedId = (rootMessageId?._id ?? rootMessageId)?.toString?.()
-    if (!resolvedId) return
-    rootMessageId = resolvedId
-    set({ isLoadingThread: true })
+    const resolvedId = (rootMessageId?._id ?? rootMessageId)?.toString?.();
+    if (!resolvedId) return;
+    rootMessageId = resolvedId;
+    set({ isLoadingThread: true });
     try {
-      const { data } = await threadAPI.replies(rootMessageId, options)
-      const items = data.data.items || data.data.messages || []
-      const hasMore = data.data.hasMore ?? false
+      const { data } = await threadAPI.replies(rootMessageId, options);
+      const items = data.data.items || data.data.messages || [];
+      const hasMore = data.data.hasMore ?? false;
 
       set((state) => {
-        const startedAt = nowMs()
-        const existing = state.threadRepliesByRoot[rootMessageId] || []
-        let merged
+        const startedAt = nowMs();
+        const existing = state.threadRepliesByRoot[rootMessageId] || [];
+        let merged;
         if (options.cursor) {
-          const existingIds = new Set(existing.map(m => m._id))
-          const unique = items.filter(m => !existingIds.has(m._id))
-          merged = [...existing, ...unique]
+          const existingIds = new Set(existing.map((m) => m._id));
+          const unique = items.filter((m) => !existingIds.has(m._id));
+          merged = [...existing, ...unique];
         } else {
-          const freshIds = new Set(items.map(m => m._id))
-          const thirtySecsAgo = Date.now() - 30000
-          const pendingOnly = existing.filter(m =>
-            !freshIds.has(m._id) &&
-            m.pending &&
-            new Date(m.createdAt).getTime() > thirtySecsAgo
-          )
-          merged = [...items, ...pendingOnly]
+          const freshIds = new Set(items.map((m) => m._id));
+          const thirtySecsAgo = Date.now() - 30000;
+          const pendingOnly = existing.filter(
+            (m) =>
+              !freshIds.has(m._id) &&
+              m.pending &&
+              new Date(m.createdAt).getTime() > thirtySecsAgo,
+          );
+          merged = [...items, ...pendingOnly];
         }
-        merged.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+        merged.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
-        const { ids, byId } = buildThreadReplyIndex(merged)
-        const nextRepliesById = { ...state.threadRepliesById }
-        const nextRootByReplyId = { ...state.threadRootByReplyId }
+        const { ids, byId } = buildThreadReplyIndex(merged);
+        const nextRepliesById = { ...state.threadRepliesById };
+        const nextRootByReplyId = { ...state.threadRootByReplyId };
 
-        const previousIds = state.threadReplyIdsByRoot[rootMessageId] || []
+        const previousIds = state.threadReplyIdsByRoot[rootMessageId] || [];
         for (const id of previousIds) {
-          delete nextRepliesById[id]
-          delete nextRootByReplyId[id]
+          delete nextRepliesById[id];
+          delete nextRootByReplyId[id];
         }
 
         for (const id of ids) {
-          nextRepliesById[id] = byId[id]
-          nextRootByReplyId[id] = rootMessageId
+          nextRepliesById[id] = byId[id];
+          nextRootByReplyId[id] = rootMessageId;
         }
 
-        logSlowMutation('fetchThreadReplies.merge', startedAt, {
+        logSlowMutation("fetchThreadReplies.merge", startedAt, {
           rootMessageId,
           mergedCount: merged.length,
           cursorMode: Boolean(options.cursor),
-        })
+        });
 
         return {
           threadRepliesByRoot: {
@@ -899,22 +939,22 @@ export const useChatStore = create((set, get) => ({
           threadRootByReplyId: nextRootByReplyId,
           threadHasMore: { ...state.threadHasMore, [rootMessageId]: hasMore },
           isLoadingThread: false,
-        }
-      })
+        };
+      });
     } catch (error) {
-      set({ isLoadingThread: false })
-      logger.error('Failed to fetch thread replies:', error)
+      set({ isLoadingThread: false });
+      logger.error("Failed to fetch thread replies:", error);
     }
   },
 
   addThreadReply: (rootMessageId, reply) => {
     set((state) => {
-      const existing = state.threadRepliesByRoot[rootMessageId] || []
-      if (existing.some(m => m._id === reply._id)) return state
-      const nextReplies = [...existing, reply]
+      const existing = state.threadRepliesByRoot[rootMessageId] || [];
+      if (existing.some((m) => m._id === reply._id)) return state;
+      const nextReplies = [...existing, reply];
 
-      const nextIds = [...(state.threadReplyIdsByRoot[rootMessageId] || [])]
-      if (!nextIds.includes(reply._id)) nextIds.push(reply._id)
+      const nextIds = [...(state.threadReplyIdsByRoot[rootMessageId] || [])];
+      if (!nextIds.includes(reply._id)) nextIds.push(reply._id);
 
       return {
         threadRepliesByRoot: {
@@ -933,29 +973,31 @@ export const useChatStore = create((set, get) => ({
           ...state.threadRootByReplyId,
           [reply._id]: rootMessageId,
         },
-      }
-    })
+      };
+    });
   },
 
   reconcileThreadReply: (rootMessageId, tempId, serverReply) => {
-    if (!tempId || !serverReply) return
+    if (!tempId || !serverReply) return;
     set((state) => {
-      const resolvedRootId = rootMessageId || state.threadRootByReplyId[tempId]
-      if (!resolvedRootId) return state
+      const resolvedRootId = rootMessageId || state.threadRootByReplyId[tempId];
+      if (!resolvedRootId) return state;
 
-      const existing = state.threadRepliesByRoot[resolvedRootId] || []
-      if (existing.some(m => m._id === serverReply._id)) {
-        const nextReplies = existing.filter(m => m._id !== tempId)
-        const nextIds = (state.threadReplyIdsByRoot[resolvedRootId] || []).filter((id) => id !== tempId)
-        const nextRepliesById = { ...state.threadRepliesById }
-        const nextRootByReplyId = { ...state.threadRootByReplyId }
-        delete nextRepliesById[tempId]
-        delete nextRootByReplyId[tempId]
+      const existing = state.threadRepliesByRoot[resolvedRootId] || [];
+      if (existing.some((m) => m._id === serverReply._id)) {
+        const nextReplies = existing.filter((m) => m._id !== tempId);
+        const nextIds = (
+          state.threadReplyIdsByRoot[resolvedRootId] || []
+        ).filter((id) => id !== tempId);
+        const nextRepliesById = { ...state.threadRepliesById };
+        const nextRootByReplyId = { ...state.threadRootByReplyId };
+        delete nextRepliesById[tempId];
+        delete nextRootByReplyId[tempId];
         nextRepliesById[serverReply._id] = {
           ...(nextRepliesById[serverReply._id] || {}),
           ...serverReply,
-        }
-        nextRootByReplyId[serverReply._id] = resolvedRootId
+        };
+        nextRootByReplyId[serverReply._id] = resolvedRootId;
 
         return {
           threadRepliesByRoot: {
@@ -968,30 +1010,32 @@ export const useChatStore = create((set, get) => ({
             [resolvedRootId]: nextIds,
           },
           threadRootByReplyId: nextRootByReplyId,
-        }
+        };
       }
 
-      const nextReplies = existing.map(m =>
-        m._id === tempId ? { ...serverReply, pending: false, failed: false } : m,
-      )
+      const nextReplies = existing.map((m) =>
+        m._id === tempId
+          ? { ...serverReply, pending: false, failed: false }
+          : m,
+      );
 
-      const nextIds = (state.threadReplyIdsByRoot[resolvedRootId] || []).map((id) =>
-        id === tempId ? serverReply._id : id,
-      )
+      const nextIds = (state.threadReplyIdsByRoot[resolvedRootId] || []).map(
+        (id) => (id === tempId ? serverReply._id : id),
+      );
 
-      const dedupedIds = Array.from(new Set(nextIds))
+      const dedupedIds = Array.from(new Set(nextIds));
 
-      const nextRepliesById = { ...state.threadRepliesById }
-      const nextRootByReplyId = { ...state.threadRootByReplyId }
-      delete nextRepliesById[tempId]
-      delete nextRootByReplyId[tempId]
+      const nextRepliesById = { ...state.threadRepliesById };
+      const nextRootByReplyId = { ...state.threadRootByReplyId };
+      delete nextRepliesById[tempId];
+      delete nextRootByReplyId[tempId];
       nextRepliesById[serverReply._id] = {
         ...(nextRepliesById[serverReply._id] || {}),
         ...serverReply,
         pending: false,
         failed: false,
-      }
-      nextRootByReplyId[serverReply._id] = resolvedRootId
+      };
+      nextRootByReplyId[serverReply._id] = resolvedRootId;
 
       return {
         threadRepliesByRoot: {
@@ -1004,19 +1048,19 @@ export const useChatStore = create((set, get) => ({
           [resolvedRootId]: dedupedIds,
         },
         threadRootByReplyId: nextRootByReplyId,
-      }
-    })
+      };
+    });
   },
 
   markThreadReplyFailed: (tempId, rootMessageId) => {
     set((state) => {
-      const resolvedRootId = rootMessageId || state.threadRootByReplyId[tempId]
-      if (!resolvedRootId) return state
+      const resolvedRootId = rootMessageId || state.threadRootByReplyId[tempId];
+      if (!resolvedRootId) return state;
 
-      const existing = state.threadRepliesByRoot[resolvedRootId] || []
-      const nextReplies = existing.map(m =>
+      const existing = state.threadRepliesByRoot[resolvedRootId] || [];
+      const nextReplies = existing.map((m) =>
         m._id === tempId ? { ...m, pending: false, failed: true } : m,
-      )
+      );
 
       return {
         threadRepliesByRoot: {
@@ -1035,27 +1079,31 @@ export const useChatStore = create((set, get) => ({
               },
             }
           : {}),
-      }
-    })
+      };
+    });
   },
 
   incrementReplyCount: (rootMessageId, channelId) => {
     set((state) => {
-      const resolvedChannelId = channelId || state.messageChannelById[rootMessageId]
-      if (!resolvedChannelId) return state
-      const existing = state.messagesByChannel[resolvedChannelId] || []
+      const resolvedChannelId =
+        channelId || state.messageChannelById[rootMessageId];
+      if (!resolvedChannelId) return state;
+      const existing = state.messagesByChannel[resolvedChannelId] || [];
 
-      let updatedReplyCount = null
+      let updatedReplyCount = null;
       const nextChannelMessages = existing.map((m) => {
-        if (m._id !== rootMessageId) return m
-        const updated = { ...m, replyCount: (m.replyCount || 0) + 1 }
-        updatedReplyCount = updated.replyCount
-        return updated
-      })
+        if (m._id !== rootMessageId) return m;
+        const updated = { ...m, replyCount: (m.replyCount || 0) + 1 };
+        updatedReplyCount = updated.replyCount;
+        return updated;
+      });
 
-      if (updatedReplyCount === null) return state
+      if (updatedReplyCount === null) return state;
 
-      if (CHAT_FEATURE_FLAGS.normalizedMessageStore && state.messagesById[rootMessageId]) {
+      if (
+        CHAT_FEATURE_FLAGS.normalizedMessageStore &&
+        state.messagesById[rootMessageId]
+      ) {
         return {
           messagesByChannel: {
             ...state.messagesByChannel,
@@ -1072,7 +1120,7 @@ export const useChatStore = create((set, get) => ({
             ...state.messageChannelById,
             [rootMessageId]: resolvedChannelId,
           },
-        }
+        };
       }
 
       return {
@@ -1080,113 +1128,137 @@ export const useChatStore = create((set, get) => ({
           ...state.messagesByChannel,
           [resolvedChannelId]: nextChannelMessages,
         },
-      }
-    })
+      };
+    });
   },
 
   clearThreadReplies: (rootMessageId) => {
     set((state) => {
-      const newThreadReplies = { ...state.threadRepliesByRoot }
-      const newThreadReplyIds = { ...state.threadReplyIdsByRoot }
-      const newThreadRepliesById = { ...state.threadRepliesById }
-      const newThreadRootByReplyId = { ...state.threadRootByReplyId }
+      const newThreadReplies = { ...state.threadRepliesByRoot };
+      const newThreadReplyIds = { ...state.threadReplyIdsByRoot };
+      const newThreadRepliesById = { ...state.threadRepliesById };
+      const newThreadRootByReplyId = { ...state.threadRootByReplyId };
 
-      const idsForRoot = newThreadReplyIds[rootMessageId] || []
+      const idsForRoot = newThreadReplyIds[rootMessageId] || [];
       for (const replyId of idsForRoot) {
-        delete newThreadRepliesById[replyId]
-        delete newThreadRootByReplyId[replyId]
+        delete newThreadRepliesById[replyId];
+        delete newThreadRootByReplyId[replyId];
       }
 
-      delete newThreadReplies[rootMessageId]
-      delete newThreadReplyIds[rootMessageId]
+      delete newThreadReplies[rootMessageId];
+      delete newThreadReplyIds[rootMessageId];
 
       return {
         threadRepliesByRoot: newThreadReplies,
         threadReplyIdsByRoot: newThreadReplyIds,
         threadRepliesById: newThreadRepliesById,
         threadRootByReplyId: newThreadRootByReplyId,
-      }
-    })
+      };
+    });
   },
 
   // ─── Reactions ──────────────────────────────────────────────────────
   addReaction: async (messageId, emoji) => {
     try {
-      await messageAPI.addReaction(messageId, emoji)
+      await messageAPI.addReaction(messageId, emoji);
     } catch {
-      toast.error('Failed to add reaction')
+      toast.error("Failed to add reaction");
     }
   },
 
   removeReaction: async (messageId, emoji) => {
     try {
-      await messageAPI.removeReaction(messageId, emoji)
+      await messageAPI.removeReaction(messageId, emoji);
     } catch {
-      toast.error('Failed to remove reaction')
+      toast.error("Failed to remove reaction");
     }
   },
 
   addReactionLocal: (messageId, userId, emoji, channelId) => {
     set((state) => {
-      const startedAt = nowMs()
-      const newState = { ...state.messagesByChannel }
+      const startedAt = nowMs();
+      const newState = { ...state.messagesByChannel };
       // Prefer indexed channel lookup when normalization is enabled.
-      const hintedChannelId = channelId || (CHAT_FEATURE_FLAGS.normalizedMessageStore ? state.messageChannelById[messageId] : null)
-      const channelsToScan = hintedChannelId && newState[hintedChannelId] ? [hintedChannelId] : Object.keys(newState)
+      const hintedChannelId =
+        channelId ||
+        (CHAT_FEATURE_FLAGS.normalizedMessageStore
+          ? state.messageChannelById[messageId]
+          : null);
+      const channelsToScan =
+        hintedChannelId && newState[hintedChannelId]
+          ? [hintedChannelId]
+          : Object.keys(newState);
       for (const cid of channelsToScan) {
         newState[cid] = newState[cid].map((m) => {
-          if (m._id !== messageId) return m
-          const reactions = [...(m.reactions || [])]
-          const existing = reactions.find((r) => r.emoji === emoji)
+          if (m._id !== messageId) return m;
+          const reactions = [...(m.reactions || [])];
+          const existing = reactions.find((r) => r.emoji === emoji);
           if (existing) {
-            if (!existing.users?.includes(userId) && !existing.userIds?.some(id => id?.toString() === userId)) {
-              existing.users = [...(existing.users || []), userId]
-              existing.userIds = [...(existing.userIds || []), userId]
-              existing.count = (existing.count || 0) + 1
+            if (
+              !existing.users?.includes(userId) &&
+              !existing.userIds?.some((id) => id?.toString() === userId)
+            ) {
+              existing.users = [...(existing.users || []), userId];
+              existing.userIds = [...(existing.userIds || []), userId];
+              existing.count = (existing.count || 0) + 1;
             }
           } else {
-            reactions.push({ emoji, users: [userId], userIds: [userId], count: 1 })
+            reactions.push({
+              emoji,
+              users: [userId],
+              userIds: [userId],
+              count: 1,
+            });
           }
-          return { ...m, reactions }
-        })
+          return { ...m, reactions };
+        });
       }
-      logSlowMutation('addReactionLocal', startedAt, {
+      logSlowMutation("addReactionLocal", startedAt, {
         channelsScanned: channelsToScan.length,
         usedHint: Boolean(hintedChannelId),
-      })
-      return { messagesByChannel: newState }
-    })
+      });
+      return { messagesByChannel: newState };
+    });
   },
 
   removeReactionLocal: (messageId, userId, emoji, channelId) => {
     set((state) => {
-      const startedAt = nowMs()
-      const newState = { ...state.messagesByChannel }
-      const hintedChannelId = channelId || (CHAT_FEATURE_FLAGS.normalizedMessageStore ? state.messageChannelById[messageId] : null)
-      const channelsToScan = hintedChannelId && newState[hintedChannelId] ? [hintedChannelId] : Object.keys(newState)
+      const startedAt = nowMs();
+      const newState = { ...state.messagesByChannel };
+      const hintedChannelId =
+        channelId ||
+        (CHAT_FEATURE_FLAGS.normalizedMessageStore
+          ? state.messageChannelById[messageId]
+          : null);
+      const channelsToScan =
+        hintedChannelId && newState[hintedChannelId]
+          ? [hintedChannelId]
+          : Object.keys(newState);
       for (const cid of channelsToScan) {
         newState[cid] = newState[cid].map((m) => {
-          if (m._id !== messageId) return m
+          if (m._id !== messageId) return m;
           const reactions = (m.reactions || [])
             .map((r) => {
-              if (r.emoji !== emoji) return r
+              if (r.emoji !== emoji) return r;
               return {
                 ...r,
                 users: (r.users || []).filter((u) => u !== userId),
-                userIds: (r.userIds || []).filter((u) => u?.toString() !== userId),
+                userIds: (r.userIds || []).filter(
+                  (u) => u?.toString() !== userId,
+                ),
                 count: Math.max(0, (r.count || 1) - 1),
-              }
+              };
             })
-            .filter((r) => (r.users?.length > 0 || r.count > 0))
-          return { ...m, reactions }
-        })
+            .filter((r) => r.users?.length > 0 || r.count > 0);
+          return { ...m, reactions };
+        });
       }
-      logSlowMutation('removeReactionLocal', startedAt, {
+      logSlowMutation("removeReactionLocal", startedAt, {
         channelsScanned: channelsToScan.length,
         usedHint: Boolean(hintedChannelId),
-      })
-      return { messagesByChannel: newState }
-    })
+      });
+      return { messagesByChannel: newState };
+    });
   },
 
   // ─── Typing ─────────────────────────────────────────────────────────
@@ -1196,62 +1268,65 @@ export const useChatStore = create((set, get) => ({
         ...state.typingByChannel,
         [channelId]: { ...state.typingByChannel[channelId], [userId]: name },
       },
-    }))
+    }));
     // Auto-clear after 5s
     setTimeout(() => {
-      get().clearTyping(channelId, userId)
-    }, 5000)
+      get().clearTyping(channelId, userId);
+    }, 5000);
   },
 
   clearTyping: (channelId, userId) => {
     set((state) => {
-      const typing = { ...state.typingByChannel[channelId] }
-      delete typing[userId]
+      const typing = { ...state.typingByChannel[channelId] };
+      delete typing[userId];
       return {
         typingByChannel: { ...state.typingByChannel, [channelId]: typing },
-      }
-    })
+      };
+    });
   },
 
   // ─── Presence ───────────────────────────────────────────────────────
   setUserOnline: (userId) => {
     set((state) => {
-      const users = new Map(state.onlineUsers)
-      users.set(userId, 'online')
-      return { onlineUsers: users }
-    })
+      const users = new Map(state.onlineUsers);
+      users.set(userId, "online");
+      return { onlineUsers: users };
+    });
   },
 
   setUserOffline: (userId) => {
     set((state) => {
-      const users = new Map(state.onlineUsers)
-      users.delete(userId)
-      return { onlineUsers: users }
-    })
+      const users = new Map(state.onlineUsers);
+      users.delete(userId);
+      return { onlineUsers: users };
+    });
   },
 
   setUserAway: (userId) => {
     set((state) => {
-      const users = new Map(state.onlineUsers)
+      const users = new Map(state.onlineUsers);
       if (users.has(userId)) {
-        users.set(userId, 'away')
+        users.set(userId, "away");
       }
-      return { onlineUsers: users }
-    })
+      return { onlineUsers: users };
+    });
   },
 
   // ─── Notifications ─────────────────────────────────────────────────
   addNotification: (notification) => {
-    const normalized = normalizeNotification(notification)
-    if (!normalized) return
+    const normalized = normalizeNotification(notification);
+    if (!normalized) return;
 
     set((state) => ({
       notifications: [normalized, ...state.notifications].slice(0, 50),
-    }))
-    if (normalized.type === 'mention') {
-      toast.custom(() => createElement(MentionToast, { notification: normalized }), {
-        duration: 4200,
-      })
+    }));
+    if (normalized.type === "mention") {
+      toast.custom(
+        () => createElement(MentionToast, { notification: normalized }),
+        {
+          duration: 4200,
+        },
+      );
     }
   },
 
@@ -1259,45 +1334,48 @@ export const useChatStore = create((set, get) => ({
 
   // ─── Pinned Messages ───────────────────────────────────────────────
   fetchPinnedMessages: async (channelId) => {
-    set({ isLoadingPins: true })
+    set({ isLoadingPins: true });
     try {
-      const { data } = await messageAPI.getPinned(channelId)
-      const pins = data.data?.items || data.data?.messages || data.data || []
+      const { data } = await messageAPI.getPinned(channelId);
+      const pins = data.data?.items || data.data?.messages || data.data || [];
       set((state) => ({
         pinnedMessagesByChannel: {
           ...state.pinnedMessagesByChannel,
           [channelId]: Array.isArray(pins) ? pins : [],
         },
         isLoadingPins: false,
-      }))
+      }));
     } catch (error) {
-      set({ isLoadingPins: false })
-      logger.error('Failed to fetch pinned messages:', error)
+      set({ isLoadingPins: false });
+      logger.error("Failed to fetch pinned messages:", error);
     }
   },
 
   pinMessage: async (messageId) => {
     try {
-      await messageAPI.pin(messageId)
+      await messageAPI.pin(messageId);
       // Optimistic: update isPinned in message list
       set((state) => {
         const targetChannelId = CHAT_FEATURE_FLAGS.normalizedMessageStore
           ? state.messageChannelById[messageId]
-          : null
+          : null;
 
         const channelsToScan = targetChannelId
           ? [targetChannelId]
-          : Object.keys(state.messagesByChannel)
+          : Object.keys(state.messagesByChannel);
 
-        const newState = { ...state.messagesByChannel }
+        const newState = { ...state.messagesByChannel };
         for (const cid of channelsToScan) {
-          if (!newState[cid]) continue
+          if (!newState[cid]) continue;
           newState[cid] = newState[cid].map((m) =>
             m._id === messageId ? { ...m, isPinned: true } : m,
-          )
+          );
         }
 
-        if (CHAT_FEATURE_FLAGS.normalizedMessageStore && state.messagesById[messageId]) {
+        if (
+          CHAT_FEATURE_FLAGS.normalizedMessageStore &&
+          state.messagesById[messageId]
+        ) {
           return {
             messagesByChannel: newState,
             messagesById: {
@@ -1307,46 +1385,53 @@ export const useChatStore = create((set, get) => ({
                 isPinned: true,
               },
             },
-          }
+          };
         }
 
-        return { messagesByChannel: newState }
-      })
-      toast.success('Message pinned')
+        return { messagesByChannel: newState };
+      });
+      toast.success("Message pinned");
     } catch {
-      toast.error('Failed to pin message')
+      toast.error("Failed to pin message");
     }
   },
 
   unpinMessage: async (messageId) => {
     try {
-      await messageAPI.unpin(messageId)
+      await messageAPI.unpin(messageId);
       set((state) => {
         const targetChannelId = CHAT_FEATURE_FLAGS.normalizedMessageStore
           ? state.messageChannelById[messageId]
-          : null
+          : null;
 
         const channelsToScan = targetChannelId
           ? [targetChannelId]
-          : Object.keys(state.messagesByChannel)
+          : Object.keys(state.messagesByChannel);
 
-        const newState = { ...state.messagesByChannel }
+        const newState = { ...state.messagesByChannel };
         for (const cid of channelsToScan) {
-          if (!newState[cid]) continue
+          if (!newState[cid]) continue;
           newState[cid] = newState[cid].map((m) =>
             m._id === messageId ? { ...m, isPinned: false } : m,
-          )
+          );
         }
 
         // Remove from pinned cache
-        const newPins = { ...state.pinnedMessagesByChannel }
-        const pinChannelsToScan = targetChannelId ? [targetChannelId] : Object.keys(newPins)
+        const newPins = { ...state.pinnedMessagesByChannel };
+        const pinChannelsToScan = targetChannelId
+          ? [targetChannelId]
+          : Object.keys(newPins);
         for (const cid of pinChannelsToScan) {
-          if (!newPins[cid]) continue
-          newPins[cid] = (newPins[cid] || []).filter((m) => m._id !== messageId)
+          if (!newPins[cid]) continue;
+          newPins[cid] = (newPins[cid] || []).filter(
+            (m) => m._id !== messageId,
+          );
         }
 
-        if (CHAT_FEATURE_FLAGS.normalizedMessageStore && state.messagesById[messageId]) {
+        if (
+          CHAT_FEATURE_FLAGS.normalizedMessageStore &&
+          state.messagesById[messageId]
+        ) {
           return {
             messagesByChannel: newState,
             pinnedMessagesByChannel: newPins,
@@ -1357,39 +1442,42 @@ export const useChatStore = create((set, get) => ({
                 isPinned: false,
               },
             },
-          }
+          };
         }
 
-        return { messagesByChannel: newState, pinnedMessagesByChannel: newPins }
-      })
-      toast.success('Message unpinned')
+        return {
+          messagesByChannel: newState,
+          pinnedMessagesByChannel: newPins,
+        };
+      });
+      toast.success("Message unpinned");
     } catch {
-      toast.error('Failed to unpin message')
+      toast.error("Failed to unpin message");
     }
   },
 
   // Handle pin socket events
   handleMessagePinned: (payload) => {
     set((state) => {
-      const message = payload?.message || payload
-      const messageId = message?._id || payload?.messageId
-      const cid = message?.channelId || payload?.channelId
-      if (!messageId || !cid) return state
+      const message = payload?.message || payload;
+      const messageId = message?._id || payload?.messageId;
+      const cid = message?.channelId || payload?.channelId;
+      if (!messageId || !cid) return state;
 
-      const newMsgs = { ...state.messagesByChannel }
+      const newMsgs = { ...state.messagesByChannel };
       if (newMsgs[cid]) {
         newMsgs[cid] = newMsgs[cid].map((m) =>
           m._id === messageId ? { ...m, isPinned: true } : m,
-        )
+        );
       }
       // Add to pinned cache if loaded
-      const newPins = { ...state.pinnedMessagesByChannel }
+      const newPins = { ...state.pinnedMessagesByChannel };
       if (newPins[cid]) {
         if (!newPins[cid].some((m) => m._id === messageId)) {
-          const cachedMessage = newMsgs[cid]?.find((m) => m._id === messageId)
-          const pinEntry = cachedMessage || (message?._id ? message : null)
+          const cachedMessage = newMsgs[cid]?.find((m) => m._id === messageId);
+          const pinEntry = cachedMessage || (message?._id ? message : null);
           if (pinEntry) {
-            newPins[cid] = [{ ...pinEntry, isPinned: true }, ...newPins[cid]]
+            newPins[cid] = [{ ...pinEntry, isPinned: true }, ...newPins[cid]];
           }
         }
       }
@@ -1409,31 +1497,35 @@ export const useChatStore = create((set, get) => ({
             ...state.messageChannelById,
             ...(cid ? { [messageId]: cid } : {}),
           },
-        }
+        };
       }
 
-      return { messagesByChannel: newMsgs, pinnedMessagesByChannel: newPins }
-    })
+      return { messagesByChannel: newMsgs, pinnedMessagesByChannel: newPins };
+    });
   },
 
   handleMessageUnpinned: (payload) => {
     set((state) => {
-      const message = payload?.message || payload
-      const messageId = message?._id || payload?.messageId
-      const cid = message?.channelId || payload?.channelId
-      if (!messageId || !cid) return state
+      const message = payload?.message || payload;
+      const messageId = message?._id || payload?.messageId;
+      const cid = message?.channelId || payload?.channelId;
+      if (!messageId || !cid) return state;
 
-      const newMsgs = { ...state.messagesByChannel }
+      const newMsgs = { ...state.messagesByChannel };
       if (newMsgs[cid]) {
         newMsgs[cid] = newMsgs[cid].map((m) =>
           m._id === messageId ? { ...m, isPinned: false } : m,
-        )
+        );
       }
-      const newPins = { ...state.pinnedMessagesByChannel }
+      const newPins = { ...state.pinnedMessagesByChannel };
       if (newPins[cid]) {
-        newPins[cid] = newPins[cid].filter((m) => m._id !== messageId)
+        newPins[cid] = newPins[cid].filter((m) => m._id !== messageId);
       }
-      if (CHAT_FEATURE_FLAGS.normalizedMessageStore && messageId && state.messagesById[messageId]) {
+      if (
+        CHAT_FEATURE_FLAGS.normalizedMessageStore &&
+        messageId &&
+        state.messagesById[messageId]
+      ) {
         return {
           messagesByChannel: newMsgs,
           pinnedMessagesByChannel: newPins,
@@ -1445,23 +1537,26 @@ export const useChatStore = create((set, get) => ({
               isPinned: false,
             },
           },
-        }
+        };
       }
 
-      return { messagesByChannel: newMsgs, pinnedMessagesByChannel: newPins }
-    })
+      return { messagesByChannel: newMsgs, pinnedMessagesByChannel: newPins };
+    });
   },
 
   // ─── All Threads ────────────────────────────────────────────────────
   fetchAllThreads: async () => {
-    set({ allThreadsLoading: true })
+    set({ allThreadsLoading: true });
     try {
-      const { data } = await threadAPI.myThreads()
-      const threads = data.data?.items || data.data?.threads || data.data || []
-      set({ allThreads: Array.isArray(threads) ? threads : [], allThreadsLoading: false })
+      const { data } = await threadAPI.myThreads();
+      const threads = data.data?.items || data.data?.threads || data.data || [];
+      set({
+        allThreads: Array.isArray(threads) ? threads : [],
+        allThreadsLoading: false,
+      });
     } catch (error) {
-      set({ allThreadsLoading: false })
-      logger.error('Failed to fetch threads:', error)
+      set({ allThreadsLoading: false });
+      logger.error("Failed to fetch threads:", error);
     }
   },
 
@@ -1469,83 +1564,85 @@ export const useChatStore = create((set, get) => ({
   setConnectionStatus: (status) => set({ connectionStatus: status }),
 
   // ─── Workspace Switch — Clear all cached data ──────────────────────
-  clearCache: () => set({
-    messagesByChannel: {},
-    messagesById: {},
-    channelMessageIds: {},
-    messageChannelById: {},
-    hasMore: {},
-    pinnedMessagesByChannel: {},
-    allThreads: [],
-    threadRepliesByRoot: {},
-    threadRepliesById: {},
-    threadReplyIdsByRoot: {},
-    threadRootByReplyId: {},
-    threadHasMore: {},
-    typingByChannel: {},
-    onlineUsers: new Map(),
-    notifications: [],
-    activeThread: null,
-  }),
-}))
+  clearCache: () =>
+    set({
+      messagesByChannel: {},
+      messagesById: {},
+      channelMessageIds: {},
+      messageChannelById: {},
+      hasMore: {},
+      pinnedMessagesByChannel: {},
+      allThreads: [],
+      threadRepliesByRoot: {},
+      threadRepliesById: {},
+      threadReplyIdsByRoot: {},
+      threadRootByReplyId: {},
+      threadHasMore: {},
+      typingByChannel: {},
+      onlineUsers: new Map(),
+      notifications: [],
+      activeThread: null,
+    }),
+}));
 
 useChatStore.subscribe((state, prevState) => {
-  if (!CHAT_FEATURE_FLAGS.indexedDbCache) return
+  if (!CHAT_FEATURE_FLAGS.indexedDbCache) return;
 
-  const nextMessagesByChannel = state.messagesByChannel
-  const prevMessagesByChannel = prevState.messagesByChannel
-  if (nextMessagesByChannel === prevMessagesByChannel) return
+  const nextMessagesByChannel = state.messagesByChannel;
+  const prevMessagesByChannel = prevState.messagesByChannel;
+  if (nextMessagesByChannel === prevMessagesByChannel) return;
 
   for (const [channelId, messages] of Object.entries(nextMessagesByChannel)) {
     if (prevMessagesByChannel[channelId] !== messages) {
-      scheduleChannelPersist(channelId, messages)
+      scheduleChannelPersist(channelId, messages);
     }
   }
-})
+});
 
 useChatStore.subscribe((state, prevState) => {
-  if (!CHAT_FEATURE_FLAGS.normalizedMessageStore) return
+  if (!CHAT_FEATURE_FLAGS.normalizedMessageStore) return;
 
-  const nextMessagesByChannel = state.messagesByChannel
-  const prevMessagesByChannel = prevState.messagesByChannel
-  if (nextMessagesByChannel === prevMessagesByChannel) return
+  const nextMessagesByChannel = state.messagesByChannel;
+  const prevMessagesByChannel = prevState.messagesByChannel;
+  if (nextMessagesByChannel === prevMessagesByChannel) return;
 
-  const nextMessagesById = { ...state.messagesById }
-  const nextChannelMessageIds = { ...state.channelMessageIds }
-  const nextMessageChannelById = { ...state.messageChannelById }
+  const nextMessagesById = { ...state.messagesById };
+  const nextChannelMessageIds = { ...state.channelMessageIds };
+  const nextMessageChannelById = { ...state.messageChannelById };
 
   const channelIds = new Set([
     ...Object.keys(prevMessagesByChannel),
     ...Object.keys(nextMessagesByChannel),
-  ])
+  ]);
 
-  let hasChanges = false
+  let hasChanges = false;
 
   for (const channelId of channelIds) {
-    if (prevMessagesByChannel[channelId] === nextMessagesByChannel[channelId]) continue
+    if (prevMessagesByChannel[channelId] === nextMessagesByChannel[channelId])
+      continue;
 
-    hasChanges = true
-    const prevIds = prevState.channelMessageIds[channelId] || []
+    hasChanges = true;
+    const prevIds = prevState.channelMessageIds[channelId] || [];
 
     for (const messageId of prevIds) {
       if (nextMessageChannelById[messageId] === channelId) {
-        delete nextMessageChannelById[messageId]
+        delete nextMessageChannelById[messageId];
       }
-      delete nextMessagesById[messageId]
+      delete nextMessagesById[messageId];
     }
 
-    const channelMessages = nextMessagesByChannel[channelId] || []
-    const { ids, byId } = buildNormalizedChannel(channelMessages)
+    const channelMessages = nextMessagesByChannel[channelId] || [];
+    const { ids, byId } = buildNormalizedChannel(channelMessages);
 
     if (channelMessages.length > 0) {
-      nextChannelMessageIds[channelId] = ids
+      nextChannelMessageIds[channelId] = ids;
     } else {
-      delete nextChannelMessageIds[channelId]
+      delete nextChannelMessageIds[channelId];
     }
 
     for (const messageId of ids) {
-      nextMessagesById[messageId] = byId[messageId]
-      nextMessageChannelById[messageId] = channelId
+      nextMessagesById[messageId] = byId[messageId];
+      nextMessageChannelById[messageId] = channelId;
     }
   }
 
@@ -1554,24 +1651,24 @@ useChatStore.subscribe((state, prevState) => {
       messagesById: nextMessagesById,
       channelMessageIds: nextChannelMessageIds,
       messageChannelById: nextMessageChannelById,
-    })
+    });
   }
-})
+});
 
 if (CHAT_FEATURE_FLAGS.indexedDbCache) {
-  const originalClearCache = useChatStore.getState().clearCache
+  const originalClearCache = useChatStore.getState().clearCache;
   useChatStore.setState({
     clearCache: () => {
-      hydratedChannels.clear()
-      hydrationInFlight.clear()
-      channelAccessOrder.splice(0, channelAccessOrder.length)
-      pendingPersistByChannel.clear()
+      hydratedChannels.clear();
+      hydrationInFlight.clear();
+      channelAccessOrder.splice(0, channelAccessOrder.length);
+      pendingPersistByChannel.clear();
       if (persistTimer) {
-        clearTimeout(persistTimer)
-        persistTimer = null
+        clearTimeout(persistTimer);
+        persistTimer = null;
       }
-      void clearMessageCache()
-      originalClearCache()
+      void clearMessageCache();
+      originalClearCache();
     },
-  })
+  });
 }

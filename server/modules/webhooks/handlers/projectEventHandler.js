@@ -298,7 +298,7 @@ export function registerProjectEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.PROJECT_MEMBER_REMOVED);
     if (!wsId) return;
 
-    const { boardId, memberId, userId } = payload;
+    const { boardId, memberId, userId, hasActiveTasks } = payload;
     const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.board?._id);
     const memberIds = collectProjectMemberIds(payload);
     const ownerId = collectProjectOwnerId(payload);
@@ -309,21 +309,43 @@ export function registerProjectEventHandlers() {
     if (!channel) return;
 
     const member = await userRepository.findByFlowTaskId(memberId, wsId);
-    if (memberIds.length > 0 || ownerId) {
-      await channelService.reconcileProjectMembers(channel._id, memberIds, wsId, {
-        ownerFlowTaskId: ownerId,
-      });
-    } else if (member) {
-      await channelService.removeMember(channel._id, member._id, 'system');
-    }
+    const removedBy = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
+    const removedByName = removedBy?.name || 'Someone';
 
-    if (member) {
-      await messageService.sendSystemMessage(
-        channel._id,
-        `👤 ${member.name} was removed from the project`,
-        undefined,
-        wsId,
-      );
+    if (hasActiveTasks) {
+      // User still has task/subtask/nano assignments — keep in channel
+      logger.info('project.member_removed: user has active tasks, keeping in channel', {
+        memberId,
+        boardId: normalizedBoardId,
+        channelId: channel._id,
+      });
+
+      if (member) {
+        await messageService.sendSystemMessage(
+          channel._id,
+          `👤 ${member.name} was removed from the project by ${removedByName} but still has active task assignments`,
+          undefined,
+          wsId,
+        );
+      }
+    } else {
+      // No active tasks — safe to remove from channel
+      if (memberIds.length > 0 || ownerId) {
+        await channelService.reconcileProjectMembers(channel._id, memberIds, wsId, {
+          ownerFlowTaskId: ownerId,
+        });
+      } else if (member) {
+        await channelService.removeMember(channel._id, member._id, 'system');
+      }
+
+      if (member) {
+        await messageService.sendSystemMessage(
+          channel._id,
+          `👤 ${removedByName} removed ${member.name} from the project`,
+          undefined,
+          wsId,
+        );
+      }
     }
   });
 

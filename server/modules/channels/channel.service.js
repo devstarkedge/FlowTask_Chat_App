@@ -744,18 +744,37 @@ class ChannelService {
           );
         }
 
-        // Sync board members
-        const memberIds = (board.members || [])
-          .map((m) => (typeof m === "string" ? m : m._id || m.id))
-          .filter(Boolean);
+        // Deep sync: board members + card/subtask/nano assignees
+        let memberIds = [];
+        let ownerId = typeof board.owner === "string"
+          ? board.owner
+          : board.owner?._id || board.owner?.id;
 
-        // Add owner
-        const ownerId =
-          typeof board.owner === "string"
-            ? board.owner
-            : board.owner?._id || board.owner?.id;
-        if (ownerId && !memberIds.includes(ownerId)) {
-          memberIds.push(ownerId);
+        try {
+          const deepResult = await flowTaskService.getBoardDeepMembers(boardId, token);
+          memberIds = [...deepResult.memberIds];
+
+          // Extract owner from deep result sources
+          if (deepResult.sources) {
+            for (const [userId, sources] of deepResult.sources) {
+              if (sources.includes('board')) {
+                ownerId = userId;
+                break;
+              }
+            }
+          }
+        } catch (deepErr) {
+          // Fallback to shallow board members if deep fetch fails
+          logger.warn('[CHANNEL_SYNC] Deep member fetch failed, using shallow members', {
+            boardId,
+            error: deepErr.message,
+          });
+          memberIds = (board.members || [])
+            .map((m) => (typeof m === "string" ? m : m._id || m.id))
+            .filter(Boolean);
+          if (ownerId && !memberIds.includes(ownerId)) {
+            memberIds.push(ownerId);
+          }
         }
 
         if (memberIds.length > 0) {

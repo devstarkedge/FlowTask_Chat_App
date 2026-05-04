@@ -1,5 +1,6 @@
 import eventBus from '../../../services/eventBus.js';
 import channelRepository from '../../channels/channel.repository.js';
+import channelService from '../../channels/channel.service.js';
 import threadService from '../../threads/thread.service.js';
 import threadRepository from '../../threads/thread.repository.js';
 import messageService from '../../messages/message.service.js';
@@ -60,6 +61,39 @@ function normalizeEntityId(value) {
 }
 
 /**
+ * Auto-add FlowTask assignees to the project chat channel.
+ * Additive only — never removes users. Called on task/subtask/nano events.
+ */
+async function autoAddAssigneesToChannel(channel, assigneeIds, wsId) {
+  if (!channel || !assigneeIds || assigneeIds.length === 0) return;
+
+  const uniqueIds = [...new Set(
+    assigneeIds
+      .map((id) => {
+        if (!id) return null;
+        if (typeof id === 'string') return id;
+        return (id._id || id.id || id.userId)?.toString() || null;
+      })
+      .filter(Boolean),
+  )];
+
+  if (uniqueIds.length === 0) return;
+
+  try {
+    await channelService.syncMembers(channel._id, uniqueIds, wsId);
+    logger.info('Auto-added assignees to project channel', {
+      channelId: channel._id,
+      assigneeCount: uniqueIds.length,
+    });
+  } catch (err) {
+    logger.warn('Failed to auto-add assignees to channel', {
+      channelId: channel._id,
+      error: err.message,
+    });
+  }
+}
+
+/**
  * Task Event Handler — handles FlowTask card/task lifecycle events.
  *
  * Events:
@@ -89,6 +123,10 @@ export function registerTaskEventHandlers() {
       logger.debug('task.created: no project channel', { boardId: normalizedBoardId });
       return;
     }
+
+    // Auto-add task assignees to project channel
+    const taskAssignees = card.assignees || (card.assignedTo ? [card.assignedTo] : []);
+    await autoAddAssigneesToChannel(channel, taskAssignees, wsId);
 
     const creator = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const creatorName = resolveActorName(payload, creator);
@@ -259,6 +297,17 @@ export function registerTaskEventHandlers() {
 
     const assignerName = resolveActorName(payload, assigner);
 
+    // Auto-add all assignees to project channel
+    if (channel) {
+      const allAssigneeIds = (payload.assignees || [])
+        .map((a) => a.userId || a._id || a.id || (typeof a === 'string' ? a : null))
+        .filter(Boolean);
+      if (assigneeId && !allAssigneeIds.includes(assigneeId)) {
+        allAssigneeIds.push(assigneeId);
+      }
+      await autoAddAssigneesToChannel(channel, allAssigneeIds, wsId);
+    }
+
     // Post in project channel
     if (channel) {
       const activityMeta = {
@@ -280,6 +329,62 @@ export function registerTaskEventHandlers() {
         [],
         activityMeta,
       );
+    }
+  });
+
+  // ─── task.unassigned ──────────────────────────────────────────────────
+  eventBus.register(FLOWTASK_EVENTS.TASK_UNASSIGNED, async (payload) => {
+    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_UNASSIGNED);
+    if (!wsId) return;
+
+    const { boardId, removedUserIds, activeTaskFlags, userId, card, project, departmentId } = payload;
+    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id);
+
+    if (!normalizedBoardId || !removedUserIds || removedUserIds.length === 0) return;
+
+    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
+    if (!channel) return;
+
+    const actor = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
+    const actorName = resolveActorName(payload, actor);
+    const taskTitle = card?.title || payload.task?.title || 'a task';
+
+    for (const removedId of removedUserIds) {
+      const chatUser = await userRepository.findByFlowTaskId(removedId, wsId);
+      if (!chatUser) continue;
+
+      const stillHasTasks = activeTaskFlags?.[removedId];
+
+      if (stillHasTasks) {
+        // User has other assignments in the project — keep in channel, just notify
+        logger.info('task.unassigned: user has other active tasks, keeping in channel', {
+          removedId,
+          boardId: normalizedBoardId,
+          channelId: channel._id,
+        });
+      } else {
+        // User has NO other involvement — remove from channel
+        try {
+          await channelService.removeMember(channel._id, chatUser._id, 'system');
+          logger.info('task.unassigned: removed user from project channel', {
+            removedId,
+            chatUserId: chatUser._id,
+            channelId: channel._id,
+          });
+        } catch (err) {
+          logger.warn('task.unassigned: failed to remove user from channel', {
+            removedId,
+            error: err.message,
+          });
+        }
+
+        await messageService.sendSystemMessage(
+          channel._id,
+          `👤 ${actorName} removed ${chatUser.name} from **${taskTitle}** — no remaining project assignments`,
+          { entityType: 'card', entityId: card?._id || payload.task?.id },
+          wsId,
+        );
+      }
     }
   });
 
@@ -496,6 +601,10 @@ export function registerTaskEventHandlers() {
       return;
     }
 
+    // Auto-add subtask assignees to project channel
+    const subtaskAssignees = subtask.assignees || [];
+    await autoAddAssigneesToChannel(channel, subtaskAssignees, wsId);
+
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const userName = resolveActorName(payload, user);
     const taskTitle = card?.title || payload.task?.title || 'a task';
@@ -618,6 +727,10 @@ export function registerTaskEventHandlers() {
       return;
     }
 
+    // Auto-add subtask assignees to project channel (handles new assignee additions)
+    const subtaskAssignees = subtask.assignees || [];
+    await autoAddAssigneesToChannel(channel, subtaskAssignees, wsId);
+
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const userName = resolveActorName(payload, user);
     const taskTitle = card?.title || payload.task?.title || 'a task';
@@ -657,6 +770,10 @@ export function registerTaskEventHandlers() {
 
     const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
+
+    // Auto-add nano assignees to project channel
+    const nanoAssignees = nano.assignees || [];
+    await autoAddAssigneesToChannel(channel, nanoAssignees, wsId);
 
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const userName = user?.name || 'Someone';

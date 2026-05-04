@@ -181,7 +181,7 @@ class FlowTaskSyncService {
 
   /**
   * Sync project members from a FlowTask board to the corresponding ChatApp channel.
-  * Strict project channels mirror the board owner plus board members only.
+  * Deep sync: includes board owner, members, AND all task/subtask/nano assignees.
    *
    * @param {string} boardId - FlowTask board ID
    * @param {string} workspaceId - ChatApp workspace ID
@@ -198,27 +198,20 @@ class FlowTaskSyncService {
       return report;
     }
 
-    let board;
+    // Use deep member aggregation: board owner + members + card assignees
+    // + subtask assignees + nano assignees
+    let deepResult;
     try {
-      board = await flowTaskService.getBoard(boardId, token);
+      deepResult = await flowTaskService.getBoardDeepMembers(boardId, token);
     } catch (err) {
-      logger.warn('[SYNC] Failed to fetch board members', {
+      logger.warn('[SYNC] Failed to fetch deep board members', {
         boardId,
         error: err.message,
       });
       return report;
     }
 
-    const memberFlowTaskIds = new Set(
-      (board?.members || [])
-        .map((member) => (typeof member === 'string' ? member : member?._id || member?.id))
-        .filter(Boolean)
-        .map((memberId) => memberId.toString()),
-    );
-    const ownerFlowTaskId = normalizeEntityId(board?.owner);
-    if (ownerFlowTaskId) {
-      memberFlowTaskIds.add(ownerFlowTaskId);
-    }
+    const memberFlowTaskIds = deepResult.memberIds;
 
     report.total = memberFlowTaskIds.size;
 
@@ -231,6 +224,17 @@ class FlowTaskSyncService {
         .filter(Boolean),
     );
 
+    // Determine the board owner for role assignment
+    let ownerFlowTaskId = null;
+    if (deepResult.sources) {
+      for (const [userId, sources] of deepResult.sources) {
+        if (sources.includes('board')) {
+          ownerFlowTaskId = userId;
+          break;
+        }
+      }
+    }
+
     await channelService.reconcileProjectMembers(
       channel._id,
       [...memberFlowTaskIds],
@@ -241,6 +245,13 @@ class FlowTaskSyncService {
     report.added = [...memberFlowTaskIds].filter(
       (memberId) => !existingMemberIds.has(memberId.toString()),
     ).length;
+
+    logger.info('[SYNC] Deep board member sync complete', {
+      boardId,
+      totalDeepMembers: memberFlowTaskIds.size,
+      added: report.added,
+      sources: deepResult.sources ? Object.fromEntries([...deepResult.sources].map(([k, v]) => [k, v])) : {},
+    });
 
     return report;
   }

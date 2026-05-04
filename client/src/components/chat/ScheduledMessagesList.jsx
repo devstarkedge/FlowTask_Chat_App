@@ -445,7 +445,7 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
     <div className="sml-root ds-root">
       {/* Header */}
       <div className="sml-header ds-header">
-        <div className="sml-header-top ds-header__top">
+        {/* <div className="sml-header-top ds-header__top">
           <div className="sml-title ds-header__title">
             <span className="sml-title-icon ds-header__title-icon">
               <Clock size={14} />
@@ -459,7 +459,7 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
               </span>
             )}
           </div>
-        </div>
+        </div> */}
 
         {/* Search */}
         <div className="sml-search ds-search">

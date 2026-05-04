@@ -341,7 +341,7 @@ export default function DraftsSidebar() {
     <div className="dsl-root">
       {/* Header */}
       <div className="dsl-header">
-        <div className="dsl-header-top">
+        {/* <div className="dsl-header-top">
           <div className="dsl-title">
             <span className="dsl-title-icon">
               <PencilLine size={14} strokeWidth={2.2} />
@@ -351,7 +351,7 @@ export default function DraftsSidebar() {
               <span className="dsl-count-pill">{mergedDrafts.length}</span>
             )}
           </div>
-        </div>
+        </div> */}
 
         {/* Search */}
         <div className="dsl-search">

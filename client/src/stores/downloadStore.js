@@ -7,23 +7,31 @@ export const useDownloadStore = create(
       downloads: [],
 
       addDownload: (file) => {
-        const exists = get().downloads.find(
-          (d) => d.url === (file.url || file.secureUrl),
-        );
-        if (exists) return;
+        const url = file.url || file.secureUrl;
+        if (!url) return null;
 
-        const newFile = {
+        const exists = get().downloads.find((d) => d.url === url);
+
+        if (exists) {
+          return { ...exists, alreadyExists: true };
+        }
+
+        const newDownload = {
           id: Date.now(),
-          name: file.name,
-          url: file.url,
+          name: file.name || "Unnamed file",
+          url,
           size: file.size || "—",
-          type: file.type || "file",
+          status: "downloading",
+          progress: 0,
+          blobUrl: null,
           createdAt: new Date().toISOString(),
         };
 
         set((state) => ({
-          downloads: [newFile, ...state.downloads],
+          downloads: [newDownload, ...state.downloads],
         }));
+
+        return newDownload;
       },
 
       removeDownload: (id) =>

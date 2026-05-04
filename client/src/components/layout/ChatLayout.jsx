@@ -78,6 +78,8 @@ import DownloadsModalWrapper from "../modals/DownloadsModalWrapper";
 import { useDownloadStore } from "../../stores/downloadStore";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 import PinnedBar from "../chat/PinnedBar";
+import { handleDownload } from "../../utils/handleDownload";
+
 const EMPTY_LIST = [];
 
 /* ─── Injected styles ─────────────────────────────────────────────────────── */
@@ -925,31 +927,6 @@ export default function ChatLayout() {
     },
     [navigate, user, workspaceId],
   );
-
-  const handleDownload = async (file) => {
-    const fileName = file.fileName || file.name || "download";
-    const downloadUrl = file.url || file.secureUrl;
-    try {
-      addDownload({
-        name: fileName,
-        url: downloadUrl,
-        size: file.fileSize || file.size,
-        type: file.mimeType || file.type,
-      });
-      const res = await fetch(downloadUrl);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(objectUrl);
-    } catch (err) {
-      console.error("Download failed", err);
-    }
-  };
 
   const handleOpenSearchResult = useCallback(
     (item) => {

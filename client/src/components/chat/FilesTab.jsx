@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { fileAPI } from '../../services/api'
 import toast from 'react-hot-toast'
+import { handleDownload } from "../../utils/handleDownload";
 
 /* ─────────────────────────── helpers ───────────────────────────────────── */
 
@@ -188,12 +189,12 @@ function MediaCard({ file, onPreview, onShare, onDownload, onDelete, index }) {
         display: 'flex', gap: 4,
         opacity: hover ? 1 : 0, transform: hover ? 'translateY(0)' : 'translateY(-4px)',
         transition: 'all 180ms ease',
-        background: 'rgba(10,8,69,0.72)', backdropFilter: 'blur(6px)',
+        background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(6px)',
         borderRadius: 10, padding: '4px 5px',
         border: '1px solid rgba(255,255,255,0.1)',
       }}>
         <ActionBtn title="Share" onClick={(e) => { e.stopPropagation(); onShare(file) }}><Share2 size={13} /></ActionBtn>
-        <ActionBtn title="Download" onClick={(e) => { e.stopPropagation(); onDownload(file) }}><Download size={13} /></ActionBtn>
+        <ActionBtn title="Download" onClick={() => handleDownload(file)}><Download size={13} /></ActionBtn>
         <ActionBtn title="Delete" tone="danger" onClick={(e) => { e.stopPropagation(); onDelete(file) }}><Trash2 size={13} /></ActionBtn>
       </div>
 
@@ -463,18 +464,6 @@ export default function FilesTab({ channelId, onOpenFilePreview }) {
     a.href = url; a.setAttribute('download', fileName || 'download')
     a.rel = 'noopener noreferrer'; a.style.display = 'none'
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
-  }
-
-  const handleDownload = async (file) => {
-    const fileName = file.fileName || file.originalName || 'download'
-    try {
-      const res = await fetch(file.url)
-      if (!res.ok) throw new Error()
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      forceDownload(url, fileName)
-      setTimeout(() => URL.revokeObjectURL(url), 1500)
-    } catch { forceDownload(file.url, fileName) }
   }
 
   /* ── render ───────────────────────────────────────────────────────────── */

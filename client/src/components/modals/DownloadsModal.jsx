@@ -181,6 +181,7 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
   const [activeTab, setActiveTab] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
   const overlayRef = useRef(null);
+  const removeDownload = useDownloadStore((s) => s.removeDownload);
 
   const fetchFiles = async () => {
     // const [activeTab, setActiveTab] = useState("recent");
@@ -221,6 +222,14 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
     setRefreshing(true);
     await fetchFiles();
     setRefreshing(false);
+  };
+
+  const handleOpenFile = (file) => {
+    if (file.blobUrl) {
+      window.open(file.blobUrl, "_blank");
+    } else {
+      window.open(file.url, "_blank");
+    }
   };
 
   /* bulk download trigger */
@@ -295,17 +304,57 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
                       key={file.id || i}
                       className="dl-row"
                       style={{ animationDelay: `${i * 0.04}s` }}
-                      onClick={() => openFile(file.url)}
                     >
                       <FileIcon name={file.name} mime={file.type} />
 
+                      {/* FILE INFO */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p className="dl-file-name">
                           {file.name || "Unnamed file"}
                         </p>
-                        <div className="dl-file-meta">
-                          <span>{file.size || "—"}</span>
-                        </div>
+
+                        {/* STATUS TEXT */}
+                        {file.status === "completed" ? (
+                          <div
+                            className="dl-file-meta"
+                            style={{ cursor: "pointer", color: "#3b82f6" }}
+                            onClick={() => handleOpenFile(file)}
+                          >
+                          </div>
+                        ) : file.status === "downloading" ? (
+                          <div className="dl-file-meta">
+                            Downloading... {file.progress || 0}%
+                          </div>
+                        ) : (
+                          <div className="dl-file-meta">Failed</div>
+                        )}
+                      </div>
+
+                      {/* ACTION BUTTONS */}
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {file.status === "completed" && (
+                          <button
+                            className="dl-action-btn done"
+                            onClick={() => handleOpenFile(file)}
+                            title="Open file"
+                          >
+                            <FolderOpen size={14} />
+                          </button>
+                        )}
+
+                        {file.status === "downloading" && (
+                          <button className="dl-action-btn downloading">
+                            <RefreshCw size={14} />
+                          </button>
+                        )}
+
+                        <button
+                          className="dl-action-btn"
+                          onClick={() => removeDownload(file.id)}
+                          title="Remove"
+                        >
+                          <X size={14} />
+                        </button>
                       </div>
                     </div>
                   ))}

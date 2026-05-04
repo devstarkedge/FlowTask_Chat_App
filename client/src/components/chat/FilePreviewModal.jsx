@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Download, ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight, FileText, Film, Music, File } from 'lucide-react'
 import { useDownloadStore } from "../../stores/downloadStore";
+import { handleDownload } from "../../utils/handleDownload";
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp']
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
@@ -54,39 +55,6 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
 
   const downloadUrl = currentFile.secureUrl || currentFile.url || '#'
 
-  const handleDownload = async (file) => {
-    const fileName = file.fileName || file.name || "download";
-    const downloadUrl = file.url || file.secureUrl;
-
-    try {
-      //  store update (centralized)
-      addDownload({
-        name: fileName,
-        url: downloadUrl,
-        size: file.fileSize || file.size,
-        type: file.mimeType || file.type,
-      });
-
-      //  download logic
-      const res = await fetch(downloadUrl);
-      const blob = await res.blob();
-
-      const objectUrl = URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = fileName;
-
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-      URL.revokeObjectURL(objectUrl);
-    } catch (err) {
-      console.error("Download failed", err);
-    }
-  };
-
   return (
     <div className="file-preview-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       {/* Top Bar */}
@@ -137,7 +105,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
               <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
             </>
           )}
-          <ToolbarBtn icon={Download} onClick={handleDownload} />
+          <ToolbarBtn icon={Download} onClick={() => handleDownload(currentFile)} />
           <ToolbarBtn icon={X} onClick={onClose} />
         </div>
       </div>

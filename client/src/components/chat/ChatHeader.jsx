@@ -96,7 +96,7 @@ export default function ChatHeader({
   const overflowTabs   = HEADER_TABS.filter((t) => t.id !== activeTab)
 
   // Dynamic padding — reduced from before
-  const hPad = isConstrained ? 8 : 14
+  const hPad = isConstrained ? 8 : 8
 
   return (
     <div
@@ -140,7 +140,7 @@ export default function ChatHeader({
           <h2
             className="font-bold truncate group-hover:underline"
             style={{
-              fontSize: isConstrained ? 14 : 17,
+              fontSize: isConstrained ? 17 : 17,
               color: 'var(--text-primary)',
               lineHeight: 1.3,
               minWidth: 0,
@@ -171,14 +171,14 @@ export default function ChatHeader({
                 className="hide-mobile"
               />
 
-                <HdrBtn
+                {/* <HdrBtn
                 icon={Pin}
                 title="Pinned messages"
                 label={pinnedMessages.length > 0 ? String(pinnedMessages.length) : undefined}
                 onClick={onTogglePins}
               />
 
-                <HdrBtn icon={Search} title="Search" onClick={onToggleSearch} />
+                <HdrBtn icon={Search} title="Search" onClick={onToggleSearch} /> */}
             </>
           )}
 

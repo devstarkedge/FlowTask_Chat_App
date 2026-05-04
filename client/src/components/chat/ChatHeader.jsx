@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Lock,
   MessageCircle,
@@ -15,8 +15,6 @@ import {
 import ChannelMemberCount from './ChannelMemberCount'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
-import { channelAPI } from '../../services/api'
-import toast from 'react-hot-toast'
 import logger from '../../utils/logger'
 
 const EMPTY_PINS = []
@@ -35,7 +33,7 @@ export default function ChatHeader({
   activeTab = 'messages',
   onTabChange,
 }) {
-  const { membersByChannel, toggleInfoPanel, updateChannel, showInfoPanel } =
+  const { membersByChannel, toggleInfoPanel, showInfoPanel } =
     useChannelStore()
   const activeThread   = useChatStore((s) => s.activeThread)
   const pinnedMessages =
@@ -90,14 +88,8 @@ export default function ChatHeader({
     channel.visibility?.toLowerCase() === 'private' ||
     channel.type?.toLowerCase()       === 'private' ||
     channel.isPrivate
-  if (isPrivate) {
-    Icon = Lock
-  }
   const members = membersByChannel[channel._id] || []
   const memberCount = channel.memberCount ?? members.length
-  const isDM = channel.type === 'dm'
-
-  const members  = membersByChannel[channel._id] || []
   const pinCount = pinnedMessages.length
 
   const activeTabObj   = HEADER_TABS.find((t) => t.id === activeTab) || HEADER_TABS[0]
@@ -179,14 +171,14 @@ export default function ChatHeader({
                 className="hide-mobile"
               />
 
-              <HeaderBtn
+                <HdrBtn
                 icon={Pin}
                 title="Pinned messages"
                 label={pinnedMessages.length > 0 ? String(pinnedMessages.length) : undefined}
                 onClick={onTogglePins}
               />
 
-              <HeaderBtn icon={Search} title="Search" onClick={onToggleSearch} />
+                <HdrBtn icon={Search} title="Search" onClick={onToggleSearch} />
             </>
           )}
 

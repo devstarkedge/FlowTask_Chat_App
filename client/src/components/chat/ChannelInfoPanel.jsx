@@ -125,6 +125,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
   const { user } = useAuthStore();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [confirm, setConfirm] = useState(null);
 
   if (!channel) return null;
 
@@ -163,6 +164,8 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
   const handleConfirm = async () => {
     const action = confirm;
     setConfirm(null); // close dialog first
+
+    if (!action) return;
 
     if (action.type === "remove") {
       try {

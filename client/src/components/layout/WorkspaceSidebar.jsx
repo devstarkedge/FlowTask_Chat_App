@@ -182,7 +182,7 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
 
         {/* Create Button */}
         <div className="workspace-sidebar-divider" />
-        <button
+        {/* <button
           ref={createBtnRef}
           className="workspace-sidebar-create"
           onClick={() => { setShowCreateMenu((s) => !s); setShowUserMenu(false) }}
@@ -190,7 +190,7 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
           title=""
         >
           <Plus size={20} />
-        </button>
+        </button> */}
 
         {/* User Avatar */}
         <button

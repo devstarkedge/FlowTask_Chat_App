@@ -1,21 +1,17 @@
-import { useMemo, useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
-  Hash,
   Lock,
-  Users,
   MessageCircle,
   Search,
-  Info,
   Menu,
   Pin,
   FileText,
   Star,
   Headphones,
-  Plus,
+  Info,
   MoreVertical,
+  ChevronDown,
 } from 'lucide-react'
-import MemberAvatarGroup from './MemberAvatarGroup'
-import TabBar from '../ui/TabBar'
 import ChannelMemberCount from './ChannelMemberCount'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
@@ -23,20 +19,12 @@ import { channelAPI } from '../../services/api'
 import toast from 'react-hot-toast'
 import logger from '../../utils/logger'
 
-const TYPE_ICONS = {
-  project: Hash,
-  department: Users,
-  team: Users,
-  dm: MessageCircle,
-  system: Hash,
-}
-
 const EMPTY_PINS = []
 
 const HEADER_TABS = [
   { id: 'messages', label: 'Messages', icon: MessageCircle },
-  { id: 'files', label: 'Files', icon: FileText },
-  { id: 'untitled', label: 'Untitled', icon: FileText },
+  { id: 'files',    label: 'Files',    icon: FileText },
+  // { id: 'untitled', label: 'Untitled', icon: FileText },
 ]
 
 export default function ChatHeader({
@@ -49,48 +37,58 @@ export default function ChatHeader({
 }) {
   const { membersByChannel, toggleInfoPanel, updateChannel, showInfoPanel } =
     useChannelStore()
-  const activeThread = useChatStore((s) => s.activeThread)
+  const activeThread   = useChatStore((s) => s.activeThread)
   const pinnedMessages =
     useChatStore((s) => s.pinnedMessagesByChannel[channel?._id]) ?? EMPTY_PINS
+
   const [showMoreActions, setShowMoreActions] = useState(false)
-  const moreMenuRef = useRef(null)
+  const [showTabsDropdown, setShowTabsDropdown] = useState(false)
+  const [isStarred, setIsStarred]             = useState(false)
+  const [narrowTabs, setNarrowTabs]           = useState(false)
+
+  const moreMenuRef    = useRef(null)
+  const tabsMenuRef    = useRef(null)
+  const headerRef      = useRef(null)
 
   const isConstrained = showInfoPanel || !!activeThread
 
+  // Measure header width — collapse tabs when < 480px
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) {
+    if (!headerRef.current) return
+    const ro = new ResizeObserver(([entry]) => {
+      setNarrowTabs(entry.contentRect.width < 480)
+    })
+    ro.observe(headerRef.current)
+    return () => ro.disconnect()
+  }, [])
+
+  // Close action dropdown on outside click
+  useEffect(() => {
+    if (!showMoreActions) return
+    const fn = (e) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target))
         setShowMoreActions(false)
-      }
     }
-    if (showMoreActions) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
   }, [showMoreActions])
 
-  const [editingTopic, setEditingTopic] = useState(false)
-  const [topicValue, setTopicValue] = useState('')
-  const [isStarred, setIsStarred] = useState(false)
-  const topicInputRef = useRef(null)
-
-  const handleToggleStar = () => {
-    setIsStarred((s) => !s)
-  }
-
-  const handleHuddleClick = () => {
-    // TODO: implement huddle feature
-    logger.log('Huddle clicked for channel:', channel?._id)
-  }
+  // Close tabs dropdown on outside click
+  useEffect(() => {
+    if (!showTabsDropdown) return
+    const fn = (e) => {
+      if (tabsMenuRef.current && !tabsMenuRef.current.contains(e.target))
+        setShowTabsDropdown(false)
+    }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [showTabsDropdown])
 
   if (!channel) return null
 
-  let Icon = TYPE_ICONS[channel.type] || Hash
   const isPrivate =
     channel.visibility?.toLowerCase() === 'private' ||
-    channel.type?.toLowerCase() === 'private' ||
+    channel.type?.toLowerCase()       === 'private' ||
     channel.isPrivate
   if (isPrivate) {
     Icon = Lock
@@ -99,119 +97,77 @@ export default function ChatHeader({
   const memberCount = channel.memberCount ?? members.length
   const isDM = channel.type === 'dm'
 
-  const handleTopicClick = () => {
-    setTopicValue(channel.topic || '')
-    setEditingTopic(true)
-    setTimeout(() => topicInputRef.current?.focus(), 0)
-  }
+  const members  = membersByChannel[channel._id] || []
+  const pinCount = pinnedMessages.length
 
-  const handleTopicSave = async () => {
-    setEditingTopic(false)
-    if (topicValue === (channel.topic || '')) return
-    try {
-      await channelAPI.update(channel._id, { topic: topicValue })
-      if (updateChannel) updateChannel(channel._id, { topic: topicValue })
-    } catch {
-      toast.error('Failed to update topic')
-    }
-  }
+  const activeTabObj   = HEADER_TABS.find((t) => t.id === activeTab) || HEADER_TABS[0]
+  const overflowTabs   = HEADER_TABS.filter((t) => t.id !== activeTab)
+
+  // Dynamic padding — reduced from before
+  const hPad = isConstrained ? 8 : 14
 
   return (
     <div
+      ref={headerRef}
       className="shrink-0 select-none chat-header"
-      style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 20,
-      }}
+      style={{ position: 'sticky', top: 0, zIndex: 20 }}
     >
-      {/* Top row: channel info */}
-      <div className="flex items-center px-6 pt-3 pb-2 gap-4">
-        {/* Mobile Menu */}
-        <button
+      {/* ══════════════════════════════════════════════════════════════
+          TOP ROW — [mobile-btn] [name: flex-1] [actions: shrink-0]
+      ══════════════════════════════════════════════════════════════ */}
+      <div
+        className="flex items-center"
+        style={{ padding: `8px ${hPad}px 4px`, gap: 3, minHeight: 48 }}
+      >
+        {/* Mobile sidebar toggle */}
+        <HdrBtn
+          icon={Menu}
+          title="Open sidebar"
           onClick={onOpenMobileSidebar}
-          className="mobile-menu-btn p-2 rounded-lg cursor-pointer transition-colors"
-          style={{
-            color: 'var(--text-muted)',
-            background: 'transparent',
-            border: 'none',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-        >
-          <Menu size={20} />
-        </button>
+          className="mobile-menu-btn"
+          size={18}
+        />
 
-        {/* Channel Name & Details */}
-        <div
-          className="chat-header__channel-trigger flex items-center gap-3 min-w-0 cursor-pointer group py-1.5 px-2 -ml-2 rounded-lg transition-colors"
+        {/* Channel name */}
+        <button
+          className="chat-header__channel-trigger flex items-center gap-1.5 min-w-0 flex-1 text-left rounded-lg group"
+          style={{ padding: '3px 6px', background: 'transparent', border: 'none', cursor: 'pointer' }}
           onClick={toggleInfoPanel}
+          title={channel.name || channel.slug}
         >
-          {/* Star moved to the front where the channel type icon used to be. */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              handleToggleStar()
-            }}
-            className={`chat-header__star p-1 rounded cursor-pointer transition-colors shrink-0 ${isStarred ? 'is-active' : ''}`}
-            aria-pressed={isStarred}
-            title={isStarred ? 'Unstar channel' : 'Star channel'}
+          <span
+            role="button"
+            tabIndex={-1}
+            onClick={(e) => { e.stopPropagation(); setIsStarred((s) => !s) }}
+            className={`chat-header__star shrink-0${isStarred ? ' is-active' : ''}`}
+            title={isStarred ? 'Unstar' : 'Star channel'}
           >
-            <Star size={18} fill={isStarred ? 'currentColor' : 'none'} />
-          </button>
+            <Star size={14} fill={isStarred ? 'currentColor' : 'none'} />
+          </span>
 
-          <h2 className="font-bold text-[20px] truncate group-hover:underline" style={{ color: 'var(--text-primary)' }}>
+          <h2
+            className="font-bold truncate group-hover:underline"
+            style={{
+              fontSize: isConstrained ? 14 : 17,
+              color: 'var(--text-primary)',
+              lineHeight: 1.3,
+              minWidth: 0,
+            }}
+          >
             {channel.name || channel.slug}
           </h2>
-        </div>
 
-        {/* Topic — editable on click (placed before right actions so actions align right) */}
-        {/* {!isDM && (
-          <div className="flex items-center hide-mobile">
-            <div className="w-px h-8 mx-4" style={{ background: 'var(--border-color)' }} />
-            {editingTopic ? (
-              <input
-                ref={topicInputRef}
-                value={topicValue}
-                onChange={(e) => setTopicValue(e.target.value)}
-                onBlur={handleTopicSave}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.target.blur()
-                  }
-                  if (e.key === 'Escape') setEditingTopic(false)
-                }}
-                placeholder="Add a topic"
-                className="text-[15px] bg-transparent outline-none px-2 py-1 rounded"
-                style={{
-                  color: 'var(--text-primary)',
-                  maxWidth: 300,
-                  border: '1px solid var(--accent-color)',
-                }}
-              />
-            ) : (
-              <span
-                role="button"
-                tabIndex={0}
-                className="chat-header__topic text-[15px] truncate cursor-pointer hover:underline px-2 py-1 rounded transition-colors"
-                style={{ color: 'var(--text-muted)', maxWidth: 300 }}
-                onClick={handleTopicClick}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    handleTopicClick()
-                  }
-                }}
-                title={channel.topic || 'Click to add a topic'}
-              >
-                {channel.topic || 'Add a topic'}
-              </span>
-            )}
-          </div>
-        )} */}
+          {isPrivate && (
+            <Lock size={10} className="shrink-0" style={{ color: 'var(--text-muted)' }} />
+          )}
+        </button>
 
-        {/* Right-aligned actions: member count, pin, search, more (top row) */}
-        <div className="absolute right-6 top-3 flex items-center gap-2" ref={moreMenuRef}>
+        {/* Right actions */}
+        <div
+          className="flex items-center flex-shrink-0"
+          ref={moreMenuRef}
+          style={{ gap: 2, position: 'relative' }}
+        >
           {!isConstrained && (
             <>
               <ChannelMemberCount
@@ -234,92 +190,201 @@ export default function ChatHeader({
             </>
           )}
 
-          <HeaderBtn icon={MoreVertical} title="More" onClick={() => setShowMoreActions(!showMoreActions)} className={showMoreActions ? 'is-active' : ''} />
+          <HdrBtn
+            icon={Pin}
+            title="Pinned messages"
+            label={pinCount > 0 && !isConstrained ? String(pinCount) : undefined}
+            onClick={onTogglePins}
+            size={14}
+          />
+
+          {!isConstrained && (
+            <HdrBtn
+              icon={Search}
+              title="Search messages"
+              onClick={onToggleSearch}
+              className="hide-mobile"
+              size={14}
+            />
+          )}
+
+          <HdrBtn
+            icon={MoreVertical}
+            title="More options"
+            onClick={() => setShowMoreActions((v) => !v)}
+            className={showMoreActions ? 'is-active' : ''}
+            size={14}
+          />
 
           {showMoreActions && (
-            <div className="chat-header__menu absolute top-full right-0 mt-2 w-56 rounded-lg py-2 z-50 animate-fade-in-up">
+            <div
+              className="chat-header__menu absolute py-1 z-50 animate-fade-in-up"
+              style={{ top: 'calc(100% + 6px)', right: 0, minWidth: 196 }}
+            >
               {isConstrained && (
                 <>
-                  <button
-                    className="chat-header__menu-item w-full flex items-center gap-3 px-4 py-3 transition-colors text-left group"
-                    onClick={() => {
-                      onTogglePins()
-                      setShowMoreActions(false)
-                    }}
-                  >
-                    <Pin size={18} style={{ color: 'var(--text-muted)' }} />
-                    <div className="flex flex-col">
-                      <span className="text-[14px] font-semibold" style={{ color: 'var(--text-primary)' }}>
-                        Pinned Messages
-                      </span>
-                      {pinnedMessages.length > 0 && <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{pinnedMessages.length} items pinned</span>}
-                    </div>
-                  </button>
-
-                  <button
-                    className="chat-header__menu-item w-full flex items-center gap-3 px-4 py-3 transition-colors text-left group"
-                    onClick={() => {
-                      onToggleSearch()
-                      setShowMoreActions(false)
-                    }}
-                  >
-                    <Search size={18} style={{ color: 'var(--text-muted)' }} />
-                    <span className="text-[14px] font-semibold" style={{ color: 'var(--text-primary)' }}>Search Messages</span>
-                  </button>
-
-                  <button
-                    className="chat-header__menu-item w-full flex items-center gap-3 px-4 py-3 transition-colors text-left group md:hidden"
-                    onClick={() => {
-                      handleHuddleClick()
-                      setShowMoreActions(false)
-                    }}
-                  >
-                    <Headphones size={18} style={{ color: 'var(--text-muted)' }} />
-                    <span className="text-[14px] font-semibold" style={{ color: 'var(--text-primary)' }}>Huddle</span>
-                  </button>
-
-                  <div className="h-px my-2 mx-2" style={{ background: 'var(--border-color)' }} />
+                  <DropItem
+                    icon={Search}
+                    label="Search Messages"
+                    onClick={() => { onToggleSearch(); setShowMoreActions(false) }}
+                  />
+                  <DropItem
+                    icon={Pin}
+                    label="Pinned Messages"
+                    sublabel={pinCount > 0 ? `${pinCount} pinned` : undefined}
+                    onClick={() => { onTogglePins(); setShowMoreActions(false) }}
+                  />
+                  <DropItem
+                    icon={Headphones}
+                    label="Huddle"
+                    onClick={() => { logger.log('Huddle', channel?._id); setShowMoreActions(false) }}
+                    className="md:hidden"
+                  />
+                  <div style={{ height: 1, background: 'var(--border-color)', margin: '4px 10px' }} />
                 </>
               )}
-
-              <button
-                className="chat-header__menu-item w-full flex items-center gap-3 px-4 py-3 transition-colors text-left group"
-                onClick={() => {
-                  toggleInfoPanel()
-                  setShowMoreActions(false)
-                }}
-              >
-                <Info size={18} style={{ color: 'var(--text-muted)' }} />
-                <span className="text-[14px] font-semibold" style={{ color: 'var(--text-primary)' }}>Channel Details</span>
-              </button>
+              <DropItem
+                icon={Info}
+                label="Channel Details"
+                onClick={() => { toggleInfoPanel(); setShowMoreActions(false) }}
+              />
             </div>
           )}
         </div>
       </div>
 
-      {/* Tabs & Actions row as slim tab bar */}
-      <div className="px-6 pb-4">
-          <div className="chat-header__toolbar flex items-center px-3 h-12 relative">
-            <div className="min-w-0">
-              <TabBar tabs={HEADER_TABS} activeTab={activeTab} onTabChange={onTabChange} compact={isConstrained} />
-            </div>
-          </div>
+      {/* ══════════════════════════════════════════════════════════════
+          TAB BAR
+          Wide  → all tabs shown with labels (normal)
+          Narrow → only the active tab shown + "More ▾" button
+                   clicking More reveals the other tabs in a dropdown
+      ══════════════════════════════════════════════════════════════ */}
+      <div style={{ padding: `0 ${hPad}px 8px` }}>
+        <div className="flex items-center" style={{ minHeight: 34, gap: 2 }}>
+
+          {narrowTabs ? (
+            /* ── Narrow mode: active tab + overflow dropdown ── */
+            <>
+              {/* Active tab — always visible */}
+              <SlimTab
+                tab={activeTabObj}
+                isActive={true}
+                onClick={() => {}} /* already active */
+              />
+
+              {/* More tabs dropdown */}
+              <div ref={tabsMenuRef} style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowTabsDropdown((v) => !v)}
+                  className={`slim-tab${showTabsDropdown ? ' slim-tab--active' : ''}`}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                >
+                  <span className="slim-tab__label">More</span>
+                  <ChevronDown
+                    size={12}
+                    style={{
+                      transform: showTabsDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 180ms ease',
+                    }}
+                  />
+                </button>
+
+                {showTabsDropdown && (
+                  <div
+                    className="chat-header__menu absolute py-1 z-50 animate-fade-in-up"
+                    style={{ top: 'calc(100% + 4px)', left: 0, minWidth: 160 }}
+                  >
+                    {overflowTabs.map((tab) => (
+                      <DropItem
+                        key={tab.id}
+                        icon={tab.icon}
+                        label={tab.label}
+                        onClick={() => {
+                          onTabChange?.(tab.id)
+                          setShowTabsDropdown(false)
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            /* ── Full mode: all tabs with labels ── */
+            HEADER_TABS.map((tab) => (
+              <SlimTab
+                key={tab.id}
+                tab={tab}
+                isActive={activeTab === tab.id}
+                onClick={() => onTabChange?.(tab.id)}
+              />
+            ))
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
-function HeaderBtn({ icon: Icon, title, label, onClick, className = '' }) {
+/* ── SlimTab ────────────────────────────────────────────────────────────── */
+function SlimTab({ tab, isActive, onClick }) {
+  const Icon = tab.icon
+  return (
+    <button
+      onClick={onClick}
+      className={`slim-tab${isActive ? ' slim-tab--active' : ''}`}
+    >
+      <Icon size={13} className="slim-tab__icon shrink-0" />
+      <span className="slim-tab__label">{tab.label}</span>
+    </button>
+  )
+}
+
+/* ── HdrBtn ─────────────────────────────────────────────────────────────── */
+function HdrBtn({ icon: Icon, title, label, onClick, className = '', size = 14 }) {
   return (
     <button
       onClick={onClick}
       title={title}
-      className={`chat-header__icon-btn shrink-0 flex items-center justify-center gap-2 ${label ? 'px-4' : 'w-8'} h-8 rounded-lg cursor-pointer transition-all ${className}`}
+      className={[
+        'chat-header__icon-btn shrink-0 inline-flex items-center justify-center gap-1',
+        'rounded-lg cursor-pointer transition-all',
+        label ? 'h-7 px-2' : 'h-7 w-7',
+        className,
+      ].join(' ')}
     >
-      <Icon size={16} />
+      <Icon size={size} />
       {label && (
-        <span className="text-[14px] font-bold hide-mobile ml-0.5">{label}</span>
+        <span className="font-bold hide-mobile leading-none" style={{ fontSize: 11 }}>
+          {label}
+        </span>
       )}
+    </button>
+  )
+}
+
+/* ── DropItem ────────────────────────────────────────────────────────────── */
+function DropItem({ icon: Icon, label, sublabel, onClick, className = '' }) {
+  return (
+    <button
+      onClick={onClick}
+      className={[
+        'chat-header__menu-item w-full flex items-center gap-3',
+        'px-3 py-2 text-left transition-colors',
+        className,
+      ].join(' ')}
+    >
+      <Icon size={14} className="shrink-0" style={{ color: 'var(--text-muted)' }} />
+      <span className="flex flex-col min-w-0">
+        <span className="font-semibold truncate" style={{ fontSize: 13, color: 'var(--text-primary)' }}>
+          {label}
+        </span>
+        {sublabel && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+            {sublabel}
+          </span>
+        )}
+      </span>
     </button>
   )
 }

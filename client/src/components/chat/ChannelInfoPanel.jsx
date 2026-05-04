@@ -9,6 +9,7 @@ import {
   LogOut,
   Info,
   Globe,
+  AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import SectionHeader from "./SectionHeader";
@@ -19,6 +20,100 @@ import EditChannelModal from "./EditChannelModal";
 import AddMemberModal from "./AddMemberModal";
 import "./custom-css/channelInfoPanel.css";
 
+/* ─────────────────────────────────────────────
+   Inline confirmation dialog (no extra library)
+───────────────────────────────────────────── */
+function ConfirmDialog({ title, message, confirmLabel = "Confirm", confirmClassName = "btn-danger", onConfirm, onCancel }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.55)",
+        backdropFilter: "blur(3px)",
+      }}
+      onClick={onCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "var(--bg-secondary, #1e1f22)",
+          border: "1px solid var(--border-primary, #3a3b3d)",
+          borderRadius: "var(--radius-lg, 12px)",
+          padding: "24px",
+          minWidth: 320,
+          maxWidth: 400,
+          boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+        }}
+      >
+        {/* Icon + title */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              background: "rgba(237,66,69,0.15)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <AlertTriangle size={18} style={{ color: "var(--status-error, #ed4245)" }} />
+          </div>
+          <span
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              color: "var(--text-white, #fff)",
+            }}
+          >
+            {title}
+          </span>
+        </div>
+
+        {/* Message */}
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--text-secondary, #b5bac1)",
+            lineHeight: 1.55,
+            marginBottom: 20,
+          }}
+        >
+          {message}
+        </p>
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button
+            onClick={onCancel}
+            className="btn-ghost"
+            style={{ fontSize: 13, padding: "7px 16px" }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className={confirmClassName}
+            style={{ fontSize: 13, padding: "7px 16px" }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Main component
+───────────────────────────────────────────── */
 export default function ChannelInfoPanel({ channel, onOpenProfile }) {
   const {
     membersByChannel,
@@ -57,53 +152,81 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
   const canLeaveChannel = !isSystem && !isSystemManagedProject;
   const canEditChannel = !isDM && isAdmin && !isSystemManagedProject;
 
-  const handleRemoveMember = async (memberId) => {
-    const confirmRemove = window.confirm(
-      "Remove this member from the channel?",
-    );
+  /* ── ask for confirmation ── */
+  const askRemove = (memberId, memberName) =>
+    setConfirm({ type: "remove", memberId, memberName });
 
-    if (!confirmRemove) return;
+  const askLeave = () =>
+    setConfirm({ type: "leave" });
 
-    try {
-      await toast.promise(removeMember(channel._id, memberId), {
-        loading: "Removing member...",
-        success: "Member removed",
-        error: "Failed to remove member",
-      });
-    } catch (err) {
-      console.error(err);
+  /* ── confirmed: actually do it ── */
+  const handleConfirm = async () => {
+    const action = confirm;
+    setConfirm(null); // close dialog first
+
+    if (action.type === "remove") {
+      try {
+        await toast.promise(removeMember(channel._id, action.memberId), {
+          loading: "Removing member…",
+          success: `${action.memberName || "Member"} removed`,
+          error: "Failed to remove member",
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    if (action.type === "leave") {
+      try {
+        await toast.promise(leaveChannel(channel._id), {
+          loading: "Leaving channel…",
+          success: "You left the channel",
+          error: "Failed to leave channel",
+        });
+        setShowInfoPanel(false);
+      } catch (err) {
+        console.error(err);
+      }
     }
   };
 
-  const handleLeave = async () => {
-    const confirmLeave = window.confirm(
-      "Are you sure you want to leave this channel?",
-    );
+  const handleCancel = () => setConfirm(null);
 
-    if (!confirmLeave) return;
+  /* ── confirm dialog props ── */
+  const confirmProps = confirm
+    ? confirm.type === "remove"
+      ? {
+          title: "Remove Member",
+          message: `Are you sure you want to remove ${confirm.memberName || "this member"} from #${channel.name}? They will lose access to this channel.`,
+          confirmLabel: "Remove",
+          confirmClassName: "btn-danger",
+        }
+      : {
+          title: "Leave Channel",
+          message: `Are you sure you want to leave #${channel.name}? You will need to be re-added to rejoin.`,
+          confirmLabel: "Leave",
+          confirmClassName: "btn-danger",
+        }
+    : null;
 
-    try {
-      await toast.promise(leaveChannel(channel._id), {
-        loading: "Leaving channel...",
-        success: "You left the channel",
-        error: "Failed to leave channel",
-      });
-
-      setShowInfoPanel(false);
-    } catch (err) {
-      console.error(err);
-    }
-  };
   return (
     <>
-      {/* ── Root panel── */}
+      {/* ── Confirmation dialog ── */}
+      {confirm && confirmProps && (
+        <ConfirmDialog
+          {...confirmProps}
+          onConfirm={handleConfirm}
+          onCancel={handleCancel}
+        />
+      )}
+
+      {/* ── Root panel ── */}
       <div className="profile-panel cip-root" style={{ position: "relative" }}>
+
         {/* ══ HERO HEADER ══ */}
         <div className="cip-hero">
           <div style={{ position: "relative", zIndex: 1 }}>
-            {/* Top row: icon + name + close */}
             <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-              {/* Channel icon */}
               <div className="cip-channel-icon">
                 {isPrivate ? (
                   <Lock size={22} style={{ color: "var(--accent-yellow)" }} />
@@ -112,7 +235,6 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                 )}
               </div>
 
-              {/* Name + type */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h2
                   style={{
@@ -143,7 +265,6 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                 )}
               </div>
 
-              {/* Close button */}
               <button
                 onClick={() => setShowInfoPanel(false)}
                 className="app-topbar__icon"
@@ -153,7 +274,6 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
               </button>
             </div>
 
-            {/* Stat pills */}
             <div className="cip-stats">
               <span className="cip-stat-pill">
                 <Users size={11} />
@@ -194,13 +314,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
               <button
                 onClick={() => setShowAddMember(true)}
                 className="btn-ghost"
-                style={{
-                  fontSize: 12,
-                  padding: "6px 12px",
-                  gap: 6,
-                  flex: 1,
-                  justifyContent: "center",
-                }}
+                style={{ fontSize: 12, padding: "6px 12px", gap: 6, flex: 1, justifyContent: "center" }}
               >
                 <UserPlus size={13} />
                 Add Member
@@ -212,13 +326,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
               <button
                 onClick={() => setShowEditModal(true)}
                 className="btn-ghost"
-                style={{
-                  fontSize: 12,
-                  padding: "6px 12px",
-                  gap: 6,
-                  flex: 1,
-                  justifyContent: "center",
-                }}
+                style={{ fontSize: 12, padding: "6px 12px", gap: 6, flex: 1, justifyContent: "center" }}
               >
                 <Settings size={13} />
                 Edit Channel
@@ -228,7 +336,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
             {/* Leave  */}
             {canLeaveChannel && (
               <button
-                onClick={handleLeave}
+                onClick={askLeave}
                 className="btn-danger"
                 style={{ fontSize: 12, padding: "6px 12px", gap: 6 }}
                 title="Leave channel"
@@ -241,7 +349,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
 
         {/* ══ SCROLLABLE CONTENT ══ */}
         <div style={{ flex: 1, overflowY: "auto", padding: "14px 14px 20px" }}>
-          {/* Description block */}
+
           {channel.description && (
             <div className="cip-info-block">
               <div className="cip-info-label">
@@ -251,17 +359,6 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
               <p className="cip-info-text">{channel.description}</p>
             </div>
           )}
-
-          {/* Topic block */}
-          {/* {channel.topic && (
-            <div className="cip-info-block">
-              <div className="cip-info-label">
-                <Hash size={10} />
-                Topic
-              </div>
-              <p className="cip-info-text">{channel.topic}</p>
-            </div>
-          )} */}
 
           {/* ── Members section ── */}
           <div>
@@ -289,7 +386,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
               </div>
             </div>
 
-            {/* Online members */}
+            {/* Online */}
             {onlineMembers.length > 0 && (
               <div style={{ marginBottom: 4 }}>
                 <div className="cip-members-section-label online-label">
@@ -301,10 +398,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                     <div
                       key={member._id || member.flowTaskUserId}
                       className="panel-item"
-                      style={{
-                        padding: "6px 8px",
-                        borderRadius: "var(--radius-md)",
-                      }}
+                      style={{ padding: "6px 8px", borderRadius: "var(--radius-md)" }}
                     >
                       <MemberItem
                         member={member}
@@ -323,7 +417,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
               </div>
             )}
 
-            {/* Offline members */}
+            {/* Offline */}
             {offlineMembers.length > 0 && (
               <div>
                 <div
@@ -338,11 +432,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                     <div
                       key={member._id || member.flowTaskUserId}
                       className="panel-item"
-                      style={{
-                        padding: "6px 8px",
-                        borderRadius: "var(--radius-md)",
-                        opacity: 0.75,
-                      }}
+                      style={{ padding: "6px 8px", borderRadius: "var(--radius-md)", opacity: 0.75 }}
                     >
                       <MemberItem
                         member={member}
@@ -361,16 +451,26 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
               </div>
             )}
 
-            {/* Faded/Unregistered members */}
+            {/* Faded / Unregistered */}
             {fadedMembers.length > 0 && (
               <div>
-                <div className="cip-members-section-label" style={{ marginTop: (onlineMembers.length > 0 || offlineMembers.length > 0) ? 12 : 0, color: 'var(--text-muted)' }}>
-                  <span className="dot" style={{ background: 'var(--border-secondary)' }} />
+                <div
+                  className="cip-members-section-label"
+                  style={{
+                    marginTop: (onlineMembers.length > 0 || offlineMembers.length > 0) ? 12 : 0,
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  <span className="dot" style={{ background: "var(--border-secondary)" }} />
                   Unregistered (FlowTask) — {fadedMembers.length}
                 </div>
                 <div className="panel-list">
                   {fadedMembers.map((member) => (
-                    <div key={member.flowTaskUserId} className="panel-item" style={{ padding: '6px 8px', borderRadius: 'var(--radius-md)' }}>
+                    <div
+                      key={member.flowTaskUserId}
+                      className="panel-item"
+                      style={{ padding: "6px 8px", borderRadius: "var(--radius-md)" }}
+                    >
                       <MemberItem
                         member={member}
                         onOpenProfile={onOpenProfile}
@@ -413,23 +513,10 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                 <div className="cip-empty-icon">
                   <Users size={22} style={{ color: "var(--text-muted)" }} />
                 </div>
-                <p
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "var(--text-secondary)",
-                    margin: 0,
-                  }}
-                >
+                <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", margin: 0 }}>
                   No members yet
                 </p>
-                <p
-                  style={{
-                    fontSize: 12,
-                    color: "var(--text-muted)",
-                    margin: 0,
-                  }}
-                >
+                <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
                   Add someone to get started
                 </p>
                 {isAdmin && !isDM && (
@@ -456,40 +543,11 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                 }}
               >
                 {[1, 2, 3].map((i) => (
-                  <div
-                    key={i}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "6px 8px",
-                    }}
-                  >
-                    <div
-                      className="skeleton"
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: "50%",
-                        flexShrink: 0,
-                      }}
-                    />
-                    <div
-                      style={{
-                        flex: 1,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 5,
-                      }}
-                    >
-                      <div
-                        className="skeleton"
-                        style={{ height: 11, width: "55%", borderRadius: 4 }}
-                      />
-                      <div
-                        className="skeleton"
-                        style={{ height: 9, width: "35%", borderRadius: 4 }}
-                      />
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px" }}>
+                    <div className="skeleton" style={{ width: 32, height: 32, borderRadius: "50%", flexShrink: 0 }} />
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
+                      <div className="skeleton" style={{ height: 11, width: "55%", borderRadius: 4 }} />
+                      <div className="skeleton" style={{ height: 9, width: "35%", borderRadius: 4 }} />
                     </div>
                   </div>
                 ))}
@@ -498,69 +556,12 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
           </div>
         </div>
 
-        {/* ══ CONFIRM LEAVE OVERLAY ══ */}
-        {/* {confirmLeave && (
-          <div className="cip-confirm-overlay">
-            <div className="cip-confirm-card">
-              <div className="cip-confirm-icon">
-                <LogOut size={20} style={{ color: "var(--accent-red)" }} />
-              </div>
-              <p
-                style={{
-                  fontSize: 15,
-                  fontWeight: 800,
-                  color: "var(--text-white)",
-                  marginBottom: 6,
-                }}
-              >
-                Leave channel?
-              </p>
-              <p
-                style={{
-                  fontSize: 13,
-                  color: "var(--text-muted)",
-                  lineHeight: 1.55,
-                  marginBottom: 18,
-                }}
-              >
-                You'll need to be invited back to rejoin{" "}
-                <strong style={{ color: "var(--text-secondary)" }}>
-                  #{channel.name}
-                </strong>
-                .
-              </p>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  onClick={() => setConfirmLeave(false)}
-                  className="btn-ghost"
-                  style={{ flex: 1, justifyContent: "center", fontSize: 13 }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleLeave}
-                  className="btn-danger"
-                  style={{ flex: 1, justifyContent: "center", fontSize: 13 }}
-                >
-                  Leave
-                </button>
-              </div>
-            </div>
-          </div>
-        )} */}
-
         {/* ══ MODALS ══ */}
         {showEditModal && (
-          <EditChannelModal
-            channel={channel}
-            onClose={() => setShowEditModal(false)}
-          />
+          <EditChannelModal channel={channel} onClose={() => setShowEditModal(false)} />
         )}
         {showAddMember && (
-          <AddMemberModal
-            channel={channel}
-            onClose={() => setShowAddMember(false)}
-          />
+          <AddMemberModal channel={channel} onClose={() => setShowAddMember(false)} />
         )}
       </div>
     </>

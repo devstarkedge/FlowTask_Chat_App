@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef, memo } from "react";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
@@ -23,13 +24,39 @@ import {
   Forward,
   Link2,
   MoreVertical,
-  ChevronDown
+  ChevronDown,
 } from "lucide-react";
-import SlackFileCard from './SlackFileCard'
+import SlackFileCard from "./SlackFileCard";
 import { Avatar } from "./MemberAvatarGroup";
 import EmojiPicker from "./EmojiPicker";
 import { sanitizeHtml } from "../../utils/sanitize";
 import toast from "react-hot-toast";
+
+// ─── Inject highlight keyframes once ─────────────────────────────────────────
+const HIGHLIGHT_STYLE_ID = "msg-pinned-highlight-style";
+if (
+  typeof document !== "undefined" &&
+  !document.getElementById(HIGHLIGHT_STYLE_ID)
+) {
+  const s = document.createElement("style");
+  s.id = HIGHLIGHT_STYLE_ID;
+  s.textContent = `
+    @keyframes msgPinnedPulse {
+      0%   { background: color-mix(in srgb, var(--accent-color, #1264a3) 28%, transparent);
+              box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent-color, #1264a3) 40%, transparent); }
+      55%  { background: color-mix(in srgb, var(--accent-color, #1264a3) 12%, transparent);
+              box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent-color, #1264a3) 18%, transparent); }
+      100% { background: transparent; box-shadow: none; }
+    }
+    .msg-pinned-active {
+      animation: msgPinnedPulse 2s ease forwards !important;
+      border-radius: 8px;
+    }
+  `;
+  document.head.appendChild(s);
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function isImage(mimeType) {
   return mimeType?.startsWith("image/");
@@ -44,8 +71,8 @@ function isAudio(mimeType) {
 function formatFileSize(bytes) {
   if (!bytes) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  let size = bytes;
+  let i = 0,
+    size = bytes;
   while (size >= 1024 && i < units.length - 1) {
     size /= 1024;
     i++;
@@ -79,7 +106,9 @@ function fileIcon(mimeType) {
   return File;
 }
 
-const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000;
+
+// ─── MessageItem ─────────────────────────────────────────────────────────────
 
 const MessageItem = memo(
   function MessageItem({
@@ -91,6 +120,11 @@ const MessageItem = memo(
     onOpenFilePreview,
     isDMChannel,
     onSaveMessage,
+    // isPinnedHighlight: true when this message was jumped to from PinnedBar/Panel.
+    // MessageItem self-applies the CSS animation as soon as it is rendered into
+    // the DOM (via useEffect), which is the correct moment because Virtuoso only
+    // mounts the row *after* the scroll completes.
+    isPinnedHighlight,
   }) {
     const { user } = useAuthStore();
     const {
@@ -103,57 +137,81 @@ const MessageItem = memo(
       unpinMessage,
       highlightMessageId,
     } = useChatStore();
+
     const [showActions, setShowActions] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editContent, setEditContent] = useState(message.content);
     const [showReactionPicker, setShowReactionPicker] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
+
     const messageRef = useRef(null);
     const moreMenuRef = useRef(null);
 
-    // Close reaction picker when clicking outside the message or pressing Escape
+    // ── Apply pinned-highlight animation when this row is first rendered ────
+    // This fires right after the component mounts into the Virtuoso viewport,
+    // which is guaranteed to be *after* Virtuoso has finished scrolling the
+    // row into view. Using a DOM class + CSS animation means no jank.
+    useEffect(() => {
+      if (!isPinnedHighlight) return;
+      const el = messageRef.current;
+      if (!el) return;
+
+      // Remove first in case animation was already playing (shouldn't happen, but safe)
+      el.classList.remove("msg-pinned-active");
+      // Force reflow so re-adding the class re-triggers the keyframes
+      void el.offsetWidth;
+      el.classList.add("msg-pinned-active");
+
+      const t = setTimeout(
+        () => el.classList.remove("msg-pinned-active"),
+        2100,
+      );
+      return () => clearTimeout(t);
+    }, [isPinnedHighlight]);
+
+    // Close reaction picker on outside click / Escape
     useEffect(() => {
       if (!showReactionPicker) return;
-      const handleClickOutside = (e) => {
+      const onDown = (e) => {
         if (messageRef.current && !messageRef.current.contains(e.target)) {
           setShowReactionPicker(false);
           setShowActions(false);
         }
       };
-      const handleEscape = (e) => {
+      const onKey = (e) => {
         if (e.key === "Escape") {
           setShowReactionPicker(false);
           setShowActions(false);
         }
       };
-      document.addEventListener("mousedown", handleClickOutside);
-      document.addEventListener("keydown", handleEscape);
+      document.addEventListener("mousedown", onDown);
+      document.addEventListener("keydown", onKey);
       return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-        document.removeEventListener("keydown", handleEscape);
+        document.removeEventListener("mousedown", onDown);
+        document.removeEventListener("keydown", onKey);
       };
     }, [showReactionPicker]);
 
-    // Close More Actions menu when clicking outside the menu or pressing Escape
+    // Close more-menu on outside click / Escape
     useEffect(() => {
       if (!showMoreMenu) return;
-      const handleClickOutsideMenu = (e) => {
+      const onDown = (e) => {
         if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
           setShowMoreMenu(false);
           setShowActions(false);
         }
       };
-      const handleEscapeMenu = (e) => {
+      const onKey = (e) => {
         if (e.key === "Escape") {
           setShowMoreMenu(false);
           setShowActions(false);
         }
       };
-      document.addEventListener("mousedown", handleClickOutsideMenu);
-      document.addEventListener("keydown", handleEscapeMenu);
+      document.addEventListener("mousedown", onDown);
+      document.addEventListener("keydown", onKey);
       return () => {
-        document.removeEventListener("mousedown", handleClickOutsideMenu);
-        document.removeEventListener("keydown", handleEscapeMenu);
+        document.removeEventListener("mousedown", onDown);
+        document.removeEventListener("keydown", onKey);
       };
     }, [showMoreMenu]);
 
@@ -168,7 +226,7 @@ const MessageItem = memo(
       !isDeleted &&
       Date.now() - new Date(message.createdAt).getTime() <
         MESSAGE_EDIT_WINDOW_MS;
-    // Prefer senderSnapshot for display (denormalized), fall back to populated authorId
+
     const authorName =
       message.senderSnapshot?.name || message.authorId?.name || "FlowTask Bot";
     const authorAvatar =
@@ -179,13 +237,16 @@ const MessageItem = memo(
         ? message.authorId
         : { _id: message.authorId, name: authorName, avatar: authorAvatar };
     const time = format(new Date(message.createdAt), "h:mm a");
-    const deletedText = isOwn ? "You deleted this message" : "This message was deleted";
-    const deletedTextColor = isOwn ? "var(--text-muted)" : "var(--text-secondary)";
+    const deletedText = isOwn
+      ? "You deleted this message"
+      : "This message was deleted";
+    const deletedTextColor = isOwn
+      ? "var(--text-muted)"
+      : "var(--text-secondary)";
 
     const handleEdit = () => {
-      if (editContent.trim() && editContent !== message.content) {
+      if (editContent.trim() && editContent !== message.content)
         editMessage(message._id, editContent);
-      }
       setIsEditing(false);
     };
 
@@ -196,11 +257,8 @@ const MessageItem = memo(
           (r.users?.includes(user?._id) ||
             r.userIds?.some((id) => id?.toString() === user?._id)),
       );
-      if (existing) {
-        removeReaction(message._id, emoji);
-      } else {
-        addReaction(message._id, emoji);
-      }
+      if (existing) removeReaction(message._id, emoji);
+      else addReaction(message._id, emoji);
       setShowReactionPicker(false);
     };
 
@@ -215,31 +273,33 @@ const MessageItem = memo(
             .filter(Boolean)
         : message.attachments || [];
 
-    // Download helper (tries blob download then fallback to opening URL)
     const downloadFile = async (f) => {
-      const url = f?.secureUrl || f?.url
-      const fileName = f?.originalName || f?.fileName || 'download'
-      if (!url) return
+      const url = f?.secureUrl || f?.url;
+      const fileName = f?.originalName || f?.fileName || "download";
+      if (!url) return;
       try {
-        const res = await fetch(url)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const blob = await res.blob()
-        const objectUrl = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = objectUrl
-        a.setAttribute('download', fileName)
-        a.rel = 'noopener noreferrer'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
-      } catch (err) {
-        // fallback: open in new tab
-        try { window.open(url, '_blank') } catch { /* noop */ }
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.setAttribute("download", fileName);
+        a.rel = "noopener noreferrer";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      } catch {
+        try {
+          window.open(url, "_blank");
+        } catch {
+          /* noop */
+        }
       }
-    }
+    };
 
-    // System messages (plain separator style)
+    // System messages
     if (isSystem) {
       return (
         <div className="flex items-center gap-3 py-2 px-5 my-1 animate-fade-in">
@@ -261,25 +321,21 @@ const MessageItem = memo(
       );
     }
 
-    // Delivery status indicator for DM messages
     const renderDeliveryStatus = () => {
       if (!isDMChannel || !isOwn || isPending || isFailed) return null;
       const status = message.status || "sent";
-      if (status === "seen") {
+      if (status === "seen")
         return (
           <span title="Seen" className="inline-flex items-center ml-1">
             <CheckCheck size={13} style={{ color: "var(--accent-primary)" }} />
           </span>
         );
-      }
-      if (status === "delivered") {
+      if (status === "delivered")
         return (
           <span title="Delivered" className="inline-flex items-center ml-1">
             <CheckCheck size={13} style={{ color: "var(--text-muted)" }} />
           </span>
         );
-      }
-      // sent
       return (
         <span title="Sent" className="inline-flex items-center ml-1">
           <Check size={13} style={{ color: "var(--text-muted)" }} />
@@ -287,7 +343,6 @@ const MessageItem = memo(
       );
     };
 
-    // Position within group: solo | first | middle | last
     const groupPos =
       !compact && isLastInGroup
         ? "solo"
@@ -299,17 +354,16 @@ const MessageItem = memo(
 
     return (
       <div
-        id={`message-${message._id}`}
+        id={`msg-${message._id}`}
         ref={messageRef}
-        className={`relative group ${highlightMessageId === message._id ? 'message-highlight' : ''}`}
+        className={`relative group ${highlightMessageId === message._id ? "message-highlight" : ""}`}
         style={{
           background: showActions ? "var(--bg-hover)" : "transparent",
           transition: "background 150ms ease",
           opacity: isPending ? 0.6 : isFailed ? 0.5 : 1,
-          // Group spacing: large gap before first-in-group, tiny gap within
           marginTop: compact ? 2 : 12,
         }}
-      onMouseEnter={() => {
+        onMouseEnter={() => {
           if (!isDeleted) setShowActions(true);
         }}
         onMouseLeave={() => {
@@ -319,11 +373,8 @@ const MessageItem = memo(
         <div
           className={`flex items-start gap-2 px-4 pb-0 ${isOwn ? "flex-row-reverse" : ""}`}
         >
-          {/* Gutter Column — keeps alignment for grouped messages; shows timestamp on hover in compact mode */}
-          <div
-            className="shrink-0"
-            style={{ width: 36 }}
-          >
+          {/* Gutter */}
+          <div className="shrink-0" style={{ width: 36 }}>
             {!compact ? (
               <div
                 className="cursor-pointer"
@@ -349,12 +400,11 @@ const MessageItem = memo(
             )}
           </div>
 
-          {/* Column: name header + bubble */}
+          {/* Column: name + bubble */}
           <div
             className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}
             style={{ maxWidth: "min(65%, 480px)" }}
           >
-            {/* Name + time row — only on first/solo message */}
             {!compact && (
               <div
                 className={`flex items-baseline gap-1.5 mb-1 px-1 ${isOwn ? "flex-row-reverse" : ""}`}
@@ -452,7 +502,6 @@ const MessageItem = memo(
                 </div>
               )}
 
-              {/* Failed message indicator */}
               {!isDeleted && isFailed && (
                 <div className="flex items-center gap-2 mt-1">
                   <span style={{ fontSize: 12, color: "var(--accent-red)" }}>
@@ -471,8 +520,6 @@ const MessageItem = memo(
                   </button>
                 </div>
               )}
-
-              {/* Pending indicator */}
               {!isDeleted && isPending && !isFailed && (
                 <span
                   style={{
@@ -486,36 +533,49 @@ const MessageItem = memo(
                 </span>
               )}
 
-              {/* Attachments (Slack-style cards) */}
+              {/* Attachments */}
               {!isDeleted && derivedAttachments.length > 0 && (
                 <div className="mt-2 flex flex-col gap-1.5">
                   {derivedAttachments.length > 1 ? (
-                    <div className="flex items-center gap-2 text-[13px] font-medium mb-1" style={{ color: "inherit", opacity: 0.85 }}>
+                    <div
+                      className="flex items-center gap-2 text-[13px] font-medium mb-1"
+                      style={{ color: "inherit", opacity: 0.85 }}
+                    >
                       <span className="cursor-pointer flex items-center gap-1 hover:underline">
-                        {derivedAttachments.length} files <ChevronDown size={14} style={{ opacity: 0.7 }} />
+                        {derivedAttachments.length} files{" "}
+                        <ChevronDown size={14} style={{ opacity: 0.7 }} />
                       </span>
                       <span style={{ opacity: 0.4 }}>|</span>
-                      <span 
+                      <span
                         className="cursor-pointer flex items-center gap-1 hover:underline"
                         onClick={() => derivedAttachments.forEach(downloadFile)}
                       >
-                        <Download size={14} style={{ opacity: 0.7 }} /> Download all
+                        <Download size={14} style={{ opacity: 0.7 }} /> Download
+                        all
                       </span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1 text-[13px] font-medium mb-1" style={{ color: "inherit", opacity: 0.85 }}>
+                    <div
+                      className="flex items-center gap-1 text-[13px] font-medium mb-1"
+                      style={{ color: "inherit", opacity: 0.85 }}
+                    >
                       <span className="cursor-pointer flex items-center gap-1 hover:underline">
-                        {derivedAttachments[0].originalName || derivedAttachments[0].fileName || derivedAttachments[0].name || 'File'} <ChevronDown size={14} style={{ opacity: 0.7 }} />
+                        {derivedAttachments[0].originalName ||
+                          derivedAttachments[0].fileName ||
+                          derivedAttachments[0].name ||
+                          "File"}{" "}
+                        <ChevronDown size={14} style={{ opacity: 0.7 }} />
                       </span>
                     </div>
                   )}
-
                   <div className="flex flex-wrap gap-2">
                     {derivedAttachments.map((att, idx) => (
                       <SlackFileCard
                         key={att._id || att.referenceId || idx}
                         file={att}
-                        onOpen={(f) => onOpenFilePreview?.(f, derivedAttachments)}
+                        onOpen={(f) =>
+                          onOpenFilePreview?.(f, derivedAttachments)
+                        }
                         onDownload={downloadFile}
                         isSingle={derivedAttachments.length === 1}
                       />
@@ -534,22 +594,11 @@ const MessageItem = memo(
                         (id) => id?.toString() === user?._id,
                       );
                     const count = reaction.users?.length || reaction.count || 0;
-                    const tooltipParts = [];
-                    if (hasReacted) tooltipParts.push("You");
-                    if (count > 1 && hasReacted)
-                      tooltipParts.push(
-                        `and ${count - 1} other${count - 1 > 1 ? "s" : ""}`,
-                      );
-                    else if (count > 0 && !hasReacted)
-                      tooltipParts.push(
-                        `${count} ${count === 1 ? "person" : "people"}`,
-                      );
-                    const tooltip = `${reaction.emoji} ${tooltipParts.join(" ")} reacted`;
                     return (
                       <button
                         key={reaction.emoji}
                         onClick={() => handleReaction(reaction.emoji)}
-                        title={tooltip}
+                        title={`${reaction.emoji} ${count}`}
                         className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer transition-all"
                         style={{
                           background: hasReacted
@@ -565,16 +614,15 @@ const MessageItem = memo(
                   })}
                 </div>
               )}
-              {/* Thread preview — Slack-style, outside the bubble */}
+
+              {/* Thread preview */}
               {message.replyCount > 0 && (
                 <ThreadPreview message={message} onOpenThread={onOpenThread} />
               )}
             </div>
-            {/* end column */}
           </div>
-          {/* end flex row */}
 
-          {/* Action Bar (hover) */}
+          {/* Action bar */}
           {(showActions || showReactionPicker || showMoreMenu) &&
             !isDeleted &&
             !isEditing &&
@@ -611,7 +659,6 @@ const MessageItem = memo(
                     setShowActions(false);
                   }}
                 />
-
                 {isOwn && (
                   <>
                     {canEdit && (
@@ -642,7 +689,7 @@ const MessageItem = memo(
               </div>
             )}
 
-          {/* More Actions Menu */}
+          {/* More menu */}
           {showMoreMenu && (
             <div
               ref={moreMenuRef}
@@ -669,19 +716,19 @@ const MessageItem = memo(
                 icon={Copy}
                 label="Copy text"
                 onClick={async () => {
-                  const textToCopy = message.content || "";
                   try {
-                    if (navigator?.clipboard?.writeText) {
-                      await navigator.clipboard.writeText(textToCopy);
-                    } else {
-                      const textarea = document.createElement("textarea");
-                      textarea.value = textToCopy;
-                      textarea.setAttribute("readonly", "");
-                      textarea.style.cssText = "position:fixed;opacity:0";
-                      document.body.appendChild(textarea);
-                      textarea.select();
+                    if (navigator?.clipboard?.writeText)
+                      await navigator.clipboard.writeText(
+                        message.content || "",
+                      );
+                    else {
+                      const ta = document.createElement("textarea");
+                      ta.value = message.content || "";
+                      ta.style.cssText = "position:fixed;opacity:0";
+                      document.body.appendChild(ta);
+                      ta.select();
                       document.execCommand("copy");
-                      document.body.removeChild(textarea);
+                      document.body.removeChild(ta);
                     }
                     toast.success("Copied to clipboard", { duration: 1500 });
                   } catch {
@@ -695,9 +742,10 @@ const MessageItem = memo(
                 icon={Link2}
                 label="Copy link"
                 onClick={async () => {
-                  const link = `${window.location.origin}/chat/${message.channelId}/${message._id}`;
                   try {
-                    await navigator.clipboard.writeText(link);
+                    await navigator.clipboard.writeText(
+                      `${window.location.origin}/chat/${message.channelId}/${message._id}`,
+                    );
                     toast.success("Link copied", { duration: 1500 });
                   } catch {
                     toast.error("Failed to copy link");
@@ -710,7 +758,6 @@ const MessageItem = memo(
                 icon={Forward}
                 label="Forward message"
                 onClick={() => {
-                  // Future: Implement forward modal
                   toast.success("Forwarding not yet implemented!");
                   setShowMoreMenu(false);
                   setShowActions(false);
@@ -719,12 +766,9 @@ const MessageItem = memo(
             </div>
           )}
 
-          {/* Reaction Picker (extended with EmojiPicker) */}
+          {/* Reaction picker */}
           {showReactionPicker && (
-            <div
-              className="absolute -top-3 right-5 z-20"
-              style={{ position: "absolute" }}
-            >
+            <div className="absolute -top-3 right-5 z-20">
               <EmojiPicker
                 onSelect={(emoji) => {
                   handleReaction(emoji);
@@ -742,6 +786,7 @@ const MessageItem = memo(
       </div>
     );
   },
+  // Memo comparison — include isPinnedHighlight so the component re-renders when it changes
   (prev, next) => {
     return (
       prev.message._id === next.message._id &&
@@ -756,62 +801,107 @@ const MessageItem = memo(
       prev.message.failed === next.message.failed &&
       prev.compact === next.compact &&
       prev.isLastInGroup === next.isLastInGroup &&
-      prev.isDMChannel === next.isDMChannel
+      prev.isDMChannel === next.isDMChannel &&
+      prev.isPinnedHighlight === next.isPinnedHighlight // ← new
     );
   },
 );
 
 export default MessageItem;
 
-function ActionButton({ icon: Icon, title, onClick, danger, color, size = 16 }) {
+// ─── ActionButton ─────────────────────────────────────────────────────────────
+
+function ActionButton({
+  icon: Icon,
+  title,
+  onClick,
+  danger,
+  color,
+  size = 16,
+}) {
+  const [ripple, setRipple] = useState(null);
+  const handleClick = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setRipple({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      id: Date.now(),
+    });
+    setTimeout(() => setRipple(null), 500);
+    onClick?.(e);
+  };
   return (
     <button
-      className="p-2 rounded-md cursor-pointer transition-colors"
-      style={{
-        color: color || (danger ? "var(--danger-color)" : "var(--text-secondary)"),
-        background: "transparent",
-        border: "none",
-      }}
-      onClick={onClick}
+      className={`ab-btn ${danger ? "danger" : "normal"}`}
+      onClick={handleClick}
       title={title}
-      onMouseEnter={(e) =>
-        (e.currentTarget.style.background = "var(--bg-hover)")
-      }
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+      aria-label={title}
+      style={{
+        color:
+          color ||
+          (danger ? "var(--accent-red, #e5534b)" : "var(--text-secondary)"),
+      }}
     >
-      <Icon size={size} />
+      {ripple && (
+        <span
+          key={ripple.id}
+          className="ab-ripple-circle"
+          style={{
+            left: ripple.x - 12,
+            top: ripple.y - 12,
+            background: danger
+              ? "color-mix(in srgb, var(--accent-red, #e5534b) 40%, transparent)"
+              : "color-mix(in srgb, var(--text-secondary) 30%, transparent)",
+          }}
+        />
+      )}
+      <span className="ab-icon-wrap">
+        <Icon size={size} strokeWidth={1.75} />
+      </span>
     </button>
   );
 }
+
+// ─── MoreMenuItem ─────────────────────────────────────────────────────────────
 
 function MoreMenuItem({ icon: Icon, label, onClick, danger }) {
   return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-2.5 w-full px-3 py-1.5 text-[13px] cursor-pointer transition-colors text-left"
-      style={{
-        color: danger ? "var(--accent-red)" : "var(--text-primary)",
-        background: "transparent",
-        border: "none",
-      }}
-      onMouseEnter={(e) =>
-        (e.currentTarget.style.background = "var(--bg-hover)")
-      }
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-    >
-      <Icon size={15} style={{ opacity: 0.7 }} />
-      <span>{label}</span>
-    </button>
+    <>
+      <style>{`
+        @keyframes mmi-slide-in { 0%{opacity:0;transform:translateX(-6px)} 100%{opacity:1;transform:translateX(0)} }
+        @keyframes mmi-icon-nudge { 0%{transform:translateX(0)} 40%{transform:translateX(3px)} 100%{transform:translateX(0)} }
+        .mmi-btn{display:flex;align-items:center;gap:9px;padding:6px 12px;font-size:13px;font-family:inherit;cursor:pointer;background:transparent;border:none;text-align:left;border-radius:6px;margin:1px 4px;width:calc(100% - 8px);transition:background 110ms ease,color 110ms ease,transform 100ms ease;animation:mmi-slide-in 160ms ease both;position:relative;overflow:hidden}
+        .mmi-btn:hover{transform:translateX(2px)}
+        .mmi-btn:hover .mmi-icon{animation:mmi-icon-nudge 220ms ease forwards}
+        .mmi-btn:active{transform:scale(0.98) translateX(1px)}
+        .mmi-btn.danger:hover{background:color-mix(in srgb,var(--accent-red,#e5534b) 10%,transparent);color:var(--accent-red,#e5534b)!important}
+        .mmi-btn.normal:hover{background:var(--bg-hover)}
+        .mmi-label{letter-spacing:-0.01em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .mmi-icon{flex-shrink:0;transition:opacity 110ms ease}
+      `}</style>
+      <button
+        className={`mmi-btn ${danger ? "danger" : "normal"}`}
+        onClick={onClick}
+        style={{
+          color: danger ? "var(--accent-red, #e5534b)" : "var(--text-primary)",
+        }}
+      >
+        <span className="mmi-icon" style={{ opacity: danger ? 0.85 : 0.65 }}>
+          <Icon size={14} strokeWidth={1.75} />
+        </span>
+        <span className="mmi-label">{label}</span>
+      </button>
+    </>
   );
 }
 
-/* ─── Thread Preview (under the bubble) ─────────────────────────────────── */
+// ─── ThreadPreview ─────────────────────────────────────────────────────────────
+
 function ThreadPreview({ message, onOpenThread }) {
   const participants = Array.isArray(message.threadParticipants)
     ? message.threadParticipants
     : [];
   const count = message.replyCount || 0;
-
   const formatLastReply = (dateStr) => {
     if (!dateStr) return null;
     const d = new Date(dateStr);
@@ -823,9 +913,7 @@ function ThreadPreview({ message, onOpenThread }) {
     if (isYesterday) return `Last reply yesterday at ${format(d, "h:mm a")}`;
     return `Last reply ${format(d, "MMM d")} at ${format(d, "h:mm a")}`;
   };
-
   const lastReplyText = formatLastReply(message.lastReplyAt);
-
   return (
     <button
       className="thread-preview"
@@ -836,7 +924,6 @@ function ThreadPreview({ message, onOpenThread }) {
         })
       }
     >
-      {/* Participant avatar stack */}
       {participants.length > 0 ? (
         <div className="thread-preview__avatars">
           {participants.slice(0, 4).map((p, i) =>
@@ -860,18 +947,12 @@ function ThreadPreview({ message, onOpenThread }) {
           style={{ color: "var(--accent-primary)", flexShrink: 0 }}
         />
       )}
-
-      {/* Reply count */}
       <span className="thread-preview__count">
         {count} {count === 1 ? "reply" : "replies"}
       </span>
-
-      {/* Last reply time */}
       {lastReplyText && (
         <span className="thread-preview__time">{lastReplyText}</span>
       )}
-
-      {/* CTA — visible on hover */}
       <span className="thread-preview__cta">View thread</span>
     </button>
   );

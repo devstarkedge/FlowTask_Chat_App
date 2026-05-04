@@ -77,7 +77,7 @@ import toast from "react-hot-toast";
 import DownloadsModalWrapper from "../modals/DownloadsModalWrapper";
 import { useDownloadStore } from "../../stores/downloadStore";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
-
+import PinnedBar from "../chat/PinnedBar";
 const EMPTY_LIST = [];
 
 /* ─── Injected styles ─────────────────────────────────────────────────────── */
@@ -647,8 +647,6 @@ function formatSize(bytes) {
 /* ─── Main ChatLayout ─────────────────────────────────────────────────────── */
 
 export default function ChatLayout() {
-  useLayoutStylesInjected();
-
   const {
     fetchChannels,
     fetchMembers,
@@ -682,6 +680,144 @@ export default function ChatLayout() {
   const [showTopSetStatus, setShowTopSetStatus] = useState(false);
   const addDownload = useDownloadStore((state) => state.addDownload);
   const user = useAuthStore((s) => s.user);
+
+  // const handleDownload = async (file) => {
+  //   const fileName = file.fileName || file.name || "download";
+  //   const downloadUrl = file.url || file.secureUrl;
+  //   try {
+  //     addDownload({
+  //       name: fileName,
+  //       url: downloadUrl,
+  //       size: file.fileSize || file.size,
+  //       type: file.mimeType || file.type,
+  //     });
+  //     const res = await fetch(downloadUrl);
+  //     const blob = await res.blob();
+  //     const objectUrl = URL.createObjectURL(blob);
+  //     const a = document.createElement("a");
+  //     a.href = objectUrl;
+  //     a.download = fileName;
+  //     document.body.appendChild(a);
+  //     a.click();
+  //     document.body.removeChild(a);
+  //     URL.revokeObjectURL(objectUrl);
+  //   } catch (err) {
+  //     console.error("Download failed", err);
+  //   }
+  // };
+
+  // const handleOpenSearchResult = useCallback(
+  //   (item) => {
+  //     if (!workspaceId) return;
+  //     switch (item.type) {
+  //       case "user":
+  //         useProfileStore.getState().openProfile({
+  //           _id: item.id,
+  //           name: item.name,
+  //           email: item.email,
+  //           avatar: item.avatar,
+  //           role: item.role,
+  //           onlineStatus: item.status,
+  //           customStatus: item.customStatus,
+  //           flowTaskUserId: item.flowTaskUserId,
+  //         });
+  //         break;
+  //       case "message":
+  //         navigate(
+  //           item.channelType === "dm"
+  //             ? getDMPath(workspaceId, item.channelId, item.id)
+  //             : getChannelPath(workspaceId, item.channelId, item.id),
+  //         );
+  //         break;
+  //       case "channel":
+  //         navigate(getChannelPath(workspaceId, item.id));
+  //         break;
+  //       case "dm":
+  //         navigate(getDMPath(workspaceId, item.id));
+  //         break;
+  //       case "file":
+  //         navigate(getFilesPath(workspaceId, item.referenceId));
+  //         break;
+  //       case "link":
+  //         navigate(
+  //           item.channelType === "dm"
+  //             ? getDMPath(workspaceId, item.channelId, item.messageId)
+  //             : getChannelPath(workspaceId, item.channelId, item.messageId),
+  //         );
+  //         break;
+  //       case "page":
+  //         if (item.path === "profile")
+  //           useProfileStore.getState().openProfile(user);
+  //         else if (item.path === "settings") setShowTopPreferences(true);
+  //         else if (item.path === "activity") setShowNotifications(true);
+  //         else if (item.path === "threads") setShowAllThreads(true);
+  //         else if (item.path === "starred") setShowSaved(true);
+  //         else navigate(`/workspace/${workspaceId}/${item.path}`);
+  //         break;
+  //       default:
+  //         break;
+  //     }
+  //   },
+  //   [workspaceId, navigate, user],
+  // );
+
+  // Resizable Sidebar
+  // const [sidebarWidth, setSidebarWidth] = useState(getSavedSidebarWidth);
+  // const isResizingRef = useRef(false);
+  // const [isResizing, setIsResizing] = useState(false);
+  // const widthBeforeCollapseRef = useRef(SIDEBAR_DEFAULT);
+  // const sidebarCollapsed = sidebarWidth === SIDEBAR_COLLAPSED;
+  // const persistWidth = useCallback((w) => {
+  //   try {
+  //     localStorage.setItem(SIDEBAR_STORAGE_KEY, String(w));
+  //   } catch {}
+  // }, []);
+
+  // const handleResizeStart = useCallback(
+  //   (e) => {
+  //     e.preventDefault();
+  //     isResizingRef.current = true;
+  //     setIsResizing(true);
+  //     const startX = e.clientX,
+  //       startW = sidebarCollapsed ? SIDEBAR_MIN : sidebarWidth;
+  //     document.body.style.cursor = "col-resize";
+  //     document.body.style.userSelect = "none";
+  //     const onMove = (ev) => {
+  //       const delta = ev.clientX - startX;
+  //       setSidebarWidth(
+  //         Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startW + delta)),
+  //       );
+  //     };
+  //     const onUp = () => {
+  //       isResizingRef.current = false;
+  //       setIsResizing(false);
+  //       document.body.style.cursor = "";
+  //       document.body.style.userSelect = "";
+  //       document.removeEventListener("mousemove", onMove);
+  //       document.removeEventListener("mouseup", onUp);
+  //       setSidebarWidth((w) => {
+  //         persistWidth(w);
+  //         return w;
+  //       });
+  //     };
+  //     document.addEventListener("mousemove", onMove);
+  //     document.addEventListener("mouseup", onUp);
+  //   },
+  //   [sidebarWidth, sidebarCollapsed, persistWidth],
+  // );
+
+  // const handleResizeDoubleClick = useCallback(() => {
+  //   if (sidebarCollapsed) {
+  //     const r = widthBeforeCollapseRef.current;
+  //     setSidebarWidth(r);
+  //     persistWidth(r);
+  //   } else {
+  //     widthBeforeCollapseRef.current = sidebarWidth;
+  //     setSidebarWidth(SIDEBAR_COLLAPSED);
+  //     persistWidth(SIDEBAR_COLLAPSED);
+  //   }
+  // }, [sidebarCollapsed, sidebarWidth, persistWidth]);
+
   const globalSearchRef = useRef(null);
 
   const channelMessageRoute = matchPath(
@@ -1500,7 +1636,9 @@ export default function ChatLayout() {
                   </Suspense>
                 );
               return activeChannelId ? (
-                <ChatPanel
+                <>
+                  <PinnedBar />
+                  <ChatPanel
                   channelId={activeChannelId}
                   workspaceId={workspaceId}
                   onOpenThread={openThread}
@@ -1514,6 +1652,7 @@ export default function ChatLayout() {
                   onOpenMobileSidebar={() => setShowMobileSidebar(true)}
                   onSaveMessage={handleSaveMessage}
                 />
+                </>
               ) : (
                 <WelcomeScreen
                   onOpenMobileSidebar={() => setShowMobileSidebar(true)}
@@ -1546,6 +1685,15 @@ export default function ChatLayout() {
           <PinnedMessagesPanel
             channelId={activeChannelId}
             onClose={() => setShowPins(false)}
+            onJumpToMessage={(msg) => {
+              if (msg.channelId !== activeChannelId) {
+                useChannelStore.getState().setActiveChannel(msg.channelId);
+              }
+
+              navigate(getChannelPath(workspaceId, msg.channelId, msg._id));
+
+              setShowPins(false);
+            }}
           />
         </ErrorBoundary>
       )}

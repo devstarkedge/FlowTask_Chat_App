@@ -1,17 +1,19 @@
-import { useState, useEffect, useRef } from "react";
-import { Clock, PencilLine, ClockFading, Sparkles } from "lucide-react";
-import DraftsSidebar from "../components/chat/DraftsSidebar";
-import ScheduledMessagesList from "../components/chat/ScheduledMessagesList";
-import { useDraftStore } from "../stores/draftStore";
-import "./custom-css/laterPage.css";
+import { useState, useRef } from 'react'
+import { Clock, PencilLine, ClockFading, Sparkles } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import DraftsSidebar from '../components/chat/DraftsSidebar'
+import ScheduledMessagesList from '../components/chat/ScheduledMessagesList'
+import { countWorkspaceDrafts, useDraftStore } from '../stores/draftStore'
+import './custom-css/laterPage.css'
 
 export default function LaterPage() {
-  const [activeTab, setActiveTab] = useState("drafts");
-  const [scheduledCount, setScheduledCount] = useState(0);
-  const [animating, setAnimating] = useState(false);
-  const [prevTab, setPrevTab] = useState(null);
-  const contentRef = useRef(null);
-  const draftCount = useDraftStore((s) => s.allDraftsForSidebar.length);
+  const { workspaceId } = useParams()
+  const [activeTab, setActiveTab] = useState('drafts')
+  const [scheduledCount, setScheduledCount] = useState(0)
+  const [animating, setAnimating] = useState(false)
+  const [prevTab, setPrevTab] = useState(null)
+  const contentRef = useRef(null)
+  const draftCount = useDraftStore((s) => countWorkspaceDrafts(s.drafts, workspaceId))
 
   const TABS = [
     {

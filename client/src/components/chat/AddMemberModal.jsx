@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAuthStore } from "../../stores/authStore";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
-import { authAPI } from "../../services/api";
+import { userAPI } from "../../services/api";
 import {
   X,
   Search,
@@ -71,6 +71,10 @@ const shimmerKeyframes = `
 }
 @keyframes amm-spin { to { transform: rotate(360deg); } }
 `;
+
+function getContactUserId(contact) {
+  return contact?.chatUserId || contact?._id || contact?.flowTaskUserId || null;
+}
 
 function useStylesInjected() {
   const ref = useRef(false);
@@ -153,7 +157,7 @@ function OnlineDot({ isOnline }) {
 }
 
 /* ─── User row ────────────────────────────────────────────────────── */
-function UserRow({ u, isOnline, isAdding, wasAdded, addingAny, onAdd, index }) {
+function UserRow({ u, isOnline, isAdding, wasAdded, addingAny, onAdd }) {
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -324,6 +328,7 @@ export default function AddMemberModal({ channel, onClose }) {
   const { user } = useAuthStore();
   const { membersByChannel, addMember } = useChannelStore();
   const { onlineUsers } = useChatStore();
+  const channelId = channel?._id;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [users, setUsers] = useState([]);
@@ -337,13 +342,35 @@ export default function AddMemberModal({ channel, onClose }) {
   const modalRef = useRef(null);
   const debRef = useRef(null);
 
-  const channelMembers = (channel && membersByChannel?.[channel._id]) || [];
   const memberIds = useMemo(
-    () => new Set(channelMembers.map((m) => m._id)),
-    [channelMembers],
+    () => new Set((membersByChannel?.[channelId] || []).map((member) => member._id)),
+    [channelId, membersByChannel],
   );
 
   const onlineSet = useMemo(() => new Set(onlineUsers || []), [onlineUsers]);
+
+  const fetchUsers = useCallback(async (query) => {
+    setIsLoading(true);
+    try {
+      const { data } = await userAPI.getDMContacts(query);
+
+      const contacts = data.data?.contacts || [];
+
+      // important filtering
+      const filtered = contacts.filter(
+        (u) =>
+          getContactUserId(u) !== user?._id &&
+          !memberIds.has(getContactUserId(u)),
+      );
+
+      setUsers(filtered);
+    } catch (err) {
+      logger.error("Failed to fetch users:", err);
+      setUsers([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [memberIds, user?._id]);
 
   /* Auto-focus + focus trap + ESC */
   useEffect(() => {
@@ -383,41 +410,19 @@ export default function AddMemberModal({ channel, onClose }) {
 
   /* Debounced search */
   useEffect(() => {
+    const query = searchQuery.trim();
     clearTimeout(debRef.current);
     debRef.current = setTimeout(
-      () => fetchUsers(searchQuery.trim()),
-      searchQuery.trim() ? 380 : 100,
+      () => fetchUsers(query),
+      query ? 380 : 100,
     );
     return () => clearTimeout(debRef.current);
-  }, [searchQuery]);
-
-  const fetchUsers = async (query) => {
-    setIsLoading(true);
-    try {
-      const { data } = await userAPI.getDMContacts(query);
-
-      const contacts = data.data?.contacts || [];
-
-      // important filtering
-      const filtered = contacts.filter(
-        (u) =>
-          u.chatUserId !== user?._id &&
-          !memberIds.has(u.chatUserId || u.flowTaskUserId),
-      );
-
-      setUsers(filtered);
-    } catch (err) {
-      logger.error("Failed to fetch users:", err);
-      setUsers([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [fetchUsers, searchQuery]);
 
   const handleAdd = async (targetUser) => {
     if (addingId) return;
 
-    const userId = targetUser.chatUserId || targetUser.flowTaskUserId;
+    const userId = getContactUserId(targetUser);
 
     if (!userId) return;
 
@@ -444,7 +449,7 @@ export default function AddMemberModal({ channel, onClose }) {
     }
   };
   const isEmpty = !isLoading && users.length === 0;
-  const onlineCount = users.filter((u) => onlineSet.has(u._id)).length;
+  const onlineCount = users.filter((u) => onlineSet.has(getContactUserId(u))).length;
 
   return (
     <AnimatePresence>
@@ -886,16 +891,21 @@ export default function AddMemberModal({ channel, onClose }) {
                   style={{ display: "flex", flexDirection: "column", gap: 2 }}
                 >
                   {users.map((u, i) => (
+                    (() => {
+                      const userId = getContactUserId(u);
+                      return (
                     <UserRow
-                      key={u._id}
+                      key={userId || `${u.email || u.name || 'contact'}-${i}`}
                       u={u}
                       index={i}
-                      isOnline={onlineSet.has(u._id)}
-                      isAdding={addingId === u._id}
-                      wasAdded={addedIds.has(u._id)}
+                      isOnline={onlineSet.has(userId)}
+                      isAdding={addingId === userId}
+                      wasAdded={addedIds.has(userId)}
                       addingAny={addingId}
                       onAdd={handleAdd}
                     />
+                      )
+                    })()
                   ))}
                 </motion.div>
               )}

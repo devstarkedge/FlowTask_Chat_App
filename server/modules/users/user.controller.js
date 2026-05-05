@@ -100,9 +100,10 @@ export const getDMContacts = asyncHandler(async (req, res) => {
 
   // Synchronize FlowTask users into ChatApp workspace membership as needed.
   for (const ftu of flowTaskUsers) {
+    let syncedUser = null;
     try {
       if (!ftu._id || !ftu.email) continue;
-      const syncedUser = await userRepository.upsertFromFlowTask(ftu);
+      syncedUser = await userRepository.upsertFromFlowTask(ftu);
       const isMember = await workspaceRepository.isMember(syncedUser._id, workspaceId);
       if (!isMember) {
         await workspaceRepository.addMember(syncedUser._id, workspaceId, WORKSPACE_ROLES.MEMBER);
@@ -127,6 +128,10 @@ export const getDMContacts = asyncHandler(async (req, res) => {
       const existing = contactMap.get(email);
       if (!existing.avatar && ftu.avatar) existing.avatar = ftu.avatar;
       if (!existing.flowTaskUserId && ftu._id) existing.flowTaskUserId = ftu._id.toString();
+      if (!existing.chatUserId && syncedUser?._id) {
+        existing.chatUserId = syncedUser._id.toString();
+        existing.isInChatApp = true;
+      }
     } else {
       // FlowTask user NOT in ChatApp
       contactMap.set(email, {
@@ -134,9 +139,9 @@ export const getDMContacts = asyncHandler(async (req, res) => {
         email: ftu.email,
         avatar: ftu.avatar || null,
         flowTaskUserId: ftu._id?.toString() || null,
-        chatUserId: null,
-        onlineStatus: 'offline',
-        isInChatApp: false,
+        chatUserId: syncedUser?._id?.toString() || null,
+        onlineStatus: syncedUser?.onlineStatus || 'offline',
+        isInChatApp: !!syncedUser,
         role: ftu.role || 'employee',
       });
     }

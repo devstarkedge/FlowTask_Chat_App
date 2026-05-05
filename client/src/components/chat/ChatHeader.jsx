@@ -170,15 +170,6 @@ export default function ChatHeader({
                 }}
                 className="hide-mobile"
               />
-
-                <HdrBtn
-                icon={Pin}
-                title="Pinned messages"
-                label={pinnedMessages.length > 0 ? String(pinnedMessages.length) : undefined}
-                onClick={onTogglePins}
-              />
-
-                <HdrBtn icon={Search} title="Search" onClick={onToggleSearch} />
             </>
           )}
 

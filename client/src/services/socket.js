@@ -4,7 +4,6 @@ import { useChatStore } from '../stores/chatStore'
 import { useChannelStore } from '../stores/channelStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useNotificationStore } from '../stores/notificationStore'
-import { useDraftStore } from '../stores/draftStore'
 import { throttle } from '../utils/throttle'
 import logger from '../utils/logger'
 
@@ -384,16 +383,6 @@ export function connectSocket() {
     if (preferences) {
       useNotificationStore.getState().applyPreferences(preferences)
     }
-  })
-
-  // ─── Draft Events (cross-device sync) ────────────────────────────────
-  socket.on('draft:updated', ({ draft }) => {
-    if (!draft) return
-    useDraftStore.getState().setServerDraft(draft)
-  })
-
-  socket.on('draft:deleted', ({ channelId, threadId, workspaceId }) => {
-    useDraftStore.getState().removeServerDraft(channelId, threadId, workspaceId)
   })
 
   // ─── Scheduled Message Events ────────────────────────────────────────

@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Home, MessageSquare, Bell, FolderOpen, Clock, Wrench, Plus } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
-import { useDraftStore } from '../../stores/draftStore'
+import { countWorkspaceDrafts, useDraftStore } from '../../stores/draftStore'
 import { Avatar } from '../chat/MemberAvatarGroup'
 // Tooltip removed for sidebar hover - using direct buttons to avoid popovers
 import CreateMenu from '../ui/CreateMenu'
@@ -29,7 +29,7 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   const { workspaceId } = useParams()
   const { user } = useAuthStore()
   const unreadNotifications = useNotificationStore((s) => s.unreadCount)
-  const draftCount = useDraftStore((s) => s.allDraftsForSidebar.length)
+  const draftCount = useDraftStore((s) => countWorkspaceDrafts(s.drafts, workspaceId))
   const [showCreateMenu, setShowCreateMenu] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showPreferences, setShowPreferences] = useState(false)
@@ -150,7 +150,7 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
             onPointerEnter={(e) => handleHoverEnter(item.id, e)}
             onPointerLeave={() => handleHoverLeave(item.id)}
             aria-label={item.label}
-            title=""
+            data-tooltip={item.label}
           >
             <item.icon size={20} />
             {item.id === 'activity' && unreadNotifications > 0 && (

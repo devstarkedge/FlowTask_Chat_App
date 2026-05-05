@@ -108,6 +108,10 @@ function getEffectiveTheme(mode) {
   return getMediaQuery()?.matches ? 'dark' : 'light'
 }
 
+export function resolveEffectiveTheme(mode) {
+  return getEffectiveTheme(mode)
+}
+
 function safeParse(value) {
   try {
     return value ? JSON.parse(value) : null
@@ -208,14 +212,23 @@ export const useThemeStore = create((set, get) => ({
   theme: initialAppearance.mode,
   effectiveTheme: getEffectiveTheme(initialAppearance.mode),
 
-  applyCurrent: () => {
+  applyAppearance: (appearance, options) => {
+    const next = sanitizeAppearance(appearance)
+    applyAppearance(next, options)
+    set({
+      ...next,
+      theme: next.mode,
+      effectiveTheme: getEffectiveTheme(next.mode),
+    })
+  },
+
+  applyCurrent: (options) => {
     const appearance = {
       mode: get().mode,
       sidebarTheme: get().sidebarTheme,
       customTheme: get().customTheme,
     }
-    applyAppearance(appearance)
-    set({ effectiveTheme: getEffectiveTheme(appearance.mode), theme: appearance.mode })
+    get().applyAppearance(appearance, options)
   },
 
   setMode: (mode) => {
@@ -248,12 +261,7 @@ export const useThemeStore = create((set, get) => ({
   },
 
   resetAppearance: () => {
-    set({
-      ...DEFAULT_APPEARANCE,
-      theme: DEFAULT_APPEARANCE.mode,
-      effectiveTheme: getEffectiveTheme(DEFAULT_APPEARANCE.mode),
-    })
-    applyAppearance(DEFAULT_APPEARANCE)
+    get().applyAppearance(DEFAULT_APPEARANCE)
   },
 
   hydrateFromPreferences: (preferences) => {
@@ -264,8 +272,7 @@ export const useThemeStore = create((set, get) => ({
       sidebarTheme: preferences.sidebarTheme || get().sidebarTheme,
       customTheme: preferences.customTheme || get().customTheme,
     })
-    set({ ...next, theme: next.mode, effectiveTheme: getEffectiveTheme(next.mode) })
-    applyAppearance(next)
+    get().applyAppearance(next)
   },
 
   getAppearancePayload: () => ({
@@ -276,8 +283,7 @@ export const useThemeStore = create((set, get) => ({
 
   syncFromStorage: () => {
     const next = readStoredAppearance()
-    set({ ...next, theme: next.mode, effectiveTheme: getEffectiveTheme(next.mode) })
-    applyAppearance(next, { persist: false })
+    get().applyAppearance(next, { persist: false })
   },
 }))
 

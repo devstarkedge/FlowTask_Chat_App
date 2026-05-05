@@ -10,29 +10,70 @@ export const getDraftKey = (channelId, workspaceId, threadId) => {
   return `${workspaceId}:${channelId}:${threadKey}`
 }
 
+function normalizeArray(value) {
+  return Array.isArray(value) ? value : []
+}
+
+function isDraftExpired(draft, now = Date.now()) {
+  return !draft?.timestamp || now - draft.timestamp > DRAFT_MAX_AGE_MS
+}
+
+export function getWorkspaceDrafts(drafts, workspaceId) {
+  if (!workspaceId) return []
+
+  const prefix = `${workspaceId}:`
+  const now = Date.now()
+
+  return Object.entries(drafts)
+    .filter(([key]) => key.startsWith(prefix))
+    .map(([key, draft]) => ({
+      ...draft,
+      _key: key,
+    }))
+    .filter(
+      (draft) =>
+        draft.channelId &&
+        !isDraftExpired(draft, now) &&
+        !isContentEmpty(draft.html, draft.text),
+    )
+    .sort((left, right) => right.timestamp - left.timestamp)
+}
+
+export function countWorkspaceDrafts(drafts, workspaceId) {
+  return getWorkspaceDrafts(drafts, workspaceId).length
+}
+
 export const useDraftStore = create(
   persist(
     (set, get) => ({
       drafts: {},
-      serverDrafts: {}, // Server-synced drafts: keyed same as drafts
-      draftCounts: {}, // { [workspaceId]: number }
-      allDraftsForSidebar: [], // Full draft objects for sidebar display
-      draftListStale: false, // Flag to trigger refetch in DraftsSidebar
 
-      setDraft: (channelId, html, text, workspaceId, threadId) => {
+      setDraft: (channelId, html, text, workspaceId, threadId, metadata = {}) => {
         const key = getDraftKey(channelId, workspaceId, threadId)
         if (!key) return
+
         const trimmed = (text || '').trim()
         const trimmedHtml = (html || '').trim()
-        // Don't save empty drafts — detect TipTap empty HTML like <p></p>
+
         if (isContentEmpty(trimmedHtml, trimmed)) {
           get().clearDraft(channelId, workspaceId, threadId)
           return
         }
+
         set((state) => ({
           drafts: {
             ...state.drafts,
-            [key]: { html: trimmedHtml, text: trimmed, timestamp: Date.now(), channelId, threadId, workspaceId },
+            [key]: {
+              html: trimmedHtml,
+              text: trimmed,
+              timestamp: Date.now(),
+              channelId,
+              threadId: threadId || null,
+              workspaceId,
+              mentions: normalizeArray(metadata.mentions),
+              attachments: normalizeArray(metadata.attachments),
+              fileReferences: normalizeArray(metadata.fileReferences),
+            },
           },
         }))
       },
@@ -40,164 +81,85 @@ export const useDraftStore = create(
       getDraft: (channelId, workspaceId, threadId) => {
         const key = getDraftKey(channelId, workspaceId, threadId)
         if (!key) return null
+
         const draft = get().drafts[key]
         if (!draft) return null
-        // Expire old drafts
-        if (Date.now() - draft.timestamp > DRAFT_MAX_AGE_MS) {
+
+        if (isDraftExpired(draft)) {
           get().clearDraft(channelId, workspaceId, threadId)
           return null
         }
+
         return draft
       },
 
       clearDraft: (channelId, workspaceId, threadId) => {
-      const thread = threadId || 'root'
-
-      set((state) => {
-        const newDrafts = { ...state.drafts }
-
-        //  remove workspace draft
-        const workspaceKey = `${workspaceId}:${channelId}:${thread}`
-        delete newDrafts[workspaceKey]
-
-        //  remove global draft (MANUAL — no helper)
-        const globalKey = `global:${channelId}:${thread}`
-        delete newDrafts[globalKey]
-
-        return { drafts: newDrafts }
-      })
-    },
-      // Set server-synced draft data (from API response)
-      setServerDraft: (draft) => {
-        if (!draft) return
-        const key = getDraftKey(draft.channelId, draft.workspaceId, draft.threadId)
-        if (!key) return
-        // Skip phantom drafts with empty content (e.g. <p></p> from TipTap)
-        if (isContentEmpty(draft.htmlContent, draft.content)) {
-          get().removeServerDraft(draft.channelId, draft.threadId, draft.workspaceId)
-          return
-        }
-        set((state) => ({
-          serverDrafts: {
-            ...state.serverDrafts,
-            [key]: draft,
-          },
-          // Also update local draft for immediate availability
-          drafts: {
-            ...state.drafts,
-            [key]: {
-              html: draft.htmlContent || '',
-              text: draft.content || '',
-              timestamp: new Date(draft.updatedAt).getTime(),
-              channelId: draft.channelId,
-              threadId: draft.threadId,
-              workspaceId: draft.workspaceId,
-              serverId: draft._id,
-              attachments: draft.attachments,
-              mentions: draft.mentions,
-            },
-          },
-          draftListStale: true,
-        }))
-      },
-
-      // Remove server draft (on send or delete via socket)
-      removeServerDraft: (channelId, threadId, workspaceId) => {
         const key = getDraftKey(channelId, workspaceId, threadId)
         if (!key) return
-        set((state) => {
-          const newServerDrafts = { ...state.serverDrafts }
-          const newDrafts = { ...state.drafts }
-          delete newServerDrafts[key]
-          delete newDrafts[key]
-          return { serverDrafts: newServerDrafts, drafts: newDrafts }
-        })
-      },
 
-      // Set sidebar drafts list from API
-      setSidebarDrafts: (drafts, count) => {
-        set({ allDraftsForSidebar: drafts || [], draftCounts: { ...get().draftCounts, _current: count }, draftListStale: false })
-      },
-
-      // Mark draft list as stale (triggers refetch in DraftsSidebar)
-      markDraftListStale: () => set({ draftListStale: true }),
-      clearDraftListStale: () => set({ draftListStale: false }),
-
-      // Update draft count for a workspace
-      setDraftCount: (workspaceId, count) => {
         set((state) => ({
-          draftCounts: { ...state.draftCounts, [workspaceId]: count },
+          drafts: Object.fromEntries(
+            Object.entries(state.drafts).filter(([draftKey]) => draftKey !== key),
+          ),
         }))
       },
 
-      // Get count of local drafts as fallback
       getLocalDraftCount: (workspaceId) => {
-        const prefix = `${workspaceId}:`
-        return Object.keys(get().drafts).filter((k) => k.startsWith(prefix)).length
+        return countWorkspaceDrafts(get().drafts, workspaceId)
       },
 
       clearWorkspaceDrafts: (workspaceId) => {
         const wsPrefix = `${workspaceId}:`
-        set((state) => {
-          const newDrafts = {}
-          for (const [key, draft] of Object.entries(state.drafts)) {
-            if (!key.startsWith(wsPrefix)) {
-              newDrafts[key] = draft
-            }
-          }
-          return { drafts: newDrafts }
-        })
+        set((state) => ({
+          drafts: Object.fromEntries(
+            Object.entries(state.drafts).filter(([key]) => !key.startsWith(wsPrefix)),
+          ),
+        }))
       },
 
       clearAllDrafts: () => {
-        set({ drafts: {}, serverDrafts: {}, allDraftsForSidebar: [] })
+        set({ drafts: {} })
       },
 
-      // Reset only sidebar/server state — preserves local drafts across workspace switches
-      resetSidebarState: () => set({
-        serverDrafts: {},
-        allDraftsForSidebar: [],
-        draftListStale: true,
-      }),
-
-      // Cleanup old drafts on store init
       cleanupExpired: () => {
         const now = Date.now()
-        set((state) => {
-          const newDrafts = {}
-          for (const [id, draft] of Object.entries(state.drafts)) {
-            if (now - draft.timestamp < DRAFT_MAX_AGE_MS) {
-              newDrafts[id] = draft
-            }
-          }
-          return { drafts: newDrafts }
-        })
+        set((state) => ({
+          drafts: Object.fromEntries(
+            Object.entries(state.drafts).filter(([, draft]) => !isDraftExpired(draft, now)),
+          ),
+        }))
       },
     }),
     {
       name: 'flowtask-chat-drafts',
-      version: 2,
+      version: 3,
       partialize: (state) => ({ drafts: state.drafts }),
       onRehydrateStorage: () => (state) => {
         state?.cleanupExpired()
       },
       migrate: (persisted, version) => {
-        if (version < 2) {
-          // v1 → v2: drafts keyed by ws:channel now ws:channel:root
-          const oldDrafts = persisted?.drafts || {}
-          const newDrafts = {}
-          for (const [key, val] of Object.entries(oldDrafts)) {
-            const parts = key.split(':')
-            if (parts.length === 2) {
-              newDrafts[`${key}:root`] = val
-            } else {
-              newDrafts[key] = val
-            }
+        const oldDrafts = persisted?.drafts || {}
+        const migratedDrafts = {}
+
+        for (const [key, value] of Object.entries(oldDrafts)) {
+          const parts = key.split(':')
+          const nextKey = parts.length === 2 ? `${key}:root` : key
+
+          migratedDrafts[nextKey] = {
+            ...value,
+            threadId: value?.threadId || null,
+            mentions: normalizeArray(value?.mentions),
+            attachments: normalizeArray(value?.attachments),
+            fileReferences: normalizeArray(value?.fileReferences),
           }
-          return { ...persisted, drafts: newDrafts }
         }
-        return persisted
+
+        if (version < 3) {
+          return { drafts: migratedDrafts }
+        }
+
+        return { ...persisted, drafts: migratedDrafts }
       },
-    }
-  )
+    },
+  ),
 )

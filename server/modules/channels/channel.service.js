@@ -969,23 +969,17 @@ class ChannelService {
     if (channel.isArchived) throw new ForbiddenError("Channel is archived");
 
     const effectiveWsId = channel.workspaceId?.toString();
-
-    // Validate target user is an active workspace member
-    if (effectiveWsId) {
-      const isMember = await WorkspaceMembership.findOne({
-        userId,
-        workspaceId: effectiveWsId,
-        isActive: true,
-      }).lean();
-      if (!isMember) {
-        throw new ForbiddenError('User is not a member of this workspace');
-      }
-    }
+    const resolvedWorkspaceId = effectiveWsId || workspaceId;
+    const { chatUserId } = await this.resolveAndValidateDMTarget(
+      userId,
+      resolvedWorkspaceId,
+      null,
+    );
 
     // Always go through repository to keep ChannelMember and embedded members in sync.
     const updated = await channelRepository.addMember(
       channelId,
-      userId,
+      chatUserId,
       role,
       effectiveWsId,
     );
@@ -1004,10 +998,10 @@ class ChannelService {
     };
 
     // Notify the user and make their socket join the room
-    emitToUser(userId.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
+    emitToUser(chatUserId.toString(), SOCKET_EVENTS.CHANNEL_ADDED, {
       channel: channelPayload,
     }, effectiveWsId);
-    joinChannelRoom(userId.toString(), channelId.toString(), effectiveWsId);
+    joinChannelRoom(chatUserId.toString(), channelId.toString(), effectiveWsId);
 
     // Notify channel
     emitToChannel(
@@ -1015,7 +1009,7 @@ class ChannelService {
       SOCKET_EVENTS.MEMBER_JOINED,
       {
         channelId,
-        userId,
+        userId: chatUserId,
       },
       channel.workspaceId?.toString(),
     );
@@ -1026,7 +1020,7 @@ class ChannelService {
         notificationService
           .createChannelInviteNotification({
             workspaceId: channel.workspaceId,
-            recipientId: userId,
+            recipientId: chatUserId,
             channelId: channel._id,
             channelName: channel.name,
             inviterName: "System",

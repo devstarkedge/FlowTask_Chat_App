@@ -597,16 +597,21 @@ function formatDateLabel(date) {
     date.getMonth(),
     date.getDate()
   );
-  const diff = today - messageDay;
+  const diff = today.getTime() - messageDay.getTime();
   const dayMs = 86400000;
 
   if (diff === 0) return "Today";
   if (diff === dayMs) return "Yesterday";
-  if (diff < dayMs * 7)
-    return date.toLocaleDateString(undefined, { weekday: "long" });
-  return date.toLocaleDateString(undefined, {
-    month: "long",
-    day: "numeric",
-    year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
-  });
+  
+  const weekday = date.toLocaleDateString(undefined, { weekday: "long" });
+  const month = date.toLocaleDateString(undefined, { month: "long" });
+  
+  const day = date.getDate();
+  const s = ["th", "st", "nd", "rd"];
+  const v = day % 100;
+  const ordinal = day + (s[(v - 20) % 10] || s[v] || s[0]);
+  
+  const year = date.getFullYear() !== now.getFullYear() ? `, ${date.getFullYear()}` : "";
+
+  return `${weekday}, ${month} ${ordinal}${year}`;
 }

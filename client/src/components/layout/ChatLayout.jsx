@@ -1389,19 +1389,10 @@ export default function ChatLayout() {
       const channelId = resolveNotificationChannelId(data);
       if (channelId) {
         setActiveChannel(channelId);
-        const messageId = asId(data.messageId || data.sourceId);
-        const channelType =
-          data.conversationType ||
-          data.channelId?.type ||
-          channels.find((c) => c._id === channelId)?.type;
-        navigate(
-          channelType === "dm"
-            ? getDMPath(workspaceId, channelId, messageId)
-            : getChannelPath(workspaceId, channelId, messageId),
-        );
-      } else {
-        navigate(getActivityPath(workspaceId, data._id));
       }
+      
+      navigate(getActivityPath(workspaceId, data._id));
+
       if (data.sourceType === "message" && (data.messageId || data.sourceId)) {
         const messageId = asId(data.messageId || data.sourceId);
         if (messageId) {
@@ -1412,6 +1403,13 @@ export default function ChatLayout() {
           );
         }
       }
+
+      if (data.type === "thread_reply") {
+        const rootId = asId(data.threadId || data.messageId || data.sourceId);
+        if (rootId && channelId) {
+          openThread({ rootMessageId: rootId, channelId });
+        }
+      }
     },
     [workspaceId, navigate, setActiveChannel, channels],
   );
@@ -1419,11 +1417,17 @@ export default function ChatLayout() {
   const handleAutoSelectActivityNotification = useCallback(
     (notification) => {
       if (!workspaceId || !notification?._id || activityNotificationId) return;
+      
+      const channelId = resolveNotificationChannelId(notification);
+      if (channelId) {
+        setActiveChannel(channelId);
+      }
+
       navigate(getActivityPath(workspaceId, notification._id), {
         replace: true,
       });
     },
-    [workspaceId, activityNotificationId, navigate],
+    [workspaceId, activityNotificationId, navigate, setActiveChannel],
   );
 
   const handleSelectFileForModule = useCallback(
@@ -1600,6 +1604,16 @@ export default function ChatLayout() {
                       selectedNotification,
                     )}
                     onOpenMobileSidebar={() => setShowMobileSidebar(true)}
+                    workspaceId={workspaceId}
+                    onOpenThread={openThread}
+                    onToggleSearch={toggleLocalSearch}
+                    onTogglePins={() => {
+                      setShowPins((s) => !s);
+                      closeSearch();
+                    }}
+                    onOpenProfile={openProfile}
+                    onOpenFilePreview={openFilePreview}
+                    onSaveMessage={handleSaveMessage}
                   />
                 );
               if (isFilesRoute)
@@ -1906,6 +1920,13 @@ function ActivityMainPane({
   selectedNotification,
   selectedChannelId,
   onOpenMobileSidebar,
+  workspaceId,
+  onOpenThread,
+  onToggleSearch,
+  onTogglePins,
+  onOpenProfile,
+  onOpenFilePreview,
+  onSaveMessage,
 }) {
   return (
     <section
@@ -1979,7 +2000,17 @@ function ActivityMainPane({
               {getNotificationText(selectedNotification)}
             </span>
           </div>
-          <ChatPanel channelId={selectedChannelId} />
+          <PinnedBar channelId={selectedChannelId} />
+          <ChatPanel 
+            channelId={selectedChannelId}
+            workspaceId={workspaceId}
+            onOpenThread={onOpenThread}
+            onToggleSearch={onToggleSearch}
+            onTogglePins={onTogglePins}
+            onOpenProfile={onOpenProfile}
+            onOpenFilePreview={onOpenFilePreview}
+            onSaveMessage={onSaveMessage}
+          />
         </>
       )}
     </section>

@@ -12,7 +12,6 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import SectionHeader from "./SectionHeader";
 import MemberItem from "./MemberItem";
 import { useChannelStore } from "../../stores/channelStore";
 import { useAuthStore } from "../../stores/authStore";
@@ -135,6 +134,9 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
   const fadedMembers   = members.filter((m) => m.registrationStatus === 'faded')
   const onlineMembers  = activeMembers.filter((m) => m.onlineStatus === 'online')
   const offlineMembers = activeMembers.filter((m) => m.onlineStatus !== 'online')
+  const ownerCount = members.filter(
+    (m) => m.channelRole === "owner" || m.role === "owner",
+  ).length
   const isResolvingMembers = memberCount > 0 && members.length === 0
 
   const myMembership = members.find((m) => m._id === user?._id);
@@ -150,7 +152,8 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
     channel.visibility === "private" || channel.type === "private";
   const canManageMembership =
     isAdmin && !isDM && !isSystem && !isSystemManagedProject;
-  const canLeaveChannel = !isSystem && !isSystemManagedProject;
+  const isLastOwner = isOwner && (isResolvingMembers || ownerCount <= 1)
+  const canLeaveChannel = !isSystem && !isSystemManagedProject && !isLastOwner;
   const canEditChannel = !isDM && isAdmin && !isSystemManagedProject;
 
   /* ── ask for confirmation ── */
@@ -412,7 +415,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                           !isDM &&
                           !isSystem
                         }
-                        onRemove={() => handleRemoveMember(member._id)}
+                        onRemove={() => askRemove(member._id, member.name)}
                       />
                     </div>
                   ))}
@@ -446,7 +449,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                           !isDM &&
                           !isSystem
                         }
-                        onRemove={() => handleRemoveMember(member._id)}
+                        onRemove={() => askRemove(member._id, member.name)}
                       />
                     </div>
                   ))}

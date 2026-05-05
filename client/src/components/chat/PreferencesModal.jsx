@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   X,
   Bell,
@@ -21,8 +21,10 @@ import {
 import { useAuthStore } from '../../stores/authStore'
 import {
   getSidebarThemeColors,
+  resolveEffectiveTheme,
   SIDEBAR_THEME_PRESETS,
   THEME_MODES,
+  DEFAULT_APPEARANCE,
   useThemeStore,
 } from '../../stores/themeStore'
 import { authAPI } from '../../services/api'
@@ -45,13 +47,15 @@ const COLOR_FIELDS = [
 export default function PreferencesModal({ onClose }) {
   const { user } = useAuthStore()
   const mode = useThemeStore((s) => s.mode)
-  const effectiveTheme = useThemeStore((s) => s.effectiveTheme)
   const sidebarTheme = useThemeStore((s) => s.sidebarTheme)
   const customTheme = useThemeStore((s) => s.customTheme)
-  const setMode = useThemeStore((s) => s.setMode)
-  const setSidebarTheme = useThemeStore((s) => s.setSidebarTheme)
-  const setCustomTheme = useThemeStore((s) => s.setCustomTheme)
-  const resetAppearance = useThemeStore((s) => s.resetAppearance)
+  const applyAppearance = useThemeStore((s) => s.applyAppearance)
+
+  const loadedPrefs = useMemo(() => ({
+    notificationSound: user?.chatPreferences?.notificationSound ?? true,
+    desktopNotifications: user?.chatPreferences?.desktopNotifications ?? true,
+    compactMode: user?.chatPreferences?.compactMode ?? false,
+  }), [user?.chatPreferences])
 
   const [prefs, setPrefs] = useState({
     notificationSound: true,
@@ -60,23 +64,18 @@ export default function PreferencesModal({ onClose }) {
   })
   const [savingPrefs, setSavingPrefs] = useState(false)
   const [appearanceSaveState, setAppearanceSaveState] = useState('idle')
+  const [draftAppearance, setDraftAppearance] = useState({
+    mode,
+    sidebarTheme,
+    customTheme,
+  })
   const [notifPermission, setNotifPermission] = useState(
     typeof Notification !== 'undefined' ? Notification.permission : 'denied',
   )
-  const skipAppearanceSaveRef = useRef(true)
-  const appearanceTimerRef = useRef(null)
-  const savedTimerRef = useRef(null)
 
   useEffect(() => {
-    if (user?.chatPreferences) {
-      setPrefs((p) => ({
-        ...p,
-        notificationSound: user.chatPreferences.notificationSound ?? true,
-        desktopNotifications: user.chatPreferences.desktopNotifications ?? true,
-        compactMode: user.chatPreferences.compactMode ?? false,
-      }))
-    }
-  }, [user])
+    setPrefs(loadedPrefs)
+  }, [loadedPrefs])
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
@@ -88,50 +87,45 @@ export default function PreferencesModal({ onClose }) {
     return () => {
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', handleKeyDown)
-      window.clearTimeout(appearanceTimerRef.current)
-      window.clearTimeout(savedTimerRef.current)
     }
   }, [onClose])
 
-  const appearancePayload = useMemo(() => ({
-    theme: mode,
-    sidebarTheme,
-    customTheme,
-  }), [customTheme, mode, sidebarTheme])
-
   useEffect(() => {
-    if (skipAppearanceSaveRef.current) {
-      skipAppearanceSaveRef.current = false
-      return undefined
-    }
+    setDraftAppearance({
+      mode,
+      sidebarTheme,
+      customTheme,
+    })
+    setAppearanceSaveState('idle')
+  }, [customTheme, mode, sidebarTheme])
 
-    window.clearTimeout(appearanceTimerRef.current)
-    window.clearTimeout(savedTimerRef.current)
-    setAppearanceSaveState('saving')
+  const appearancePayload = useMemo(() => ({
+    theme: draftAppearance.mode,
+    sidebarTheme: draftAppearance.sidebarTheme,
+    customTheme: draftAppearance.customTheme,
+  }), [draftAppearance])
 
-    appearanceTimerRef.current = window.setTimeout(async () => {
-      try {
-        const { data } = await authAPI.updatePreferences(appearancePayload)
-        if (data?.data?.user) {
-          useAuthStore.setState({ user: data.data.user })
-        }
-        setAppearanceSaveState('saved')
-        savedTimerRef.current = window.setTimeout(() => {
-          setAppearanceSaveState('idle')
-        }, 1600)
-      } catch (error) {
-        logger.error('Failed to save appearance preferences:', error)
-        setAppearanceSaveState('error')
-      }
-    }, 420)
-
-    return () => window.clearTimeout(appearanceTimerRef.current)
-  }, [appearancePayload])
+  const previewEffectiveTheme = useMemo(
+    () => resolveEffectiveTheme(draftAppearance.mode),
+    [draftAppearance.mode],
+  )
 
   const sidebarColors = useMemo(
-    () => getSidebarThemeColors(sidebarTheme, customTheme),
-    [customTheme, sidebarTheme],
+    () => getSidebarThemeColors(draftAppearance.sidebarTheme, draftAppearance.customTheme),
+    [draftAppearance.customTheme, draftAppearance.sidebarTheme],
   )
+
+  const hasAppearanceChanges = useMemo(
+    () => JSON.stringify(draftAppearance) !== JSON.stringify({ mode, sidebarTheme, customTheme }),
+    [customTheme, draftAppearance, mode, sidebarTheme],
+  )
+
+  const hasPreferenceChanges = useMemo(
+    () => JSON.stringify(prefs) !== JSON.stringify(loadedPrefs),
+    [loadedPrefs, prefs],
+  )
+
+  const hasPendingChanges = hasAppearanceChanges || hasPreferenceChanges
 
   const handleToggle = (key) => {
     setPrefs((p) => ({ ...p, [key]: !p[key] }))
@@ -151,25 +145,64 @@ export default function PreferencesModal({ onClose }) {
     }
   }
 
-  const handleSavePrefs = async () => {
+  const handleSaveChanges = async () => {
+    if (!hasPendingChanges) {
+      onClose()
+      return
+    }
+
+    let shouldClose = false
+
     setSavingPrefs(true)
+    setAppearanceSaveState('saving')
     try {
-      const { data } = await authAPI.updatePreferences(prefs)
+      const payload = {
+        ...prefs,
+        ...appearancePayload,
+      }
+      const { data } = await authAPI.updatePreferences(payload)
+      applyAppearance({
+        mode: draftAppearance.mode,
+        sidebarTheme: draftAppearance.sidebarTheme,
+        customTheme: draftAppearance.customTheme,
+      })
       if (data?.data?.user) {
         useAuthStore.setState({ user: data.data.user })
       }
-      toast.success('Preferences saved')
+      toast.success('Changes saved')
+      shouldClose = true
     } catch (error) {
       logger.error('Failed to save preferences:', error)
-      toast.error('Failed to save preferences')
+      setAppearanceSaveState('error')
+      toast.error('Failed to save changes')
     } finally {
       setSavingPrefs(false)
+    }
+
+    if (shouldClose) {
+      onClose()
     }
   }
 
   const handleColorChange = useCallback((key, value) => {
-    setCustomTheme({ [key]: value })
-  }, [setCustomTheme])
+    setDraftAppearance((current) => ({
+      ...current,
+      sidebarTheme: 'custom',
+      customTheme: {
+        ...current.customTheme,
+        [key]: value,
+      },
+    }))
+  }, [])
+
+  const handleResetAppearance = useCallback(() => {
+    setDraftAppearance({
+      mode: DEFAULT_APPEARANCE.mode,
+      sidebarTheme: DEFAULT_APPEARANCE.sidebarTheme,
+      customTheme: DEFAULT_APPEARANCE.customTheme,
+    })
+    setAppearanceSaveState('idle')
+  }, [])
 
   return (
     <div
@@ -206,12 +239,12 @@ export default function PreferencesModal({ onClose }) {
               <div className="appearance-mode-grid">
                 {THEME_MODES.map((option) => {
                   const Icon = MODE_ICONS[option.id]
-                  const selected = mode === option.id
+                  const selected = draftAppearance.mode === option.id
                   return (
                     <button
                       key={option.id}
                       className={`appearance-mode-card ${selected ? 'is-selected' : ''}`}
-                      onClick={() => setMode(option.id)}
+                      onClick={() => setDraftAppearance((current) => ({ ...current, mode: option.id }))}
                       aria-pressed={selected}
                     >
                       <span className="appearance-mode-card__icon">
@@ -233,8 +266,8 @@ export default function PreferencesModal({ onClose }) {
               />
               <div className="appearance-theme-grid">
                 {SIDEBAR_THEME_PRESETS.map((preset) => {
-                  const colors = getSidebarThemeColors(preset.id, customTheme)
-                  const selected = sidebarTheme === preset.id
+                  const colors = getSidebarThemeColors(preset.id, draftAppearance.customTheme)
+                  const selected = draftAppearance.sidebarTheme === preset.id
                   return (
                     <button
                       key={preset.id}
@@ -246,7 +279,7 @@ export default function PreferencesModal({ onClose }) {
                         '--theme-card-active': colors.sidebarActive,
                         '--theme-card-accent': colors.accentColor,
                       }}
-                      onClick={() => setSidebarTheme(preset.id)}
+                      onClick={() => setDraftAppearance((current) => ({ ...current, sidebarTheme: preset.id }))}
                       aria-pressed={selected}
                     >
                       <span className="appearance-theme-card__mock">
@@ -276,7 +309,7 @@ export default function PreferencesModal({ onClose }) {
                   <ColorField
                     key={field.key}
                     label={field.label}
-                    value={customTheme[field.key]}
+                    value={draftAppearance.customTheme[field.key]}
                     onChange={(value) => handleColorChange(field.key, value)}
                   />
                 ))}
@@ -330,26 +363,27 @@ export default function PreferencesModal({ onClose }) {
 
           <aside className="appearance-modal__preview" aria-label="Live appearance preview">
             <LivePreview
-              effectiveTheme={effectiveTheme}
-              mode={mode}
+              effectiveTheme={previewEffectiveTheme}
+              mode={draftAppearance.mode}
               sidebarColors={sidebarColors}
             />
           </aside>
         </div>
 
         <footer className="appearance-modal__footer">
-          <button className="appearance-secondary-btn" onClick={resetAppearance}>
+          <button className="appearance-secondary-btn" onClick={handleResetAppearance}>
             <RotateCcw size={16} />
             Reset to default
           </button>
           <div className="appearance-footer-actions">
-            <span>Appearance saves automatically</span>
-            <button className="appearance-secondary-btn" onClick={handleSavePrefs} disabled={savingPrefs}>
+            <span>
+              {hasPendingChanges
+                ? 'Changes are pending'
+                : 'No unsaved changes. Save changes will close this dialog.'}
+            </span>
+            <button className="appearance-primary-btn appearance-save-btn" onClick={handleSaveChanges} disabled={savingPrefs}>
               {savingPrefs && <Loader2 size={15} className="animate-spin" />}
-              Save preferences
-            </button>
-            <button className="appearance-primary-btn" onClick={onClose}>
-              Done
+              Save changes
             </button>
           </div>
         </footer>

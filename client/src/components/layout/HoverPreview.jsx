@@ -294,9 +294,11 @@ export default function HoverPreview({
     if (!notification.isRead) {
       await markAsRead(notification._id)
     }
+    const channelId = notification?.channelId?._id || notification?.channelId
+    if (channelId) setActiveChannel(channelId)
     navigate(getActivityPath(workspaceId, notification._id))
     onClose?.()
-  }, [markAsRead, navigate, onClose, workspaceId])
+  }, [markAsRead, navigate, onClose, workspaceId, setActiveChannel])
 
   const openFile = useCallback((file) => {
     if (!workspaceId || !file?.referenceId) return

@@ -1044,7 +1044,7 @@ export default function ChatLayout() {
   const persistWidth = useCallback((w) => {
     try {
       localStorage.setItem(SIDEBAR_STORAGE_KEY, String(w));
-    } catch {}
+    } catch { }
   }, []);
 
   const handleResizeStart = useCallback(
@@ -1276,7 +1276,7 @@ export default function ChatLayout() {
                 setActiveChannel(preferredChannelId);
               return;
             }
-          } catch {}
+          } catch { }
         }
         const { data } = await messageAPI.get(routeMessageId);
         const message = data?.data?.message || data?.data || null;
@@ -1301,7 +1301,7 @@ export default function ChatLayout() {
           .addMessage({ ...message, channelId: messageChannelId });
         if (messageChannelId !== activeChannelId)
           setActiveChannel(messageChannelId);
-      } catch {}
+      } catch { }
     };
     syncDeepLinkMessage();
     return () => {
@@ -1492,7 +1492,7 @@ export default function ChatLayout() {
               mode={isDMRoute ? "dms" : "home"}
               onToggleAllThreads={() => {
                 setShowAllThreads((s) => !s);
-                  closeSearch();
+                closeSearch();
                 setShowPins(false);
                 setShowNotifications(false);
                 setShowSaved(false);
@@ -1502,7 +1502,7 @@ export default function ChatLayout() {
               onToggleNotifications={() => {
                 setShowNotifications((s) => !s);
                 setShowAllThreads(false);
-                  closeSearch();
+                closeSearch();
                 setShowPins(false);
                 setShowSaved(false);
                 useProfileStore.getState().closeProfile();
@@ -1511,7 +1511,7 @@ export default function ChatLayout() {
               onToggleSaved={() => {
                 setShowSaved((s) => !s);
                 setShowAllThreads(false);
-                  closeSearch();
+                closeSearch();
                 setShowPins(false);
                 setShowNotifications(false);
                 useProfileStore.getState().closeProfile();

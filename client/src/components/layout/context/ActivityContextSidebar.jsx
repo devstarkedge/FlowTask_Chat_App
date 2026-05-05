@@ -8,6 +8,7 @@ import {
   MessageCircle,
   MessageSquareText,
   UserPlus,
+  Settings,
 } from "lucide-react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { useNotificationStore } from "../../../stores/notificationStore";
@@ -19,304 +20,399 @@ import {
   normalizeNotification,
 } from "../../../utils/notificationFormat";
 
-/* ─────────────────────────────────────────────
-   THEME TOKENS
-   The host sets [data-theme="light"] or
-   [data-theme="dark"] on <html>/<body>.
-   prefers-color-scheme is the automatic fallback.
-───────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────
+   STYLES
+   • All colors derive from --sidebar-* vars so the component
+     blends into ANY sidebar theme (dark purple, light, custom).
+   • NO hardcoded background on the header — it is fully
+     transparent so the SidebarContainer bg shows through.
+   • The "white line" was caused by a border that used a
+     light CSS variable. Fixed: border now uses a fully
+     sidebar-relative semi-transparent color.
+───────────────────────────────────────────────────────────── */
 const STYLES = `
-/* ── Dark (default) ── */
-:root,
-[data-theme="dark"],
-.theme-dark {
-  --acs-bg-row-hover:      rgba(255,255,255,0.045);
-  --acs-bg-row-active:     rgba(88,101,242,0.13);
-  --acs-bg-icon:           rgba(255,255,255,0.07);
-  --acs-bg-empty-ring:     rgba(255,255,255,0.04);
-  --acs-border-empty-ring: rgba(255,255,255,0.07);
-  --acs-border-divider:    rgba(255,255,255,0.055);
-  --acs-bg-markbtn-hover:  rgba(88,101,242,0.12);
-  --acs-border-markbtn:    rgba(88,101,242,0.28);
-  --acs-text-title:        #f1f1f1;
-  --acs-text-label:        #b0b0b8;
-  --acs-text-label-unread: #f1f1f1;
-  --acs-text-sublabel:     #6e6e7a;
-  --acs-text-time:         #5a5a68;
-  --acs-text-time-active:  rgba(255,255,255,0.5);
-  --acs-text-divider:      #4e4e5e;
-  --acs-text-empty-sub:    #5a5a68;
-  --acs-text-bell:         #4e4e5e;
-  --acs-skeleton-a:        rgba(255,255,255,0.04);
-  --acs-skeleton-b:        rgba(255,255,255,0.09);
-  --acs-rail-active:       rgba(88,101,242,0.7);
-  --acs-scrollbar:         rgba(255,255,255,0.09);
-  --acs-focus-ring:        rgba(88,101,242,0.55);
-  --acs-dot-pulse:         rgba(88,101,242,0.5);
-  --acs-badge-bg:          var(--accent-primary, #5865f2);
-  --acs-badge-border:      var(--bg-secondary, #1e1f24);
+
+/* ─── Keyframes ─────────────────────────────────────── */
+@keyframes acs3-in {
+  from { opacity:0; transform:translateY(6px) scale(.98); }
+  to   { opacity:1; transform:translateY(0)   scale(1);   }
+}
+@keyframes acs3-fade {
+  from { opacity:0; } to { opacity:1; }
+}
+@keyframes acs3-pop {
+  0%  { transform:scale(.45); opacity:0; }
+  65% { transform:scale(1.18); }
+  100%{ transform:scale(1);   opacity:1; }
+}
+@keyframes acs3-rail {
+  from { transform:scaleY(0) translateY(-50%); opacity:0; }
+  to   { transform:scaleY(1) translateY(-50%); opacity:1; }
+}
+@keyframes acs3-spin { to { transform:rotate(360deg); } }
+@keyframes acs3-shimmer {
+  0%  { background-position:-220% center; }
+  100%{ background-position: 220% center; }
+}
+@keyframes acs3-float {
+  0%,100% { transform:translateY(0);   }
+  50%      { transform:translateY(-5px); }
 }
 
-/* ── Light ── */
-[data-theme="light"],
-.theme-light {
-  --acs-bg-row-hover:      rgba(0,0,0,0.035);
-  --acs-bg-row-active:     rgba(88,101,242,0.07);
-  --acs-bg-icon:           rgba(0,0,0,0.05);
-  --acs-bg-empty-ring:     rgba(0,0,0,0.03);
-  --acs-border-empty-ring: rgba(0,0,0,0.08);
-  --acs-border-divider:    rgba(0,0,0,0.07);
-  --acs-bg-markbtn-hover:  rgba(88,101,242,0.07);
-  --acs-border-markbtn:    rgba(88,101,242,0.2);
-  --acs-text-title:        #12121a;
-  --acs-text-label:        #4a4a5a;
-  --acs-text-label-unread: #12121a;
-  --acs-text-sublabel:     #9090a2;
-  --acs-text-time:         #a8a8b8;
-  --acs-text-time-active:  rgba(88,101,242,0.75);
-  --acs-text-divider:      #b0b0c2;
-  --acs-text-empty-sub:    #a0a0b2;
-  --acs-text-bell:         #c8c8d8;
-  --acs-skeleton-a:        rgba(0,0,0,0.04);
-  --acs-skeleton-b:        rgba(0,0,0,0.085);
-  --acs-rail-active:       rgba(88,101,242,0.55);
-  --acs-scrollbar:         rgba(0,0,0,0.1);
-  --acs-focus-ring:        rgba(88,101,242,0.3);
-  --acs-dot-pulse:         rgba(88,101,242,0.35);
-  --acs-badge-bg:          var(--accent-primary, #5865f2);
-  --acs-badge-border:      var(--bg-secondary, #fff);
+/* ─── Header ───────────────────────────────────────── */
+.acs3-header {
+  flex-shrink: 0;
+  /* NO background — transparent so sidebar bg shows */
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 0 0 2px;
 }
 
-/* ── System preference fallback ── */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]):not(.theme-dark):not(.theme-light) {
-    --acs-bg-row-hover:      rgba(0,0,0,0.035);
-    --acs-bg-row-active:     rgba(88,101,242,0.07);
-    --acs-bg-icon:           rgba(0,0,0,0.05);
-    --acs-bg-empty-ring:     rgba(0,0,0,0.03);
-    --acs-border-empty-ring: rgba(0,0,0,0.08);
-    --acs-border-divider:    rgba(0, 0, 0, 0);
-    --acs-bg-markbtn-hover:  rgba(88,101,242,0.07);
-    --acs-border-markbtn:    rgba(88,101,242,0.2);
-    --acs-text-title:        #12121a;
-    --acs-text-label:        #4a4a5a;
-    --acs-text-label-unread: #12121a;
-    --acs-text-sublabel:     #9090a2;
-    --acs-text-time:         #a8a8b8;
-    --acs-text-time-active:  rgba(88,101,242,0.75);
-    --acs-text-divider:      #ffffff02;
-    --acs-text-empty-sub:    #a0a0b2;
-    --acs-text-bell:         #c8c8d8;
-    --acs-skeleton-a:        rgba(0,0,0,0.04);
-    --acs-skeleton-b:        rgba(0,0,0,0.085);
-    --acs-rail-active:       rgba(88,101,242,0.55);
-    --acs-scrollbar:         rgba(0,0,0,0.1);
-    --acs-focus-ring:        rgba(88,101,242,0.3);
-    --acs-dot-pulse:         rgba(88,101,242,0.35);
-    --acs-badge-bg:          var(--accent-primary, #5865f2);
-    --acs-badge-border:      var(--bg-secondary, #fff);
-  }
+/* Workspace switcher lives at the very top */
+.acs3-ws {
+  padding: 10px 10px 2px;
 }
 
-/* ── Keyframes ── */
-@keyframes acs-fade-slide {
-  from { opacity:0; transform:translateY(7px); }
-  to   { opacity:1; transform:translateY(0);   }
-}
-@keyframes acs-fade-in {
-  from { opacity:0; }
-  to   { opacity:1; }
-}
-@keyframes acs-scale-in {
-  from { opacity:0; transform:scale(0.82); }
-  to   { opacity:1; transform:scale(1);    }
-}
-@keyframes acs-badge-pop {
-  0%   { transform:scale(0.4); opacity:0; }
-  65%  { transform:scale(1.18); }
-  100% { transform:scale(1);   opacity:1; }
-}
-@keyframes acs-pulse-dot {
-  0%,100% { box-shadow:0 0 0 0   var(--acs-dot-pulse); }
-  50%     { box-shadow:0 0 0 4px transparent; }
-}
-@keyframes acs-spin { to { transform:rotate(360deg); } }
-@keyframes acs-shimmer {
-  0%   { background-position:-200% center; }
-  100% { background-position: 200% center; }
-}
-@keyframes acs-rail-grow {
-  from { transform:translateY(-50%) scaleY(0); opacity:0; }
-  to   { transform:translateY(-50%) scaleY(1); opacity:1; }
+/* "Activity" title bar */
+.acs3-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px 8px;
+  gap: 8px;
 }
 
-/* ── Row ── */
-.acs-row {
-  display:flex; align-items:flex-start; gap:10px;
-  width:100%; padding:8px 10px;
-  background:transparent; border:none; text-align:left; cursor:pointer;
-  border-radius:10px; position:relative; overflow:hidden;
-  transition:background 0.15s ease;
-  animation:acs-fade-slide 0.26s cubic-bezier(0.16,1,0.3,1) both;
+.acs3-title-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
-/* hover film */
-.acs-row::after {
-  content:''; position:absolute; inset:0; border-radius:10px;
-  background:var(--acs-bg-row-hover);
-  opacity:0; transition:opacity 0.15s; pointer-events:none;
-}
-.acs-row:hover::after { opacity:1; }
-.acs-row:focus-visible { outline:2px solid var(--acs-focus-ring); outline-offset:-2px; }
 
-/* active state */
-.acs-row.is-active { background:var(--acs-bg-row-active); }
-.acs-row.is-active::after { opacity:0 !important; }
-/* left accent rail */
-.acs-row.is-active::before {
+.acs3-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--sidebar-text, #fff);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+/* Unread count badge (red pill) */
+.acs3-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: #e01e5a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  animation: acs3-pop .3s cubic-bezier(.16,1,.3,1) both;
+}
+
+/* Right-side action buttons */
+.acs3-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.acs3-icon-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: 7px; border: none;
+  background: transparent;
+  color: rgba(255,255,255,0.35);
+  cursor: pointer;
+  padding: 0;
+  transition: background 130ms ease, color 130ms ease;
+}
+.acs3-icon-btn:hover {
+  background: rgba(255,255,255,0.09);
+  color: rgba(255,255,255,0.85);
+}
+
+/* Mark-all-read button */
+.acs3-markbtn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: transparent;
+  color: rgba(255,255,255,0.5);
+  font-size: 11.5px; font-weight: 500;
+  cursor: pointer; font-family: inherit;
+  white-space: nowrap;
+  transition: all 130ms ease;
+}
+.acs3-markbtn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.28);
+  color: rgba(255,255,255,0.9);
+}
+.acs3-markbtn:disabled { opacity:.4; cursor:not-allowed; }
+
+/* ─── Filter tab pills ───────────────────────────── */
+.acs3-tabs {
+  display: flex; align-items: center;
+  gap: 4px;
+  padding: 0 12px 8px;
+  overflow-x: auto;
+}
+.acs3-tabs::-webkit-scrollbar { display:none; }
+
+.acs3-tab {
+  display: inline-flex; align-items: center;
+  padding: 4px 13px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255,255,255,0.42);
+  font-size: 12.5px; font-weight: 500;
+  cursor: pointer; white-space: nowrap; font-family: inherit;
+  transition: all 140ms ease;
+}
+.acs3-tab:hover {
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.8);
+}
+.acs3-tab.is-on {
+  background: rgba(255,255,255,0.14);
+  border-color: rgba(255,255,255,0.18);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+}
+
+/* ─── Scroll container ───────────────────────────── */
+.acs3-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.acs3-scroll::-webkit-scrollbar { width:3px; }
+.acs3-scroll::-webkit-scrollbar-track { background:transparent; }
+.acs3-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1);
+  border-radius: 3px;
+}
+
+/* ─── Date divider ───────────────────────────────── */
+.acs3-divider {
+  display: flex; align-items: center; gap:10px;
+  padding: 12px 14px 5px;
+  animation: acs3-fade .25s ease both;
+}
+.acs3-divider-line {
+  flex:1; height:1px;
+  background: rgba(255,255,255,0.08);
+}
+.acs3-divider-label {
+  font-size: 10px; font-weight: 800;
+  color: rgba(255,255,255,0.3);
+  letter-spacing: .1em; text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ─── Notification row ───────────────────────────── */
+.acs3-row {
+  position: relative;
+  display: flex; align-items: flex-start; gap: 10px;
+  width: 100%; padding: 8px 12px 8px 14px;
+  background: transparent; border: none;
+  text-align: left; cursor: pointer;
+  transition: background 120ms ease;
+  animation: acs3-in .24s cubic-bezier(.16,1,.3,1) both;
+  overflow: hidden;
+}
+
+/* Hover: subtle glow film */
+.acs3-row::after {
   content:'';
-  position:absolute; left:0; top:50%; width:3px; height:58%;
-  transform:translateY(-50%);
-  background:var(--acs-rail-active);
-  border-radius:0 3px 3px 0;
-  animation:acs-rail-grow 0.22s cubic-bezier(0.16,1,0.3,1) both;
+  position:absolute; inset:0;
+  background: rgba(255,255,255,0.035);
+  opacity:0; transition:opacity 120ms;
+  pointer-events:none;
+}
+.acs3-row:hover::after { opacity:1; }
+.acs3-row:focus-visible {
+  outline: 2px solid rgba(255,255,255,0.3);
+  outline-offset: -2px;
+  z-index:1;
 }
 
-/* ── Text ── */
-.acs-label {
-  font-size:12.5px; font-weight:400; line-height:1.45;
-  color:var(--acs-text-label);
-  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
-  transition:color 0.15s;
+/* Active (selected) row */
+.acs3-row.is-on {
+  background: rgba(255,255,255,0.1);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
 }
-.acs-row.is-unread .acs-label { font-weight:600; color:var(--acs-text-label-unread); }
-.acs-sublabel {
-  font-size:11px; margin-top:2px;
-  color:var(--acs-text-sublabel);
+.acs3-row.is-on::after { opacity:0 !important; }
+
+/* Active left accent rail */
+.acs3-row.is-on::before {
+  content:'';
+  position:absolute; left:0; top:50%;
+  width:3px; height:65%;
+  border-radius:0 3px 3px 0;
+  background: var(--sidebar-active-text, #fff);
+  transform-origin: center top;
+  animation: acs3-rail .22s cubic-bezier(.16,1,.3,1) both;
+}
+
+/* ─── Avatar wrapper ─────────────────────────────── */
+.acs3-av {
+  flex-shrink:0; position:relative; padding-top:2px;
+}
+/* Small type-icon pip on the avatar corner */
+.acs3-pip {
+  position:absolute; bottom:-2px; right:-3px;
+  width:15px; height:15px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background: var(--bg-sidebar, #070534);
+  border: 1.5px solid var(--bg-sidebar, #070534);
+}
+/* Generic icon box (no avatar) */
+.acs3-icon-box {
+  width:36px; height:36px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+  transition: transform 140ms ease;
+}
+.acs3-row:hover .acs3-icon-box { transform:scale(1.07); }
+
+/* ─── Content ────────────────────────────────────── */
+.acs3-body {
+  flex:1; min-width:0;
+  display:flex; flex-direction:column; gap:2px;
+}
+.acs3-meta {
+  display:flex; align-items:baseline;
+  justify-content:space-between; gap:6px;
+}
+/* Sender name */
+.acs3-name {
+  font-size: 13.5px; font-weight: 700;
+  color: rgba(255,255,255,0.6);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  letter-spacing:-.015em; line-height:1.3;
+  transition: color 120ms ease;
+}
+.acs3-row.is-unread .acs3-name,
+.acs3-row.is-on .acs3-name {
+  color: #fff;
+}
+/* Timestamp */
+.acs3-time {
+  font-size: 11px;
+  color: rgba(255,255,255,0.28);
+  white-space:nowrap; flex-shrink:0; line-height:1.4;
+}
+.acs3-row.is-on .acs3-time { color:rgba(255,255,255,0.5); }
+
+/* Notification body text */
+.acs3-text {
+  font-size: 12.5px; line-height: 1.5;
+  color: rgba(255,255,255,0.42);
+  display:-webkit-box;
+  -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden;
+  transition: color 120ms ease;
+}
+.acs3-row.is-unread .acs3-text { color:rgba(255,255,255,0.68); }
+.acs3-row.is-on .acs3-text     { color:rgba(255,255,255,0.75); }
+
+/* Sub-label (channel / body) */
+.acs3-sub {
+  font-size:11.5px;
+  color: rgba(255,255,255,0.25);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.acs-time {
-  font-size:10.5px; white-space:nowrap; flex-shrink:0; margin-top:1px;
-  color:var(--acs-text-time); transition:color 0.15s;
-}
-.acs-row.is-active .acs-time { color:var(--acs-text-time-active); }
 
-/* ── Icons ── */
-.acs-icon-wrap  { flex-shrink:0; position:relative; animation:acs-scale-in 0.2s cubic-bezier(0.16,1,0.3,1) both; }
-.acs-icon-box   {
-  display:flex; align-items:center; justify-content:center;
-  width:32px; height:32px; border-radius:10px; flex-shrink:0;
-  transition:transform 0.15s;
+/* ─── Right indicators ───────────────────────────── */
+.acs3-right {
+  display:flex; flex-direction:column;
+  align-items:flex-end; gap:5px;
+  flex-shrink:0; padding-top:2px;
 }
-.acs-row:hover .acs-icon-box { transform:scale(1.07); }
-.acs-type-badge {
-  position:absolute; bottom:-2px; right:-2px;
-  width:14px; height:14px; border-radius:50%;
-  background:var(--acs-badge-border);
-  border:1.5px solid var(--acs-badge-border);
-  display:flex; align-items:center; justify-content:center;
+/* Unread dot */
+.acs3-dot {
+  width:8px; height:8px; border-radius:50%;
+  background: var(--accent-primary, #9394fb);
+  flex-shrink:0;
+  animation: acs3-pop .28s cubic-bezier(.16,1,.3,1) both;
 }
-
-/* ── Unread dot ── */
-.acs-dot {
-  width:7px; height:7px; border-radius:50%; flex-shrink:0;
-  background:var(--acs-badge-bg);
-  animation:acs-badge-pop 0.28s cubic-bezier(0.16,1,0.3,1) both,
-            acs-pulse-dot 2.8s ease 1.2s infinite;
+/* Mention pill */
+.acs3-at {
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:18px; height:18px; padding:0 5px;
+  border-radius:4px;
+  background: rgba(147,164,252,.22);
+  color: rgba(197,203,255,.9);
+  font-size:11px; font-weight:800;
 }
 
-/* ── Header badge ── */
-.acs-hbadge {
-  font-size:10px; font-weight:700; line-height:1.5;
-  padding:2px 7px; border-radius:20px;
-  background:var(--acs-badge-bg); color:#fff;
-  animation:acs-badge-pop 0.28s cubic-bezier(0.16,1,0.3,1) both;
-}
-
-/* ── Mark-all button ── */
-.acs-markbtn {
-  display:flex; align-items:center; gap:4px;
-  padding:4px 9px; border-radius:7px; cursor:pointer;
-  font-size:11px; font-weight:500;
-  color:var(--accent-primary, #5865f2);
-  background:transparent; border:1px solid transparent;
-  transition:background 0.15s, border-color 0.15s;
-}
-.acs-markbtn:hover:not(:disabled) {
-  background:var(--acs-bg-markbtn-hover);
-  border-color:var(--acs-border-markbtn);
-}
-.acs-markbtn:disabled { opacity:0.55; cursor:not-allowed; }
-
-/* ── Section divider ── */
-.acs-divider {
-  display:flex; align-items:center; gap:8px;
-  padding:10px 10px 4px;
-  font-size:9.5px; font-weight:700;
-  letter-spacing:0.09em; text-transform:uppercase;
-  color:var(--acs-text-divider);
-  animation:acs-fade-in 0.3s ease both;
-}
-.acs-divider::after {
-  content:''; flex:1; height:1px;
-  background:var(--acs-border-divider);
-}
-
-/* ── Skeleton ── */
-.acs-skel {
-  border-radius:6px;
-  background:linear-gradient(90deg,
-    var(--acs-skeleton-a) 25%,
-    var(--acs-skeleton-b) 50%,
-    var(--acs-skeleton-a) 75%
-  );
+/* ─── Skeleton loader ────────────────────────────── */
+.acs3-skel {
+  border-radius:5px;
+  background: linear-gradient(90deg,
+    rgba(255,255,255,.04) 25%,
+    rgba(255,255,255,.10) 50%,
+    rgba(255,255,255,.04) 75%);
   background-size:200% 100%;
-  animation:acs-shimmer 1.5s ease infinite;
+  animation: acs3-shimmer 1.5s ease infinite;
 }
 
-/* ── Empty ── */
-.acs-empty {
-  display:flex; flex-direction:column; align-items:center;
-  justify-content:center; padding:52px 24px; text-align:center;
-  animation:acs-fade-slide 0.35s cubic-bezier(0.16,1,0.3,1) both;
+/* ─── Empty state ────────────────────────────────── */
+.acs3-empty {
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  padding:56px 24px; text-align:center;
+  animation: acs3-in .35s ease both;
 }
-.acs-empty-ring {
-  width:58px; height:58px; border-radius:18px;
-  background:var(--acs-bg-empty-ring);
-  border:1px solid var(--acs-border-empty-ring);
+.acs3-empty-orb {
+  width:60px; height:60px; border-radius:18px;
   display:flex; align-items:center; justify-content:center;
-  margin-bottom:14px;
-  animation:acs-scale-in 0.3s cubic-bezier(0.16,1,0.3,1) both;
+  margin-bottom:16px;
+  background: rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.08);
+  animation: acs3-float 3s ease-in-out infinite;
+}
+.acs3-empty-title {
+  font-size:14px; font-weight:700;
+  color:rgba(255,255,255,.75);
+  margin:0 0 7px; letter-spacing:-.01em;
+}
+.acs3-empty-sub {
+  font-size:12px; line-height:1.65;
+  color:rgba(255,255,255,.3);
+  margin:0; max-width:185px;
 }
 
-/* ── Scrollbar ── */
-.acs-scroll::-webkit-scrollbar       { width:4px; }
-.acs-scroll::-webkit-scrollbar-track { background:transparent; }
-.acs-scroll::-webkit-scrollbar-thumb { background:var(--acs-scrollbar); border-radius:4px; }
-
-/* ── Spinner ── */
-.acs-spinner {
+/* ─── Spinner / load row ─────────────────────────── */
+.acs3-spinner {
   border-radius:50%;
-  border:2px solid var(--acs-border-divider);
-  border-top-color:var(--accent-primary, #5865f2);
-  animation:acs-spin 0.72s linear infinite;
+  border:2px solid rgba(255,255,255,.10);
+  border-top-color: var(--accent-primary,#9394fb);
+  animation: acs3-spin .72s linear infinite;
 }
-
-/* ── Header icon ── */
-.acs-header-icon {
-  width:26px; height:26px; border-radius:8px;
-  background:var(--acs-bg-icon);
-  display:flex; align-items:center; justify-content:center;
+.acs3-load-row {
+  display:flex; justify-content:center;
+  padding:14px;
+  animation: acs3-fade .2s ease both;
 }
 `;
 
 /* ── Icon map ── */
 const ICONS = {
-  mention:        { Icon: AtSign,            color: "var(--accent-primary,  #5865f2)" },
-  dm:             { Icon: MessageCircle,     color: "var(--accent-green,    #3ba55d)" },
-  thread_reply:   { Icon: MessageSquareText, color: "var(--accent-blue,     #4a9eff)" },
-  channel_invite: { Icon: UserPlus,          color: "var(--accent-purple,   #9b59b6)" },
-  task_update:    { Icon: Activity,          color: "var(--accent-yellow,   #f5a623)" },
-  system:         { Icon: Info,              color: "var(--acs-text-divider)"          },
+  mention:        { Icon: AtSign,            color: "#a5b4fc" },
+  dm:             { Icon: MessageCircle,     color: "#34d399" },
+  thread_reply:   { Icon: MessageSquareText, color: "#a5b4fc" },
+  channel_invite: { Icon: UserPlus,          color: "#c084fc" },
+  task_update:    { Icon: Activity,          color: "#fbbf24" },
+  system:         { Icon: Info,              color: "rgba(255,255,255,0.3)" },
 };
 
 /* ── Group by date ── */
@@ -335,7 +431,6 @@ function groupByDate(list) {
 }
 
 /* ── Sub-components ── */
-
 function StyleInjector() {
   return <style dangerouslySetInnerHTML={{ __html: STYLES }} />;
 }
@@ -344,15 +439,19 @@ function ActivitySkeleton({ delay = 0 }) {
   return (
     <div style={{
       display:"flex", alignItems:"flex-start", gap:10,
-      padding:"8px 10px",
-      animation:`acs-fade-in 0.3s ease ${delay}ms both`,
+      padding:"8px 12px",
+      animation:`acs3-fade .3s ease ${delay}ms both`,
     }}>
-      <div className="acs-skel" style={{ width:32, height:32, borderRadius:10, flexShrink:0 }} />
-      <div style={{ flex:1, display:"flex", flexDirection:"column", gap:6 }}>
-        <div className="acs-skel" style={{ height:12, width:"75%", borderRadius:4 }} />
-        <div className="acs-skel" style={{ height:10, width:"48%", borderRadius:4 }} />
+      <div className="acs3-skel"
+        style={{ width:36, height:36, borderRadius:10, flexShrink:0 }} />
+      <div style={{ flex:1, display:"flex", flexDirection:"column", gap:7, paddingTop:3 }}>
+        <div style={{ display:"flex", justifyContent:"space-between" }}>
+          <div className="acs3-skel" style={{ height:13, width:"40%", borderRadius:4 }} />
+          <div className="acs3-skel" style={{ height:11, width:"18%", borderRadius:4 }} />
+        </div>
+        <div className="acs3-skel" style={{ height:12, width:"78%", borderRadius:4 }} />
+        <div className="acs3-skel" style={{ height:12, width:"55%", borderRadius:4 }} />
       </div>
-      <div className="acs-skel" style={{ width:26, height:10, borderRadius:4, flexShrink:0 }} />
     </div>
   );
 }
@@ -364,9 +463,9 @@ function NotifIcon({ notification }) {
 
   if (data?.senderName) {
     return (
-      <div className="acs-icon-wrap">
-        <Avatar member={{ name: data.senderName, avatar: data.senderAvatar }} size={32} />
-        <div className="acs-type-badge">
+      <div className="acs3-av">
+        <Avatar member={{ name: data.senderName, avatar: data.senderAvatar }} size={36} />
+        <div className="acs3-pip">
           <Icon size={8} style={{ color }} />
         </div>
       </div>
@@ -374,25 +473,29 @@ function NotifIcon({ notification }) {
   }
 
   return (
-    <div
-      className="acs-icon-box"
-      style={{ background:`color-mix(in srgb, ${color} 14%, transparent)` }}
-    >
-      <Icon size={15} style={{ color }} />
+    <div className="acs3-av">
+      <div
+        className="acs3-icon-box"
+        style={{ background:`color-mix(in srgb, ${color} 18%, rgba(0,0,0,0.15))` }}
+      >
+        <Icon size={15} style={{ color }} />
+      </div>
     </div>
   );
 }
 
 function NotifRow({ notification, isSelected, animDelay, onSelect, onKeyDown }) {
-  const timeAgo = notification.createdAt
+  const timeAgo    = notification.createdAt
     ? formatDistanceToNowStrict(new Date(notification.createdAt), { addSuffix: true })
     : "";
+  const data       = normalizeNotification(notification);
+  const senderName = data?.senderName || "System";
 
   return (
     <button
       className={[
-        "acs-row",
-        isSelected           ? "is-active" : "",
+        "acs3-row",
+        isSelected           ? "is-on"     : "",
         !notification.isRead ? "is-unread" : "",
       ].filter(Boolean).join(" ")}
       style={{ animationDelay:`${animDelay}ms` }}
@@ -404,14 +507,22 @@ function NotifRow({ notification, isSelected, animDelay, onSelect, onKeyDown }) 
     >
       <NotifIcon notification={notification} />
 
-      <div style={{ flex:1, minWidth:0 }}>
-        <span className="acs-label">{getNotificationText(notification)}</span>
-        {notification.body && <p className="acs-sublabel">{notification.body}</p>}
+      <div className="acs3-body">
+        <div className="acs3-meta">
+          <span className="acs3-name">{senderName}</span>
+          {timeAgo && <span className="acs3-time">{timeAgo}</span>}
+        </div>
+        <span className="acs3-text">{getNotificationText(notification)}</span>
+        {notification.body && (
+          <span className="acs3-sub">{notification.body}</span>
+        )}
       </div>
 
-      <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4, flexShrink:0 }}>
-        {timeAgo && <span className="acs-time">{timeAgo}</span>}
-        {!notification.isRead && <span className="acs-dot" />}
+      <div className="acs3-right">
+        {!notification.isRead && <span className="acs3-dot" />}
+        {notification.type === "mention" && (
+          <span className="acs3-at">@</span>
+        )}
       </div>
     </button>
   );
@@ -428,8 +539,9 @@ export default function ActivityContextSidebar({
     fetchNotifications, fetchUnreadCount, markAsRead, markAllAsRead,
   } = useNotificationStore();
 
-  const scrollRef = useRef(null);
-  const [marking, setMarking] = useState(false);
+  const scrollRef                   = useRef(null);
+  const [marking, setMarking]       = useState(false);
+  const [activeTab, setActiveTab]   = useState("all");
 
   useEffect(() => {
     fetchNotifications(true);
@@ -470,43 +582,65 @@ export default function ActivityContextSidebar({
     if (sib?.tagName === "BUTTON") sib.focus();
   }
 
-  const groups = groupByDate(notifications);
+  /* Tab filter */
+  const filtered = useMemo(() => {
+    if (activeTab === "unreads") return notifications.filter(n => !n.isRead);
+    if (activeTab === "dms")     return notifications.filter(n => n.type === "dm");
+    return notifications;
+  }, [notifications, activeTab]);
+
+  const groups = groupByDate(filtered);
   const flat   = [...groups.Today, ...groups.Yesterday, ...groups.Earlier];
 
-  /* ── Header ── */
+  const TABS = [
+    { id:"all",     label:"All"     },
+    { id:"unreads", label:"Unreads" },
+    { id:"dms",     label:"DMs"     },
+  ];
+
+  /* ── Header (transparent — no bg override) ── */
   const header = (
-    <div>
-      <div className="w-full flex items-center justify-between" style={{ minHeight:32 }}>
+    <div className="acs3-header">
+      {/* Workspace switcher */}
+      <div className="acs3-ws">
         <WorkspaceSwitcher />
       </div>
 
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:10 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-          <div className="acs-header-icon">
-            <Activity size={14} style={{ color:"white" }} />
-          </div>
-          <span style={{
-            fontSize:13, fontWeight:700, letterSpacing:"-0.01em",
-            color:"white",
-          }}>
-            Activity
-          </span>
+      {/* Title + actions */}
+      <div className="acs3-titlebar">
+        <div className="acs3-title-left">
+          <span className="acs3-title">Activity</span>
           {unreadCount > 0 && (
-            <span className="acs-hbadge">
+            <span className="acs3-count">
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
         </div>
 
-        {unreadCount > 0 && (
-          <button className="acs-markbtn" onClick={handleMarkAll} disabled={marking}>
-            {marking
-              ? <div className="acs-spinner" style={{ width:12, height:12 }} />
-              : <CheckCheck size={12} />
-            }
-            Mark all read
+        <div className="acs3-title-actions">
+          {unreadCount > 0 && (
+            <button className="acs3-markbtn" onClick={handleMarkAll} disabled={marking}>
+              {marking
+                ? <div className="acs3-spinner" style={{ width:12, height:12 }} />
+                : <CheckCheck size={12} />
+              }
+              Mark all read
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="acs3-tabs">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            className={`acs3-tab${activeTab === tab.id ? " is-on" : ""}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
           </button>
-        )}
+        ))}
       </div>
     </div>
   );
@@ -518,59 +652,54 @@ export default function ActivityContextSidebar({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="acs-scroll"
-        style={{ height:"100%", overflowY:"auto" }}
+        className="acs3-scroll"
         role="listbox"
         aria-label="Activity notifications"
       >
         {/* Skeletons */}
-        {isLoading && notifications.length === 0 && (
-          <div style={{ padding:"6px 2px" }}>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <ActivitySkeleton key={i} delay={i * 55} />
+        {isLoading && filtered.length === 0 && (
+          <div style={{ paddingTop:4 }}>
+            {Array.from({ length:7 }).map((_, i) => (
+              <ActivitySkeleton key={i} delay={i * 50} />
             ))}
           </div>
         )}
 
         {/* Empty state */}
-        {!isLoading && notifications.length === 0 && (
-          <div className="acs-empty">
-            <div className="acs-empty-ring">
-              <Bell size={22} style={{ color:"var(--acs-text-bell)" }} />
+        {!isLoading && filtered.length === 0 && (
+          <div className="acs3-empty">
+            <div className="acs3-empty-orb">
+              <Bell size={24} style={{ color:"rgba(255,255,255,.35)" }} />
             </div>
-            <p style={{
-              fontSize:13, fontWeight:700, margin:"0 0 6px",
-              color:"var(--acs-text-title)",
-            }}>
-              All caught up
-            </p>
-            <p style={{
-              fontSize:12, lineHeight:1.6, margin:0, maxWidth:195,
-              color:"var(--acs-text-empty-sub)",
-            }}>
+            <p className="acs3-empty-title">All caught up</p>
+            <p className="acs3-empty-sub">
               Mentions, replies, and reactions appear here in real-time.
             </p>
           </div>
         )}
 
-        {/* Groups */}
-        {notifications.length > 0 && (
-          <div style={{ padding:"4px 2px 16px" }}>
+        {/* Grouped rows */}
+        {filtered.length > 0 && (
+          <div style={{ paddingBottom:16 }}>
             {Object.entries(groups).map(([label, items]) => {
               if (!items.length) return null;
               return (
                 <div key={label}>
-                  <div className="acs-divider">{label}</div>
+                  <div className="acs3-divider">
+                    <div className="acs3-divider-line" />
+                    <span className="acs3-divider-label">{label}</span>
+                    <div className="acs3-divider-line" />
+                  </div>
                   {items.map(n => (
                     <NotifRow
                       key={n._id}
                       notification={n}
                       isSelected={n._id === selectedNotificationId}
-                      animDelay={Math.min(flat.indexOf(n) * 32, 280)}
+                      animDelay={Math.min(flat.indexOf(n) * 25, 200)}
                       onSelect={handleSelect}
                       onKeyDown={e => {
-                        if (e.key === "ArrowDown") { e.preventDefault(); moveFocus(e, "next"); }
-                        if (e.key === "ArrowUp")   { e.preventDefault(); moveFocus(e, "prev"); }
+                        if (e.key === "ArrowDown") { e.preventDefault(); moveFocus(e,"next"); }
+                        if (e.key === "ArrowUp")   { e.preventDefault(); moveFocus(e,"prev"); }
                       }}
                     />
                   ))}
@@ -581,12 +710,9 @@ export default function ActivityContextSidebar({
         )}
 
         {/* Load more */}
-        {isLoading && notifications.length > 0 && (
-          <div style={{
-            display:"flex", justifyContent:"center", padding:12,
-            animation:"acs-fade-in 0.2s ease both",
-          }}>
-            <div className="acs-spinner" style={{ width:16, height:16 }} />
+        {isLoading && filtered.length > 0 && (
+          <div className="acs3-load-row">
+            <div className="acs3-spinner" style={{ width:16, height:16 }} />
           </div>
         )}
       </div>

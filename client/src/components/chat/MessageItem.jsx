@@ -31,6 +31,7 @@ import { Avatar } from "./MemberAvatarGroup";
 import EmojiPicker from "./EmojiPicker";
 import { sanitizeHtml } from "../../utils/sanitize";
 import toast from "react-hot-toast";
+import { handleDownload } from "../../utils/handleDownload";
 
 // ─── Inject highlight keyframes once ─────────────────────────────────────────
 const HIGHLIGHT_STYLE_ID = "msg-pinned-highlight-style";
@@ -272,32 +273,6 @@ const MessageItem = memo(
             )
             .filter(Boolean)
         : message.attachments || [];
-
-    const downloadFile = async (f) => {
-      const url = f?.secureUrl || f?.url;
-      const fileName = f?.originalName || f?.fileName || "download";
-      if (!url) return;
-      try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = objectUrl;
-        a.setAttribute("download", fileName);
-        a.rel = "noopener noreferrer";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-      } catch {
-        try {
-          window.open(url, "_blank");
-        } catch {
-          /* noop */
-        }
-      }
-    };
 
     // System messages
     if (isSystem) {
@@ -548,7 +523,7 @@ const MessageItem = memo(
                       <span style={{ opacity: 0.4 }}>|</span>
                       <span
                         className="cursor-pointer flex items-center gap-1 hover:underline"
-                        onClick={() => derivedAttachments.forEach(downloadFile)}
+                        onClick={() => derivedAttachments.forEach((file) => handleDownload(file))}
                       >
                         <Download size={14} style={{ opacity: 0.7 }} /> Download
                         all
@@ -576,7 +551,7 @@ const MessageItem = memo(
                         onOpen={(f) =>
                           onOpenFilePreview?.(f, derivedAttachments)
                         }
-                        onDownload={downloadFile}
+                        onDownload={handleDownload}
                         isSingle={derivedAttachments.length === 1}
                       />
                     ))}

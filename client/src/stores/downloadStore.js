@@ -7,22 +7,38 @@ export const useDownloadStore = create(
       downloads: [],
 
       addDownload: (file) => {
-        const exists = get().downloads.find(
-          (d) => d.url === (file.url || file.secureUrl),
-        );
-        if (exists) return;
+        const url = file.url || file.secureUrl;
+        if (!url) return null;
 
-        const newFile = {
+        const exists = get().downloads.find((d) => d.url === url);
+
+        if (exists) {
+          return { ...exists, alreadyExists: true };
+        }
+
+        const newDownload = {
           id: Date.now(),
-          name: file.name,
-          url: file.url,
+          name: file.name || "Unnamed file",
+          url,
           size: file.size || "—",
-          type: file.type || "file",
+          status: "downloading",
+          progress: 0,
+          blobUrl: null,
           createdAt: new Date().toISOString(),
         };
 
         set((state) => ({
-          downloads: [newFile, ...state.downloads],
+          downloads: [newDownload, ...state.downloads],
+        }));
+
+        return newDownload;
+      },
+
+      updateDownload: (id, updates) => {
+        set((state) => ({
+          downloads: state.downloads.map((d) =>
+            d.id === id ? { ...d, ...updates } : d
+          ),
         }));
       },
 
@@ -35,6 +51,20 @@ export const useDownloadStore = create(
     }),
     {
       name: "downloads-storage",
-    },
-  ),
+      partialize: (state) => ({
+        // persist downloads but avoid storing transient blobUrl values
+        downloads: state.downloads.map((d) => ({
+          id: d.id,
+          name: d.name,
+          url: d.url,
+          size: d.size,
+          status: d.status,
+          progress: d.progress,
+          // do not persist blobUrl as it is session-scoped
+          blobUrl: null,
+          createdAt: d.createdAt,
+        })),
+      }),
+    }
+  )
 );

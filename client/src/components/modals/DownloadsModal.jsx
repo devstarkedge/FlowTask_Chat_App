@@ -18,6 +18,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import "./custom-css/DownloadModal.css";
+import { openPreview } from "../../services/previewService";
 
 /* ─────────────────────────────────────────────────────────────────────────
    HELPERS
@@ -172,16 +173,13 @@ function EmptyState({ icon: Icon, title, sub }) {
 ───────────────────────────────────────────────────────────────────────── */
 export default function DownloadsModal({ isOpen, onClose, channelId }) {
   const downloads = useDownloadStore((state) => state.downloads);
-  const openFile = (url) => {
-    if (!url) return;
-    window.open(url, "_blank");
-  };
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
   const overlayRef = useRef(null);
   const removeDownload = useDownloadStore((s) => s.removeDownload);
+  
 
   const fetchFiles = async () => {
     // const [activeTab, setActiveTab] = useState("recent");
@@ -225,13 +223,33 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
   };
 
   const handleOpenFile = (file) => {
-    if (file.blobUrl) {
-      window.open(file.blobUrl, "_blank");
-    } else {
-      window.open(file.url, "_blank");
-    }
+    if (!file) return;
+    const url = file.blobUrl || file.url || file.secureUrl;
+    if (!url) return;
+    const preview = {
+      url,
+      blobUrl: file.blobUrl || null,
+      remoteUrl: file.url || file.secureUrl || null,
+      originalName: file.name,
+      fileName: file.name,
+      mimeType: file.type,
+      fileSize: file.size,
+    };
+    const all = downloads
+      .slice()
+      .reverse()
+      .map((f) => ({
+        url: f.blobUrl || f.url || f.secureUrl,
+        blobUrl: f.blobUrl || null,
+        remoteUrl: f.url || f.secureUrl || null,
+        originalName: f.name,
+        fileName: f.name,
+        mimeType: f.type,
+        fileSize: f.size,
+      }));
+    openPreview(preview, all);
   };
-
+  
   /* bulk download trigger */
   const triggerDownload = async (url, name) => {
     try {
@@ -319,8 +337,7 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
                             className="dl-file-meta"
                             style={{ cursor: "pointer", color: "#3b82f6" }}
                             onClick={() => handleOpenFile(file)}
-                          >
-                          </div>
+                          ></div>
                         ) : file.status === "downloading" ? (
                           <div className="dl-file-meta">
                             Downloading... {file.progress || 0}%

@@ -76,6 +76,7 @@ import {
 import toast from "react-hot-toast";
 import DownloadsModalWrapper from "../modals/DownloadsModalWrapper";
 import { useDownloadStore } from "../../stores/downloadStore";
+import { onPreviewRequest } from "../../services/previewService";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 import PinnedBar from "../chat/PinnedBar";
 import { handleDownload } from "../../utils/handleDownload";
@@ -1344,10 +1345,18 @@ export default function ChatLayout() {
     closeThread();
     useChannelStore.getState().setShowInfoPanel(false);
   };
-  const openFilePreview = (file, allFiles = []) => {
+  const openFilePreview = useCallback((file, allFiles = []) => {
     setPreviewFile(file);
     setPreviewFiles(allFiles.length > 0 ? allFiles : [file]);
-  };
+  }, []);
+
+  useEffect(() => {
+    const unsub = onPreviewRequest((file, files) => {
+      if (!file) return;
+      openFilePreview(file, files);
+    });
+    return () => unsub && unsub();
+  }, [openFilePreview]);
   const handleSaveMessage = useCallback(async (messageId) => {
     try {
       const { data } = await savedMessageAPI.toggle(messageId);

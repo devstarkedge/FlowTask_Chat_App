@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Download, ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight, FileText, Film, Music, File } from 'lucide-react'
 import { useDownloadStore } from "../../stores/downloadStore";
 import { handleDownload } from "../../utils/handleDownload";
@@ -6,6 +7,7 @@ import { handleDownload } from "../../utils/handleDownload";
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp']
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
 const AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4']
+const PDF_TYPES = ['application/pdf']
 
 export default function FilePreviewModal({ file, files = [], onClose }) {
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -37,9 +39,10 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   if (!currentFile) return null
 
   const mime = currentFile.mimeType || ''
-  const isImage = IMAGE_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t)
+  const isImage = IMAGE_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t) || (currentFile.fileName || '').toLowerCase().endsWith('.png') || (currentFile.fileName || '').toLowerCase().endsWith('.jpg')
   const isVideo = VIDEO_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t)
   const isAudio = AUDIO_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t)
+  const isPdf = PDF_TYPES.some((t) => mime === t) || (currentFile.fileName || '').toLowerCase().endsWith('.pdf')
 
   const prev = () => {
     setCurrentIndex((i) => (i > 0 ? i - 1 : files.length - 1))
@@ -55,8 +58,20 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
 
   const downloadUrl = currentFile.secureUrl || currentFile.url || '#'
 
-  return (
-    <div className="file-preview-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+  const overlayStyle = {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 11000,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'rgba(0,0,0,0.6)',
+    WebkitBackdropFilter: 'blur(6px)',
+    backdropFilter: 'blur(6px)',
+  }
+
+  const content = (
+    <div style={overlayStyle} className="file-preview-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       {/* Top Bar */}
       <div
         style={{
@@ -168,6 +183,13 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             draggable={false}
           />
         )}
+        {isPdf && currentFile.url && (
+          <iframe
+            src={currentFile.url}
+            title={currentFile.originalName || 'PDF Preview'}
+            style={{ width: '100%', height: '100%', border: 'none', borderRadius: 8 }}
+          />
+        )}
 
         {isVideo && (
           <video
@@ -191,7 +213,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
           </div>
         )}
 
-        {!isImage && !isVideo && !isAudio && (
+        {!isImage && !isVideo && !isAudio && !isPdf && (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
             padding: 40, background: 'rgba(0,0,0,0.3)', borderRadius: 16,
@@ -203,14 +225,24 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
               Preview not available for this file type
             </p>
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="btn-primary"
-              style={{ marginTop: 8 }}
-            >
-              <Download size={14} /> Download
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => handleDownload(currentFile)}
+                className="btn-primary"
+                style={{ marginTop: 8 }}
+              >
+                <Download size={14} /> Download
+              </button>
+              <button
+                type="button"
+                onClick={() => window.open(downloadUrl, '_blank')}
+                className="btn-primary"
+                style={{ marginTop: 8 }}
+              >
+                Open externally
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -229,6 +261,12 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
       )}
     </div>
   )
+
+  if (typeof document !== 'undefined') {
+    return createPortal(content, document.body)
+  }
+
+  return content
 }
 
 function ToolbarBtn({ icon: Icon, onClick }) {

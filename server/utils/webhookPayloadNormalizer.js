@@ -90,6 +90,38 @@ function taskToCard(task) {
   };
 }
 
+function resolveTimeEntryType(payload) {
+  const directType = payload?.entryType || payload?.timeEntry?.type;
+  if (directType === 'logged' || directType === 'estimation') {
+    return directType;
+  }
+
+  const activeEntry = payload?.timeEntry?.current || payload?.timeEntry?.previous || payload?.timeEntry;
+  if (activeEntry?.reason && !activeEntry?.description) {
+    return 'estimation';
+  }
+  if (activeEntry?.description && !activeEntry?.reason) {
+    return 'logged';
+  }
+
+  return undefined;
+}
+
+function normalizeTimeEntryPayload(p) {
+  return {
+    ...p,
+    entryType: resolveTimeEntryType(p),
+    timeEntry: p.timeEntry,
+    timeTotals: p.timeTotals,
+    card: p.card || taskToCard(p.task),
+    subtask: p.subtask,
+    nano: p.nano,
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    userId: p.userId || actorToUserId(p.actor),
+  };
+}
+
 // ─── Helper: Extract userId from actor ───────────────────────────────────────
 
 function actorToUserId(actor) {
@@ -219,14 +251,22 @@ const NORMALIZERS = {
     userId: p.userId || actorToUserId(p.actor),
   }),
 
-  [FLOWTASK_EVENTS.TIME_ENTRY_ADDED]: (p) => ({
-    ...p,
-    timeEntry: p.timeEntry,
-    card: p.card || taskToCard(p.task),
-    boardId: p.boardId || p.task?.boardId || p.project?.id,
-    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
-    userId: p.userId || actorToUserId(p.actor),
-  }),
+  [FLOWTASK_EVENTS.TIME_ENTRY_ADDED]: normalizeTimeEntryPayload,
+
+  [FLOWTASK_EVENTS.TIME_ENTRY_UPDATED]: normalizeTimeEntryPayload,
+
+  [FLOWTASK_EVENTS.TIME_ENTRY_DELETED]: normalizeTimeEntryPayload,
+
+  // Type-specific time entry events — same normalizer, entryType already in payload
+  [FLOWTASK_EVENTS.LOGGED_TIME_ADDED]: normalizeTimeEntryPayload,
+  [FLOWTASK_EVENTS.LOGGED_TIME_UPDATED]: normalizeTimeEntryPayload,
+  [FLOWTASK_EVENTS.LOGGED_TIME_DELETED]: normalizeTimeEntryPayload,
+  [FLOWTASK_EVENTS.ESTIMATED_TIME_ADDED]: normalizeTimeEntryPayload,
+  [FLOWTASK_EVENTS.ESTIMATED_TIME_UPDATED]: normalizeTimeEntryPayload,
+  [FLOWTASK_EVENTS.ESTIMATED_TIME_DELETED]: normalizeTimeEntryPayload,
+  [FLOWTASK_EVENTS.BILLED_TIME_ADDED]: normalizeTimeEntryPayload,
+  [FLOWTASK_EVENTS.BILLED_TIME_UPDATED]: normalizeTimeEntryPayload,
+  [FLOWTASK_EVENTS.BILLED_TIME_DELETED]: normalizeTimeEntryPayload,
 
   // ─── User Events ────────────────────────────────────────────────────────
 

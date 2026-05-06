@@ -13,7 +13,18 @@ const EVENT_CONFIG = {
   TASK_COMMENTED:        { label: 'commented on task',         accent: 'var(--text-link)' },
   TASK_STATUS_CHANGED:   { label: 'changed task status',       accent: 'var(--accent-primary)' },
   TASK_DUE_DATE_CHANGED: { label: 'changed due date',          accent: 'var(--accent-yellow)' },
+  // Legacy generic time entry events (backward compat)
   TIME_ENTRY_ADDED:      { label: 'logged time',               accent: 'var(--accent-orange)' },
+  TIME_ENTRY_UPDATED:    { label: 'updated time entry',        accent: 'var(--accent-yellow)' },
+  TIME_ENTRY_DELETED:    { label: 'removed time entry',        accent: 'var(--accent-red)' },
+  // Logged time
+  LOGGED_TIME_ADDED:     { label: 'logged time',               accent: 'var(--accent-orange)' },
+  LOGGED_TIME_UPDATED:   { label: 'updated logged time',       accent: 'var(--accent-yellow)' },
+  LOGGED_TIME_DELETED:   { label: 'removed logged time',       accent: 'var(--accent-red)' },
+  // Estimated time
+  ESTIMATED_TIME_ADDED:  { label: 'set estimate',              accent: 'var(--accent-purple)' },
+  ESTIMATED_TIME_UPDATED:{ label: 'updated estimate',          accent: 'var(--accent-primary)' },
+  ESTIMATED_TIME_DELETED:{ label: 'removed estimate',          accent: 'var(--accent-red)' },
   ANNOUNCEMENT_CREATED:  { label: 'posted an announcement',    accent: 'var(--accent-primary)' },
   SUBTASK_CREATED:       { label: 'added subtask',             accent: 'var(--accent-primary)' },
   SUBTASK_UPDATED:       { label: 'updated subtask',           accent: 'var(--accent-primary)' },
@@ -36,6 +47,49 @@ const FIELD_LABELS = {
   listId: 'List',
 }
 
+function getTimeEntryActionLabel(eventType, meta) {
+  // For new type-specific events, the label comes directly from EVENT_CONFIG
+  if (!eventType.startsWith('TIME_ENTRY_')) {
+    return EVENT_CONFIG[eventType]?.label || 'activity'
+  }
+
+  // Legacy TIME_ENTRY_* events: derive label from entryType in meta
+  const isEstimate = meta.entryType === 'estimation'
+
+  if (eventType === 'TIME_ENTRY_UPDATED') {
+    return isEstimate ? 'updated estimate' : 'updated logged time'
+  }
+
+  if (eventType === 'TIME_ENTRY_DELETED') {
+    return isEstimate ? 'removed estimate' : 'removed logged time'
+  }
+
+  return isEstimate ? 'set estimate' : 'logged time'
+}
+
+function getTimeEntryValueLabel(meta) {
+  if (meta.entryType === 'estimation') return 'Estimate'
+  return 'Duration'
+}
+
+function getTimeEntryNoteLabel(meta) {
+  return meta.entryType === 'estimation' ? 'Reason' : 'Note'
+}
+
+function getTimeEntryTotalLabel(meta) {
+  if (meta.entryType === 'estimation') return 'Total Estimated'
+  return 'Total Logged'
+}
+
+function formatMinutes(totalMinutes) {
+  if (totalMinutes == null || totalMinutes < 0) return null
+  const h = Math.floor(totalMinutes / 60)
+  const m = totalMinutes % 60
+  if (h > 0 && m > 0) return `${h}h ${m}m`
+  if (h > 0) return `${h}h`
+  return `${m}m`
+}
+
 /**
  * Premium auto-activity message card for FlowTask bot notifications.
  * Handles all event types: tasks, subtasks, nano, attachments, announcements.
@@ -44,16 +98,18 @@ const FIELD_LABELS = {
  */
 export default function AutoActivityMessage({ message }) {
   const meta = message.activityMeta || {}
-  const config = EVENT_CONFIG[meta.eventType] || { label: 'activity', accent: 'var(--accent-primary)' }
-  const redirect = buildRedirectFromMeta(meta)
-
   const eventType = meta.eventType || ''
+  const config = EVENT_CONFIG[eventType] || { label: 'activity', accent: 'var(--accent-primary)' }
+  const redirect = buildRedirectFromMeta(meta)
+  const isTimeEntry = eventType.startsWith('TIME_ENTRY_')
+    || eventType.startsWith('LOGGED_TIME_')
+    || eventType.startsWith('ESTIMATED_TIME_')
+  const actionLabel = isTimeEntry ? getTimeEntryActionLabel(eventType, meta) : config.label
   const isAnnouncement = eventType === 'ANNOUNCEMENT_CREATED'
   const isTaskUpdate = eventType === 'TASK_UPDATED'
   const isStatusChange = eventType === 'TASK_STATUS_CHANGED'
   const isDueDateChange = eventType === 'TASK_DUE_DATE_CHANGED'
   const isAssignment = eventType === 'TASK_ASSIGNED'
-  const isTimeEntry = eventType === 'TIME_ENTRY_ADDED'
   const isSubtask = eventType.startsWith('SUBTASK_')
   const isNano = eventType.startsWith('NANO_')
   const isAttachment = eventType === 'ATTACHMENT_ADDED'
@@ -84,10 +140,19 @@ export default function AutoActivityMessage({ message }) {
 
       <div style={{ paddingRight: redirect ? 100 : 0 }}>
         {/* Actor + Action */}
-        <div style={{ lineHeight: 1.5 }}>
-          <span className="activity-actor">{meta.actorName || 'Someone'}</span>
-          {' '}
-          <span className="activity-action">{config.label}</span>
+        <div style={{ lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+          {meta.actorAvatar && (
+            <img
+              src={meta.actorAvatar}
+              alt={meta.actorName || ''}
+              style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+            />
+          )}
+          <span>
+            <span className="activity-actor">{meta.actorName || 'Someone'}</span>
+            {' '}
+            <span className="activity-action">{actionLabel}</span>
+          </span>
         </div>
 
         {/* Task title (for task events) */}
@@ -168,12 +233,59 @@ export default function AutoActivityMessage({ message }) {
           </div>
         )}
 
-        {/* Time entry duration */}
-        {isTimeEntry && meta.newValue && (
-          <div className="activity-detail" style={{ marginTop: 3 }}>
-            <span className="activity-detail-label">Duration:</span>
-            <span className="activity-detail-value">{meta.newValue}</span>
-          </div>
+        {/* Time entry details */}
+        {isTimeEntry && (
+          <>
+            {(meta.oldValue || meta.newValue) && (
+              <div className="activity-detail" style={{ marginTop: 3 }}>
+                <span className="activity-detail-label">{getTimeEntryValueLabel(meta)}:</span>
+                {meta.oldValue && meta.newValue ? (
+                  <>
+                    <span className="activity-detail-value">{meta.oldValue}</span>
+                    <span style={{ color: 'var(--text-muted)', margin: '0 4px', fontSize: 12 }}>→</span>
+                    <span className="activity-detail-value" style={{ fontWeight: 600 }}>{meta.newValue}</span>
+                  </>
+                ) : (
+                  <span className="activity-detail-value">{meta.newValue || meta.oldValue}</span>
+                )}
+              </div>
+            )}
+
+            {meta.subtaskTitle && (
+              <div className="activity-detail" style={{ marginTop: 2 }}>
+                <span className="activity-detail-label">Subtask:</span>
+                <span className="activity-detail-value">{meta.subtaskTitle}</span>
+              </div>
+            )}
+
+            {meta.nanoTitle && (
+              <div className="activity-detail" style={{ marginTop: 2 }}>
+                <span className="activity-detail-label">Item:</span>
+                <span className="activity-detail-value">{meta.nanoTitle}</span>
+              </div>
+            )}
+
+            {meta.entryNote && (
+              <div className="activity-detail" style={{ marginTop: 2 }}>
+                <span className="activity-detail-label">{getTimeEntryNoteLabel(meta)}:</span>
+                <span className="activity-detail-value">{meta.entryNote}</span>
+              </div>
+            )}
+
+            {meta.totalMinutes != null && (
+              <div className="activity-detail" style={{ marginTop: 2 }}>
+                <span className="activity-detail-label">{getTimeEntryTotalLabel(meta)}:</span>
+                <span className="activity-detail-value" style={{ fontWeight: 600 }}>{formatMinutes(meta.totalMinutes)}</span>
+              </div>
+            )}
+
+            {/* {meta.projectName && (
+              <div className="activity-detail" style={{ marginTop: 2 }}>
+                <span className="activity-detail-label">Project:</span>
+                <span className="activity-detail-value">{meta.projectName}</span>
+              </div>
+            )} */}
+          </>
         )}
 
         {/* ─── Subtask events ─── */}

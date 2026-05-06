@@ -8,6 +8,12 @@ import userRepository from '../../users/user.repository.js';
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS } from '../../../config/constants.js';
 
+const TIME_ACTION_BY_EVENT = Object.freeze({
+  [FLOWTASK_EVENTS.TIME_ENTRY_ADDED]: 'added',
+  [FLOWTASK_EVENTS.TIME_ENTRY_UPDATED]: 'updated',
+  [FLOWTASK_EVENTS.TIME_ENTRY_DELETED]: 'deleted',
+});
+
 function requireWorkspaceId(payload, eventName) {
   const wsId = payload?._workspaceId || payload?.workspaceId || payload?.data?.workspaceId;
   if (!wsId) {
@@ -91,6 +97,242 @@ async function autoAddAssigneesToChannel(channel, assigneeIds, wsId) {
       error: err.message,
     });
   }
+}
+
+function toInteger(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function resolveTimeEntryState(timeEntry) {
+  return timeEntry?.current || timeEntry?.previous || timeEntry || null;
+}
+
+function resolveTimeEntryNote(entry) {
+  return entry?.note || entry?.description || entry?.reason || null;
+}
+
+function resolveTimeEntryMinutes(entry) {
+  if (!entry) return 0;
+  if (entry.totalMinutes !== undefined && entry.totalMinutes !== null) return toInteger(entry.totalMinutes);
+  if (entry.duration !== undefined && entry.duration !== null) return toInteger(entry.duration);
+  return (toInteger(entry.hours) * 60) + toInteger(entry.minutes);
+}
+
+function formatTimeEntryDuration(entry) {
+  const totalMinutes = resolveTimeEntryMinutes(entry);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}m`;
+}
+
+function resolveTimeEntryType(payload) {
+  const directType = payload?.entryType || payload?.timeEntry?.type;
+  if (directType === 'logged' || directType === 'estimation') {
+    return directType;
+  }
+
+  const activeEntry = resolveTimeEntryState(payload?.timeEntry);
+  if (activeEntry?.reason && !activeEntry?.description) {
+    return 'estimation';
+  }
+  if (activeEntry?.description && !activeEntry?.reason) {
+    return 'logged';
+  }
+
+  return null;
+}
+
+function resolveTimeActionType(eventName, payload) {
+  const operation = payload?.operation;
+
+  if (operation === 'add' || operation === 'added' || operation === 'create' || operation === 'created') {
+    return 'added';
+  }
+
+  if (operation === 'update' || operation === 'updated') {
+    return 'updated';
+  }
+
+  if (operation === 'delete' || operation === 'deleted' || operation === 'remove' || operation === 'removed') {
+    return 'deleted';
+  }
+
+  return TIME_ACTION_BY_EVENT[eventName] || 'added';
+}
+
+function resolveTimeTotals(payload, entryType) {
+  const loggedTotalMinutes = payload?.timeTotals?.logged?.totalMinutes;
+  const estimationTotalMinutes = payload?.timeTotals?.estimation?.totalMinutes;
+  const billedTotalMinutes = payload?.timeTotals?.billed?.totalMinutes;
+  const affectedSource = payload?.timeTotals?.affectedType === entryType
+    ? payload?.timeTotals?.affectedTotal
+    : entryType === 'estimation'
+      ? payload?.timeTotals?.estimation
+      : entryType === 'logged'
+        ? payload?.timeTotals?.logged
+        : entryType === 'billed'
+          ? payload?.timeTotals?.billed
+          : null;
+  const totalMinutes = affectedSource?.totalMinutes;
+
+  return {
+    totalMinutes: totalMinutes !== undefined && totalMinutes !== null ? toInteger(totalMinutes) : null,
+    loggedTotalMinutes: loggedTotalMinutes !== undefined && loggedTotalMinutes !== null ? toInteger(loggedTotalMinutes) : null,
+    estimationTotalMinutes: estimationTotalMinutes !== undefined && estimationTotalMinutes !== null ? toInteger(estimationTotalMinutes) : null,
+    billedTotalMinutes: billedTotalMinutes !== undefined && billedTotalMinutes !== null ? toInteger(billedTotalMinutes) : null,
+  };
+}
+
+function formatMinutesAsDuration(totalMinutes) {
+  if (totalMinutes === undefined || totalMinutes === null) {
+    return null;
+  }
+
+  return formatTimeEntryDuration({ totalMinutes });
+}
+
+function resolveTimeEntityContext(payload) {
+  const entityType = payload.entityType || payload.entity?.type || (payload.nano ? 'nano' : payload.subtask ? 'subtask' : 'task');
+  const taskTitle = payload.card?.title || payload.task?.title || 'a task';
+  const subtaskTitle = payload.subtask?.title || null;
+  const nanoTitle = payload.nano?.title || null;
+
+  if (entityType === 'nano') {
+    const nanoTarget = nanoTitle ? `checklist item **${nanoTitle}**` : 'a checklist item';
+    return {
+      entityType,
+      entityName: payload.entity?.title || nanoTitle || taskTitle || null,
+      taskTitle,
+      subtaskTitle,
+      nanoTitle,
+      targetText: taskTitle ? `${nanoTarget} in **${taskTitle}**` : nanoTarget,
+    };
+  }
+
+  if (entityType === 'subtask') {
+    const subtaskTarget = subtaskTitle ? `subtask **${subtaskTitle}**` : 'a subtask';
+    return {
+      entityType,
+      entityName: payload.entity?.title || subtaskTitle || taskTitle || null,
+      taskTitle,
+      subtaskTitle,
+      nanoTitle,
+      targetText: taskTitle ? `${subtaskTarget} in **${taskTitle}**` : subtaskTarget,
+    };
+  }
+
+  return {
+    entityType,
+    entityName: payload.entity?.title || taskTitle || null,
+    taskTitle,
+    subtaskTitle,
+    nanoTitle,
+    targetText: taskTitle ? `**${taskTitle}**` : 'a task',
+  };
+}
+
+function buildTimeEntryActivityMeta({
+  eventName,
+  payload,
+  userName,
+  normalizedBoardId,
+  departmentId,
+  project,
+  taskId,
+  entryType,
+  entityContext,
+  oldValue,
+  newValue,
+  channelId = null,
+}) {
+  const previousEntry = payload?.timeEntry?.previous || null;
+  const currentEntry = payload?.timeEntry?.current || null;
+  const fallbackEntry = resolveTimeEntryState(payload?.timeEntry);
+  const actionType = resolveTimeActionType(eventName, payload);
+  const totals = resolveTimeTotals(payload, entryType);
+  const actorAvatar = payload?.actor?.avatar || null;
+
+  return {
+    eventType: eventName,
+    actionType,
+    taskId,
+    channelId,
+    projectId: normalizedBoardId,
+    departmentId: departmentId || project?.departmentId || null,
+    projectName: project?.name || null,
+    taskTitle: entityContext.taskTitle || null,
+    parentTaskTitle: entityContext.taskTitle || null,
+    subtaskTitle: entityContext.subtaskTitle || null,
+    nanoTitle: entityContext.nanoTitle || null,
+    actorName: userName,
+    actorAvatar,
+    entryType,
+    entityType: entityContext.entityType,
+    entityName: entityContext.entityName || null,
+    entryNote: resolveTimeEntryNote(currentEntry || previousEntry || fallbackEntry),
+    oldValue,
+    newValue,
+    currentMinutes: currentEntry
+      ? resolveTimeEntryMinutes(currentEntry)
+      : (actionType === 'added' && fallbackEntry ? resolveTimeEntryMinutes(fallbackEntry) : null),
+    previousMinutes: previousEntry
+      ? resolveTimeEntryMinutes(previousEntry)
+      : (actionType === 'deleted' && fallbackEntry ? resolveTimeEntryMinutes(fallbackEntry) : null),
+    totalMinutes: totals.totalMinutes,
+    loggedTotalMinutes: totals.loggedTotalMinutes,
+    estimationTotalMinutes: totals.estimationTotalMinutes,
+    billedTotalMinutes: totals.billedTotalMinutes,
+  };
+}
+
+function resolveEntryLabel(entryType) {
+  if (entryType === 'estimation') return 'estimated time';
+  if (entryType === 'billed') return 'billed time';
+  return 'logged time';
+}
+
+function isUpdateEvent(eventName) {
+  return eventName === FLOWTASK_EVENTS.TIME_ENTRY_UPDATED
+    || eventName === FLOWTASK_EVENTS.LOGGED_TIME_UPDATED
+    || eventName === FLOWTASK_EVENTS.ESTIMATED_TIME_UPDATED
+    || eventName === FLOWTASK_EVENTS.BILLED_TIME_UPDATED;
+}
+
+function isDeleteEvent(eventName) {
+  return eventName === FLOWTASK_EVENTS.TIME_ENTRY_DELETED
+    || eventName === FLOWTASK_EVENTS.LOGGED_TIME_DELETED
+    || eventName === FLOWTASK_EVENTS.ESTIMATED_TIME_DELETED
+    || eventName === FLOWTASK_EVENTS.BILLED_TIME_DELETED;
+}
+
+function buildTimeEntryMessage(eventName, payload, userName, previousValue, currentValue, entryType, totalValue) {
+  const { targetText } = resolveTimeEntityContext(payload);
+  const entryLabel = resolveEntryLabel(entryType);
+  const activeEntry = resolveTimeEntryState(payload.timeEntry);
+  const note = activeEntry?.note ? ` — "${activeEntry.note}"` : '';
+  const totalSuffix = totalValue ? `. Total ${entryLabel}: **${totalValue}**` : '';
+
+  if (isUpdateEvent(eventName)) {
+    return `${userName} updated ${entryLabel} on ${targetText}: ${previousValue || '0m'} → ${currentValue || '0m'}${note}${totalSuffix}`;
+  }
+
+  if (isDeleteEvent(eventName)) {
+    return `${userName} removed ${entryLabel} (${previousValue || currentValue || '0m'}) from ${targetText}${note}${totalSuffix}`;
+  }
+
+  if (entryType === 'estimation') {
+    return `${userName} added estimated time **${currentValue || '0m'}** on ${targetText}${note}${totalSuffix}`;
+  }
+
+  if (entryType === 'billed') {
+    return `${userName} added billed time **${currentValue || '0m'}** on ${targetText}${note}${totalSuffix}`;
+  }
+
+  return `${userName} logged **${currentValue || '0m'}** on ${targetText}${note}${totalSuffix}`;
 }
 
 /**
@@ -534,54 +776,80 @@ export function registerTaskEventHandlers() {
   // NOTE: TASK_COMMENT_ADDED removed — consolidated into TASK_COMMENTED above
   // to avoid duplicate messages from the same webhook event.
 
-  // ─── time_entry_added ──────────────────────────────────────────────────
-  eventBus.register(FLOWTASK_EVENTS.TIME_ENTRY_ADDED, async (payload) => {
-    const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TIME_ENTRY_ADDED);
-    if (!wsId) return;
-    const { timeEntry, card, boardId, userId, departmentId, project } = payload;
-    const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
+  const registerTimeEntryHandler = (eventName) => {
+    eventBus.register(eventName, async (payload) => {
+      const wsId = requireWorkspaceId(payload, eventName);
+      if (!wsId) return;
 
-    if (!timeEntry || !normalizedBoardId) return;
+      const { timeEntry, card, boardId, userId, departmentId, project } = payload;
+      const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
 
-    const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
-    if (!channel) return;
+      if (!timeEntry || !normalizedBoardId) return;
 
-    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-    const userName = resolveActorName(payload, user);
+      const entryType = resolveTimeEntryType(payload);
+      if (!entryType) {
+        logger.warn(`${eventName}: missing or invalid entryType for time event, skipping`, {
+          deliveryId: payload.deliveryId,
+          boardId: normalizedBoardId,
+        });
+        return;
+      }
 
-    // Format duration
-    const minutes = timeEntry.duration || timeEntry.minutes || 0;
-    const hours = Math.floor(minutes / 60);
-    const remainingMins = minutes % 60;
-    let durationStr = '';
-    if (hours > 0) durationStr += `${hours}h`;
-    if (remainingMins > 0) durationStr += ` ${remainingMins}m`;
-    if (!durationStr) durationStr = `${minutes}m`;
-    durationStr = durationStr.trim();
+      const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
+      if (!channel) return;
 
-    const taskTitle = card?.title || timeEntry.cardTitle || 'a task';
-    const description = timeEntry.description ? ` — "${timeEntry.description}"` : '';
+      const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
+      const userName = resolveActorName(payload, user);
+      const previousEntry = timeEntry.previous || null;
+      const currentEntry = timeEntry.current || null;
+      const fallbackEntry = resolveTimeEntryState(timeEntry);
+      const oldValue = previousEntry
+        ? formatTimeEntryDuration(previousEntry)
+        : (eventName === FLOWTASK_EVENTS.TIME_ENTRY_DELETED && fallbackEntry ? formatTimeEntryDuration(fallbackEntry) : null);
+      const newValue = currentEntry
+        ? formatTimeEntryDuration(currentEntry)
+        : (eventName === FLOWTASK_EVENTS.TIME_ENTRY_ADDED && fallbackEntry ? formatTimeEntryDuration(fallbackEntry) : null);
+      const entityContext = resolveTimeEntityContext(payload);
+      const taskId = card?._id || payload.task?.id || payload.task?._id || null;
+      const activityMeta = buildTimeEntryActivityMeta({
+        eventName,
+        payload,
+        userName,
+        normalizedBoardId,
+        departmentId,
+        project,
+        taskId,
+        entryType,
+        entityContext,
+        oldValue,
+        newValue,
+      });
+      const totalValue = formatMinutesAsDuration(activityMeta.totalMinutes);
 
-    const activityMeta = {
-      eventType: 'TIME_ENTRY_ADDED',
-      taskId: card?._id || timeEntry.cardId || null,
-      projectId: normalizedBoardId,
-      departmentId: departmentId || null,
-      projectName: project?.name || null,
-      taskTitle: taskTitle,
-      actorName: userName,
-      newValue: durationStr,
-    };
+      await messageService.sendSystemMessage(
+        channel._id,
+        buildTimeEntryMessage(eventName, payload, userName, oldValue, newValue, entryType, totalValue),
+        { entityType: 'card', entityId: taskId },
+        wsId,
+        [],
+        activityMeta,
+      );
+    });
+  };
 
-    await messageService.sendSystemMessage(
-      channel._id,
-      `${userName} logged **${durationStr}** on **${taskTitle}**${description}`,
-      { entityType: 'card', entityId: card?._id || timeEntry.cardId },
-      wsId,
-      [],
-      activityMeta,
-    );
-  });
+  registerTimeEntryHandler(FLOWTASK_EVENTS.TIME_ENTRY_ADDED);
+  registerTimeEntryHandler(FLOWTASK_EVENTS.TIME_ENTRY_UPDATED);
+  registerTimeEntryHandler(FLOWTASK_EVENTS.TIME_ENTRY_DELETED);
+  // Type-specific time entry events
+  registerTimeEntryHandler(FLOWTASK_EVENTS.LOGGED_TIME_ADDED);
+  registerTimeEntryHandler(FLOWTASK_EVENTS.LOGGED_TIME_UPDATED);
+  registerTimeEntryHandler(FLOWTASK_EVENTS.LOGGED_TIME_DELETED);
+  registerTimeEntryHandler(FLOWTASK_EVENTS.ESTIMATED_TIME_ADDED);
+  registerTimeEntryHandler(FLOWTASK_EVENTS.ESTIMATED_TIME_UPDATED);
+  registerTimeEntryHandler(FLOWTASK_EVENTS.ESTIMATED_TIME_DELETED);
+  registerTimeEntryHandler(FLOWTASK_EVENTS.BILLED_TIME_ADDED);
+  registerTimeEntryHandler(FLOWTASK_EVENTS.BILLED_TIME_UPDATED);
+  registerTimeEntryHandler(FLOWTASK_EVENTS.BILLED_TIME_DELETED);
 
   // ─── subtask.created ───────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.SUBTASK_CREATED, async (payload) => {

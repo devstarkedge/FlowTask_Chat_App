@@ -160,7 +160,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   const typingTimeoutRef = useRef(null)
 
   // ─── Draft Auto Save Hook ─────────────────────────────────────────
-  const { saveDraftDebounced, restoreDraft, saveDraftLocal } = useDraftAutoSave(channelId, threadId, editorRef)
+  const { saveDraftDebounced, restoreDraft, saveDraftLocal, cancelPendingDraft } = useDraftAutoSave(channelId, threadId, editorRef)
 
   // ─── Format State Sync ───────────────────────────────────────────────────
 
@@ -386,6 +386,9 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     const submitMentions = mentions || []
     const submitFileReferences = pendingFiles.map((f) => f._id)
 
+    // Cancel any pending debounced draft saves immediately
+    cancelPendingDraft()
+
     // Optimistic UX: clear composer immediately so next message can be sent right away.
     ed.clear()
     setHasContent(false)
@@ -406,7 +409,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     } catch {
       // Error handled in store
     }
-  }, [channelId, threadId, pendingFiles, isUploading, sendMessage, clearDraft, activeWorkspaceId])
+  }, [channelId, threadId, pendingFiles, isUploading, sendMessage, clearDraft, activeWorkspaceId, cancelPendingDraft])
 
   // ─── Paste Handler (images) ───────────────────────────────────────────────
 

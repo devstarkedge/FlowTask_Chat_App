@@ -1,5 +1,4 @@
 .user-menu .user-menu-popup {
-  /* ensure popup sits flush to the active menu item (no extra gap) */
   margin-left: 0 !important;
 }
 

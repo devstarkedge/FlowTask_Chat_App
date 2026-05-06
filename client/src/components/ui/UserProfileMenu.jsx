@@ -288,7 +288,7 @@ export default function UserProfileMenu({
         {showPauseMenu && (
           <div
             className="user-menu-popup"
-            style={{ position: 'absolute', left: '100%', top: '50%', transform: 'translateY(-50%)', marginLeft: 0 }}
+            style={{ position: 'absolute', left: '100%', top: '50%', width: 300, transform: 'translateY(-50%)', marginLeft: 0 }}
           >
             <div className="user-submenu">
               <div className="user-submenu-header">

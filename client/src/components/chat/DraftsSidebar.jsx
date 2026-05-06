@@ -198,7 +198,7 @@ export default function DraftsSidebar() {
     }
 
     return {
-      name: `#${channel.name}`,
+      name: `${channel.name}`,
       type: 'channel',
       isPrivate: channel.isPrivate ?? channel.private ?? channel.visibility === 'private' ?? false,
     }

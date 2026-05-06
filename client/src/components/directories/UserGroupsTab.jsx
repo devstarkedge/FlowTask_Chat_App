@@ -1,18 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, ChevronDown, ChevronRight, UsersRound, Users } from 'lucide-react'
+import { Search, ChevronDown, ChevronRight, UsersRound, Users, X } from 'lucide-react'
 import { directoriesAPI } from '../../services/directoriesAPI'
 import { useProfileStore } from '../../stores/profileStore'
 import { ListSkeleton } from './Skeletons'
 import EmptyState from './EmptyState'
 
 export default function UserGroupsTab() {
-  const [groups, setGroups] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [sort, setSort] = useState('asc')
-  const [expandedId, setExpandedId] = useState(null)
+  const [groups, setGroups]               = useState([])
+  const [loading, setLoading]             = useState(true)
+  const [search, setSearch]               = useState('')
+  const [sort, setSort]                   = useState('asc')
+  const [expandedId, setExpandedId]       = useState(null)
   const [expandedMembers, setExpandedMembers] = useState([])
-  const [loadingMembers, setLoadingMembers] = useState(false)
+  const [loadingMembers, setLoadingMembers]   = useState(false)
   const debounceRef = useRef(null)
 
   const fetchGroups = useCallback(async (searchVal = '', sortVal = 'asc') => {
@@ -29,13 +29,18 @@ export default function UserGroupsTab() {
 
   useEffect(() => {
     fetchGroups(search, sort)
-  }, [sort]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sort]) // eslint-disable-line
 
   const handleSearchInput = (e) => {
     const val = e.target.value
     setSearch(val)
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => fetchGroups(val, sort), 300)
+  }
+
+  const clearSearch = () => {
+    setSearch('')
+    fetchGroups('', sort)
   }
 
   const handleToggleExpand = async (groupId) => {
@@ -57,50 +62,44 @@ export default function UserGroupsTab() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="dir-groups-root">
       {/* Filters */}
-      <div
-        className="shrink-0 px-5 py-3 flex flex-wrap items-center gap-3"
-        style={{ borderBottom: '1px solid var(--border-secondary)' }}
-      >
-        <div
-          className="flex items-center gap-2 rounded-md px-3 py-1.5 flex-1 min-w-45"
-          style={{ background: 'var(--bg-input)', border: '1px solid var(--border-primary)' }}
-        >
-          <Search size={15} style={{ color: 'var(--text-muted)' }} />
+      <div className="dir-groups-filters">
+        <div className="dir-search-wrap" style={{ flex: 1, maxWidth: 340 }}>
+          <Search size={14} className="dir-search-icon" />
           <input
             type="text"
             value={search}
             onChange={handleSearchInput}
-            placeholder="Search user groups"
-            className="flex-1 bg-transparent border-none outline-none text-sm"
-            style={{ color: 'var(--text-primary)' }}
+            placeholder="Search user groups…"
+            className="dir-search-input"
           />
+          {search && (
+            <button onClick={clearSearch} className="dir-search-clear">
+              <X size={12} />
+            </button>
+          )}
         </div>
 
-        <div className="relative">
+        <div className="dir-select-wrap">
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
-            className="appearance-none pl-3 pr-8 py-1.5 rounded-md text-sm cursor-pointer"
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-primary)',
-              color: 'var(--text-secondary)',
-              outline: 'none',
-            }}
+            className="dir-select"
           >
             <option value="asc">A → Z</option>
             <option value="desc">Z → A</option>
           </select>
-          <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
+          <ChevronDown size={13} className="dir-select-arrow" />
         </div>
       </div>
 
-      {/* Groups list */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
+      {/* List */}
+      <div className="dir-groups-body">
         {loading ? (
-          <ListSkeleton count={6} />
+          <div style={{ padding: '8px 12px' }}>
+            <ListSkeleton count={6} />
+          </div>
         ) : groups.length === 0 ? (
           <EmptyState
             icon={UsersRound}
@@ -108,94 +107,105 @@ export default function UserGroupsTab() {
             description={search ? 'Try adjusting your search' : 'No user groups created yet'}
           />
         ) : (
-          <div className="flex flex-col gap-0.5 p-2">
-            {groups.map((g) => {
+          <div className="dir-groups-list">
+            {groups.map((g, index) => {
               const isExpanded = expandedId === g._id
+              const hue = [...(g.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0) % 360
+              const accentColor = `hsl(${hue}, 55%, 52%)`
+
               return (
-                <div key={g._id}>
+                <div
+                  key={g._id}
+                  className={`dir-group-item ${isExpanded ? 'dir-group-item--open' : ''}`}
+                  style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
+                >
+                  {/* Group row */}
                   <button
                     onClick={() => handleToggleExpand(g._id)}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors cursor-pointer text-left"
-                    style={{ background: isExpanded ? 'var(--bg-card)' : 'transparent', border: 'none' }}
-                    onMouseEnter={(e) => {
-                      if (!isExpanded) e.currentTarget.style.background = 'var(--bg-hover, var(--bg-card))'
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isExpanded) e.currentTarget.style.background = 'transparent'
-                    }}
+                    className="dir-group-row"
                   >
-                    {isExpanded ? (
-                      <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} className="shrink-0" />
-                    ) : (
-                      <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} className="shrink-0" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold truncate" style={{ color: 'var(--text-white)' }}>
-                          {g.name}
-                        </span>
+                    {/* Icon */}
+                    <div
+                      className="dir-group-icon"
+                      style={{
+                        background: `hsl(${hue}, 55%, 52%, 0.12)`,
+                        color: accentColor,
+                        borderColor: `hsl(${hue}, 55%, 52%, 0.22)`,
+                      }}
+                    >
+                      <UsersRound size={14} />
+                    </div>
+
+                    {/* Info */}
+                    <div className="dir-group-info">
+                      <div className="dir-group-name-row">
+                        <span className="dir-group-name">{g.name}</span>
                         {g.handle && (
-                          <span className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
-                            @{g.handle}
-                          </span>
+                          <span className="dir-group-handle">@{g.handle}</span>
                         )}
                       </div>
                       {g.description && (
-                        <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                          {g.description}
-                        </p>
+                        <p className="dir-group-desc">{g.description}</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 shrink-0" style={{ color: 'var(--text-muted)' }}>
+
+                    {/* Member count */}
+                    <div className="dir-group-meta">
                       <Users size={12} />
-                      <span className="text-xs">{g.memberCount ?? g.members?.length ?? 0}</span>
+                      <span>{g.memberCount ?? g.members?.length ?? 0}</span>
+                    </div>
+
+                    {/* Chevron */}
+                    <div className={`dir-group-chevron ${isExpanded ? 'dir-group-chevron--open' : ''}`}>
+                      <ChevronRight size={14} />
                     </div>
                   </button>
 
-                  {/* Expanded members */}
+                  {/* Expanded members panel */}
                   {isExpanded && (
-                    <div
-                      className="ml-8 mr-4 mb-2 rounded-lg overflow-hidden"
-                      style={{ border: '1px solid var(--border-secondary)' }}
-                    >
+                    <div className="dir-group-members">
                       {loadingMembers ? (
-                        <div className="px-4 py-3 flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
-                          <div className="w-4 h-4 rounded-full shimmer" style={{ background: 'var(--bg-skeleton)' }} />
-                          <div className="w-24 h-3 rounded shimmer" style={{ background: 'var(--bg-skeleton)' }} />
+                        <div className="dir-group-members-loading">
+                          {[1, 2, 3].map(i => (
+                            <div key={i} className="dir-group-member-skeleton">
+                              <div className="dir-skeleton-circle" />
+                              <div className="dir-skeleton-line" style={{ width: `${60 + i * 15}%` }} />
+                            </div>
+                          ))}
                         </div>
                       ) : expandedMembers.length === 0 ? (
-                        <div className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-                          No members in this group
-                        </div>
+                        <div className="dir-group-empty">No members in this group</div>
                       ) : (
-                        expandedMembers.map((m) => {
-                          const name = m.name || m.displayName || 'Unknown'
-                          const avatar = m.avatar || m.profilePicture
-                          return (
-                            <div
-                              key={m._id}
-                              onClick={() => useProfileStore.getState().openProfile(m)}
-                              className="flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors"
-                              style={{ borderBottom: '1px solid var(--border-secondary)' }}
-                              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                            >
-                              {avatar ? (
-                                <img src={avatar} alt={name} className="w-6 h-6 rounded-full object-cover shrink-0" />
-                              ) : (
-                                <div
-                                  className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
-                                  style={{ background: 'var(--accent-primary)', color: '#fff' }}
-                                >
-                                  {name.charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              <span className="text-sm truncate" style={{ color: 'var(--text-white)' }}>
-                                {name}
-                              </span>
-                            </div>
-                          )
-                        })
+                        <div className="dir-group-member-list">
+                          {expandedMembers.map((m, mi) => {
+                            const name = m.name || m.displayName || 'Unknown'
+                            const avatar = m.avatar || m.profilePicture
+                            const mhue = [...name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360
+                            return (
+                              <div
+                                key={m._id}
+                                onClick={() => useProfileStore.getState().openProfile(m)}
+                                className="dir-group-member-row"
+                                style={{ animationDelay: `${mi * 25}ms` }}
+                              >
+                                {avatar ? (
+                                  <img src={avatar} alt={name} className="dir-group-member-avatar" />
+                                ) : (
+                                  <div
+                                    className="dir-group-member-avatar dir-group-member-avatar--fallback"
+                                    style={{ background: `hsl(${mhue},55%,45%)` }}
+                                  >
+                                    {name.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                <span className="dir-group-member-name">{name}</span>
+                                {m.title && (
+                                  <span className="dir-group-member-title">{m.title}</span>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
                       )}
                     </div>
                   )}

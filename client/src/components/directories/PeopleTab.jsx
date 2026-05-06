@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback, forwardRef } from 'react'
-import { Search, UserPlus, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback, forwardRef, useMemo } from 'react'
+import { Search, UserPlus, ChevronDown, X, Users } from 'lucide-react'
 import { VirtuosoGrid } from 'react-virtuoso'
 import { directoriesAPI } from '../../services/directoriesAPI'
 import { useAuthStore } from '../../stores/authStore'
@@ -13,8 +13,8 @@ import InviteModal from './InviteModal'
 
 const SORT_OPTIONS = [
   { value: 'recommended', label: 'Most recommended' },
-  { value: 'asc', label: 'A → Z' },
-  { value: 'desc', label: 'Z → A' },
+  { value: 'asc',         label: 'A → Z' },
+  { value: 'desc',        label: 'Z → A' },
 ]
 
 export default function PeopleTab() {
@@ -22,39 +22,42 @@ export default function PeopleTab() {
   const { activeWorkspaceId, members } = useWorkspaceStore()
   const { isMobile, isTablet } = useResponsive()
 
-  const [users, setUsers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [sort, setSort] = useState('recommended')
+  const [users, setUsers]       = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [search, setSearch]     = useState('')
+  const [sort, setSort]         = useState('recommended')
   const [showInvite, setShowInvite] = useState(false)
   const debounceRef = useRef(null)
 
-  // Determine admin
   const currentMembership = members.find(
     (m) => (m.userId?._id || m.userId) === user?._id
   )
-  const isAdmin = currentMembership?.role === 'owner' || currentMembership?.role === 'admin'
+  const isAdmin =
+    currentMembership?.role === 'owner' || currentMembership?.role === 'admin'
 
-  const fetchUsers = useCallback(async (searchVal = '', sortVal = 'recommended') => {
-    if (!activeWorkspaceId) return
-    setLoading(true)
-    try {
-      const { data } = await directoriesAPI.getUsers({
-        search: searchVal,
-        sort: sortVal,
-        limit: 50,
-      })
-      setUsers(data.data?.users || data.data || [])
-    } catch {
-      setUsers([])
-    } finally {
-      setLoading(false)
-    }
-  }, [activeWorkspaceId])
+  const fetchUsers = useCallback(
+    async (searchVal = '', sortVal = 'recommended') => {
+      if (!activeWorkspaceId) return
+      setLoading(true)
+      try {
+        const { data } = await directoriesAPI.getUsers({
+          search: searchVal,
+          sort:   sortVal,
+          limit:  50,
+        })
+        setUsers(data.data?.users || data.data || [])
+      } catch {
+        setUsers([])
+      } finally {
+        setLoading(false)
+      }
+    },
+    [activeWorkspaceId]
+  )
 
   useEffect(() => {
     fetchUsers(search, sort)
-  }, [activeWorkspaceId, sort]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeWorkspaceId, sort])
 
   const handleSearchInput = (e) => {
     const val = e.target.value
@@ -63,104 +66,122 @@ export default function PeopleTab() {
     debounceRef.current = setTimeout(() => fetchUsers(val, sort), 300)
   }
 
-  // Grid columns based on breakpoint
+  const clearSearch = () => {
+    setSearch('')
+    fetchUsers('', sort)
+  }
+
+  const onlineCount = users.filter(
+    (u) => u.isOnline || u.status === 'online'
+  ).length
+
   const gridCols = isMobile
-    ? 'repeat(1, 1fr)'
+    ? 'repeat(2, 1fr)'
     : isTablet
       ? 'repeat(3, 1fr)'
-      : 'repeat(auto-fill, minmax(190px, 1fr))'
+      : 'repeat(auto-fill, minmax(170px, 1fr))'
+
+  // ✅ KEY FIX: Stable List reference — only recreates when viewport bucket changes.
+  // Previously defined inline, causing VirtuosoGrid to fully remount the list
+  // on every render (e.g. when a card click triggers a parent re-render via profileStore).
+  const GridList = useMemo(
+    () =>
+      forwardRef((props, ref) => (
+        <div
+          ref={ref}
+          {...props}
+          className="dir-people-grid"
+          style={{ ...props.style, gridTemplateColumns: gridCols }}
+        />
+      )),
+    [gridCols]
+  )
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Sticky header */}
-      <div
-        className="shrink-0 px-5 py-3 flex flex-wrap items-center gap-3"
-        style={{ borderBottom: '1px solid var(--border-secondary)' }}
-      >
-        {/* Search */}
-        <div
-          className="flex items-center gap-2 rounded-md px-3 py-1.5 flex-1 min-w-45"
-          style={{ background: 'var(--bg-input)', border: '1px solid var(--border-primary)' }}
-        >
-          <Search size={15} style={{ color: 'var(--text-muted)' }} />
-          <input
-            type="text"
-            value={search}
-            onChange={handleSearchInput}
-            placeholder="Search people"
-            className="flex-1 bg-transparent border-none outline-none text-sm"
-            style={{ color: 'var(--text-primary)' }}
-          />
+    <div className="dir-people-root">
+      {/* ── Header strip ── */}
+      <div className="dir-people-header">
+        <div className="dir-people-header-left">
+          <div className="dir-people-stat">
+            <Users size={13} className="dir-stat-icon" />
+            <span>{users.length} members</span>
+          </div>
+          {onlineCount > 0 && (
+            <div className="dir-people-stat online">
+              <span className="dir-online-dot" />
+              <span>{onlineCount} online</span>
+            </div>
+          )}
         </div>
 
-        {/* Sort */}
-        <div className="relative">
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            className="appearance-none pl-3 pr-8 py-1.5 rounded-md text-sm cursor-pointer"
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-primary)',
-              color: 'var(--text-secondary)',
-              outline: 'none',
-            }}
-          >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-          <ChevronDown
-            size={14}
-            className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
-            style={{ color: 'var(--text-muted)' }}
-          />
-        </div>
+        <div className="dir-people-controls">
+          {/* Search */}
+          <div className="dir-search-wrap">
+            <Search size={14} className="dir-search-icon" />
+            <input
+              type="text"
+              value={search}
+              onChange={handleSearchInput}
+              placeholder="Search people…"
+              className="dir-search-input"
+            />
+            {search && (
+              <button onClick={clearSearch} className="dir-search-clear">
+                <X size={12} />
+              </button>
+            )}
+          </div>
 
-        {/* Invite */}
-        {isAdmin && (
-          <button
-            onClick={() => setShowInvite(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-colors"
-            style={{
-              background: 'var(--accent-primary)',
-              color: '#fff',
-              border: 'none',
-            }}
-          >
-            <UserPlus size={14} />
-            Invite People
-          </button>
-        )}
+          {/* Sort */}
+          <div className="dir-select-wrap">
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+              className="dir-select"
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <ChevronDown size={13} className="dir-select-arrow" />
+          </div>
+
+          {/* Invite */}
+          {isAdmin && (
+            <button onClick={() => setShowInvite(true)} className="dir-invite-btn">
+              <UserPlus size={14} />
+              <span>Invite</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 min-h-0">
+      {/* ── Grid ── */}
+      <div className="dir-people-body">
         {loading ? (
-          <div className="overflow-y-auto h-full custom-scrollbar">
-            <CardSkeletonGrid count={isMobile ? 4 : 12} columns={gridCols} />
+          <div className="dir-grid-scroll">
+            <CardSkeletonGrid count={isMobile ? 6 : 12} columns={gridCols} />
           </div>
         ) : users.length === 0 ? (
           <EmptyState
             title="No people found"
-            description={search ? 'Try adjusting your search' : 'No members in this workspace yet'}
+            description={
+              search
+                ? 'Try adjusting your search'
+                : 'No members in this workspace yet'
+            }
           />
         ) : (
           <VirtuosoGrid
             totalCount={users.length}
-            overscan={200}
-            components={{
-              List: forwardRef((props, ref) => (
-                <div
-                  ref={ref}
-                  {...props}
-                  className="grid gap-4 p-4"
-                  style={{ ...props.style, gridTemplateColumns: gridCols }}
-                />
-              )),
-            }}
+            overscan={300}
+            components={{ List: GridList }}
             itemContent={(index) => (
-              <PersonCard person={users[index]} currentUserId={user?._id} />
+              <PersonCard
+                person={users[index]}
+                currentUserId={user?._id}
+                index={index}
+              />
             )}
           />
         )}
@@ -176,84 +197,77 @@ export default function PeopleTab() {
   )
 }
 
-function PersonCard({ person, currentUserId }) {
-  const isCurrentUser = person._id === currentUserId || person.userId === currentUserId
-  const name = person.name || person.displayName || 'Unknown'
+function PersonCard({ person, currentUserId, index }) {
+  const isCurrentUser =
+    person._id === currentUserId || person.userId === currentUserId
+  const name   = person.name || person.displayName || 'Unknown'
   const avatar = person.avatar || person.profilePicture
-  const role = person.role || 'member'
-  const title = person.title || ''
+  const role   = person.role || 'member'
+  const title  = person.title || ''
+  const dept   = person.department || ''
 
-  // Real-time online status from chatStore
   const onlineUsers = useChatStore((s) => s.onlineUsers)
-  const personId = person._id || person.userId
-  const liveStatus = onlineUsers.get(personId)
-  const isOnline = liveStatus === 'online' || (!liveStatus && (person.isOnline || person.status === 'online'))
+  const personId    = person._id || person.userId
+  const liveStatus  = onlineUsers.get(personId)
+  const isOnline    =
+    liveStatus === 'online' ||
+    (!liveStatus && (person.isOnline || person.status === 'online'))
   const isAway = liveStatus === 'away'
 
-  const handleClick = () => {
+  const statusColor = isOnline
+    ? 'var(--status-online,#22c55e)'
+    : isAway
+      ? 'var(--status-away,#f59e0b)'
+      : 'var(--status-offline,#6b7280)'
+  const statusLabel = isOnline ? 'online' : isAway ? 'away' : 'offline'
+
+  const hue = [...name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360
+  const avatarGradient = `linear-gradient(135deg, hsl(${hue},60%,45%), hsl(${(hue + 40) % 360},70%,35%))`
+
+  const handleClick = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
     useProfileStore.getState().openProfile(person)
   }
 
   return (
     <div
+      className="dir-person-card"
       onClick={handleClick}
-      className="rounded-2xl overflow-hidden transition-all duration-200 hover:scale-[1.02] cursor-pointer group"
-      style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border-secondary)',
-      }}
+      style={{ animationDelay: `${Math.min(index * 40, 400)}ms` }}
     >
-      <div className="p-4 flex flex-col items-center text-center">
-        {/* Avatar */}
-        <div className="relative mb-3">
-          {avatar ? (
-            <img
-              src={avatar}
-              alt={name}
-              className="w-20 h-20 rounded-full object-cover"
-              style={{ border: '2px solid var(--border-secondary)' }}
-            />
-          ) : (
-            <div
-              className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold"
-              style={{
-                background: 'var(--accent-primary)',
-                color: '#fff',
-                border: '2px solid var(--border-secondary)',
-              }}
-            >
-              {name.charAt(0).toUpperCase()}
-            </div>
-          )}
-          {/* Online dot */}
-          <span
-            className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 rounded-full border-2"
-            style={{
-              background: isOnline
-                ? 'var(--status-online, #22c55e)'
-                : isAway
-                  ? 'var(--status-away, #f59e0b)'
-                  : 'var(--status-offline, #6b7280)',
-              borderColor: 'var(--bg-card)',
-            }}
-          />
-        </div>
+      {(role === 'owner' || role === 'admin') && (
+        <div className="dir-person-ribbon">{role}</div>
+      )}
 
-        {/* Name */}
-        <p
-          className="text-sm font-semibold truncate max-w-full leading-tight"
-          style={{ color: 'var(--text-white)' }}
-        >
+      <div className="dir-person-avatar-wrap">
+        {avatar ? (
+          <img src={avatar} alt={name} className="dir-person-avatar-img" />
+        ) : (
+          <div
+            className="dir-person-avatar-fallback"
+            style={{ background: avatarGradient }}
+          >
+            {name.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <span
+          className="dir-person-status-dot"
+          style={{ background: statusColor }}
+          title={statusLabel}
+        />
+      </div>
+
+      <div className="dir-person-info">
+        <p className="dir-person-name">
           {name}
-          {isCurrentUser && (
-            <span className="ml-1 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>(you)</span>
-          )}
+          {isCurrentUser && <span className="dir-person-you">you</span>}
         </p>
+        <p className="dir-person-title">{title || dept || role}</p>
+      </div>
 
-        {/* Title or role */}
-        <p className="text-xs mt-0.5 truncate max-w-full" style={{ color: 'var(--text-secondary)' }}>
-          {title || role}
-        </p>
+      <div className="dir-person-hover-cta">
+        <span>View profile</span>
       </div>
     </div>
   )

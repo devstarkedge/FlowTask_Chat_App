@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Mail, RefreshCw, XCircle, Loader2 } from 'lucide-react'
+import { Mail, RefreshCw, XCircle, Loader2, UserPlus, Clock, CheckCircle2, AlertCircle, Ban } from 'lucide-react'
 import { directoriesAPI } from '../../services/directoriesAPI'
 import { useAuthStore } from '../../stores/authStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
@@ -9,21 +9,29 @@ import InviteModal from './InviteModal'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
-const STATUS_COLORS = {
-  pending:  { bg: 'rgba(234,179,8,0.15)',  color: '#eab308' },
-  accepted: { bg: 'rgba(34,197,94,0.15)',  color: '#22c55e' },
-  expired:  { bg: 'rgba(239,68,68,0.15)',  color: '#ef4444' },
-  revoked:  { bg: 'rgba(107,114,128,0.15)', color: '#6b7280' },
+const STATUS_META = {
+  pending:  { label: 'Pending',  icon: Clock,         bg: 'rgba(234,179,8,0.13)',  color: '#d97706', border: 'rgba(234,179,8,0.25)' },
+  accepted: { label: 'Accepted', icon: CheckCircle2,  bg: 'rgba(34,197,94,0.12)',  color: '#16a34a', border: 'rgba(34,197,94,0.25)' },
+  expired:  { label: 'Expired',  icon: AlertCircle,   bg: 'rgba(239,68,68,0.12)',  color: '#dc2626', border: 'rgba(239,68,68,0.25)' },
+  revoked:  { label: 'Revoked',  icon: Ban,           bg: 'rgba(107,114,128,0.12)', color: '#6b7280', border: 'rgba(107,114,128,0.2)' },
 }
 
+const STATUS_FILTERS = [
+  { value: '',         label: 'All' },
+  { value: 'pending',  label: 'Pending' },
+  { value: 'accepted', label: 'Accepted' },
+  { value: 'expired',  label: 'Expired' },
+]
+
 export default function InvitationsTab() {
-  const user = useAuthStore((s) => s.user)
+  const user                           = useAuthStore((s) => s.user)
   const { activeWorkspaceId, members } = useWorkspaceStore()
 
   const [invitations, setInvitations] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showInvite, setShowInvite] = useState(false)
-  const [actionId, setActionId] = useState(null)
+  const [loading, setLoading]         = useState(true)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [showInvite, setShowInvite]   = useState(false)
+  const [actionId, setActionId]       = useState(null)
 
   const currentMembership = members.find(
     (m) => (m.userId?._id || m.userId) === user?._id
@@ -43,19 +51,14 @@ export default function InvitationsTab() {
     }
   }, [activeWorkspaceId])
 
-  useEffect(() => {
-    fetchInvitations()
-  }, [fetchInvitations])
+  useEffect(() => { fetchInvitations() }, [fetchInvitations])
 
-  const handleResend = async (invite) => {
+  const handleResend = async (inv) => {
     if (!activeWorkspaceId || actionId) return
-    setActionId(invite._id)
+    setActionId(inv._id)
     try {
-      await directoriesAPI.resendInvitation(activeWorkspaceId, {
-        email: invite.email,
-        role: invite.role || 'member',
-      })
-      toast.success(`Invitation resent to ${invite.email}`)
+      await directoriesAPI.resendInvitation(activeWorkspaceId, { email: inv.email, role: inv.role || 'member' })
+      toast.success(`Resent to ${inv.email}`)
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to resend')
     } finally {
@@ -63,13 +66,13 @@ export default function InvitationsTab() {
     }
   }
 
-  const handleCancel = async (invite) => {
+  const handleCancel = async (inv) => {
     if (!activeWorkspaceId || actionId) return
-    if (!confirm(`Cancel invitation to ${invite.email}?`)) return
-    setActionId(invite._id)
+    if (!confirm(`Cancel invitation to ${inv.email}?`)) return
+    setActionId(inv._id)
     try {
-      await directoriesAPI.cancelInvitation(activeWorkspaceId, invite._id)
-      setInvitations((prev) => prev.filter((i) => i._id !== invite._id))
+      await directoriesAPI.cancelInvitation(activeWorkspaceId, inv._id)
+      setInvitations((prev) => prev.filter((i) => i._id !== inv._id))
       toast.success('Invitation cancelled')
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to cancel')
@@ -78,104 +81,132 @@ export default function InvitationsTab() {
     }
   }
 
+  const filtered = statusFilter
+    ? invitations.filter(i => (i.status || 'pending') === statusFilter)
+    : invitations
+
+  const pendingCount  = invitations.filter(i => (i.status || 'pending') === 'pending').length
+  const acceptedCount = invitations.filter(i => i.status === 'accepted').length
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div
-        className="shrink-0 px-5 py-3 flex items-center justify-between"
-        style={{ borderBottom: '1px solid var(--border-secondary)' }}
-      >
-        <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-          {loading ? '...' : `${invitations.length} invitation${invitations.length !== 1 ? 's' : ''}`}
-        </p>
+    <div className="dir-inv-root">
+
+      {/* Banner */}
+      <div className="dir-inv-banner">
+        <div className="dir-inv-banner-left">
+          <div className="dir-inv-banner-icon">
+            <Mail size={16} />
+          </div>
+          <div>
+            <p className="dir-inv-banner-title">Invitations</p>
+            <p className="dir-inv-banner-sub">
+              {invitations.length} total · {pendingCount} pending · {acceptedCount} accepted
+            </p>
+          </div>
+        </div>
         {isAdmin && (
-          <button
-            onClick={() => setShowInvite(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer"
-            style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none' }}
-          >
-            <Mail size={14} />
-            Invite People
+          <button onClick={() => setShowInvite(true)} className="dir-invite-btn">
+            <UserPlus size={14} />
+            <span>Invite People</span>
           </button>
         )}
       </div>
 
+      {/* Filters */}
+      <div className="dir-inv-filters">
+        <div className="dir-type-pills">
+          {STATUS_FILTERS.map(f => (
+            <button
+              key={f.value}
+              onClick={() => setStatusFilter(f.value)}
+              className={`dir-type-pill ${statusFilter === f.value ? 'active' : ''}`}
+            >
+              {f.label}
+              {f.value === 'pending' && pendingCount > 0 && (
+                <span className="dir-inv-pill-count">{pendingCount}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* List */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
+      <div className="dir-inv-body">
         {loading ? (
-          <ListSkeleton count={6} />
-        ) : invitations.length === 0 ? (
+          <div style={{ padding: '8px 12px' }}>
+            <ListSkeleton count={6} />
+          </div>
+        ) : filtered.length === 0 ? (
           <EmptyState
             icon={Mail}
-            title="No invitations"
-            description="No pending or recent invitations"
+            title={statusFilter ? `No ${statusFilter} invitations` : 'Track your invitations'}
+            description={statusFilter ? 'Try a different filter' : 'You’ll see the status of invitations you’ve sent and received here.'}
           />
         ) : (
-          <div className="flex flex-col gap-0.5 p-2">
-            {invitations.map((inv) => {
-              const statusStyle = STATUS_COLORS[inv.status] || STATUS_COLORS.pending
+          <div className="dir-inv-list">
+            {filtered.map((inv, index) => {
+              const st       = STATUS_META[inv.status] || STATUS_META.pending
+              const StatusIcon = st.icon
               const isProcessing = actionId === inv._id
+              const isPending = (inv.status || 'pending') === 'pending'
+
               return (
                 <div
                   key={inv._id}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors"
-                  style={{ background: 'transparent' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover, var(--bg-card))')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  className="dir-inv-row"
+                  style={{ animationDelay: `${Math.min(index * 30, 350)}ms` }}
                 >
-                  {/* Email icon */}
+                  {/* Left: email icon */}
                   <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-secondary)' }}
+                    className="dir-inv-icon"
+                    style={{ background: st.bg, color: st.color, borderColor: st.border }}
                   >
-                    <Mail size={14} style={{ color: 'var(--text-muted)' }} />
+                    <Mail size={15} />
                   </div>
 
                   {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-white)' }}>
-                      {inv.email}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs capitalize" style={{ color: 'var(--text-muted)' }}>
-                        {inv.role || 'member'}
-                      </span>
+                  <div className="dir-inv-info">
+                    <p className="dir-inv-email">{inv.email}</p>
+                    <div className="dir-inv-meta">
+                      <span className="dir-inv-role">{inv.role || 'member'}</span>
                       {inv.createdAt && (
-                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                          · Sent {format(new Date(inv.createdAt), 'MMM d, yyyy')}
+                        <span className="dir-inv-date">
+                          Sent {format(new Date(inv.createdAt), 'MMM d, yyyy')}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Status */}
+                  {/* Status badge */}
                   <span
-                    className="text-[10px] px-2 py-0.5 rounded-full font-medium capitalize shrink-0"
-                    style={{ background: statusStyle.bg, color: statusStyle.color }}
+                    className="dir-inv-status-badge"
+                    style={{ background: st.bg, color: st.color, borderColor: st.border }}
                   >
-                    {inv.status || 'pending'}
+                    <StatusIcon size={10} />
+                    {st.label}
                   </span>
 
-                  {/* Actions */}
-                  {isAdmin && inv.status === 'pending' && (
-                    <div className="flex items-center gap-1 shrink-0">
+                  {/* Actions — only for pending + admin */}
+                  {isAdmin && isPending && (
+                    <div className="dir-inv-actions">
                       <button
                         onClick={() => handleResend(inv)}
                         disabled={isProcessing}
-                        className="p-1.5 rounded-md cursor-pointer transition-colors"
-                        style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+                        className="dir-inv-action-btn"
                         title="Resend invitation"
                       >
-                        {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                        {isProcessing
+                          ? <Loader2 size={13} className="dir-spin" />
+                          : <RefreshCw size={13} />
+                        }
                       </button>
                       <button
                         onClick={() => handleCancel(inv)}
                         disabled={isProcessing}
-                        className="p-1.5 rounded-md cursor-pointer transition-colors"
-                        style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
+                        className="dir-inv-action-btn dir-inv-action-btn--danger"
                         title="Cancel invitation"
                       >
-                        <XCircle size={14} />
+                        <XCircle size={13} />
                       </button>
                     </div>
                   )}

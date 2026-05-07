@@ -21,6 +21,8 @@ export const useDownloadStore = create(
           name: file.name || "Unnamed file",
           url,
           size: file.size || "—",
+          type: file.type || "",
+          thumbnailUrl: file.thumbnailUrl || null,
           status: "downloading",
           progress: 0,
           blobUrl: null,
@@ -58,6 +60,8 @@ export const useDownloadStore = create(
           name: d.name,
           url: d.url,
           size: d.size,
+          type: d.type,
+          thumbnailUrl: d.thumbnailUrl,
           status: d.status,
           progress: d.progress,
           // do not persist blobUrl as it is session-scoped

@@ -38,6 +38,8 @@ export default function PauseNotificationsDropdown({ onClose }) {
       const diff = new Date(pauseResumeAt) - new Date()
       if (diff <= 0) {
         setCountdown('Resuming...')
+        // Safety net: auto-resume if the server socket event was missed
+        resumeNotifications()
         return
       }
       const hours = Math.floor(diff / 3600000)
@@ -55,7 +57,7 @@ export default function PauseNotificationsDropdown({ onClose }) {
     update()
     const interval = setInterval(update, 1000)
     return () => clearInterval(interval)
-  }, [isPaused, pauseResumeAt])
+  }, [isPaused, pauseResumeAt, resumeNotifications])
 
   const handlePause = async (option) => {
     if (option.custom === 'tomorrow') {

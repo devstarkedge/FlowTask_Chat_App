@@ -567,16 +567,21 @@ class MessageService {
     if (!message) throw new NotFoundError('Message not found');
     this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
 
-    await messageRepository.pin(messageId, userId, workspaceId);
+    // Capture the updated document returned by the repository (returnDocument: 'after')
+    const updated = await messageRepository.pin(messageId, userId, workspaceId);
 
     const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId, { workspaceId }))?.workspaceId?.toString();
+
+    // Emit full message payload so clients can update pinnedMessagesByChannel without a round-trip
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_PINNED, {
+      message: messageSocketPayload(updated || message, { pinnedBy: userId, pinnedAt: (updated || message).pinnedAt }),
       messageId,
       channelId: message.channelId,
       pinnedBy: userId,
+      pinnedAt: (updated || message).pinnedAt,
     }, wsId);
 
-    return message;
+    return updated || message;
   }
 
   /**
@@ -587,7 +592,8 @@ class MessageService {
     if (!message) throw new NotFoundError('Message not found');
     this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
 
-    await messageRepository.unpin(messageId, workspaceId);
+    // Capture the updated document returned by the repository (returnDocument: 'after')
+    const updated = await messageRepository.unpin(messageId, workspaceId);
 
     const wsId = message.workspaceId?.toString() || (await channelRepository.findById(message.channelId, { workspaceId }))?.workspaceId?.toString();
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_UNPINNED, {
@@ -596,7 +602,7 @@ class MessageService {
       unpinnedBy: userId,
     }, wsId);
 
-    return message;
+    return updated || message;
   }
 
   /**

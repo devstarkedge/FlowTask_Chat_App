@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import env from '../config/environment.js';
 import { ValidationError } from './errorHandler.js';
+import { validateUploadedFileMagic } from '../utils/fileMagicValidator.js';
 
 /**
  * Multer upload middleware — handles file uploads with disk storage.
@@ -19,9 +20,16 @@ if (!fs.existsSync(uploadDir)) {
 // Allowed MIME types
 // NOTE: SVG excluded due to XSS risk (can embed JavaScript)
 const ALLOWED_TYPES = new Set([
-  // Images (SVG excluded — XSS vector)
+  // ── Images (SVG excluded — XSS vector) ───────────────────────────────
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-  // Documents
+
+  // ── Video ─────────────────────────────────────────────────────────────
+  'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/mpeg',
+
+  // ── Audio ─────────────────────────────────────────────────────────────
+  'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/aac',
+
+  // ── Documents ─────────────────────────────────────────────────────────
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -29,18 +37,39 @@ const ALLOWED_TYPES = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-powerpoint',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  // Text
-  'text/plain', 'text/csv', 'text/markdown',
-  // Archives
-  'application/zip', 'application/x-rar-compressed', 'application/gzip',
-  // Code / data
+
+  // ── Text / Markup ─────────────────────────────────────────────────────
+  'text/plain', 'text/csv', 'text/markdown', 'text/html', 'text/css',
+
+  // ── Code / Dev files ─────────────────────────────────────────────────
+  'text/javascript', 'application/javascript',
+  'text/typescript', 'application/typescript',
+  'text/x-python',
+  'text/x-java-source',
+  'text/x-c',
+  'text/x-scss',
+  'text/x-sql',
+  'text/yaml', 'application/x-yaml',
+  'text/x-env',
+
+  // ── Archives ──────────────────────────────────────────────────────────
+  'application/zip',
+  'application/x-rar-compressed',
+  'application/x-7z-compressed',
+  'application/gzip',
+  'application/x-tar',
+
+  // ── Data ──────────────────────────────────────────────────────────────
   'application/json', 'application/xml',
 ]);
 
 // Mime-to-extension mapping for safe filename generation
 const MIME_TO_EXT = {
-  'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp', 'image/svg+xml': '.svg',
-  'video/mp4': '.mp4', 'video/webm': '.webm', 'audio/mpeg': '.mp3', 'audio/ogg': '.ogg', 'audio/wav': '.wav',
+  'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp',
+  'video/mp4': '.mp4', 'video/quicktime': '.mov', 'video/x-msvideo': '.avi',
+  'video/webm': '.webm', 'video/mpeg': '.mpeg',
+  'audio/mpeg': '.mp3', 'audio/wav': '.wav', 'audio/ogg': '.ogg',
+  'audio/flac': '.flac', 'audio/aac': '.aac',
   'application/pdf': '.pdf', 'application/msword': '.doc',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
   'application/vnd.ms-excel': '.xls',
@@ -48,7 +77,16 @@ const MIME_TO_EXT = {
   'application/vnd.ms-powerpoint': '.ppt',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
   'text/plain': '.txt', 'text/csv': '.csv', 'text/markdown': '.md',
-  'application/zip': '.zip', 'application/x-rar-compressed': '.rar', 'application/gzip': '.gz',
+  'text/html': '.html', 'text/css': '.css',
+  'text/javascript': '.js', 'application/javascript': '.js',
+  'text/typescript': '.ts', 'application/typescript': '.ts',
+  'text/x-python': '.py', 'text/x-java-source': '.java',
+  'text/x-c': '.c', 'text/x-scss': '.scss',
+  'text/x-sql': '.sql', 'text/yaml': '.yaml', 'application/x-yaml': '.yaml',
+  'text/x-env': '.env',
+  'application/zip': '.zip', 'application/x-rar-compressed': '.rar',
+  'application/x-7z-compressed': '.7z', 'application/gzip': '.gz',
+  'application/x-tar': '.tar',
   'application/json': '.json', 'application/xml': '.xml',
 };
 
@@ -64,8 +102,24 @@ const storage = multer.diskStorage({
   },
 });
 
+/**
+ * Sanitize original filename — strip path traversal, null bytes, and
+ * dangerous shell characters while preserving the human-readable name.
+ */
+function sanitizeFilename(name) {
+  return (name || 'file')
+    .replace(/[\/\\:*?"<>|\x00]/g, '_') // path separators, shell specials, null byte
+    .replace(/\.{2,}/g, '.')             // no double-dots (path traversal)
+    .replace(/^[.\s]+|[.\s]+$/g, '')     // no leading/trailing dots or spaces
+    .slice(0, 255)                        // enforce max length
+    || 'file';
+}
+
 // File filter
 function fileFilter(_req, file, cb) {
+  // Sanitize the original filename on ingress
+  file.originalname = sanitizeFilename(file.originalname);
+
   if (ALLOWED_TYPES.has(file.mimetype)) {
     cb(null, true);
   } else {
@@ -102,7 +156,7 @@ export const uploadSingle = multer({
 export function handleMulterError(err, req, res, next) {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return next(new ValidationError(`File too large. Max size: ${env.MAX_FILE_SIZE / 1024 / 1024}MB`));
+      return next(new ValidationError(`File too large. Max size: ${Math.round(env.MAX_FILE_SIZE / 1024 / 1024)}MB`));
     }
     if (err.code === 'LIMIT_FILE_COUNT') {
       return next(new ValidationError('Too many files. Max: 10 files per upload'));
@@ -111,3 +165,6 @@ export function handleMulterError(err, req, res, next) {
   }
   next(err);
 }
+
+// Re-export magic-byte validator so routes can apply it after multer
+export { validateUploadedFileMagic };

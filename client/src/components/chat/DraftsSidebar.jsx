@@ -13,6 +13,12 @@ import {
   PencilLine,
   Hash,
   X,
+  FileText,
+  FileArchive,
+  FileCode,
+  Music,
+  Video,
+  File,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -90,10 +96,74 @@ function SkeletonCard({ delay = 0 }) {
   )
 }
 
+function formatFileSize(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function AttachmentIcon({ mimeType, size = 14 }) {
+  if (!mimeType) return <File size={size} />
+  if (mimeType.startsWith('audio/')) return <Music size={size} />
+  if (mimeType.startsWith('video/')) return <Video size={size} />
+  if (mimeType.includes('pdf') || mimeType.includes('word') || mimeType.includes('excel') ||
+      mimeType.includes('powerpoint') || mimeType.includes('presentation') ||
+      mimeType.includes('spreadsheet')) return <FileText size={size} />
+  if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('7z') ||
+      mimeType.includes('tar') || mimeType.includes('gzip')) return <FileArchive size={size} />
+  if (mimeType.startsWith('text/') || mimeType.includes('javascript') ||
+      mimeType.includes('typescript') || mimeType.includes('json') ||
+      mimeType.includes('xml') || mimeType.includes('yaml')) return <FileCode size={size} />
+  return <File size={size} />
+}
+
+function DraftAttachmentPreviews({ attachments }) {
+  if (!attachments || attachments.length === 0) return null
+
+  const MAX_PREVIEW = 3
+  const shown = attachments.slice(0, MAX_PREVIEW)
+  const overflow = attachments.length - MAX_PREVIEW
+
+  return (
+    <div className="dsl-attachments">
+      {shown.map((att, idx) => {
+        const isImage = att.mimeType?.startsWith('image/')
+        return (
+          <div key={att.fileId || idx} className="dsl-attachment-chip" title={att.fileName}>
+            {isImage && att.thumbnailUrl ? (
+              <img
+                src={att.thumbnailUrl}
+                alt={att.fileName}
+                className="dsl-attachment-thumb"
+                onError={(e) => { e.currentTarget.style.display = 'none' }}
+              />
+            ) : (
+              <span className="dsl-attachment-icon">
+                <AttachmentIcon mimeType={att.mimeType} size={12} />
+              </span>
+            )}
+            <span className="dsl-attachment-name">{att.fileName || 'file'}</span>
+            {att.fileSize ? (
+              <span className="dsl-attachment-size">{formatFileSize(att.fileSize)}</span>
+            ) : null}
+          </div>
+        )
+      })}
+      {overflow > 0 && (
+        <div className="dsl-attachment-chip dsl-attachment-chip--overflow">
+          +{overflow} more
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DraftCard({ draft, channelName, channelType, onNavigate, onSend, onDelete, sendingId }) {
   const isSending = sendingId === draft._key
   const preview = truncatePreview(draft.text || draft.html)
-  const attachmentCount = (draft.attachments?.length || 0) + (draft.fileReferences?.length || 0)
+  const attachments = draft.attachments || []
+  const attachmentCount = attachments.length + (draft.fileReferences?.length || 0)
 
   return (
     <div
@@ -126,6 +196,10 @@ function DraftCard({ draft, channelName, channelType, onNavigate, onSend, onDele
             </em>
           )}
         </p>
+
+        {attachments.length > 0 && (
+          <DraftAttachmentPreviews attachments={attachments} />
+        )}
       </div>
 
       <div className="dsl-actions" onClick={(e) => e.stopPropagation()}>
@@ -226,7 +300,12 @@ export default function DraftsSidebar() {
         threadId: draft.threadId || undefined,
         htmlContent: draft.html || undefined,
         mentions: draft.mentions?.length ? draft.mentions : undefined,
-        fileReferences: draft.fileReferences?.length ? draft.fileReferences : undefined,
+        // Prefer explicit fileReferences; fall back to attachment stubs stored in draft
+        fileReferences: draft.fileReferences?.length
+          ? draft.fileReferences
+          : draft.attachments?.length
+            ? draft.attachments.map((a) => a.fileId).filter(Boolean)
+            : undefined,
       })
       clearDraft(draft.channelId, draft.workspaceId || activeWorkspaceId, draft.threadId)
       toast.success('Draft sent')

@@ -158,9 +158,13 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   const fileInputRef = useRef(null)
   const containerRef = useRef(null)
   const typingTimeoutRef = useRef(null)
+  // Ref mirror of pendingFiles so useDraftAutoSave always reads the latest value
+  // without needing pendingFiles in its dependency array
+  const pendingFilesRef = useRef(pendingFiles)
+  useEffect(() => { pendingFilesRef.current = pendingFiles }, [pendingFiles])
 
   // ─── Draft Auto Save Hook ─────────────────────────────────────────
-  const { saveDraftDebounced, restoreDraft, saveDraftLocal } = useDraftAutoSave(channelId, threadId, editorRef)
+  const { saveDraftDebounced, restoreDraft, saveDraftLocal } = useDraftAutoSave(channelId, threadId, editorRef, pendingFilesRef)
 
   // ─── Format State Sync ───────────────────────────────────────────────────
 
@@ -199,8 +203,36 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
     const hasContent = await restoreDraft()
 
+    // Restore any saved attachment drafts from localStorage
     if (!cancelled) {
-      setHasContent(!!hasContent)
+      try {
+        const { getDraft } = useDraftStore.getState()
+        const savedDraft = getDraft(channelId, activeWorkspaceId, threadId || null)
+        if (savedDraft?.attachments?.length > 0) {
+          // Map stored attachment metadata back to the pendingFiles shape.
+          // Files are already uploaded (have a url), so we restore them as
+          // completed upload references.
+          const restoredFiles = savedDraft.attachments
+            .filter((a) => a.fileId && a.url)
+            .map((a) => ({
+              _id: a.fileId,
+              fileName: a.fileName || '',
+              mimeType: a.mimeType || '',
+              fileSize: a.fileSize || 0,
+              url: a.url,
+              thumbnailUrl: a.thumbnailUrl || null,
+              // Mark as restored so UI knows the file is already uploaded
+              restored: true,
+            }))
+          if (restoredFiles.length > 0) {
+            setPendingFiles(restoredFiles)
+          }
+        }
+      } catch { /* store not hydrated yet — skip */ }
+    }
+
+    if (!cancelled) {
+      setHasContent(!!hasContent || pendingFilesRef.current.length > 0)
       requestAnimationFrame(() => editorRef.current?.focus())
     }
   }
@@ -211,7 +243,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     cancelled = true
     if (rafId) cancelAnimationFrame(rafId)
   }
-}, [channelId, activeWorkspaceId, restoreDraft])
+}, [channelId, activeWorkspaceId, restoreDraft, threadId])
   // ─── Typing ──────────────────────────────────────────────────────────────
 
   const handleTyping = useCallback(() => {
@@ -782,7 +814,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
         multiple
         className="hidden"
         onChange={handleFileSelect}
-        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.md,.zip,.rar,.gz,.json,.xml"
+        accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/x-msvideo,video/webm,video/mpeg,audio/mpeg,audio/wav,audio/ogg,audio/flac,audio/aac,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv,text/markdown,text/html,text/css,text/javascript,text/typescript,text/x-python,text/x-java-source,text/x-c,text/x-scss,text/x-sql,text/yaml,text/x-env,application/json,application/xml,application/zip,application/x-rar-compressed,application/x-7z-compressed,application/gzip,application/x-tar"
       />
 
       <p className="slack-composer-hint">

@@ -27,7 +27,7 @@ import {
 } from './message.controller.js';
 import { protect, requireChannelAccess, requireMessageAccess } from '../auth/auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
-import { uploadFiles as uploadMiddleware, handleMulterError } from '../../middleware/upload.js';
+import { uploadFiles as uploadMiddleware, handleMulterError, validateUploadedFileMagic } from '../../middleware/upload.js';
 import { validate } from '../../middleware/validate.js';
 import {
   sendMessageSchema,
@@ -98,7 +98,7 @@ channelMessageRouter.use(requireChannelAccess());
 channelMessageRouter.get('/messages', getMessages);
 channelMessageRouter.get('/messages/around/:messageId', getMessagesAround);
 channelMessageRouter.post('/messages', validate({ body: sendMessageSchema }), sendMessage);
-channelMessageRouter.post('/upload', uploadLimiter, uploadMiddleware, handleMulterError, uploadFiles);
+channelMessageRouter.post('/upload', uploadLimiter, uploadMiddleware, handleMulterError, validateUploadedFileMagic, uploadFiles);
 channelMessageRouter.post('/upload/sign', getUploadSignature);
 channelMessageRouter.get('/files', getChannelFiles);
 channelMessageRouter.delete('/files/:fileId', deleteChannelFile);

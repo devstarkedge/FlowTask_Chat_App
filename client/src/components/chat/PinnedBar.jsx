@@ -1,6 +1,22 @@
 import { useState, useEffect, useRef } from "react";
 import { useChatStore } from "../../stores/chatStore";
-import { Pin, ChevronUp, ChevronDown, X } from "lucide-react";
+import { Pin, ChevronUp, ChevronDown, X, Paperclip } from "lucide-react";
+import { getAttachmentPreviewLabel } from "./PinnedAttachmentCard";
+
+/** Normalize attachments from a message (mirrors MessageItem + PinnedMessagesPanel logic). */
+function deriveAttachments(msg) {
+  if (!msg) return [];
+  if (msg.fileReferences?.length > 0) {
+    return msg.fileReferences
+      .map((ref) =>
+        ref?.fileId
+          ? { ...ref.fileId, url: ref.fileId.secureUrl || ref.fileId.url }
+          : ref
+      )
+      .filter(Boolean);
+  }
+  return msg.attachments || [];
+}
 
 /**
  * PinnedBar — always-visible sticky banner at the top of the chat.
@@ -68,7 +84,11 @@ export default function PinnedBar({ channelId }) {
 
   const handleBarClick = () => scrollTo(current);
 
-  const preview = (current?.content || "No content").slice(0, 80);
+  const attachmentLabel = getAttachmentPreviewLabel(deriveAttachments(current));
+  const isAttachmentOnly = !current?.content?.trim() && !!attachmentLabel;
+  const previewText = current?.content?.trim()
+    ? current.content.slice(0, 80)
+    : (attachmentLabel || "Attachment");
 
   return (
     <>
@@ -240,8 +260,15 @@ export default function PinnedBar({ channelId }) {
         >
           <span className="pin-bar-label">Pinned</span>
           <span className="pin-bar-sep" />
+          {isAttachmentOnly && (
+            <Paperclip
+              size={12}
+              strokeWidth={2}
+              style={{ color: "var(--text-muted)", flexShrink: 0 }}
+            />
+          )}
           <span className="pin-bar-text" key={current?._id}>
-            {preview}
+            {previewText}
             {(current?.content?.length || 0) > 80 ? "…" : ""}
           </span>
           {hasMultiple && (

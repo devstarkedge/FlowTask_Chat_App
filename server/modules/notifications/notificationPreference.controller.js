@@ -1,6 +1,7 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
 import NotificationPreference from './NotificationPreference.model.js';
 import Notification from './Notification.model.js';
+import ChatUser from '../users/ChatUser.model.js';
 import { emitToUser } from '../../sockets/socketManager.js';
 import { SOCKET_EVENTS } from '../../config/constants.js';
 import logger from '../../utils/logger.js';
@@ -121,11 +122,22 @@ export const pauseNotifications = asyncHandler(async (req, res) => {
   const pauseData = { active: true };
 
   if (resumeAt) {
-    pauseData.resumeAt = new Date(resumeAt);
+    const resumeDate = new Date(resumeAt);
+    if (isNaN(resumeDate.getTime()) || resumeDate <= new Date()) {
+      return res.status(400).json({ success: false, error: { message: 'resumeAt must be a valid future date' } });
+    }
+    const maxResumeAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    if (resumeDate > maxResumeAt) {
+      return res.status(400).json({ success: false, error: { message: 'resumeAt cannot be more than 7 days in the future' } });
+    }
+    pauseData.resumeAt = resumeDate;
   } else if (duration) {
-    // Duration in minutes
-    const durationMs = parseInt(duration, 10) * 60 * 1000;
-    pauseData.resumeAt = new Date(Date.now() + durationMs);
+    // Duration in minutes — must be a positive integer, max 1440 (24h)
+    const durationMins = parseInt(duration, 10);
+    if (!Number.isFinite(durationMins) || durationMins <= 0 || durationMins > 1440) {
+      return res.status(400).json({ success: false, error: { message: 'duration must be between 1 and 1440 minutes' } });
+    }
+    pauseData.resumeAt = new Date(Date.now() + durationMins * 60 * 1000);
   }
 
   if (typeof quietHoursEnabled === 'boolean') {
@@ -136,6 +148,14 @@ export const pauseNotifications = asyncHandler(async (req, res) => {
   if (timezone) pauseData.timezone = timezone;
 
   const updated = await NotificationPreference.setPause(userId, workspaceId, pauseData);
+
+  // Keep legacy ChatUser.dnd in sync so dnd.gateway.js path is also suppressed
+  await ChatUser.findByIdAndUpdate(userId, {
+    $set: {
+      'chatPreferences.dnd.enabled': true,
+      ...(pauseData.resumeAt ? { 'chatPreferences.dnd.endAt': pauseData.resumeAt } : {}),
+    },
+  }).catch((err) => logger.warn('Failed to sync ChatUser DND on pause', { userId, error: err.message }));
 
   // Broadcast to all devices
   emitToUser(userId.toString(), SOCKET_EVENTS.NOTIFICATION_PREFERENCES_UPDATED, {
@@ -154,6 +174,12 @@ export const resumeNotifications = asyncHandler(async (req, res) => {
     active: false,
     resumeAt: null,
   });
+
+  // Keep legacy ChatUser.dnd in sync
+  await ChatUser.findByIdAndUpdate(userId, {
+    $set: { 'chatPreferences.dnd.enabled': false },
+    $unset: { 'chatPreferences.dnd.endAt': 1 },
+  }).catch((err) => logger.warn('Failed to sync ChatUser DND on resume', { userId, error: err.message }));
 
   emitToUser(userId.toString(), SOCKET_EVENTS.NOTIFICATION_PREFERENCES_UPDATED, {
     preferences: updated,

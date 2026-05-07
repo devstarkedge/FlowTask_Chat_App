@@ -323,9 +323,13 @@ class MessageRepository {
     return Message.find(filter)
       .sort({ pinnedAt: -1 })
       .populate('authorId', 'name email avatar flowTaskUserId')
+      .populate('pinnedBy', 'name avatar email')
       .populate({
         path: 'fileReferences',
-        populate: { path: 'fileId' }
+        populate: {
+          path: 'fileId',
+          select: 'secureUrl originalName mimeType fileSize thumbnailUrl resourceType',
+        },
       })
       .lean();
   }

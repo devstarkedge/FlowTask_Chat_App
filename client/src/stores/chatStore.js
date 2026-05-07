@@ -137,6 +137,11 @@ export const useChatStore = create((set, get) => ({
   pinnedMessagesByChannel: {},
   isLoadingPins: false,
 
+  // Pinned panel visibility — persisted in localStorage so it survives page reload
+  isPinnedPanelOpen: (() => {
+    try { return localStorage.getItem('chat:pinnedPanelOpen') === 'true'; } catch { return false; }
+  })(),
+
   // All threads for the current user
   allThreads: [],
   allThreadsLoading: false,
@@ -1333,18 +1338,50 @@ export const useChatStore = create((set, get) => ({
   clearNotifications: () => set({ notifications: [] }),
 
   // ─── Pinned Messages ───────────────────────────────────────────────
+  setIsPinnedPanelOpen: (value) => {
+    set({ isPinnedPanelOpen: value });
+    try { localStorage.setItem('chat:pinnedPanelOpen', String(value)); } catch { /* noop */ }
+  },
+  togglePinnedPanel: () => {
+    const next = !useChatStore.getState().isPinnedPanelOpen;
+    set({ isPinnedPanelOpen: next });
+    try { localStorage.setItem('chat:pinnedPanelOpen', String(next)); } catch { /* noop */ }
+  },
+
   fetchPinnedMessages: async (channelId) => {
+    // Stale-while-revalidate: seed from sessionStorage for instant display on reload
+    if (!useChatStore.getState().pinnedMessagesByChannel[channelId]) {
+      try {
+        const cached = sessionStorage.getItem(`chat:pins:${channelId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            set((state) => ({
+              pinnedMessagesByChannel: {
+                ...state.pinnedMessagesByChannel,
+                [channelId]: parsed,
+              },
+            }));
+          }
+        }
+      } catch {
+        try { sessionStorage.removeItem(`chat:pins:${channelId}`); } catch { /* noop */ }
+      }
+    }
     set({ isLoadingPins: true });
     try {
       const { data } = await messageAPI.getPinned(channelId);
       const pins = data.data?.items || data.data?.messages || data.data || [];
+      const pinArray = Array.isArray(pins) ? pins : [];
       set((state) => ({
         pinnedMessagesByChannel: {
           ...state.pinnedMessagesByChannel,
-          [channelId]: Array.isArray(pins) ? pins : [],
+          [channelId]: pinArray,
         },
         isLoadingPins: false,
       }));
+      // Persist to sessionStorage for reload rehydration
+      try { sessionStorage.setItem(`chat:pins:${channelId}`, JSON.stringify(pinArray)); } catch { /* noop */ }
     } catch (error) {
       set({ isLoadingPins: false });
       logger.error("Failed to fetch pinned messages:", error);
@@ -1459,9 +1496,10 @@ export const useChatStore = create((set, get) => ({
   // Handle pin socket events
   handleMessagePinned: (payload) => {
     set((state) => {
+      // Backend now emits a full message object in payload.message
       const message = payload?.message || payload;
       const messageId = message?._id || payload?.messageId;
-      const cid = message?.channelId || payload?.channelId;
+      const cid = message?.channelId?.toString?.() || payload?.channelId?.toString?.();
       if (!messageId || !cid) return state;
 
       const newMsgs = { ...state.messagesByChannel };
@@ -1470,14 +1508,18 @@ export const useChatStore = create((set, get) => ({
           m._id === messageId ? { ...m, isPinned: true } : m,
         );
       }
-      // Add to pinned cache if loaded
+      // Add to pinned cache if loaded — prefer the rich socket payload over stale cache
       const newPins = { ...state.pinnedMessagesByChannel };
       if (newPins[cid]) {
         if (!newPins[cid].some((m) => m._id === messageId)) {
+          // Use the full message from socket (has attachments), fall back to cached message
           const cachedMessage = newMsgs[cid]?.find((m) => m._id === messageId);
-          const pinEntry = cachedMessage || (message?._id ? message : null);
+          const pinEntry = (message?._id ? message : null) || cachedMessage;
           if (pinEntry) {
-            newPins[cid] = [{ ...pinEntry, isPinned: true }, ...newPins[cid]];
+            const updated = [{ ...pinEntry, isPinned: true }, ...newPins[cid]];
+            newPins[cid] = updated;
+            // Update sessionStorage
+            try { sessionStorage.setItem(`chat:pins:${cid}`, JSON.stringify(updated)); } catch { /* noop */ }
           }
         }
       }
@@ -1519,7 +1561,10 @@ export const useChatStore = create((set, get) => ({
       }
       const newPins = { ...state.pinnedMessagesByChannel };
       if (newPins[cid]) {
-        newPins[cid] = newPins[cid].filter((m) => m._id !== messageId);
+        const updated = newPins[cid].filter((m) => m._id !== messageId);
+        newPins[cid] = updated;
+        // Sync sessionStorage
+        try { sessionStorage.setItem(`chat:pins:${cid}`, JSON.stringify(updated)); } catch { /* noop */ }
       }
       if (
         CHAT_FEATURE_FLAGS.normalizedMessageStore &&
@@ -1564,7 +1609,17 @@ export const useChatStore = create((set, get) => ({
   setConnectionStatus: (status) => set({ connectionStatus: status }),
 
   // ─── Workspace Switch — Clear all cached data ──────────────────────
-  clearCache: () =>
+  clearCache: () => {
+    // Clear per-channel pin caches from sessionStorage
+    try {
+      const keysToRemove = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && k.startsWith('chat:pins:')) keysToRemove.push(k);
+      }
+      keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+    } catch { /* noop */ }
+
     set({
       messagesByChannel: {},
       messagesById: {},
@@ -1572,6 +1627,7 @@ export const useChatStore = create((set, get) => ({
       messageChannelById: {},
       hasMore: {},
       pinnedMessagesByChannel: {},
+      isPinnedPanelOpen: false,
       allThreads: [],
       threadRepliesByRoot: {},
       threadRepliesById: {},
@@ -1582,7 +1638,9 @@ export const useChatStore = create((set, get) => ({
       onlineUsers: new Map(),
       notifications: [],
       activeThread: null,
-    }),
+    });
+    try { localStorage.removeItem('chat:pinnedPanelOpen'); } catch { /* noop */ }
+  },
 }));
 
 useChatStore.subscribe((state, prevState) => {

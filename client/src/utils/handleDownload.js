@@ -13,6 +13,8 @@ export const handleDownload = async (file) => {
       "Unnamed file",
     url: file.url || file.secureUrl,
     size: file.fileSize || file.size,
+    type: file.mimeType || file.type || "",
+    thumbnailUrl: file.thumbnailUrl || null,
   };
 
   const downloadItem = addDownload(mappedFile);
@@ -47,6 +49,8 @@ export const handleDownload = async (file) => {
         status: "completed",
         progress: 100,
         blobUrl,
+        type: mappedFile.type,
+        thumbnailUrl: mappedFile.thumbnailUrl,
       });
 
       return;
@@ -82,6 +86,8 @@ export const handleDownload = async (file) => {
       status: "completed",
       progress: 100,
       blobUrl,
+      type: mappedFile.type,
+      thumbnailUrl: mappedFile.thumbnailUrl,
     });
   } catch (err) {
     console.error("Download failed", err);

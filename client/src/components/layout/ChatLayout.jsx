@@ -78,7 +78,6 @@ import DownloadsModalWrapper from "../modals/DownloadsModalWrapper";
 import { useDownloadStore } from "../../stores/downloadStore";
 import { onPreviewRequest } from "../../services/previewService";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
-import PinnedBar from "../chat/PinnedBar";
 import { handleDownload } from "../../utils/handleDownload";
 
 const EMPTY_LIST = [];
@@ -668,8 +667,10 @@ export default function ChatLayout() {
   const activeThread = useChatStore((s) => s.activeThread);
   const openThreadAction = useChatStore((s) => s.openThread);
   const closeThread = useChatStore((s) => s.closeThread);
+  const showPins = useChatStore((s) => s.isPinnedPanelOpen);
+  const setShowPins = useChatStore((s) => s.setIsPinnedPanelOpen);
+  const togglePinnedPanel = useChatStore((s) => s.togglePinnedPanel);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [showPins, setShowPins] = useState(false);
   const [showAllThreads, setShowAllThreads] = useState(false);
   const profileUser = useProfileStore((s) => s.profileUser);
   const [previewFile, setPreviewFile] = useState(null);
@@ -1594,7 +1595,7 @@ export default function ChatLayout() {
                     onOpenThread={openThread}
                     onToggleSearch={toggleLocalSearch}
                     onTogglePins={() => {
-                      setShowPins((s) => !s);
+                      togglePinnedPanel();
                       closeSearch();
                     }}
                     onOpenProfile={openProfile}
@@ -1637,14 +1638,13 @@ export default function ChatLayout() {
                 );
               return activeChannelId ? (
                 <>
-                  <PinnedBar />
                   <ChatPanel
                   channelId={activeChannelId}
                   workspaceId={workspaceId}
                   onOpenThread={openThread}
                   onToggleSearch={toggleLocalSearch}
                   onTogglePins={() => {
-                    setShowPins((s) => !s);
+                    togglePinnedPanel();
                     closeSearch();
                   }}
                   onOpenProfile={openProfile}
@@ -1986,8 +1986,7 @@ function ActivityMainPane({
               {getNotificationText(selectedNotification)}
             </span>
           </div>
-          <PinnedBar channelId={selectedChannelId} />
-          <ChatPanel 
+          <ChatPanel
             channelId={selectedChannelId}
             workspaceId={workspaceId}
             onOpenThread={onOpenThread}

@@ -102,9 +102,37 @@ const FILE_ICON_CONFIG = {
   },
 };
 
-function FileIcon({ name, mime, size = 16 }) {
+function FileIcon({ name, mime, size = 16, thumbnailUrl, fileUrl }) {
   const type = getFileType(name, mime);
   const { bg, border, color, Icon } = FILE_ICON_CONFIG[type];
+  const [imgError, setImgError] = useState(false);
+  
+  // Show thumbnail for images if available
+  if (type === "image" && !imgError && (thumbnailUrl || fileUrl)) {
+    return (
+      <div
+        className="dl-file-icon"
+        style={{ 
+          background: bg, 
+          borderColor: border,
+          padding: 0,
+          overflow: "hidden"
+        }}
+      >
+        <img
+          src={thumbnailUrl || fileUrl}
+          alt={name}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover"
+          }}
+          onError={() => setImgError(true)}
+        />
+      </div>
+    );
+  }
+  
   return (
     <div
       className="dl-file-icon"
@@ -323,7 +351,12 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
                       className="dl-row"
                       style={{ animationDelay: `${i * 0.04}s` }}
                     >
-                      <FileIcon name={file.name} mime={file.type} />
+                      <FileIcon 
+                        name={file.name} 
+                        mime={file.type}
+                        thumbnailUrl={file.thumbnailUrl}
+                        fileUrl={file.blobUrl || file.url || file.secureUrl}
+                      />
 
                       {/* FILE INFO */}
                       <div style={{ flex: 1, minWidth: 0 }}>

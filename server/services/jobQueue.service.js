@@ -77,6 +77,14 @@ export async function addJob(name, data, opts = {}) {
   }
 
   if (entry.sync) {
+    // If the job has a delay, do NOT execute immediately in sync mode.
+    // Delayed jobs (e.g. scheduled messages) must wait for their time — the
+    // caller's polling interval will process them when they become due.
+    if (opts.delay && opts.delay > 0) {
+      logger.debug(`Sync queue "${name}": delayed job deferred to polling (delay: ${opts.delay}ms)`);
+      return null;
+    }
+
     // Synchronous fallback — execute immediately and propagate processor result
     try {
       const jobWrapper = { data, id: `sync-${Date.now()}` };

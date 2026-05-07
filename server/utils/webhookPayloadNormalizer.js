@@ -305,6 +305,24 @@ const NORMALIZERS = {
     userId: p.userId || actorToUserId(p.actor),
   }),
 
+  [FLOWTASK_EVENTS.ANNOUNCEMENT_DELETED]: (p) => ({
+    ...p,
+    announcement: p.announcement
+      ? { ...p.announcement, _id: p.announcement.id || p.announcement._id }
+      : undefined,
+    announcementId: p.announcementId || p.announcement?.id || p.announcement?._id,
+    deletedBy: p.deletedBy || actorToUserId(p.actor),
+    deletedAt: p.deletedAt || new Date().toISOString(),
+    syncVersion: p.syncVersion,
+    userId: p.userId || actorToUserId(p.actor),
+  }),
+
+  [FLOWTASK_EVENTS.ANNOUNCEMENT_UPDATED]: (p) => ({
+    ...p,
+    announcement: p.announcement ? { ...p.announcement, _id: p.announcement.id || p.announcement._id } : undefined,
+    userId: p.userId || actorToUserId(p.actor),
+  }),
+
   // ─── Department Events ──────────────────────────────────────────────────
 
   [FLOWTASK_EVENTS.DEPARTMENT_CREATED]: (p) => ({

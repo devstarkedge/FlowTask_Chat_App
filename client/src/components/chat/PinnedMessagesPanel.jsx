@@ -4,6 +4,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { X, Pin, Loader2, Hash, Search, PinOff } from "lucide-react";
 import { format } from "date-fns";
 import { Avatar } from "./MemberAvatarGroup";
+import PinnedAttachmentCard from "./PinnedAttachmentCard";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -24,7 +25,24 @@ function formatDate(dateStr) {
     return `Yesterday at ${format(d, "h:mm a")}`;
   return format(d, "MMM d, yyyy · h:mm a");
 }
-
+/**
+ * Normalize attachment data from a message — mirrors the same logic in MessageItem.
+ * Files are stored as fileReferences (FileAsset refs) in modern messages,
+ * and as embedded attachments[] in legacy messages.
+ */
+function deriveAttachments(msg) {
+  if (!msg) return [];
+  if (msg.fileReferences?.length > 0) {
+    return msg.fileReferences
+      .map((ref) =>
+        ref?.fileId
+          ? { ...ref.fileId, url: ref.fileId.secureUrl || ref.fileId.url }
+          : ref
+      )
+      .filter(Boolean);
+  }
+  return msg.attachments || [];
+}
 // ─── Main Component ────────────────────────────────────────────────────────
 
 export default function PinnedMessagesPanel({ channelId, onClose }) {
@@ -47,9 +65,13 @@ export default function PinnedMessagesPanel({ channelId, onClose }) {
   }, [channelId, fetchPinnedMessages]);
 
   const filtered = query.trim()
-    ? pinnedMessages.filter((m) =>
-        (m.content || "").toLowerCase().includes(query.toLowerCase())
-      )
+    ? pinnedMessages.filter((m) => {
+        const q = query.toLowerCase();
+        if ((m.content || "").toLowerCase().includes(q)) return true;
+        return deriveAttachments(m).some((a) =>
+          (a?.originalName || a?.fileName || "").toLowerCase().includes(q)
+        );
+      })
     : pinnedMessages;
 
   const handleJump = useCallback(
@@ -526,9 +548,19 @@ export default function PinnedMessagesPanel({ channelId, onClose }) {
                     </div>
 
                     {/* Content */}
-                    <div className="pm-card-content">
-                      {truncate(msg.content || "")}
-                    </div>
+                    {(msg.content || "").trim() && (
+                      <div className="pm-card-content">
+                        {truncate(msg.content)}
+                      </div>
+                    )}
+
+                    {/* Attachments — derive from fileReferences (modern) or attachments[] (legacy) */}
+                    {(() => {
+                      const atts = deriveAttachments(msg);
+                      return atts.length > 0 ? (
+                        <PinnedAttachmentCard attachments={atts} />
+                      ) : null;
+                    })()}
 
                     {/* Footer */}
                     <div className="pm-card-footer">

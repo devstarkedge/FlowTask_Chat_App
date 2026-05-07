@@ -507,6 +507,12 @@ const MessageItem = memo(
                   Sending...
                 </span>
               )}
+              {/* Pinned icon for attachment-only messages */}
+              {!isDeleted && !message.content?.trim() && message.isPinned && compact && (
+                <div className="flex items-center mb-1">
+                  <Pin size={11} style={{ color: "var(--accent-yellow)" }} />
+                </div>
+              )}
 
               {/* Attachments */}
               {!isDeleted && derivedAttachments.length > 0 && (

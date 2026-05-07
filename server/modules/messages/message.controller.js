@@ -10,6 +10,8 @@ import Channel from "../channels/Channel.model.js";
 import botService from "../bot/bot.service.js";
 import channelRepository from "../channels/channel.repository.js";
 import { enqueueScheduledMessage } from '../../services/scheduledMessages.service.js';
+import { emitToUser } from '../../sockets/socketManager.js';
+import { SOCKET_EVENTS } from '../../config/constants.js';
 
 
 /**
@@ -625,19 +627,11 @@ export const getSavedMessages = asyncHandler(async (req, res) => {
 export const scheduleMessage = asyncHandler(async (req, res) => {
   const { content, htmlContent, threadId, scheduledAt, attachments, mentions, fileReferences } = req.body;
 
-
-  if (!content || !content.trim()) {
-    return res.status(400).json({
-      success: false,
-      error: { message: "Message content is required" },
-    });
-
-  // Require content OR attachments (mirrors sendMessage validation)
+  // Require content OR attachments
   const hasContent = content && content.trim();
   const hasAttachments = (attachments && attachments.length > 0) || (fileReferences && fileReferences.length > 0);
   if (!hasContent && !hasAttachments) {
     return res.status(400).json({ success: false, error: { message: 'Message must have content or attachments' } });
-
   }
 
   const schedDate = new Date(scheduledAt);
@@ -667,12 +661,7 @@ export const scheduleMessage = asyncHandler(async (req, res) => {
     mentions: normMentions,
   });
 
-
-  res
-    .status(201)
-    .json({ success: true, data: { scheduledMessage: scheduled } });
-
-  // Enqueue BullMQ delayed job (no-op if Redis unavailable)
+  // Enqueue BullMQ delayed job (no-op if Redis unavailable; polling fallback picks it up)
   try {
     await enqueueScheduledMessage(scheduled);
   } catch {
@@ -680,8 +669,7 @@ export const scheduleMessage = asyncHandler(async (req, res) => {
   }
 
   res.status(201).json({ success: true, data: { scheduledMessage: scheduled } });
-
-}});
+});
 
 /**
  * GET /api/chat/scheduled-messages
@@ -793,6 +781,14 @@ export const sendScheduledNow = asyncHandler(async (req, res) => {
     });
 
     await ScheduledMessage.markSent(scheduled._id, message._id);
+
+    // Emit real-time event to remove from scheduled list
+    emitToUser(scheduled.authorId.toString(), SOCKET_EVENTS.SCHEDULED_MESSAGE_SENT, {
+      scheduledMessageId: scheduled._id.toString(),
+      message,
+      channelId: scheduled.channelId.toString(),
+      workspaceId: scheduled.workspaceId.toString(),
+    }, scheduled.workspaceId.toString());
 
     res.json({ success: true, data: { message, scheduledMessage: { ...scheduled.toObject(), status: 'sent' } } });
   } catch (err) {

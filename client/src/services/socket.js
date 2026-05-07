@@ -4,6 +4,7 @@ import { useChatStore } from '../stores/chatStore'
 import { useChannelStore } from '../stores/channelStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useNotificationStore } from '../stores/notificationStore'
+import { useDraftStore } from '../stores/draftStore'
 import { throttle } from '../utils/throttle'
 import logger from '../utils/logger'
 
@@ -73,6 +74,18 @@ const SOCKET_EVENTS = {
   // Other
   NOTIFICATION: 'notification',
   UNREAD_UPDATED: 'unread:updated',
+
+  // Announcements
+  ANNOUNCEMENT_DELETED: 'announcement:deleted',
+  ANNOUNCEMENT_UPDATED: 'announcement:updated',
+
+  // Drafts
+  DRAFT_UPDATED: 'draft:updated',
+  DRAFT_DELETED: 'draft:deleted',
+
+  // Scheduled Messages
+  SCHEDULED_MESSAGE_SENT: 'scheduledMessage:sent',
+  SCHEDULED_MESSAGE_FAILED: 'scheduledMessage:failed',
 }
 
 export function connectSocket() {
@@ -108,6 +121,11 @@ export function connectSocket() {
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
   })
+
+  // Expose socket globally for components that need direct access
+  if (typeof window !== 'undefined') {
+    window.socketInstance = socket
+  }
 
   socket.on('connect', () => {
     logger.log('[Socket] Connected:', socket.id)
@@ -396,6 +414,45 @@ export function connectSocket() {
 
   socket.on('scheduledMessage:failed', ({ scheduledMessageId, error }) => {
     logger.error('[Socket] Scheduled message failed:', scheduledMessageId, error)
+  })
+
+  // ─── Announcement Events ─────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.ANNOUNCEMENT_DELETED, ({ announcementId, workspaceId }) => {
+    if (!announcementId) return
+    // Remove any message in the chat store that has this announcementId in activityMeta
+    useChatStore.getState().removeAnnouncementMessages?.(announcementId)
+    logger.log('[Socket] Announcement deleted:', announcementId)
+  })
+
+  socket.on(SOCKET_EVENTS.ANNOUNCEMENT_UPDATED, ({ announcementId, title, description }) => {
+    if (!announcementId) return
+    logger.log('[Socket] Announcement updated:', announcementId, title)
+  })
+
+  // ─── Draft Sync Events (cross-device) ───────────────────────────────
+  socket.on(SOCKET_EVENTS.DRAFT_UPDATED, (draftPayload) => {
+    try {
+      const { channelId, html, text, workspaceId: wsId, threadId, mentions, attachments, fileReferences } = draftPayload
+      if (channelId && wsId) {
+        useDraftStore.getState().setDraft(channelId, html || '', text || '', wsId, threadId || null, {
+          mentions: mentions || [],
+          attachments: attachments || [],
+          fileReferences: fileReferences || [],
+        })
+      }
+    } catch (err) {
+      logger.error('[Socket] draft:updated handler error:', err.message)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.DRAFT_DELETED, ({ channelId, workspaceId: wsId, threadId }) => {
+    try {
+      if (channelId && wsId) {
+        useDraftStore.getState().clearDraft(channelId, wsId, threadId || null)
+      }
+    } catch (err) {
+      logger.error('[Socket] draft:deleted handler error:', err.message)
+    }
   })
 
   return socket

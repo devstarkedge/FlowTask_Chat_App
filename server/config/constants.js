@@ -39,6 +39,7 @@ export const FLOWTASK_EVENTS = Object.freeze({
   USER_VERIFIED: 'USER_VERIFIED',
   ANNOUNCEMENT_CREATED: 'ANNOUNCEMENT_CREATED',
   ANNOUNCEMENT_DELETED: 'ANNOUNCEMENT_DELETED',
+  ANNOUNCEMENT_UPDATED: 'ANNOUNCEMENT_UPDATED',
 
   // Department events
   DEPARTMENT_CREATED: 'DEPARTMENT_CREATED',
@@ -285,6 +286,10 @@ export const SOCKET_EVENTS = Object.freeze({
   // Scheduled Messages
   SCHEDULED_MESSAGE_SENT: 'scheduledMessage:sent',
   SCHEDULED_MESSAGE_FAILED: 'scheduledMessage:failed',
+
+  // Announcements
+  ANNOUNCEMENT_DELETED: 'announcement:deleted',
+  ANNOUNCEMENT_UPDATED: 'announcement:updated',
 
   // FlowTask Sync
   USER_ACTIVATED: 'user:activated',

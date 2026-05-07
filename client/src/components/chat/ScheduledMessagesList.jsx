@@ -261,7 +261,7 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
     try {
       setLoading(true);
       const { data } = await scheduledMessageAPI.list();
-      const items = data?.data?.scheduledMessages || data?.data || [];
+      const items = data?.data?.messages || [];
       const arr = Array.isArray(items) ? items : [];
       setMessages(arr);
       onCountChange?.(arr.length);
@@ -270,9 +270,31 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
     } finally {
       setLoading(false);
     }
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, onCountChange]);
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
+
+  /* ── Socket: Remove sent scheduled messages in real-time ── */
+  useEffect(() => {
+    const socket = window.socketInstance;
+    if (!socket) return;
+
+    const handleScheduledSent = ({ scheduledMessageId }) => {
+      if (!scheduledMessageId) return;
+      animateRemove(scheduledMessageId, () => {
+        setMessages((prev) => {
+          const next = prev.filter((m) => m._id !== scheduledMessageId);
+          onCountChange?.(next.length);
+          return next;
+        });
+      });
+    };
+
+    socket.on('scheduledMessage:sent', handleScheduledSent);
+    return () => {
+      socket.off('scheduledMessage:sent', handleScheduledSent);
+    };
+  }, [onCountChange]);
 
   /* ── Animated remove ── */
   const animateRemove = (id, cb) => {

@@ -26,6 +26,7 @@ export default function ChatPanel({
 }) {
   const channel = useChannelStore((s) => s.channels.find((c) => c._id === channelId))
   const fetchMessages = useChatStore((s) => s.fetchMessages)
+  const fetchPinnedMessages = useChatStore((s) => s.fetchPinnedMessages)
   const legacyMessages = useChatStore((s) => s.messagesByChannel[channelId] || EMPTY_LIST)
   const channelMessageIds = useChatStore((s) => s.channelMessageIds[channelId] || EMPTY_LIST)
   const messagesById = useChatStore((s) => s.messagesById)
@@ -49,12 +50,13 @@ export default function ChatPanel({
     prevChannelRef.current = channelId;
 
     fetchMessages(channelId);
+    fetchPinnedMessages(channelId);
     setActiveTab("messages");
 
     return () => {
       leaveChannel(channelId);
     };
-  }, [channelId, fetchMessages]);
+  }, [channelId, fetchMessages, fetchPinnedMessages]);
 
   const isDMChannel = channel?.type === "dm";
 

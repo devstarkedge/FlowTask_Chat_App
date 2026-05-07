@@ -96,7 +96,7 @@ const env = Object.freeze({
 
   // Uploads
   UPLOAD_DIR: process.env.UPLOAD_DIR || './uploads',
-  MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE, 10) || 10 * 1024 * 1024, // 10MB
+  MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE, 10) || 50 * 1024 * 1024, // 50MB
 
   // Redis (optional)
   REDIS_URL: process.env.REDIS_URL || '',

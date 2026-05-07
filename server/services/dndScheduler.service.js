@@ -1,5 +1,8 @@
 import cron from 'node-cron'
 import ChatUser from '../modules/users/ChatUser.model.js'
+import NotificationPreference from '../modules/notifications/NotificationPreference.model.js'
+import { emitToUser } from '../sockets/socketManager.js'
+import { SOCKET_EVENTS } from '../config/constants.js'
 import logger from '../utils/logger.js'
 
 let cronJob = null
@@ -43,11 +46,8 @@ export function startDNDScheduler() {
           const currentlyEnabled = !!user.chatPreferences?.dnd?.enabled
 
           if (inWindow && !currentlyEnabled) {
-            // enable recurring DND
             await ChatUser.findByIdAndUpdate(user._id, { $set: { 'chatPreferences.dnd.enabled': true } })
           } else if (!inWindow && currentlyEnabled) {
-            // disable recurring DND (only if there is no manual endAt active)
-            // If manual endAt exists and is in future, respect manual setting; otherwise clear
             const manualEnd = user.chatPreferences?.dnd?.endAt
             if (!manualEnd || new Date(manualEnd) <= now) {
               await ChatUser.findByIdAndUpdate(user._id, { $set: { 'chatPreferences.dnd.enabled': false }, $unset: { 'chatPreferences.dnd.endAt': 1 } })
@@ -58,8 +58,52 @@ export function startDNDScheduler() {
         }
       }
 
-      const durationMs = Date.now() - start
-      logger.debug('DND scheduler run complete', { durationMs })
+      // 3) Auto-resume NotificationPreference.pause where resumeAt has passed
+      try {
+        const expiredPauses = await NotificationPreference.find({
+          'pause.active': true,
+          'pause.resumeAt': { $lte: now },
+        }).select('userId workspaceId').lean()
+
+        if (expiredPauses.length > 0) {
+          const expiredIds = expiredPauses.map((p) => p._id)
+          await NotificationPreference.updateMany(
+            { _id: { $in: expiredIds } },
+            { $set: { 'pause.active': false, 'pause.resumeAt': null } },
+          )
+
+          // Also clear corresponding ChatUser.dnd entries
+          const userIds = [...new Set(expiredPauses.map((p) => p.userId.toString()))]
+          await ChatUser.updateMany(
+            { _id: { $in: userIds }, 'chatPreferences.dnd.enabled': true },
+            { $set: { 'chatPreferences.dnd.enabled': false }, $unset: { 'chatPreferences.dnd.endAt': 1 } },
+          )
+
+          // Notify each affected user's devices so clients instantly update isPaused state
+          for (const entry of expiredPauses) {
+            try {
+              const updatedPrefs = await NotificationPreference.findOne({
+                userId: entry.userId,
+                workspaceId: entry.workspaceId,
+              }).lean()
+              emitToUser(
+                entry.userId.toString(),
+                SOCKET_EVENTS.NOTIFICATION_PREFERENCES_UPDATED,
+                { preferences: updatedPrefs },
+                entry.workspaceId?.toString(),
+              )
+            } catch (emitErr) {
+              logger.warn('Failed to emit pause expiry to user', { userId: entry.userId, error: emitErr.message })
+            }
+          }
+
+          logger.info('Auto-resumed expired notification pauses', { count: expiredPauses.length })
+        }
+      } catch (err) {
+        logger.error('Failed to auto-resume expired notification pauses', { error: err.message })
+      }
+
+      logger.debug('DND scheduler run complete', { durationMs: Date.now() - start })
     } catch (error) {
       logger.error('DND scheduler failed', { error: error.message })
     }

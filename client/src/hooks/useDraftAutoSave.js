@@ -13,12 +13,15 @@ import { isContentEmpty } from '../utils/draftUtils'
  *  - Restores draft on mount with async cancellation for fast switching
  *  - Persists drafts locally via draftStore/localStorage
  *  - isContentEmpty guard to prevent phantom <p></p> drafts
+ *  - pendingFilesRef: a React ref pointing to the current upload attachment list
+ *    so attachment drafts are persisted alongside text drafts.
  *
  * @param {string} conversationId - channelId
  * @param {string|null} threadId - optional thread ID
  * @param {React.RefObject} editorRef - ref to the editor instance
+ * @param {React.RefObject} [pendingFilesRef] - ref to the current pendingFiles state array
  */
-export default function useDraftAutoSave(conversationId, threadId, editorRef) {
+export default function useDraftAutoSave(conversationId, threadId, editorRef, pendingFilesRef) {
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const { setDraft, getDraft, clearDraft } = useDraftStore()
 
@@ -28,13 +31,27 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef) {
   const lastSignatureRef = useRef('')
   const restoreGenRef = useRef(0)
 
-  const buildSignature = useCallback((html, text, mentions = []) => {
+  const buildSignature = useCallback((html, text, mentions = [], attachments = []) => {
     return JSON.stringify({
       html: (html || '').trim(),
       text: (text || '').trim(),
       mentions: Array.isArray(mentions) ? mentions : [],
+      attachmentCount: Array.isArray(attachments) ? attachments.length : 0,
     })
   }, [])
+
+  /**
+   * Map a pendingFile object (from upload response or restored draft) to the
+   * attachment shape stored in draftStore.
+   */
+  const mapToAttachment = useCallback((f) => ({
+    fileId: f._id || f.fileId || null,
+    fileName: f.fileName || f.name || '',
+    mimeType: f.mimeType || f.type || '',
+    fileSize: f.fileSize || f.size || 0,
+    url: f.url || f.secureUrl || '',
+    thumbnailUrl: f.thumbnailUrl || null,
+  }), [])
 
   const saveDraftLocal = useCallback(
     (targetConversationId = conversationId, targetThreadId = threadId) => {
@@ -44,8 +61,10 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef) {
       const { html, text, mentions } = ed.getContent()
       const trimmed = (text || '').trim()
       const trimmedHtml = (html || '').trim()
+      const currentFiles = pendingFilesRef?.current || []
+      const attachments = currentFiles.map(mapToAttachment)
 
-      if (isContentEmpty(trimmedHtml, trimmed)) {
+      if (isContentEmpty(trimmedHtml, trimmed) && attachments.length === 0) {
         clearDraft(targetConversationId, activeWorkspaceId, targetThreadId)
         if (targetConversationId === conversationId && targetThreadId === threadId) {
           lastSignatureRef.current = ''
@@ -53,7 +72,7 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef) {
         return false
       }
 
-      const nextSignature = buildSignature(trimmedHtml, trimmed, mentions)
+      const nextSignature = buildSignature(trimmedHtml, trimmed, mentions, attachments)
       if (
         targetConversationId === conversationId &&
         targetThreadId === threadId &&
@@ -64,11 +83,12 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef) {
 
       setDraft(targetConversationId, trimmedHtml, trimmed, activeWorkspaceId, targetThreadId, {
         mentions,
+        attachments,
       })
       lastSignatureRef.current = nextSignature
       return true
     },
-    [activeWorkspaceId, buildSignature, clearDraft, conversationId, editorRef, setDraft, threadId],
+    [activeWorkspaceId, buildSignature, clearDraft, conversationId, editorRef, mapToAttachment, pendingFilesRef, setDraft, threadId],
   )
 
   const saveDraftDebounced = useCallback(() => {
@@ -78,8 +98,10 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef) {
     const { html, text, mentions } = ed.getContent()
     const trimmed = (text || '').trim()
     const trimmedHtml = (html || '').trim()
+    const currentFiles = pendingFilesRef?.current || []
+    const attachments = currentFiles.map(mapToAttachment)
 
-    if (isContentEmpty(trimmedHtml, trimmed)) {
+    if (isContentEmpty(trimmedHtml, trimmed) && attachments.length === 0) {
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
       clearDraft(conversationId, activeWorkspaceId, threadId)
       lastSignatureRef.current = ''
@@ -89,15 +111,16 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef) {
     if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
 
     draftTimerRef.current = setTimeout(() => {
-      const nextSignature = buildSignature(trimmedHtml, trimmed, mentions)
+      const nextSignature = buildSignature(trimmedHtml, trimmed, mentions, attachments)
       if (nextSignature === lastSignatureRef.current) return
 
       setDraft(conversationId, trimmedHtml, trimmed, activeWorkspaceId, threadId, {
         mentions,
+        attachments,
       })
       lastSignatureRef.current = nextSignature
     }, 800)
-  }, [activeWorkspaceId, buildSignature, clearDraft, conversationId, editorRef, setDraft, threadId])
+  }, [activeWorkspaceId, buildSignature, clearDraft, conversationId, editorRef, mapToAttachment, pendingFilesRef, setDraft, threadId])
 
   const flushTimers = useCallback(() => {
     if (draftTimerRef.current) {
@@ -118,10 +141,13 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef) {
         const { html, text, mentions } = ed.getContent()
         const previousConversationId = lastConversationRef.current
         const previousThreadId = lastThreadRef.current
+        const currentFiles = pendingFilesRef?.current || []
+        const attachments = currentFiles.map(mapToAttachment)
 
-        if (!isContentEmpty(html, text)) {
+        if (!isContentEmpty(html, text) || attachments.length > 0) {
           setDraft(previousConversationId, html, text, activeWorkspaceId, previousThreadId, {
             mentions,
+            attachments,
           })
         } else {
           clearDraft(previousConversationId, activeWorkspaceId, previousThreadId)
@@ -134,7 +160,7 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef) {
     lastConversationRef.current = conversationId
     lastThreadRef.current = threadId
     lastSignatureRef.current = ''
-  }, [conversationId, setDraft, clearDraft, activeWorkspaceId, threadId, editorRef, flushTimers])
+  }, [conversationId, setDraft, clearDraft, activeWorkspaceId, threadId, editorRef, flushTimers, mapToAttachment, pendingFilesRef])
 
   const restoreDraft = useCallback(async () => {
     const gen = ++restoreGenRef.current

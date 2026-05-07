@@ -495,7 +495,7 @@ const MessageItem = memo(
                   </button>
                 </div>
               )}
-              {!isDeleted && isPending && !isFailed && (
+              {/* {!isDeleted && isPending && !isFailed && (
                 <span
                   style={{
                     fontSize: 11,
@@ -506,7 +506,7 @@ const MessageItem = memo(
                 >
                   Sending...
                 </span>
-              )}
+              )} */}
 
               {/* Attachments */}
               {!isDeleted && derivedAttachments.length > 0 && (

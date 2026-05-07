@@ -216,11 +216,11 @@ class ChannelService {
   }
 
   /**
-   * Create or get a DM channel between two users.
+   * Create or get a DM channel between two users OR a self-DM.
    * Both user IDs must be valid ChatUser _id values within the same workspace.
    *
    * @param {string} user1Id - ChatUser _id of the initiating user
-   * @param {string} user2Id - ChatUser _id of the target user
+   * @param {string} user2Id - ChatUser _id of the target user (can be same as user1Id for self-DM)
    * @param {string} workspaceId - Workspace scope (required)
    * @returns {Promise<Channel>}
    */
@@ -235,18 +235,12 @@ class ChannelService {
     const id1 = user1Id.toString();
     const id2 = user2Id.toString();
 
-    // ── Prevent self-DM ──
-    if (id1 === id2) {
-      throw new ValidationError(
-        "Cannot create a DM conversation with yourself",
-      );
-    }
+    // ── Self-DM: single-user conversation ──
+    const isSelfDM = id1 === id2;
+    const ids = isSelfDM ? [id1] : [id1, id2].sort();
+    const dmKey = isSelfDM ? id1 : `${ids[0]}:${ids[1]}`;
 
-    // ── Canonical ID ordering for deterministic dedup ──
-    const ids = [id1, id2].sort();
-    const dmKey = `${ids[0]}:${ids[1]}`;
-
-    // ── Check for existing DM channel (pass as array — matches repository signature) ──
+    // ── Check for existing DM channel ──
     const existing = await channelRepository.findDMChannel(ids, workspaceId);
     if (existing) {
       // DM v2 foundation: ensure dedicated DM record mirrors legacy channel.
@@ -267,50 +261,71 @@ class ChannelService {
       return existing;
     }
 
-    // ── Validate both users exist in ChatApp within this workspace ──
-    const [user1, user2] = await Promise.all([
-      userRepository.findById(ids[0]),
-      userRepository.findById(ids[1]),
-    ]);
-
-    if (!user1 || !user2) {
-      throw new NotFoundError("One or both users not found");
+    // ── Validate user(s) exist in ChatApp within this workspace ──
+    const user1 = await userRepository.findById(ids[0]);
+    if (!user1) {
+      throw new NotFoundError("User not found");
     }
 
-    // ── Verify both users are active members of this workspace ──
-    const [membership1, membership2] = await Promise.all([
-      WorkspaceMembership.findOne({
-        userId: ids[0],
-        workspaceId,
-        isActive: true,
-      }).lean(),
-      WorkspaceMembership.findOne({
+    let user2 = null;
+    if (!isSelfDM) {
+      user2 = await userRepository.findById(ids[1]);
+      if (!user2) {
+        throw new NotFoundError("One or both users not found");
+      }
+    }
+
+    // ── Verify user(s) are active members of this workspace ──
+    const membership1 = await WorkspaceMembership.findOne({
+      userId: ids[0],
+      workspaceId,
+      isActive: true,
+    }).lean();
+
+    if (!membership1) {
+      throw new ForbiddenError(
+        "User must be an active member of the workspace",
+      );
+    }
+
+    if (!isSelfDM) {
+      const membership2 = await WorkspaceMembership.findOne({
         userId: ids[1],
         workspaceId,
         isActive: true,
-      }).lean(),
-    ]);
+      }).lean();
 
-    if (!membership1 || !membership2) {
-      throw new ForbiddenError(
-        "Both users must be active members of the workspace",
-      );
+      if (!membership2) {
+        throw new ForbiddenError(
+          "Both users must be active members of the workspace",
+        );
+      }
     }
 
     let channel;
     try {
+      const channelName = isSelfDM
+        ? `${user1.name} (You)`
+        : `${user1.name}, ${user2.name}`;
+      const channelSlug = isSelfDM
+        ? `dm-self-${ids[0]}`
+        : `dm-${ids[0]}-${ids[1]}`;
+      const members = isSelfDM
+        ? [{ userId: ids[0], role: CHANNEL_MEMBER_ROLES.MEMBER }]
+        : [
+            { userId: ids[0], role: CHANNEL_MEMBER_ROLES.MEMBER },
+            { userId: ids[1], role: CHANNEL_MEMBER_ROLES.MEMBER },
+          ];
+
       channel = await channelRepository.create({
-        name: `${user1.name}, ${user2.name}`,
-        slug: `dm-${ids[0]}-${ids[1]}`,
+        name: channelName,
+        slug: channelSlug,
         type: CHANNEL_TYPES.DM,
         visibility: CHANNEL_VISIBILITY.PRIVATE,
         dmParticipants: ids,
         dmKey,
-        members: [
-          { userId: ids[0], role: CHANNEL_MEMBER_ROLES.MEMBER },
-          { userId: ids[1], role: CHANNEL_MEMBER_ROLES.MEMBER },
-        ],
-        memberCount: 2,
+        members,
+        memberCount: ids.length,
         workspaceId,
       });
     } catch (error) {
@@ -332,24 +347,31 @@ class ChannelService {
       throw error;
     }
 
-    // Persist both participants to ChannelMember collection so that
-    // findByMember (which uses ChannelMember as primary lookup) can
-    // find this DM channel after page refresh.
+    // Persist member(s) to ChannelMember collection
     const channelId = channel._id.toString();
-    await Promise.all([
-      ChannelMember.addMember(
+    if (isSelfDM) {
+      await ChannelMember.addMember(
         channelId,
         ids[0],
         workspaceId,
         CHANNEL_MEMBER_ROLES.MEMBER,
-      ),
-      ChannelMember.addMember(
-        channelId,
-        ids[1],
-        workspaceId,
-        CHANNEL_MEMBER_ROLES.MEMBER,
-      ),
-    ]);
+      );
+    } else {
+      await Promise.all([
+        ChannelMember.addMember(
+          channelId,
+          ids[0],
+          workspaceId,
+          CHANNEL_MEMBER_ROLES.MEMBER,
+        ),
+        ChannelMember.addMember(
+          channelId,
+          ids[1],
+          workspaceId,
+          CHANNEL_MEMBER_ROLES.MEMBER,
+        ),
+      ]);
+    }
 
     // DM v2 foundation: dual-write a dedicated DirectMessage record.
     await directMessageService
@@ -367,13 +389,16 @@ class ChannelService {
         });
       });
 
-    // Auto-join both users to the workspace-scoped channel room
+    // Auto-join user(s) to the workspace-scoped channel room
     joinChannelRoom(ids[0], channel._id.toString(), workspaceId);
-    joinChannelRoom(ids[1], channel._id.toString(), workspaceId);
+    if (!isSelfDM) {
+      joinChannelRoom(ids[1], channel._id.toString(), workspaceId);
+    }
 
     logger.info("DM channel created", {
       channelId: channel._id,
       participants: ids,
+      isSelfDM,
       workspaceId,
     });
 
@@ -879,8 +904,15 @@ class ChannelService {
       const participants = Array.isArray(dm.dmParticipants)
         ? dm.dmParticipants.map((p) => p?.toString())
         : [];
-      const recipientId = participants.find((p) => p && p !== currentId);
-      if (recipientId) recipientIds.add(recipientId);
+      
+      // Self-DM: single participant
+      if (participants.length === 1 && participants[0] === currentId) {
+        recipientIds.add(currentId);
+      } else {
+        // Regular DM: find the other user
+        const recipientId = participants.find((p) => p && p !== currentId);
+        if (recipientId) recipientIds.add(recipientId);
+      }
     }
 
     if (recipientIds.size === 0) return channels;
@@ -894,14 +926,31 @@ class ChannelService {
       const participants = Array.isArray(channel.dmParticipants)
         ? channel.dmParticipants.map((p) => p?.toString())
         : [];
-      const recipientId =
-        participants.find((p) => p && p !== currentId) || null;
+      
+      // Self-DM detection
+      const isSelfDM = participants.length === 1 && participants[0] === currentId;
+      
+      if (isSelfDM) {
+        const currentUser = byId.get(currentId);
+        const raw = channel.toObject ? channel.toObject() : channel;
+        return {
+          ...raw,
+          dmRecipientId: currentId,
+          isSelfDM: true,
+          name: `${currentUser?.name || 'You'} (You)`,
+          avatar: currentUser?.avatar || raw.avatar || null,
+        };
+      }
+      
+      // Regular DM
+      const recipientId = participants.find((p) => p && p !== currentId) || null;
       const recipient = recipientId ? byId.get(recipientId) : null;
 
       const raw = channel.toObject ? channel.toObject() : channel;
       return {
         ...raw,
         dmRecipientId: recipientId,
+        isSelfDM: false,
         name: recipient?.name || raw.name || "Direct message",
         avatar: recipient?.avatar || raw.avatar || null,
       };

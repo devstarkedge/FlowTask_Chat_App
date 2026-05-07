@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { Avatar } from '../chat/MemberAvatarGroup'
-import { Smile, Moon, BellOff, User, Settings, Download, LogOut, HelpCircle } from 'lucide-react'
+import { Smile, Moon, BellOff, User, Settings, Download, LogOut, HelpCircle, MessageSquare } from 'lucide-react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import toast from 'react-hot-toast'
 import { useProfileStore } from '../../stores/profileStore'
 import { dndAPI } from '../../services/api'
+import { useChannelStore } from '../../stores/channelStore'
 import { useUIStore } from "../../stores/uiStore";
 
 export default function UserProfileMenu({
@@ -16,10 +18,26 @@ export default function UserProfileMenu({
   onOpenSetStatus,
 }) {
   const menuRef = useRef(null);
+  const navigate = useNavigate();
+  const { workspaceId } = useParams();
   const { user, logout, setPresence } = useAuthStore();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const { profileUser, openProfile } = useProfileStore();
   const openDownloads = useUIStore((s) => s.openDownloads);
+
+  const handleMessageYourself = async () => {
+    try {
+      const channel = await useChannelStore.getState().createDM(user._id)
+      if (channel?._id) {
+        navigate(`/workspace/${workspaceId}/dm/${channel._id}`)
+      }
+      onClose()
+      toast.success('Opened your personal space')
+    } catch (error) {
+      console.error('Failed to create self-DM:', error)
+      toast.error('Failed to open personal space')
+    }
+  }
 
   const STATUS_COLORS = {
     online: "var(--status-online)",
@@ -258,6 +276,17 @@ export default function UserProfileMenu({
       >
         <Smile size={16} style={{ color: "var(--text-muted)" }} />
         <span>Update your status</span>
+      </button>
+
+      <div className="user-menu-divider" />
+
+      {/* Message Yourself */}
+      <button
+        className="user-menu-item"
+        onClick={handleMessageYourself}
+      >
+        <MessageSquare size={16} style={{ color: "var(--text-muted)" }} />
+        <span>Message yourself</span>
       </button>
 
       <div className="user-menu-divider" />

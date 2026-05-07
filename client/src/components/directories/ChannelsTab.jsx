@@ -1,234 +1,332 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Search, Hash, Lock, Plus, Users, ChevronDown, Loader2 } from 'lucide-react'
-import { Virtuoso } from 'react-virtuoso'
-import { directoriesAPI } from '../../services/directoriesAPI'
-import { useAuthStore } from '../../stores/authStore'
-import { useWorkspaceStore } from '../../stores/workspaceStore'
-import { getChannelPath } from '../../utils/chatRoutes'
-import { ListSkeleton } from './Skeletons'
-import EmptyState from './EmptyState'
-import CreateChannelModal from '../chat/CreateChannelModal'
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Search,
+  Hash,
+  Lock,
+  Plus,
+  Users,
+  ChevronDown,
+  Loader2,
+  X,
+  Globe,
+  TrendingUp,
+  CheckCircle2,
+} from "lucide-react";
+import { Virtuoso } from "react-virtuoso";
+import { directoriesAPI } from "../../services/directoriesAPI";
+import { useAuthStore } from "../../stores/authStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { getChannelPath } from "../../utils/chatRoutes";
+import { ListSkeleton } from "./Skeletons";
+import EmptyState from "./EmptyState";
+import CreateChannelModal from "../chat/CreateChannelModal";
 
 const TYPE_OPTIONS = [
-  { value: '', label: 'All channels' },
-  { value: 'public', label: 'Public' },
-  { value: 'private', label: 'Private' },
-]
+  { value: "", label: "All", icon: Globe },
+  { value: "public", label: "Public", icon: Hash },
+  { value: "private", label: "Private", icon: Lock },
+];
 
 export default function ChannelsTab() {
-  const user = useAuthStore((s) => s.user)
-  const { activeWorkspaceId, members } = useWorkspaceStore()
-  const navigate = useNavigate()
-
-  const [channels, setChannels] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [type, setType] = useState('')
-  const [sort, setSort] = useState('asc')
-  const [showCreate, setShowCreate] = useState(false)
-  const [joiningId, setJoiningId] = useState(null)
-  const debounceRef = useRef(null)
+  const user = useAuthStore((s) => s.user);
+  const { activeWorkspaceId, members } = useWorkspaceStore();
+  const navigate = useNavigate();
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [channels, setChannels] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [type, setType] = useState("");
+  const [sort, setSort] = useState("asc");
+  const [showCreate, setShowCreate] = useState(false);
+  const [joiningId, setJoiningId] = useState(null);
+  const debounceRef = useRef(null);
 
   const currentMembership = members.find(
-    (m) => (m.userId?._id || m.userId) === user?._id
-  )
-  const isAdmin = currentMembership?.role === 'owner' || currentMembership?.role === 'admin'
+    (m) => (m.userId?._id || m.userId) === user?._id,
+  );
+  const isAdmin =
+    currentMembership?.role === "owner" || currentMembership?.role === "admin";
 
-  const fetchChannels = useCallback(async (searchVal = '', typeVal = '', sortVal = 'asc') => {
-    if (!activeWorkspaceId) return
-    setLoading(true)
-    try {
-      const { data } = await directoriesAPI.getChannels({
-        search: searchVal,
-        type: typeVal,
-        sort: sortVal,
-        limit: 100,
-      })
-      setChannels(data.data?.channels || data.data || [])
-    } catch {
-      setChannels([])
-    } finally {
-      setLoading(false)
-    }
-  }, [activeWorkspaceId])
+  const fetchChannels = useCallback(
+    async (searchVal = "", typeVal = "", sortVal = "asc") => {
+      if (!activeWorkspaceId) return;
+      setLoading(true);
+      try {
+        const { data } = await directoriesAPI.getChannels({
+          search: searchVal,
+          type: typeVal,
+          sort: sortVal,
+          limit: 100,
+        });
+        setChannels(data.data?.channels || data.data || []);
+      } catch {
+        setChannels([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [activeWorkspaceId],
+  );
 
   useEffect(() => {
-    fetchChannels(search, type, sort)
-  }, [activeWorkspaceId, type, sort]) // eslint-disable-line react-hooks/exhaustive-deps
+    fetchChannels(search, type, sort);
+  }, [activeWorkspaceId, type, sort]);
 
   const handleSearchInput = (e) => {
-    const val = e.target.value
-    setSearch(val)
-    clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => fetchChannels(val, type, sort), 300)
-  }
+    const val = e.target.value;
+    setSearch(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchChannels(val, type, sort), 300);
+  };
 
-  const handleJoinLeave = async (channel) => {
-    if (joiningId) return
-    const wasJoined = channel.isJoined
-    setJoiningId(channel._id)
+  const clearSearch = () => {
+    setSearch("");
+    fetchChannels("", type, sort);
+  };
 
-    // Optimistic update
+  const handleJoinLeave = async (e, channel) => {
+    e.stopPropagation();
+    if (joiningId) return;
+    const wasJoined = channel.isJoined;
+    setJoiningId(channel._id);
+
     setChannels((prev) =>
-      prev.map((c) => (c._id === channel._id ? { ...c, isJoined: !wasJoined } : c))
-    )
+      prev.map((c) =>
+        c._id === channel._id ? { ...c, isJoined: !wasJoined } : c,
+      ),
+    );
 
     try {
       if (wasJoined) {
-        await directoriesAPI.leaveChannel(channel._id)
+        await directoriesAPI.leaveChannel(channel._id);
       } else {
-        await directoriesAPI.joinChannel(channel._id)
+        await directoriesAPI.joinChannel(channel._id);
       }
     } catch {
-      // Revert on failure
       setChannels((prev) =>
-        prev.map((c) => (c._id === channel._id ? { ...c, isJoined: wasJoined } : c))
-      )
+        prev.map((c) =>
+          c._id === channel._id ? { ...c, isJoined: wasJoined } : c,
+        ),
+      );
     } finally {
-      setJoiningId(null)
+      setJoiningId(null);
     }
-  }
+  };
+
+  const joinedCount = channels.filter((c) => c.isJoined).length;
+  const publicCount = channels.filter((c) => !c.isPrivate).length;
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Banner */}
-      <div className="panel-header px-5 py-4">
-        <div>
-          <p className="text-sm font-semibold" style={{ color: 'var(--text-white)' }}>
-            Organize your team's conversations
-          </p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            Browse and discover channels in this workspace
+    <div className="dir-channels-root">
+      {/* ── Top banner ── */}
+      <div className="dir-channels-banner">
+        <div className="dir-channels-banner-copy">
+          <h3 className="dir-channels-banner-title">Browse Channels</h3>
+          <p className="dir-channels-banner-sub">
+            {publicCount} public · {joinedCount} joined
           </p>
         </div>
         {isAdmin && (
           <button
             onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer shrink-0"
-            style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none' }}
+            className="dir-create-btn"
           >
             <Plus size={14} />
-            Create Channel
+            <span>New Channel</span>
           </button>
         )}
       </div>
 
-      {/* Filters */}
-      <div className="shrink-0 px-5 py-3 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 rounded-md px-3 py-1.5 flex-1 min-w-45 panel-search">
-          <Search size={15} style={{ color: 'var(--text-muted)' }} />
+      {/* ── Filters ── */}
+      <div className="dir-channels-filters">
+        {/* Search */}
+        <div
+          className="dir-search-wrap"
+          style={{ flex: 1, minWidth: 0, maxWidth: 340 }}
+        >
+          <Search size={14} className="dir-search-icon" />
           <input
             type="text"
             value={search}
             onChange={handleSearchInput}
-            placeholder="Search channels"
-            className="flex-1 bg-transparent border-none outline-none text-sm panel-search-input"
-            style={{ color: 'var(--text-primary)' }}
+            placeholder="Search channels…"
+            className="dir-search-input"
           />
+          {search && (
+            <button onClick={clearSearch} className="dir-search-clear">
+              <X size={12} />
+            </button>
+          )}
         </div>
 
-        <div className="relative">
-          <select
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className="appearance-none pl-3 pr-8 py-1.5 rounded-md text-sm cursor-pointer"
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-primary)',
-              color: 'var(--text-secondary)',
-              outline: 'none',
-            }}
-          >
-            {TYPE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-          <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
+        {/* Type pills */}
+        <div className="dir-type-pills">
+          {TYPE_OPTIONS.map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              onClick={() => setType(value)}
+              className={`dir-type-pill ${type === value ? "active" : ""}`}
+            >
+              <Icon size={12} />
+              {label}
+            </button>
+          ))}
         </div>
+
+        {/* Sort */}
+        {/* <div className="dir-select-wrap">
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            className="dir-select"
+          >
+            <option value="asc">A → Z</option>
+            <option value="desc">Z → A</option>
+            <option value="members">Most members</option>
+          </select>
+          <ChevronDown size={13} className="dir-select-arrow" />
+        </div> */}
       </div>
 
-      {/* Channel list */}
-      <div className="flex-1 min-h-0">
+      {/* Create Channel Banner */}
+      {!bannerDismissed && (
+      <div className="dsl-channel-banner">
+        <button
+          className="dsl-channel-banner-close"
+          onClick={() => setBannerDismissed(true)}
+        >
+          <X size={16} />
+        </button>
+        <h2 className="dsl-channel-banner-title">
+          Organize your team's conversations
+        </h2>
+        <p className="dsl-channel-banner-desc">
+          Channels are spaces for gathering all the right people, messages,
+          files and tools. Organize them by any project, group, initiative or
+          topic of your choosing.
+        </p>
+        <button
+          className="dsl-channel-banner-btn"
+          onClick={() => setShowCreate(true)}
+        >
+          Create a channel
+        </button>
+      </div>
+      )}
+
+      {/* ── List ── */}
+      <div className="dir-channels-body">
         {loading ? (
-          <div className="overflow-y-auto h-full custom-scrollbar">
+          <div style={{ padding: "8px 12px" }}>
             <ListSkeleton count={8} />
           </div>
         ) : channels.length === 0 ? (
           <EmptyState
             icon={Hash}
             title="No channels found"
-            description={search ? 'Try adjusting your search' : 'No channels in this workspace yet'}
+            description={
+              search
+                ? "Try a different search term"
+                : "No channels in this workspace yet"
+            }
           />
         ) : (
           <Virtuoso
             data={channels}
-            overscan={150}
-            style={{ height: '100%' }}
+            overscan={200}
+            style={{ height: "100%" }}
             itemContent={(index, ch) => (
-              <div
-                onClick={() => navigate(getChannelPath(activeWorkspaceId, ch._id))}
-                className="panel-item flex items-center gap-3 mx-2 px-4 py-3 rounded-lg transition-colors cursor-pointer"
-              >
-                {/* Icon */}
-                {ch.isPrivate ? (
-                  <Lock size={16} style={{ color: 'var(--text-muted)' }} className="shrink-0" />
-                ) : (
-                  <Hash size={16} style={{ color: 'var(--text-muted)' }} className="shrink-0" />
-                )}
-
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold truncate" style={{ color: 'var(--text-white)' }}>
-                      {ch.name}
-                    </span>
-                    {ch.isJoined && (
-                      <span
-                        className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
-                        style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}
-                      >
-                        Joined
-                      </span>
-                    )}
-                  </div>
-                  {ch.description && (
-                    <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                      {ch.description}
-                    </p>
-                  )}
-                </div>
-
-                {/* Member count */}
-                <div className="flex items-center gap-1 shrink-0" style={{ color: 'var(--text-muted)' }}>
-                  <Users size={12} />
-                  <span className="text-xs">{ch.memberCount ?? '—'}</span>
-                </div>
-
-                {/* Join/Leave */}
-                {!ch.isPrivate && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleJoinLeave(ch) }}
-                    disabled={joiningId === ch._id}
-                    className="px-3 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors shrink-0"
-                    style={{
-                      background: ch.isJoined ? 'transparent' : 'var(--accent-primary)',
-                      color: ch.isJoined ? 'var(--text-secondary)' : '#fff',
-                      border: ch.isJoined ? '1px solid var(--border-primary)' : 'none',
-                    }}
-                  >
-                    {joiningId === ch._id ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : ch.isJoined ? 'Leave' : 'Join'}
-                  </button>
-                )}
-              </div>
+              <ChannelRow
+                channel={ch}
+                index={index}
+                joiningId={joiningId}
+                onNavigate={() =>
+                  navigate(getChannelPath(activeWorkspaceId, ch._id))
+                }
+                onJoinLeave={(e) => handleJoinLeave(e, ch)}
+              />
             )}
           />
         )}
       </div>
 
-      {showCreate && <CreateChannelModal onClose={() => setShowCreate(false)} />}
+      {showCreate && (
+        <CreateChannelModal onClose={() => setShowCreate(false)} />
+      )}
     </div>
-  )
+  );
+}
+
+function ChannelRow({
+  channel: ch,
+  index,
+  joiningId,
+  onNavigate,
+  onJoinLeave,
+}) {
+  // Deterministic accent hue from channel name
+  const hue =
+    [...(ch.name || "")].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+  const accentColor = `hsl(${hue}, 55%, 52%)`;
+
+  return (
+    <div
+      className="dir-channel-row"
+      onClick={onNavigate}
+      style={{ animationDelay: `${Math.min(index * 25, 350)}ms` }}
+    >
+      {/* Left icon */}
+      <div
+        className="dir-channel-icon"
+        style={{
+          background: `hsl(${hue}, 55%, 52%, 0.12)`,
+          color: accentColor,
+          borderColor: `hsl(${hue}, 55%, 52%, 0.2)`,
+        }}
+      >
+        {ch.isPrivate ? <Lock size={15} /> : <Hash size={15} />}
+      </div>
+
+      {/* Info */}
+      <div className="dir-channel-info">
+        <div className="dir-channel-name-row">
+          <span className="dir-channel-name">{ch.name}</span>
+          {ch.isJoined && (
+            <span className="dir-channel-joined-badge">
+              <CheckCircle2 size={10} />
+              Joined
+            </span>
+          )}
+          {ch.isPrivate && (
+            <span className="dir-channel-private-badge">Private</span>
+          )}
+        </div>
+        {ch.description && <p className="dir-channel-desc">{ch.description}</p>}
+      </div>
+
+      {/* Members */}
+      <div className="dir-channel-meta">
+        <Users size={12} />
+        <span>{ch.memberCount ?? "—"}</span>
+      </div>
+
+      {/* Join / Leave */}
+      {!ch.isPrivate && (
+        <button
+          onClick={onJoinLeave}
+          disabled={joiningId === ch._id}
+          className={`dir-channel-action-btn ${ch.isJoined ? "leave" : "join"}`}
+        >
+          {joiningId === ch._id ? (
+            <Loader2 size={12} className="dir-spin" />
+          ) : ch.isJoined ? (
+            "Leave"
+          ) : (
+            "Join"
+          )}
+        </button>
+      )}
+    </div>
+  );
 }

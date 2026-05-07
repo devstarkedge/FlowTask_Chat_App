@@ -12,8 +12,8 @@ const directMessageSchema = new Schema({
   memberIds: {
     type: [{ type: Schema.Types.ObjectId, ref: 'ChatUser', required: true }],
     validate: {
-      validator: (arr) => Array.isArray(arr) && arr.length === 2,
-      message: 'DirectMessage must have exactly 2 members',
+      validator: (arr) => Array.isArray(arr) && (arr.length === 1 || arr.length === 2),
+      message: 'DirectMessage must have 1 (self-DM) or 2 members',
     },
     required: true,
   },

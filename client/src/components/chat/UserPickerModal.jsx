@@ -87,9 +87,20 @@ export default function UserPickerModal({ onClose, onSelect }) {
     }
     setIsCreating(true)
     try {
-      const existingDM = channels.find(
-        (c) => c.type === 'dm' && c.dmParticipants?.includes(targetId)
-      )
+      const currentUserId = user?._id?.toString?.()
+      const isTargetSelf = currentUserId && targetId?.toString?.() === currentUserId
+
+      let existingDM = null
+      if (isTargetSelf) {
+        existingDM = channels.find(
+          (c) => c.type === 'dm' && (c.isSelfDM || c.isSelf) && (c.dmParticipants || []).length === 1 && (c.dmParticipants || [])[0]?.toString?.() === targetId?.toString?.()
+        )
+      } else {
+        existingDM = channels.find(
+          (c) => c.type === 'dm' && c.dmParticipants?.includes(targetId)
+        )
+      }
+
       if (existingDM) { onSelect(existingDM._id); return }
       const channel = await createDM(targetId)
       joinChannel(channel._id)

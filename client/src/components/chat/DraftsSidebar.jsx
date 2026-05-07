@@ -12,6 +12,7 @@ import {
   Loader2,
   PencilLine,
   Hash,
+  Lock,
   X,
   FileText,
   FileArchive,
@@ -54,7 +55,7 @@ const AVATAR_COLORS = [
   '#0891b2', '#d97706', '#db2777', '#65a30d',
 ]
 
-function ChannelAvatar({ name, type, size = 38 }) {
+function ChannelAvatar({ name, type, isPrivate, size = 38 }) {
   const initials = getInitials(name.replace(/^#/, ''))
   const colorIndex =
     name.split('').reduce((accumulator, character) => accumulator + character.charCodeAt(0), 0) % AVATAR_COLORS.length
@@ -73,6 +74,8 @@ function ChannelAvatar({ name, type, size = 38 }) {
     >
       {type === 'dm' ? (
         initials
+      ) : isPrivate ? (
+        <Lock size={size * 0.42} strokeWidth={2.2} style={{ opacity: 0.9 }} />
       ) : (
         <Hash size={size * 0.42} strokeWidth={2.2} style={{ opacity: 0.9 }} />
       )}
@@ -159,7 +162,7 @@ function DraftAttachmentPreviews({ attachments }) {
   )
 }
 
-function DraftCard({ draft, channelName, channelType, onNavigate, onSend, onDelete, sendingId }) {
+function DraftCard({ draft, channelName, channelType, isPrivate, onNavigate, onSend, onDelete, sendingId }) {
   const isSending = sendingId === draft._key
   const preview = truncatePreview(draft.text || draft.html)
   const attachments = draft.attachments || []
@@ -174,7 +177,7 @@ function DraftCard({ draft, channelName, channelType, onNavigate, onSend, onDele
       role="button"
       aria-label={`Draft for ${channelName}`}
     >
-      <ChannelAvatar name={channelName} type={channelType} size={38} />
+      <ChannelAvatar name={channelName} type={channelType} isPrivate={isPrivate} size={38} />
 
       <div className="dsl-body">
         <div className="dsl-top">
@@ -258,16 +261,21 @@ export default function DraftsSidebar() {
 
   const getChannelInfo = (channelId) => {
     const channel = channels.find((item) => item._id === channelId)
-    if (!channel) return { name: 'Unknown', type: 'channel' }
+    if (!channel) return { name: 'Unknown', type: 'channel', isPrivate: false }
 
     if (channel.type === 'dm') {
       return {
         name: channel.name || channel.dmRecipientName || channel.recipientName || 'Direct Message',
         type: 'dm',
+        isPrivate: false,
       }
     }
 
-    return { name: `#${channel.name}`, type: 'channel' }
+    return {
+      name: `${channel.name}`,
+      type: 'channel',
+      isPrivate: channel.isPrivate ?? channel.private ?? channel.visibility === 'private' ?? false,
+    }
   }
 
   const filteredDrafts = searchQuery
@@ -278,10 +286,42 @@ export default function DraftsSidebar() {
       })
     : visibleDrafts
 
-  const handleDelete = (e, draft) => {
-    e.stopPropagation()
-    clearDraft(draft.channelId, draft.workspaceId || activeWorkspaceId, draft.threadId)
-    toast.success('Draft deleted')
+const handleDelete = (e, draft) => {
+  e.stopPropagation()
+
+  toast((t) => (
+    <div className="dsl-confirm-toast">
+      <p className="dsl-confirm-toast-msg">Delete this draft?</p>
+      <div className="dsl-confirm-toast-actions">
+        <button
+          className="dsl-confirm-toast-btn dsl-confirm-toast-btn--cancel"
+          onClick={() => toast.dismiss(t.id)}
+        >
+          Cancel
+        </button>
+        <button
+          className="dsl-confirm-toast-btn dsl-confirm-toast-btn--danger"
+          onClick={() => {
+            clearDraft(draft.channelId, draft.workspaceId || activeWorkspaceId, draft.threadId)
+            toast.dismiss(t.id)
+            toast.success('Draft deleted')
+          }}
+        >
+          <Trash2 size={12} />
+          Delete
+        </button>
+      </div>
+    </div>
+  ), { duration: 6000 })
+}
+
+const handleSendNow = async (e, draft) => {
+  e.stopPropagation()
+
+  const channel = channels.find((item) => item._id === draft.channelId)
+  if (!channel) {
+    toast.error('Channel not found')
+    return
   }
 
   const handleSendNow = async (e, draft) => {
@@ -315,6 +355,44 @@ export default function DraftsSidebar() {
       setSendingId(null)
     }
   }
+  toast((t) => (
+    <div className="dsl-confirm-toast">
+      <p className="dsl-confirm-toast-msg">Send this draft now?</p>
+      <div className="dsl-confirm-toast-actions">
+        <button
+          className="dsl-confirm-toast-btn dsl-confirm-toast-btn--cancel"
+          onClick={() => toast.dismiss(t.id)}
+        >
+          Cancel
+        </button>
+        <button
+          className="dsl-confirm-toast-btn dsl-confirm-toast-btn--send"
+          onClick={async () => {
+            toast.dismiss(t.id)
+            setSendingId(draft._key)
+            try {
+              await sendMessage(draft.channelId, draft.text?.trim() || ' ', {
+                threadId: draft.threadId || undefined,
+                htmlContent: draft.html || undefined,
+                mentions: draft.mentions?.length ? draft.mentions : undefined,
+                fileReferences: draft.fileReferences?.length ? draft.fileReferences : undefined,
+              })
+              clearDraft(draft.channelId, draft.workspaceId || activeWorkspaceId, draft.threadId)
+              toast.success('Draft sent!')
+            } catch {
+              // sendMessage already reports failures
+            } finally {
+              setSendingId(null)
+            }
+          }}
+        >
+          <Send size={12} />
+          Send
+        </button>
+      </div>
+    </div>
+  ), { duration: 6000 })
+}
 
   const handleNavigate = (draft) => {
     const channel = channels.find((item) => item._id === draft.channelId)
@@ -390,13 +468,14 @@ export default function DraftsSidebar() {
             </div>
 
             {filteredDrafts.map((draft) => {
-              const { name, type } = getChannelInfo(draft.channelId)
+              const { name, type, isPrivate } = getChannelInfo(draft.channelId)
               return (
                 <DraftCard
                   key={draft._key}
                   draft={draft}
                   channelName={name}
                   channelType={type}
+                  isPrivate={isPrivate}
                   onNavigate={handleNavigate}
                   onSend={handleSendNow}
                   onDelete={handleDelete}

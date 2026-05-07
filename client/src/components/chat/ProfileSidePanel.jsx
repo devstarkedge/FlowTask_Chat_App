@@ -486,12 +486,12 @@ export default function ProfileSidePanel({ user, onClose }) {
                       Copy email address
                     </DropdownItem>
                   )}
-                  <DropdownItem
+                  {/* <DropdownItem
                     icon={<ExternalLink size={13} />}
                     onClick={() => setShowMore(false)}
                   >
                     View in FlowTask
-                  </DropdownItem>
+                  </DropdownItem> */}
                 </div>
               )}
             </div>

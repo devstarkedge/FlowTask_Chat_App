@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo } from "react";
 
 /**
  * SidebarItem — Shared list item used across ALL sidebar modules.
@@ -29,14 +29,15 @@ const SidebarItem = memo(function SidebarItem({
   indicator,
   onClick,
   onKeyDown,
-  className = '',
+  className = "",
   ariaSelected,
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       onKeyDown={onKeyDown}
-      className={`sidebar-item ${isActive ? 'active' : ''} ${className}`}
+      className={`sidebar-item ${isActive ? "active" : ""} ${className}`}
       role="option"
       aria-selected={ariaSelected ?? isActive}
     >
@@ -49,9 +50,7 @@ const SidebarItem = memo(function SidebarItem({
         >
           {label}
         </span>
-        {sublabel && (
-          <span className="sidebar-item-sublabel">{sublabel}</span>
-        )}
+        {sublabel && <span className="sidebar-item-sublabel">{sublabel}</span>}
       </span>
 
       {(meta || badge > 0 || indicator) && (
@@ -59,14 +58,14 @@ const SidebarItem = memo(function SidebarItem({
           {meta}
           {badge > 0 && (
             <span className="badge badge-red sidebar-item-badge">
-              {badge > 99 ? '99+' : badge}
+              {badge > 99 ? "99+" : badge}
             </span>
           )}
           {indicator}
         </span>
       )}
     </button>
-  )
-})
+  );
+});
 
-export default SidebarItem
+export default SidebarItem;

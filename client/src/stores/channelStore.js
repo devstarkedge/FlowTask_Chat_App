@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { channelAPI, readReceiptAPI } from '../services/api'
 import toast from 'react-hot-toast'
 import logger from '../utils/logger'
+import { useAuthStore } from './authStore'
 
 export const useChannelStore = create(
   persist(
@@ -208,16 +209,27 @@ export const useChannelStore = create(
 
   createDM: async (targetUserId) => {
     const target = targetUserId?.toString?.() || String(targetUserId)
+    const currentUserId = useAuthStore.getState().user?._id?.toString?.() || null
+    const isTargetSelf = currentUserId && target === currentUserId
+
     // Deduplication guard: check if DM already exists locally
-    // dmParticipants stores ChatUser _id values consistently
-    const existing = get().channels.find(
-      (c) => {
+    // For self-target, ONLY match channels explicitly marked as self-DM
+    let existing = null
+    if (isTargetSelf) {
+      existing = get().channels.find((c) => {
+        if (c.type !== 'dm') return false
+        const participants = (c.dmParticipants || []).map((p) => p?.toString?.() || String(p))
+        return (c.isSelfDM || c.isSelf) && participants.length === 1 && participants[0] === target
+      })
+    } else {
+      existing = get().channels.find((c) => {
         if (c.type !== 'dm') return false
         const participants = (c.dmParticipants || []).map((p) => p?.toString?.() || String(p))
         const recipient = c.dmRecipientId?.toString?.() || (c.dmRecipientId ? String(c.dmRecipientId) : null)
         return participants.includes(target) || recipient === target
-      }
-    )
+      })
+    }
+
     if (existing) {
       get().setActiveChannel(existing._id)
       return existing
@@ -226,6 +238,8 @@ export const useChannelStore = create(
     try {
       const { data: res } = await channelAPI.createDM(targetUserId)
       const channel = res.data.channel
+      // Mark as self-DM locally for immediate UI consistency
+      if (isTargetSelf) channel.isSelfDM = true
       set((state) => {
         if (state.channels.some((c) => c._id === channel._id)) return state
         return { channels: [...state.channels, channel] }

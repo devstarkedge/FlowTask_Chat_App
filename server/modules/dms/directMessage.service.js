@@ -3,7 +3,7 @@ import logger from '../../utils/logger.js';
 
 class DirectMessageService {
   async ensureForChannel({ workspaceId, memberIds, legacyChannelId, createdBy }) {
-    if (!workspaceId || !Array.isArray(memberIds) || memberIds.length !== 2) {
+    if (!workspaceId || !Array.isArray(memberIds) || (memberIds.length !== 1 && memberIds.length !== 2)) {
       return null;
     }
 

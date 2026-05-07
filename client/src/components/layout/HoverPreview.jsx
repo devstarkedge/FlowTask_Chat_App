@@ -550,13 +550,13 @@ export default function HoverPreview({
             <FolderOpen size={14} style={{ color: 'var(--accent-primary)' }} />
             <span>Files</span>
           </div>
-          <button
+          {/* <button
             className={`hover-preview-toggle ${filesStarredOnly ? 'active' : ''}`}
             onClick={() => setFilesStarredOnly((value) => !value)}
             type="button"
           >
             Starred
-          </button>
+          </button> */}
         </div>
 
         <div className="hover-preview-body" role="listbox" aria-label="Files preview">

@@ -7,6 +7,7 @@ import {
   updateChannel,
   archiveChannel,
   createDM,
+  createSelfDM,
   addMember,
   removeMember,
   leaveChannel,
@@ -56,6 +57,7 @@ router.post(
   createChannel,
 );
 router.post("/dm", validate({ body: createDMSchema }), createDM);
+router.post("/self-dm", createSelfDM);
 router.get("/slug/:slug", getChannelBySlug);
 
 router.get("/:id", requireChannelAccess(), getChannel);

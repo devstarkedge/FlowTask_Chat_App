@@ -122,6 +122,13 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef, pe
     }, 800)
   }, [activeWorkspaceId, buildSignature, clearDraft, conversationId, editorRef, mapToAttachment, pendingFilesRef, setDraft, threadId])
 
+  const cancelPendingDraft = useCallback(() => {
+    if (draftTimerRef.current) {
+      clearTimeout(draftTimerRef.current)
+      draftTimerRef.current = null
+    }
+  }, [])
+
   const flushTimers = useCallback(() => {
     if (draftTimerRef.current) {
       clearTimeout(draftTimerRef.current)
@@ -219,5 +226,6 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef, pe
     saveDraftDebounced,
     restoreDraft,
     saveDraftLocal,
+    cancelPendingDraft,
   }
 }

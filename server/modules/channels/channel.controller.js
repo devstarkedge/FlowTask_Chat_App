@@ -128,13 +128,12 @@ export const archiveChannel = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/chat/channels/dm
- * Create or get a DM channel between current user and target.
+ * Create or get a DM channel between current user and target (or self-DM if same user).
  *
  * Validates that:
  *  1. targetUserId is provided
  *  2. Target user exists in ChatApp within this workspace
  *  3. Target user is active
- *  4. Sender is not messaging themselves
  *
  * Returns 403 with USER_NOT_IN_WORKSPACE if target hasn't joined ChatApp.
  */
@@ -161,7 +160,7 @@ export const createDM = asyncHandler(async (req, res) => {
       flowTaskToken,
     );
 
-    // ── Create or retrieve existing DM channel ──
+    // ── Create or retrieve existing DM channel (supports self-DM) ──
     const channel = await channelService.getOrCreateDM(
       senderId,
       chatUserId,
@@ -352,6 +351,24 @@ export const createAIDM = asyncHandler(async (req, res) => {
     data: {
       channelId: channel._id,
     },
+  });
+});
+
+/**
+ * POST /api/chat/channels/self-dm
+ * Create or return the user's self-DM (saved messages).
+ * Returns: { channelId }
+ */
+export const createSelfDM = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const workspaceId = req.workspaceId;
+
+  // Reuse DM creation logic (self-DM is a DM with same sender/recipient)
+  const channel = await channelService.getOrCreateDM(userId, userId, workspaceId);
+
+  res.json({
+    success: true,
+    data: { channelId: channel._id },
   });
 });
 

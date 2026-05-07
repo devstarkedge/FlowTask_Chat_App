@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Users, Hash, UsersRound, Globe, Mail } from 'lucide-react'
 import PeopleTab from './PeopleTab'
 import ChannelsTab from './ChannelsTab'
@@ -7,48 +7,83 @@ import ExternalTab from './ExternalTab'
 import InvitationsTab from './InvitationsTab'
 
 const TABS = [
-  { id: 'people', label: 'People', icon: Users },
-  { id: 'channels', label: 'Channels', icon: Hash },
-  { id: 'userGroups', label: 'User Groups', icon: UsersRound },
-  { id: 'external', label: 'External', icon: Globe },
-  { id: 'invitations', label: 'Invitations', icon: Mail },
+  { id: 'people',      label: 'People',      icon: Users,      color: '#4e7cff' },
+  { id: 'channels',    label: 'Channels',    icon: Hash,       color: '#059669' },
+  { id: 'userGroups',  label: 'User Groups', icon: UsersRound, color: '#7c3aed' },
+  { id: 'external',    label: 'External',    icon: Globe,      color: '#ea580c' },
+  { id: 'invitations', label: 'Invitations', icon: Mail,       color: '#0891b2' },
 ]
 
 export default function DirectoriesPanel() {
   const [activeTab, setActiveTab] = useState('people')
+  const [indicatorStyle, setIndicatorStyle] = useState({})
+  const tabRefs = useRef({})
+  const tabBarRef = useRef(null)
+
+  // Move the sliding indicator to the active tab
+  useEffect(() => {
+    const el = tabRefs.current[activeTab]
+    const bar = tabBarRef.current
+    if (!el || !bar) return
+    const barRect = bar.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    setIndicatorStyle({
+      left: elRect.left - barRect.left + bar.scrollLeft,
+      width: elRect.width,
+    })
+  }, [activeTab])
+
+  const activeColor = TABS.find(t => t.id === activeTab)?.color || 'var(--accent-color, var(--accent-primary))'
 
   return (
-    <section className="flex-1 min-w-0 flex flex-col h-full" style={{ background: 'var(--bg-primary)' }}>
-      {/* Header */}
-      <div className="page-header">
-        <h1 className="text-xl font-bold mb-0" style={{ color: 'var(--text-white)' }}>
-          Directories
-        </h1>
-        {/* Tabs */}
-        <div className="page-tabs overflow-x-auto scrollbar-none -mb-px" style={{ paddingTop: 8, paddingBottom: 8 }}>
-          {TABS.map((tab) => {
-            const isActive = activeTab === tab.id
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`tab-button ${isActive ? 'active' : ''} flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors shrink-0`}
-                style={{ color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)', background: 'transparent' }}
-              >
-                <tab.icon size={16} />
-                <span>{tab.label}</span>
-              </button>
-            )
-          })}
+    <section className="dir-panel-root">
+      {/* ── Header ── */}
+      <div className="dir-panel-header">
+        <div className="dir-panel-title-row">
+          <h1 className="dir-panel-title">Directories</h1>
+          <p className="dir-panel-subtitle">Browse your workspace members, channels &amp; groups</p>
+        </div>
+
+        {/* Tab bar */}
+        <div className="dir-tab-bar-wrap" ref={tabBarRef}>
+          <div className="dir-tab-bar">
+            {TABS.map((tab) => {
+              const isActive = activeTab === tab.id
+              const Icon = tab.icon
+              return (
+                <button
+                  key={tab.id}
+                  ref={(el) => { tabRefs.current[tab.id] = el }}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`dir-tab ${isActive ? 'dir-tab--active' : ''}`}
+                  style={isActive ? { '--tab-color': tab.color } : {}}
+                >
+                  <span className="dir-tab-icon-wrap">
+                    <Icon size={15} />
+                  </span>
+                  <span className="dir-tab-label">{tab.label}</span>
+                </button>
+              )
+            })}
+
+            {/* Sliding underline indicator */}
+            <span
+              className="dir-tab-indicator"
+              style={{
+                ...indicatorStyle,
+                background: activeColor,
+              }}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Tab Content */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar" style={{ animation: 'fadeIn 0.2s ease' }} key={activeTab}>
-        {activeTab === 'people' && <PeopleTab />}
-        {activeTab === 'channels' && <ChannelsTab />}
-        {activeTab === 'userGroups' && <UserGroupsTab />}
-        {activeTab === 'external' && <ExternalTab />}
+      {/* ── Tab content ── */}
+      <div className="dir-panel-body" key={activeTab}>
+        {activeTab === 'people'      && <PeopleTab />}
+        {activeTab === 'channels'    && <ChannelsTab />}
+        {activeTab === 'userGroups'  && <UserGroupsTab />}
+        {activeTab === 'external'    && <ExternalTab />}
         {activeTab === 'invitations' && <InvitationsTab />}
       </div>
     </section>

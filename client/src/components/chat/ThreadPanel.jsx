@@ -166,12 +166,12 @@ export default function ThreadPanel({ thread, onClose }) {
           )}
         </div>
         <div className="thread-panel__header-actions">
-          <button className="thread-panel__icon-btn" title="Sort / filter">
+          {/* <button className="thread-panel__icon-btn" title="Sort / filter">
             <SlidersHorizontal size={15} />
           </button>
           <button className="thread-panel__icon-btn" title="More options">
             <MoreHorizontal size={15} />
-          </button>
+          </button> */}
           <button
             className="thread-panel__icon-btn thread-panel__close-btn"
             onClick={onClose}

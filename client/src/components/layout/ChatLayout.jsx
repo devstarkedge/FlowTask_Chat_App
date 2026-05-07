@@ -913,10 +913,6 @@ export default function ChatLayout() {
   const openDirectMessageFromSearch = useCallback(
     async (targetUserId) => {
       if (!workspaceId || !targetUserId) return;
-      if (targetUserId === user?._id) {
-        useProfileStore.getState().openProfile(user);
-        return;
-      }
 
       try {
         const channel = await useChannelStore.getState().createDM(targetUserId);
@@ -927,7 +923,7 @@ export default function ChatLayout() {
         // createDM already handles user-facing toasts.
       }
     },
-    [navigate, user, workspaceId],
+    [navigate, workspaceId],
   );
 
   const handleOpenSearchResult = useCallback(

@@ -2,15 +2,11 @@ import { useEffect, useMemo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useAuthStore } from '../../stores/authStore'
-import { X, MessageSquareText, Hash, Lock, Loader2 } from 'lucide-react'
+import { X, MessageSquareText, Hash, Lock, Loader2, MessagesSquare } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
 import { sanitizeHtml } from '../../utils/sanitize'
 import { formatDistanceToNowStrict } from 'date-fns'
 
-/**
- * AllThreadsPanel — Lists all threads the current user participates in.
- * Renders in a side panel similar to Pinned Messages / Search.
- */
 export default function AllThreadsPanel({ onClose, onOpenThread }) {
   const { allThreads, allThreadsLoading, fetchAllThreads } = useChatStore()
   const { channels } = useChannelStore()
@@ -36,155 +32,150 @@ export default function AllThreadsPanel({ onClose, onOpenThread }) {
   }, [allThreads])
 
   return (
-    <div className="panel animate-slide-in-right" style={{ width: 'var(--thread-panel-width)', minWidth: 'var(--thread-panel-width)', borderLeft: '1px solid var(--border-primary)', background: 'var(--bg-primary)' }}>
-      {/* Header */}
-      <div className="panel-header">
-        <div className="flex items-center gap-2">
-          <MessageSquareText size={18} style={{ color: 'var(--accent-primary)' }} />
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-white)' }}>
-            Threads
-          </h2>
+    <div className="atp-root">
+      {/* ── Header ── */}
+      <div className="atp-header">
+        <div className="atp-header-left">
+          <div className="atp-header-icon">
+            <MessagesSquare size={15} />
+          </div>
+          <h2 className="atp-header-title">Threads</h2>
           {sortedThreads.length > 0 && (
-            <span
-              className="text-[11px] px-1.5 py-0.5 rounded-full font-medium"
-              style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)' }}
-            >
-              {sortedThreads.length}
-            </span>
+            <span className="atp-header-count">{sortedThreads.length}</span>
           )}
         </div>
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-lg transition-colors cursor-pointer"
-          style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none' }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-        >
-          <X size={16} />
+        <button className="atp-close-btn" onClick={onClose} title="Close">
+          <X size={15} />
         </button>
       </div>
 
-      {/* Content */}
-      <div className="panel-body">
+      {/* ── Body ── */}
+      <div className="atp-body">
+
+        {/* Loading */}
         {allThreadsLoading && sortedThreads.length === 0 && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-muted)' }} />
+          <div className="atp-loading">
+            <Loader2 size={18} className="atp-spinner" />
+            <span>Loading threads…</span>
           </div>
         )}
 
+        {/* Empty */}
         {!allThreadsLoading && sortedThreads.length === 0 && (
-          <div className="text-center py-12 px-6">
-            <MessageSquareText
-              size={36}
-              style={{ color: 'var(--text-muted)', margin: '0 auto 12px', opacity: 0.5 }}
-            />
-            <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-white)' }}>
-              No threads yet
-            </p>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              Start a thread by replying to any message.
-              Threads you create or participate in will appear here.
+          <div className="atp-empty">
+            <div className="atp-empty-icon">
+              <MessagesSquare size={28} />
+            </div>
+            <p className="atp-empty-title">No threads yet</p>
+            <p className="atp-empty-desc">
+              Reply to any message to start a thread. Threads you create or join will appear here.
             </p>
           </div>
         )}
 
-        <div className="panel-list px-3 py-2">
-          {sortedThreads.map((thread) => (
-            <ThreadCard
-              key={thread._id}
-              thread={thread}
-              channel={channelMap[typeof thread.channelId === 'object' ? thread.channelId._id : thread.channelId]}
-              currentUser={user}
-              onClick={() => {
-                onOpenThread({
-                  rootMessageId: (
-                    thread.rootMessageId?._id ??
-                    thread.rootMessageId ??
-                    thread.parentMessage?._id ??
-                    thread._id
-                  )?.toString(),
-                  channelId: (typeof thread.channelId === 'object' ? thread.channelId._id : thread.channelId)?.toString(),
-                })
-              }}
-            />
-          ))}
-        </div>
+        {/* Thread list */}
+        {sortedThreads.length > 0 && (
+          <div className="atp-list">
+            {sortedThreads.map((thread, index) => (
+              <ThreadCard
+                key={thread._id}
+                thread={thread}
+                index={index}
+                channel={channelMap[
+                  typeof thread.channelId === 'object'
+                    ? thread.channelId._id
+                    : thread.channelId
+                ]}
+                currentUser={user}
+                onClick={() => {
+                  onOpenThread({
+                    rootMessageId: (
+                      thread.rootMessageId?._id ??
+                      thread.rootMessageId ??
+                      thread.parentMessage?._id ??
+                      thread._id
+                    )?.toString(),
+                    channelId: (
+                      typeof thread.channelId === 'object'
+                        ? thread.channelId._id
+                        : thread.channelId
+                    )?.toString(),
+                  })
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-function ThreadCard({ thread, channel, currentUser, onClick }) {
-  const rootMsg = (typeof thread.rootMessageId === 'object' && thread.rootMessageId !== null) ? thread.rootMessageId : (thread.parentMessage || thread)
-  const rootContent = rootMsg.content || thread.rootContent || ''
-  const rootHtml = rootMsg.htmlContent || thread.rootHtmlContent || ''
-  const author = rootMsg.senderSnapshot || rootMsg.author || rootMsg.sender || thread.createdBy || {}
-  const replyCount = thread.replyCount || thread.replies?.length || 0
-  const lastReplyAt = thread.lastReplyAt || thread.updatedAt || thread.createdAt
-  const lastReplyDate = lastReplyAt ? new Date(lastReplyAt) : null
-  const hasValidLastReplyDate = lastReplyDate && !Number.isNaN(lastReplyDate.getTime())
-  
-  // thread.channelId might be populated from the backend
-  const resolvedChannel = channel || (typeof thread.channelId === 'object' ? thread.channelId : null)
-  const channelName = resolvedChannel?.name || 'unknown'
-  const isPrivate = resolvedChannel?.visibility === 'private' || resolvedChannel?.type === 'dm'
+function ThreadCard({ thread, channel, currentUser, onClick, index }) {
+  const rootMsg = (typeof thread.rootMessageId === 'object' && thread.rootMessageId !== null)
+    ? thread.rootMessageId
+    : (thread.parentMessage || thread)
 
-  const displayContent = rootHtml
-    ? sanitizeHtml(rootHtml)
-    : rootContent
+  const rootContent  = rootMsg.content || thread.rootContent || ''
+  const rootHtml     = rootMsg.htmlContent || thread.rootHtmlContent || ''
+  const author       = rootMsg.senderSnapshot || rootMsg.author || rootMsg.sender || thread.createdBy || {}
+  const replyCount   = thread.replyCount || thread.replies?.length || 0
+  const lastReplyAt  = thread.lastReplyAt || thread.updatedAt || thread.createdAt
+  const lastReplyDate = lastReplyAt ? new Date(lastReplyAt) : null
+  const hasValidDate  = lastReplyDate && !Number.isNaN(lastReplyDate.getTime())
+
+  const resolvedChannel = channel || (typeof thread.channelId === 'object' ? thread.channelId : null)
+  const channelName     = resolvedChannel?.name || 'unknown'
+  const isPrivate       = resolvedChannel?.visibility === 'private' || resolvedChannel?.type === 'dm'
+
+  const displayContent = rootHtml ? sanitizeHtml(rootHtml) : rootContent
 
   return (
     <button
       onClick={onClick}
-      className="w-full text-left rounded-lg p-3 transition-all cursor-pointer panel-item"
+      className="atp-card"
+      style={{ animationDelay: `${Math.min(index * 35, 400)}ms` }}
     >
-      {/* Channel tag */}
-      <div className="flex items-center gap-1 mb-2">
-        {isPrivate ? (
-          <Lock size={11} style={{ color: 'var(--text-muted)' }} />
-        ) : (
-          <Hash size={11} style={{ color: 'var(--text-muted)' }} />
-        )}
-        <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
-          {channelName}
-        </span>
+      {/* Channel pill */}
+      <div className="atp-card-channel">
+        {isPrivate
+          ? <Lock size={10} className="atp-card-channel-icon" />
+          : <Hash size={10} className="atp-card-channel-icon" />
+        }
+        <span>{channelName}</span>
       </div>
 
-      {/* Root message */}
-      <div className="flex items-start gap-2 mb-2">
+      {/* Root message row */}
+      <div className="atp-card-message">
         <Avatar
           member={{ name: author.name || 'Unknown', avatar: author.avatar }}
-          size={24}
+          size={26}
           showStatus={false}
         />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-xs font-semibold truncate" style={{ color: 'var(--text-white)' }}>
-              {author.name || 'Unknown'}
-            </span>
-          </div>
+        <div className="atp-card-message-body">
+          <span className="atp-card-author">{author.name || 'Unknown'}</span>
           {rootHtml ? (
             <div
-              className="text-xs line-clamp-2"
-              style={{ color: 'var(--text-secondary)' }}
+              className="atp-card-content"
               dangerouslySetInnerHTML={{ __html: displayContent }}
             />
           ) : (
-            <p className="text-xs line-clamp-2" style={{ color: 'var(--text-secondary)' }}>
-              {displayContent || <em className="opacity-50">No content</em>}
+            <p className="atp-card-content">
+              {displayContent || <em className="atp-card-empty">No content</em>}
             </p>
           )}
         </div>
       </div>
 
       {/* Footer */}
-      <div className="flex items-center gap-3 mt-1">
-        <span className="text-[11px] font-medium" style={{ color: 'var(--accent-primary)' }}>
-          {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
-        </span>
-        {hasValidLastReplyDate && (
-          <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-            Last reply {formatDistanceToNowStrict(lastReplyDate, { addSuffix: true })}
+      <div className="atp-card-footer">
+        <div className="atp-card-replies">
+          <MessageSquareText size={11} />
+          <span>{replyCount} {replyCount === 1 ? 'reply' : 'replies'}</span>
+        </div>
+        {hasValidDate && (
+          <span className="atp-card-time">
+            {formatDistanceToNowStrict(lastReplyDate, { addSuffix: true })}
           </span>
         )}
       </div>

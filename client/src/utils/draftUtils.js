@@ -10,6 +10,14 @@ const EMPTY_HTML_PATTERNS = [
   /^<p><br\s*\/?>\s*<\/p>$/,
   /^<br\s*\/?>$/,
   /^\s*$/,
+  // Empty list patterns
+  /^<ul>\s*<li>\s*<\/li>\s*<\/ul>$/,
+  /^<ol>\s*<li>\s*<\/li>\s*<\/ol>$/,
+  /^<ul>\s*<li>\s*<br\s*\/?>\s*<\/li>\s*<\/ul>$/,
+  /^<ol>\s*<li>\s*<br\s*\/?>\s*<\/li>\s*<\/ol>$/,
+  // Multiple empty list items
+  /^<ul>(\s*<li>\s*(<br\s*\/?>)?\s*<\/li>\s*)+<\/ul>$/,
+  /^<ol>(\s*<li>\s*(<br\s*\/?>)?\s*<\/li>\s*)+<\/ol>$/,
 ]
 
 /**
@@ -32,7 +40,7 @@ export function stripHtmlTags(html) {
 
 /**
  * Determine if draft content is truly empty.
- * Handles TipTap empty-editor HTML (`<p></p>`, `<p><br></p>`) and whitespace-only text.
+ * Handles TipTap empty-editor HTML (`<p></p>`, `<p><br></p>`), empty lists, and whitespace-only text.
  *
  * @param {string} [html]  — HTML content from editor
  * @param {string} [text]  — plain text content from editor

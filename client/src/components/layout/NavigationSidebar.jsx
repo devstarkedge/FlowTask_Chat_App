@@ -19,7 +19,7 @@ import {
   Compass,
   Radio,
   AppWindow,
-  BookMarked, // icon for Saved Messages
+  BookMarked,
 } from "lucide-react";
 import { Avatar } from "../chat/MemberAvatarGroup";
 import CreateChannelModal from "../chat/CreateChannelModal";
@@ -51,7 +51,7 @@ const CHANNEL_ICONS = {
   system: Volume2,
   public: Hash,
   private: Lock,
-  self: BookMarked, // icon for self-DM
+  self: BookMarked,
 };
 
 export default function NavigationSidebar({
@@ -93,7 +93,6 @@ export default function NavigationSidebar({
   const [showJoinWorkspace, setShowJoinWorkspace] = useState(false);
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
 
-  // ── Self-DM loading state ────────────────────────────────────────────────
   const [selfDmLoading, setSelfDmLoading] = useState(false);
 
   const toggleSection = (section) => {
@@ -116,7 +115,6 @@ export default function NavigationSidebar({
       !c.isArchived,
   );
 
-  // ── Self-DM channel (decorated by backend as `isSelfDM`) ────────────────
   const selfChannel = useMemo(
     () => channels.find((c) => c.isSelfDM || c.isSelf || c.type === "self"),
     [channels],
@@ -129,7 +127,7 @@ export default function NavigationSidebar({
 
     return channels
       .filter(
-        (c) => c.type === "dm" && !c.isArchived && !c.isAI && !c.isSelf && !c.isSelfDM, // exclude self-DM from regular DM list
+        (c) => c.type === "dm" && !c.isArchived && !c.isAI && !c.isSelf && !c.isSelfDM,
       )
       .map((c) => {
         const participants = Array.isArray(c.dmParticipants)
@@ -194,15 +192,12 @@ export default function NavigationSidebar({
     }
   };
 
-  // ── Open or create the self-DM ──────────────────────────────────────────
   const handleSavedMessages = async () => {
-    // If we already have it in the channel list, just navigate there
     if (selfChannel) {
       handleSelectChannel(selfChannel._id);
       return;
     }
 
-    // Use existing client-side createDM flow (reuses /channels/dm)
     setSelfDmLoading(true);
     try {
       const channel = await createDM(user?._id);
@@ -248,9 +243,11 @@ export default function NavigationSidebar({
   return (
     <>
       <SidebarContainer header={header} aria-label="Channels sidebar">
-        {/* Quick Nav Items (Home mode only) */}
+
+        {/* ── Quick Nav Items (Home mode only) ── */}
         {!isDMMode && (
           <div className="px-3 pt-3 pb-2">
+            {/* Primary nav group */}
             <div>
               <NavButton
                 icon={MessageSquareText}
@@ -267,37 +264,23 @@ export default function NavigationSidebar({
                 label="Directories"
                 onClick={() => navigate(getDirectoriesPath(workspaceId))}
               />
-            </div>
-
-            {/* Starred & External */}
-            <div className="mt-3 flex flex-col gap-2">
-              <div
-                className="rounded-md"
-                style={{ background: "var(--bg-active)", padding: "2px" }}
-              >
-                <NavButton
-                  icon={Bookmark}
-                  label="Saved"
-                  onClick={() => onToggleSaved?.()}
-                />
-              </div>
-
-              <div
-                className="rounded-md"
-                style={{ background: "var(--bg-active)", padding: "2px" }}
-              >
-                <NavButton
-                  icon={Globe}
-                  label="External Connections"
-                  onClick={() => {}}
-                />
-              </div>
+              {/* ── Saved & External: plain nav buttons, no special wrapper ── */}
+              <NavButton
+                icon={Bookmark}
+                label="Saved"
+                onClick={() => onToggleSaved?.()}
+              />
+              <NavButton
+                icon={Globe}
+                label="External Connections"
+                onClick={() => {}}
+              />
             </div>
           </div>
         )}
 
-        {/* Channel Sections */}
-        <div className="pt-3">
+        {/* ── Channel Sections ── */}
+        <div className="pt-1">
           {!isDMMode && systemChannels.length > 0 && (
             <SidebarSection
               title="System"
@@ -392,6 +375,7 @@ export default function NavigationSidebar({
             {/* ── SAVED MESSAGES (self-DM) — pinned at top ── */}
             <SavedMessagesItem
               user={user}
+              channel={selfChannel}
               isActive={selfChannel?._id === activeChannelId}
               unread={selfChannel ? unreads[selfChannel._id] || 0 : 0}
               isLoading={selfDmLoading}
@@ -431,7 +415,7 @@ export default function NavigationSidebar({
           </SidebarSection>
         </div>
 
-        {/* Apps footer */}
+        {/* ── Apps footer ── */}
         {!isDMMode && (
           <div className="px-4 py-3 shrink-0 mt-auto">
             <NavButton icon={AppWindow} label="Apps" onClick={() => {}} />
@@ -517,7 +501,6 @@ function SavedMessagesItem({
   const timeAgo = channel?.lastMessageAt
     ? (() => {
         const d = new Date(channel.lastMessageAt);
-
         return isNaN(d.getTime())
           ? ""
           : formatDistanceToNowStrict(d, { addSuffix: false });
@@ -571,7 +554,6 @@ function SavedMessagesItem({
                 size={28}
                 showStatus={false}
               />
-
               <span
                 className="absolute rounded-full"
                 style={{
@@ -590,7 +572,6 @@ function SavedMessagesItem({
       label={
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {user?.name || "You"}
-
           <span
             style={{
               fontSize: 9,
@@ -622,7 +603,7 @@ function SavedMessagesItem({
             <span style={{ fontSize: 10 }}>✏️</span> Draft
           </span>
         ) : (
-          channel?.lastMessagePreview 
+          channel?.lastMessagePreview
         )
       }
       meta={
@@ -630,9 +611,7 @@ function SavedMessagesItem({
           <span
             className="text-[11px]"
             style={{
-              color: isActive
-                ? "rgba(255,255,255,0.7)"
-                : "var(--text-muted)",
+              color: isActive ? "rgba(255,255,255,0.7)" : "var(--text-muted)",
             }}
           >
             {timeAgo}
@@ -642,7 +621,7 @@ function SavedMessagesItem({
       isActive={isActive}
       isBold={unread > 0 || hasDraft}
       badge={unread}
-     onClick={onClick}
+      onClick={onClick}
     />
   );
 }
@@ -719,7 +698,6 @@ function DMListItem({
             size={28}
             showStatus={false}
           />
-
           {isOnline && (
             <span
               className="absolute rounded-full"

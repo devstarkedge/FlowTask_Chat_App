@@ -281,16 +281,13 @@ export default function UserProfileMenu({
       <div className="user-menu-divider" />
 
       {/* Message Yourself */}
-      <button
+      {/* <button
         className="user-menu-item"
         onClick={handleMessageYourself}
       >
         <MessageSquare size={16} style={{ color: "var(--text-muted)" }} />
         <span>Message yourself</span>
-      </button>
-
-      <div className="user-menu-divider" />
-
+      </button> */}
       <button
         className="user-menu-item"
         onClick={() => {

@@ -114,6 +114,7 @@ const LAYOUT_STYLES = `
 
 /* ════════════════════════
    GLOBAL TOP BAR
+   — matches the dark navy sidebar color (Image 2)
 ════════════════════════ */
 .cl-topbar {
   height: 48px;
@@ -122,8 +123,8 @@ const LAYOUT_STYLES = `
   align-items: center;
   gap: 12px;
   padding: 0 14px;
-  background: var(--surface-primary, var(--bg-primary));
-  border-bottom: 1px solid var(--border-color, var(--border-primary));
+  background: var(--bg-sidebar, var(--bg-workspace-sidebar, #1e1f2e));
+  border-bottom: 1px solid var(--border-sidebar, rgba(255,255,255,0.06));
   flex-shrink: 0;
   position: relative;
   z-index: 100;
@@ -138,14 +139,14 @@ const LAYOUT_STYLES = `
   width: 30px; height: 30px;
   border-radius: 8px; border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-sidebar-muted, rgba(255,255,255,0.5));
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   transition: background 140ms ease, color 140ms ease, transform 160ms cubic-bezier(0.34,1.56,0.64,1);
 }
 .cl-topbar__nav-btn:hover {
-  background: var(--surface-hover, var(--bg-hover));
-  color: var(--text-primary);
+  background: var(--bg-sidebar-hover, rgba(255,255,255,0.08));
+  color: var(--text-sidebar, rgba(255,255,255,0.9));
   transform: scale(1.08);
 }
 .cl-topbar__nav-btn:active { transform: scale(0.95); }
@@ -166,14 +167,14 @@ const LAYOUT_STYLES = `
   width: 32px; height: 32px;
   border-radius: 8px; border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-sidebar-muted, rgba(255,255,255,0.5));
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   transition: background 140ms ease, color 140ms ease, transform 160ms cubic-bezier(0.34,1.56,0.64,1);
 }
 .cl-topbar__action-btn:hover {
-  background: var(--surface-hover, var(--bg-hover));
-  color: var(--text-primary);
+  background: var(--bg-sidebar-hover, rgba(255,255,255,0.08));
+  color: var(--text-sidebar, rgba(255,255,255,0.9));
   transform: scale(1.06);
 }
 .cl-topbar__action-btn:active { transform: scale(0.95); }
@@ -190,7 +191,6 @@ const LAYOUT_STYLES = `
     gap: 8px;
     padding: 0 10px;
   }
-
   .cl-topbar__search-wrap {
     display: none;
   }
@@ -206,7 +206,7 @@ const LAYOUT_STYLES = `
   color: #fff;
   font-size: 9.5px; font-weight: 900;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 0 2px var(--surface-primary, var(--bg-primary));
+  box-shadow: 0 0 0 2px var(--bg-sidebar, #1e1f2e);
   line-height: 1;
   animation: cl-scaleIn 200ms cubic-bezier(0.34,1.56,0.64,1);
 }
@@ -685,142 +685,7 @@ export default function ChatLayout() {
   const addDownload = useDownloadStore((state) => state.addDownload);
   const user = useAuthStore((s) => s.user);
 
-  // const handleDownload = async (file) => {
-  //   const fileName = file.fileName || file.name || "download";
-  //   const downloadUrl = file.url || file.secureUrl;
-  //   try {
-  //     addDownload({
-  //       name: fileName,
-  //       url: downloadUrl,
-  //       size: file.fileSize || file.size,
-  //       type: file.mimeType || file.type,
-  //     });
-  //     const res = await fetch(downloadUrl);
-  //     const blob = await res.blob();
-  //     const objectUrl = URL.createObjectURL(blob);
-  //     const a = document.createElement("a");
-  //     a.href = objectUrl;
-  //     a.download = fileName;
-  //     document.body.appendChild(a);
-  //     a.click();
-  //     document.body.removeChild(a);
-  //     URL.revokeObjectURL(objectUrl);
-  //   } catch (err) {
-  //     console.error("Download failed", err);
-  //   }
-  // };
-
-  // const handleOpenSearchResult = useCallback(
-  //   (item) => {
-  //     if (!workspaceId) return;
-  //     switch (item.type) {
-  //       case "user":
-  //         useProfileStore.getState().openProfile({
-  //           _id: item.id,
-  //           name: item.name,
-  //           email: item.email,
-  //           avatar: item.avatar,
-  //           role: item.role,
-  //           onlineStatus: item.status,
-  //           customStatus: item.customStatus,
-  //           flowTaskUserId: item.flowTaskUserId,
-  //         });
-  //         break;
-  //       case "message":
-  //         navigate(
-  //           item.channelType === "dm"
-  //             ? getDMPath(workspaceId, item.channelId, item.id)
-  //             : getChannelPath(workspaceId, item.channelId, item.id),
-  //         );
-  //         break;
-  //       case "channel":
-  //         navigate(getChannelPath(workspaceId, item.id));
-  //         break;
-  //       case "dm":
-  //         navigate(getDMPath(workspaceId, item.id));
-  //         break;
-  //       case "file":
-  //         navigate(getFilesPath(workspaceId, item.referenceId));
-  //         break;
-  //       case "link":
-  //         navigate(
-  //           item.channelType === "dm"
-  //             ? getDMPath(workspaceId, item.channelId, item.messageId)
-  //             : getChannelPath(workspaceId, item.channelId, item.messageId),
-  //         );
-  //         break;
-  //       case "page":
-  //         if (item.path === "profile")
-  //           useProfileStore.getState().openProfile(user);
-  //         else if (item.path === "settings") setShowTopPreferences(true);
-  //         else if (item.path === "activity") setShowNotifications(true);
-  //         else if (item.path === "threads") setShowAllThreads(true);
-  //         else if (item.path === "starred") setShowSaved(true);
-  //         else navigate(`/workspace/${workspaceId}/${item.path}`);
-  //         break;
-  //       default:
-  //         break;
-  //     }
-  //   },
-  //   [workspaceId, navigate, user],
-  // );
-
-  // Resizable Sidebar
-  // const [sidebarWidth, setSidebarWidth] = useState(getSavedSidebarWidth);
-  // const isResizingRef = useRef(false);
-  // const [isResizing, setIsResizing] = useState(false);
-  // const widthBeforeCollapseRef = useRef(SIDEBAR_DEFAULT);
-  // const sidebarCollapsed = sidebarWidth === SIDEBAR_COLLAPSED;
-  // const persistWidth = useCallback((w) => {
-  //   try {
-  //     localStorage.setItem(SIDEBAR_STORAGE_KEY, String(w));
-  //   } catch {}
-  // }, []);
-
-  // const handleResizeStart = useCallback(
-  //   (e) => {
-  //     e.preventDefault();
-  //     isResizingRef.current = true;
-  //     setIsResizing(true);
-  //     const startX = e.clientX,
-  //       startW = sidebarCollapsed ? SIDEBAR_MIN : sidebarWidth;
-  //     document.body.style.cursor = "col-resize";
-  //     document.body.style.userSelect = "none";
-  //     const onMove = (ev) => {
-  //       const delta = ev.clientX - startX;
-  //       setSidebarWidth(
-  //         Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startW + delta)),
-  //       );
-  //     };
-  //     const onUp = () => {
-  //       isResizingRef.current = false;
-  //       setIsResizing(false);
-  //       document.body.style.cursor = "";
-  //       document.body.style.userSelect = "";
-  //       document.removeEventListener("mousemove", onMove);
-  //       document.removeEventListener("mouseup", onUp);
-  //       setSidebarWidth((w) => {
-  //         persistWidth(w);
-  //         return w;
-  //       });
-  //     };
-  //     document.addEventListener("mousemove", onMove);
-  //     document.addEventListener("mouseup", onUp);
-  //   },
-  //   [sidebarWidth, sidebarCollapsed, persistWidth],
-  // );
-
-  // const handleResizeDoubleClick = useCallback(() => {
-  //   if (sidebarCollapsed) {
-  //     const r = widthBeforeCollapseRef.current;
-  //     setSidebarWidth(r);
-  //     persistWidth(r);
-  //   } else {
-  //     widthBeforeCollapseRef.current = sidebarWidth;
-  //     setSidebarWidth(SIDEBAR_COLLAPSED);
-  //     persistWidth(SIDEBAR_COLLAPSED);
-  //   }
-  // }, [sidebarCollapsed, sidebarWidth, persistWidth]);
+  useLayoutStylesInjected();
 
   const globalSearchRef = useRef(null);
 
@@ -913,7 +778,6 @@ export default function ChatLayout() {
   const openDirectMessageFromSearch = useCallback(
     async (targetUserId) => {
       if (!workspaceId || !targetUserId) return;
-
       try {
         const channel = await useChannelStore.getState().createDM(targetUserId);
         if (channel?._id) {
@@ -1199,15 +1063,14 @@ export default function ChatLayout() {
 
   useEffect(() => {
     if (!routeConversationId) return;
-
     const currentActiveChannelId = useChannelStore.getState().activeChannelId;
     if (routeConversationId === currentActiveChannelId) {
       fetchMembers(routeConversationId);
       return;
     }
-
     setActiveChannel(routeConversationId);
   }, [routeConversationId, workspaceId, fetchMembers, setActiveChannel]);
+
   useEffect(() => {
     if (activeChannelId && document.hasFocus())
       getSocket()?.emit("window:focus", { channelId: activeChannelId });
@@ -1342,6 +1205,7 @@ export default function ChatLayout() {
     closeThread();
     useChannelStore.getState().setShowInfoPanel(false);
   };
+
   const openFilePreview = useCallback((file, allFiles = []) => {
     setPreviewFile(file);
     setPreviewFiles(allFiles.length > 0 ? allFiles : [file]);
@@ -1354,6 +1218,7 @@ export default function ChatLayout() {
     });
     return () => unsub && unsub();
   }, [openFilePreview]);
+
   const handleSaveMessage = useCallback(async (messageId) => {
     try {
       const { data } = await savedMessageAPI.toggle(messageId);
@@ -1373,9 +1238,7 @@ export default function ChatLayout() {
       if (channelId) {
         setActiveChannel(channelId);
       }
-      
       navigate(getActivityPath(workspaceId, data._id));
-
       if (data.sourceType === "message" && (data.messageId || data.sourceId)) {
         const messageId = asId(data.messageId || data.sourceId);
         if (messageId) {
@@ -1386,7 +1249,6 @@ export default function ChatLayout() {
           );
         }
       }
-
       if (data.type === "thread_reply") {
         const rootId = asId(data.threadId || data.messageId || data.sourceId);
         if (rootId && channelId) {
@@ -1400,12 +1262,10 @@ export default function ChatLayout() {
   const handleAutoSelectActivityNotification = useCallback(
     (notification) => {
       if (!workspaceId || !notification?._id || activityNotificationId) return;
-      
       const channelId = resolveNotificationChannelId(notification);
       if (channelId) {
         setActiveChannel(channelId);
       }
-
       navigate(getActivityPath(workspaceId, notification._id), {
         replace: true,
       });
@@ -1633,8 +1493,7 @@ export default function ChatLayout() {
                   </Suspense>
                 );
               return activeChannelId ? (
-                <>
-                  <ChatPanel
+                <ChatPanel
                   channelId={activeChannelId}
                   workspaceId={workspaceId}
                   onOpenThread={openThread}
@@ -1648,7 +1507,6 @@ export default function ChatLayout() {
                   onOpenMobileSidebar={() => setShowMobileSidebar(true)}
                   onSaveMessage={handleSaveMessage}
                 />
-                </>
               ) : (
                 <WelcomeScreen
                   onOpenMobileSidebar={() => setShowMobileSidebar(true)}
@@ -1685,9 +1543,7 @@ export default function ChatLayout() {
               if (msg.channelId !== activeChannelId) {
                 useChannelStore.getState().setActiveChannel(msg.channelId);
               }
-
               navigate(getChannelPath(workspaceId, msg.channelId, msg._id));
-
               setShowPins(false);
             }}
           />
@@ -1851,35 +1707,26 @@ function WelcomeScreen({ onOpenMobileSidebar }) {
         >
           Open sidebar
         </button>
-
         <div className="cl-welcome__orb">
           <MessageSquare size={30} color="white" strokeWidth={1.5} />
         </div>
-
         <h2 className="cl-welcome__title">Welcome to FlowTask Chat</h2>
         <p className="cl-welcome__desc">
           Select a channel or DM from the sidebar to start collaborating with
           your team.
         </p>
-
         <div className="cl-welcome__pills">
           <span className="cl-welcome__pill">
             <span
               className="cl-welcome__pill-dot"
-              style={{
-                background: "var(--status-online, #22c55e)",
-                animationDelay: "0ms",
-              }}
+              style={{ background: "var(--status-online, #22c55e)", animationDelay: "0ms" }}
             />
             Real-time messaging
           </span>
           <span className="cl-welcome__pill">
             <span
               className="cl-welcome__pill-dot"
-              style={{
-                background: "var(--accent-color, var(--accent-primary))",
-                animationDelay: "300ms",
-              }}
+              style={{ background: "var(--accent-color, var(--accent-primary))", animationDelay: "300ms" }}
             />
             Project channels
           </span>
@@ -1911,53 +1758,34 @@ function ActivityMainPane({
   onSaveMessage,
 }) {
   return (
-    <section
-      className="flex-1 min-w-0 flex flex-col"
-      style={{ background: "var(--bg-primary)" }}
-    >
+    <section className="flex-1 min-w-0 flex flex-col" style={{ background: "var(--bg-primary)" }}>
       {!selectedNotification && (
         <div className="cl-empty-pane">
           <div className="cl-empty-pane__inner">
-            <button
-              className="cl-empty-pane__mobile-btn"
-              onClick={onOpenMobileSidebar}
-            >
+            <button className="cl-empty-pane__mobile-btn" onClick={onOpenMobileSidebar}>
               Open activity list
             </button>
             <div
               className="cl-empty-pane__icon-wrap"
               style={{
-                background:
-                  "color-mix(in srgb, var(--accent-color, var(--accent-primary)) 10%, var(--bg-secondary))",
-                borderColor:
-                  "color-mix(in srgb, var(--accent-color, var(--accent-primary)) 20%, transparent)",
+                background: "color-mix(in srgb, var(--accent-color, var(--accent-primary)) 10%, var(--bg-secondary))",
+                borderColor: "color-mix(in srgb, var(--accent-color, var(--accent-primary)) 20%, transparent)",
               }}
             >
-              <Activity
-                size={26}
-                style={{
-                  color: "var(--accent-color, var(--accent-primary))",
-                  opacity: 0.8,
-                }}
-              />
+              <Activity size={26} style={{ color: "var(--accent-color, var(--accent-primary))", opacity: 0.8 }} />
             </div>
             <p className="cl-empty-pane__title">Select an activity</p>
             <p className="cl-empty-pane__sub">
-              Choose a notification from the list to open its related
-              conversation.
+              Choose a notification from the list to open its related conversation.
             </p>
           </div>
         </div>
       )}
-
       {selectedNotification && !selectedChannelId && (
         <div className="cl-empty-pane">
           <div className="cl-empty-pane__inner">
             <div className="cl-empty-pane__icon-wrap">
-              <Info
-                size={26}
-                style={{ color: "var(--text-muted)", opacity: 0.6 }}
-              />
+              <Info size={26} style={{ color: "var(--text-muted)", opacity: 0.6 }} />
             </div>
             <p className="cl-empty-pane__title">No chat target</p>
             <p className="cl-empty-pane__sub">
@@ -1966,7 +1794,6 @@ function ActivityMainPane({
           </div>
         </div>
       )}
-
       {selectedNotification && selectedChannelId && (
         <>
           <div className="cl-activity-context-bar">
@@ -1974,10 +1801,7 @@ function ActivityMainPane({
               <Zap size={10} />
               Activity
             </span>
-            <ChevronRight
-              size={12}
-              style={{ color: "var(--text-muted)", flexShrink: 0 }}
-            />
+            <ChevronRight size={12} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
             <span className="cl-activity-context-bar__name">
               {getNotificationText(selectedNotification)}
             </span>
@@ -2000,72 +1824,39 @@ function ActivityMainPane({
 
 /* ─── FilesMainPane ───────────────────────────────────────────────────────── */
 
-function FilesMainPane({
-  selectedFile,
-  files,
-  onPreview,
-  onDownload,
-  onOpenInChat,
-  onOpenMobileSidebar,
-}) {
+function FilesMainPane({ selectedFile, files, onPreview, onDownload, onOpenInChat, onOpenMobileSidebar }) {
   const isImage = selectedFile?.mimeType?.startsWith("image/");
   const isVideo = selectedFile?.mimeType?.startsWith("video/");
   const isAudio = selectedFile?.mimeType?.startsWith("audio/");
-  const fileName =
-    selectedFile?.fileName || selectedFile?.originalName || "Untitled file";
-
-  const fileIconColor = isImage
-    ? "#3b82f6"
-    : isVideo
-      ? "#8b5cf6"
-      : isAudio
-        ? "#10b981"
-        : "var(--text-muted)";
-  const FileTypeIcon = isImage
-    ? ImageIcon
-    : isVideo
-      ? Film
-      : isAudio
-        ? Volume2
-        : File;
+  const fileName = selectedFile?.fileName || selectedFile?.originalName || "Untitled file";
+  const fileIconColor = isImage ? "#3b82f6" : isVideo ? "#8b5cf6" : isAudio ? "#10b981" : "var(--text-muted)";
+  const FileTypeIcon = isImage ? ImageIcon : isVideo ? Film : isAudio ? Volume2 : File;
 
   return (
-    <section
-      className="flex-1 min-w-0 flex flex-col"
-      style={{ background: "var(--bg-primary)" }}
-    >
+    <section className="flex-1 min-w-0 flex flex-col" style={{ background: "var(--bg-primary)" }}>
       {!selectedFile ? (
         <div className="cl-empty-pane">
           <div className="cl-empty-pane__inner">
-            <button
-              className="cl-empty-pane__mobile-btn"
-              onClick={onOpenMobileSidebar}
-            >
+            <button className="cl-empty-pane__mobile-btn" onClick={onOpenMobileSidebar}>
               Open file list
             </button>
             <div
               className="cl-empty-pane__icon-wrap"
               style={{
-                background:
-                  "color-mix(in srgb, #3b82f6 10%, var(--bg-secondary))",
+                background: "color-mix(in srgb, #3b82f6 10%, var(--bg-secondary))",
                 borderColor: "color-mix(in srgb, #3b82f6 20%, transparent)",
               }}
             >
-              <FolderOpen
-                size={26}
-                style={{ color: "#3b82f6", opacity: 0.8 }}
-              />
+              <FolderOpen size={26} style={{ color: "#3b82f6", opacity: 0.8 }} />
             </div>
             <p className="cl-empty-pane__title">Select a file</p>
             <p className="cl-empty-pane__sub">
-              Choose a file from the list to preview it or jump to its
-              conversation.
+              Choose a file from the list to preview it or jump to its conversation.
             </p>
           </div>
         </div>
       ) : (
         <div className="h-full flex flex-col">
-          {/* Breadcrumb + actions */}
           <div className="cl-breadcrumb-bar">
             <div className="cl-breadcrumb-bar__left">
               <span className="cl-breadcrumb-bar__label">Files</span>
@@ -2073,37 +1864,19 @@ function FilesMainPane({
               <span className="cl-breadcrumb-bar__name">{fileName}</span>
             </div>
             <div className="cl-file-actions">
-              <button
-                className="cl-file-btn cl-file-btn--ghost"
-                onClick={() => onPreview?.(selectedFile)}
-                title="Preview"
-              >
-                <Eye size={13} />
-                <span>Preview</span>
+              <button className="cl-file-btn cl-file-btn--ghost" onClick={() => onPreview?.(selectedFile)} title="Preview">
+                <Eye size={13} /><span>Preview</span>
               </button>
-              <button
-                className="cl-file-btn cl-file-btn--ghost"
-                onClick={() => onDownload(selectedFile)}
-                title="Download"
-              >
-                <Download size={13} />
-                <span>Download</span>
+              <button className="cl-file-btn cl-file-btn--ghost" onClick={() => onDownload(selectedFile)} title="Download">
+                <Download size={13} /><span>Download</span>
               </button>
-              <button
-                className="cl-file-btn cl-file-btn--primary"
-                onClick={onOpenInChat}
-                title="Open in chat"
-              >
-                <ExternalLink size={13} />
-                <span>Open in chat</span>
+              <button className="cl-file-btn cl-file-btn--primary" onClick={onOpenInChat} title="Open in chat">
+                <ExternalLink size={13} /><span>Open in chat</span>
               </button>
             </div>
           </div>
-
-          {/* Preview card */}
           <div className="cl-file-preview-shell">
             <div className="cl-file-preview-card">
-              {/* Card header */}
               <div className="cl-file-preview-card__header">
                 <div
                   className="cl-file-preview-card__icon"
@@ -2117,88 +1890,31 @@ function FilesMainPane({
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="cl-file-preview-card__title">{fileName}</div>
                   <div className="cl-file-preview-card__meta">
-                    {selectedFile.mimeType || "Unknown type"} ·{" "}
-                    {formatSize(selectedFile.fileSize)}
+                    {selectedFile.mimeType || "Unknown type"} · {formatSize(selectedFile.fileSize)}
                   </div>
                 </div>
               </div>
-
-              {/* Media body */}
               <div className="cl-file-preview-card__body">
-                {isImage && selectedFile.url && (
-                  <img src={selectedFile.url} alt={fileName} />
-                )}
+                {isImage && selectedFile.url && <img src={selectedFile.url} alt={fileName} />}
                 {isVideo && selectedFile.url && (
-                  <video
-                    src={selectedFile.url}
-                    controls
-                    style={{
-                      maxWidth: "100%",
-                      maxHeight: "100%",
-                      borderRadius: 10,
-                    }}
-                  />
+                  <video src={selectedFile.url} controls style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 10 }} />
                 )}
                 {isAudio && selectedFile.url && (
-                  <div
-                    style={{
-                      width: "100%",
-                      textAlign: "center",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: 16,
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 64,
-                        height: 64,
-                        borderRadius: 18,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background:
-                          "color-mix(in srgb, #10b981 12%, transparent)",
-                        border:
-                          "1px solid color-mix(in srgb, #10b981 22%, transparent)",
-                      }}
-                    >
+                  <div style={{ width: "100%", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+                    <div style={{ width: 64, height: 64, borderRadius: 18, display: "flex", alignItems: "center", justifyContent: "center", background: "color-mix(in srgb, #10b981 12%, transparent)", border: "1px solid color-mix(in srgb, #10b981 22%, transparent)" }}>
                       <Volume2 size={28} style={{ color: "#10b981" }} />
                     </div>
-                    <p
-                      style={{
-                        color: "var(--text-secondary)",
-                        fontSize: 13,
-                        fontWeight: 600,
-                        margin: 0,
-                      }}
-                    >
-                      {fileName}
-                    </p>
-                    <audio
-                      src={selectedFile.url}
-                      controls
-                      style={{ width: "100%", maxWidth: 400 }}
-                    />
+                    <p style={{ color: "var(--text-secondary)", fontSize: 13, fontWeight: 600, margin: 0 }}>{fileName}</p>
+                    <audio src={selectedFile.url} controls style={{ width: "100%", maxWidth: 400 }} />
                   </div>
                 )}
                 {!isImage && !isVideo && !isAudio && (
                   <div className="cl-file-no-preview">
                     <div className="cl-file-no-preview__icon">
-                      <File
-                        size={28}
-                        style={{ color: "var(--text-muted)", opacity: 0.6 }}
-                      />
+                      <File size={28} style={{ color: "var(--text-muted)", opacity: 0.6 }} />
                     </div>
-                    <p className="cl-file-no-preview__title">
-                      Preview not available
-                    </p>
-                    <p className="cl-file-no-preview__sub">
-                      This file type can't be previewed here.
-                      <br />
-                      Download it to open locally.
-                    </p>
+                    <p className="cl-file-no-preview__title">Preview not available</p>
+                    <p className="cl-file-no-preview__sub">This file type can't be previewed here.<br />Download it to open locally.</p>
                   </div>
                 )}
               </div>

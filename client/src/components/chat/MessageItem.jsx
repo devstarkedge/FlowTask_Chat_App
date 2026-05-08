@@ -596,11 +596,16 @@ const MessageItem = memo(
                 </div>
               )}
 
-              {/* Thread preview */}
-              {message.replyCount > 0 && (
-                <ThreadPreview message={message} onOpenThread={onOpenThread} />
-              )}
             </div>
+
+            {/* Thread preview — outside bubble so it renders on page bg, always readable */}
+            {message.replyCount > 0 && (
+              <ThreadPreview
+                message={message}
+                onOpenThread={onOpenThread}
+                isOwn={isOwn}
+              />
+            )}
           </div>
 
           {/* Action bar */}
@@ -778,6 +783,8 @@ const MessageItem = memo(
       prev.message.isDeleted === next.message.isDeleted &&
       prev.message.status === next.message.status &&
       prev.message.replyCount === next.message.replyCount &&
+      prev.message.lastReplyAt === next.message.lastReplyAt &&
+      prev.message.threadParticipants === next.message.threadParticipants &&
       prev.message.pending === next.message.pending &&
       prev.message.failed === next.message.failed &&
       prev.compact === next.compact &&
@@ -878,26 +885,31 @@ function MoreMenuItem({ icon: Icon, label, onClick, danger }) {
 
 // ─── ThreadPreview ─────────────────────────────────────────────────────────────
 
-function ThreadPreview({ message, onOpenThread }) {
-  const participants = Array.isArray(message.threadParticipants)
+function ThreadPreview({ message, onOpenThread, isOwn = false }) {
+  const { user } = useAuthStore();
+  const allParticipants = Array.isArray(message.threadParticipants)
     ? message.threadParticipants
     : [];
+  // Show only other users' avatars — exclude the current logged-in user
+  const participants = allParticipants.filter(
+    (p) => p._id && p._id.toString() !== user?._id?.toString()
+  );
   const count = message.replyCount || 0;
   const formatLastReply = (dateStr) => {
     if (!dateStr) return null;
     const d = new Date(dateStr);
     const now = new Date();
     const isToday = d.toDateString() === now.toDateString();
-    if (isToday) return `Last reply today at ${format(d, "h:mm a")}`;
+    if (isToday) return `today at ${format(d, "h:mm a")}`;
     const isYesterday =
       new Date(now - 86400000).toDateString() === d.toDateString();
-    if (isYesterday) return `Last reply yesterday at ${format(d, "h:mm a")}`;
-    return `Last reply ${format(d, "MMM d")} at ${format(d, "h:mm a")}`;
+    if (isYesterday) return `yesterday at ${format(d, "h:mm a")}`;
+    return `${format(d, "MMM d")} at ${format(d, "h:mm a")}`;
   };
   const lastReplyText = formatLastReply(message.lastReplyAt);
   return (
     <button
-      className="thread-preview"
+      className={`thread-preview${isOwn ? " thread-preview--own" : ""}`}
       onClick={() =>
         onOpenThread?.({
           rootMessageId: message._id,
@@ -923,18 +935,18 @@ function ThreadPreview({ message, onOpenThread }) {
           )}
         </div>
       ) : (
-        <MessageSquare
-          size={14}
-          style={{ color: "var(--accent-primary)", flexShrink: 0 }}
-        />
+        <MessageSquare size={14} className="thread-preview__icon" />
       )}
       <span className="thread-preview__count">
         {count} {count === 1 ? "reply" : "replies"}
       </span>
-      {lastReplyText && (
-        <span className="thread-preview__time">{lastReplyText}</span>
-      )}
-      <span className="thread-preview__cta">View thread</span>
+      {/* time + cta overlap in the same grid cell so there is no layout jump on hover */}
+      <span className="thread-preview__meta">
+        {lastReplyText && (
+          <span className="thread-preview__time">{lastReplyText}</span>
+        )}
+        <span className="thread-preview__cta">View thread</span>
+      </span>
     </button>
   );
 }

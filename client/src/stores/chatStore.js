@@ -1137,6 +1137,34 @@ export const useChatStore = create((set, get) => ({
     });
   },
 
+  // Updates replyCount, lastReplyAt, and threadParticipants on a root message.
+  // Called when THREAD_STATS_UPDATED socket event arrives with populated participant data.
+  updateThreadStats: (rootMessageId, channelId, updates) => {
+    set((state) => {
+      const resolvedChannelId = channelId || state.messageChannelById[rootMessageId];
+      if (!resolvedChannelId) return state;
+      const existing = state.messagesByChannel[resolvedChannelId] || [];
+
+      let found = false;
+      const nextChannelMessages = existing.map((m) => {
+        if (m._id !== rootMessageId) return m;
+        found = true;
+        return { ...m, ...updates };
+      });
+
+      if (!found) return state;
+
+      const nextById = CHAT_FEATURE_FLAGS.normalizedMessageStore && state.messagesById[rootMessageId]
+        ? { ...state.messagesById, [rootMessageId]: { ...state.messagesById[rootMessageId], ...updates } }
+        : state.messagesById;
+
+      return {
+        messagesByChannel: { ...state.messagesByChannel, [resolvedChannelId]: nextChannelMessages },
+        messagesById: nextById,
+      };
+    });
+  },
+
   clearThreadReplies: (rootMessageId) => {
     set((state) => {
       const newThreadReplies = { ...state.threadRepliesByRoot };

@@ -237,6 +237,7 @@ export const SOCKET_EVENTS = Object.freeze({
   THREAD_CREATED: 'thread:created',
   THREAD_UPDATED: 'thread:updated',
   THREAD_REPLY: 'thread:reply',
+  THREAD_STATS_UPDATED: 'thread:stats_updated',
 
   // Channels
   CHANNEL_CREATED: 'channel:created',

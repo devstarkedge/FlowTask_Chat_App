@@ -1,5 +1,6 @@
 import Message from './Message.model.js';
 import MessageReaction from './MessageReaction.model.js';
+import Thread from '../threads/Thread.model.js';
 import { injectWorkspaceFilter, injectWorkspaceFilterRequired } from '../../middleware/workspaceContext.js';
 import mongoose from 'mongoose';
 
@@ -99,6 +100,30 @@ class MessageRepository {
 
   if (direction === 'before') {
     messages.reverse();
+  }
+
+  // Enrich root messages that have replies with thread participant data
+  // so the ThreadPreview in the UI can show replier avatars without extra requests.
+  const rootIds = messages.filter((m) => m.replyCount > 0).map((m) => m._id);
+  if (rootIds.length > 0) {
+    const threads = await Thread.find({ rootMessageId: { $in: rootIds } })
+      .populate('participantIds', 'name avatar')
+      .lean();
+    const threadByRoot = {};
+    for (const t of threads) {
+      threadByRoot[t.rootMessageId.toString()] = t;
+    }
+    for (const m of messages) {
+      const t = threadByRoot[m._id.toString()];
+      if (t) {
+        m.lastReplyAt = t.lastReplyAt || m.lastReplyAt || null;
+        m.threadParticipants = (t.participantIds || []).map((p) => ({
+          _id: p._id,
+          name: p.name,
+          avatar: p.avatar || null,
+        }));
+      }
+    }
   }
 
   return messages;

@@ -5480,25 +5480,31 @@ body {
 /*  THREAD PREVIEW (below message bubble in main chat)                       */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
+/* Base — always visible even without hover */
 .thread-preview {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  margin-top: 5px;
+  margin-top: 4px;
   padding: 4px 10px 4px 8px;
   border-radius: var(--radius-md);
-  border: 1px solid transparent;
-  background: transparent;
+  /* Always-visible accent-tinted pill — stays readable on any bubble bg
+     because ThreadPreview is now rendered outside the bubble */
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 18%, transparent);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
   max-width: 100%;
   text-align: left;
   font-family: var(--font-sans);
 }
 
+/* Hover — deepen the tint, show a soft glow */
 .thread-preview:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-secondary);
+  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-primary) 35%, transparent);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--accent-primary) 12%, transparent);
 }
 
 /* Avatar stack */
@@ -5512,7 +5518,9 @@ body {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 2px solid var(--bg-primary);
+  /* Use surface-secondary for the separator ring — more reliable than bg-primary
+     which can equal the bubble bg on some themes */
+  border: 2px solid var(--bg-secondary, var(--bg-primary));
   object-fit: cover;
   flex-shrink: 0;
 }
@@ -5532,30 +5540,50 @@ body {
   margin-left: -6px;
 }
 
-.thread-preview__avatars>*:first-child {
+.thread-preview__avatars > *:first-child {
   margin-left: 0;
 }
 
+/* MessageSquare icon when no participants */
+.thread-preview__icon {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+/* Reply count — always visible, accent color */
 .thread-preview__count {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--accent-primary);
   white-space: nowrap;
 }
 
+/* Timestamp — shown by default, muted */
 .thread-preview__time {
   font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
 }
 
+/* Meta wrapper: grid-overlap so swapping time<->CTA causes zero layout shift */
+.thread-preview__meta {
+  display: inline-grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+}
+
+.thread-preview__meta > * {
+  grid-area: 1 / 1;
+  transition: opacity var(--transition-fast);
+}
+
+/* View thread CTA — hidden until hover */
 .thread-preview__cta {
   font-size: 12px;
+  font-weight: 600;
   color: var(--accent-primary);
   white-space: nowrap;
   opacity: 0;
-  margin-left: 2px;
-  transition: opacity var(--transition-fast);
 }
 
 .thread-preview:hover .thread-preview__cta {
@@ -5563,8 +5591,10 @@ body {
 }
 
 .thread-preview:hover .thread-preview__time {
-  display: none;
+  opacity: 0;
 }
+
+
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
 /*  THREAD PANEL                                                              */

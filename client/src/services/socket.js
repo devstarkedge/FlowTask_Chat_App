@@ -70,6 +70,7 @@ const SOCKET_EVENTS = {
   THREAD_CREATED: 'thread:created',
   THREAD_UPDATED: 'thread:updated',
   THREAD_REPLY: 'thread:reply',
+  THREAD_STATS_UPDATED: 'thread:stats_updated',
 
   // Other
   NOTIFICATION: 'notification',
@@ -235,6 +236,17 @@ export function connectSocket() {
       if (message.channelId) {
         useChatStore.getState().incrementReplyCount(resolvedRootId, message.channelId)
       }
+    }
+  })
+
+  // Thread stats update — carries populated participant data for replier avatars
+  socket.on(SOCKET_EVENTS.THREAD_STATS_UPDATED, ({ rootMessageId, channelId, replyCount, lastReplyAt, participants }) => {
+    if (rootMessageId) {
+      useChatStore.getState().updateThreadStats(rootMessageId, channelId, {
+        replyCount,
+        lastReplyAt,
+        threadParticipants: participants || [],
+      })
     }
   })
 

@@ -181,13 +181,25 @@ class MessageService {
         logger.error('Failed to update last message', { channelId, error: err.message });
       });
 
-    // If this is a thread reply, update thread stats
+    // If this is a thread reply, update thread stats and broadcast participant info
     if (actualThreadId) {
       threadRepository.onReply(actualThreadId, authorId)
-        .then((thread) => {
-          if (thread?.rootMessageId) {
-            return messageRepository.incrementReplyCount(thread.rootMessageId);
-          }
+        .then(async (thread) => {
+          if (!thread?.rootMessageId) return;
+          await messageRepository.incrementReplyCount(thread.rootMessageId);
+          // Populate participant user data so clients can show replier avatars
+          await thread.populate('participantIds', 'name avatar');
+          emitToChannel(channelId.toString(), SOCKET_EVENTS.THREAD_STATS_UPDATED, {
+            rootMessageId: thread.rootMessageId.toString(),
+            channelId: channelId.toString(),
+            replyCount: thread.replyCount,
+            lastReplyAt: thread.lastReplyAt,
+            participants: (thread.participantIds || []).map((p) => ({
+              _id: p._id,
+              name: p.name,
+              avatar: p.avatar || null,
+            })),
+          }, wsId);
         })
         .catch((err) => {
           logger.error('Failed to update thread on reply', { threadId: actualThreadId, error: err.message });

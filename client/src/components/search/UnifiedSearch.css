@@ -300,21 +300,48 @@
   border: none;
   outline: none;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--text-primary) !important;
   font-size: 13px;
   line-height: 1.4;
+  caret-color: var(--text-primary) !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
 }
 
 .global-search__control input::placeholder {
-  color: var(--text-secondary);
+  color: var(--text-secondary) !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: var(--text-secondary) !important;
+}
+
+.global-search__control input:focus {
+  color: var(--text-primary) !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+}
+
+.global-search__control input:focus::placeholder {
+  color: var(--text-secondary) !important;
+  opacity: 0.7 !important;
 }
 
 .global-search.is-open .global-search__control input {
-  color: var(--text-primary);
+  color: var(--text-primary) !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
 }
 
 .global-search.is-open .global-search__control input::placeholder {
-  color: var(--text-secondary);
+  color: var(--text-secondary) !important;
+  opacity: 1 !important;
+}
+
+/* Autofill styles */
+.global-search__control input:-webkit-autofill,
+.global-search__control input:-webkit-autofill:hover,
+.global-search__control input:-webkit-autofill:focus,
+.global-search__control input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--text-primary) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--search-control-surface) inset !important;
+  box-shadow: 0 0 0 1000px var(--search-control-surface) inset !important;
+  caret-color: var(--text-primary) !important;
 }
 
 .global-search__kbd {
@@ -384,8 +411,7 @@
 .global-search__backdrop {
   position: fixed;
   inset: 0;
-  background: var(--search-backdrop);
-  backdrop-filter: blur(6px);
+  background: transparent;
   z-index: 1990;
 }
 
@@ -1085,11 +1111,24 @@
 
 /* Text, placeholder, icon, kbd color in topbar context */
 .cl-topbar .global-search__control input {
-  color: var(--sidebar-text, #fff);
+  color: var(--sidebar-text, #fff) !important;
+  -webkit-text-fill-color: var(--sidebar-text, #fff) !important;
+  caret-color: var(--sidebar-text, #fff) !important;
+}
+
+.cl-topbar .global-search__control input:focus {
+  color: var(--sidebar-text, #fff) !important;
+  -webkit-text-fill-color: var(--sidebar-text, #fff) !important;
 }
 
 .cl-topbar .global-search__control input::placeholder {
-  color: var(--sidebar-text-dim, rgba(255,255,255,0.6));
+  color: var(--sidebar-text-dim, rgba(255,255,255,0.6)) !important;
+  -webkit-text-fill-color: var(--sidebar-text-dim, rgba(255,255,255,0.6)) !important;
+  opacity: 1 !important;
+}
+
+.cl-topbar .global-search__control input:focus::placeholder {
+  opacity: 0.7 !important;
 }
 
 .cl-topbar .global-search__search-icon {

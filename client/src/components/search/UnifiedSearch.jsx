@@ -20,7 +20,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Search, SlidersHorizontal, X } from 'lucide-react'
+import { Search, SlidersHorizontal, X, Eraser   } from 'lucide-react'
 import { messageAPI, searchAPI } from '../../services/api'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
@@ -785,7 +785,7 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
                 onClick={(e) => { e.stopPropagation(); handleClear() }}
                 aria-label="Clear search"
               >
-                <X size={13} />
+                <Eraser   size={13} />
               </button>
             )}
 

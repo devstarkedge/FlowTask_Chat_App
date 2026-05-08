@@ -122,8 +122,10 @@ const LAYOUT_STYLES = `
   align-items: center;
   gap: 12px;
   padding: 0 14px;
-  background: var(--surface-primary, var(--bg-primary));
-  border-bottom: 1px solid var(--border-color, var(--border-primary));
+  /* Use the same dark sidebar shade as the workspace rail so all three
+     top regions (rail + nav-sidebar header + topbar) read as one band */
+  background: var(--sidebar-bg-dark, var(--surface-primary, var(--bg-primary)));
+  border-bottom: 1px solid var(--sidebar-border-color, var(--border-color, var(--border-primary)));
   flex-shrink: 0;
   position: relative;
   z-index: 100;
@@ -138,14 +140,14 @@ const LAYOUT_STYLES = `
   width: 30px; height: 30px;
   border-radius: 8px; border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--sidebar-text-dim, var(--text-muted));
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   transition: background 140ms ease, color 140ms ease, transform 160ms cubic-bezier(0.34,1.56,0.64,1);
 }
 .cl-topbar__nav-btn:hover {
-  background: var(--surface-hover, var(--bg-hover));
-  color: var(--text-primary);
+  background: var(--sidebar-icon-hover, var(--surface-hover, var(--bg-hover)));
+  color: var(--sidebar-text, var(--text-primary));
   transform: scale(1.08);
 }
 .cl-topbar__nav-btn:active { transform: scale(0.95); }
@@ -163,17 +165,17 @@ const LAYOUT_STYLES = `
 }
 .cl-topbar__action-btn {
   position: relative;
-  width: 32px; height: 32px;
+  width: 34px; height: 34px;
   border-radius: 8px; border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--sidebar-text-dim, var(--text-secondary));
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   transition: background 140ms ease, color 140ms ease, transform 160ms cubic-bezier(0.34,1.56,0.64,1);
 }
 .cl-topbar__action-btn:hover {
-  background: var(--surface-hover, var(--bg-hover));
-  color: var(--text-primary);
+  background: var(--sidebar-icon-hover, var(--surface-hover, var(--bg-hover)));
+  color: var(--sidebar-text, var(--text-primary));
   transform: scale(1.06);
 }
 .cl-topbar__action-btn:active { transform: scale(0.95); }
@@ -206,7 +208,7 @@ const LAYOUT_STYLES = `
   color: #fff;
   font-size: 9.5px; font-weight: 900;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 0 2px var(--surface-primary, var(--bg-primary));
+  box-shadow: 0 0 0 2px var(--sidebar-bg-dark, var(--surface-primary, var(--bg-primary)));
   line-height: 1;
   animation: cl-scaleIn 200ms cubic-bezier(0.34,1.56,0.64,1);
 }
@@ -1557,7 +1559,7 @@ export default function ChatLayout() {
         </>
       )}
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <GlobalTopBar
           user={user}
           workspaceId={workspaceId}
@@ -1576,7 +1578,7 @@ export default function ChatLayout() {
           onHelp={() => setShowShortcuts(true)}
         />
 
-        <div className="flex-1 flex min-w-0">
+        <div className="flex-1 flex min-w-0 overflow-hidden">
           <ErrorBoundary name="Content">
             {(() => {
               if (isActivityRoute)
@@ -1633,8 +1635,7 @@ export default function ChatLayout() {
                   </Suspense>
                 );
               return activeChannelId ? (
-                <>
-                  <ChatPanel
+                <ChatPanel
                   channelId={activeChannelId}
                   workspaceId={workspaceId}
                   onOpenThread={openThread}
@@ -1648,7 +1649,6 @@ export default function ChatLayout() {
                   onOpenMobileSidebar={() => setShowMobileSidebar(true)}
                   onSaveMessage={handleSaveMessage}
                 />
-                </>
               ) : (
                 <WelcomeScreen
                   onOpenMobileSidebar={() => setShowMobileSidebar(true)}
@@ -1656,79 +1656,78 @@ export default function ChatLayout() {
               );
             })()}
           </ErrorBoundary>
+          {activeThread && (
+            <ErrorBoundary name="Thread Panel">
+              <ThreadPanel thread={activeThread} onClose={closeThread} />
+            </ErrorBoundary>
+          )}
+          {showInfoPanel &&
+            activeChannel &&
+            !activeThread &&
+            !showPins &&
+            !profileUser && (
+              <ErrorBoundary name="Channel Info" compact>
+                <ChannelInfoPanel
+                  channel={activeChannel}
+                  onOpenProfile={openProfile}
+                />
+              </ErrorBoundary>
+            )}
+          {showPins && activeChannelId && !activeThread && (
+            <ErrorBoundary name="Pinned Messages" compact>
+              <PinnedMessagesPanel
+                channelId={activeChannelId}
+                onClose={() => setShowPins(false)}
+                onJumpToMessage={(msg) => {
+                  if (msg.channelId !== activeChannelId) {
+                    useChannelStore.getState().setActiveChannel(msg.channelId);
+                  }
+
+                  navigate(getChannelPath(workspaceId, msg.channelId, msg._id));
+
+                  setShowPins(false);
+                }}
+              />
+            </ErrorBoundary>
+          )}
+          {showAllThreads && !activeThread && (
+            <ErrorBoundary name="All Threads" compact>
+              <AllThreadsPanel
+                onClose={() => setShowAllThreads(false)}
+                onOpenThread={openThread}
+              />
+            </ErrorBoundary>
+          )}
+          {profileUser && (
+            <ErrorBoundary name="Profile" compact>
+              <ProfileSidePanel
+                user={profileUser}
+                onClose={() => useProfileStore.getState().closeProfile()}
+              />
+            </ErrorBoundary>
+          )}
+          {showNotifications && (
+            <ErrorBoundary name="Notifications" compact>
+              <NotificationPanel
+                onClose={() => setShowNotifications(false)}
+                onSelectNotification={handleSelectActivityNotification}
+              />
+            </ErrorBoundary>
+          )}
+          {showSaved && (
+            <ErrorBoundary name="Saved Messages" compact>
+              <SavedMessagesPanel
+                onClose={() => setShowSaved(false)}
+                onJumpToMessage={(msg) => {
+                  if (msg.channelId !== activeChannelId)
+                    useChannelStore.getState().setActiveChannel(msg.channelId);
+                  setShowSaved(false);
+                }}
+              />
+            </ErrorBoundary>
+          )}
         </div>
       </div>
-
-      {activeThread && (
-        <ErrorBoundary name="Thread Panel">
-          <ThreadPanel thread={activeThread} onClose={closeThread} />
-        </ErrorBoundary>
-      )}
-      {showInfoPanel &&
-        activeChannel &&
-        !activeThread &&
-        !showPins &&
-        !profileUser && (
-          <ErrorBoundary name="Channel Info" compact>
-            <ChannelInfoPanel
-              channel={activeChannel}
-              onOpenProfile={openProfile}
-            />
-          </ErrorBoundary>
-        )}
-      {showPins && activeChannelId && !activeThread && (
-        <ErrorBoundary name="Pinned Messages" compact>
-          <PinnedMessagesPanel
-            channelId={activeChannelId}
-            onClose={() => setShowPins(false)}
-            onJumpToMessage={(msg) => {
-              if (msg.channelId !== activeChannelId) {
-                useChannelStore.getState().setActiveChannel(msg.channelId);
-              }
-
-              navigate(getChannelPath(workspaceId, msg.channelId, msg._id));
-
-              setShowPins(false);
-            }}
-          />
-        </ErrorBoundary>
-      )}
-      {showAllThreads && !activeThread && (
-        <ErrorBoundary name="All Threads" compact>
-          <AllThreadsPanel
-            onClose={() => setShowAllThreads(false)}
-            onOpenThread={openThread}
-          />
-        </ErrorBoundary>
-      )}
-      {profileUser && (
-        <ErrorBoundary name="Profile" compact>
-          <ProfileSidePanel
-            user={profileUser}
-            onClose={() => useProfileStore.getState().closeProfile()}
-          />
-        </ErrorBoundary>
-      )}
-      {showNotifications && (
-        <ErrorBoundary name="Notifications" compact>
-          <NotificationPanel
-            onClose={() => setShowNotifications(false)}
-            onSelectNotification={handleSelectActivityNotification}
-          />
-        </ErrorBoundary>
-      )}
-      {showSaved && (
-        <ErrorBoundary name="Saved Messages" compact>
-          <SavedMessagesPanel
-            onClose={() => setShowSaved(false)}
-            onJumpToMessage={(msg) => {
-              if (msg.channelId !== activeChannelId)
-                useChannelStore.getState().setActiveChannel(msg.channelId);
-              setShowSaved(false);
-            }}
-          />
-        </ErrorBoundary>
-      )}
       {previewFile && (
         <FilePreviewModal
           file={previewFile}

@@ -72,12 +72,14 @@ const STYLES = `
 
 /* ── Header block ── */
 .fcs-header {
-  padding: 14px 12px 0;
+  /* legacy wrapper — no longer used as a direct container */
+  padding: 0;
   flex-shrink: 0;
 }
 
 .fcs-ws-wrap {
-  margin-bottom: 14px;
+  /* no longer needed — WorkspaceSwitcher is in the header band */
+  display: none;
 }
 
 /* Title row */
@@ -85,7 +87,7 @@ const STYLES = `
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .fcs-title-icon {
   width: 28px;
@@ -197,7 +199,7 @@ const STYLES = `
   gap: 5px;
   overflow-x: auto;
   scrollbar-width: none;
-  margin-bottom: 10px;
+  margin-bottom: 0;
   padding-bottom: 1px;
 }
 .fcs-chips::-webkit-scrollbar { display: none; }
@@ -784,18 +786,18 @@ export default function FilesContextSidebar({
     onSelectFile?.(files[0]);
   }, [selectedFile, files, onSelectFile]);
 
-  /* ── Header passed to SidebarContainer ── */
+  /* ── Header: just WorkspaceSwitcher (dark band) ── */
   const header = (
-    <>
-      {/* Workspace switcher */}
-      <div className="fcs-ws-wrap">
-        <WorkspaceSwitcher
-          onOpenCreate={() => setShowCreateWorkspace(true)}
-          onOpenJoin={() => setShowJoinWorkspace(true)}
-          onOpenSettings={() => setShowWorkspaceSettings(true)}
-        />
-      </div>
+    <WorkspaceSwitcher
+      onOpenCreate={() => setShowCreateWorkspace(true)}
+      onOpenJoin={() => setShowJoinWorkspace(true)}
+      onOpenSettings={() => setShowWorkspaceSettings(true)}
+    />
+  );
 
+  /* ── Sub-header: Files title + search + chips (section-specific controls) ── */
+  const subHeader = (
+    <>
       {/* Title row */}
       <div className="fcs-title-row">
         <div className="fcs-title-icon">
@@ -859,13 +861,11 @@ export default function FilesContextSidebar({
           </button>
         ))}
       </div>
-
-      <div className="fcs-divider" />
     </>
   );
 
   return (
-    <SidebarContainer header={header} aria-label="Files sidebar">
+    <SidebarContainer header={header} subHeader={subHeader} aria-label="Files sidebar">
       {/* Scrollable list */}
       <div className="fcs-list-scroll" role="listbox" aria-label="Files list">
         {/* Skeletons */}

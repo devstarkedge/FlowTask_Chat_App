@@ -6,7 +6,7 @@ import { forwardRef } from 'react'
  * header slot, and scrollable content area.
  */
 const SidebarContainer = forwardRef(function SidebarContainer(
-  { header, children, className = '', style, ...rest },
+  { header, subHeader, children, className = '', style, ...rest },
   ref,
 ) {
   return (
@@ -18,6 +18,9 @@ const SidebarContainer = forwardRef(function SidebarContainer(
     >
       {header && (
         <div className="context-sidebar-header">{header}</div>
+      )}
+      {subHeader && (
+        <div className="context-sidebar-subheader">{subHeader}</div>
       )}
       <div className="context-sidebar-scroll">{children}</div>
     </nav>

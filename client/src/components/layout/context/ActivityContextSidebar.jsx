@@ -60,24 +60,12 @@ const STYLES = `
 }
 
 /* ─── Header ───────────────────────────────────────── */
-.acs3-header {
-  flex-shrink: 0;
-  /* NO background — transparent so sidebar bg shows */
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  padding: 0 0 2px;
-}
-
-/* Workspace switcher lives at the very top */
-.acs3-ws {
-  padding: 10px 10px 2px;
-}
-
 /* "Activity" title bar */
 .acs3-titlebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 12px 8px;
+  padding: 0 0 8px;
   gap: 8px;
 }
 
@@ -159,7 +147,7 @@ const STYLES = `
 .acs3-tabs {
   display: flex; align-items: center;
   gap: 4px;
-  padding: 0 12px 8px;
+  padding: 0;
   overflow-x: auto;
 }
 .acs3-tabs::-webkit-scrollbar { display:none; }
@@ -598,14 +586,14 @@ export default function ActivityContextSidebar({
     { id:"dms",     label:"DMs"     },
   ];
 
-  /* ── Header (transparent — no bg override) ── */
+  /* ── Header: just WorkspaceSwitcher (dark band) ── */
   const header = (
-    <div className="acs3-header">
-      {/* Workspace switcher */}
-      <div className="acs3-ws">
-        <WorkspaceSwitcher />
-      </div>
+    <WorkspaceSwitcher />
+  );
 
+  /* ── Sub-header: Activity title + tabs (section-specific controls) ── */
+  const subHeader = (
+    <>
       {/* Title + actions */}
       <div className="acs3-titlebar">
         <div className="acs3-title-left">
@@ -642,11 +630,11 @@ export default function ActivityContextSidebar({
           </button>
         ))}
       </div>
-    </div>
+    </>
   );
 
   return (
-    <SidebarContainer header={header} aria-label="Activity notifications">
+    <SidebarContainer header={header} subHeader={subHeader} aria-label="Activity notifications">
       <StyleInjector />
 
       <div

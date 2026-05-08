@@ -205,6 +205,7 @@ function PersonCard({ person, currentUserId, index }) {
   const role   = person.role || 'member'
   const title  = person.title || ''
   const dept   = person.department || ''
+  const formattedRole = role.charAt(0).toUpperCase() + role.slice(1)
 
   const onlineUsers = useChatStore((s) => s.onlineUsers)
   const personId    = person._id || person.userId
@@ -220,6 +221,8 @@ function PersonCard({ person, currentUserId, index }) {
       ? 'var(--status-away,#f59e0b)'
       : 'var(--status-offline,#6b7280)'
   const statusLabel = isOnline ? 'online' : isAway ? 'away' : 'offline'
+  const availabilityLabel = isOnline ? 'Active now' : isAway ? 'Away' : 'Offline'
+  const secondaryText = title || dept || formattedRole
 
   const hue = [...name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360
   const avatarGradient = `linear-gradient(135deg, hsl(${hue},60%,45%), hsl(${(hue + 40) % 360},70%,35%))`
@@ -234,7 +237,15 @@ function PersonCard({ person, currentUserId, index }) {
     <div
       className="dir-person-card"
       onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          handleClick(e)
+        }
+      }}
       style={{ animationDelay: `${Math.min(index * 40, 400)}ms` }}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open profile for ${name}`}
     >
       {(role === 'owner' || role === 'admin') && (
         <div className="dir-person-ribbon">{role}</div>
@@ -263,7 +274,7 @@ function PersonCard({ person, currentUserId, index }) {
           {name}
           {isCurrentUser && <span className="dir-person-you">you</span>}
         </p>
-        <p className="dir-person-title">{title || dept || role}</p>
+        <p className="dir-person-title">{secondaryText}</p>
       </div>
 
       <div className="dir-person-hover-cta">

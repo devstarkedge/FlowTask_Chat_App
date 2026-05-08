@@ -221,7 +221,6 @@ export default function NavigationSidebar({
     <>
       <div
         className="w-full flex items-center justify-between"
-        style={{ minHeight: 32 }}
       >
         <WorkspaceSwitcher
           onOpenCreate={() => setShowCreateWorkspace(true)}
@@ -233,9 +232,10 @@ export default function NavigationSidebar({
             onClick={onClose}
             className="p-1.5 rounded-md cursor-pointer transition-colors mobile-menu-btn"
             style={{
-              color: "var(--text-muted)",
+              color: "var(--sidebar-text-dim, var(--text-muted))",
               background: "transparent",
               border: "none",
+              flexShrink: 0,
             }}
           >
             <X size={18} />
@@ -250,54 +250,37 @@ export default function NavigationSidebar({
       <SidebarContainer header={header} aria-label="Channels sidebar">
         {/* Quick Nav Items (Home mode only) */}
         {!isDMMode && (
-          <div className="px-3 pt-3 pb-2">
-            <div>
-              <NavButton
-                icon={MessageSquareText}
-                label="Threads"
-                onClick={() => onToggleAllThreads?.()}
-              />
-              <NavButton
-                icon={Send}
-                label="Drafts & Sent"
-                onClick={() => navigate(`/workspace/${workspaceId}/later`)}
-              />
-              <NavButton
-                icon={Compass}
-                label="Directories"
-                onClick={() => navigate(getDirectoriesPath(workspaceId))}
-              />
-            </div>
-
-            {/* Starred & External */}
-            <div className="mt-3 flex flex-col gap-2">
-              <div
-                className="rounded-md"
-                style={{ background: "var(--bg-active)", padding: "2px" }}
-              >
-                <NavButton
-                  icon={Bookmark}
-                  label="Saved"
-                  onClick={() => onToggleSaved?.()}
-                />
-              </div>
-
-              <div
-                className="rounded-md"
-                style={{ background: "var(--bg-active)", padding: "2px" }}
-              >
-                <NavButton
-                  icon={Globe}
-                  label="External Connections"
-                  onClick={() => {}}
-                />
-              </div>
-            </div>
+          <div className="pt-2 pb-1">
+            <NavButton
+              icon={MessageSquareText}
+              label="Threads"
+              onClick={() => onToggleAllThreads?.()}
+            />
+            <NavButton
+              icon={Send}
+              label="Drafts & Sent"
+              onClick={() => navigate(`/workspace/${workspaceId}/later`)}
+            />
+            <NavButton
+              icon={Compass}
+              label="Directories"
+              onClick={() => navigate(getDirectoriesPath(workspaceId))}
+            />
+            <NavButton
+              icon={Bookmark}
+              label="Saved"
+              onClick={() => onToggleSaved?.()}
+            />
+            <NavButton
+              icon={Globe}
+              label="External Connections"
+              onClick={() => {}}
+            />
           </div>
         )}
 
         {/* Channel Sections */}
-        <div className="pt-3">
+        <div className="pt-1">
           {!isDMMode && systemChannels.length > 0 && (
             <SidebarSection
               title="System"
@@ -349,8 +332,8 @@ export default function NavigationSidebar({
               {[...publicChannels, ...projectChannels, ...deptChannels]
                 .length === 0 && (
                 <p
-                  className="text-xs px-3 py-2"
-                  style={{ color: "var(--text-muted)" }}
+                  className="text-xs px-4 py-2"
+                  style={{ color: "var(--sidebar-text-dim, var(--text-muted))" }}
                 >
                   No channels yet
                 </p>
@@ -420,8 +403,8 @@ export default function NavigationSidebar({
 
             {dmChannels.length === 0 && (
               <p
-                className="text-xs px-3 py-2"
-                style={{ color: "var(--text-muted)" }}
+                className="text-xs px-4 py-2"
+                style={{ color: "var(--sidebar-text-dim, var(--text-muted))" }}
               >
                 {isDMMode
                   ? "Start a direct message to begin private conversations."
@@ -433,7 +416,7 @@ export default function NavigationSidebar({
 
         {/* Apps footer */}
         {!isDMMode && (
-          <div className="px-4 py-3 shrink-0 mt-auto">
+          <div className="py-3 shrink-0 mt-auto">
             <NavButton icon={AppWindow} label="Apps" onClick={() => {}} />
           </div>
         )}
@@ -489,7 +472,6 @@ function NavButton({ icon: Icon, label, onClick, badge }) {
     <button
       onClick={onClick}
       className="sidebar-item"
-      style={{ padding: "8px 12px" }}
     >
       <span className="sidebar-item-icon">
         <Icon size={18} style={{ opacity: 0.8 }} />
@@ -578,7 +560,7 @@ function SavedMessagesItem({
                   width: 10,
                   height: 10,
                   background: "var(--status-online)",
-                  border: "2px solid var(--bg-sidebar)",
+                  border: "2px solid var(--sidebar-bg-inner, var(--bg-sidebar))",
                   bottom: -1,
                   right: -1,
                 }}
@@ -601,8 +583,8 @@ function SavedMessagesItem({
               borderRadius: 4,
               background: isActive
                 ? "rgba(255,255,255,0.22)"
-                : "var(--bg-active)",
-              color: isActive ? "#fff" : "var(--accent-primary)",
+                : "var(--sidebar-icon-hover, var(--bg-active))",
+              color: isActive ? "#fff" : "var(--sidebar-text, var(--accent-primary))",
               lineHeight: "14px",
             }}
           >
@@ -729,7 +711,7 @@ function DMListItem({
                 background: isAway
                   ? "var(--status-away)"
                   : "var(--status-online)",
-                border: "2px solid var(--bg-sidebar)",
+                border: "2px solid var(--sidebar-bg-inner, var(--bg-sidebar))",
                 bottom: -1,
                 right: -1,
               }}

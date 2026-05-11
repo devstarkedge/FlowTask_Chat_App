@@ -251,6 +251,13 @@ export const notificationAPI = {
   removeFCMToken: (token) => api.delete('/push/fcm-token', { data: { token } }),
 }
 
+export const pushAPI = {
+  getPublicKey: () => api.get('/push/publicKey'),
+  getStatus: (params) => api.get('/push/status', { params }),
+  subscribe: (payload) => api.post('/push/subscribe', payload),
+  unsubscribe: (payload) => api.post('/push/unsubscribe', payload),
+}
+
 // ─── Workspaces ──────────────────────────────────────────────────────────
 function buildSearchParams({ q = '', scope = null, limit = null, cursor = null } = {}) {
   const params = { q }

@@ -39,6 +39,7 @@ import AllThreadsPanel from "../chat/AllThreadsPanel";
 import NotificationPanel from "../notifications/NotificationPanel";
 import KeyboardShortcutsModal from "../chat/KeyboardShortcutsModal";
 import SavedMessagesPanel from "../chat/SavedMessagesPanel";
+import PushNotificationPrompt from "../notifications/PushNotificationPrompt";
 import { useKeyboardShortcuts } from "../../utils/keyboardShortcuts";
 import { messageAPI, savedMessageAPI } from "../../services/api";
 import {
@@ -1006,7 +1007,7 @@ export default function ChatLayout() {
     };
   }, [resetIdleTimer]);
 
-  usePushSubscription({ enabled: !!user });
+  const { prompt } = usePushSubscription({ enabled: !!user });
 
   useEffect(() => {
     const handleFocus = () => {
@@ -1608,6 +1609,7 @@ export default function ChatLayout() {
         <SetStatusModal onClose={() => setShowTopSetStatus(false)} />
       )}
       <DownloadsModalWrapper channelId={activeChannelId} />
+      <PushNotificationPrompt prompt={prompt} />
     </div>
   );
 }

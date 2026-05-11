@@ -10,6 +10,7 @@ import {
 import toast from 'react-hot-toast'
 import { notificationAPI } from '../../services/api'
 import logger from '../../utils/logger'
+import usePushSubscription from '../../hooks/usePushSubscription'
 
 const TABS = [
   { id: 'general', label: 'General', icon: Bell },
@@ -41,6 +42,7 @@ export default function NotificationSettingsModal({ onClose }) {
 
   const [activeTab, setActiveTab] = useState('general')
   const [saving, setSaving] = useState(false)
+  const pushSub = usePushSubscription({ enabled: false })
 
   useEffect(() => {
     if (!preferences) fetchPreferences()
@@ -132,6 +134,7 @@ export default function NotificationSettingsModal({ onClose }) {
                     onPause={pauseNotifications}
                     onResume={resumeNotifications}
                     saving={saving}
+                    pushSub={pushSub}
                   />
                 )}
                 {activeTab === 'channels' && (
@@ -196,8 +199,28 @@ export default function NotificationSettingsModal({ onClose }) {
 
 // ─── General Tab ─────────────────────────────────────────────────────────────
 
-function GeneralTab({ prefs, onUpdateGlobal, isPaused, onPause, onResume, saving }) {
+function GeneralTab({ prefs, onUpdateGlobal, isPaused, onPause, onResume, saving, pushSub }) {
   const global = prefs?.global || {}
+  const { permission, requestPermissionAndSubscribe } = pushSub || {}
+
+  const isDesktopPushOn = permission === 'granted' && global.desktopPush !== false
+
+  const handleDesktopPushChange = async (v) => {
+    if (v) {
+      if (permission === 'default') {
+        const result = await requestPermissionAndSubscribe({ silent: false })
+        if (result.success) {
+          onUpdateGlobal('desktopPush', true)
+        }
+      } else if (permission === 'granted') {
+        onUpdateGlobal('desktopPush', true)
+      } else {
+        toast.error('Notifications are blocked by your browser. Please allow them via the lock icon in the address bar.')
+      }
+    } else {
+      onUpdateGlobal('desktopPush', false)
+    }
+  }
 
   return (
     <div className="notif-settings-content">
@@ -226,8 +249,8 @@ function GeneralTab({ prefs, onUpdateGlobal, isPaused, onPause, onResume, saving
           icon={Monitor}
           label="Desktop push notifications"
           description="Show browser push notifications on desktop"
-          checked={global.desktopPush !== false}
-          onChange={(v) => onUpdateGlobal('desktopPush', v)}
+          checked={isDesktopPushOn}
+          onChange={handleDesktopPushChange}
         />
         <ToggleRow
           icon={Smartphone}

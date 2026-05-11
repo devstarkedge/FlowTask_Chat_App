@@ -1,6 +1,28 @@
 import ChatUser from './ChatUser.model.js';
 import { BOT } from '../../config/constants.js';
 
+function normalizePushSubscription(subscription = {}) {
+  return {
+    endpoint: subscription.endpoint,
+    keys: subscription.keys,
+    deviceId: subscription.deviceId || null,
+    browser: subscription.browser || null,
+    platform: subscription.platform || 'web',
+    userAgent: subscription.userAgent || null,
+    permissionState: subscription.permissionState || 'default',
+    subscriptionStatus: subscription.subscriptionStatus || 'active',
+    lastPromptedAt: subscription.lastPromptedAt || null,
+    lastDismissedAt: subscription.lastDismissedAt || null,
+    cooldownUntil: subscription.cooldownUntil || null,
+    dismissCount: Number.isFinite(subscription.dismissCount) ? subscription.dismissCount : 0,
+    dontAskAgain: Boolean(subscription.dontAskAgain),
+    lastValidatedAt: subscription.lastValidatedAt || new Date(),
+    lastFailureCode: subscription.lastFailureCode || null,
+    createdAt: subscription.createdAt || new Date(),
+    lastSeenAt: subscription.lastSeenAt || new Date(),
+  };
+}
+
 /**
  * User Repository — data access layer for ChatUser documents.
  * Supports both native (email/password) and FlowTask SSO users.
@@ -287,16 +309,23 @@ class UserRepository {
    */
   async addPushSubscription(userId, subscription) {
     if (!subscription || !subscription.endpoint) return null;
-    // Remove any existing subscription with the same endpoint to avoid duplicates
-    // caused by fluctuating fields like expirationTime failing $addToSet exact matches
+    const normalized = normalizePushSubscription(subscription);
+
+    // Remove any existing record for the same endpoint or device to avoid duplicate
+    // active subscriptions when the browser refreshes or rotates keys.
+    const removalFilter = [{ endpoint: normalized.endpoint }];
+    if (normalized.deviceId) {
+      removalFilter.push({ deviceId: normalized.deviceId });
+    }
+
     await ChatUser.findByIdAndUpdate(userId, {
-      $pull: { 'chatPreferences.pushSubscriptions': { endpoint: subscription.endpoint } }
+      $pull: { 'chatPreferences.pushSubscriptions': { $or: removalFilter } }
     }).exec();
 
     // Add the new subscription
     return ChatUser.findByIdAndUpdate(
       userId,
-      { $push: { 'chatPreferences.pushSubscriptions': subscription } },
+      { $push: { 'chatPreferences.pushSubscriptions': normalized } },
       { returnDocument: 'after' },
     ).exec();
   }
@@ -324,6 +353,29 @@ class UserRepository {
   async getPushSubscriptions(userId) {
     const user = await ChatUser.findById(userId).select('chatPreferences.pushSubscriptions').lean();
     return user?.chatPreferences?.pushSubscriptions || [];
+  }
+
+  /**
+   * Get a push subscription for the current device.
+   * Matches by endpoint first, then by deviceId when available.
+   * @param {string} userId
+   * @param {{ endpoint?: string, deviceId?: string }} currentDevice
+   * @returns {Promise<object|null>}
+   */
+  async getPushSubscriptionForDevice(userId, currentDevice = {}) {
+    const subs = await this.getPushSubscriptions(userId);
+    if (!subs.length) return null;
+
+    if (currentDevice.endpoint) {
+      const byEndpoint = subs.find((sub) => sub.endpoint === currentDevice.endpoint);
+      if (byEndpoint) return byEndpoint;
+    }
+
+    if (currentDevice.deviceId) {
+      return subs.find((sub) => sub.deviceId && sub.deviceId === currentDevice.deviceId) || null;
+    }
+
+    return null;
   }
 
   /**

@@ -10,6 +10,7 @@ router.get('/publicKey', ctrl.getPublicKey)
 
 // Push endpoints require auth + workspace
 router.use(protect, resolveWorkspace)
+router.get('/status', ctrl.getStatus)
 router.post('/subscribe', ctrl.subscribe)
 router.post('/unsubscribe', ctrl.unsubscribe)
 

@@ -106,7 +106,14 @@ function FileIcon({ name, mime, size = 16, thumbnailUrl, fileUrl }) {
   const type = getFileType(name, mime);
   const { bg, border, color, Icon } = FILE_ICON_CONFIG[type];
   const [imgError, setImgError] = useState(false);
-  
+  const [currentSrc, setCurrentSrc] = useState(thumbnailUrl || fileUrl || null);
+
+  // Reset currentSrc when inputs change
+  useEffect(() => {
+    setImgError(false);
+    setCurrentSrc(thumbnailUrl || fileUrl || null);
+  }, [thumbnailUrl, fileUrl]);
+
   // Show thumbnail for images if available
   if (type === "image" && !imgError && (thumbnailUrl || fileUrl)) {
     return (
@@ -120,14 +127,22 @@ function FileIcon({ name, mime, size = 16, thumbnailUrl, fileUrl }) {
         }}
       >
         <img
-          src={thumbnailUrl || fileUrl}
-          alt={name}
+          src={currentSrc}
+          alt={name || ""}
           style={{
             width: "100%",
             height: "100%",
             objectFit: "cover"
           }}
-          onError={() => setImgError(true)}
+          onError={() => {
+            // If we were showing the thumbnail and a fileUrl exists, try that next
+            if (currentSrc && thumbnailUrl && currentSrc === thumbnailUrl && fileUrl) {
+              setCurrentSrc(fileUrl);
+              return;
+            }
+            // Otherwise both sources failed
+            setImgError(true);
+          }}
         />
       </div>
     );

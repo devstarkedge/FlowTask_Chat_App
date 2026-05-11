@@ -1161,6 +1161,7 @@ export const useChatStore = create((set, get) => ({
       return {
         messagesByChannel: { ...state.messagesByChannel, [resolvedChannelId]: nextChannelMessages },
         messagesById: nextById,
+        messageChannelById: { ...state.messageChannelById, [rootMessageId]: resolvedChannelId },
       };
     });
   },

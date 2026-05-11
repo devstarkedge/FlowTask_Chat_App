@@ -898,6 +898,7 @@ function ThreadPreview({ message, onOpenThread, isOwn = false }) {
   const formatLastReply = (dateStr) => {
     if (!dateStr) return null;
     const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
     const now = new Date();
     const isToday = d.toDateString() === now.toDateString();
     if (isToday) return `today at ${format(d, "h:mm a")}`;
@@ -905,7 +906,7 @@ function ThreadPreview({ message, onOpenThread, isOwn = false }) {
       new Date(now - 86400000).toDateString() === d.toDateString();
     if (isYesterday) return `yesterday at ${format(d, "h:mm a")}`;
     return `${format(d, "MMM d")} at ${format(d, "h:mm a")}`;
-  };
+  };  
   const lastReplyText = formatLastReply(message.lastReplyAt);
   return (
     <button

@@ -123,10 +123,6 @@ export function connectSocket() {
     reconnectionDelayMax: 5000,
   })
 
-  // Expose socket globally for components that need direct access
-  if (typeof window !== 'undefined') {
-    window.socketInstance = socket
-  }
 
   socket.on('connect', () => {
     logger.log('[Socket] Connected:', socket.id)
@@ -431,10 +427,12 @@ export function connectSocket() {
   // ─── Announcement Events ─────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.ANNOUNCEMENT_DELETED, ({ announcementId, workspaceId }) => {
     if (!announcementId) return
+    const activeWsId = useWorkspaceStore.getState().activeWorkspaceId
+    if (workspaceId && workspaceId !== activeWsId) return
     // Remove any message in the chat store that has this announcementId in activityMeta
     useChatStore.getState().removeAnnouncementMessages?.(announcementId)
     logger.log('[Socket] Announcement deleted:', announcementId)
-  })
+  })  
 
   socket.on(SOCKET_EVENTS.ANNOUNCEMENT_UPDATED, ({ announcementId, title, description }) => {
     if (!announcementId) return

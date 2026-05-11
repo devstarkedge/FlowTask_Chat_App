@@ -195,11 +195,10 @@ class MessageService {
             replyCount: thread.replyCount,
             lastReplyAt: thread.lastReplyAt,
             participants: (thread.participantIds || []).map((p) => ({
-              _id: p._id,
-              name: p.name,
-              avatar: p.avatar || null,
-            })),
-          }, wsId);
+              _id: p?._id,
+              name: p?.name || 'Unknown',
+              avatar: p?.avatar || null,
+            })),          }, wsId);
         })
         .catch((err) => {
           logger.error('Failed to update thread on reply', { threadId: actualThreadId, error: err.message });

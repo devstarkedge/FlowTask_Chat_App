@@ -48,7 +48,7 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef, pe
     fileId: f._id || f.fileId || null,
     fileName: f.fileName || f.name || '',
     mimeType: f.mimeType || f.type || '',
-    fileSize: f.fileSize || f.size || 0,
+    fileSize: f.fileSize ?? f.size ?? 0,
     url: f.url || f.secureUrl || '',
     thumbnailUrl: f.thumbnailUrl || null,
   }), [])
@@ -146,17 +146,18 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef, pe
       const ed = editorRef?.current
       if (ed && activeWorkspaceId) {
         const { html, text, mentions } = ed.getContent()
+        const trimmedHtml = (html || '').trim()
+        const trimmedText = (text || '').trim()
         const previousConversationId = lastConversationRef.current
         const previousThreadId = lastThreadRef.current
         const currentFiles = pendingFilesRef?.current || []
         const attachments = currentFiles.map(mapToAttachment)
 
-        if (!isContentEmpty(html, text) || attachments.length > 0) {
-          setDraft(previousConversationId, html, text, activeWorkspaceId, previousThreadId, {
+        if (!isContentEmpty(trimmedHtml, trimmedText) || attachments.length > 0) {
+          setDraft(previousConversationId, trimmedHtml, trimmedText, activeWorkspaceId, previousThreadId, {
             mentions,
             attachments,
-          })
-        } else {
+          })        } else {
           clearDraft(previousConversationId, activeWorkspaceId, previousThreadId)
         }
 

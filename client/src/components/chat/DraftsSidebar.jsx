@@ -121,6 +121,33 @@ function AttachmentIcon({ mimeType, size = 14 }) {
   return <File size={size} />
 }
 
+function AttachmentChip({ att, idx }) {
+  const [isImageError, setIsImageError] = useState(false)
+  const isImage = att.mimeType?.startsWith('image/')
+  const showThumb = isImage && att.thumbnailUrl && !isImageError
+
+  return (
+    <div key={att.fileId || idx} className="dsl-attachment-chip" title={att.fileName}>
+      {showThumb ? (
+        <img
+          src={att.thumbnailUrl}
+          alt={att.fileName || ''}
+          className="dsl-attachment-thumb"
+          onError={() => setIsImageError(true)}
+        />
+      ) : (
+        <span className="dsl-attachment-icon">
+          <AttachmentIcon mimeType={att.mimeType} size={12} />
+        </span>
+      )}
+      <span className="dsl-attachment-name">{att.fileName || 'file'}</span>
+      {att.fileSize ? (
+        <span className="dsl-attachment-size">{formatFileSize(att.fileSize)}</span>
+      ) : null}
+    </div>
+  )
+}
+
 function DraftAttachmentPreviews({ attachments }) {
   if (!attachments || attachments.length === 0) return null
 
@@ -130,29 +157,9 @@ function DraftAttachmentPreviews({ attachments }) {
 
   return (
     <div className="dsl-attachments">
-      {shown.map((att, idx) => {
-        const isImage = att.mimeType?.startsWith('image/')
-        return (
-          <div key={att.fileId || idx} className="dsl-attachment-chip" title={att.fileName}>
-            {isImage && att.thumbnailUrl ? (
-              <img
-                src={att.thumbnailUrl}
-                alt={att.fileName}
-                className="dsl-attachment-thumb"
-                onError={(e) => { e.currentTarget.style.display = 'none' }}
-              />
-            ) : (
-              <span className="dsl-attachment-icon">
-                <AttachmentIcon mimeType={att.mimeType} size={12} />
-              </span>
-            )}
-            <span className="dsl-attachment-name">{att.fileName || 'file'}</span>
-            {att.fileSize ? (
-              <span className="dsl-attachment-size">{formatFileSize(att.fileSize)}</span>
-            ) : null}
-          </div>
-        )
-      })}
+      {shown.map((att, idx) => (
+        <AttachmentChip key={att.fileId || idx} att={att} idx={idx} />
+      ))}
       {overflow > 0 && (
         <div className="dsl-attachment-chip dsl-attachment-chip--overflow">
           +{overflow} more
@@ -166,7 +173,7 @@ function DraftCard({ draft, channelName, channelType, isPrivate, onNavigate, onS
   const isSending = sendingId === draft._key
   const preview = truncatePreview(draft.text || draft.html)
   const attachments = draft.attachments || []
-  const attachmentCount = attachments.length + (draft.fileReferences?.length || 0)
+  const attachmentCount = attachments.length || draft.fileReferences?.length || 0
 
   return (
     <div

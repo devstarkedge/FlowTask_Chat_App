@@ -106,7 +106,7 @@ class MessageRepository {
   // so the ThreadPreview in the UI can show replier avatars without extra requests.
   const rootIds = messages.filter((m) => m.replyCount > 0).map((m) => m._id);
   if (rootIds.length > 0) {
-    const threads = await Thread.find({ rootMessageId: { $in: rootIds } })
+    const threads = await Thread.find({ rootMessageId: { $in: rootIds }, ...(workspaceId && { workspaceId }) })
       .populate('participantIds', 'name avatar')
       .lean();
     const threadByRoot = {};

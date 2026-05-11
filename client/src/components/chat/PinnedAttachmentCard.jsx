@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   File,
   FileText,
@@ -17,6 +17,38 @@ import { handleDownload as downloadFile } from "../../utils/handleDownload";
 /**
  * Return a Lucide icon component and accent colour for a given MIME type.
  */
+/** Map verbose MIME subtypes to short friendly labels; truncate anything else. */
+const MIME_LABELS = {
+  // documents
+  "vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+  "vnd.ms-excel": "xls",
+  "vnd.ms-powerpoint": "ppt",
+  "vnd.oasis.opendocument.text": "odt",
+  "vnd.oasis.opendocument.spreadsheet": "ods",
+  // archives
+  "x-zip-compressed": "zip",
+  "x-rar-compressed": "rar",
+  "x-7z-compressed": "7z",
+  "x-tar": "tar",
+  // images
+  "svg+xml": "svg",
+  "vnd.adobe.photoshop": "psd",
+  // audio / video
+  "mpeg": "mp3",
+  "x-matroska": "mkv",
+  "quicktime": "mov",
+};
+
+function getMimeLabel(mimeType = "") {
+  const [, subtype = ""] = mimeType.toLowerCase().split("/");
+  const base = subtype.split("+")[0];
+  if (MIME_LABELS[base]) return MIME_LABELS[base];
+  // Truncate long subtypes so the badge never overflows
+  return base.length > 20 ? base.slice(0, 20) + "…" : base || mimeType.split("/")[0] || "file";
+}
+
 function getMimeIcon(mimeType = "") {
   const m = mimeType.toLowerCase();
   if (m.startsWith("image/")) return { Icon: ImageIcon, color: "#4ade80" };
@@ -74,18 +106,26 @@ function truncateFilename(name = "", maxLen = 32) {
 // ─── Single attachment row ────────────────────────────────────────────────────
 
 function AttachmentRow({ attachment, compact, allAttachments = [] }) {
+  // Define these up-front (even if attachment is null) so hooks keep stable order
+  const name = attachment?.originalName || attachment?.fileName || "Attachment";
+  const mimeType = attachment?.mimeType || "";
+  const fileUrl = attachment?.url || attachment?.secureUrl || null;
+  const thumbUrl = attachment?.thumbnailUrl || null;
+  const size = attachment?.fileSize ?? null;
+  const { Icon, color } = getMimeIcon(mimeType);
+  const isImage = mimeType.startsWith("image/");
+
   const [imgError, setImgError] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState(thumbUrl || fileUrl || null);
+
+  useEffect(() => {
+    setImgError(false);
+    setCurrentSrc(thumbUrl || fileUrl || null);
+  }, [thumbUrl, fileUrl]);
 
   if (!attachment) return null;
 
-  const name = attachment.originalName || attachment.fileName || "Attachment";
-  const mimeType = attachment.mimeType || "";
-  const fileUrl = attachment.url || attachment.secureUrl || null;
-  const thumbUrl = attachment.thumbnailUrl || null;
-  const size = attachment.fileSize || attachment.fileSize === 0 ? attachment.fileSize : null;
-  const { Icon, color } = getMimeIcon(mimeType);
-  const isImage = mimeType.startsWith("image/");
-  const showThumb = isImage && thumbUrl && !imgError;
+  const showThumb = isImage && currentSrc && !imgError;
 
   const handleClick = (e) => {
     e.preventDefault();
@@ -98,6 +138,91 @@ function AttachmentRow({ attachment, compact, allAttachments = [] }) {
     e.stopPropagation();
     downloadFile(attachment);
   };
+
+  return (
+    <div
+        className="pac-row"
+        onClick={handleClick}
+        title={name}
+        aria-label={`Preview ${name}`}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && handleClick(e)}
+      >
+        {/* Thumbnail or icon */}
+        {showThumb ? (
+          <img
+            className="pac-thumb"
+            src={currentSrc}
+            alt={name}
+            loading="lazy"
+            onError={() => {
+              if (currentSrc && thumbUrl && currentSrc === thumbUrl && fileUrl) {
+                setCurrentSrc(fileUrl);
+                return;
+              }
+              setImgError(true);
+            }}
+          />
+        ) : (
+          <div className="pac-icon" style={{ "--icon-color": color }}>
+            <Icon size={16} style={{ color }} strokeWidth={1.8} />
+          </div>
+        )}
+
+        {/* Name + metadata */}
+        <div className="pac-meta">
+          <span className="pac-name" title={name}>
+            {compact ? truncateFilename(name, 24) : truncateFilename(name, 38)}
+          </span>
+          <div className="pac-info">
+            {mimeType && (
+              <span className="pac-ext" title={mimeType}>
+                {getMimeLabel(mimeType)}
+              </span>
+            )}
+            {size !== null && <span className="pac-size">{formatSize(size)}</span>}
+          </div>
+        </div>
+
+        {/* Actions */}
+        {fileUrl && (
+          <div className="pac-action">
+            <button
+              type="button"
+              className="pac-action-btn"
+              title="Download"
+              aria-label="Download attachment"
+              onClick={handleDownloadClick}
+            >
+              <Download size={13} strokeWidth={2} />
+            </button>
+          </div>
+        )}
+      </div>
+  );
+}
+
+// ─── Main export ─────────────────────────────────────────────────────────────
+
+/**
+ * PinnedAttachmentCard
+ *
+ * Renders one or more attachment rows inside a pinned message card.
+ *
+ * @param {{ attachments: object[], compact?: boolean }} props
+ *   - attachments: array of attachment objects from the Message model
+ *   - compact:     if true, uses shorter filename truncation (for PinnedBar)
+ */
+export default function PinnedAttachmentCard({ attachments = [], compact = false }) {
+  if (!attachments || attachments.length === 0) return null;
+
+  // Filter out any null/corrupted entries — require at minimum a URL
+  const valid = attachments.filter(
+    (a) => a && (a.url || a.secureUrl)
+  );
+
+  if (valid.length === 0) return null;
 
   return (
     <>
@@ -171,6 +296,11 @@ function AttachmentRow({ attachment, compact, allAttachments = [] }) {
           border-radius: 3px;
           padding: 1px 4px;
           line-height: 1.4;
+          max-width: 80px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          display: inline-block;
         }
         .pac-size {
           font-size: 10.5px;
@@ -207,90 +337,13 @@ function AttachmentRow({ attachment, compact, allAttachments = [] }) {
         }
       `}</style>
       <div
-        className="pac-row"
-        onClick={handleClick}
-        title={name}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => e.key === "Enter" && handleClick(e)}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 5,
+          marginTop: 4,
+        }}
       >
-        {/* Thumbnail or icon */}
-        {showThumb ? (
-          <img
-            className="pac-thumb"
-            src={thumbUrl}
-            alt={name}
-            loading="lazy"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <div className="pac-icon" style={{ "--icon-color": color }}>
-            <Icon size={16} style={{ color }} strokeWidth={1.8} />
-          </div>
-        )}
-
-        {/* Name + metadata */}
-        <div className="pac-meta">
-          <span className="pac-name" title={name}>
-            {compact ? truncateFilename(name, 24) : truncateFilename(name, 38)}
-          </span>
-          <div className="pac-info">
-            {mimeType && (
-              <span className="pac-ext">
-                {mimeType.split("/")[1]?.split("+")[0] || mimeType.split("/")[0]}
-              </span>
-            )}
-            {size !== null && <span className="pac-size">{formatSize(size)}</span>}
-          </div>
-        </div>
-
-        {/* Actions */}
-        {fileUrl && (
-          <div className="pac-action">
-            <button
-              className="pac-action-btn"
-              title="Download"
-              onClick={handleDownloadClick}
-            >
-              <Download size={13} strokeWidth={2} />
-            </button>
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
-// ─── Main export ─────────────────────────────────────────────────────────────
-
-/**
- * PinnedAttachmentCard
- *
- * Renders one or more attachment rows inside a pinned message card.
- *
- * @param {{ attachments: object[], compact?: boolean }} props
- *   - attachments: array of attachment objects from the Message model
- *   - compact:     if true, uses shorter filename truncation (for PinnedBar)
- */
-export default function PinnedAttachmentCard({ attachments = [], compact = false }) {
-  if (!attachments || attachments.length === 0) return null;
-
-  // Filter out any null/corrupted entries — require at minimum a URL
-  const valid = attachments.filter(
-    (a) => a && (a.url || a.secureUrl)
-  );
-
-  if (valid.length === 0) return null;
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 5,
-        marginTop: 4,
-      }}
-    >
       {valid.map((attachment, i) => (
         <AttachmentRow
           key={attachment._id || attachment.url || i}
@@ -299,7 +352,8 @@ export default function PinnedAttachmentCard({ attachments = [], compact = false
           allAttachments={valid}
         />
       ))}
-    </div>
+      </div>
+    </>
   );
 }
 

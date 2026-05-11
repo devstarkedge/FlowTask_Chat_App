@@ -7,6 +7,25 @@ import userRepository from '../../users/user.repository.js';
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SYSTEM_CHANNELS, SOCKET_EVENTS } from '../../../config/constants.js';
 import { emitToChannel, emitToUser } from '../../../sockets/socketManager.js';
+import env from '../../../config/environment.js';
+
+// Optional Redis-backed idempotency (uses REDIS_URL when available)
+let _redisClient = null;
+async function getRedisClient() {
+  if (_redisClient) return _redisClient;
+  if (!env.REDIS_URL) return null;
+  try {
+    const Redis = (await import('ioredis')).default;
+    _redisClient = new Redis(env.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 3 });
+    _redisClient.on('error', (err) => logger.warn('Redis client error', err?.message || err));
+    await _redisClient.connect();
+    return _redisClient;
+  } catch (err) {
+    logger.warn('Failed to initialize Redis client for idempotency, continuing with in-memory fallback', err?.message || err);
+    _redisClient = null;
+    return null;
+  }
+}
 
 /**
  * Announcement Event Handler — sync FlowTask announcements with ChatApp
@@ -16,11 +35,25 @@ import { emitToChannel, emitToUser } from '../../../sockets/socketManager.js';
  */
 
 // ─── Idempotency guard ───────────────────────────────────────────────────────
-const processedDeleteEvents = new Map(); // syncVersion → expiry timestamp
+// Uses Redis SET NX EX for cross-instance atomicity when REDIS_URL is configured.
+const processedDeleteEvents = new Map(); // fallback: syncVersion → expiry timestamp
 const DELETE_EVENT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-function isDeleteEventProcessed(syncVersion) {
+async function isDeleteEventProcessed(syncVersion) {
   if (!syncVersion) return false;
+  // Try Redis first (atomic, cross-instance)
+  try {
+    const client = await getRedisClient();
+    if (client) {
+      const key = `announcement:delete:${syncVersion}`;
+      const v = await client.get(key);
+      return !!v;
+    }
+  } catch (err) {
+    logger.warn('isDeleteEventProcessed: redis check failed, falling back to memory', err?.message || err);
+  }
+
+  // In-memory fallback (best-effort, process-local)
   const expiry = processedDeleteEvents.get(syncVersion);
   if (!expiry) return false;
   if (Date.now() > expiry) {
@@ -30,8 +63,22 @@ function isDeleteEventProcessed(syncVersion) {
   return true;
 }
 
-function markDeleteEventProcessed(syncVersion) {
+async function markDeleteEventProcessed(syncVersion) {
   if (!syncVersion) return;
+  // Try Redis first (SET NX EX)
+  try {
+    const client = await getRedisClient();
+    if (client) {
+      const key = `announcement:delete:${syncVersion}`;
+      // SET key value NX EX seconds
+      await client.set(key, '1', 'EX', Math.floor(DELETE_EVENT_TTL_MS / 1000), 'NX');
+      return;
+    }
+  } catch (err) {
+    logger.warn('markDeleteEventProcessed: redis set failed, falling back to memory', err?.message || err);
+  }
+
+  // In-memory fallback
   processedDeleteEvents.set(syncVersion, Date.now() + DELETE_EVENT_TTL_MS);
   // Prune expired entries every 1000 tracked events to prevent unbounded growth
   if (processedDeleteEvents.size > 1000) {
@@ -97,8 +144,7 @@ export function registerAnnouncementEventHandlers() {
       }
 
       const chatUsers = await userRepository.findByFlowTaskIds(subscriberIds, wsId);
-      const chatUserIds = [...new Set(chatUsers.map((u) => u._id))];
-
+      const chatUserIds = [...new Set(chatUsers.map((u) => u._id.toString()))];
       if (!chatUserIds.length) {
         logger.warn('announcement.created: no matching ChatApp users for subscribers');
         return;
@@ -148,7 +194,7 @@ export function registerAnnouncementEventHandlers() {
       } = payload;
 
       // Idempotency: skip already-processed delete events
-      if (syncVersion && isDeleteEventProcessed(syncVersion)) {
+      if (syncVersion && await isDeleteEventProcessed(syncVersion)) {
         logger.info('announcement.deleted: duplicate event skipped', { syncVersion });
         return;
       }
@@ -175,7 +221,7 @@ export function registerAnnouncementEventHandlers() {
         await messageService.deleteByFlowTaskRef('announcement', announcementId, wsId);
 
         // Mark event as processed (idempotency)
-        if (syncVersion) markDeleteEventProcessed(syncVersion);
+        if (syncVersion) await markDeleteEventProcessed(syncVersion);
 
         // Broadcast semantic announcement:deleted event so frontend can do
         // clean removal (not just show a tombstone)
@@ -275,7 +321,7 @@ export function registerAnnouncementEventHandlers() {
           .join('  •  ');
 
         const updatedActivityMeta = {
-          eventType: 'ANNOUNCEMENT_CREATED',
+          eventType: 'ANNOUNCEMENT_UPDATED',
           announcementId,
           announcementTitle: title,
           announcementDescription: description ? description.substring(0, 200) : null,

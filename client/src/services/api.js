@@ -297,8 +297,12 @@ export const workspaceAPI = {
 
 // ─── Saved Messages ──────────────────────────────────────────────────────
 export const savedMessageAPI = {
-  list: () => api.get('/messages/saved'),
+  list: (status = null) => api.get('/messages/saved', { params: status ? { status } : {} }),
   toggle: (messageId) => api.post(`/messages/${messageId}/save`),
+  updateStatus: (messageId, status) => api.patch(`/messages/${messageId}/save/status`, { status }),
+  updateReminder: (messageId, data) => api.patch(`/messages/${messageId}/save/reminder`, data),
+  createStandalone: (data) => api.post('/messages/reminders/standalone', data),
+  deleteReminder: (reminderId) => api.delete(`/messages/reminders/${reminderId}`),
 }
 
 // ─── Scheduled Messages ──────────────────────────────────────────────────

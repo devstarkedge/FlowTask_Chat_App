@@ -9,6 +9,7 @@ import {
   MessageSquareText,
   UserPlus,
   Settings,
+  AlarmClock,
 } from "lucide-react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { useNotificationStore } from "../../../stores/notificationStore";
@@ -65,7 +66,7 @@ const STYLES = `
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 0 8px;
+  padding: 16px 16px 4px;
   gap: 8px;
 }
 
@@ -76,10 +77,10 @@ const STYLES = `
 }
 
 .acs3-title {
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 16px;
+  font-weight: 700;
   color: var(--sidebar-text, #fff);
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
@@ -146,33 +147,37 @@ const STYLES = `
 /* ─── Filter tab pills ───────────────────────────── */
 .acs3-tabs {
   display: flex; align-items: center;
-  gap: 4px;
-  padding: 0;
+  gap: 20px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 8px;
   overflow-x: auto;
 }
 .acs3-tabs::-webkit-scrollbar { display:none; }
 
 .acs3-tab {
   display: inline-flex; align-items: center;
-  padding: 4px 13px;
-  border-radius: 999px;
-  border: 1px solid transparent;
+  padding: 8px 4px;
+  border-radius: 0;
+  border: none;
+  border-bottom: 2px solid transparent;
   background: transparent;
-  color: rgba(255,255,255,0.42);
-  font-size: 12.5px; font-weight: 500;
+  color: rgba(255,255,255,0.5);
+  font-size: 13px; font-weight: 600;
   cursor: pointer; white-space: nowrap; font-family: inherit;
   transition: all 140ms ease;
+  margin-bottom: -1px;
 }
 .acs3-tab:hover {
-  background: rgba(255,255,255,0.07);
+  background: transparent;
   color: rgba(255,255,255,0.8);
 }
 .acs3-tab.is-on {
-  background: rgba(255,255,255,0.14);
-  border-color: rgba(255,255,255,0.18);
+  background: transparent;
+  border-bottom-color: var(--accent-primary, #a5b4fc);
   color: #fff;
-  font-weight: 700;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  font-weight: 600;
+  box-shadow: none;
 }
 
 /* ─── Scroll container ───────────────────────────── */
@@ -190,26 +195,31 @@ const STYLES = `
 
 /* ─── Date divider ───────────────────────────────── */
 .acs3-divider {
-  display: flex; align-items: center; gap:10px;
-  padding: 12px 14px 5px;
+  display: flex; align-items: center; gap:0px;
+  padding: 16px 16px 8px;
   animation: acs3-fade .25s ease both;
+  justify-content: center;
 }
 .acs3-divider-line {
   flex:1; height:1px;
   background: rgba(255,255,255,0.08);
 }
 .acs3-divider-label {
-  font-size: 10px; font-weight: 800;
-  color: rgba(255,255,255,0.3);
-  letter-spacing: .1em; text-transform: uppercase;
+  font-size: 11px; font-weight: 500;
+  color: rgba(255,255,255,0.7);
+  background: rgba(255,255,255,0.08);
+  padding: 4px 12px;
+  border-radius: 12px;
+  margin: 0 10px;
+  letter-spacing: 0; text-transform: none;
   white-space: nowrap;
 }
 
 /* ─── Notification row ───────────────────────────── */
 .acs3-row {
   position: relative;
-  display: flex; align-items: flex-start; gap: 10px;
-  width: 100%; padding: 8px 12px 8px 14px;
+  display: flex; align-items: flex-start; gap: 12px;
+  width: 100%; padding: 10px 16px;
   background: transparent; border: none;
   text-align: left; cursor: pointer;
   transition: background 120ms ease;
@@ -256,11 +266,11 @@ const STYLES = `
 }
 /* Small type-icon pip on the avatar corner */
 .acs3-pip {
-  position:absolute; bottom:-2px; right:-3px;
-  width:15px; height:15px; border-radius:50%;
+  position:absolute; bottom:-4px; right:-4px;
+  width:18px; height:18px; border-radius:6px;
   display:flex; align-items:center; justify-content:center;
-  background: var(--bg-sidebar, #070534);
-  border: 1.5px solid var(--bg-sidebar, #070534);
+  background: #a5b4fc;
+  border: 2px solid var(--bg-sidebar, #070534);
 }
 /* Generic icon box (no avatar) */
 .acs3-icon-box {
@@ -282,35 +292,36 @@ const STYLES = `
 }
 /* Sender name */
 .acs3-name {
-  font-size: 13.5px; font-weight: 700;
-  color: rgba(255,255,255,0.6);
+  font-size: 14px; font-weight: 600;
+  color: rgba(255,255,255,0.8);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  letter-spacing:-.015em; line-height:1.3;
+  letter-spacing:0; line-height:1.3;
   transition: color 120ms ease;
 }
 .acs3-row.is-unread .acs3-name,
 .acs3-row.is-on .acs3-name {
   color: #fff;
+  font-weight: 700;
 }
 /* Timestamp */
 .acs3-time {
   font-size: 11px;
-  color: rgba(255,255,255,0.28);
+  color: rgba(255,255,255,0.4);
   white-space:nowrap; flex-shrink:0; line-height:1.4;
 }
 .acs3-row.is-on .acs3-time { color:rgba(255,255,255,0.5); }
 
 /* Notification body text */
 .acs3-text {
-  font-size: 12.5px; line-height: 1.5;
-  color: rgba(255,255,255,0.42);
+  font-size: 13px; line-height: 1.4;
+  color: rgba(255,255,255,0.6);
   display:-webkit-box;
   -webkit-line-clamp:2; -webkit-box-orient:vertical;
   overflow:hidden;
   transition: color 120ms ease;
 }
-.acs3-row.is-unread .acs3-text { color:rgba(255,255,255,0.68); }
-.acs3-row.is-on .acs3-text     { color:rgba(255,255,255,0.75); }
+.acs3-row.is-unread .acs3-text { color:rgba(255,255,255,0.9); }
+.acs3-row.is-on .acs3-text     { color:rgba(255,255,255,0.9); }
 
 /* Sub-label (channel / body) */
 .acs3-sub {
@@ -395,27 +406,78 @@ const STYLES = `
 
 /* ── Icon map ── */
 const ICONS = {
-  mention:        { Icon: AtSign,            color: "#a5b4fc" },
-  dm:             { Icon: MessageCircle,     color: "#34d399" },
-  thread_reply:   { Icon: MessageSquareText, color: "#a5b4fc" },
-  channel_invite: { Icon: UserPlus,          color: "#c084fc" },
-  task_update:    { Icon: Activity,          color: "#fbbf24" },
-  system:         { Icon: Info,              color: "rgba(255,255,255,0.3)" },
+  mention:          { Icon: AtSign,            color: "#a5b4fc" },
+  dm:               { Icon: MessageCircle,     color: "#34d399" },
+  thread_reply:     { Icon: MessageSquareText, color: "#a5b4fc" },
+  channel_invite:   { Icon: UserPlus,          color: "#c084fc" },
+  task_update:      { Icon: Activity,          color: "#fbbf24" },
+  reminder_overdue: { Icon: AlarmClock,        color: "#f87171" },
+  system:           { Icon: Info,              color: "rgba(255,255,255,0.3)" },
 };
 
 /* ── Group by date ── */
 function groupByDate(list) {
-  const today = new Date();
-  const yest  = new Date(today); yest.setDate(today.getDate() - 1);
-  const g = { Today: [], Yesterday: [], Earlier: [] };
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  const groups = {};
   for (const n of list) {
-    const d = n.createdAt ? new Date(n.createdAt) : null;
-    if (!d)                                               g.Earlier.push(n);
-    else if (d.toDateString() === today.toDateString())   g.Today.push(n);
-    else if (d.toDateString() === yest.toDateString())    g.Yesterday.push(n);
-    else                                                  g.Earlier.push(n);
+    if (!n.createdAt) {
+      if (!groups["Earlier"]) groups["Earlier"] = [];
+      groups["Earlier"].push(n);
+      continue;
+    }
+    const d = new Date(n.createdAt);
+    const dateObj = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diffDays = Math.round((today - dateObj) / (1000 * 60 * 60 * 24));
+    
+    let label;
+    if (diffDays === 0) label = "Today";
+    else if (diffDays === 1) label = "Yesterday";
+    else if (diffDays < 7) {
+      label = d.toLocaleDateString('en-US', { weekday: 'long' });
+    } else {
+      label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+    
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(n);
   }
-  return g;
+  
+  const orderedGroups = {};
+  if (groups["Today"]) orderedGroups["Today"] = groups["Today"];
+  if (groups["Yesterday"]) orderedGroups["Yesterday"] = groups["Yesterday"];
+  
+  const remainingLabels = Object.keys(groups).filter(k => k !== "Today" && k !== "Yesterday" && k !== "Earlier");
+  remainingLabels.sort((a, b) => new Date(groups[b][0].createdAt) - new Date(groups[a][0].createdAt));
+  
+  for (const label of remainingLabels) {
+    orderedGroups[label] = groups[label];
+  }
+  if (groups["Earlier"]) orderedGroups["Earlier"] = groups["Earlier"];
+  
+  return orderedGroups;
+}
+
+/* ── Format Time ── */
+function formatTime(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  const now = new Date();
+  
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dateObj = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((today - dateObj) / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) {
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  } else if (diffDays === 1) {
+    return "Yesterday";
+  } else if (diffDays < 7) {
+    return d.toLocaleDateString('en-US', { weekday: 'long' });
+  } else {
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
 }
 
 /* ── Sub-components ── */
@@ -453,8 +515,8 @@ function NotifIcon({ notification }) {
     return (
       <div className="acs3-av">
         <Avatar member={{ name: data.senderName, avatar: data.senderAvatar }} size={36} />
-        <div className="acs3-pip">
-          <Icon size={8} style={{ color }} />
+        <div className="acs3-pip" style={{ background: color }}>
+          <Icon size={11} style={{ color: "var(--bg-sidebar, #070534)" }} strokeWidth={2.5} />
         </div>
       </div>
     );
@@ -473,9 +535,7 @@ function NotifIcon({ notification }) {
 }
 
 function NotifRow({ notification, isSelected, animDelay, onSelect, onKeyDown }) {
-  const timeAgo    = notification.createdAt
-    ? formatDistanceToNowStrict(new Date(notification.createdAt), { addSuffix: true })
-    : "";
+  const timeStr    = formatTime(notification.createdAt);
   const data       = normalizeNotification(notification);
   const senderName = data?.senderName || "System";
 
@@ -498,7 +558,7 @@ function NotifRow({ notification, isSelected, animDelay, onSelect, onKeyDown }) 
       <div className="acs3-body">
         <div className="acs3-meta">
           <span className="acs3-name">{senderName}</span>
-          {timeAgo && <span className="acs3-time">{timeAgo}</span>}
+          {timeStr && <span className="acs3-time">{timeStr}</span>}
         </div>
         <span className="acs3-text">{getNotificationText(notification)}</span>
         {notification.body && (
@@ -578,7 +638,7 @@ export default function ActivityContextSidebar({
   }, [notifications, activeTab]);
 
   const groups = groupByDate(filtered);
-  const flat   = [...groups.Today, ...groups.Yesterday, ...groups.Earlier];
+  const flat   = Object.values(groups).flat();
 
   const TABS = [
     { id:"all",     label:"All"     },

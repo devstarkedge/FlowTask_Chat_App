@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   X,
   Users,
@@ -156,6 +156,26 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
   const canLeaveChannel = !isSystem && !isSystemManagedProject && !isLastOwner;
   const canEditChannel = !isDM && isAdmin && !isSystemManagedProject;
 
+  // Filter out current user's name from DM channel names
+  const displayChannelName = useMemo(() => {
+    if (!isDM) return channel.name
+    
+    let name = channel.name
+    if (channel.dmParticipantNames && Array.isArray(channel.dmParticipantNames)) {
+      const otherNames = channel.dmParticipantNames.filter(n => n !== user?.name)
+      if (otherNames.length > 0) {
+        name = otherNames.join(', ')
+      }
+    } else if (name && name.includes(',')) {
+      const names = name.split(',').map(n => n.trim())
+      const otherNames = names.filter(n => n !== user?.name)
+      if (otherNames.length > 0) {
+        name = otherNames.join(', ')
+      }
+    }
+    return name
+  }, [channel, isDM, user])
+
   /* ── ask for confirmation ── */
   const askRemove = (memberId, memberName) =>
     setConfirm({ type: "remove", memberId, memberName });
@@ -255,7 +275,7 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
                     marginBottom: 3,
                   }}
                 >
-                  {channel.name}
+                  {displayChannelName}
                 </h2>
                 {channel.type && (
                   <span

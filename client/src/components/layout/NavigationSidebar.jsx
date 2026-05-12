@@ -42,6 +42,7 @@ import SidebarContainer from "./sidebar/SidebarContainer";
 import SidebarItem from "./sidebar/SidebarItem";
 import SidebarSection from "./sidebar/SidebarSection";
 import api from "../../services/api";
+import { useUIStore } from '../../stores/uiStore'
 
 const CHANNEL_ICONS = {
   project: Hash,
@@ -59,7 +60,6 @@ export default function NavigationSidebar({
   onClose,
   onToggleAllThreads,
   onToggleNotifications,
-  onToggleSaved,
 }) {
   const navigate = useNavigate();
   const { workspaceId } = useParams();
@@ -139,7 +139,27 @@ export default function NavigationSidebar({
           participants.find((p) => p && !selfIds.has(p)) ||
           null;
 
-        return { ...c, dmRecipientId: recipientId };
+        // Extract DM participant names and filter out current user
+        let displayName = c.name
+        if (c.dmParticipantNames && Array.isArray(c.dmParticipantNames)) {
+          const otherNames = c.dmParticipantNames.filter(name => {
+            const userName = user?.name || ''
+            return name !== userName
+          })
+          if (otherNames.length > 0) {
+            displayName = otherNames.join(', ')
+          }
+        } else if (c.name && c.name.includes(',')) {
+          // Fallback: parse comma-separated names
+          const names = c.name.split(',').map(n => n.trim())
+          const userName = user?.name || ''
+          const otherNames = names.filter(name => name !== userName)
+          if (otherNames.length > 0) {
+            displayName = otherNames.join(', ')
+          }
+        }
+
+        return { ...c, dmRecipientId: recipientId, name: displayName };
       });
   }, [channels, user]);
 
@@ -168,6 +188,9 @@ export default function NavigationSidebar({
   const handleSelectChannel = (channelId) => {
     const channel = channels.find((c) => c._id === channelId);
     setActiveChannel(channelId);
+
+    // Close any workspace-level panel (e.g. Later) when user navigates to a channel
+    useUIStore.getState().clearActiveWorkspacePanel()
 
     if (workspaceId && channel) {
       const nextPath =
@@ -255,22 +278,17 @@ export default function NavigationSidebar({
             <NavButton
               icon={Send}
               label="Drafts & Sent"
-              onClick={() => navigate(`/workspace/${workspaceId}/later`)}
+              onClick={() => {
+                // ensure Later page opens to the Drafts tab by default
+                useUIStore.getState().setActiveLaterPage('drafts');
+                useUIStore.getState().clearActiveWorkspacePanel();
+                navigate(`/workspace/${workspaceId}/later`);
+              }}
             />
             <NavButton
               icon={Compass}
               label="Directories"
               onClick={() => navigate(getDirectoriesPath(workspaceId))}
-            />
-            <NavButton
-              icon={Bookmark}
-              label="Saved"
-              onClick={() => onToggleSaved?.()}
-            />
-            <NavButton
-              icon={Globe}
-              label="External Connections"
-              onClick={() => {}}
             />
           </div>
         )}

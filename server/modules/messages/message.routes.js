@@ -19,6 +19,10 @@ import {
   markDMSeen,
   toggleSaveMessage,
   getSavedMessages,
+  updateSavedMessageStatus,
+  updateSavedMessageReminder,
+  createStandaloneReminder,
+  deleteReminder,
   scheduleMessage,
   getScheduledMessages,
   cancelScheduledMessage,
@@ -82,6 +86,10 @@ router.delete('/:id/reactions/:emoji', requireMessageAccess(), removeReaction);
 router.post('/:id/pin', requireMessageAccess(), pinMessage);
 router.delete('/:id/pin', requireMessageAccess(), unpinMessage);
 router.post('/:id/save', requireMessageAccess(), toggleSaveMessage);
+router.patch('/:id/save/status', requireMessageAccess(), updateSavedMessageStatus);
+router.patch('/:id/save/reminder', requireMessageAccess(), updateSavedMessageReminder);
+router.post('/reminders/standalone', createStandaloneReminder);
+router.delete('/reminders/:id', deleteReminder);
 export default router;
 
 /**

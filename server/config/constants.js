@@ -312,6 +312,7 @@ export const NOTIFICATION_TYPES = Object.freeze({
   ROLE_CHANGE: 'role_change',
   SECURITY_ALERT: 'security_alert',
   CALL_INVITE: 'call_invite',
+  REMINDER_OVERDUE: 'reminder_overdue',
   CHANNEL_AUTO_CREATED: 'channel_auto_created',
   USER_ACTIVATED: 'user_activated',
 });

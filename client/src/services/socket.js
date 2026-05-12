@@ -387,9 +387,9 @@ export function connectSocket() {
   socket.on(SOCKET_EVENTS.NOTIFICATION, ({ notification }) => {
     if (!notification) return
 
-    // Suppress notification if user is actively viewing the channel
+    // Suppress notification if user is actively viewing the channel, except for overdue reminders
     const activeChannelId = useChannelStore.getState().activeChannelId
-    if (notification.channelId && notification.channelId === activeChannelId && document.hasFocus()) {
+    if (notification.channelId && notification.channelId === activeChannelId && document.hasFocus() && notification.type !== 'reminder_overdue') {
       return
     }
     // Persist to notification store

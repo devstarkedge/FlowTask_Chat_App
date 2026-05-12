@@ -344,6 +344,14 @@ async function startServer() {
     const { startScheduledMessageProcessor } = await import('./services/scheduledMessages.service.js');
     startScheduledMessageProcessor();
 
+    // 8c. Start saved reminder checker (in-app reminders / Later feature)
+    try {
+      const { startSavedReminderChecker } = await import('./services/savedReminderChecker.js');
+      startSavedReminderChecker();
+    } catch (err) {
+      logger.warn('Failed to start saved reminder checker', { error: err?.message || err });
+    }
+
     // 9. Start HTTP server
     httpServer.listen(env.PORT, () => {
       logger.info(`FlowTask Chat server running`, {
@@ -399,6 +407,15 @@ async function shutdown(signal) {
     logger.info('Scheduled message processor stopped');
   } catch {
     // May not be initialized
+  }
+
+  // Stop saved reminder checker
+  try {
+    const { stopSavedReminderChecker } = await import('./services/savedReminderChecker.js');
+    stopSavedReminderChecker();
+    logger.info('Saved reminder checker stopped');
+  } catch {
+    // Not initialized or failed to stop
   }
 
   // 4. Stop DB health check

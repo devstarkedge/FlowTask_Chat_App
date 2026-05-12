@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   Lock,
   MessageCircle,
@@ -15,6 +15,7 @@ import {
 import ChannelMemberCount from './ChannelMemberCount'
 import { useChannelStore } from '../../stores/channelStore'
 import { useChatStore } from '../../stores/chatStore'
+import { useAuthStore } from '../../stores/authStore'
 import logger from '../../utils/logger'
 
 const EMPTY_PINS = []
@@ -35,6 +36,7 @@ export default function ChatHeader({
 }) {
   const { membersByChannel, toggleInfoPanel, showInfoPanel } =
     useChannelStore()
+  const { user } = useAuthStore()
   const activeThread   = useChatStore((s) => s.activeThread)
   const pinnedMessages =
     useChatStore((s) => s.pinnedMessagesByChannel[channel?._id]) ?? EMPTY_PINS
@@ -49,6 +51,27 @@ export default function ChatHeader({
   const headerRef      = useRef(null)
 
   const isConstrained = showInfoPanel || !!activeThread
+
+  // Filter out current user's name from DM channel names
+  const displayChannelName = useMemo(() => {
+    if (!channel) return ''
+    if (channel.type !== 'dm') return channel.name || channel.slug
+    
+    let name = channel.name || channel.slug
+    if (channel.dmParticipantNames && Array.isArray(channel.dmParticipantNames)) {
+      const otherNames = channel.dmParticipantNames.filter(n => n !== user?.name)
+      if (otherNames.length > 0) {
+        name = otherNames.join(', ')
+      }
+    } else if (name && name.includes(',')) {
+      const names = name.split(',').map(n => n.trim())
+      const otherNames = names.filter(n => n !== user?.name)
+      if (otherNames.length > 0) {
+        name = otherNames.join(', ')
+      }
+    }
+    return name
+  }, [channel, user])
 
   // Measure header width — collapse tabs when < 480px
   useEffect(() => {
@@ -146,7 +169,7 @@ export default function ChatHeader({
               minWidth: 0,
             }}
           >
-            {channel.name || channel.slug}
+            {displayChannelName}
           </h2>
 
           {isPrivate && (

@@ -1,6 +1,7 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Home, MessageSquare, Bell, FolderOpen, Clock, Wrench, Plus } from 'lucide-react'
+import { useUIStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { countWorkspaceDrafts, useDraftStore } from '../../stores/draftStore'
@@ -48,6 +49,10 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
 
   const basePath = `/workspace/${workspaceId}`
 
+  const activeWorkspacePanel = useUIStore((s) => s.activeWorkspacePanel)
+  const setActiveWorkspacePanel = useUIStore((s) => s.setActiveWorkspacePanel)
+  const clearActiveWorkspacePanel = useUIStore((s) => s.clearActiveWorkspacePanel)
+
   const getActiveId = () => {
     const path = location.pathname.replace(basePath, '')
     if (path.startsWith('/dms') || path.startsWith('/dm/')) return 'dms'
@@ -63,9 +68,17 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
 
   const handleNav = useCallback(
     (item) => {
+      // Workspace 'Later' icon should toggle the Later sidebar panel
+      if (item.id === 'later') {
+        setActiveWorkspacePanel(activeWorkspacePanel === 'later' ? null : 'later')
+        return
+      }
+
+      // Navigating to other workspace sections should close any open workspace panel
+      clearActiveWorkspacePanel()
       navigate(`${basePath}${item.path}`)
     },
-    [navigate, basePath],
+    [navigate, basePath, setActiveWorkspacePanel, clearActiveWorkspacePanel, activeWorkspacePanel],
   )
 
   const handleHoverEnter = useCallback((id, e) => {

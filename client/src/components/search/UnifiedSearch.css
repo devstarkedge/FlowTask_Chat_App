@@ -250,13 +250,13 @@
   min-height: 36px;
   padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid var(--search-panel-border);
+  /* border: 1px solid var(--search-panel-border); */
   background: linear-gradient(
       180deg,
       color-mix(in srgb, var(--search-control-surface) 74%, var(--surface-primary)),
       var(--search-control-surface)
     );
-  box-shadow: var(--search-control-shadow);
+  box-shadow: var(--search-control-shadow);  
   cursor: text;
   transition:
     background-color 160ms ease,

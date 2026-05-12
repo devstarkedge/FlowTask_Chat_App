@@ -1361,6 +1361,25 @@ export const useChatStore = create((set, get) => ({
           duration: 4200,
         },
       );
+    } else if (normalized.type === 'reminder_overdue') {
+      const text = `Reminder overdue: “${normalized.title || normalized.messagePreview}”`;
+      toast.custom((t) => createElement('div', {
+        onClick: () => {
+          const workspaceId = normalized.deepLink?.workspaceId;
+          const target = workspaceId ? `/workspace/${workspaceId}/activity` : '/';
+          window.location.href = target;
+          toast.dismiss(t.id);
+        },
+        style: {
+          cursor: 'pointer',
+          padding: '10px 14px',
+          background: '#fff',
+          borderRadius: 8,
+          boxShadow: '0 8px 28px rgba(0,0,0,0.08)',
+          display: 'flex',
+          alignItems: 'center',
+        }
+      }, createElement('div', { style: { fontWeight: 700 } }, text)), { duration: 5000 });
     }
   },
 

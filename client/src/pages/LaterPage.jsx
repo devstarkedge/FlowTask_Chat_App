@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Clock, PencilLine, ClockFading, Sparkles } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import DraftsSidebar from '../components/chat/DraftsSidebar'
 import ScheduledMessagesList from '../components/chat/ScheduledMessagesList'
 import { countWorkspaceDrafts, useDraftStore } from '../stores/draftStore'
+import { useUIStore } from '../stores/uiStore'
 import './custom-css/laterPage.css'
 
 export default function LaterPage() {
@@ -14,6 +15,25 @@ export default function LaterPage() {
   const [prevTab, setPrevTab] = useState(null)
   const contentRef = useRef(null)
   const draftCount = useDraftStore((s) => countWorkspaceDrafts(s.drafts, workspaceId))
+
+  const activeLaterPage = useUIStore((s) => s.activeLaterPage)
+  const setActiveLaterPage = useUIStore((s) => s.setActiveLaterPage)
+  const clearActiveLaterPage = useUIStore((s) => s.clearActiveLaterPage)
+
+  // Initialize tab from global UI intent (if any). Accept both 'sent' and 'scheduled'.
+  useEffect(() => {
+    if (!activeLaterPage) return
+    const map = {
+      drafts: 'drafts',
+      sent: 'scheduled',
+      scheduled: 'scheduled',
+    }
+    const mapped = map[activeLaterPage] || activeLaterPage
+    if (mapped && mapped !== activeTab) setActiveTab(mapped)
+    // clear the intent after consuming it
+    clearActiveLaterPage()
+  // Intentionally only run when the external intent changes
+  }, [activeLaterPage])
 
   const TABS = [
     {
@@ -52,6 +72,8 @@ export default function LaterPage() {
         contentRef.current.style.transform = "translateY(0)";
       }
       setAnimating(false);
+      // reflect change in global UI store (so navigation intents stay in sync)
+      try { setActiveLaterPage(tabId) } catch (e) { /* ignore */ }
     }, 160);
   };
 

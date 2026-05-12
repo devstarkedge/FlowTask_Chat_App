@@ -244,13 +244,34 @@ export default function HoverPreview({
           ? channel.dmParticipants.map((p) => p?.toString?.() || String(p))
           : []
         const recipientId = channel.dmRecipientId || participants.find((p) => p && !selfIds.has(p)) || null
-        return { ...channel, dmRecipientId: recipientId }
+        
+        // Extract DM participant names and filter out current user
+        let displayName = channel.name
+        if (channel.dmParticipantNames && Array.isArray(channel.dmParticipantNames)) {
+          const otherNames = channel.dmParticipantNames.filter(name => {
+            const userName = user?.name || ''
+            return name !== userName
+          })
+          if (otherNames.length > 0) {
+            displayName = otherNames.join(', ')
+          }
+        } else if (channel.name && channel.name.includes(',')) {
+          // Fallback: parse comma-separated names
+          const names = channel.name.split(',').map(n => n.trim())
+          const userName = user?.name || ''
+          const otherNames = names.filter(name => name !== userName)
+          if (otherNames.length > 0) {
+            displayName = otherNames.join(', ')
+          }
+        }
+        
+        return { ...channel, dmRecipientId: recipientId, name: displayName }
       })
 
     const sorted = sortDMs(mapped, unreads)
     const filtered = dmUnreadOnly ? sorted.filter((item) => (unreads[item._id] || 0) > 0) : sorted
     return filtered.slice(0, PREVIEW_LIMIT)
-  }, [channels, dmUnreadOnly, selfIds, unreads])
+  }, [channels, dmUnreadOnly, selfIds, unreads, user])
 
   const filteredNotifications = useMemo(() => {
     const map = {

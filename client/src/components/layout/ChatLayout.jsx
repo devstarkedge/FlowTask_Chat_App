@@ -25,6 +25,7 @@ import NavigationSidebar from "./NavigationSidebar";
 import SetStatusModal from "../chat/SetStatusModal";
 import ActivityContextSidebar from "./context/ActivityContextSidebar";
 import FilesContextSidebar from "./context/FilesContextSidebar";
+import ToolsContextSidebar from "./context/ToolsContextSidebar";
 import ChatPanel from "../chat/ChatPanel";
 import ThreadPanel from "../chat/ThreadPanel";
 import ChannelInfoPanel from "../chat/ChannelInfoPanel";
@@ -40,6 +41,8 @@ import NotificationPanel from "../notifications/NotificationPanel";
 import KeyboardShortcutsModal from "../chat/KeyboardShortcutsModal";
 import SavedMessagesPanel from "../chat/SavedMessagesPanel";
 import PushNotificationPrompt from "../notifications/PushNotificationPrompt";
+import LaterPanel from "../chat/LaterPanel";
+import { useUIStore } from '../../stores/uiStore'
 import { useKeyboardShortcuts } from "../../utils/keyboardShortcuts";
 import { messageAPI, savedMessageAPI } from "../../services/api";
 import {
@@ -681,7 +684,6 @@ export default function ChatLayout() {
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showSaved, setShowSaved] = useState(false);
   const [filesForModule, setFilesForModule] = useState([]);
   const [showTopPreferences, setShowTopPreferences] = useState(false);
   const [showTopSetStatus, setShowTopSetStatus] = useState(false);
@@ -753,6 +755,7 @@ export default function ChatLayout() {
     filesWithSelectionRoute?.params?.fileRefId || null;
   const isActivityRoute = !!(activityRoute || activityWithSelectionRoute);
   const isFilesRoute = !!(filesRoute || filesWithSelectionRoute);
+  const isToolsRoute = !!matchPath("/workspace/:workspaceId/tools", location.pathname);
   const isDMRoute = !!(dmsHomeRoute || dmsRoute || dmsMessageRoute);
   const localSearchConversationId = routeConversationId || activeChannelId || null;
   const localSearchChannel = useMemo(
@@ -849,7 +852,6 @@ export default function ChatLayout() {
     setShowPins(false);
     setShowAllThreads(false);
     setShowNotifications(false);
-    setShowSaved(false);
     useProfileStore.getState().closeProfile();
     closeThread();
   }, [closeThread]);
@@ -863,7 +865,6 @@ export default function ChatLayout() {
     setShowPins(false);
     setShowAllThreads(false);
     setShowNotifications(false);
-    setShowSaved(false);
     useProfileStore.getState().closeProfile();
     closeThread();
   }, [closeThread, localSearchChannel?.type, localSearchConversationId]);
@@ -956,7 +957,6 @@ export default function ChatLayout() {
         if (showShortcuts) setShowShortcuts(false);
         else if (isSearchOpen) closeSearch();
         else if (showPins) setShowPins(false);
-        else if (showSaved) setShowSaved(false);
         else if (showNotifications) setShowNotifications(false);
         else if (showAllThreads) setShowAllThreads(false);
         else if (profileUser) useProfileStore.getState().closeProfile();
@@ -967,7 +967,6 @@ export default function ChatLayout() {
       showShortcuts,
       isSearchOpen,
       showPins,
-      showSaved,
       showAllThreads,
       showNotifications,
       openGlobalSearch,
@@ -1301,6 +1300,7 @@ export default function ChatLayout() {
   }, [workspaceId, selectedFile, channels, setActiveChannel, navigate]);
 
   const activeChannel = channels.find((c) => c._id === activeChannelId) || null;
+  const activeWorkspacePanel = useUIStore((s) => s.activeWorkspacePanel);
 
   return (
     <div className="h-full flex" style={{ background: "var(--bg-primary)" }}>
@@ -1333,6 +1333,16 @@ export default function ChatLayout() {
               onSelectFile={handleSelectFileForModule}
               onFilesChanged={setFilesForModule}
             />
+          ) : isToolsRoute ? (
+            <ToolsContextSidebar />
+          ) : (matchPath('/workspace/:workspaceId/later', location.pathname) || activeWorkspacePanel === 'later') ? (
+            <LaterPanel
+              onJumpToMessage={(msg) => {
+                if (msg.channelId !== activeChannelId)
+                  useChannelStore.getState().setActiveChannel(msg.channelId);
+                navigate(getChannelPath(workspaceId, msg.channelId, msg._id));
+              }}
+            />
           ) : (
             <NavigationSidebar
               mode={isDMRoute ? "dms" : "home"}
@@ -1350,16 +1360,6 @@ export default function ChatLayout() {
                 setShowAllThreads(false);
                 closeSearch();
                 setShowPins(false);
-                setShowSaved(false);
-                useProfileStore.getState().closeProfile();
-                closeThread();
-              }}
-              onToggleSaved={() => {
-                setShowSaved((s) => !s);
-                setShowAllThreads(false);
-                closeSearch();
-                setShowPins(false);
-                setShowNotifications(false);
                 useProfileStore.getState().closeProfile();
                 closeThread();
               }}
@@ -1399,6 +1399,17 @@ export default function ChatLayout() {
                     setShowMobileSidebar(false);
                   }}
                   onFilesChanged={setFilesForModule}
+                />
+              ) : isToolsRoute ? (
+                <ToolsContextSidebar />
+              ) : (matchPath('/workspace/:workspaceId/later', location.pathname) || activeWorkspacePanel === 'later') ? (
+                <LaterPanel
+                  onJumpToMessage={(msg) => {
+                    if (msg.channelId !== activeChannelId)
+                      useChannelStore.getState().setActiveChannel(msg.channelId);
+                    navigate(getChannelPath(workspaceId, msg.channelId, msg._id));
+                    setShowMobileSidebar(false);
+                  }}
                 />
               ) : (
                 <NavigationSidebar
@@ -1572,18 +1583,6 @@ export default function ChatLayout() {
               <NotificationPanel
                 onClose={() => setShowNotifications(false)}
                 onSelectNotification={handleSelectActivityNotification}
-              />
-            </ErrorBoundary>
-          )}
-          {showSaved && (
-            <ErrorBoundary name="Saved Messages" compact>
-              <SavedMessagesPanel
-                onClose={() => setShowSaved(false)}
-                onJumpToMessage={(msg) => {
-                  if (msg.channelId !== activeChannelId)
-                    useChannelStore.getState().setActiveChannel(msg.channelId);
-                  setShowSaved(false);
-                }}
               />
             </ErrorBoundary>
           )}

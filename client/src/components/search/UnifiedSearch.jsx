@@ -791,14 +791,14 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
 
             {effectiveOpen ? (
               <>
-                <button
+                {/* <button
                   type="button"
                   className="global-search__filter"
                   aria-label="Search filters"
                   title="Search filters"
                 >
                   <SlidersHorizontal size={14} />
-                </button>
+                </button> */}
                 <button
                   type="button"
                   className="global-search__close"

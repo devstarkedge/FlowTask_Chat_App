@@ -605,17 +605,133 @@ export const toggleSaveMessage = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET /api/chat/saved-messages
- * Get user's saved messages.
+ * GET /api/chat/messages/saved
+ * Get user's saved messages with optional status filter.
  */
 export const getSavedMessages = asyncHandler(async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
   const skip = Math.max(parseInt(req.query.skip) || 0, 0);
+  const status = req.query.status || null;
+
   const saved = await SavedMessage.getUserSaved(req.user._id, req.workspaceId, {
     limit,
     skip,
+    status,
   });
+
   res.json({ success: true, data: { messages: saved } });
+});
+
+/**
+ * PATCH /api/chat/messages/:id/save/status
+ * Update saved message status by messageId or savedMessage _id.
+ */
+export const updateSavedMessageStatus = asyncHandler(async (req, res) => {
+  const { status } = req.body;
+  
+  if (!['in_progress', 'archived', 'completed'].includes(status)) {
+    return res.status(400).json({ success: false, error: { message: 'Invalid status' } });
+  }
+
+  // Try to find by messageId first, then by _id (for standalone reminders)
+  let saved = await SavedMessage.findOneAndUpdate(
+    { userId: req.user._id, messageId: req.params.id, workspaceId: req.workspaceId },
+    { $set: { status } },
+    { new: true },
+  );
+
+  if (!saved) {
+    // Try finding by _id (standalone reminder or direct saved message ID)
+    saved = await SavedMessage.findOneAndUpdate(
+      { userId: req.user._id, _id: req.params.id, workspaceId: req.workspaceId },
+      { $set: { status } },
+      { new: true },
+    );
+  }
+
+  if (!saved) {
+    return res.status(404).json({ success: false, error: { message: 'Saved message not found' } });
+  }
+
+  res.json({ success: true, data: { saved } });
+});
+
+/**
+ * PATCH /api/chat/messages/:id/save/reminder
+ * Update reminder for a saved message by messageId or savedMessage _id.
+ */
+export const updateSavedMessageReminder = asyncHandler(async (req, res) => {
+  const { reminderAt, reminderDescription } = req.body;
+
+  const updateData = { notificationSent: false, overdueNotificationSent: false }; // Reset notification flags when reminder is updated
+  if (reminderAt !== undefined) updateData.reminderAt = reminderAt ? new Date(reminderAt) : null;
+  if (reminderDescription !== undefined) updateData.reminderDescription = reminderDescription || '';
+
+  // Try to find by messageId first, then by _id (for standalone reminders)
+  let saved = await SavedMessage.findOneAndUpdate(
+    { userId: req.user._id, messageId: req.params.id, workspaceId: req.workspaceId },
+    { $set: updateData },
+    { new: true },
+  );
+
+  if (!saved) {
+    // Try finding by _id (standalone reminder or direct saved message ID)
+    saved = await SavedMessage.findOneAndUpdate(
+      { userId: req.user._id, _id: req.params.id, workspaceId: req.workspaceId },
+      { $set: updateData },
+      { new: true },
+    );
+  }
+
+  if (!saved) {
+    return res.status(404).json({ success: false, error: { message: 'Saved message not found' } });
+  }
+
+  res.json({ success: true, data: { saved } });
+});
+
+/**
+ * POST /api/chat/messages/reminders/standalone
+ * Create a standalone reminder.
+ */
+export const createStandaloneReminder = asyncHandler(async (req, res) => {
+  const { title, reminderAt, reminderDescription, channelId } = req.body;
+
+  if (!title || !reminderAt) {
+    return res.status(400).json({ success: false, error: { message: 'Title and reminderAt are required' } });
+  }
+
+  const schedDate = new Date(reminderAt);
+  if (isNaN(schedDate.getTime())) {
+    return res.status(400).json({ success: false, error: { message: 'Invalid reminderAt date' } });
+  }
+
+  const reminder = await SavedMessage.createStandalone(req.user._id, req.workspaceId, {
+    title,
+    reminderAt: schedDate,
+    reminderDescription,
+    channelId,
+  });
+
+  res.status(201).json({ success: true, data: { reminder } });
+});
+
+/**
+ * DELETE /api/chat/messages/reminders/:id
+ * Delete a reminder.
+ */
+export const deleteReminder = asyncHandler(async (req, res) => {
+  const reminder = await SavedMessage.findOneAndDelete({
+    _id: req.params.id,
+    userId: req.user._id,
+    workspaceId: req.workspaceId,
+  });
+
+  if (!reminder) {
+    return res.status(404).json({ success: false, error: { message: 'Reminder not found' } });
+  }
+
+  res.json({ success: true, data: { reminderId: req.params.id } });
 });
 
 // ──────────────────── Scheduled Messages ────────────────────────────────────

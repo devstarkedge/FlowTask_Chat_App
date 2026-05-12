@@ -38,6 +38,8 @@ export function getNotificationText(input) {
       return `${senderName} added you to #${channelName || 'channel'}`
     case 'task_update':
       return notification.title || 'Task update'
+    case 'reminder_overdue':
+      return notification.title || 'Reminder overdue'
     default:
       return notification.title || 'Notification'
   }

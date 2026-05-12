@@ -18,12 +18,22 @@ const savedMessageSchema = new Schema({
   messageId: {
     type: Schema.Types.ObjectId,
     ref: 'Message',
-    required: true,
+    default: null,
+  },
+  type: {
+    type: String,
+    enum: ['saved_message', 'standalone'],
+    default: 'saved_message',
+  },
+  title: {
+    type: String,
+    maxlength: 200,
+    default: '',
   },
   channelId: {
     type: Schema.Types.ObjectId,
     ref: 'Channel',
-    required: true,
+    default: null,
   },
   workspaceId: {
     type: Schema.Types.ObjectId,
@@ -34,6 +44,28 @@ const savedMessageSchema = new Schema({
     type: String,
     maxlength: 500,
     default: '',
+  },
+  reminderAt: {
+    type: Date,
+    default: null,
+  },
+  reminderDescription: {
+    type: String,
+    maxlength: 1000,
+    default: '',
+  },
+  status: {
+    type: String,
+    enum: ['in_progress', 'archived', 'completed'],
+    default: 'in_progress',
+  },
+  notificationSent: {
+    type: Boolean,
+    default: false,
+  },
+  overdueNotificationSent: {
+    type: Boolean,
+    default: false,
   },
 }, {
   timestamps: true,
@@ -47,26 +79,38 @@ savedMessageSchema.index({ userId: 1, workspaceId: 1, createdAt: -1 });
 
 // ─── Statics ─────────────────────────────────────────────────────────────────
 savedMessageSchema.statics.toggle = async function (userId, messageId, channelId, workspaceId) {
-  // Try delete first — if it existed, we unsaved
   const deleted = await this.findOneAndDelete({ userId, messageId });
   if (deleted) {
     return { saved: false };
   }
-  // Not found — create (handle concurrent duplicate)
   try {
-    await this.create({ userId, messageId, channelId, workspaceId });
+    await this.create({ userId, messageId, channelId, workspaceId, type: 'saved_message' });
     return { saved: true };
   } catch (err) {
     if (err.code === 11000) {
-      // Race: another request saved it first — treat as already saved
       return { saved: true };
     }
     throw err;
   }
 };
 
-savedMessageSchema.statics.getUserSaved = async function (userId, workspaceId, { limit = 50, skip = 0 } = {}) {
-  return this.find({ userId, workspaceId })
+savedMessageSchema.statics.createStandalone = async function (userId, workspaceId, data) {
+  return this.create({
+    userId,
+    workspaceId,
+    type: 'standalone',
+    title: data.title,
+    reminderAt: data.reminderAt,
+    reminderDescription: data.reminderDescription || '',
+    channelId: data.channelId || null,
+  });
+};
+
+savedMessageSchema.statics.getUserSaved = async function (userId, workspaceId, { limit = 50, skip = 0, status = null } = {}) {
+  const query = { userId, workspaceId };
+  if (status) query.status = status;
+  
+  return this.find(query)
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
@@ -74,6 +118,7 @@ savedMessageSchema.statics.getUserSaved = async function (userId, workspaceId, {
       path: 'messageId',
       populate: { path: 'authorId', select: 'name avatar' },
     })
+    .populate('channelId', 'name type')
     .lean();
 };
 

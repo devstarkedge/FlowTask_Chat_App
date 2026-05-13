@@ -328,6 +328,25 @@ class MessageService {
     workspaceId,
   });
 
+  // Guard: skip creation if an identical activity message already exists within
+  // the last 30 seconds (defense-in-depth against duplicate webhook deliveries).
+  if (activityMeta?.eventType && activityMeta?.taskId) {
+    const isDuplicate = await messageRepository.findRecentActivityDuplicate(
+      channelId,
+      activityMeta.eventType,
+      String(activityMeta.taskId),
+    );
+    if (isDuplicate) {
+      logger.warn('sendSystemMessage: duplicate activity suppressed', {
+        channelId,
+        eventType: activityMeta.eventType,
+        taskId: activityMeta.taskId,
+        workspaceId,
+      });
+      return null;
+    }
+  }
+
   const message = await messageRepository.create(messageData);
 
   // Diagnostic: log created system message and room occupancy to help debug

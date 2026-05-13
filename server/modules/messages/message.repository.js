@@ -27,6 +27,28 @@ class MessageRepository {
   }
 
   /**
+   * Check for a recent duplicate activity message in the same channel.
+   * Used to prevent double-inserts when both the typed and legacy webhook
+   * events are received within a short window.
+   * @param {string|ObjectId} channelId
+   * @param {string} eventType  - activityMeta.eventType
+   * @param {string} taskId     - activityMeta.taskId (string)
+   * @param {number} [windowMs=30000] - look-back window in milliseconds
+   * @returns {Promise<boolean>} true if a duplicate exists
+   */
+  async findRecentActivityDuplicate(channelId, eventType, taskId, windowMs = 30000) {
+    const since = new Date(Date.now() - windowMs);
+    const exists = await Message.exists({
+      channelId,
+      'activityMeta.eventType': eventType,
+      'activityMeta.taskId': taskId,
+      createdAt: { $gte: since },
+      isDeleted: { $ne: true },
+    });
+    return !!exists;
+  }
+
+  /**
    * Find message by ID.
    * @param {string} id
    * @param {object} [options]

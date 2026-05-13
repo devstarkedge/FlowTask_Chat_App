@@ -464,8 +464,22 @@ export const useChatStore = create((set, get) => ({
       if (message.threadId) return state;
       const channelId = message.channelId;
       const existing = state.messagesByChannel[channelId] || [];
-      // Avoid duplicates
+      // Avoid duplicates by _id
       if (existing.some((m) => m._id === message._id)) return state;
+      // Semantic dedup for activity messages: skip if an identical activity
+      // (same eventType + taskId) already arrived within the last 60 seconds.
+      // This guards against duplicate socket events caused by any future
+      // regression in dual-dispatch on the FlowTask side.
+      if (message.activityMeta?.eventType && message.activityMeta?.taskId) {
+        const sixtySecsAgo = Date.now() - 60000;
+        const isDupe = existing.some(
+          (m) =>
+            m.activityMeta?.eventType === message.activityMeta.eventType &&
+            String(m.activityMeta?.taskId) === String(message.activityMeta.taskId) &&
+            new Date(m.createdAt).getTime() >= sixtySecsAgo,
+        );
+        if (isDupe) return state;
+      }
       const merged = [...existing, message].sort(
         (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
       );

@@ -837,10 +837,8 @@ export function registerTaskEventHandlers() {
     });
   };
 
-  registerTimeEntryHandler(FLOWTASK_EVENTS.TIME_ENTRY_ADDED);
-  registerTimeEntryHandler(FLOWTASK_EVENTS.TIME_ENTRY_UPDATED);
-  registerTimeEntryHandler(FLOWTASK_EVENTS.TIME_ENTRY_DELETED);
-  // Type-specific time entry events
+  // Type-specific time entry events only — legacy TIME_ENTRY_* events are no longer
+  // dispatched by FlowTask (removed dual-dispatch), so those handlers are omitted.
   registerTimeEntryHandler(FLOWTASK_EVENTS.LOGGED_TIME_ADDED);
   registerTimeEntryHandler(FLOWTASK_EVENTS.LOGGED_TIME_UPDATED);
   registerTimeEntryHandler(FLOWTASK_EVENTS.LOGGED_TIME_DELETED);

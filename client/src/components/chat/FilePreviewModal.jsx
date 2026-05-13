@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Download, ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight, FileText, Film, Music, File, Copy, Check, Table2 } from 'lucide-react'
+import { X, Download, ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight, FileText, Film, Music, File, Copy, Check } from 'lucide-react'
 import { useDownloadStore } from "../../stores/downloadStore";
 import { handleDownload } from "../../utils/handleDownload";
+import { useAuthStore } from '../../stores/authStore';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
+import { messageAPI } from '../../services/api';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp']
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
@@ -42,6 +45,10 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   const [csvShowAll, setCsvShowAll] = useState(false)
   const containerRef = useRef(null)
   const addDownload = useDownloadStore((s) => s.addDownload);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfError, setPdfError] = useState(null)
+  const pdfUrlRef = useRef(null)
 
   useEffect(() => {
     if (file && files.length > 0) {
@@ -74,6 +81,75 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   const isPdf = PDF_TYPES.some((t) => mime === t) || ext === 'pdf'
   const isText = TEXT_CODE_TYPES.some((t) => mime === t || mime.startsWith('text/')) || TEXT_EXTS.includes(ext)
   const isCsv = mime === 'text/csv' || ext === 'csv'
+
+  // Fetch PDF as blob to avoid 401 from Chrome's PDF viewer extension making
+  // unauthenticated requests when it intercepts the iframe src URL.
+  // For Cloudinary assets, we route through our server proxy so that CDN
+  // account-level access restrictions are also bypassed transparently.
+  useEffect(() => {
+    setPdfBlobUrl(null)
+    setPdfError(null)
+    // Revoke previous blob URL
+    if (pdfUrlRef.current) {
+      URL.revokeObjectURL(pdfUrlRef.current)
+      pdfUrlRef.current = null
+    }
+    if (!isPdf) return
+    const rawUrl = currentFile.secureUrl || currentFile.url
+    if (!rawUrl || rawUrl === '/placeholder-loading') {
+      setPdfError('File is still processing — please try again in a moment.')
+      return
+    }
+    let cancelled = false
+    setPdfLoading(true)
+    ;(async () => {
+      try {
+        const token = useAuthStore.getState().accessToken
+        const isServerUrl = rawUrl.startsWith('/')
+
+        // Prefer server proxy when we have an asset _id, so Cloudinary CDN
+        // restrictions are bypassed by the server fetching on our behalf.
+        const assetId = currentFile._id?.toString?.() || currentFile.fileId?.toString?.()
+        let fetchUrl = rawUrl
+        let fetchHeaders = {}
+
+        const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+
+        if (assetId && !isServerUrl) {
+          // Route through our authenticated server proxy
+          fetchUrl = messageAPI.getFileProxyUrl(assetId)
+          fetchHeaders = {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+          }
+        } else if (isServerUrl && token) {
+          fetchHeaders = {
+            Authorization: `Bearer ${token}`,
+            ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+          }
+        }
+
+        let res = await fetch(fetchUrl, { headers: fetchHeaders })
+        if (!res.ok) throw new Error(`Could not load PDF (HTTP ${res.status})`)
+        const blob = await res.blob()
+        if (cancelled) return
+        const objectUrl = URL.createObjectURL(blob)
+        pdfUrlRef.current = objectUrl
+        setPdfBlobUrl(objectUrl)
+      } catch (err) {
+        if (!cancelled) setPdfError(err.message || 'Failed to load PDF')
+      } finally {
+        if (!cancelled) setPdfLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (pdfUrlRef.current) {
+        URL.revokeObjectURL(pdfUrlRef.current)
+        pdfUrlRef.current = null
+      }
+    }
+  }, [currentFile, isPdf]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch text content for code/text preview
   useEffect(() => {
@@ -114,6 +190,21 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
     } else {
       setZoom((z) => Math.max(z - 0.15, 0.5))
     }
+  }, [isImage])
+
+  // Attach a non-passive native wheel listener to the preview container so
+  // we can call preventDefault() and implement smooth zooming for images.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const wheelListener = (ev) => {
+      if (!isImage) return
+      ev.preventDefault()
+      if (ev.deltaY < 0) setZoom((z) => Math.min(z + 0.15, 3))
+      else setZoom((z) => Math.max(z - 0.15, 0.5))
+    }
+    el.addEventListener('wheel', wheelListener, { passive: false })
+    return () => el.removeEventListener('wheel', wheelListener, { passive: false })
   }, [isImage])
 
   const handleCopy = async () => {
@@ -253,7 +344,6 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
       {/* Content */}
       <div
         ref={containerRef}
-        onWheel={handleWheel}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           width: '100%', height: '100%', padding: 60,
@@ -273,12 +363,43 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             draggable={false}
           />
         )}
-        {isPdf && currentFile.url && (
-          <iframe
-            src={currentFile.url}
-            title={currentFile.originalName || 'PDF Preview'}
-            style={{ width: '100%', height: '100%', border: 'none', borderRadius: 8 }}
-          />
+        {isPdf && (
+          pdfLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <div style={{
+                width: 36, height: 36,
+                border: '3px solid rgba(255,255,255,0.15)',
+                borderTopColor: 'rgba(255,255,255,0.8)',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+              }} />
+              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Loading PDF…</p>
+            </div>
+          ) : pdfError ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: 40, background: 'rgba(0,0,0,0.35)', borderRadius: 16 }}>
+              <FileText size={48} style={{ color: '#ef4444' }} />
+              <p style={{ color: 'white', fontWeight: 600, fontSize: 15 }}>Failed to load PDF</p>
+              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{pdfError}</p>
+              <button
+                type="button"
+                onClick={() => handleDownload(currentFile)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: 'rgba(255,255,255,0.15)', border: 'none',
+                  color: 'white', padding: '8px 20px', borderRadius: 8,
+                  cursor: 'pointer', fontSize: 14, marginTop: 4,
+                }}
+              >
+                <Download size={14} /> Download Instead
+              </button>
+            </div>
+          ) : pdfBlobUrl ? (
+            <iframe
+              src={pdfBlobUrl}
+              title={currentFile.originalName || 'PDF Preview'}
+              style={{ width: '100%', height: '100%', border: 'none', borderRadius: 8 }}
+            />
+          ) : null
         )}
 
         {isVideo && (

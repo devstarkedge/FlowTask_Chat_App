@@ -80,12 +80,20 @@ function ThreadMessage({ message, isRoot = false }) {
               }}>
                 <span>{derivedAttachments.length} files</span>
                 <span style={{ opacity: 0.4 }}>|</span>
-                <span
-                  style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                <button
+                  type="button"
                   onClick={() => derivedAttachments.forEach((file) => handleDownload(file))}
+                  disabled={derivedAttachments.length === 0}
+                  aria-label="Download all attachments"
+                  style={{
+                    cursor: derivedAttachments.length === 0 ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    background: 'transparent', border: 'none', padding: 0,
+                    color: 'inherit'
+                  }}
                 >
                   <Download size={12} style={{ opacity: 0.7 }} /> Download all
-                </span>
+                </button>
               </div>
             )}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

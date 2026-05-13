@@ -176,6 +176,9 @@ export const messageAPI = {
   }),
   // Direct Cloudinary upload support
   getUploadSignature: (channelId) => api.post(`/channels/${channelId}/upload/sign`),
+  // Build a proxy URL that the client can use to fetch a file through the server.
+  // The server fetches from Cloudinary server-side, avoiding CDN 401 errors.
+  getFileProxyUrl: (assetId) => `${api.defaults.baseURL}/messages/files/${encodeURIComponent(assetId)}/proxy`,
 }
 
 // ─── Files (channel/DM scoped) ─────────────────────────────────────────

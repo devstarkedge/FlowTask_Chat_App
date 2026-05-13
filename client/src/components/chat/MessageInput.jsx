@@ -571,16 +571,47 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       const clipboardData = e.clipboardData;
       if (!clipboardData) return;
 
+      // Allowlist for pasted files: accept common image/video/audio types,
+      // common document/text MIME types and known extensions.
+      const ALLOWED_MIME_PREFIXES = ["image/", "video/", "audio/"];
+      const ALLOWED_MIME_EXACT = [
+        "application/pdf",
+        "text/plain",
+        "text/csv",
+        "text/markdown",
+        "application/json",
+        "application/xml",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/zip",
+        "application/x-7z-compressed",
+        "application/gzip",
+        "application/x-tar",
+      ];
+      const ALLOWED_EXTS = [
+        'txt','md','csv','json','xml','pdf','doc','docx','xls','xlsx','ppt','pptx',
+        'zip','rar','7z','gz','tar','png','jpg','jpeg','gif','webp','svg',
+        'mp4','webm','mov','mp3','wav','ogg','flac','aac'
+      ];
+
       const files = [];
       let hasUnsupported = false;
       for (const item of clipboardData.items) {
         if (item.kind === "file") {
           const file = item.getAsFile();
           if (file) {
-            // Check if the pasted file type is supported
-            const ext = (file.name || "").split(".").pop()?.toLowerCase();
-            const mime = file.type || "";
-            if (mime || ext) {
+            const name = file.name || "";
+            const lastDotIndex = name.lastIndexOf('.');
+            const ext = lastDotIndex > -1 ? name.slice(lastDotIndex + 1).toLowerCase() : '';
+            const mime = file.type || '';
+
+            const allowed = ALLOWED_MIME_PREFIXES.some((p) => mime.startsWith(p)) || ALLOWED_MIME_EXACT.includes(mime) || (ext && ALLOWED_EXTS.includes(ext));
+
+            if (allowed) {
               files.push(file);
             } else {
               hasUnsupported = true;
@@ -903,6 +934,8 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
               const thumbSrc =
                 file.preview || file.thumbnailUrl || file.secureUrl || file.url;
               const name = file.name || file.originalName || file.fileName || "File";
+              const lastDotIndex = name.lastIndexOf('.')
+              const ext = lastDotIndex > -1 ? name.slice(lastDotIndex) : ''
               const key = file.localId || file._id || file.idx;
               const fileSize = file.size || file.fileSize || 0;
               const mime = file.mimeType || file.type || "";
@@ -923,7 +956,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
                   {/* File info */}
                   <div className="slack-input-preview-info">
                     <span className="slack-input-preview-name" title={name}>
-                      {name.length > 20 ? name.slice(0, 17) + "…" + name.slice(name.lastIndexOf(".")) : name}
+                      {name.length > 20 ? name.slice(0, 17) + "…" + ext : name}
                     </span>
                     {fileSize > 0 && (
                       <span className="slack-input-preview-size">

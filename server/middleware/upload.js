@@ -53,13 +53,7 @@ const ALLOWED_TYPES = new Set([
   'text/x-env',
 
   // ── Archives ──────────────────────────────────────────────────────────
-  'application/zip',
-  'application/x-zip-compressed',
-  'application/x-rar-compressed',
-  'application/vnd.rar',
-  'application/x-7z-compressed',
-  'application/gzip',
-  'application/x-tar',
+
 
   // ── Data ──────────────────────────────────────────────────────────────
   'application/json', 'application/xml',
@@ -86,10 +80,7 @@ const MIME_TO_EXT = {
   'text/x-c': '.c', 'text/x-scss': '.scss',
   'text/x-sql': '.sql', 'text/yaml': '.yaml', 'application/x-yaml': '.yaml',
   'text/x-env': '.env',
-  'application/zip': '.zip', 'application/x-zip-compressed': '.zip',
-  'application/x-rar-compressed': '.rar', 'application/vnd.rar': '.rar',
-  'application/x-7z-compressed': '.7z', 'application/gzip': '.gz',
-  'application/x-tar': '.tar',
+  
   'application/json': '.json', 'application/xml': '.xml',
 };
 
@@ -122,6 +113,17 @@ function sanitizeFilename(name) {
 function fileFilter(_req, file, cb) {
   // Sanitize the original filename on ingress
   file.originalname = sanitizeFilename(file.originalname);
+
+  // Explicitly reject common archive types to avoid unsafe extraction on server
+  const ARCHIVE_MIMES = new Set([
+    'application/zip', 'application/x-zip-compressed', 'application/x-rar-compressed',
+    'application/vnd.rar', 'application/x-7z-compressed', 'application/gzip', 'application/x-tar'
+  ]);
+  const extFromName = path.extname(file.originalname || '').toLowerCase();
+  if (ARCHIVE_MIMES.has(file.mimetype) || /\.(zip|rar|7z|tar|gz|gzip)$/i.test(extFromName)) {
+    cb(new ValidationError('Archive uploads are not allowed'), false);
+    return;
+  }
 
   if (ALLOWED_TYPES.has(file.mimetype)) {
     cb(null, true);

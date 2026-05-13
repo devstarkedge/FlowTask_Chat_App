@@ -33,7 +33,7 @@ function getFileKind(mime = "", name = "") {
   if (/^(zip|rar|7z|tar|gz|gzip)$/.test(ext)) return "archive";
   if (mime?.includes("zip") || mime?.includes("rar") || mime?.includes("tar") || mime?.includes("gzip") || mime?.includes("7z")) return "archive";
   if (/^(js|ts|py|java|c|cpp|json|xml|html|css|scss|sql|yaml|env)$/.test(ext)) return "code";
-  if (/^(txt|md|csv)$/.test(ext)) return "text";
+  if (/^(txt|md)$/.test(ext)) return "text";
   if (mime === "text/csv" || ext === "csv") return "csv";
   if (mime === "application/pdf" || ext === "pdf") return "pdf";
   if (/^(doc|docx)$/.test(ext) || mime?.includes("word") || mime?.includes("msword")) return "word";
@@ -109,7 +109,7 @@ function CodePreviewBlock({ file, onOpen }) {
   const url = file.secureUrl || file.url;
   const name = file.originalName || file.fileName || file.name || "File";
   const ext = getFileExtension(name);
-
+  const fullTextRef = useRef(null);
   useEffect(() => {
     if (!url) return;
     let cancelled = false;
@@ -117,6 +117,7 @@ function CodePreviewBlock({ file, onOpen }) {
       .then((r) => r.text())
       .then((text) => {
         if (!cancelled) {
+          fullTextRef.current = text;
           const allLines = text.split("\n");
           setLines(allLines.slice(0, 8));
         }
@@ -261,6 +262,14 @@ function VideoCard({ file, onOpen }) {
         <Film size={14} style={{ color: "#a855f7", flexShrink: 0 }} />
         <span className="sfc-video-name" title={name}>{name}</span>
         <span className="sfc-video-size">{formatFileSize(file.fileSize || file.size)}</span>
+        <button
+          className="sfc-mini-open"
+          onClick={(e) => { e.stopPropagation(); onOpen?.(file); }}
+          title="Open"
+          aria-label="Open"
+        >
+          <ExternalLink size={13} />
+        </button>
         <button
           className="sfc-mini-download"
           onClick={(e) => { e.stopPropagation(); handleDownload(file); }}

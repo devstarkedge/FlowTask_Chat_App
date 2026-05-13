@@ -40,6 +40,7 @@ import {
   searchMessagesSchema,
   scheduleMessageSchema,
 } from '../../middleware/schemas.js';
+import { proxyFileAsset } from '../files/cloudinarySign.controller.js';
 
 const router = Router();
 
@@ -73,6 +74,8 @@ router.use(resolveWorkspace);
 // ─── Message-scoped routes (mounted under /api/chat/messages) ────────────────
 router.get('/search', validate({ query: searchMessagesSchema }), searchMessages);
 router.get('/files', getWorkspaceFiles);
+// Proxy endpoint: streams a FileAsset from Cloudinary server-side to avoid CDN 401
+router.get('/files/:assetId/proxy', proxyFileAsset);
 router.get('/saved', getSavedMessages);
 router.get('/scheduled', getScheduledMessages);
 router.delete('/scheduled/:id', cancelScheduledMessage);

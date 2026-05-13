@@ -45,7 +45,24 @@ export default function PeopleTab() {
           sort:   sortVal,
           limit:  50,
         })
-        setUsers(data.data?.users || data.data || [])
+        let usersList = data.data?.users || data.data || []
+        
+        // Client-side sorting to ensure correct order
+        if (sortVal === 'asc') {
+          usersList = [...usersList].sort((a, b) => {
+            const nameA = (a.name || a.displayName || '').toLowerCase()
+            const nameB = (b.name || b.displayName || '').toLowerCase()
+            return nameA.localeCompare(nameB)
+          })
+        } else if (sortVal === 'desc') {
+          usersList = [...usersList].sort((a, b) => {
+            const nameA = (a.name || a.displayName || '').toLowerCase()
+            const nameB = (b.name || b.displayName || '').toLowerCase()
+            return nameB.localeCompare(nameA)
+          })
+        }
+        
+        setUsers(usersList)
       } catch {
         setUsers([])
       } finally {
@@ -81,7 +98,7 @@ export default function PeopleTab() {
       ? 'repeat(3, 1fr)'
       : 'repeat(auto-fill, minmax(170px, 1fr))'
 
-  // ✅ KEY FIX: Stable List reference — only recreates when viewport bucket changes.
+  // Stable List reference — only recreates when viewport bucket changes.
   // Previously defined inline, causing VirtuosoGrid to fully remount the list
   // on every render (e.g. when a card click triggers a parent re-render via profileStore).
   const GridList = useMemo(

@@ -51,7 +51,8 @@ export default function EmojiPickerComponent({ onSelect, onClose, position = 'to
           }}
           skinTonesDisabled
           searchDisabled={false}
-          emojiStyle="native"
+          emojiStyle="apple"
+          theme="auto"
         />
       </Suspense>
     </div>

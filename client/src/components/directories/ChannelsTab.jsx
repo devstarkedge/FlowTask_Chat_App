@@ -59,7 +59,28 @@ export default function ChannelsTab() {
           sort: sortVal,
           limit: 100,
         });
-        setChannels(data.data?.channels || data.data || []);
+        let channelsList = data.data?.channels || data.data || []
+        
+        // Client-side sorting to ensure correct order
+        if (sortVal === 'asc') {
+          channelsList = [...channelsList].sort((a, b) => {
+            const nameA = (a.name || '').toLowerCase()
+            const nameB = (b.name || '').toLowerCase()
+            return nameA.localeCompare(nameB)
+          })
+        } else if (sortVal === 'desc') {
+          channelsList = [...channelsList].sort((a, b) => {
+            const nameA = (a.name || '').toLowerCase()
+            const nameB = (b.name || '').toLowerCase()
+            return nameB.localeCompare(nameA)
+          })
+        } else if (sortVal === 'members') {
+          channelsList = [...channelsList].sort((a, b) => {
+            return (b.memberCount || 0) - (a.memberCount || 0)
+          })
+        }
+        
+        setChannels(channelsList);
       } catch {
         setChannels([]);
       } finally {
@@ -175,7 +196,7 @@ export default function ChannelsTab() {
         </div>
 
         {/* Sort */}
-        {/* <div className="dir-select-wrap">
+        <div className="dir-select-wrap">
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
@@ -186,7 +207,7 @@ export default function ChannelsTab() {
             <option value="members">Most members</option>
           </select>
           <ChevronDown size={13} className="dir-select-arrow" />
-        </div> */}
+        </div>
       </div>
 
       {/* Create Channel Banner */}

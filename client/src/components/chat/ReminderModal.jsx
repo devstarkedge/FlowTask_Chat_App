@@ -79,6 +79,12 @@ export default function ReminderModal({ saved, onClose, isStandalone = false }) 
         return;
       }
 
+      if (reminderAt <= new Date()) {
+        toast.error('Selected reminder time must be in the future.');
+        setSaving(false);
+        return;
+      }
+
       if (isStandalone) {
         await createStandaloneReminder({
           title: title.trim(),

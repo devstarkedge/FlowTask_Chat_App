@@ -54,7 +54,9 @@ const ALLOWED_TYPES = new Set([
 
   // ── Archives ──────────────────────────────────────────────────────────
   'application/zip',
+  'application/x-zip-compressed',
   'application/x-rar-compressed',
+  'application/vnd.rar',
   'application/x-7z-compressed',
   'application/gzip',
   'application/x-tar',
@@ -84,7 +86,8 @@ const MIME_TO_EXT = {
   'text/x-c': '.c', 'text/x-scss': '.scss',
   'text/x-sql': '.sql', 'text/yaml': '.yaml', 'application/x-yaml': '.yaml',
   'text/x-env': '.env',
-  'application/zip': '.zip', 'application/x-rar-compressed': '.rar',
+  'application/zip': '.zip', 'application/x-zip-compressed': '.zip',
+  'application/x-rar-compressed': '.rar', 'application/vnd.rar': '.rar',
   'application/x-7z-compressed': '.7z', 'application/gzip': '.gz',
   'application/x-tar': '.tar',
   'application/json': '.json', 'application/xml': '.xml',

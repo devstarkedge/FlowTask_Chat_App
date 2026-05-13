@@ -1,18 +1,45 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Download, ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight, FileText, Film, Music, File } from 'lucide-react'
+import { X, Download, ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight, FileText, Film, Music, File, Copy, Check, Table2 } from 'lucide-react'
 import { useDownloadStore } from "../../stores/downloadStore";
 import { handleDownload } from "../../utils/handleDownload";
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp']
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
-const AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4']
+const AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/flac', 'audio/aac']
 const PDF_TYPES = ['application/pdf']
+const TEXT_CODE_TYPES = [
+  'text/plain', 'text/csv', 'text/markdown', 'text/html', 'text/css',
+  'text/javascript', 'application/javascript', 'text/typescript',
+  'text/x-python', 'text/x-java-source', 'text/x-c', 'text/x-scss',
+  'text/x-sql', 'text/yaml', 'application/x-yaml', 'text/x-env',
+  'application/json', 'application/xml',
+]
+const TEXT_EXTS = ['txt', 'md', 'json', 'xml', 'js', 'ts', 'py', 'java', 'c', 'cpp', 'css', 'scss', 'html', 'sql', 'yaml', 'env', 'csv']
+
+function getExtension(name = '') {
+  const ext = (name.split('.').pop() || '').toLowerCase()
+  return ext !== name.toLowerCase() ? ext : ''
+}
+
+function getLanguageLabelFromExt(ext) {
+  const map = {
+    js: 'JavaScript', ts: 'TypeScript', py: 'Python', java: 'Java',
+    c: 'C', cpp: 'C++', json: 'JSON', xml: 'XML', html: 'HTML',
+    css: 'CSS', scss: 'SCSS', sql: 'SQL', yaml: 'YAML', md: 'Markdown',
+    txt: 'Plain Text', csv: 'CSV', env: 'Environment',
+  }
+  return map[ext] || ext.toUpperCase()
+}
 
 export default function FilePreviewModal({ file, files = [], onClose }) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
+  const [textContent, setTextContent] = useState(null)
+  const [textLoading, setTextLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [csvShowAll, setCsvShowAll] = useState(false)
   const containerRef = useRef(null)
   const addDownload = useDownloadStore((s) => s.addDownload);
 
@@ -39,10 +66,32 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   if (!currentFile) return null
 
   const mime = currentFile.mimeType || ''
-  const isImage = IMAGE_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t) || (currentFile.fileName || '').toLowerCase().endsWith('.png') || (currentFile.fileName || '').toLowerCase().endsWith('.jpg')
-  const isVideo = VIDEO_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t)
-  const isAudio = AUDIO_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t)
-  const isPdf = PDF_TYPES.some((t) => mime === t) || (currentFile.fileName || '').toLowerCase().endsWith('.pdf')
+  const fileName = currentFile.originalName || currentFile.fileName || ''
+  const ext = getExtension(fileName)
+  const isImage = IMAGE_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t) || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)
+  const isVideo = VIDEO_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t) || ['mp4', 'webm', 'mov', 'avi'].includes(ext)
+  const isAudio = AUDIO_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t) || ['mp3', 'wav', 'ogg', 'flac', 'aac'].includes(ext)
+  const isPdf = PDF_TYPES.some((t) => mime === t) || ext === 'pdf'
+  const isText = TEXT_CODE_TYPES.some((t) => mime === t || mime.startsWith('text/')) || TEXT_EXTS.includes(ext)
+  const isCsv = mime === 'text/csv' || ext === 'csv'
+
+  // Fetch text content for code/text preview
+  useEffect(() => {
+    setTextContent(null)
+    setCopied(false)
+    setCsvShowAll(false)
+    if (!isText && !isCsv) return
+    const url = currentFile.secureUrl || currentFile.url
+    if (!url) return
+    let cancelled = false
+    setTextLoading(true)
+    fetch(url)
+      .then((r) => r.text())
+      .then((text) => { if (!cancelled) setTextContent(text) })
+      .catch(() => { if (!cancelled) setTextContent(null) })
+      .finally(() => { if (!cancelled) setTextLoading(false) })
+    return () => { cancelled = true }
+  }, [currentFile, isText, isCsv])
 
   const prev = () => {
     setCurrentIndex((i) => (i > 0 ? i - 1 : files.length - 1))
@@ -56,7 +105,41 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
     setRotation(0)
   }
 
+  // Mouse wheel zoom for images
+  const handleWheel = useCallback((e) => {
+    if (!isImage) return
+    e.preventDefault()
+    if (e.deltaY < 0) {
+      setZoom((z) => Math.min(z + 0.15, 3))
+    } else {
+      setZoom((z) => Math.max(z - 0.15, 0.5))
+    }
+  }, [isImage])
+
+  const handleCopy = async () => {
+    if (!textContent) return
+    try {
+      await navigator.clipboard.writeText(textContent)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* noop */ }
+  }
+
   const downloadUrl = currentFile.secureUrl || currentFile.url || '#'
+
+  // Parse CSV for table view
+  const csvRows = isCsv && textContent ? textContent.split('\n').filter(Boolean).map((line) => {
+    const result = []
+    let current = ''
+    let inQuotes = false
+    for (const ch of line) {
+      if (ch === '"') { inQuotes = !inQuotes; continue }
+      if (ch === ',' && !inQuotes) { result.push(current.trim()); current = ''; continue }
+      current += ch
+    }
+    result.push(current.trim())
+    return result
+  }) : null
 
   const overlayStyle = {
     position: 'fixed',
@@ -120,6 +203,12 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
               <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
             </>
           )}
+          {(isText || isCsv) && textContent && (
+            <>
+              <ToolbarBtn icon={copied ? Check : Copy} onClick={handleCopy} />
+              <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
+            </>
+          )}
           <ToolbarBtn icon={Download} onClick={() => handleDownload(currentFile)} />
           <ToolbarBtn icon={X} onClick={onClose} />
         </div>
@@ -164,6 +253,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
       {/* Content */}
       <div
         ref={containerRef}
+        onWheel={handleWheel}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           width: '100%', height: '100%', padding: 60,
@@ -213,7 +303,108 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
           </div>
         )}
 
-        {!isImage && !isVideo && !isAudio && !isPdf && (
+        {/* CSV Table Preview */}
+        {isCsv && !isAudio && !isVideo && !isImage && !isPdf && (
+          <div style={{
+            width: '100%', maxWidth: 900, maxHeight: '100%', overflow: 'auto',
+            background: 'rgba(0,0,0,0.4)', borderRadius: 12, padding: 16,
+          }}>
+            {textLoading && (
+              <p style={{ color: 'rgba(255,255,255,0.6)', textAlign: 'center', padding: 40 }}>Loading…</p>
+            )}
+            {csvRows && csvRows.length > 0 && (
+              <>
+                <table style={{
+                  width: '100%', borderCollapse: 'collapse', fontSize: 13,
+                  fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                }}>
+                  <thead>
+                    <tr>
+                      {csvRows[0].map((h, i) => (
+                        <th key={i} style={{
+                          padding: '8px 12px', textAlign: 'left', fontWeight: 700,
+                          color: 'rgba(255,255,255,0.9)', borderBottom: '2px solid rgba(255,255,255,0.15)',
+                          whiteSpace: 'nowrap',
+                        }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(csvShowAll ? csvRows.slice(1) : csvRows.slice(1, 51)).map((row, ri) => (
+                      <tr key={ri}>
+                        {row.map((cell, ci) => (
+                          <td key={ci} style={{
+                            padding: '6px 12px', color: 'rgba(255,255,255,0.75)',
+                            borderBottom: '1px solid rgba(255,255,255,0.06)',
+                            whiteSpace: 'nowrap', maxWidth: 300, overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}>{cell}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {!csvShowAll && csvRows.length > 51 && (
+                  <div style={{ textAlign: 'center', padding: 12 }}>
+                    <button
+                      onClick={() => setCsvShowAll(true)}
+                      style={{
+                        background: 'rgba(255,255,255,0.1)', border: 'none',
+                        color: 'rgba(255,255,255,0.7)', padding: '6px 16px',
+                        borderRadius: 6, cursor: 'pointer', fontSize: 12,
+                      }}
+                    >
+                      Show all {csvRows.length - 1} rows
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Text / Code Preview */}
+        {isText && !isCsv && !isAudio && !isVideo && !isImage && !isPdf && (
+          <div style={{
+            width: '100%', maxWidth: 800, maxHeight: '100%', overflow: 'auto',
+            background: 'rgba(0,0,0,0.4)', borderRadius: 12,
+          }}>
+            {textLoading && (
+              <p style={{ color: 'rgba(255,255,255,0.6)', textAlign: 'center', padding: 40 }}>Loading…</p>
+            )}
+            {textContent !== null && (
+              <>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 16px',
+                  borderBottom: '1px solid rgba(255,255,255,0.1)',
+                }}>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
+                    color: '#059669', background: 'rgba(5,150,105,0.15)',
+                    padding: '2px 8px', borderRadius: 4, textTransform: 'uppercase',
+                  }}>
+                    {getLanguageLabelFromExt(ext)}
+                  </span>
+                  <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+                    {textContent.split('\n').length} lines
+                  </span>
+                </div>
+                <pre style={{
+                  margin: 0, padding: '16px',
+                  color: 'rgba(255,255,255,0.85)', fontSize: 13,
+                  fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+                  lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  overflow: 'auto', maxHeight: 'calc(100vh - 200px)',
+                }}>
+                  <code>{textContent}</code>
+                </pre>
+              </>
+            )}
+          </div>
+        )}
+
+        {!isImage && !isVideo && !isAudio && !isPdf && !isText && !isCsv && (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
             padding: 40, background: 'rgba(0,0,0,0.3)', borderRadius: 16,

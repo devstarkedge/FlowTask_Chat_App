@@ -1,11 +1,14 @@
 import { useEffect, useRef, useCallback, useMemo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import MessageInput from './MessageInput'
-import { X, MessageSquare, SlidersHorizontal, MoreHorizontal } from 'lucide-react'
+import { X, MessageSquare, SlidersHorizontal, MoreHorizontal, Download, ChevronDown } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
 import { format } from 'date-fns'
 import { sanitizeHtml } from '../../utils/sanitize'
 import { CHAT_FEATURE_FLAGS } from '../../config/featureFlags'
+import SlackFileCard from './SlackFileCard'
+import { handleDownload } from '../../utils/handleDownload'
+import { openPreview } from '../../services/previewService'
 
 const EMPTY_LIST = []
 
@@ -18,6 +21,18 @@ function ThreadMessage({ message, isRoot = false }) {
   const time = format(new Date(message.createdAt), 'h:mm a')
   const isDeleted = message.isDeleted === true
   const isPending = message.pending === true
+
+  // Derive attachments — same logic as MessageItem
+  const derivedAttachments =
+    message.fileReferences?.length > 0
+      ? message.fileReferences
+          .map((ref) =>
+            ref.fileId
+              ? { ...ref.fileId, url: ref.fileId.secureUrl || ref.fileId.url }
+              : null,
+          )
+          .filter(Boolean)
+      : message.attachments || []
 
   return (
     <div className={`thread-message${isRoot ? ' thread-message--root' : ''}`}>
@@ -54,6 +69,39 @@ function ThreadMessage({ message, isRoot = false }) {
           <p className="thread-message__content">{message.content}</p>
         )}
 
+        {/* Attachments */}
+        {!isDeleted && derivedAttachments.length > 0 && (
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {derivedAttachments.length > 1 && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)',
+                opacity: 0.85,
+              }}>
+                <span>{derivedAttachments.length} files</span>
+                <span style={{ opacity: 0.4 }}>|</span>
+                <span
+                  style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                  onClick={() => derivedAttachments.forEach((file) => handleDownload(file))}
+                >
+                  <Download size={12} style={{ opacity: 0.7 }} /> Download all
+                </span>
+              </div>
+            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {derivedAttachments.map((att, idx) => (
+                <SlackFileCard
+                  key={att._id || att.referenceId || idx}
+                  file={att}
+                  onOpen={(f) => openPreview(f, derivedAttachments)}
+                  onDownload={handleDownload}
+                  isSingle={derivedAttachments.length === 1}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Reactions */}
         {message.reactions?.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
@@ -79,6 +127,7 @@ function ThreadMessage({ message, isRoot = false }) {
     </div>
   )
 }
+
 
 /* ─── Loading Skeleton ────────────────────────────────────────────────────── */
 function ThreadSkeleton() {

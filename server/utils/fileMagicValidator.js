@@ -52,7 +52,9 @@ const MAGIC_SIGNATURES = {
 
   // ── Archives ──────────────────────────────────────────────────────────
   'application/zip':             [[0x50, 0x4B, 0x03, 0x04], [0x50, 0x4B, 0x05, 0x06]], // PK.. (local file / empty)
+  'application/x-zip-compressed':[[0x50, 0x4B, 0x03, 0x04], [0x50, 0x4B, 0x05, 0x06]], // Windows alternate MIME for .zip
   'application/x-rar-compressed':[[0x52, 0x61, 0x72, 0x21, 0x1A, 0x07]], // Rar!
+  'application/vnd.rar':         [[0x52, 0x61, 0x72, 0x21, 0x1A, 0x07]], // Modern RAR MIME
   'application/x-7z-compressed': [[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]], // 7z
   'application/gzip':            [[0x1F, 0x8B]], // gzip
   'application/x-tar':           null, // TAR has no universal magic — skip validation

@@ -33,6 +33,7 @@ import EmojiPicker from "./EmojiPicker";
 import MentionDropdown from "./MentionDropdown";
 import RichTextEditor from "./RichTextEditor";
 import ScheduleMessageModal from "./ScheduleMessageModal";
+import { getFileKind, KindIcon, formatFileSize } from "./SlackFileCard";
 
 // ─── Toolbar Button ──────────────────────────────────────────────────────────
 
@@ -563,7 +564,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     cancelPendingDraft,
   ]);
 
-  // ─── Paste Handler (images) ───────────────────────────────────────────────
+  // ─── Paste Handler (images + files) ────────────────────────────────────────
 
   const handlePaste = useCallback(
     (e) => {
@@ -571,15 +572,28 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       if (!clipboardData) return;
 
       const files = [];
+      let hasUnsupported = false;
       for (const item of clipboardData.items) {
         if (item.kind === "file") {
           const file = item.getAsFile();
-          if (file) files.push(file);
+          if (file) {
+            // Check if the pasted file type is supported
+            const ext = (file.name || "").split(".").pop()?.toLowerCase();
+            const mime = file.type || "";
+            if (mime || ext) {
+              files.push(file);
+            } else {
+              hasUnsupported = true;
+            }
+          }
         }
       }
       if (files.length > 0) {
         e.preventDefault();
         processFiles(files);
+      }
+      if (hasUnsupported) {
+        toast.error("Cannot attach pasted content — unsupported file type");
       }
       // Text paste is handled natively by TipTap (plain text)
     },
@@ -888,20 +902,36 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
               const isImg = file.mimeType?.startsWith("image/");
               const thumbSrc =
                 file.preview || file.thumbnailUrl || file.secureUrl || file.url;
-              const name = file.name || file.originalName || "File";
+              const name = file.name || file.originalName || file.fileName || "File";
               const key = file.localId || file._id || file.idx;
+              const fileSize = file.size || file.fileSize || 0;
+              const mime = file.mimeType || file.type || "";
+              const kind = getFileKind(mime, name);
 
               return (
                 <div key={key} className="slack-input-preview">
+                  {/* Thumbnail or type icon */}
                   {isImg && thumbSrc ? (
                     <div className="slack-input-preview-thumb">
                       <img src={thumbSrc} alt={name} loading="lazy" />
                     </div>
                   ) : (
                     <div className="slack-input-preview-icon">
-                      <FileText size={24} />
+                      <KindIcon kind={kind} size={22} />
                     </div>
                   )}
+                  {/* File info */}
+                  <div className="slack-input-preview-info">
+                    <span className="slack-input-preview-name" title={name}>
+                      {name.length > 20 ? name.slice(0, 17) + "…" + name.slice(name.lastIndexOf(".")) : name}
+                    </span>
+                    {fileSize > 0 && (
+                      <span className="slack-input-preview-size">
+                        {formatFileSize(fileSize)}
+                      </span>
+                    )}
+                  </div>
+                  {/* Upload progress overlay */}
                   {file.uploading && (
                     <div className="slack-input-preview-loading">
                       <div className="slack-upload-progress">
@@ -912,6 +942,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
                       </div>
                     </div>
                   )}
+                  {/* Remove button */}
                   {!file.uploading && (
                     <button
                       onClick={() =>
@@ -1066,11 +1097,4 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       </p>
     </div>
   );
-}
-
-function formatFileSize(bytes) {
-  if (!bytes) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

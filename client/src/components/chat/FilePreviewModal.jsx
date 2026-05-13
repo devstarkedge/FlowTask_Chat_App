@@ -35,12 +35,46 @@ function getLanguageLabelFromExt(ext) {
   return map[ext] || ext.toUpperCase()
 }
 
+/**
+ * Fetch any workspace file as an ArrayBuffer via the authenticated server proxy.
+ * Routes Cloudinary assets through /api/chat/messages/files/:assetId/proxy to
+ * bypass CDN access restrictions and Chrome extension interference.
+ */
+async function fetchFileBuffer(currentFile) {
+  const rawUrl = currentFile.secureUrl || currentFile.url
+  if (!rawUrl || rawUrl === '/placeholder-loading') {
+    throw new Error('File is still processing — please try again in a moment.')
+  }
+  const token = useAuthStore.getState().accessToken
+  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+  const assetId = currentFile._id?.toString?.() || currentFile.fileId?.toString?.()
+  const isServerUrl = rawUrl.startsWith('/')
+  let fetchUrl = rawUrl
+  let fetchHeaders = {}
+  if (assetId && !isServerUrl) {
+    fetchUrl = messageAPI.getFileProxyUrl(assetId)
+    fetchHeaders = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+    }
+  } else if (isServerUrl && token) {
+    fetchHeaders = {
+      Authorization: `Bearer ${token}`,
+      ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+    }
+  }
+  const res = await fetch(fetchUrl, { headers: fetchHeaders })
+  if (!res.ok) throw new Error(`Could not load file (HTTP ${res.status})`)
+  return res.arrayBuffer()
+}
+
 export default function FilePreviewModal({ file, files = [], onClose }) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
   const [textContent, setTextContent] = useState(null)
   const [textLoading, setTextLoading] = useState(false)
+  const [textError, setTextError] = useState(null)
   const [copied, setCopied] = useState(false)
   const [csvShowAll, setCsvShowAll] = useState(false)
   const containerRef = useRef(null)
@@ -49,6 +83,17 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfError, setPdfError] = useState(null)
   const pdfUrlRef = useRef(null)
+
+  // XLSX (spreadsheet) preview state
+  const [xlsxData, setXlsxData] = useState(null)
+  const [xlsxLoading, setXlsxLoading] = useState(false)
+  const [xlsxError, setXlsxError] = useState(null)
+  const [xlsxActiveSheet, setXlsxActiveSheet] = useState(0)
+  const [xlsxShowAll, setXlsxShowAll] = useState(false)
+  // DOCX (Word document) preview state
+  const [docxHtml, setDocxHtml] = useState(null)
+  const [docxLoading, setDocxLoading] = useState(false)
+  const [docxError, setDocxError] = useState(null)
 
   useEffect(() => {
     if (file && files.length > 0) {
@@ -81,58 +126,27 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   const isPdf = PDF_TYPES.some((t) => mime === t) || ext === 'pdf'
   const isText = TEXT_CODE_TYPES.some((t) => mime === t || mime.startsWith('text/')) || TEXT_EXTS.includes(ext)
   const isCsv = mime === 'text/csv' || ext === 'csv'
+  const isJson = mime === 'application/json' || ext === 'json'
+  const isXlsx = ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'].includes(mime) || ['xls', 'xlsx'].includes(ext)
+  const isDocx = ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(mime) || ['doc', 'docx'].includes(ext)
 
   // Fetch PDF as blob to avoid 401 from Chrome's PDF viewer extension making
   // unauthenticated requests when it intercepts the iframe src URL.
-  // For Cloudinary assets, we route through our server proxy so that CDN
-  // account-level access restrictions are also bypassed transparently.
   useEffect(() => {
     setPdfBlobUrl(null)
     setPdfError(null)
-    // Revoke previous blob URL
     if (pdfUrlRef.current) {
       URL.revokeObjectURL(pdfUrlRef.current)
       pdfUrlRef.current = null
     }
     if (!isPdf) return
-    const rawUrl = currentFile.secureUrl || currentFile.url
-    if (!rawUrl || rawUrl === '/placeholder-loading') {
-      setPdfError('File is still processing — please try again in a moment.')
-      return
-    }
     let cancelled = false
     setPdfLoading(true)
     ;(async () => {
       try {
-        const token = useAuthStore.getState().accessToken
-        const isServerUrl = rawUrl.startsWith('/')
-
-        // Prefer server proxy when we have an asset _id, so Cloudinary CDN
-        // restrictions are bypassed by the server fetching on our behalf.
-        const assetId = currentFile._id?.toString?.() || currentFile.fileId?.toString?.()
-        let fetchUrl = rawUrl
-        let fetchHeaders = {}
-
-        const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
-
-        if (assetId && !isServerUrl) {
-          // Route through our authenticated server proxy
-          fetchUrl = messageAPI.getFileProxyUrl(assetId)
-          fetchHeaders = {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
-          }
-        } else if (isServerUrl && token) {
-          fetchHeaders = {
-            Authorization: `Bearer ${token}`,
-            ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
-          }
-        }
-
-        let res = await fetch(fetchUrl, { headers: fetchHeaders })
-        if (!res.ok) throw new Error(`Could not load PDF (HTTP ${res.status})`)
-        const blob = await res.blob()
+        const buf = await fetchFileBuffer(currentFile)
         if (cancelled) return
+        const blob = new Blob([buf], { type: 'application/pdf' })
         const objectUrl = URL.createObjectURL(blob)
         pdfUrlRef.current = objectUrl
         setPdfBlobUrl(objectUrl)
@@ -151,23 +165,83 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
     }
   }, [currentFile, isPdf]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch text content for code/text preview
+  // XLSX / Excel preview — SheetJS is dynamically imported so it's code-split
+  useEffect(() => {
+    setXlsxData(null)
+    setXlsxError(null)
+    setXlsxActiveSheet(0)
+    setXlsxShowAll(false)
+    if (!isXlsx) return
+    let cancelled = false
+    setXlsxLoading(true)
+    ;(async () => {
+      try {
+        const buf = await fetchFileBuffer(currentFile)
+        if (cancelled) return
+        const XLSX = await import('xlsx')
+        const wb = XLSX.read(buf, { type: 'array' })
+        const sheets = wb.SheetNames.map((name) => ({
+          name,
+          data: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' }),
+        }))
+        if (!cancelled) setXlsxData(sheets)
+      } catch (err) {
+        if (!cancelled) setXlsxError(err.message || 'Failed to load spreadsheet')
+      } finally {
+        if (!cancelled) setXlsxLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [currentFile, isXlsx]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // DOCX / Word preview — mammoth is dynamically imported so it's code-split
+  useEffect(() => {
+    setDocxHtml(null)
+    setDocxError(null)
+    if (!isDocx) return
+    let cancelled = false
+    setDocxLoading(true)
+    ;(async () => {
+      try {
+        const buf = await fetchFileBuffer(currentFile)
+        if (cancelled) return
+        const mammoth = await import('mammoth')
+        const result = await mammoth.convertToHtml({ arrayBuffer: buf })
+        if (!cancelled) setDocxHtml(result.value)
+      } catch (err) {
+        if (!cancelled) setDocxError(err.message || 'Failed to load document')
+      } finally {
+        if (!cancelled) setDocxLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [currentFile, isDocx]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch text content for code/text/JSON preview
+  // Routes through the authenticated server proxy (fetchFileBuffer) so that:
+  //  1. Cloudinary CDN access restrictions are bypassed
+  //  2. '/placeholder-loading' assets are handled gracefully (no HTML bleed-through)
   useEffect(() => {
     setTextContent(null)
+    setTextError(null)
     setCopied(false)
     setCsvShowAll(false)
     if (!isText && !isCsv) return
-    const url = currentFile.secureUrl || currentFile.url
-    if (!url) return
     let cancelled = false
     setTextLoading(true)
-    fetch(url)
-      .then((r) => r.text())
-      .then((text) => { if (!cancelled) setTextContent(text) })
-      .catch(() => { if (!cancelled) setTextContent(null) })
-      .finally(() => { if (!cancelled) setTextLoading(false) })
+    (async () => {
+      try {
+        const buf = await fetchFileBuffer(currentFile)
+        if (cancelled) return
+        setTextContent(new TextDecoder().decode(buf))
+      } catch (err) {
+        if (!cancelled) setTextError(err.message || 'Failed to load file')
+      } finally {
+        if (!cancelled) setTextLoading(false)
+      }
+    })()
     return () => { cancelled = true }
-  }, [currentFile, isText, isCsv])
+  }, [currentFile, isText, isCsv]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const prev = () => {
     setCurrentIndex((i) => (i > 0 ? i - 1 : files.length - 1))
@@ -484,7 +558,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
           </div>
         )}
 
-        {/* Text / Code Preview */}
+        {/* Text / Code / JSON Preview */}
         {isText && !isCsv && !isAudio && !isVideo && !isImage && !isPdf && (
           <div style={{
             width: '100%', maxWidth: 800, maxHeight: '100%', overflow: 'auto',
@@ -492,6 +566,19 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
           }}>
             {textLoading && (
               <p style={{ color: 'rgba(255,255,255,0.6)', textAlign: 'center', padding: 40 }}>Loading…</p>
+            )}
+            {textError && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 40 }}>
+                <FileText size={36} style={{ color: '#ef4444' }} />
+                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{textError}</p>
+                <button
+                  type="button"
+                  onClick={() => handleDownload(currentFile)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}
+                >
+                  <Download size={14} /> Download Instead
+                </button>
+              </div>
             )}
             {textContent !== null && (
               <>
@@ -518,14 +605,82 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
                   lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                   overflow: 'auto', maxHeight: 'calc(100vh - 200px)',
                 }}>
-                  <code>{textContent}</code>
+                  <code>
+                    {isJson
+                      ? (() => {
+                          try { return JSON.stringify(JSON.parse(textContent), null, 2) }
+                          catch { return textContent }
+                        })()
+                      : textContent
+                    }
+                  </code>
                 </pre>
               </>
             )}
           </div>
         )}
 
-        {!isImage && !isVideo && !isAudio && !isPdf && !isText && !isCsv && (
+        {/* XLSX / Spreadsheet Preview */}
+        {isXlsx && !isImage && !isVideo && !isAudio && !isPdf && (
+          xlsxLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <div style={{
+                width: 36, height: 36,
+                border: '3px solid rgba(255,255,255,0.15)',
+                borderTopColor: 'rgba(255,255,255,0.8)',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+              }} />
+              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Loading spreadsheet…</p>
+            </div>
+          ) : xlsxError ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: 40, background: 'rgba(0,0,0,0.35)', borderRadius: 16 }}>
+              <FileText size={48} style={{ color: '#ef4444' }} />
+              <p style={{ color: 'white', fontWeight: 600, fontSize: 15 }}>Failed to load spreadsheet</p>
+              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{xlsxError}</p>
+              <button type="button" onClick={() => handleDownload(currentFile)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 14, marginTop: 4 }}>
+                <Download size={14} /> Download Instead
+              </button>
+            </div>
+          ) : xlsxData ? (
+            <XlsxPreview
+              sheets={xlsxData}
+              activeSheet={xlsxActiveSheet}
+              onChangeSheet={setXlsxActiveSheet}
+              showAll={xlsxShowAll}
+              onShowAll={() => setXlsxShowAll(true)}
+            />
+          ) : null
+        )}
+
+        {/* DOCX / Word Document Preview */}
+        {isDocx && !isImage && !isVideo && !isAudio && !isPdf && !isXlsx && (
+          docxLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <div style={{
+                width: 36, height: 36,
+                border: '3px solid rgba(255,255,255,0.15)',
+                borderTopColor: 'rgba(255,255,255,0.8)',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+              }} />
+              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Loading document…</p>
+            </div>
+          ) : docxError ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: 40, background: 'rgba(0,0,0,0.35)', borderRadius: 16 }}>
+              <FileText size={48} style={{ color: '#ef4444' }} />
+              <p style={{ color: 'white', fontWeight: 600, fontSize: 15 }}>Failed to load document</p>
+              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{docxError}</p>
+              <button type="button" onClick={() => handleDownload(currentFile)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 14, marginTop: 4 }}>
+                <Download size={14} /> Download Instead
+              </button>
+            </div>
+          ) : docxHtml ? (
+            <DocxPreview html={docxHtml} />
+          ) : null
+        )}
+
+        {!isImage && !isVideo && !isAudio && !isPdf && !isText && !isCsv && !isXlsx && !isDocx && (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
             padding: 40, background: 'rgba(0,0,0,0.3)', borderRadius: 16,
@@ -622,4 +777,146 @@ function formatFileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/**
+ * Renders an Excel workbook as a tabbed spreadsheet (Google Sheets look).
+ * The first row is treated as the header. Rows beyond 200 are hidden behind
+ * a "Show all" button to keep the initial render fast.
+ */
+function XlsxPreview({ sheets, activeSheet, onChangeSheet, showAll, onShowAll }) {
+  const sheet = sheets[activeSheet]
+  if (!sheet) return null
+  const allRows = sheet.data
+  const headerRow = allRows[0] || []
+  const bodyRows = showAll ? allRows.slice(1) : allRows.slice(1, 201)
+  const hasMore = allRows.length > 201
+
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 8, overflow: 'hidden' }}>
+      {/* Sheet tabs */}
+      {sheets.length > 1 && (
+        <div style={{ display: 'flex', overflowX: 'auto', background: '#f1f3f4', borderBottom: '1px solid #dadce0', flexShrink: 0 }}>
+          {sheets.map((s, i) => (
+            <button
+              key={i}
+              onClick={() => onChangeSheet(i)}
+              style={{
+                padding: '8px 18px', border: 'none', cursor: 'pointer', fontSize: 13,
+                background: i === activeSheet ? '#fff' : 'transparent',
+                color: i === activeSheet ? '#1a73e8' : '#5f6368',
+                fontWeight: i === activeSheet ? 600 : 400,
+                borderBottom: i === activeSheet ? '2px solid #1a73e8' : '2px solid transparent',
+                whiteSpace: 'nowrap', flexShrink: 0,
+              }}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Spreadsheet table */}
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        {allRows.length === 0 ? (
+          <p style={{ padding: 32, color: '#9aa0a6', textAlign: 'center', fontSize: 14 }}>Empty sheet</p>
+        ) : (
+          <>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: "'Segoe UI', Arial, sans-serif" }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
+                <tr>
+                  {/* Row-number gutter */}
+                  <th style={{ width: 40, background: '#f8f9fa', borderRight: '1px solid #e0e0e0', borderBottom: '2px solid #dadce0' }} />
+                  {headerRow.map((cell, ci) => (
+                    <th
+                      key={ci}
+                      style={{
+                        padding: '7px 10px', textAlign: 'left', fontWeight: 600,
+                        color: '#202124', background: '#f8f9fa',
+                        borderRight: '1px solid #e8eaed', borderBottom: '2px solid #dadce0',
+                        whiteSpace: 'nowrap', minWidth: 80,
+                      }}
+                    >
+                      {String(cell ?? '')}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {bodyRows.map((row, ri) => (
+                  <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#f8fffe' }}>
+                    <td style={{
+                      padding: '5px 8px', color: '#9aa0a6', fontSize: 11, textAlign: 'right',
+                      borderRight: '1px solid #e8eaed', borderBottom: '1px solid #f0f0f0',
+                      background: '#f8f9fa', userSelect: 'none',
+                    }}>
+                      {ri + 2}
+                    </td>
+                    {headerRow.map((_, ci) => (
+                      <td
+                        key={ci}
+                        title={String(row[ci] ?? '')}
+                        style={{
+                          padding: '5px 10px', color: '#202124',
+                          borderRight: '1px solid #f0f0f0', borderBottom: '1px solid #f0f0f0',
+                          whiteSpace: 'nowrap', maxWidth: 300,
+                          overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {String(row[ci] ?? '')}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!showAll && hasMore && (
+              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                <button
+                  onClick={onShowAll}
+                  style={{ background: '#f1f3f4', border: 'none', color: '#1a73e8', padding: '6px 18px', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+                >
+                  Show all {allRows.length - 1} rows
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Renders a Word document as a white-page layout using HTML converted by mammoth.
+ * mammoth output is sanitised (no scripts/iframes) so dangerouslySetInnerHTML is safe.
+ */
+function DocxPreview({ html }) {
+  return (
+    <div style={{ width: '100%', height: '100%', overflow: 'auto', background: '#e8eaed', padding: '24px 0' }}>
+      <div style={{
+        maxWidth: 816, margin: '0 auto 24px', background: '#fff',
+        padding: '72px 80px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08)',
+        minHeight: 400,
+      }}>
+        {/* Scoped styles for mammoth-generated HTML elements */}
+        <style>{`
+          .docx-content h1,.docx-content h2,.docx-content h3,.docx-content h4 { margin: 0.9em 0 0.4em; font-weight: 700; color: #202124; }
+          .docx-content h1 { font-size: 24px; } .docx-content h2 { font-size: 20px; } .docx-content h3 { font-size: 16px; }
+          .docx-content p { margin: 0.4em 0; }
+          .docx-content table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+          .docx-content td,.docx-content th { border: 1px solid #dadce0; padding: 6px 10px; }
+          .docx-content img { max-width: 100%; height: auto; }
+          .docx-content ul,.docx-content ol { padding-left: 24px; margin: 0.4em 0; }
+          .docx-content strong { font-weight: 700; } .docx-content em { font-style: italic; }
+        `}</style>
+        <div
+          className="docx-content"
+          style={{ lineHeight: 1.7, color: '#333', fontSize: 14, fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif" }}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      </div>
+    </div>
+  )
 }

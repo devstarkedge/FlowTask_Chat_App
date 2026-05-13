@@ -137,6 +137,7 @@ class FileUploadService {
       workspaceId,
       checksumHash,
       status: 'uploading',
+      metadata: { localPath: file.path }, // persisted for crash recovery
     });
 
     await asset.save();
@@ -245,7 +246,7 @@ class FileUploadService {
     try {
       const uploadOptions = {
         folder: asset.folderPath,
-        resource_type: asset.resourceType === 'raw' ? 'auto' : asset.resourceType,
+        resource_type: asset.resourceType, // explicit: 'image' | 'video' | 'raw'
         use_filename: true,
       };
 

@@ -3,6 +3,7 @@ import asyncHandler from '../../middleware/asyncHandler.js';
 import env from '../../config/environment.js';
 import FileAsset from './FileAsset.model.js';
 import { NotFoundError, ForbiddenError } from '../../middleware/errorHandler.js';
+import logger from '../../utils/logger.js';
 
 /**
  * Cloudinary Direct Upload Signing Endpoint.
@@ -64,14 +65,19 @@ export const proxyFileAsset = asyncHandler(async (req, res) => {
   const asset = await FileAsset.findById(assetId).lean();
   if (!asset) throw new NotFoundError('File');
 
-  // Workspace isolation — ensure the file belongs to the requester's workspace
+  // Workspace isolation
   if (!req.workspaceId || asset.workspaceId.toString() !== req.workspaceId.toString()) {
     throw new ForbiddenError('Access denied');
   }
 
+  // Guard: asset must be fully uploaded before we can proxy it
+  if (asset.status !== 'available') {
+    throw new NotFoundError('File is not yet available — upload may still be in progress');
+  }
+
   const storedUrl = asset.secureUrl;
 
-  // SSRF guard — only allow proxying Cloudinary CDN URLs
+  // SSRF guard — only proxy Cloudinary CDN URLs stored in the DB
   let parsedUrl;
   try {
     parsedUrl = new URL(storedUrl);
@@ -82,28 +88,50 @@ export const proxyFileAsset = asyncHandler(async (req, res) => {
     throw new ForbiddenError('Only Cloudinary CDN files can be proxied');
   }
 
-  // Parse resource_type and delivery type from the stored Cloudinary URL.
-  // URL format: https://res.cloudinary.com/<cloudName>/<resourceType>/<deliveryType>/...
-  // e.g. .../da7l03wjn/image/upload/v123.../folder/file.pdf
-  const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
-  // pathParts[0] = cloudName, pathParts[1] = resourceType, pathParts[2] = deliveryType
-  const cloudinaryResourceType = pathParts[1] || 'image'; // 'image' | 'video' | 'raw'
-  const deliveryType = pathParts[2] || 'upload';           // 'upload' | 'authenticated' | 'private'
-
-  // Generate a short-lived signed URL using the server's API secret.
-  // This bypasses Cloudinary account-level access restrictions that would
-  // otherwise cause 401/403 on direct CDN fetches.
-  const signedUrl = cloudinary.url(asset.publicId, {
-    resource_type: cloudinaryResourceType,
-    type: deliveryType,
-    sign_url: true,
-    secure: true,
-    expires_at: Math.floor(Date.now() / 1000) + 300, // 5-minute window
+  // Ensure Cloudinary SDK is configured with credentials
+  cloudinary.config({
+    cloud_name: env.CLOUDINARY_CLOUD_NAME,
+    api_key: env.CLOUDINARY_API_KEY,
+    api_secret: env.CLOUDINARY_API_SECRET,
   });
 
-  // Fetch the signed URL server-side
-  const upstream = await fetch(signedUrl);
+  // Parse resource_type and delivery type from stored URL.
+  // URL format: https://res.cloudinary.com/<cloudName>/<resourceType>/<deliveryType>/...
+  const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
+  const resourceType = pathParts[1] || 'image';  // image | video | raw
+  const deliveryType = pathParts[2] || 'upload'; // upload | authenticated | private
+
+  // File format needed for private_download_url
+  const nameParts = (asset.originalName || 'file').split('.');
+  const format = nameParts.length > 1 ? nameParts[nameParts.length - 1].toLowerCase() : '';
+
+  // Use private_download_url which generates a signed URL via the Cloudinary
+  // Management API (api.cloudinary.com). Unlike CDN URLs, this is always
+  // authenticated with your API key+secret and bypasses ALL account-level
+  // CDN access restrictions that would block direct res.cloudinary.com fetches.
+  const authDownloadUrl = cloudinary.utils.private_download_url(
+    asset.publicId,
+    format,
+    {
+      resource_type: resourceType,
+      type: deliveryType,
+      expires_at: Math.floor(Date.now() / 1000) + 300, // 5-minute window
+    },
+  );
+
+  logger.debug('Cloudinary proxy fetching', { assetId, resourceType, deliveryType, publicId: asset.publicId });
+
+  const upstream = await fetch(authDownloadUrl);
   if (!upstream.ok) {
+    const body = await upstream.text().catch(() => '');
+    logger.error('Cloudinary proxy upstream failed', {
+      assetId,
+      status: upstream.status,
+      publicId: asset.publicId,
+      resourceType,
+      deliveryType,
+      cloudinaryError: body.slice(0, 300),
+    });
     res.status(502).json({
       success: false,
       error: { message: `Upstream fetch failed: HTTP ${upstream.status}` },
@@ -124,15 +152,12 @@ export const proxyFileAsset = asyncHandler(async (req, res) => {
 
   // Stream body to client with back-pressure handling
   const reader = upstream.body.getReader();
-  const pump = async () => {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) { res.end(); return; }
-      const canContinue = res.write(Buffer.from(value));
-      if (!canContinue) {
-        await new Promise((resolve) => res.once('drain', resolve));
-      }
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) { res.end(); return; }
+    const canContinue = res.write(Buffer.from(value));
+    if (!canContinue) {
+      await new Promise((resolve) => res.once('drain', resolve));
     }
-  };
-  await pump();
+  }
 });

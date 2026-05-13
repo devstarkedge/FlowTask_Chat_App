@@ -678,6 +678,7 @@ export default function ChatLayout() {
   const togglePinnedPanel = useChatStore((s) => s.togglePinnedPanel);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [showAllThreads, setShowAllThreads] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
   const profileUser = useProfileStore((s) => s.profileUser);
   const [previewFile, setPreviewFile] = useState(null);
   const [previewFiles, setPreviewFiles] = useState([]);

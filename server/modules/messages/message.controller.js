@@ -664,7 +664,20 @@ export const updateSavedMessageReminder = asyncHandler(async (req, res) => {
   const { reminderAt, reminderDescription } = req.body;
 
   const updateData = { notificationSent: false, overdueNotificationSent: false }; // Reset notification flags when reminder is updated
-  if (reminderAt !== undefined) updateData.reminderAt = reminderAt ? new Date(reminderAt) : null;
+  if (reminderAt !== undefined) {
+    if (reminderAt) {
+      const schedDate = new Date(reminderAt);
+      if (isNaN(schedDate.getTime())) {
+        return res.status(400).json({ success: false, error: { message: 'Invalid reminderAt date' } });
+      }
+      if (schedDate <= new Date()) {
+        return res.status(400).json({ success: false, error: { message: 'Reminder time must be in the future' } });
+      }
+      updateData.reminderAt = schedDate;
+    } else {
+      updateData.reminderAt = null;
+    }
+  }
   if (reminderDescription !== undefined) updateData.reminderDescription = reminderDescription || '';
 
   // Try to find by messageId first, then by _id (for standalone reminders)
@@ -704,6 +717,10 @@ export const createStandaloneReminder = asyncHandler(async (req, res) => {
   const schedDate = new Date(reminderAt);
   if (isNaN(schedDate.getTime())) {
     return res.status(400).json({ success: false, error: { message: 'Invalid reminderAt date' } });
+  }
+
+  if (schedDate <= new Date()) {
+    return res.status(400).json({ success: false, error: { message: 'Reminder time must be in the future' } });
   }
 
   const reminder = await SavedMessage.createStandalone(req.user._id, req.workspaceId, {

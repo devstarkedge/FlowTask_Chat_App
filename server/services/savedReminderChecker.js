@@ -7,6 +7,30 @@ const POLL_INTERVAL_MS = 30_000; // 30s
 const BATCH_SIZE = 50;
 let intervalHandle = null;
 
+function calculateNextReminderAt(current, frequency) {
+  if (!frequency || frequency === 'none') return null;
+  const next = new Date(current);
+  const now = new Date();
+  
+  // Ensure the next occurrence is in the future
+  while (next <= now) {
+    switch (frequency) {
+      case 'daily':
+        next.setDate(next.getDate() + 1);
+        break;
+      case 'weekly':
+        next.setDate(next.getDate() + 7);
+        break;
+      case 'monthly':
+        next.setMonth(next.getMonth() + 1);
+        break;
+      default:
+        return null;
+    }
+  }
+  return next;
+}
+
 async function processDueReminders() {
   try {
     const now = new Date();
@@ -21,14 +45,37 @@ async function processDueReminders() {
 
     for (const saved of due) {
       try {
-        // Atomically mark this reminder as having its overdue notification sent
+        const nextAt = calculateNextReminderAt(saved.reminderAt, saved.recurrence);
+        
+        let updateData;
+        if (nextAt) {
+          // Recurring: Reschedule instead of marking as sent/overdue
+          updateData = { 
+            $set: { 
+              reminderAt: nextAt,
+              notificationSent: false,
+              overdueNotificationSent: false 
+            } 
+          };
+          logger.info(`[ReminderChecker] Rescheduling recurring reminder ${saved._id} to ${nextAt.toISOString()} (${saved.recurrence})`);
+        } else {
+          // One-time: Mark as sent
+          updateData = { 
+            $set: { 
+              overdueNotificationSent: true, 
+              notificationSent: true 
+            } 
+          };
+        }
+
+        // Atomically claim and update
         const claimed = await SavedMessage.findOneAndUpdate(
           { _id: saved._id, overdueNotificationSent: { $ne: true } },
-          { $set: { overdueNotificationSent: true, notificationSent: true } },
+          updateData,
           { new: true },
         );
 
-        if (!claimed) continue; // Already handled by another instance
+        if (!claimed) continue;
 
         const rawTitle = claimed.title || claimed.reminderDescription || 'Reminder';
         const rawBody = claimed.reminderDescription || 'Your reminder is now overdue';
@@ -42,7 +89,7 @@ async function processDueReminders() {
           type: claimed.channelId ? 'channel' : 'workspace',
         };
 
-        // Use the Notification Engine so deepLink, DND and push logic are applied
+        // Use the Notification Engine
         await notificationEngine.processSystemNotification({
           workspaceId: claimed.workspaceId,
           recipientId: claimed.userId,

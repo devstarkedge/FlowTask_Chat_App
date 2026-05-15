@@ -21,11 +21,13 @@ import {
   CheckCheck,
   Copy,
   Bookmark,
+  BookmarkCheck,
   Forward,
   Link2,
   MoreVertical,
   ChevronDown,
 } from "lucide-react";
+import { useLaterStore } from "../../stores/laterStore";
 import SlackFileCard from "./SlackFileCard";
 import { Avatar } from "./MemberAvatarGroup";
 import EmojiPicker from "./EmojiPicker";
@@ -138,6 +140,8 @@ const MessageItem = memo(
       unpinMessage,
       highlightMessageId,
     } = useChatStore();
+
+    const isSaved = useLaterStore((s) => s.savedMessageIds.has(message._id));
 
     const [showActions, setShowActions] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -630,17 +634,20 @@ const MessageItem = memo(
                 <ActionButton
                   icon={MessageSquare}
                   title="Reply in thread"
-                  onClick={() =>
+                  onClick={(e) => {
+                    e.preventDefault();
                     onOpenThread?.({
                       rootMessageId: message._id,
                       channelId: message.channelId,
-                    })
+                    })}
                   }
                 />
                 <ActionButton
-                  icon={Bookmark}
-                  title="Save message"
-                  onClick={() => {
+                  icon={isSaved ? BookmarkCheck : Bookmark}
+                  title={isSaved ? "Unsave message" : "Save message"}
+                  color={isSaved ? "var(--accent-primary)" : undefined}
+                  onClick={(e) => {
+                    e.preventDefault();
                     onSaveMessage?.(message._id);
                     setShowActions(false);
                   }}

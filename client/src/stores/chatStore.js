@@ -1394,6 +1394,11 @@ export const useChatStore = create((set, get) => ({
           alignItems: 'center',
         }
       }, createElement('div', { style: { fontWeight: 700 } }, text)), { duration: 5000 });
+    } else if (normalized.type === 'system') {
+      toast.success(normalized.title || 'Notification received', { 
+        duration: 3000,
+        icon: '🔔'
+      });
     }
   },
 

@@ -42,7 +42,7 @@ import KeyboardShortcutsModal from "../chat/KeyboardShortcutsModal";
 import SavedMessagesPanel from "../chat/SavedMessagesPanel";
 import PushNotificationPrompt from "../notifications/PushNotificationPrompt";
 import LaterPanel from "../chat/LaterPanel";
-import { useUIStore } from '../../stores/uiStore'
+import { useUIStore } from '../../stores/uiStore';
 import { useKeyboardShortcuts } from "../../utils/keyboardShortcuts";
 import { messageAPI, savedMessageAPI } from "../../services/api";
 import {
@@ -116,10 +116,6 @@ const LAYOUT_STYLES = `
   50%       { transform: translateY(-6px); }
 }
 
-/* ════════════════════════
-   GLOBAL TOP BAR
-   — matches the dark navy sidebar color (Image 2)
-════════════════════════ */
 .cl-topbar {
   height: 48px;
   display: grid;
@@ -127,8 +123,6 @@ const LAYOUT_STYLES = `
   align-items: center;
   gap: 12px;
   padding: 0 14px;
-  /* Use the same dark sidebar shade as the workspace rail so all three
-     top regions (rail + nav-sidebar header + topbar) read as one band */
   background: var(--sidebar-bg-dark, var(--surface-primary, var(--bg-primary)));
   border-bottom: 1px solid var(--sidebar-border-color, var(--border-color, var(--border-primary)));
   flex-shrink: 0;
@@ -217,7 +211,6 @@ const LAYOUT_STYLES = `
   animation: cl-scaleIn 200ms cubic-bezier(0.34,1.56,0.64,1);
 }
 
-/* Bell shake on new notification */
 .cl-topbar__action-btn.has-notif svg {
   animation: cl-bellShake 500ms ease;
 }
@@ -229,9 +222,6 @@ const LAYOUT_STYLES = `
   80%      { transform: rotate(6deg); }
 }
 
-/* ════════════════════════
-   LOADING SPINNER
-════════════════════════ */
 .cl-spinner {
   width: 32px; height: 32px;
   border: 3px solid var(--border-secondary, rgba(255,255,255,0.12));
@@ -240,9 +230,6 @@ const LAYOUT_STYLES = `
   animation: cl-spin 700ms linear infinite;
 }
 
-/* ════════════════════════
-   WELCOME SCREEN
-════════════════════════ */
 .cl-welcome {
   flex: 1;
   display: flex;
@@ -330,9 +317,6 @@ const LAYOUT_STYLES = `
 .cl-welcome__mobile-btn:hover { background: var(--bg-hover); transform: translateY(-1px); }
 @media (max-width: 768px) { .cl-welcome__mobile-btn { display: flex; } }
 
-/* ════════════════════════
-   EMPTY / SELECT PANES
-════════════════════════ */
 .cl-empty-pane {
   flex: 1;
   display: flex;
@@ -386,9 +370,6 @@ const LAYOUT_STYLES = `
 .cl-empty-pane__mobile-btn:hover { background: var(--bg-secondary); }
 @media (max-width: 768px) { .cl-empty-pane__mobile-btn { display: flex; } }
 
-/* ════════════════════════
-   PANE BREADCRUMB BAR
-════════════════════════ */
 .cl-breadcrumb-bar {
   display: flex;
   align-items: center;
@@ -426,9 +407,6 @@ const LAYOUT_STYLES = `
   text-overflow: ellipsis;
 }
 
-/* ════════════════════════
-   FILE ACTION BUTTONS
-════════════════════════ */
 .cl-file-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .cl-file-btn {
   display: inline-flex; align-items: center; gap: 5px;
@@ -457,9 +435,6 @@ const LAYOUT_STYLES = `
   box-shadow: 0 4px 14px color-mix(in srgb, var(--accent-color, var(--accent-primary)) 42%, transparent);
 }
 
-/* ════════════════════════
-   FILE PREVIEW AREA
-════════════════════════ */
 .cl-file-preview-shell {
   flex: 1;
   overflow: hidden;
@@ -543,9 +518,6 @@ const LAYOUT_STYLES = `
   margin: 0;
 }
 
-/* ════════════════════════
-   ACTIVITY PANE CONTEXT
-════════════════════════ */
 .cl-activity-context-bar {
   display: flex;
   align-items: center;
@@ -576,9 +548,6 @@ const LAYOUT_STYLES = `
   min-width: 0;
 }
 
-/* ════════════════════════
-   RESPONSIVE HELPERS
-════════════════════════ */
 @media (max-width: 768px) {
   .cl-topbar { grid-template-columns: auto 1fr auto; gap: 8px; padding: 0 10px; }
   .cl-file-actions { gap: 4px; }
@@ -739,6 +708,10 @@ export default function ChatLayout() {
     "/workspace/:workspaceId/files",
     location.pathname,
   );
+
+  // Detect the Later page route — when on this route, the Later Panel
+  // must NEVER be shown in the sidebar; LaterPage renders the full content.
+  const isLaterRoute = !!matchPath('/workspace/:workspaceId/later', location.pathname);
 
   const routeConversationId =
     channelMessageRoute?.params?.channelId ||
@@ -1302,6 +1275,91 @@ export default function ChatLayout() {
 
   const activeChannel = channels.find((c) => c._id === activeChannelId) || null;
   const activeWorkspacePanel = useUIStore((s) => s.activeWorkspacePanel);
+  const clearActiveWorkspacePanel = useUIStore((s) => s.clearActiveWorkspacePanel);
+
+  // When navigating to the Later page route, always clear the Later Panel
+  // so both never render at the same time.
+  useEffect(() => {
+    if (isLaterRoute && activeWorkspacePanel === 'later') {
+      clearActiveWorkspacePanel();
+    }
+  }, [isLaterRoute, activeWorkspacePanel, clearActiveWorkspacePanel]);
+
+  // Determine what to show in the left context sidebar.
+  // IMPORTANT: the Later Panel is ONLY shown when activeWorkspacePanel === 'later'
+  // AND we are NOT on the Later page route. On the Later page route, LaterPage
+  // renders as the main content via PAGE_ROUTES, and the sidebar shows
+  // the normal NavigationSidebar.
+  const showLaterPanelInSidebar = activeWorkspacePanel === 'later' && !isLaterRoute;
+
+  const renderContextSidebar = (isMobile = false) => {
+    const onJumpToMessage = (msg) => {
+      if (msg.channelId !== activeChannelId)
+        useChannelStore.getState().setActiveChannel(msg.channelId);
+      navigate(getChannelPath(workspaceId, msg.channelId, msg._id));
+      if (isMobile) setShowMobileSidebar(false);
+    };
+
+    if (showLaterPanelInSidebar) {
+      return (
+        <LaterPanel onJumpToMessage={onJumpToMessage} />
+      );
+    }
+
+    if (isActivityRoute) {
+      return (
+        <ActivityContextSidebar
+          selectedNotificationId={activityNotificationId}
+          onSelectNotification={(n) => {
+            handleSelectActivityNotification(n);
+            if (isMobile) setShowMobileSidebar(false);
+          }}
+          onAutoSelect={handleAutoSelectActivityNotification}
+        />
+      );
+    }
+
+    if (isFilesRoute) {
+      return (
+        <FilesContextSidebar
+          selectedFileId={filesSelectedFileId}
+          onSelectFile={(f) => {
+            handleSelectFileForModule(f);
+            if (isMobile) setShowMobileSidebar(false);
+          }}
+          onFilesChanged={setFilesForModule}
+        />
+      );
+    }
+
+    if (isToolsRoute) {
+      return <ToolsContextSidebar />;
+    }
+
+    return (
+      <NavigationSidebar
+        mode={isDMRoute ? "dms" : "home"}
+        onClose={isMobile ? () => setShowMobileSidebar(false) : undefined}
+        onToggleAllThreads={() => {
+          setShowAllThreads((s) => !s);
+          closeSearch();
+          setShowPins(false);
+          setShowNotifications(false);
+          setShowSaved(false);
+          useProfileStore.getState().closeProfile();
+          closeThread();
+        }}
+        onToggleNotifications={() => {
+          setShowNotifications((s) => !s);
+          setShowAllThreads(false);
+          closeSearch();
+          setShowPins(false);
+          useProfileStore.getState().closeProfile();
+          closeThread();
+        }}
+      />
+    );
+  };
 
   return (
     <div className="h-full flex" style={{ background: "var(--bg-primary)" }}>
@@ -1322,50 +1380,7 @@ export default function ChatLayout() {
         }}
       >
         <ErrorBoundary name="ContextSidebar" compact>
-          {isActivityRoute ? (
-            <ActivityContextSidebar
-              selectedNotificationId={activityNotificationId}
-              onSelectNotification={handleSelectActivityNotification}
-              onAutoSelect={handleAutoSelectActivityNotification}
-            />
-          ) : isFilesRoute ? (
-            <FilesContextSidebar
-              selectedFileId={filesSelectedFileId}
-              onSelectFile={handleSelectFileForModule}
-              onFilesChanged={setFilesForModule}
-            />
-          ) : isToolsRoute ? (
-            <ToolsContextSidebar />
-          ) : (matchPath('/workspace/:workspaceId/later', location.pathname) || activeWorkspacePanel === 'later') ? (
-            <LaterPanel
-              onJumpToMessage={(msg) => {
-                if (msg.channelId !== activeChannelId)
-                  useChannelStore.getState().setActiveChannel(msg.channelId);
-                navigate(getChannelPath(workspaceId, msg.channelId, msg._id));
-              }}
-            />
-          ) : (
-            <NavigationSidebar
-              mode={isDMRoute ? "dms" : "home"}
-              onToggleAllThreads={() => {
-                setShowAllThreads((s) => !s);
-                closeSearch();
-                setShowPins(false);
-                setShowNotifications(false);
-                setShowSaved(false);
-                useProfileStore.getState().closeProfile();
-                closeThread();
-              }}
-              onToggleNotifications={() => {
-                setShowNotifications((s) => !s);
-                setShowAllThreads(false);
-                closeSearch();
-                setShowPins(false);
-                useProfileStore.getState().closeProfile();
-                closeThread();
-              }}
-            />
-          )}
+          {renderContextSidebar(false)}
         </ErrorBoundary>
         <div
           className="sidebar-resize-handle"
@@ -1383,50 +1398,7 @@ export default function ChatLayout() {
           />
           <div className="sidebar-mobile">
             <ErrorBoundary name="ContextSidebar" compact>
-              {isActivityRoute ? (
-                <ActivityContextSidebar
-                  selectedNotificationId={activityNotificationId}
-                  onSelectNotification={(n) => {
-                    handleSelectActivityNotification(n);
-                    setShowMobileSidebar(false);
-                  }}
-                  onAutoSelect={handleAutoSelectActivityNotification}
-                />
-              ) : isFilesRoute ? (
-                <FilesContextSidebar
-                  selectedFileId={filesSelectedFileId}
-                  onSelectFile={(f) => {
-                    handleSelectFileForModule(f);
-                    setShowMobileSidebar(false);
-                  }}
-                  onFilesChanged={setFilesForModule}
-                />
-              ) : isToolsRoute ? (
-                <ToolsContextSidebar />
-              ) : (matchPath('/workspace/:workspaceId/later', location.pathname) || activeWorkspacePanel === 'later') ? (
-                <LaterPanel
-                  onJumpToMessage={(msg) => {
-                    if (msg.channelId !== activeChannelId)
-                      useChannelStore.getState().setActiveChannel(msg.channelId);
-                    navigate(getChannelPath(workspaceId, msg.channelId, msg._id));
-                    setShowMobileSidebar(false);
-                  }}
-                />
-              ) : (
-                <NavigationSidebar
-                  mode={isDMRoute ? "dms" : "home"}
-                  onClose={() => setShowMobileSidebar(false)}
-                  onToggleNotifications={() => {
-                    setShowNotifications((s) => !s);
-                    setShowMobileSidebar(false);
-                    setShowAllThreads(false);
-                    closeSearch();
-                    setShowPins(false);
-                    useProfileStore.getState().closeProfile();
-                    closeThread();
-                  }}
-                />
-              )}
+              {renderContextSidebar(true)}
             </ErrorBoundary>
           </div>
         </>
@@ -1488,6 +1460,7 @@ export default function ChatLayout() {
                     onOpenMobileSidebar={() => setShowMobileSidebar(true)}
                   />
                 );
+              // Check page routes — this includes /later which renders LaterPage
               const matchedEntry = Object.entries(PAGE_ROUTES).find(([key]) =>
                 matchPath(`/workspace/:workspaceId/${key}`, location.pathname),
               );
@@ -1555,9 +1528,7 @@ export default function ChatLayout() {
                   if (msg.channelId !== activeChannelId) {
                     useChannelStore.getState().setActiveChannel(msg.channelId);
                   }
-
                   navigate(getChannelPath(workspaceId, msg.channelId, msg._id));
-
                   setShowPins(false);
                 }}
               />

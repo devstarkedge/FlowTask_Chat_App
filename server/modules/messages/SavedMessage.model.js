@@ -67,6 +67,11 @@ const savedMessageSchema = new Schema({
     type: Boolean,
     default: false,
   },
+  recurrence: {
+    type: String,
+    enum: ['none', 'daily', 'weekly', 'monthly'],
+    default: 'none',
+  },
 }, {
   timestamps: true,
 });
@@ -102,6 +107,7 @@ savedMessageSchema.statics.createStandalone = async function (userId, workspaceI
     title: data.title,
     reminderAt: data.reminderAt,
     reminderDescription: data.reminderDescription || '',
+    recurrence: data.recurrence || 'none',
     channelId: data.channelId || null,
   });
 };

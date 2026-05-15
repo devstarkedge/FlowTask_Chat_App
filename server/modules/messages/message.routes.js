@@ -27,6 +27,7 @@ import {
   getScheduledMessages,
   cancelScheduledMessage,
   rescheduleMessage,
+  updateScheduledMessage,
   sendScheduledNow,
 } from './message.controller.js';
 import { protect, requireChannelAccess, requireMessageAccess } from '../auth/auth.middleware.js';
@@ -80,6 +81,7 @@ router.get('/saved', getSavedMessages);
 router.get('/scheduled', getScheduledMessages);
 router.delete('/scheduled/:id', cancelScheduledMessage);
 router.patch('/reschedule/:id', rescheduleMessage);
+router.patch('/scheduled/:id', updateScheduledMessage);
 router.post('/send-now/:id', sendScheduledNow);
 router.get('/:id', requireMessageAccess(), getMessage);
 router.put('/:id', requireMessageAccess(), validate({ body: editMessageSchema }), editMessage);

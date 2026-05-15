@@ -321,6 +321,7 @@ export const scheduledMessageAPI = {
   create: (channelId, data) => api.post(`/channels/${channelId}/scheduled-messages`, data),
   cancel: (id) => api.delete(`/messages/scheduled/${id}`),
   reschedule: (id, scheduledAt) => api.patch(`/messages/reschedule/${id}`, { scheduledAt }),
+  update: (id, data) => api.patch(`/messages/scheduled/${id}`, data),
   sendNow: (id) => api.post(`/messages/send-now/${id}`),
 }
 

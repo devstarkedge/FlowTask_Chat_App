@@ -3,22 +3,34 @@ import { Clock, PencilLine, ClockFading, Sparkles } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import DraftsSidebar from '../components/chat/DraftsSidebar'
 import ScheduledMessagesList from '../components/chat/ScheduledMessagesList'
-import { countWorkspaceDrafts, useDraftStore } from '../stores/draftStore'
+import { useDraftStore, countWorkspaceDrafts } from '../stores/draftStore'
 import { useUIStore } from '../stores/uiStore'
+import { useScheduledStore } from '../stores/scheduledStore'
+import { useLaterStore } from '../stores/laterStore'
 import './custom-css/laterPage.css'
 
 export default function LaterPage() {
   const { workspaceId } = useParams()
   const [activeTab, setActiveTab] = useState('drafts')
-  const [scheduledCount, setScheduledCount] = useState(0)
   const [animating, setAnimating] = useState(false)
   const [prevTab, setPrevTab] = useState(null)
   const contentRef = useRef(null)
+  
   const draftCount = useDraftStore((s) => countWorkspaceDrafts(s.drafts, workspaceId))
+  const scheduledCount = useScheduledStore((s) => s.scheduledCount || 0)
+  const fetchSaved = useLaterStore((s) => s.fetchSavedMessages)
 
   const activeLaterPage = useUIStore((s) => s.activeLaterPage)
   const setActiveLaterPage = useUIStore((s) => s.setActiveLaterPage)
   const clearActiveLaterPage = useUIStore((s) => s.clearActiveLaterPage)
+
+  // Fetch data on mount and when workspace changes
+  useEffect(() => {
+    fetchSaved()
+  }, [fetchSaved, workspaceId])
+
+  // Subscribe to store updates for real-time count changes
+  const savedCount = useLaterStore((s) => s.savedMessages?.length || 0)
 
   // Initialize tab from global UI intent (if any). Accept both 'sent' and 'scheduled'.
   useEffect(() => {
@@ -29,11 +41,20 @@ export default function LaterPage() {
       scheduled: 'scheduled',
     }
     const mapped = map[activeLaterPage] || activeLaterPage
-    if (mapped && mapped !== activeTab) setActiveTab(mapped)
+    if (mapped && mapped !== activeTab) {
+      setActiveTab(mapped)
+      // Immediately update the global state to reflect the current tab
+      setActiveLaterPage(mapped)
+    }
     // clear the intent after consuming it
     clearActiveLaterPage()
   // Intentionally only run when the external intent changes
   }, [activeLaterPage])
+
+  // Sync active tab to global UI store whenever it changes
+  useEffect(() => {
+    setActiveLaterPage(activeTab)
+  }, [activeTab, setActiveLaterPage])
 
   const TABS = [
     {
@@ -72,8 +93,6 @@ export default function LaterPage() {
         contentRef.current.style.transform = "translateY(0)";
       }
       setAnimating(false);
-      // reflect change in global UI store (so navigation intents stay in sync)
-      try { setActiveLaterPage(tabId) } catch (e) { /* ignore */ }
     }, 160);
   };
 
@@ -157,7 +176,7 @@ export default function LaterPage() {
         {activeTab === "drafts" ? (
           <DraftsSidebar />
         ) : (
-          <ScheduledMessagesList onCountChange={setScheduledCount} />
+          <ScheduledMessagesList />
         )}
       </div>
     </div>

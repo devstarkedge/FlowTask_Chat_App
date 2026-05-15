@@ -87,6 +87,11 @@ const SOCKET_EVENTS = {
   // Scheduled Messages
   SCHEDULED_MESSAGE_SENT: 'scheduledMessage:sent',
   SCHEDULED_MESSAGE_FAILED: 'scheduledMessage:failed',
+
+  // Saved Messages
+  SAVED_MESSAGE_ADDED: 'savedMessage:added',
+  SAVED_MESSAGE_REMOVED: 'savedMessage:removed',
+  SAVED_MESSAGE_STATUS_UPDATED: 'savedMessage:statusUpdated',
 }
 
 export function connectSocket() {
@@ -383,9 +388,9 @@ export function connectSocket() {
   socket.on(SOCKET_EVENTS.NOTIFICATION, ({ notification }) => {
     if (!notification) return
 
-    // Suppress notification if user is actively viewing the channel, except for overdue reminders
+    // Suppress notification if user is actively viewing the channel, except for overdue reminders or system notifications
     const activeChannelId = useChannelStore.getState().activeChannelId
-    if (notification.channelId && notification.channelId === activeChannelId && document.hasFocus() && notification.type !== 'reminder_overdue') {
+    if (notification.channelId && notification.channelId === activeChannelId && document.hasFocus() && !['reminder_overdue', 'system'].includes(notification.type)) {
       return
     }
     // Persist to notification store
@@ -412,7 +417,11 @@ export function connectSocket() {
   })
 
   // ─── Scheduled Message Events ────────────────────────────────────────
-  socket.on('scheduledMessage:sent', ({ scheduledMessageId, message }) => {
+  socket.on('scheduledMessage:sent', (payload) => {
+    const { scheduledMessageId, message } = payload
+    const { useScheduledStore } = require('../stores/scheduledStore')
+    useScheduledStore.getState().handleScheduledSent(payload)
+    
     // The scheduled message was sent successfully — add to chat if in the channel
     if (message) {
       useChatStore.getState().addMessage(message)
@@ -420,8 +429,47 @@ export function connectSocket() {
     logger.log('[Socket] Scheduled message sent:', scheduledMessageId)
   })
 
-  socket.on('scheduledMessage:failed', ({ scheduledMessageId, error }) => {
+  socket.on('scheduledMessage:failed', (payload) => {
+    const { scheduledMessageId, error } = payload
+    const { useScheduledStore } = require('../stores/scheduledStore')
+    useScheduledStore.getState().handleScheduledFailed(payload)
     logger.error('[Socket] Scheduled message failed:', scheduledMessageId, error)
+  })
+
+  socket.on('scheduledMessage:cancelled', (payload) => {
+    const { scheduledMessageId } = payload
+    const { useScheduledStore } = require('../stores/scheduledStore')
+    useScheduledStore.getState().handleScheduledCancelled(payload)
+    logger.log('[Socket] Scheduled message cancelled:', scheduledMessageId)
+  })
+
+  socket.on('scheduledMessage:deleted', (payload) => {
+    const { scheduledMessageId } = payload
+    const { useScheduledStore } = require('../stores/scheduledStore')
+    useScheduledStore.getState().handleScheduledCancelled(payload) // same logic
+    logger.log('[Socket] Scheduled message deleted:', scheduledMessageId)
+  })
+
+  // ─── Saved Message Events ────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.SAVED_MESSAGE_ADDED, ({ savedMessage }) => {
+    if (savedMessage) {
+      const { useLaterStore } = require('../stores/laterStore')
+      useLaterStore.getState().addSavedMessage(savedMessage)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.SAVED_MESSAGE_REMOVED, ({ messageId }) => {
+    if (messageId) {
+      const { useLaterStore } = require('../stores/laterStore')
+      useLaterStore.getState().removeSavedMessage(messageId)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.SAVED_MESSAGE_STATUS_UPDATED, ({ messageId, status }) => {
+    if (messageId && status) {
+      const { useLaterStore } = require('../stores/laterStore')
+      useLaterStore.getState().updateSavedMessageStatus(messageId, status)
+    }
   })
 
   // ─── Announcement Events ─────────────────────────────────────────────

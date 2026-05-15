@@ -601,6 +601,20 @@ export const toggleSaveMessage = asyncHandler(async (req, res) => {
     message.channelId,
     req.workspaceId,
   );
+
+  if (result.saved) {
+    const savedMsg = await SavedMessage.findOne({ userId: req.user._id, messageId: message._id })
+      .populate({
+        path: 'messageId',
+        populate: { path: 'authorId', select: 'name avatar' },
+      })
+      .populate('channelId', 'name type')
+      .lean();
+    emitToUser(req.user._id, SOCKET_EVENTS.SAVED_MESSAGE_ADDED, { savedMessage: savedMsg }, req.workspaceId);
+  } else {
+    emitToUser(req.user._id, SOCKET_EVENTS.SAVED_MESSAGE_REMOVED, { messageId: message._id }, req.workspaceId);
+  }
+
   res.json({ success: true, data: result });
 });
 
@@ -653,6 +667,9 @@ export const updateSavedMessageStatus = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, error: { message: 'Saved message not found' } });
   }
 
+  const messageId = saved.messageId || saved._id;
+  emitToUser(req.user._id, SOCKET_EVENTS.SAVED_MESSAGE_STATUS_UPDATED, { messageId, status }, req.workspaceId);
+
   res.json({ success: true, data: { saved } });
 });
 
@@ -661,9 +678,10 @@ export const updateSavedMessageStatus = asyncHandler(async (req, res) => {
  * Update reminder for a saved message by messageId or savedMessage _id.
  */
 export const updateSavedMessageReminder = asyncHandler(async (req, res) => {
-  const { reminderAt, reminderDescription } = req.body;
+  const { reminderAt, reminderDescription, recurrence } = req.body;
 
   const updateData = { notificationSent: false, overdueNotificationSent: false }; // Reset notification flags when reminder is updated
+  if (recurrence !== undefined) updateData.recurrence = recurrence;
   if (reminderAt !== undefined) {
     if (reminderAt) {
       const schedDate = new Date(reminderAt);
@@ -700,6 +718,46 @@ export const updateSavedMessageReminder = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, error: { message: 'Saved message not found' } });
   }
 
+  // Sync reminder update across devices
+  const populated = await SavedMessage.findById(saved._id)
+    .populate({
+      path: 'messageId',
+      populate: { path: 'authorId', select: 'name avatar' },
+    })
+    .populate('channelId', 'name type')
+    .lean();
+  emitToUser(req.user._id, SOCKET_EVENTS.SAVED_MESSAGE_ADDED, { savedMessage: populated }, req.workspaceId);
+
+  // Create activity notification for reminder
+  if (reminderAt) {
+    try {
+      const { default: notificationEngine } = await import('../../services/notificationEngine.js');
+      const { NOTIFICATION_TYPES } = await import('../../config/constants.js');
+      const reminderDate = new Date(reminderAt);
+      await notificationEngine.processSystemNotification({
+        workspaceId: req.workspaceId,
+        recipientId: req.user._id,
+        type: NOTIFICATION_TYPES.SYSTEM,
+        title: 'Reminder set',
+        body: `Reminder scheduled for ${reminderDate.toLocaleString()}`,
+        priority: 'low',
+        category: 'system',
+        channelId: saved.channelId || null,
+        channelName: null,
+        senderId: null,
+        senderName: null,
+        deepLink: {
+          workspaceId: req.workspaceId,
+          channelId: saved.channelId || null,
+          messageId: saved.messageId || null,
+          type: saved.channelId ? 'channel' : 'workspace',
+        },
+      });
+    } catch (notifErr) {
+      console.error('Failed to send reminder notification:', notifErr);
+    }
+  }
+
   res.json({ success: true, data: { saved } });
 });
 
@@ -708,7 +766,7 @@ export const updateSavedMessageReminder = asyncHandler(async (req, res) => {
  * Create a standalone reminder.
  */
 export const createStandaloneReminder = asyncHandler(async (req, res) => {
-  const { title, reminderAt, reminderDescription, channelId } = req.body;
+  const { title, reminderAt, reminderDescription, channelId, recurrence } = req.body;
 
   if (!title || !reminderAt) {
     return res.status(400).json({ success: false, error: { message: 'Title and reminderAt are required' } });
@@ -728,7 +786,40 @@ export const createStandaloneReminder = asyncHandler(async (req, res) => {
     reminderAt: schedDate,
     reminderDescription,
     channelId,
+    recurrence: recurrence || 'none',
   });
+
+  const populated = await SavedMessage.findById(reminder._id)
+    .populate('channelId', 'name type')
+    .lean();
+  emitToUser(req.user._id, SOCKET_EVENTS.SAVED_MESSAGE_ADDED, { savedMessage: populated }, req.workspaceId);
+
+  // Create activity notification for standalone reminder
+  try {
+    const { default: notificationEngine } = await import('../../services/notificationEngine.js');
+    const { NOTIFICATION_TYPES } = await import('../../config/constants.js');
+    await notificationEngine.processSystemNotification({
+      workspaceId: req.workspaceId,
+      recipientId: req.user._id,
+      type: NOTIFICATION_TYPES.SYSTEM,
+      title: 'Reminder created',
+      body: `Reminder "${title}" scheduled for ${schedDate.toLocaleString()}`,
+      priority: 'low',
+      category: 'system',
+      channelId: channelId || null,
+      channelName: null,
+      senderId: null,
+      senderName: null,
+      deepLink: {
+        workspaceId: req.workspaceId,
+        channelId: channelId || null,
+        messageId: null,
+        type: channelId ? 'channel' : 'workspace',
+      },
+    });
+  } catch (notifErr) {
+    console.error('Failed to send standalone reminder notification:', notifErr);
+  }
 
   res.status(201).json({ success: true, data: { reminder } });
 });
@@ -813,7 +904,9 @@ export const getScheduledMessages = asyncHandler(async (req, res) => {
     authorId: req.user._id,
     workspaceId: req.workspaceId,
     status: "pending",
-  }).sort({ scheduledAt: 1 });
+  })
+    .populate("authorId", "name avatar")
+    .sort({ scheduledAt: 1 });
 
   res.json({ success: true, data: { messages } });
 });
@@ -872,6 +965,48 @@ export const rescheduleMessage = asyncHandler(async (req, res) => {
 
   if (!scheduled) {
     return res.status(404).json({ success: false, error: { message: 'Scheduled message not found or already sent' } });
+  }
+
+  res.json({ success: true, data: { scheduledMessage: scheduled } });
+});
+
+/**
+ * PATCH /api/chat/messages/scheduled/:id
+ * Update a pending scheduled message (content, attachments, etc).
+ */
+export const updateScheduledMessage = asyncHandler(async (req, res) => {
+  const { content, htmlContent, attachments, mentions, scheduledAt } = req.body;
+
+  const updateData = {};
+  if (content !== undefined) updateData.content = content;
+  if (htmlContent !== undefined) updateData.htmlContent = htmlContent || content;
+  if (attachments !== undefined) updateData.attachments = attachments;
+  if (scheduledAt !== undefined) updateData.scheduledAt = new Date(scheduledAt);
+
+  if (mentions !== undefined) {
+    updateData.mentions = (mentions || []).map((m) => ({
+      targetId: m.userId || m.targetId,
+      name: m.username || m.name || "",
+      type: m.type || "user",
+    }));
+  }
+
+  const scheduled = await ScheduledMessage.findOneAndUpdate(
+    {
+      _id: req.params.id,
+      authorId: req.user._id,
+      workspaceId: req.workspaceId,
+      status: "pending",
+    },
+    { $set: updateData },
+    { returnDocument: "after" },
+  ).populate("authorId", "name avatar");
+
+  if (!scheduled) {
+    return res.status(404).json({
+      success: false,
+      error: { message: "Scheduled message not found or already sent" },
+    });
   }
 
   res.json({ success: true, data: { scheduledMessage: scheduled } });

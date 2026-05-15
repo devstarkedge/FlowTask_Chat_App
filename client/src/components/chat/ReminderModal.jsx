@@ -37,6 +37,7 @@ export default function ReminderModal({ saved, onClose, isStandalone = false }) 
   const [date, setDate]                 = useState(saved?.reminderAt ? new Date(saved.reminderAt).toISOString().split('T')[0] : '');
   const [time, setTime]                 = useState(saved?.reminderAt ? new Date(saved.reminderAt).toTimeString().slice(0, 5) : '');
   const [description, setDescription]   = useState(saved?.reminderDescription || '');
+  const [recurrence,   setRecurrence]    = useState(saved?.recurrence || 'none');
   const [saving, setSaving]             = useState(false);
   const [activeQuick, setActiveQuick]   = useState(null);
 
@@ -90,6 +91,7 @@ export default function ReminderModal({ saved, onClose, isStandalone = false }) 
           title: title.trim(),
           reminderAt: reminderAt.toISOString(),
           reminderDescription: description,
+          recurrence,
         });
       } else {
         // Use saved._id for standalone reminders, messageId._id for saved messages
@@ -97,6 +99,7 @@ export default function ReminderModal({ saved, onClose, isStandalone = false }) 
         await updateReminder(id, {
           reminderAt: reminderAt.toISOString(),
           reminderDescription: description,
+          recurrence,
         });
       }
       onClose();
@@ -315,7 +318,6 @@ export default function ReminderModal({ saved, onClose, isStandalone = false }) 
               </div>
             </div>
 
-            {/* Time */}
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6, letterSpacing: '-0.01em' }}>
                 Time
@@ -331,6 +333,33 @@ export default function ReminderModal({ saved, onClose, isStandalone = false }) 
                   onBlur={blurInput}
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Recurrence / Repeat */}
+          <div>
+            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6, letterSpacing: '-0.01em' }}>
+              Repeat
+            </label>
+            <div style={{ position: 'relative' }}>
+              <Clock size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', opacity: 0.7 }} />
+              <select
+                value={recurrence}
+                onChange={e => setRecurrence(e.target.value)}
+                style={{
+                  ...inputStyle,
+                  cursor: 'pointer',
+                  appearance: 'none',
+                }}
+                onFocus={focusInput}
+                onBlur={blurInput}
+              >
+                <option value="none">One Time</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+              <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: 10 }}>▼</div>
             </div>
           </div>
 

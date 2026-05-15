@@ -149,7 +149,9 @@ export default function SavedMessagesPanel({ onClose, onJumpToMessage }) {
   const [filter, setFilter] = useState('all') // 'all' | 'text' | 'media'
   const searchRef = useRef(null)
 
-  /* fetch */
+  /* fetch - also subscribe to store updates */
+  const laterStore = useLaterStore()
+  
   useEffect(() => {
     let cancelled = false
     async function fetch() {
@@ -166,6 +168,15 @@ export default function SavedMessagesPanel({ onClose, onJumpToMessage }) {
     }
     fetch()
     return () => { cancelled = true }
+  }, [])
+
+  // Subscribe to store updates for real-time changes
+  useEffect(() => {
+    const unsubscribe = useLaterStore.subscribe((state) => {
+      // Update local state when store changes
+      setSavedMessages(state.savedMessages)
+    })
+    return unsubscribe
   }, [])
 
   /* unsave */
@@ -437,7 +448,7 @@ export default function SavedMessagesPanel({ onClose, onJumpToMessage }) {
           margin-bottom: 6px;
           border-radius: 12px;
           border: 1px solid var(--border-primary);
-          background: var(--surface-secondary, var(--bg-secondary));
+          background: var(--surface-primary, #ffffff);
           cursor: pointer;
           overflow: hidden;
           outline: none;

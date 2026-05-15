@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useChannelStore } from "../../stores/channelStore";
+import { useScheduledStore } from "../../stores/scheduledStore";
 import { scheduledMessageAPI } from "../../services/api";
 import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
 import {
@@ -17,7 +18,6 @@ import {
   CheckCircle,
   Hash,
   MessageSquare,
-  Zap,
   ClockFading,
   CalendarClock,
   Timer,
@@ -215,7 +215,7 @@ function MessageCard({
         >
           {isLoading
             ? <Loader2 size={13} className="sml-spin" />
-            : <Zap size={13} />
+            : <Send size={13} />
           }
         </button>
         <button
@@ -243,6 +243,7 @@ function MessageCard({
 export default function ScheduledMessagesList({ onCountChange } = {}) {
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const channels          = useChannelStore((s) => s.channels);
+  const setScheduledCount = useScheduledStore((s) => s.setScheduledCount);
   const navigate          = useNavigate();
 
   const [messages,      setMessages]      = useState([]);
@@ -264,6 +265,7 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
       const items = data?.data?.messages || [];
       const arr = Array.isArray(items) ? items : [];
       setMessages(arr);
+      setScheduledCount(arr.length);
       onCountChange?.(arr.length);
     } catch {
       // silent
@@ -284,6 +286,7 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
       animateRemove(scheduledMessageId, () => {
         setMessages((prev) => {
           const next = prev.filter((m) => m._id !== scheduledMessageId);
+          setScheduledCount(next.length);
           onCountChange?.(next.length);
           return next;
         });
@@ -318,6 +321,7 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
       animateRemove(id, () => {
         setMessages((prev) => {
           const next = prev.filter((m) => m._id !== id);
+          setScheduledCount(next.length);
           onCountChange?.(next.length);
           return next;
         });
@@ -338,6 +342,7 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
       animateRemove(id, () => {
         setMessages((prev) => {
           const next = prev.filter((m) => m._id !== id);
+          setScheduledCount(next.length);
           onCountChange?.(next.length);
           return next;
         });

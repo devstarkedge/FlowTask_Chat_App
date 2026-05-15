@@ -1,9 +1,11 @@
-import { useState, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useState, useMemo, useEffect } from "react";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useChannelStore } from "../../stores/channelStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useLaterStore } from '../../stores/laterStore';
+import { useScheduledStore } from '../../stores/scheduledStore';
 import {
   Hash,
   Lock,
@@ -20,6 +22,7 @@ import {
   Radio,
   AppWindow,
   BookMarked,
+  Clock,
 } from "lucide-react";
 import { Avatar } from "../chat/MemberAvatarGroup";
 import CreateChannelModal from "../chat/CreateChannelModal";
@@ -36,13 +39,13 @@ import {
   getDMPath,
   getDirectoriesPath,
 } from "../../utils/chatRoutes";
-import { useDraftStore } from "../../stores/draftStore";
+import { useDraftStore, countWorkspaceDrafts } from "../../stores/draftStore";
 import { isContentEmpty } from "../../utils/draftUtils";
 import SidebarContainer from "./sidebar/SidebarContainer";
 import SidebarItem from "./sidebar/SidebarItem";
 import SidebarSection from "./sidebar/SidebarSection";
 import api from "../../services/api";
-import { useUIStore } from '../../stores/uiStore'
+import { useUIStore } from '../../stores/uiStore';
 
 const CHANNEL_ICONS = {
   project: Hash,
@@ -62,6 +65,7 @@ export default function NavigationSidebar({
   onToggleNotifications,
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { workspaceId } = useParams();
   const { channels, activeChannelId, setActiveChannel, unreads, createDM } =
     useChannelStore();
@@ -70,6 +74,10 @@ export default function NavigationSidebar({
   const { switchWorkspace } = useWorkspaceStore();
   const drafts = useDraftStore((s) => s.drafts);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+
+  const activeWorkspacePanel = useUIStore((s) => s.activeWorkspacePanel);
+  // Check if we're on the Later page or have the Later panel open to avoid conflicting highlighting
+  const isLaterPage = location.pathname.includes('/later') || activeWorkspacePanel === 'later';
 
   const hasDraft = (channelId) => {
     const key = `${activeWorkspaceId}:${channelId}:root`;
@@ -139,23 +147,21 @@ export default function NavigationSidebar({
           participants.find((p) => p && !selfIds.has(p)) ||
           null;
 
-        // Extract DM participant names and filter out current user
-        let displayName = c.name
+        let displayName = c.name;
         if (c.dmParticipantNames && Array.isArray(c.dmParticipantNames)) {
           const otherNames = c.dmParticipantNames.filter(name => {
-            const userName = user?.name || ''
-            return name !== userName
-          })
+            const userName = user?.name || '';
+            return name !== userName;
+          });
           if (otherNames.length > 0) {
-            displayName = otherNames.join(', ')
+            displayName = otherNames.join(', ');
           }
         } else if (c.name && c.name.includes(',')) {
-          // Fallback: parse comma-separated names
-          const names = c.name.split(',').map(n => n.trim())
-          const userName = user?.name || ''
-          const otherNames = names.filter(name => name !== userName)
+          const names = c.name.split(',').map(n => n.trim());
+          const userName = user?.name || '';
+          const otherNames = names.filter(name => name !== userName);
           if (otherNames.length > 0) {
-            displayName = otherNames.join(', ')
+            displayName = otherNames.join(', ');
           }
         }
 
@@ -186,11 +192,15 @@ export default function NavigationSidebar({
   };
 
   const handleSelectChannel = (channelId) => {
+    // Don't proceed if we're on the Later page - user needs to explicitly navigate away
+    if (isLaterPage) {
+      useUIStore.getState().clearActiveLaterPage();
+    }
+
     const channel = channels.find((c) => c._id === channelId);
     setActiveChannel(channelId);
 
-    // Close any workspace-level panel (e.g. Later) when user navigates to a channel
-    useUIStore.getState().clearActiveWorkspacePanel()
+    useUIStore.getState().clearActiveWorkspacePanel();
 
     if (workspaceId && channel) {
       const nextPath =
@@ -235,11 +245,14 @@ export default function NavigationSidebar({
     }
   };
 
+  // Combined count: drafts + scheduled messages
+  const scheduledCount = useScheduledStore((s) => s.getScheduledCount());
+  const workspaceDraftCount = useDraftStore((s) => countWorkspaceDrafts(s.drafts, workspaceId));
+  const laterTotalCount = workspaceDraftCount + scheduledCount;
+
   const header = (
     <>
-      <div
-        className="w-full flex items-center justify-between"
-      >
+      <div className="w-full flex items-center justify-between">
         <WorkspaceSwitcher
           onOpenCreate={() => setShowCreateWorkspace(true)}
           onOpenJoin={() => setShowJoinWorkspace(true)}
@@ -266,7 +279,6 @@ export default function NavigationSidebar({
   return (
     <>
       <SidebarContainer header={header} aria-label="Channels sidebar">
-
         {/* ── Quick Nav Items (Home mode only) ── */}
         {!isDMMode && (
           <div className="pt-2 pb-1">
@@ -275,14 +287,20 @@ export default function NavigationSidebar({
               label="Threads"
               onClick={() => onToggleAllThreads?.()}
             />
+            {/* Drafts & Scheduled — navigates to Later Page only, never opens panel */}
             <NavButton
-              icon={Send}
-              label="Drafts & Sent"
+              icon={Clock}
+              label="Drafts & Scheduled"
+              badge={laterTotalCount}
               onClick={() => {
-                // ensure Later page opens to the Drafts tab by default
-                useUIStore.getState().setActiveLaterPage('drafts');
+                // Ensure the Later Panel is never opened — clear it first
                 useUIStore.getState().clearActiveWorkspacePanel();
+                // Set the correct default tab
+                useUIStore.getState().setActiveLaterPage(
+                  workspaceDraftCount > 0 ? 'drafts' : 'scheduled'
+                );
                 navigate(`/workspace/${workspaceId}/later`);
+                onClose?.();
               }}
             />
             <NavButton
@@ -306,7 +324,7 @@ export default function NavigationSidebar({
                 <ChannelListItem
                   key={channel._id}
                   channel={channel}
-                  isActive={channel._id === activeChannelId}
+                  isActive={!isLaterPage && channel._id === activeChannelId}
                   unread={unreads[channel._id] || 0}
                   onClick={() => handleSelectChannel(channel._id)}
                   onlineUsers={onlineUsers}
@@ -336,7 +354,7 @@ export default function NavigationSidebar({
                 <ChannelListItem
                   key={channel._id}
                   channel={channel}
-                  isActive={channel._id === activeChannelId}
+                  isActive={!isLaterPage && channel._id === activeChannelId}
                   unread={unreads[channel._id] || 0}
                   onClick={() => handleSelectChannel(channel._id)}
                   onlineUsers={onlineUsers}
@@ -366,7 +384,7 @@ export default function NavigationSidebar({
                 <ChannelListItem
                   key={channel._id}
                   channel={channel}
-                  isActive={channel._id === activeChannelId}
+                  isActive={!isLaterPage && channel._id === activeChannelId}
                   unread={unreads[channel._id] || 0}
                   onClick={() => handleSelectChannel(channel._id)}
                   onlineUsers={onlineUsers}
@@ -390,7 +408,7 @@ export default function NavigationSidebar({
             <SavedMessagesItem
               user={user}
               channel={selfChannel}
-              isActive={selfChannel?._id === activeChannelId}
+              isActive={!isLaterPage && selfChannel?._id === activeChannelId}
               unread={selfChannel ? unreads[selfChannel._id] || 0 : 0}
               isLoading={selfDmLoading}
               hasDraft={selfChannel ? hasDraft(selfChannel._id) : false}
@@ -408,7 +426,7 @@ export default function NavigationSidebar({
               <DMListItem
                 key={channel._id}
                 channel={channel}
-                isActive={channel._id === activeChannelId}
+                isActive={!isLaterPage && channel._id === activeChannelId}
                 unread={unreads[channel._id] || 0}
                 onClick={() => handleSelectChannel(channel._id)}
                 onlineUsers={onlineUsers}

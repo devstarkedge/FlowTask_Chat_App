@@ -5,6 +5,7 @@ import { Avatar } from './MemberAvatarGroup'
 import { sanitizeHtml } from '../../utils/sanitize'
 import { savedMessageAPI } from '../../services/api'
 import toast from 'react-hot-toast'
+import { useDeleteConfirm } from '../../hooks/useDeleteConfirm'
 
 /* ─── helpers ─────────────────────────────────────────────────────────── */
 function groupByDate(messages) {
@@ -151,6 +152,7 @@ export default function SavedMessagesPanel({ onClose, onJumpToMessage }) {
 
   /* fetch - also subscribe to store updates */
   const laterStore = useLaterStore()
+  const { confirm } = useDeleteConfirm()
   
   useEffect(() => {
     let cancelled = false
@@ -182,6 +184,12 @@ export default function SavedMessagesPanel({ onClose, onJumpToMessage }) {
   /* unsave */
   const handleUnsave = useCallback(async (messageId) => {
     if (unsavingIds.has(messageId)) return
+    const ok = await confirm({
+      title: 'Remove bookmark',
+      message: 'This message will be removed from your saved items.',
+      confirmLabel: 'Remove',
+    })
+    if (!ok) return
     setUnsavingIds((prev) => new Set(prev).add(messageId))
     try {
       await savedMessageAPI.toggle(messageId)
@@ -192,7 +200,7 @@ export default function SavedMessagesPanel({ onClose, onJumpToMessage }) {
     } finally {
       setUnsavingIds((prev) => { const n = new Set(prev); n.delete(messageId); return n })
     }
-  }, [unsavingIds])
+  }, [unsavingIds, confirm])
 
   /* filter + search */
   const filtered = savedMessages.filter((saved) => {

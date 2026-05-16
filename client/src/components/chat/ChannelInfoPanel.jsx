@@ -9,7 +9,6 @@ import {
   LogOut,
   Info,
   Globe,
-  AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import MemberItem from "./MemberItem";
@@ -17,98 +16,10 @@ import { useChannelStore } from "../../stores/channelStore";
 import { useAuthStore } from "../../stores/authStore";
 import EditChannelModal from "./EditChannelModal";
 import AddMemberModal from "./AddMemberModal";
+import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import "./custom-css/channelInfoPanel.css";
 
-/* ─────────────────────────────────────────────
-   Inline confirmation dialog (no extra library)
-───────────────────────────────────────────── */
-function ConfirmDialog({ title, message, confirmLabel = "Confirm", confirmClassName = "btn-danger", onConfirm, onCancel }) {
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "rgba(0,0,0,0.55)",
-        backdropFilter: "blur(3px)",
-      }}
-      onClick={onCancel}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: "var(--bg-secondary, #1e1f22)",
-          border: "1px solid var(--border-primary, #3a3b3d)",
-          borderRadius: "var(--radius-lg, 12px)",
-          padding: "24px",
-          minWidth: 320,
-          maxWidth: 400,
-          boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
-        }}
-      >
-        {/* Icon + title */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: "50%",
-              background: "rgba(237,66,69,0.15)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            <AlertTriangle size={18} style={{ color: "var(--status-error, #ed4245)" }} />
-          </div>
-          <span
-            style={{
-              fontSize: 15,
-              fontWeight: 700,
-              color: "var(--text-white, #fff)",
-            }}
-          >
-            {title}
-          </span>
-        </div>
 
-        {/* Message */}
-        <p
-          style={{
-            fontSize: 13,
-            color: "var(--text-secondary, #b5bac1)",
-            lineHeight: 1.55,
-            marginBottom: 20,
-          }}
-        >
-          {message}
-        </p>
-
-        {/* Actions */}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button
-            onClick={onCancel}
-            className="btn-ghost"
-            style={{ fontSize: 13, padding: "7px 16px" }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className={confirmClassName}
-            style={{ fontSize: 13, padding: "7px 16px" }}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ─────────────────────────────────────────────
    Main component
@@ -122,9 +33,9 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
     leaveChannel,
   } = useChannelStore();
   const { user } = useAuthStore();
+  const { confirm } = useDeleteConfirm();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [confirm, setConfirm] = useState(null);
 
   if (!channel) return null;
 
@@ -176,75 +87,46 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
     return name
   }, [channel, isDM, user])
 
-  /* ── ask for confirmation ── */
-  const askRemove = (memberId, memberName) =>
-    setConfirm({ type: "remove", memberId, memberName });
-
-  const askLeave = () =>
-    setConfirm({ type: "leave" });
-
-  /* ── confirmed: actually do it ── */
-  const handleConfirm = async () => {
-    const action = confirm;
-    setConfirm(null); // close dialog first
-
-    if (!action) return;
-
-    if (action.type === "remove") {
-      try {
-        await toast.promise(removeMember(channel._id, action.memberId), {
-          loading: "Removing member…",
-          success: `${action.memberName || "Member"} removed`,
-          error: "Failed to remove member",
-        });
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    if (action.type === "leave") {
-      try {
-        await toast.promise(leaveChannel(channel._id), {
-          loading: "Leaving channel…",
-          success: "You left the channel",
-          error: "Failed to leave channel",
-        });
-        setShowInfoPanel(false);
-      } catch (err) {
-        console.error(err);
-      }
+  /* ── ask for confirmation then act ── */
+  const askRemove = async (memberId, memberName) => {
+    const ok = await confirm({
+      title: 'Remove member',
+      message: `${memberName || 'This member'} will lose access to #${channel.name}.`,
+      confirmLabel: 'Remove',
+    });
+    if (!ok) return;
+    try {
+      await toast.promise(removeMember(channel._id, memberId), {
+        loading: 'Removing member…',
+        success: `${memberName || 'Member'} removed`,
+        error: 'Failed to remove member',
+      });
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  const handleCancel = () => setConfirm(null);
-
-  /* ── confirm dialog props ── */
-  const confirmProps = confirm
-    ? confirm.type === "remove"
-      ? {
-          title: "Remove Member",
-          message: `Are you sure you want to remove ${confirm.memberName || "this member"} from #${channel.name}? They will lose access to this channel.`,
-          confirmLabel: "Remove",
-          confirmClassName: "btn-danger",
-        }
-      : {
-          title: "Leave Channel",
-          message: `Are you sure you want to leave #${channel.name}? You will need to be re-added to rejoin.`,
-          confirmLabel: "Leave",
-          confirmClassName: "btn-danger",
-        }
-    : null;
+  const askLeave = async () => {
+    const ok = await confirm({
+      title: 'Leave channel',
+      message: `You will need to be re-added to rejoin #${channel.name}.`,
+      confirmLabel: 'Leave',
+    });
+    if (!ok) return;
+    try {
+      await toast.promise(leaveChannel(channel._id), {
+        loading: 'Leaving channel…',
+        success: 'You left the channel',
+        error: 'Failed to leave channel',
+      });
+      setShowInfoPanel(false);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   return (
     <>
-      {/* ── Confirmation dialog ── */}
-      {confirm && confirmProps && (
-        <ConfirmDialog
-          {...confirmProps}
-          onConfirm={handleConfirm}
-          onCancel={handleCancel}
-        />
-      )}
 
       {/* ── Root panel ── */}
       <div className="profile-panel cip-root" style={{ position: "relative" }}>

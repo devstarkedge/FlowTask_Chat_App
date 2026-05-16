@@ -34,12 +34,15 @@ function calculateNextReminderAt(current, frequency) {
 async function processDueReminders() {
   try {
     const now = new Date();
+    logger.debug('[ReminderChecker] Checking for due reminders', { now: now.toISOString() });
 
     const due = await SavedMessage.find({
       reminderAt: { $lte: now },
       status: 'in_progress',
       overdueNotificationSent: { $ne: true },
     }).limit(BATCH_SIZE).lean();
+
+    logger.info('[ReminderChecker] Found due reminders', { count: due.length });
 
     if (!due || due.length === 0) return;
 
@@ -96,13 +99,14 @@ async function processDueReminders() {
           type: NOTIFICATION_TYPES.REMINDER_OVERDUE,
           title: `Reminder overdue: ${titleText}`,
           body: bodyText,
-          priority: 'medium',
+          priority: 'high',
           category: 'system',
           channelId: claimed.channelId || null,
           channelName: null,
           senderId: null,
           senderName: null,
           deepLink,
+          forceNotify: true,
         });
       } catch (err) {
         logger.error('SavedReminderChecker: failed processing saved reminder', { id: saved._id, error: err?.message || err });
@@ -115,6 +119,7 @@ async function processDueReminders() {
 
 export function startSavedReminderChecker() {
   if (intervalHandle) return;
+  logger.info('[ReminderChecker] Starting saved reminder checker', { intervalMs: POLL_INTERVAL_MS });
   // Run immediately, then poll on interval
   processDueReminders().catch(() => {});
   intervalHandle = setInterval(processDueReminders, POLL_INTERVAL_MS);

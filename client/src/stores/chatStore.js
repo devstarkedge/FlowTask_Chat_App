@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import logger from "../utils/logger";
 import { CHAT_FEATURE_FLAGS } from "../config/featureFlags";
 import MentionToast from "../components/notifications/MentionToast";
+import NotificationToast from "../components/notifications/NotificationToast";
 import { normalizeNotification } from "../utils/notificationFormat";
 import {
   loadChannelMessagesFromCache,
@@ -1071,6 +1072,82 @@ export const useChatStore = create((set, get) => ({
     });
   },
 
+  editThreadReply: async (messageId, content) => {
+    try {
+      const { data } = await messageAPI.edit(messageId, content);
+      const updated = data.data.message;
+      set((state) => {
+        // Find which root this reply belongs to
+        const rootId = state.threadRootByReplyId[messageId];
+        if (!rootId) return state;
+
+        const existing = state.threadRepliesByRoot[rootId] || [];
+        const nextReplies = existing.map((m) =>
+          m._id === messageId ? { ...m, ...updated, isEdited: true } : m,
+        );
+
+        return {
+          threadRepliesByRoot: {
+            ...state.threadRepliesByRoot,
+            [rootId]: nextReplies,
+          },
+          threadRepliesById: {
+            ...state.threadRepliesById,
+            [messageId]: {
+              ...(state.threadRepliesById[messageId] || {}),
+              ...updated,
+              isEdited: true,
+            },
+          },
+        };
+      });
+    } catch {
+      toast.error('Failed to edit message');
+    }
+  },
+
+  softDeleteThreadReply: (messageId) => {
+    set((state) => {
+      const rootId = state.threadRootByReplyId[messageId];
+      if (!rootId) return state;
+
+      const existing = state.threadRepliesByRoot[rootId] || [];
+      const deleted = {
+        isDeleted: true,
+        content: '',
+        htmlContent: '',
+        deletedAt: new Date().toISOString(),
+      };
+
+      const nextReplies = existing.map((m) =>
+        m._id === messageId ? { ...m, ...deleted } : m,
+      );
+
+      return {
+        threadRepliesByRoot: {
+          ...state.threadRepliesByRoot,
+          [rootId]: nextReplies,
+        },
+        threadRepliesById: {
+          ...state.threadRepliesById,
+          [messageId]: {
+            ...(state.threadRepliesById[messageId] || {}),
+            ...deleted,
+          },
+        },
+      };
+    });
+  },
+
+  deleteThreadReply: async (messageId) => {
+    try {
+      await messageAPI.delete(messageId);
+      get().softDeleteThreadReply(messageId);
+    } catch {
+      toast.error('Failed to delete message');
+    }
+  },
+
   markThreadReplyFailed: (tempId, rootMessageId) => {
     set((state) => {
       const resolvedRootId = rootMessageId || state.threadRootByReplyId[tempId];
@@ -1364,6 +1441,9 @@ export const useChatStore = create((set, get) => ({
   addNotification: (notification) => {
     const normalized = normalizeNotification(notification);
     if (!normalized) return;
+    // Prevent duplicate notifications in the same client session
+    const current = get();
+    if (current.notifications.some((n) => n._id === normalized._id)) return;
 
     set((state) => ({
       notifications: [normalized, ...state.notifications].slice(0, 50),
@@ -1376,25 +1456,31 @@ export const useChatStore = create((set, get) => ({
         },
       );
     } else if (normalized.type === 'reminder_overdue') {
-      const text = `Reminder overdue: “${normalized.title || normalized.messagePreview}”`;
-      toast.custom((t) => createElement('div', {
-        onClick: () => {
-          const workspaceId = normalized.deepLink?.workspaceId;
-          const target = workspaceId ? `/workspace/${workspaceId}/activity` : '/';
-          window.location.href = target;
-          toast.dismiss(t.id);
-        },
-        style: {
-          cursor: 'pointer',
-          padding: '10px 14px',
-          background: '#fff',
-          borderRadius: 8,
-          boxShadow: '0 8px 28px rgba(0,0,0,0.08)',
-          display: 'flex',
-          alignItems: 'center',
-        }
-      }, createElement('div', { style: { fontWeight: 700 } }, text)), { duration: 5000 });
-    } else if (normalized.type === 'system') {
+      toast.custom(
+        (t) => createElement(NotificationToast, {
+          notification: {
+            ...normalized,
+            senderName: 'Reminder',
+            senderAvatar: null,
+          },
+          onClick: () => {
+            const workspaceId = normalized.deepLink?.workspaceId;
+            const channelId = normalized.deepLink?.channelId;
+            const messageId = normalized.deepLink?.messageId;
+            
+            if (workspaceId && channelId && messageId) {
+              window.location.href = `/workspace/${workspaceId}/channel/${channelId}?message=${messageId}`;
+            } else if (workspaceId) {
+              window.location.href = `/workspace/${workspaceId}/later`;
+            }
+            toast.dismiss(t.id);
+          },
+          onDismiss: () => toast.dismiss(t.id),
+          playSound: true,
+        }),
+        { duration: 6000 },
+      );
+    } else if (normalized.type === 'system' || normalized.type === 'bot_alert') {
       toast.success(normalized.title || 'Notification received', { 
         duration: 3000,
         icon: '🔔'

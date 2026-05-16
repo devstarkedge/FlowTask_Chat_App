@@ -388,11 +388,14 @@ export function connectSocket() {
   socket.on(SOCKET_EVENTS.NOTIFICATION, ({ notification }) => {
     if (!notification) return
 
-    // Suppress notification if user is actively viewing the channel, except for overdue reminders or system notifications
+    // Suppress notification if user is actively viewing the channel, EXCEPT for critical system notifications
     const activeChannelId = useChannelStore.getState().activeChannelId
-    if (notification.channelId && notification.channelId === activeChannelId && document.hasFocus() && !['reminder_overdue', 'system'].includes(notification.type)) {
+    const isCriticalNotification = ['reminder_overdue', 'system', 'bot_alert'].includes(notification.type) || notification.priority === 'high'
+    
+    if (!isCriticalNotification && notification.channelId && notification.channelId === activeChannelId && document.hasFocus()) {
       return
     }
+    
     // Persist to notification store
     useNotificationStore.getState().addNotification(notification)
     // Also keep legacy in-memory notification for toast/badge

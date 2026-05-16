@@ -23,6 +23,7 @@ import {
   Timer,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 
 
 
@@ -255,6 +256,7 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
   const [actionLoading, setActionLoading] = useState(null);
   const [removingIds,   setRemovingIds]   = useState(new Set());
   const searchRef = useRef(null);
+  const { confirm } = useDeleteConfirm();
   
   /* ── Fetch ── */
   const fetchMessages = useCallback(async () => {
@@ -315,6 +317,12 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
   /* ── Actions ── */
   const handleCancel = async (e, id) => {
     e.stopPropagation();
+    const ok = await confirm({
+      title: 'Cancel scheduled message',
+      message: 'This scheduled message will be permanently cancelled and not sent.',
+      confirmLabel: 'Cancel message',
+    })
+    if (!ok) return
     setActionLoading(id);
     try {
       await scheduledMessageAPI.cancel(id);

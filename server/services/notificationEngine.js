@@ -348,21 +348,24 @@ class NotificationEngine {
     senderId = null,
     senderName = null,
     deepLink = null,
+    forceNotify = false,
   }) {
     try {
       const recipientIdStr = recipientId.toString();
 
-      // Check global preference
-      const prefs = await NotificationPreference.getOrCreate(recipientIdStr, workspaceId);
-      if (!prefs.global?.enabled) return null;
+      // Check global preference (unless forced)
+      if (!forceNotify) {
+        const prefs = await NotificationPreference.getOrCreate(recipientIdStr, workspaceId);
+        if (!prefs.global?.enabled) return null;
 
-      // Check bot preference
-      if (type === NOTIFICATION_TYPES.BOT_ALERT && !prefs.bots?.enabled) return null;
+        // Check bot preference
+        if (type === NOTIFICATION_TYPES.BOT_ALERT && !prefs.bots?.enabled) return null;
 
-      // Check pause (high-priority system notifications bypass pause)
-      if (priority !== NOTIFICATION_PRIORITIES.HIGH) {
-        const isPaused = await NotificationPreference.isPaused(recipientIdStr, workspaceId);
-        if (isPaused) return null;
+        // Check pause (high-priority system notifications bypass pause)
+        if (priority !== NOTIFICATION_PRIORITIES.HIGH) {
+          const isPaused = await NotificationPreference.isPaused(recipientIdStr, workspaceId);
+          if (isPaused) return null;
+        }
       }
 
       const notification = await Notification.create({
@@ -386,7 +389,7 @@ class NotificationEngine {
       // Send push for high/medium priority
       if (priority !== NOTIFICATION_PRIORITIES.LOW) {
         const recipient = await userRepository.findById(recipientIdStr);
-        this._sendPush(recipientIdStr, notification, recipient, prefs).catch(() => {});
+        this._sendPush(recipientIdStr, notification, recipient, forceNotify ? { global: { desktopPush: true, mobilePush: true } } : await NotificationPreference.getOrCreate(recipientIdStr, workspaceId)).catch(() => {});
       }
 
       return notification;

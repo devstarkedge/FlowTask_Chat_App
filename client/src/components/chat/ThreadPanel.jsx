@@ -1,7 +1,13 @@
-import { useEffect, useRef, useCallback, useMemo } from 'react'
+import { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import { useChatStore } from '../../stores/chatStore'
+import { useAuthStore } from '../../stores/authStore'
+import { useLaterStore } from '../../stores/laterStore'
 import MessageInput from './MessageInput'
-import { X, MessageSquare, SlidersHorizontal, MoreHorizontal, Download, ChevronDown } from 'lucide-react'
+import {
+  X, MessageSquare, Download,
+  Smile, Edit, Trash2, Copy, Bookmark,
+  BookmarkCheck, Forward, Link2, MoreVertical, Pin,
+} from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
 import { format } from 'date-fns'
 import { sanitizeHtml } from '../../utils/sanitize'
@@ -9,11 +15,101 @@ import { CHAT_FEATURE_FLAGS } from '../../config/featureFlags'
 import SlackFileCard from './SlackFileCard'
 import { handleDownload } from '../../utils/handleDownload'
 import { openPreview } from '../../services/previewService'
+import EmojiPicker from './EmojiPicker'
+import toast from 'react-hot-toast'
+import { useDeleteConfirm } from '../../hooks/useDeleteConfirm'
 
 const EMPTY_LIST = []
+const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000 // 10 minutes
+
+/* ─── ActionButton (identical to MessageItem's) ───────────────────────────── */
+function ActionButton({ icon: Icon, title, onClick, danger, color, size = 15 }) {
+  const [ripple, setRipple] = useState(null)
+  const handleClick = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setRipple({ x: e.clientX - rect.left, y: e.clientY - rect.top, id: Date.now() })
+    setTimeout(() => setRipple(null), 500)
+    onClick?.(e)
+  }
+  return (
+    <button
+      className={`ab-btn ${danger ? 'danger' : 'normal'}`}
+      onClick={handleClick}
+      title={title}
+      aria-label={title}
+      style={{ color: color || (danger ? 'var(--accent-red, #e5534b)' : 'var(--text-secondary)') }}
+    >
+      {ripple && (
+        <span
+          key={ripple.id}
+          className="ab-ripple-circle"
+          style={{
+            left: ripple.x - 12,
+            top: ripple.y - 12,
+            background: danger
+              ? 'color-mix(in srgb, var(--accent-red, #e5534b) 40%, transparent)'
+              : 'color-mix(in srgb, var(--text-secondary) 30%, transparent)',
+          }}
+        />
+      )}
+      <span className="ab-icon-wrap">
+        <Icon size={size} strokeWidth={1.75} />
+      </span>
+    </button>
+  )
+}
+
+/* ─── MoreMenuItem ─────────────────────────────────────────────────────────── */
+function MoreMenuItem({ icon: Icon, label, onClick, danger }) {
+  return (
+    <>
+      <style>{`
+        @keyframes mmi-slide-in { 0%{opacity:0;transform:translateX(-6px)} 100%{opacity:1;transform:translateX(0)} }
+        @keyframes mmi-icon-nudge { 0%{transform:translateX(0)} 40%{transform:translateX(3px)} 100%{transform:translateX(0)} }
+        .mmi-btn{display:flex;align-items:center;gap:9px;padding:6px 12px;font-size:13px;font-family:inherit;cursor:pointer;background:transparent;border:none;text-align:left;border-radius:6px;margin:1px 4px;width:calc(100% - 8px);transition:background 110ms ease,color 110ms ease,transform 100ms ease;animation:mmi-slide-in 160ms ease both;position:relative;overflow:hidden}
+        .mmi-btn:hover{transform:translateX(2px)}
+        .mmi-btn:hover .mmi-icon{animation:mmi-icon-nudge 220ms ease forwards}
+        .mmi-btn:active{transform:scale(0.98) translateX(1px)}
+        .mmi-btn.danger:hover{background:color-mix(in srgb,var(--accent-red,#e5534b) 10%,transparent);color:var(--accent-red,#e5534b)!important}
+        .mmi-btn.normal:hover{background:var(--bg-hover)}
+        .mmi-label{letter-spacing:-0.01em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .mmi-icon{flex-shrink:0;transition:opacity 110ms ease}
+      `}</style>
+      <button
+        className={`mmi-btn ${danger ? 'danger' : 'normal'}`}
+        onClick={onClick}
+        style={{ color: danger ? 'var(--accent-red, #e5534b)' : 'var(--text-primary)' }}
+      >
+        <span className="mmi-icon" style={{ opacity: danger ? 0.85 : 0.65 }}>
+          <Icon size={14} strokeWidth={1.75} />
+        </span>
+        <span className="mmi-label">{label}</span>
+      </button>
+    </>
+  )
+}
 
 /* ─── Thread Message Item ─────────────────────────────────────────────────── */
 function ThreadMessage({ message, isRoot = false }) {
+  const { user } = useAuthStore()
+  const {
+    addReaction, removeReaction,
+    editThreadReply, deleteThreadReply,
+    pinMessage, unpinMessage,
+  } = useChatStore()
+  const { toggleSaveMessage } = useLaterStore()
+  const isSaved = useLaterStore((s) => s.savedMessageIds.has(message._id))
+  const { confirm } = useDeleteConfirm()
+
+  const [showActions, setShowActions] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState(message.content)
+  const [showReactionPicker, setShowReactionPicker] = useState(false)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
+
+  const containerRef = useRef(null)
+  const moreMenuRef = useRef(null)
+
   const authorName = message.senderSnapshot?.name || message.authorId?.name || 'FlowTask Bot'
   const authorAvatar =
     message.senderSnapshot?.avatar ||
@@ -21,6 +117,14 @@ function ThreadMessage({ message, isRoot = false }) {
   const time = format(new Date(message.createdAt), 'h:mm a')
   const isDeleted = message.isDeleted === true
   const isPending = message.pending === true
+  const isFailed = message.failed === true
+
+  const isOwn = message.authorId?._id === user?._id || message.authorId === user?._id
+  const canEdit =
+    isOwn &&
+    !isDeleted &&
+    !isRoot && // Root message edits go through main channel; suppress in thread view
+    Date.now() - new Date(message.createdAt).getTime() < MESSAGE_EDIT_WINDOW_MS
 
   // Derive attachments — same logic as MessageItem
   const derivedAttachments =
@@ -34,8 +138,114 @@ function ThreadMessage({ message, isRoot = false }) {
           .filter(Boolean)
       : message.attachments || []
 
+  // Close reaction picker on outside click / Escape
+  useEffect(() => {
+    if (!showReactionPicker) return
+    const onDown = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setShowReactionPicker(false)
+        setShowActions(false)
+      }
+    }
+    const onKey = (e) => {
+      if (e.key === 'Escape') { setShowReactionPicker(false); setShowActions(false) }
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [showReactionPicker])
+
+  // Close more-menu on outside click / Escape
+  useEffect(() => {
+    if (!showMoreMenu) return
+    const onDown = (e) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
+        setShowMoreMenu(false)
+        setShowActions(false)
+      }
+    }
+    const onKey = (e) => {
+      if (e.key === 'Escape') { setShowMoreMenu(false); setShowActions(false) }
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [showMoreMenu])
+
+  const handleEdit = () => {
+    if (editContent.trim() && editContent !== message.content)
+      editThreadReply(message._id, editContent)
+    setIsEditing(false)
+  }
+
+  const handleReaction = (emoji) => {
+    const existing = message.reactions?.find(
+      (r) =>
+        r.emoji === emoji &&
+        (r.users?.includes(user?._id) ||
+          r.userIds?.some((id) => id?.toString() === user?._id)),
+    )
+    if (existing) removeReaction(message._id, emoji)
+    else addReaction(message._id, emoji)
+    setShowReactionPicker(false)
+  }
+
+  const handleCopyText = async () => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(message.content || '')
+      } else {
+        const ta = document.createElement('textarea')
+        ta.value = message.content || ''
+        ta.style.cssText = 'position:fixed;opacity:0'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      }
+      toast.success('Copied to clipboard', { duration: 1500 })
+    } catch {
+      toast.error('Copy failed')
+    }
+    setShowMoreMenu(false)
+    setShowActions(false)
+  }
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        `${window.location.origin}/chat/${message.channelId}/${message._id}`,
+      )
+      toast.success('Link copied', { duration: 1500 })
+    } catch {
+      toast.error('Failed to copy link')
+    }
+    setShowMoreMenu(false)
+    setShowActions(false)
+  }
+
+  // Action bar visibility: show if hovered OR a sub-menu is open
+  const actionBarVisible =
+    (showActions || showReactionPicker || showMoreMenu) &&
+    !isDeleted &&
+    !isEditing &&
+    !isPending &&
+    !isFailed
+
   return (
-    <div className={`thread-message${isRoot ? ' thread-message--root' : ''}`}>
+    <div
+      ref={containerRef}
+      className={`thread-message thread-message--interactive${isRoot ? ' thread-message--root' : ''}`}
+      style={{ background: showActions ? 'var(--bg-hover)' : 'transparent' }}
+      onMouseEnter={() => { if (!isDeleted && !isRoot) setShowActions(true) }}
+      onMouseLeave={() => { if (!showReactionPicker && !showMoreMenu) setShowActions(false) }}
+    >
       <div className="thread-message__avatar">
         <Avatar
           member={{ name: authorName, avatar: authorAvatar, onlineStatus: 'offline' }}
@@ -60,6 +270,23 @@ function ThreadMessage({ message, isRoot = false }) {
 
         {isDeleted ? (
           <p className="thread-message__deleted">This message was deleted</p>
+        ) : isEditing ? (
+          <div style={{ marginTop: 4 }}>
+            <input
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleEdit()
+                if (e.key === 'Escape') setIsEditing(false)
+              }}
+              className="input-field"
+              style={{ fontSize: 14, padding: '6px 10px', width: '100%' }}
+              autoFocus
+            />
+            <p style={{ fontSize: 11, marginTop: 4, color: 'var(--text-muted)' }}>
+              Enter to save · Escape to cancel
+            </p>
+          </div>
         ) : message.htmlContent && message.htmlContent !== message.content ? (
           <div
             className="message-content thread-message__content"
@@ -114,24 +341,166 @@ function ThreadMessage({ message, isRoot = false }) {
         {message.reactions?.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
             {message.reactions.map((reaction) => {
+              const hasReacted =
+                reaction.users?.includes(user?._id) ||
+                reaction.userIds?.some((id) => id?.toString() === user?._id)
               const count = reaction.users?.length || reaction.count || 0
               return (
-                <span
+                <button
                   key={reaction.emoji}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
+                  onClick={() => handleReaction(reaction.emoji)}
+                  title={`${reaction.emoji} ${count}`}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer transition-all"
                   style={{
-                    background: 'var(--bg-hover)',
-                    border: '1px solid var(--border-secondary)',
+                    background: hasReacted
+                      ? 'color-mix(in srgb, var(--accent-color) 22%, transparent)'
+                      : 'var(--bg-hover)',
+                    border: `1px solid ${hasReacted ? 'var(--accent-primary)' : 'var(--border-secondary)'}`,
                     color: 'var(--text-primary)',
                   }}
                 >
                   {reaction.emoji} {count}
-                </span>
+                </button>
               )
             })}
           </div>
         )}
       </div>
+
+      {/* ── Action bar (appears on hover, top-right of message) ─────────────── */}
+      {actionBarVisible && (
+        <div
+          className="thread-msg-actions animate-fade-in-scale"
+          style={{
+            position: 'absolute',
+            top: -14,
+            right: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: '4px 8px',
+            borderRadius: 8,
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-primary)',
+            boxShadow: 'var(--shadow-md, 0 4px 16px rgba(0,0,0,0.22))',
+            zIndex: 20,
+          }}
+        >
+          <ActionButton
+            icon={Smile}
+            title="Add reaction"
+            onClick={() => setShowReactionPicker(!showReactionPicker)}
+          />
+          <ActionButton
+            icon={isSaved ? BookmarkCheck : Bookmark}
+            title={isSaved ? 'Unsave message' : 'Save for later'}
+            color={isSaved ? 'var(--accent-primary)' : undefined}
+            onClick={(e) => {
+              e.preventDefault()
+              toggleSaveMessage(message._id)
+              setShowActions(false)
+            }}
+          />
+          {isOwn && (
+            <>
+              {canEdit && (
+                <ActionButton
+                  icon={Edit}
+                  title="Edit message"
+                  onClick={() => {
+                    setEditContent(message.content)
+                    setIsEditing(true)
+                  }}
+                />
+              )}
+              <ActionButton
+                icon={Trash2}
+                title="Delete message"
+                danger
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: 'Delete reply',
+                    message: 'This reply will be permanently removed.',
+                  })
+                  if (ok) deleteThreadReply(message._id)
+                }}
+              />
+            </>
+          )}
+          <ActionButton
+            icon={MoreVertical}
+            title="More actions"
+            onClick={() => setShowMoreMenu(!showMoreMenu)}
+          />
+        </div>
+      )}
+
+      {/* ── More menu dropdown ───────────────────────────────────────────────── */}
+      {showMoreMenu && (
+        <div
+          ref={moreMenuRef}
+          style={{
+            position: 'absolute',
+            top: -40,
+            right: 48,
+            zIndex: 30,
+            width: 192,
+            borderRadius: 8,
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-primary)',
+            boxShadow: 'var(--shadow-md, 0 4px 16px rgba(0,0,0,0.28))',
+            padding: '4px 0',
+          }}
+        >
+          {!isRoot && (
+            <MoreMenuItem
+              icon={Pin}
+              label={message.isPinned ? 'Unpin message' : 'Pin message'}
+              onClick={() => {
+                message.isPinned ? unpinMessage(message._id) : pinMessage(message._id)
+                setShowMoreMenu(false)
+                setShowActions(false)
+              }}
+            />
+          )}
+          <MoreMenuItem
+            icon={Copy}
+            label="Copy text"
+            onClick={handleCopyText}
+          />
+          <MoreMenuItem
+            icon={Link2}
+            label="Copy link"
+            onClick={handleCopyLink}
+          />
+          <MoreMenuItem
+            icon={Forward}
+            label="Forward message"
+            onClick={() => {
+              toast.success('Forwarding not yet implemented!')
+              setShowMoreMenu(false)
+              setShowActions(false)
+            }}
+          />
+        </div>
+      )}
+
+      {/* ── Emoji Reaction Picker ────────────────────────────────────────────── */}
+      {showReactionPicker && (
+        <div style={{ position: 'absolute', top: -2, right: 12, zIndex: 30 }}>
+          <EmojiPicker
+            onSelect={(emoji) => {
+              handleReaction(emoji)
+              setShowActions(false)
+            }}
+            onClose={() => {
+              setShowReactionPicker(false)
+              setShowActions(false)
+            }}
+            position="top"
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -223,12 +592,6 @@ export default function ThreadPanel({ thread, onClose }) {
           )}
         </div>
         <div className="thread-panel__header-actions">
-          {/* <button className="thread-panel__icon-btn" title="Sort / filter">
-            <SlidersHorizontal size={15} />
-          </button>
-          <button className="thread-panel__icon-btn" title="More options">
-            <MoreHorizontal size={15} />
-          </button> */}
           <button
             className="thread-panel__icon-btn thread-panel__close-btn"
             onClick={onClose}

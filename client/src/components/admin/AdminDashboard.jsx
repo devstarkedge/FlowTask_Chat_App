@@ -6,6 +6,7 @@ import {
 import { adminAPI } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import toast from 'react-hot-toast'
+import { useDeleteConfirm } from '../../hooks/useDeleteConfirm'
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -147,6 +148,7 @@ function UsersTab() {
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const debounceRef = useRef(null)
+  const { confirm } = useDeleteConfirm()
 
   // Debounce search input
   useEffect(() => {
@@ -188,7 +190,12 @@ function UsersTab() {
       toast.error('You cannot deactivate yourself')
       return
     }
-    if (!window.confirm('Are you sure you want to deactivate this user?')) return
+    const ok = await confirm({
+      title: 'Deactivate user',
+      message: 'This user will lose access to the workspace immediately.',
+      confirmLabel: 'Deactivate',
+    })
+    if (!ok) return
     try {
       await adminAPI.deactivateUser(userId)
       toast.success('User deactivated')
@@ -294,6 +301,8 @@ function ChannelsTab() {
   const [channels, setChannels] = useState([])
   const [loading, setLoading] = useState(true)
 
+  const { confirm } = useDeleteConfirm()
+
   const fetchChannels = useCallback(async () => {
     setLoading(true)
     try {
@@ -324,7 +333,12 @@ function ChannelsTab() {
   }
 
   const handleDelete = async (chId) => {
-    if (!window.confirm('Delete this channel and all its messages? This cannot be undone.')) return
+    const ok = await confirm({
+      title: 'Delete channel',
+      message: 'All messages and files in this channel will be permanently deleted. This cannot be undone.',
+      confirmLabel: 'Delete channel',
+    })
+    if (!ok) return
     try {
       await adminAPI.deleteChannel(chId)
       toast.success('Channel deleted')

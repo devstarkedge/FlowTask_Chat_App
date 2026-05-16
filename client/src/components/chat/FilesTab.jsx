@@ -8,6 +8,7 @@ import {
 import { fileAPI } from '../../services/api'
 import toast from 'react-hot-toast'
 import { handleDownload } from "../../utils/handleDownload";
+import { useDeleteConfirm } from '../../hooks/useDeleteConfirm'
 
 /* ─────────────────────────── helpers ───────────────────────────────────── */
 
@@ -380,6 +381,7 @@ export default function FilesTab({ channelId, onOpenFilePreview }) {
   const [sort, setSort]     = useLocalStorage('filesTab:sort', 'date-desc') // date-desc | date-asc | name | size
   const [viewMode, setViewMode] = useLocalStorage('filesTab:viewMode', 'split') // split | list
   const searchRef = useRef(null)
+  const { confirm } = useDeleteConfirm()
 
   /* load */
   const loadFiles = useCallback(async () => {
@@ -439,6 +441,11 @@ export default function FilesTab({ channelId, onOpenFilePreview }) {
 
   /* actions */
   const handleDelete = async (file) => {
+    const ok = await confirm({
+      title: 'Delete file',
+      message: `"${file.fileName}" will be removed from this channel permanently.`,
+    })
+    if (!ok) return
     try {
       await fileAPI.deleteFromChannel(channelId, file._id)
       setFiles(prev => prev.filter(f => f.referenceId !== file.referenceId))

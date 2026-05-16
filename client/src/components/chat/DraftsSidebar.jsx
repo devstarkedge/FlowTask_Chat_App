@@ -22,6 +22,7 @@ import {
   File,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useDeleteConfirm } from '../../hooks/useDeleteConfirm'
 
 function formatTimeAgo(date) {
   const diff = Date.now() - new Date(date).getTime()
@@ -247,6 +248,7 @@ export default function DraftsSidebar() {
   const [searchQuery, setSearchQuery] = useState('')
   const [sendingId, setSendingId] = useState(null)
   const searchRef = useRef(null)
+  const { confirm } = useDeleteConfirm()
 
   useEffect(() => {
     if (useDraftStore.persist.hasHydrated()) {
@@ -293,33 +295,15 @@ export default function DraftsSidebar() {
       })
     : visibleDrafts
 
-const handleDelete = (e, draft) => {
+const handleDelete = async (e, draft) => {
   e.stopPropagation()
-
-  toast((t) => (
-    <div className="dsl-confirm-toast">
-      <p className="dsl-confirm-toast-msg">Delete this draft?</p>
-      <div className="dsl-confirm-toast-actions">
-        <button
-          className="dsl-confirm-toast-btn dsl-confirm-toast-btn--cancel"
-          onClick={() => toast.dismiss(t.id)}
-        >
-          Cancel
-        </button>
-        <button
-          className="dsl-confirm-toast-btn dsl-confirm-toast-btn--danger"
-          onClick={() => {
-            clearDraft(draft.channelId, draft.workspaceId || activeWorkspaceId, draft.threadId)
-            toast.dismiss(t.id)
-            toast.success('Draft deleted')
-          }}
-        >
-          <Trash2 size={12} />
-          Delete
-        </button>
-      </div>
-    </div>
-  ), { duration: 6000 })
+  const ok = await confirm({
+    title: 'Delete draft',
+    message: 'This draft will be permanently deleted.',
+  })
+  if (!ok) return
+  clearDraft(draft.channelId, draft.workspaceId || activeWorkspaceId, draft.threadId)
+  toast.success('Draft deleted')
 }
 
 const handleSendNow = async (e, draft) => {

@@ -21,6 +21,7 @@ import {
   formatDistanceToNow,
 } from "date-fns";
 import ReminderModal from "./ReminderModal";
+import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 
 /* ─────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -197,6 +198,15 @@ export default function LaterPanel({ onJumpToMessage }) {
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedSaved, setSelectedSaved] = useState(null);
   const [isStandaloneReminder, setIsStandaloneReminder] = useState(false);
+  const { confirm } = useDeleteConfirm();
+
+  const handleDeleteConfirmed = async (id) => {
+    const ok = await confirm({
+      title: 'Remove item',
+      message: 'This saved item and its reminder will be permanently removed.',
+    })
+    if (ok) deleteReminder(id)
+  }
 
   /* ── Fetch once on mount ── */
   useEffect(() => {
@@ -335,7 +345,7 @@ export default function LaterPanel({ onJumpToMessage }) {
                   onJump={handleJumpToMessage}
                   onStatusChange={updateStatus}
                   onSetReminder={handleSetReminder}
-                  onDelete={deleteReminder}
+                  onDelete={handleDeleteConfirmed}
                   isActive={saved._id === activeSavedMessageId}
                 />
               </div>

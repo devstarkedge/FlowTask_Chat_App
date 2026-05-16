@@ -735,8 +735,36 @@ export async function initializeSocket(httpServer, corsOptions) {
 export function emitToUser(userId, event, data, workspaceId) {
   if (!io) return;
   const room = resolveScopedRoom(workspaceId, 'user', userId, 'emitToUser');
-  if (!room) return;
-  io.to(room).emit(event, data);
+
+  // Primary: emit to the workspace-scoped personal room (if available)
+  if (room) {
+    io.to(room).emit(event, data);
+  } else {
+    logger.warn('emitToUser: workspace-scoped room not resolved, using per-socket fallback', { userId, workspaceId });
+  }
+
+  // Fallback: ensure delivery to any connected sockets for this user
+  // by iterating connected sockets and emitting directly to matching sockets.
+  // This covers cases where workspaceId is missing or the user's active tab
+  // is joined to a different workspace room.
+  (async () => {
+    try {
+      const sockets = await io.fetchSockets();
+      for (const sock of sockets) {
+        const sockUserId = sock.chatUser?._id?.toString?.();
+        if (sockUserId !== userId) continue;
+        // Skip sockets that already received the emit via the room emit
+        if (room && sock.rooms && sock.rooms.has(room)) continue;
+        try {
+          sock.emit(event, data);
+        } catch (err) {
+          // Best-effort per-socket emit — continue on error
+        }
+      }
+    } catch (err) {
+      logger.warn('emitToUser fallback socket iteration failed', { userId, error: err?.message });
+    }
+  })();
 }
 
 /**

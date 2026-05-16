@@ -6466,6 +6466,11 @@ body {
   transition: background var(--transition-fast);
 }
 
+/* Enable the absolute-positioned action bar to be anchored to each message row */
+.thread-message--interactive {
+  position: relative;
+}
+
 .thread-message:hover {
   background: var(--bg-hover);
 }
@@ -6476,7 +6481,7 @@ body {
 }
 
 .thread-message--root:hover {
-  background: transparent;
+  background: transparent !important;
 }
 
 .thread-message__avatar {
@@ -6547,6 +6552,12 @@ body {
   font-size: 14px;
   color: var(--text-muted);
   font-style: italic;
+}
+
+/* ── Thread message action bar z-index guard ────────────────────────────── */
+/* Ensures the floating toolbar is always rendered above neighbouring message rows */
+.thread-panel__replies .thread-message--interactive:hover {
+  z-index: 1;
 }
 
 /* ========================================================================== */

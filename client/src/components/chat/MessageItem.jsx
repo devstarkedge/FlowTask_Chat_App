@@ -34,6 +34,7 @@ import EmojiPicker from "./EmojiPicker";
 import { sanitizeHtml } from "../../utils/sanitize";
 import toast from "react-hot-toast";
 import { handleDownload } from "../../utils/handleDownload";
+import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 
 // ─── Inject highlight keyframes once ─────────────────────────────────────────
 const HIGHLIGHT_STYLE_ID = "msg-pinned-highlight-style";
@@ -140,6 +141,7 @@ const MessageItem = memo(
       unpinMessage,
       highlightMessageId,
     } = useChatStore();
+    const { confirm } = useDeleteConfirm();
 
     const isSaved = useLaterStore((s) => s.savedMessageIds.has(message._id));
 
@@ -668,9 +670,13 @@ const MessageItem = memo(
                       icon={Trash2}
                       title="Delete"
                       danger
-                      onClick={() =>
-                        deleteMessage(message._id, message.channelId)
-                      }
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: 'Delete message',
+                          message: 'This message will be permanently removed for everyone.',
+                        })
+                        if (ok) deleteMessage(message._id, message.channelId)
+                      }}
                     />
                   </>
                 )}

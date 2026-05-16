@@ -24,6 +24,7 @@ import {
 import { Avatar } from "../chat/MemberAvatarGroup";
 import toast from "react-hot-toast";
 import api from "../../services/api";
+import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import "./custom-css/WorkspaceSettingsModal.css";
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -95,6 +96,7 @@ export default function WorkspaceSettingsModal({ onClose }) {
     deleteWorkspace,
   } = useWorkspaceStore();
   const { user } = useAuthStore();
+  const { confirm } = useDeleteConfirm();
 
   const [activeTab, setActiveTab] = useState("general");
   const [name, setName] = useState(activeWorkspace?.name || "");
@@ -153,8 +155,12 @@ export default function WorkspaceSettingsModal({ onClose }) {
   };
 
   const handleDeleteWorkspace = async () => {
-    if (!confirm(`Delete "${activeWorkspace?.name}"? This cannot be undone.`))
-      return;
+    const ok = await confirm({
+      title: `Delete "${activeWorkspace?.name}"?`,
+      message: 'All channels, messages and files will be permanently erased. This cannot be undone.',
+      confirmLabel: 'Delete workspace',
+    })
+    if (!ok) return
     try {
       await deleteWorkspace(activeWorkspaceId);
       onClose();
@@ -261,6 +267,7 @@ export default function WorkspaceSettingsModal({ onClose }) {
                 canManage={canManage}
                 onRemove={removeMember}
                 onUpdateRole={updateMemberRole}
+                confirm={confirm}
               />
             )}
             {activeTab === "invite" && (
@@ -409,6 +416,7 @@ function MembersTab({
   canManage,
   onRemove,
   onUpdateRole,
+  confirm,
 }) {
   const [roleMenuId, setRoleMenuId] = useState(null);
 
@@ -563,9 +571,15 @@ function MembersTab({
                           <div className="wsm-dropdown-sep" />
                           <button
                             className="wsm-dropdown-item danger"
-                            onClick={() => {
-                              onRemove(memberId);
+                            onClick={async () => {
                               setRoleMenuId(null);
+                              const name = memberUser.name || m.displayName || 'this member';
+                              const ok = await confirm({
+                                title: 'Remove member',
+                                message: `${name} will lose access to this workspace.`,
+                                confirmLabel: 'Remove',
+                              })
+                              if (ok) onRemove(memberId);
                             }}
                           >
                             <UserMinus size={12} />

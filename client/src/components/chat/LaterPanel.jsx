@@ -5,10 +5,10 @@ import {
   Check,
   Archive,
   Loader2,
-  ChevronRight,
-  BookmarkCheck,
+  ListFilter,
   Inbox,
   Trash2,
+  CircleDot 
 } from "lucide-react";
 import { useLaterStore } from "../../stores/laterStore";
 import { Avatar } from "../chat/MemberAvatarGroup";
@@ -18,6 +18,7 @@ import {
   isYesterday,
   differenceInHours,
   isPast,
+  formatDistanceToNow,
 } from "date-fns";
 import ReminderModal from "./ReminderModal";
 
@@ -25,7 +26,7 @@ import ReminderModal from "./ReminderModal";
    CONSTANTS
 ───────────────────────────────────────────────────────────────── */
 const TABS = [
-  { id: "in_progress", label: "In progress", icon: Clock },
+  { id: "in_progress", label: "In progress", icon: CircleDot  },
   { id: "archived", label: "Archived", icon: Archive },
   { id: "completed", label: "Completed", icon: Check },
 ];
@@ -42,35 +43,16 @@ function formatTime(dateStr) {
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   REMINDER PILL
+   DUE FORMATTER
 ───────────────────────────────────────────────────────────────── */
-function ReminderPill({ reminderAt, recurrence }) {
-  const d = new Date(reminderAt);
-  const overdue = isPast(d);
-  const soon = !overdue && differenceInHours(d, new Date()) < 2;
-  const cls = overdue
-    ? "lp-pill--overdue"
-    : soon
-      ? "lp-pill--soon"
-      : "lp-pill--normal";
-
-  const repeatLabel =
-    recurrence && recurrence !== "none"
-      ? recurrence === "daily"
-        ? "Daily"
-        : recurrence === "weekly"
-          ? `Every ${format(d, "EEEE")}`
-          : "Monthly"
-      : null;
-
-  return (
-    <span className={`lp-pill ${cls}`}>
-      <Clock size={10} />
-      {repeatLabel && <span className="lp-pill__repeat">{repeatLabel} ·</span>}
-      {overdue ? "Overdue · " : soon ? "Soon · " : ""}
-      {format(d, "MMM d, h:mm a")}
-    </span>
-  );
+function formatDue(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  
+  // Format as "Due in 5 days", "Due 5 days ago", etc.
+  const dist = formatDistanceToNow(d, { addSuffix: true });
+  return `Due ${dist}`;
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -120,7 +102,7 @@ function SavedMessageCard({
       status: "archived",
     },
     saved.status !== "in_progress" && {
-      icon: Clock,
+      icon: CircleDot,
       label: "Move to in progress",
       status: "in_progress",
     },
@@ -128,101 +110,69 @@ function SavedMessageCard({
 
   return (
     <div
-      className={`lp-card${isActive ? " lp-card--active" : ""}`}
+      className={`lp-item${isActive ? " lp-item--active" : ""}`}
       onClick={() =>
         !isStandalone && onJump?.({ channelId: msg?.channelId, _id: msg?._id })
       }
       style={{ cursor: isStandalone ? "default" : "pointer" }}
     >
-      {/* Left accent stripe */}
-      <div className="lp-card__stripe" />
-
-      {/* ── Top row ── */}
-      <div className="lp-card__top">
-        {!isStandalone && (
-          <div className="lp-card__avatar">
-            <Avatar
-              member={{ name: author.name || "Unknown", avatar: author.avatar }}
-              size={34}
-              showStatus={false}
-            />
-          </div>
-        )}
-
-        <div className="lp-card__meta">
-          {isStandalone ? (
-            <div className="lp-card__standalone-title">
-              {saved.title || "Untitled reminder"}
-            </div>
-          ) : (
-            <div className="lp-card__author-row">
-              <span className="lp-card__author">
-                {author.name || "Unknown"}
-              </span>
-              <span className="lp-card__time">
-                {formatTime(msg?.createdAt)}
-              </span>
-              {channel.name && (
-                <span className="lp-card__channel">#{channel.name}</span>
+      {/* ── Content ── */}
+      <div className="lp-item__content">
+        {isStandalone ? (
+          <>
+            <div className="lp-item__channel-row">
+              {saved.reminderAt && (
+                <span className="lp-item__due">{formatDue(saved.reminderAt)}</span>
               )}
+              <span className="lp-item__channel">{saved.title || "Untitled reminder"}</span>
             </div>
-          )}
-        </div>
-
-        {/* Always-visible action buttons */}
-        <div className="lp-card__actions" onClick={(e) => e.stopPropagation()}>
-          <ActionBtn
-            icon={Clock}
-            label="Set reminder"
-            onClick={() => onSetReminder(saved)}
-          />
-          {statusActions.map((a) => (
-            <ActionBtn
-              key={a.status}
-              icon={a.icon}
-              label={a.label}
-              onClick={() => onStatusChange(targetId, a.status)}
-            />
-          ))}
-          <ActionBtn
-            icon={Trash2}
-            label="Delete"
-            onClick={() => onDelete(saved._id)}
-            danger
-          />
-        </div>
+            {saved.reminderDescription && (
+              <div className="lp-item__body">
+                <div className="lp-item__details">
+                  <div className="lp-item__desc">{saved.reminderDescription}</div>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="lp-item__channel-row">
+              {saved.reminderAt && (
+                <span className="lp-item__due">{formatDue(saved.reminderAt)}</span>
+              )}
+              <span className="lp-item__channel">
+                {channel.name ? channel.name : author.name || "Unknown"}
+              </span>
+            </div>
+            <div className="lp-item__body">
+              <div className="lp-item__avatar">
+                <Avatar
+                  member={{ name: author.name || "Unknown", avatar: author.avatar }}
+                  size={36}
+                  showStatus={true}
+                />
+              </div>
+              <div className="lp-item__details">
+                <div className="lp-item__author-row">
+                  <span className="lp-item__author">{author.name || "Unknown"}</span>
+                  <span className="lp-item__time">{formatTime(msg?.createdAt)}</span>
+                </div>
+                <div className="lp-item__preview">
+                  {msg?.content || <em className="lp-item__preview--empty">Attachment</em>}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* ── Message preview ── */}
-      {!isStandalone && (
-        <p className="lp-card__preview">
-          {msg?.content || (
-            <em className="lp-card__preview--empty">Attachment</em>
-          )}
-        </p>
-      )}
-
-      {/* ── Standalone description ── */}
-      {isStandalone && saved.reminderDescription && (
-        <p className="lp-card__standalone-desc">{saved.reminderDescription}</p>
-      )}
-
-      {/* ── Bottom row ── */}
-      <div
-        className={`lp-card__bottom${isStandalone ? " lp-card__bottom--standalone" : ""}`}
-      >
-        {saved.reminderAt && (
-          <ReminderPill
-            reminderAt={saved.reminderAt}
-            recurrence={saved.recurrence}
-          />
-        )}
-        {!isStandalone && (
-          <span className="lp-card__jump">
-            <ChevronRight size={11} />
-            Jump to message
-          </span>
-        )}
+      {/* Hover actions */}
+      <div className="lp-item__actions" onClick={(e) => e.stopPropagation()}>
+        <ActionBtn icon={Clock} label="Set reminder" onClick={() => onSetReminder(saved)} />
+        {statusActions.map((a) => (
+          <ActionBtn key={a.status} icon={a.icon} label={a.label} onClick={() => onStatusChange(targetId, a.status)} />
+        ))}
+        <ActionBtn icon={Trash2} label="Delete" onClick={() => onDelete(saved._id)} danger />
       </div>
     </div>
   );
@@ -295,7 +245,7 @@ export default function LaterPanel({ onJumpToMessage }) {
     completed: {
       title: "All caught up!",
       sub: "Completed items will appear here.",
-      Icon: BookmarkCheck,
+      Icon: Check,
     },
     archived: {
       title: "Nothing archived",
@@ -316,18 +266,17 @@ export default function LaterPanel({ onJumpToMessage }) {
       <div className="lp-header">
         <div className="lp-header__title-row">
           <div className="lp-header__title-left">
-            <div className="lp-header__icon-wrap">
-              <Clock size={16} />
-            </div>
             <h2 className="lp-header__title">Later</h2>
           </div>
-          <button
-            className="lp-header__add-btn"
-            onClick={handleCreateStandalone}
-            title="Create reminder"
-          >
-            <Plus size={16} />
-          </button>
+          <div className="lp-header__actions">
+            <button
+              className="lp-header__action-btn"
+              onClick={handleCreateStandalone}
+              title="Create reminder"
+            >
+              <Plus size={16} />
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -343,15 +292,7 @@ export default function LaterPanel({ onJumpToMessage }) {
                 className={`lp-tab${isActive ? " lp-tab--active" : ""}`}
                 onClick={() => setActiveTab(tab.id)}
               >
-                <tab.icon size={13} />
-                {tab.label}
-                {count > 0 && (
-                  <span
-                    className={`lp-tab__badge${isActive ? " lp-tab__badge--active" : ""}`}
-                  >
-                    {count}
-                  </span>
-                )}
+                {tab.label}{count > 0 ? ` ${count}` : ""}
               </button>
             );
           })}

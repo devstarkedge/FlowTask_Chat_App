@@ -9,7 +9,7 @@ import {
   MessageSquare,
   Bell,
   FolderOpen,
-  Clock,
+  Bookmark,
   Wrench,
   Plus,
 } from "lucide-react";
@@ -32,7 +32,7 @@ const NAV_ITEMS = [
   { id: "dms", icon: MessageSquare, label: "DMs", path: "/dms" },
   { id: "activity", icon: Bell, label: "Activity", path: "/activity" },
   { id: "files", icon: FolderOpen, label: "Files", path: "/files" },
-  { id: "later", icon: Clock, label: "Later", path: "/later" },
+  { id: "later", icon: Bookmark, label: "Later", path: "/later" },
   { id: "tools", icon: Wrench, label: "Tools", path: "/tools" },
 ];
 

@@ -92,6 +92,7 @@ export const useDraftStore = create(
               mentions: normalizeArray(metadata.mentions),
               attachments,
               fileReferences,
+              scheduledTime: metadata.scheduledTime || null,
             },
           },
         }));

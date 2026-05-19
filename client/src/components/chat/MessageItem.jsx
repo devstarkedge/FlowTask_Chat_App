@@ -1,5 +1,4 @@
-
-import { useState, useEffect, useRef, memo } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
 import { format } from "date-fns";
@@ -26,6 +25,8 @@ import {
   Link2,
   MoreVertical,
   ChevronDown,
+  X,
+  Save,
 } from "lucide-react";
 import { useLaterStore } from "../../stores/laterStore";
 import SlackFileCard from "./SlackFileCard";
@@ -35,15 +36,14 @@ import { sanitizeHtml } from "../../utils/sanitize";
 import toast from "react-hot-toast";
 import { handleDownload } from "../../utils/handleDownload";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
+import RichTextEditor from "./RichTextEditor";
+import FormattingToolbar from "./FormattingToolbar";
 
-// ─── Inject highlight keyframes once ─────────────────────────────────────────
-const HIGHLIGHT_STYLE_ID = "msg-pinned-highlight-style";
-if (
-  typeof document !== "undefined" &&
-  !document.getElementById(HIGHLIGHT_STYLE_ID)
-) {
+// ─── Inject styles once ───────────────────────────────────────────────────────
+const STYLE_ID = "msg-item-styles";
+if (typeof document !== "undefined" && !document.getElementById(STYLE_ID)) {
   const s = document.createElement("style");
-  s.id = HIGHLIGHT_STYLE_ID;
+  s.id = STYLE_ID;
   s.textContent = `
     @keyframes msgPinnedPulse {
       0%   { background: color-mix(in srgb, var(--accent-color, #1264a3) 28%, transparent);
@@ -55,6 +55,137 @@ if (
     .msg-pinned-active {
       animation: msgPinnedPulse 2s ease forwards !important;
       border-radius: 8px;
+    }
+
+    /* ── Inline Editor ── */
+    .inline-editor-wrap {
+      width: 100%;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1.5px solid var(--accent-primary, #1264a3);
+      background: var(--bg-primary, #1a1d21);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+      animation: inlineEditorIn 140ms cubic-bezier(0.2, 0, 0.13, 1.3) both;
+    }
+    @keyframes inlineEditorIn {
+      from { opacity: 0; transform: scaleY(0.94); transform-origin: top; }
+      to   { opacity: 1; transform: scaleY(1); }
+    }
+
+    .inline-editor-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 5px 8px;
+      border-bottom: 1px solid var(--border-primary, rgba(255,255,255,0.1));
+      background: var(--bg-secondary, #222529);
+      flex-wrap: wrap;
+    }
+
+    .inline-editor-content {
+      min-height: 60px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    /* Override TipTap editor padding inside the inline editor */
+    .inline-editor-content .ProseMirror {
+      padding: 10px 14px;
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--text-primary, #d1d2d3);
+      outline: none;
+      min-height: 60px;
+    }
+    .inline-editor-content .ProseMirror p.is-editor-empty:first-child::before {
+      content: attr(data-placeholder);
+      color: var(--text-muted, #666);
+      pointer-events: none;
+      float: left;
+      height: 0;
+    }
+
+    .inline-editor-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px 8px;
+      border-top: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+      background: var(--bg-secondary, #222529);
+      gap: 8px;
+    }
+    .inline-editor-hint {
+      font-size: 11px;
+      color: var(--text-muted, #666);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      letter-spacing: 0.01em;
+      flex-shrink: 1;
+      min-width: 0;
+    }
+    .inline-editor-hint kbd {
+      display: inline-block;
+      padding: 1px 4px;
+      font-size: 10px;
+      font-family: inherit;
+      background: var(--bg-hover, rgba(255,255,255,0.07));
+      border: 1px solid var(--border-secondary, rgba(255,255,255,0.12));
+      border-radius: 3px;
+      color: var(--text-secondary, #9b9b9b);
+      margin: 0 1px;
+    }
+    .inline-editor-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .inline-editor-cancel-btn {
+      height: 28px;
+      padding: 0 12px;
+      font-size: 12.5px;
+      font-weight: 500;
+      font-family: inherit;
+      border-radius: 6px;
+      border: 1px solid var(--border-secondary, rgba(255,255,255,0.15));
+      background: transparent;
+      color: var(--text-secondary, #9b9b9b);
+      cursor: pointer;
+      transition: background 110ms ease, color 110ms ease, border-color 110ms ease;
+      white-space: nowrap;
+    }
+    .inline-editor-cancel-btn:hover {
+      background: var(--bg-hover, rgba(255,255,255,0.07));
+      color: var(--text-primary, #d1d2d3);
+      border-color: var(--border-primary, rgba(255,255,255,0.2));
+    }
+    .inline-editor-save-btn {
+      height: 28px;
+      padding: 0 14px;
+      font-size: 12.5px;
+      font-weight: 600;
+      font-family: inherit;
+      border-radius: 6px;
+      border: none;
+      background: var(--accent-primary, #1264a3);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: background 110ms ease, transform 80ms ease, opacity 110ms ease;
+      white-space: nowrap;
+    }
+    .inline-editor-save-btn:hover {
+      background: color-mix(in srgb, var(--accent-primary, #1264a3) 85%, white 15%);
+    }
+    .inline-editor-save-btn:active {
+      transform: scale(0.96);
+    }
+    .inline-editor-save-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
     }
   `;
   document.head.appendChild(s);
@@ -112,6 +243,133 @@ function fileIcon(mimeType) {
 
 const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000;
 
+// ─── InlineEditor ─────────────────────────────────────────────────────────────
+
+/**
+ * Inline message editor — uses RichTextEditor (TipTap) and the shared
+ * FormattingToolbar. Formatting is preserved because we pass `html` (TipTap
+ * HTML output) to `onSave`, which the store stores as `htmlContent`.
+ */
+function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
+  const editorRef = useRef(null);
+
+  const [formatState, setFormatState] = useState({
+    bold: false,
+    italic: false,
+    underline: false,
+    strike: false,
+    bulletList: false,
+    orderedList: false,
+    blockquote: false,
+    code: false,
+    codeBlock: false,
+  });
+
+  // Sync active marks from TipTap into local state
+  const syncFormatState = useCallback(() => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    setFormatState({
+      bold: ed.isActive("bold"),
+      italic: ed.isActive("italic"),
+      underline: ed.isActive("underline"),
+      strike: ed.isActive("strike"),
+      bulletList: ed.isActive("bulletList"),
+      orderedList: ed.isActive("orderedList"),
+      blockquote: ed.isActive("blockquote"),
+      code: ed.isActive("code"),
+      codeBlock: ed.isActive("codeBlock"),
+    });
+  }, []);
+
+  // Populate editor with the message's existing HTML (or plain text fallback)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const ed = editorRef.current;
+      if (!ed) return;
+
+      if (initialHtml) {
+        ed.setContent(initialHtml);
+      } else if (initialText) {
+        ed.setContent(initialText);
+      }
+
+      ed.focus("end");
+      syncFormatState();
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [initialHtml, initialText, syncFormatState]);
+
+  // Escape key cancels edit
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onCancel?.();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  const handleSave = useCallback(() => {
+    const ed = editorRef.current;
+    if (!ed) return;
+
+    const { html, text } = ed.getContent();
+
+    // Require at least some non-whitespace text content
+    if (!text?.trim()) return;
+
+    // Pass both HTML (for rich rendering) and plain text (for search/preview)
+    onSave(html, text);
+  }, [onSave]);
+
+  // onInput from RichTextEditor receives { html, text, isEmpty } — we only need
+  // to re-sync the active-mark state so toolbar buttons update correctly.
+  const handleEditorInput = useCallback(() => {
+    syncFormatState();
+  }, [syncFormatState]);
+
+  return (
+    <div className="inline-editor-wrap">
+      {/* Toolbar — shared FormattingToolbar in compact variant */}
+      <div className="inline-editor-toolbar">
+        <FormattingToolbar
+          editorRef={editorRef}
+          formatState={formatState}
+          onFormatChange={syncFormatState}
+          variant="compact"
+        />
+      </div>
+
+      {/* TipTap editor */}
+      <div className="inline-editor-content">
+        <RichTextEditor
+          ref={editorRef}
+          placeholder="Edit message…"
+          onInput={handleEditorInput}
+          onSubmit={handleSave}
+        />
+      </div>
+
+      {/* Footer */}
+      <div className="inline-editor-footer">
+        <span className="inline-editor-hint">
+          <kbd>Shift+Enter</kbd> new line · <kbd>Escape</kbd> cancel
+        </span>
+        <div className="inline-editor-actions">
+          <button className="inline-editor-cancel-btn" onClick={onCancel}>
+            Cancel
+          </button>
+          <button className="inline-editor-save-btn" onClick={handleSave}>
+            <Save size={12} />
+            Save changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MessageItem ─────────────────────────────────────────────────────────────
 
 const MessageItem = memo(
@@ -124,10 +382,6 @@ const MessageItem = memo(
     onOpenFilePreview,
     isDMChannel,
     onSaveMessage,
-    // isPinnedHighlight: true when this message was jumped to from PinnedBar/Panel.
-    // MessageItem self-applies the CSS animation as soon as it is rendered into
-    // the DOM (via useEffect), which is the correct moment because Virtuoso only
-    // mounts the row *after* the scroll completes.
     isPinnedHighlight,
   }) {
     const { user } = useAuthStore();
@@ -147,28 +401,20 @@ const MessageItem = memo(
 
     const [showActions, setShowActions] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
-    const [editContent, setEditContent] = useState(message.content);
     const [showReactionPicker, setShowReactionPicker] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
 
     const messageRef = useRef(null);
     const moreMenuRef = useRef(null);
 
-    // ── Apply pinned-highlight animation when this row is first rendered ────
-    // This fires right after the component mounts into the Virtuoso viewport,
-    // which is guaranteed to be *after* Virtuoso has finished scrolling the
-    // row into view. Using a DOM class + CSS animation means no jank.
+    // ── Pinned-highlight animation ───────────────────────────────────────────
     useEffect(() => {
       if (!isPinnedHighlight) return;
       const el = messageRef.current;
       if (!el) return;
-
-      // Remove first in case animation was already playing (shouldn't happen, but safe)
       el.classList.remove("msg-pinned-active");
-      // Force reflow so re-adding the class re-triggers the keyframes
       void el.offsetWidth;
       el.classList.add("msg-pinned-active");
-
       const t = setTimeout(
         () => el.classList.remove("msg-pinned-active"),
         2100,
@@ -176,7 +422,7 @@ const MessageItem = memo(
       return () => clearTimeout(t);
     }, [isPinnedHighlight]);
 
-    // Close reaction picker on outside click / Escape
+    // ── Close reaction picker on outside click / Escape ──────────────────────
     useEffect(() => {
       if (!showReactionPicker) return;
       const onDown = (e) => {
@@ -199,7 +445,7 @@ const MessageItem = memo(
       };
     }, [showReactionPicker]);
 
-    // Close more-menu on outside click / Escape
+    // ── Close more-menu on outside click / Escape ────────────────────────────
     useEffect(() => {
       if (!showMoreMenu) return;
       const onDown = (e) => {
@@ -251,11 +497,23 @@ const MessageItem = memo(
       ? "var(--text-muted)"
       : "var(--text-secondary)";
 
-    const handleEdit = () => {
-      if (editContent.trim() && editContent !== message.content)
-        editMessage(message._id, editContent);
-      setIsEditing(false);
-    };
+    /**
+     * Called by InlineEditor when the user saves.
+     * `html`  — TipTap HTML (bold, lists, code, etc.) — stored as htmlContent
+     * `text`  — plain-text equivalent              — stored as content
+     */
+    const handleEdit = useCallback(
+      (html, text) => {
+        if (text?.trim()) {
+          editMessage(message._id, {
+            content: text,
+            htmlContent: html,
+          });
+        }
+        setIsEditing(false);
+      },
+      [editMessage, message._id],
+    );
 
     const handleReaction = (emoji) => {
       const existing = message.reactions?.find(
@@ -332,6 +590,104 @@ const MessageItem = memo(
           : isLastInGroup
             ? "last"
             : "middle";
+
+    // ── Full-width editing layout ─────────────────────────────────────────────
+    if (isEditing) {
+      return (
+        <div
+          id={`msg-${message._id}`}
+          ref={messageRef}
+          style={{ marginTop: compact ? 2 : 12, padding: "4px 16px 8px" }}
+        >
+          {/* Name row */}
+          {!compact && (
+            <div
+              className={`flex items-baseline gap-1.5 mb-2 px-1 ${isOwn ? "justify-end" : ""}`}
+            >
+              <span
+                className="font-semibold text-[13px] cursor-pointer hover:underline"
+                style={{ color: "var(--text-white)" }}
+                onClick={() => onOpenProfile?.(authorData)}
+              >
+                {authorName}
+              </span>
+              <span
+                className="text-[11px]"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {time}
+              </span>
+              {message.isEdited && (
+                <span
+                  className="text-[10px]"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  (edited)
+                </span>
+              )}
+            </div>
+          )}
+          {/* Full-width editor */}
+          <InlineEditor
+            initialHtml={message.htmlContent || ""}
+            initialText={message.content}
+            onSave={handleEdit}
+            onCancel={() => setIsEditing(false)}
+          />
+        </div>
+      );
+    }
+
+    // ── Message content renderer ──────────────────────────────────────────────
+    /**
+     * Render priority:
+     * 1. Deleted → tombstone
+     * 2. htmlContent present → sanitised rich HTML (covers all edited/sent rich messages)
+     * 3. Fallback → plain text
+     *
+     * The `rich-message-content` CSS class (injected by FormattingToolbar.jsx)
+     * styles TipTap's output: paragraphs, lists, code blocks, blockquotes, etc.
+     */
+    const renderMessageContent = () => {
+      // Deleted Message
+      if (isDeleted) {
+        return (
+          <div
+            className="message-content text-[16px] leading-relaxed italic"
+            style={{ color: deletedTextColor }}
+          >
+            {deletedText}
+          </div>
+        );
+      }
+
+      // Rich HTML Message
+      if (
+        message.htmlContent &&
+        typeof message.htmlContent === "string" &&
+        message.htmlContent.trim() !== ""
+      ) {
+        return (
+          <div
+            className="message-content rich-message-content text-[15px] leading-relaxed break-words"
+            style={{ color: "inherit" }}
+            dangerouslySetInnerHTML={{
+              __html: sanitizeHtml(message.htmlContent),
+            }}
+          />
+        );
+      }
+
+      // Plain Text Fallback
+      return (
+        <div
+          className="message-content text-[15px] leading-relaxed break-words whitespace-pre-wrap"
+          style={{ color: "inherit" }}
+        >
+          {message.content}
+        </div>
+      );
+    };
 
     return (
       <div
@@ -437,51 +793,13 @@ const MessageItem = memo(
             {/* Bubble */}
             <div
               className={`message-bubble ${isOwn ? "sent" : "received"} ${groupPos}`}
+              style={{
+                opacity: message.isOptimistic ? 0.7 : 1,
+                transition: "opacity 200ms ease",
+              }}
             >
-              {isDeleted ? (
-                <div
-                  className="message-content text-[16px] leading-relaxed italic"
-                  style={{ color: deletedTextColor }}
-                >
-                  {deletedText}
-                </div>
-              ) : isEditing ? (
-                <div className="mt-1">
-                  <input
-                    value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleEdit();
-                      if (e.key === "Escape") setIsEditing(false);
-                    }}
-                    className="input-field"
-                    style={{ fontSize: 14, padding: "6px 10px" }}
-                    autoFocus
-                  />
-                  <p
-                    className="text-[11px] mt-1"
-                    style={{ color: "var(--text-muted)" }}
-                  >
-                    Enter to save · Escape to cancel
-                  </p>
-                </div>
-              ) : message.htmlContent &&
-                message.htmlContent !== message.content ? (
-                <div
-                  className="message-content text-[16px] leading-relaxed"
-                  style={{ color: "inherit" }}
-                  dangerouslySetInnerHTML={{
-                    __html: sanitizeHtml(message.htmlContent),
-                  }}
-                />
-              ) : (
-                <div
-                  className="message-content text-[16px] leading-relaxed"
-                  style={{ color: "inherit" }}
-                >
-                  {message.content}
-                </div>
-              )}
+              {/* ── Message content (rich HTML or plain text) ── */}
+              {renderMessageContent()}
 
               {!isDeleted && isFailed && (
                 <div className="flex items-center gap-2 mt-1">
@@ -501,24 +819,15 @@ const MessageItem = memo(
                   </button>
                 </div>
               )}
-              {/* {!isDeleted && isPending && !isFailed && (
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: "var(--text-muted)",
-                    marginTop: 2,
-                    display: "inline-block",
-                  }}
-                >
-                  Sending...
-                </span>
-              )}
-              {/* Pinned icon for attachment-only messages */}
-              {!isDeleted && !message.content?.trim() && message.isPinned && compact && (
-                <div className="flex items-center mb-1">
-                  <Pin size={11} style={{ color: "var(--accent-yellow)" }} />
-                </div>
-              )}
+
+              {!isDeleted &&
+                !message.content?.trim() &&
+                message.isPinned &&
+                compact && (
+                  <div className="flex items-center mb-1">
+                    <Pin size={11} style={{ color: "var(--accent-yellow)" }} />
+                  </div>
+                )}
 
               {/* Attachments */}
               {!isDeleted && derivedAttachments.length > 0 && (
@@ -535,7 +844,11 @@ const MessageItem = memo(
                       <span style={{ opacity: 0.4 }}>|</span>
                       <span
                         className="cursor-pointer flex items-center gap-1 hover:underline"
-                        onClick={() => derivedAttachments.forEach((file) => handleDownload(file))}
+                        onClick={() =>
+                          derivedAttachments.forEach((file) =>
+                            handleDownload(file),
+                          )
+                        }
                       >
                         <Download size={14} style={{ opacity: 0.7 }} /> Download
                         all
@@ -601,10 +914,9 @@ const MessageItem = memo(
                   })}
                 </div>
               )}
-
             </div>
 
-            {/* Thread preview — outside bubble so it renders on page bg, always readable */}
+            {/* Thread preview — outside bubble */}
             {message.replyCount > 0 && (
               <ThreadPreview
                 message={message}
@@ -641,8 +953,8 @@ const MessageItem = memo(
                     onOpenThread?.({
                       rootMessageId: message._id,
                       channelId: message.channelId,
-                    })}
-                  }
+                    });
+                  }}
                 />
                 <ActionButton
                   icon={isSaved ? BookmarkCheck : Bookmark}
@@ -660,10 +972,7 @@ const MessageItem = memo(
                       <ActionButton
                         icon={Edit}
                         title="Edit"
-                        onClick={() => {
-                          setEditContent(message.content);
-                          setIsEditing(true);
-                        }}
+                        onClick={() => setIsEditing(true)}
                       />
                     )}
                     <ActionButton
@@ -672,10 +981,11 @@ const MessageItem = memo(
                       danger
                       onClick={async () => {
                         const ok = await confirm({
-                          title: 'Delete message',
-                          message: 'This message will be permanently removed for everyone.',
-                        })
-                        if (ok) deleteMessage(message._id, message.channelId)
+                          title: "Delete message",
+                          message:
+                            "This message will be permanently removed for everyone.",
+                        });
+                        if (ok) deleteMessage(message._id, message.channelId);
                       }}
                     />
                   </>
@@ -785,13 +1095,14 @@ const MessageItem = memo(
       </div>
     );
   },
-  // Memo comparison — include isPinnedHighlight so the component re-renders when it changes
   (prev, next) => {
     return (
       prev.message._id === next.message._id &&
       prev.message.content === next.message.content &&
+      prev.message.htmlContent === next.message.htmlContent &&
       prev.message.reactions === next.message.reactions &&
       prev.message.isEdited === next.message.isEdited &&
+      prev.message.isOptimistic === next.message.isOptimistic &&
       prev.message.isPinned === next.message.isPinned &&
       prev.message.isDeleted === next.message.isDeleted &&
       prev.message.status === next.message.status &&
@@ -803,7 +1114,7 @@ const MessageItem = memo(
       prev.compact === next.compact &&
       prev.isLastInGroup === next.isLastInGroup &&
       prev.isDMChannel === next.isDMChannel &&
-      prev.isPinnedHighlight === next.isPinnedHighlight // ← new
+      prev.isPinnedHighlight === next.isPinnedHighlight
     );
   },
 );
@@ -903,9 +1214,8 @@ function ThreadPreview({ message, onOpenThread, isOwn = false }) {
   const allParticipants = Array.isArray(message.threadParticipants)
     ? message.threadParticipants
     : [];
-  // Show only other users' avatars — exclude the current logged-in user
   const participants = allParticipants.filter(
-    (p) => p._id && p._id.toString() !== user?._id?.toString()
+    (p) => p._id && p._id.toString() !== user?._id?.toString(),
   );
   const count = message.replyCount || 0;
   const formatLastReply = (dateStr) => {
@@ -919,7 +1229,7 @@ function ThreadPreview({ message, onOpenThread, isOwn = false }) {
       new Date(now - 86400000).toDateString() === d.toDateString();
     if (isYesterday) return `yesterday at ${format(d, "h:mm a")}`;
     return `${format(d, "MMM d")} at ${format(d, "h:mm a")}`;
-  };  
+  };
   const lastReplyText = formatLastReply(message.lastReplyAt);
   return (
     <button
@@ -954,7 +1264,6 @@ function ThreadPreview({ message, onOpenThread, isOwn = false }) {
       <span className="thread-preview__count">
         {count} {count === 1 ? "reply" : "replies"}
       </span>
-      {/* time + cta overlap in the same grid cell so there is no layout jump on hover */}
       <span className="thread-preview__meta">
         {lastReplyText && (
           <span className="thread-preview__time">{lastReplyText}</span>

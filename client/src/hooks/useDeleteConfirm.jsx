@@ -261,7 +261,7 @@ function ConfirmToast({
 /* ─── The hook ────────────────────────────────────────────────────────────── */
 export function useDeleteConfirm() {
   /**
-   * confirm(options) → Promise<boolean>
+   * confirm(options) -> Promise<boolean>
    * Resolves true if user clicks Confirm, false if they click Cancel or dismiss.
    */
   const confirm = ({

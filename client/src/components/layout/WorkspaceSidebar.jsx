@@ -1,9 +1,5 @@
 import { memo, useState, useCallback, useRef, useEffect } from "react";
-import {
-  useLocation,
-  useNavigate,
-  useParams,
-} from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Home,
   MessageSquare,
@@ -66,13 +62,15 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   const clearActiveWorkspacePanel = useUIStore(
     (s) => s.clearActiveWorkspacePanel,
   );
-  const activeWorkspacePanel = useUIStore(
-    (s) => s.activeWorkspacePanel,
-  );
+  const activeWorkspacePanel = useUIStore((s) => s.activeWorkspacePanel);
 
   const getActiveId = () => {
     // Check if we're on the Later page route or Later panel is active
-    if (activeWorkspacePanel === 'later' || location.pathname.includes('/later')) return "later";
+    if (
+      activeWorkspacePanel === "later" ||
+      location.pathname.includes("/later")
+    )
+      return "later";
 
     const path = location.pathname.replace(basePath, "");
     if (path.startsWith("/dms") || path.startsWith("/dm/")) return "dms";
@@ -89,10 +87,10 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   const handleNav = useCallback(
     (item) => {
       if (item.id === "later") {
-        if (activeWorkspacePanel === 'later') {
+        if (activeWorkspacePanel === "later") {
           clearActiveWorkspacePanel();
         } else {
-          useUIStore.getState().setActiveWorkspacePanel('later');
+          useUIStore.getState().setActiveWorkspacePanel("later");
         }
         return;
       }
@@ -107,12 +105,7 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
 
       navigate(`${basePath}${item.path}`);
     },
-    [
-      navigate,
-      basePath,
-      clearActiveWorkspacePanel,
-      activeWorkspacePanel,
-    ],
+    [navigate, basePath, clearActiveWorkspacePanel, activeWorkspacePanel],
   );
 
   const handleHoverEnter = useCallback(
@@ -173,31 +166,17 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
       <nav className="workspace-sidebar" aria-label="Workspace navigation">
         {/* Logo */}
         <button
-          className="flex items-center justify-center mb-2 cursor-pointer"
+          className="flex items-center justify-center transition-all duration-200 hover:scale-105"
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: "var(--radius-lg)",
-            background:
-              "linear-gradient(135deg, var(--accent-primary), var(--accent-purple))",
-            border: "none",
+            width: 42,
+            height: 42,
+            borderRadius: "14px",
             padding: 0,
           }}
           onClick={() => navigate(basePath)}
           aria-label="Go to home"
         >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="white"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
+          <img src="/logo.png" alt="Logo" />
         </button>
 
         <div className="workspace-sidebar-divider" />

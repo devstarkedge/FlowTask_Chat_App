@@ -1683,9 +1683,9 @@ function WelcomeScreen({ onOpenMobileSidebar }) {
         >
           Open sidebar
         </button>
-        <div className="cl-welcome__orb">
-          <MessageSquare size={30} color="white" strokeWidth={1.5} />
-        </div>
+        
+           <img src="/logo.png" alt="Logo" className="w-25 h-25 object-contain" />
+        
         <h2 className="cl-welcome__title">Welcome to FlowTask Chat</h2>
         <p className="cl-welcome__desc">
           Select a channel or DM from the sidebar to start collaborating with

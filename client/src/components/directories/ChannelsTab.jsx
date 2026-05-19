@@ -145,7 +145,7 @@ export default function ChannelsTab() {
         <div className="dir-channels-banner-copy">
           <h3 className="dir-channels-banner-title">Browse Channels</h3>
           <p className="dir-channels-banner-sub">
-            {publicCount} public · {joinedCount} joined
+            {publicCount} channels · {joinedCount} joined
           </p>
         </div>
         {isAdmin && (
@@ -286,10 +286,9 @@ function ChannelRow({
   onNavigate,
   onJoinLeave,
 }) {
-  // Deterministic accent hue from channel name
-  const hue =
+  const received =
     [...(ch.name || "")].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
-  const accentColor = `hsl(${hue}, 55%, 52%)`;
+  const accentColor = `hsl(${received}, 55%, 52%)`;
 
   return (
     <div
@@ -301,9 +300,9 @@ function ChannelRow({
       <div
         className="dir-channel-icon"
         style={{
-          background: `hsl(${hue}, 55%, 52%, 0.12)`,
+          background: `hsl(${received}, 55%, 52%, 0.12)`,
           color: accentColor,
-          borderColor: `hsl(${hue}, 55%, 52%, 0.2)`,
+          borderColor: `hsl(${received}, 55%, 52%, 0.2)`,
         }}
       >
         {ch.isPrivate ? <Lock size={15} /> : <Hash size={15} />}

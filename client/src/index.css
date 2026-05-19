@@ -629,6 +629,44 @@ body {
 /*  MESSAGE CONTENT                                                          */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
+.message-content ol {
+  list-style: decimal;
+  padding-left: 22px;
+  margin: 8px 0;
+}
+
+.message-content ul {
+  list-style: disc;
+  padding-left: 22px;
+  margin: 8px 0;
+}
+
+.message-content li {
+  margin: 4px 0;
+}
+
+.message-content blockquote {
+  border-left: 3px solid var(--border-primary);
+  padding-left: 12px;
+  margin: 8px 0;
+  opacity: 0.9;
+}
+
+.message-content code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.message-content pre {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
 .message-content strong {
   color: var(--text-white);
   font-weight: 700;
@@ -2467,6 +2505,7 @@ body {
 .workspace-sidebar-icon.active {
   background: var(--sidebar-icon-active-bg);
   color: var(--sidebar-text, var(--text-white));
+  box-shadow: inset 0 0 0 2px var(--sidebar-active, var(--accent-primary));
 }
 
 .workspace-sidebar-icon[data-tooltip]::after {
@@ -2503,11 +2542,12 @@ body {
   left: -14px;
   top: 50%;
   transform: translateY(-50%);
-  width: 3px;
-  height: 20px;
+  width: 4px;
+  height: 24px;
   /* Use sidebar-active accent color for the pill indicator */
   background: var(--sidebar-active, var(--accent-primary));
-  border-radius: 0 3px 3px 0;
+  border-radius: 0 4px 4px 0;
+  animation: slideInLeft 0.3s ease-out;
 }
 
 .workspace-sidebar-icon .badge-dot {
@@ -2727,8 +2767,10 @@ body {
   gap: 9px;
   width: 100%;
   text-align: left;
+  position: relative;
   /* Full-width flat item — no horizontal margin so it bleeds edge-to-edge */
   padding: 6px 16px;
+  padding-left: 13px;
   border-radius: 0;
   border: none;
   background: transparent;
@@ -2737,21 +2779,25 @@ body {
   font-size: 14px;
   font-weight: 400;
   cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
   min-height: 34px;
+  border-left: 3px solid transparent;
 }
 
 .sidebar-item:hover {
   /* Soft tint hover — same as Slack, not a card */
   background: var(--sidebar-icon-hover);
   color: var(--sidebar-text, var(--text-primary));
+  border-left-color: var(--sidebar-icon-hover);
 }
 
 .sidebar-item.active {
-  /* Accent-colored active state without border-radius cards */
+  /* Accent-colored active state with enhanced visual indicator */
   background: var(--sidebar-active, var(--accent-primary));
   color: var(--sidebar-active-text, #fff);
   font-weight: 600;
+  border-left-color: var(--sidebar-active-text, #fff);
+  box-shadow: inset -2px 0 0 0 rgba(0, 0, 0, 0.1);
 }
 
 .sidebar-item.active .sidebar-item-sublabel,
@@ -2766,6 +2812,11 @@ body {
   flex-shrink: 0;
   width: 28px;
   height: 28px;
+  transition: opacity var(--transition-fast);
+}
+
+.sidebar-item.active .sidebar-item-icon {
+  opacity: 1;
 }
 
 .sidebar-item-content {
@@ -6174,8 +6225,25 @@ body {
     margin: 0;
   }
 
+  .workspace-sidebar-mobile .workspace-sidebar-icon.active {
+    background: var(--sidebar-icon-active-bg) !important;
+  }
+
   .workspace-sidebar-mobile .workspace-sidebar-icon.active::before {
     display: none;
+  }
+
+  .workspace-sidebar-mobile .workspace-sidebar-icon.active::after {
+    content: "";
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px;
+    height: 4px;
+    background: var(--sidebar-active, var(--accent-primary));
+    border-radius: 50%;
+    animation: slideInLeft 0.3s ease-out;
   }
 }
 
@@ -8481,6 +8549,25 @@ textarea:focus-visible,
   transition: all 240ms cubic-bezier(0.55, 0, 1, 0.45) !important;
 }
 
+/* Rescheduling state — lock card in place and show form clearly */
+.sml-card.rescheduling {
+  transform: none !important;
+  cursor: default;
+  overflow: visible;
+  padding-bottom: 14px;
+}
+
+/* Keep accent stripe visible while editing */
+.sml-card.rescheduling::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+/* Hide hover actions while reschedule form is open */
+.sml-card.rescheduling .sml-actions {
+  display: none;
+}
+
 /* ── Card Top Row ────────────────────────────────────────────────────── */
 .sml-card-top {
   display: flex;
@@ -8490,6 +8577,7 @@ textarea:focus-visible,
   margin-bottom: 9px;
 }
 
+/* ── Channel Badge ───────────────────────────────────────────────────── */
 .sml-channel-badge {
   display: inline-flex;
   align-items: center;
@@ -8507,6 +8595,38 @@ textarea:focus-visible,
   flex-shrink: 0;
 }
 
+/* DM badge variant: slightly wider pill to fit avatar */
+.sml-channel-badge--dm {
+  gap: 6px;
+  padding: 2px 8px 2px 3px;
+}
+
+/* Shared channel name text */
+.sml-channel-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 118px;
+}
+
+/* DM avatar circle — mirrors dsl-avatar from DraftsSidebar */
+.sml-dm-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* ── Time group ──────────────────────────────────────────────────────── */
 .sml-time-group {
   display: flex;
   align-items: center;
@@ -8670,13 +8790,15 @@ textarea:focus-visible,
 /* ── Reschedule Form ─────────────────────────────────────────────────── */
 .sml-reschedule {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 10px;
-  padding: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 11px 12px 12px;
   border-radius: 10px;
   background: var(--surface-tertiary, var(--bg-tertiary));
-  border: 1px solid var(--border-color, var(--border-primary));
+  border: 1px solid color-mix(in srgb, var(--accent-color, #1264a3) 22%, var(--border-color));
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent-color, #1264a3) 8%, transparent);
   animation: sml-form-in 240ms cubic-bezier(0.34, 1.2, 0.64, 1);
 }
 
@@ -8692,15 +8814,51 @@ textarea:focus-visible,
   }
 }
 
-.sml-reschedule-input {
+/* Instructional label row */
+.sml-reschedule-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--accent-color, #1264a3);
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+/* Controls row: input + buttons */
+.sml-reschedule-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Input wrapper with inset clock icon */
+.sml-reschedule-input-wrap {
+  position: relative;
   flex: 1;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 7px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.sml-reschedule-input-icon {
+  position: absolute;
+  left: 9px;
+  color: var(--text-muted);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.sml-reschedule-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px 0 30px;
+  border-radius: 8px;
   border: 1px solid var(--border-color, var(--border-primary));
   background: var(--bg-input, var(--bg-secondary));
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 12.5px;
   font-family: var(--font-sans);
   outline: none;
   min-width: 0;
@@ -8709,25 +8867,55 @@ textarea:focus-visible,
 
 .sml-reschedule-input:focus {
   border-color: var(--accent-color, #1264a3);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color, #1264a3) 14%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color, #1264a3) 14%, transparent);
+}
+
+/* Buttons group */
+.sml-reschedule-btns {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.sml-reschedule-cancel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, var(--border-primary));
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.sml-reschedule-cancel:hover {
+  background: color-mix(in srgb, var(--accent-red, #e5534b) 12%, transparent);
+  color: var(--accent-red, #e5534b);
+  border-color: color-mix(in srgb, var(--accent-red, #e5534b) 36%, transparent);
+  transform: scale(1.08);
 }
 
 .sml-reschedule-save {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 12px;
-  height: 32px;
-  border-radius: 7px;
+  gap: 5px;
+  padding: 0 13px;
+  height: 34px;
+  border-radius: 8px;
   border: none;
   background: var(--accent-color, #1264a3);
   color: #fff;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   font-family: var(--font-sans);
-  transition: filter 140ms ease, transform 140ms ease;
+  transition: filter 140ms ease, transform 140ms ease, opacity 140ms ease;
 }
 
 .sml-reschedule-save:hover:not(:disabled) {
@@ -8735,31 +8923,14 @@ textarea:focus-visible,
   transform: translateY(-1px);
 }
 
+.sml-reschedule-save:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
 .sml-reschedule-save:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
   transform: none;
-}
-
-.sml-reschedule-cancel {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 7px;
-  border: 1px solid var(--border-color, var(--border-primary));
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 0;
-  transition: all 140ms ease;
-}
-
-.sml-reschedule-cancel:hover {
-  background: color-mix(in srgb, var(--accent-red, #e5534b) 12%, transparent);
-  color: var(--accent-red, #e5534b);
-  border-color: color-mix(in srgb, var(--accent-red, #e5534b) 36%, transparent);
 }
 
 /* ── Skeleton ────────────────────────────────────────────────────────── */
@@ -10085,6 +10256,14 @@ textarea:focus-visible,
 .dsl-badge--attach {
   background: color-mix(in srgb, var(--accent-color, #1264a3) 12%, transparent);
   color: var(--accent-color, #1264a3);
+}
+
+.dsl-badge--scheduled {
+  background: color-mix(in srgb, var(--accent-purple, #7c3aed) 12%, transparent);
+  color: var(--accent-purple, #7c3aed);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
 /* Preview */
@@ -12811,9 +12990,19 @@ textarea:focus-visible,
 }
 
 @keyframes lp-float {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  40% { transform: translateY(-7px) rotate(-4deg); }
-  65% { transform: translateY(-4px) rotate(2deg); }
+
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  40% {
+    transform: translateY(-7px) rotate(-4deg);
+  }
+
+  65% {
+    transform: translateY(-4px) rotate(2deg);
+  }
 }
 
 .lp-empty__title {
@@ -12870,8 +13059,15 @@ textarea:focus-visible,
 }
 
 @keyframes lp-card-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ── ITEM VIEW ──────────── */
@@ -12915,7 +13111,8 @@ textarea:focus-visible,
 }
 
 .lp-item__due {
-  color: #6ebaf8; /* light blue */
+  color: #6ebaf8;
+  /* light blue */
   font-weight: 600;
   white-space: nowrap;
 }
@@ -13097,7 +13294,8 @@ textarea:focus-visible,
 }
 
 .lp-dropdown__item--text {
-  padding-left: 40px; /* 16px padding + 14px icon + 10px gap */
+  padding-left: 40px;
+  /* 16px padding + 14px icon + 10px gap */
 }
 
 .lp-dropdown__sep {
@@ -13127,9 +13325,11 @@ textarea:focus-visible,
   .lp-header {
     padding: 12px 14px 0;
   }
+
   .lp-content {
     padding: 10px 0 14px;
   }
+
   .lp-item__actions {
     opacity: 1;
     pointer-events: auto;
@@ -13474,6 +13674,7 @@ textarea:focus-visible,
     animation: fadeIn 200ms ease;
   }
 }
+
 /* --- Scheduled Messages (New Design) -------------------------------------- */
 
 .sml-card-new {
@@ -13731,4 +13932,3 @@ textarea:focus-visible,
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 1px var(--accent-primary);
 }
-

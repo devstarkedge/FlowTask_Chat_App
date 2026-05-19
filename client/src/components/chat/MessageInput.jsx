@@ -11,22 +11,12 @@ import {
   Paperclip,
   Smile,
   Bold,
-  Italic,
-  Underline,
-  Strikethrough,
-  Code,
-  Braces,
-  List,
-  ListOrdered,
-  Quote,
-  Link,
-  X,
-  FileText,
   Loader2,
   Plus,
   AtSign,
   ChevronDown,
   Clock,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import EmojiPicker from "./EmojiPicker";
@@ -34,9 +24,11 @@ import MentionDropdown from "./MentionDropdown";
 import RichTextEditor from "./RichTextEditor";
 import ScheduleMessageModal from "./ScheduleMessageModal";
 import { getFileKind, KindIcon, formatFileSize } from "./SlackFileCard";
+// Shared toolbar — adjust import path to match your project structure
+import FormattingToolbar, { ToolbarBtn } from "./FormattingToolbar";
 
-// ─── Toolbar Button ──────────────────────────────────────────────────────────
-
+// ─── Toolbar Button (wraps shared ToolbarBtn with composer-specific styling) ──
+// Kept as a local alias so nothing else in this file needs to change.
 const ToolbarButton = memo(function ToolbarButton({
   icon: Icon,
   title,
@@ -304,6 +296,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       if (rafId) cancelAnimationFrame(rafId);
     };
   }, [channelId, activeWorkspaceId, restoreDraft, threadId]);
+
   // ─── Typing ──────────────────────────────────────────────────────────────
 
   const handleTyping = useCallback(() => {
@@ -571,8 +564,6 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       const clipboardData = e.clipboardData;
       if (!clipboardData) return;
 
-      // Allowlist for pasted files: accept common image/video/audio types,
-      // common document/text MIME types and known extensions.
       const ALLOWED_MIME_PREFIXES = ["image/", "video/", "audio/"];
       const ALLOWED_MIME_EXACT = [
         "application/pdf",
@@ -626,21 +617,19 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       if (hasUnsupported) {
         toast.error("Cannot attach pasted content — unsupported file type");
       }
-      // Text paste is handled natively by TipTap (plain text)
     },
     [pendingFiles.length, uploadingFiles.length],
   ); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Attach paste listener to the editor DOM once it's mounted
   useEffect(() => {
-    // Small delay to ensure TipTap editor view is mounted
     const timer = setTimeout(() => {
       try {
         const ed = editorRef.current?.getEditor?.();
         const dom = ed?.view?.dom;
         if (dom) {
           dom.addEventListener("paste", handlePaste);
-          return; // cleanup handled below
+          return;
         }
       } catch {
         // Editor view not ready yet — safe to ignore
@@ -681,11 +670,9 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
   const handleKeyDown = useCallback(
     (event) => {
-      // If mention dropdown is open, let it handle navigation keys
       if (mentionType) {
         if (["ArrowUp", "ArrowDown", "Tab", "Enter"].includes(event.key)) {
-          // MentionDropdown captures these via document listener
-          return false; // let it propagate
+          return false;
         }
         if (event.key === "Escape") {
           event.preventDefault();
@@ -694,7 +681,6 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
         }
       }
 
-      // Escape to close popups
       if (event.key === "Escape") {
         if (showEmoji) {
           setShowEmoji(false);
@@ -711,44 +697,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     [mentionType, showEmoji, showLinkModal],
   );
 
-  // ─── Formatting Actions ───────────────────────────────────────────────────
-
-  const formatBold = useCallback(() => {
-    editorRef.current?.toggleBold();
-    syncFormatState();
-  }, [syncFormatState]);
-  const formatItalic = useCallback(() => {
-    editorRef.current?.toggleItalic();
-    syncFormatState();
-  }, [syncFormatState]);
-  const formatUnderline = useCallback(() => {
-    editorRef.current?.toggleUnderline();
-    syncFormatState();
-  }, [syncFormatState]);
-  const formatStrikethrough = useCallback(() => {
-    editorRef.current?.toggleStrike();
-    syncFormatState();
-  }, [syncFormatState]);
-  const formatBulletList = useCallback(() => {
-    editorRef.current?.toggleBulletList();
-    syncFormatState();
-  }, [syncFormatState]);
-  const formatNumberedList = useCallback(() => {
-    editorRef.current?.toggleOrderedList();
-    syncFormatState();
-  }, [syncFormatState]);
-  const formatQuote = useCallback(() => {
-    editorRef.current?.toggleBlockquote();
-    syncFormatState();
-  }, [syncFormatState]);
-  const formatInlineCode = useCallback(() => {
-    editorRef.current?.toggleCode();
-    syncFormatState();
-  }, [syncFormatState]);
-  const formatCodeBlock = useCallback(() => {
-    editorRef.current?.toggleCodeBlock();
-    syncFormatState();
-  }, [syncFormatState]);
+  // ─── Link Insert ──────────────────────────────────────────────────────────
 
   const handleLinkInsert = useCallback((url, text) => {
     editorRef.current?.insertLink(url, text);
@@ -813,80 +762,22 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
           </div>
         )}
 
-        {/* Formatting Toolbar */}
+        {/* ── Formatting Toolbar — now uses shared FormattingToolbar ── */}
         {showToolbar && (
           <div className="slack-formatting-toolbar">
-            <div className="slack-toolbar-group">
-              <ToolbarButton
-                icon={Bold}
-                title="Bold (Ctrl+B)"
-                onClick={formatBold}
-                active={formatState.bold}
-              />
-              <ToolbarButton
-                icon={Italic}
-                title="Italic (Ctrl+I)"
-                onClick={formatItalic}
-                active={formatState.italic}
-              />
-              <ToolbarButton
-                icon={Underline}
-                title="Underline (Ctrl+U)"
-                onClick={formatUnderline}
-                active={formatState.underline}
-              />
-              <ToolbarButton
-                icon={Strikethrough}
-                title="Strikethrough (Ctrl+Shift+X)"
-                onClick={formatStrikethrough}
-                active={formatState.strike}
-              />
-            </div>
-            <div className="slack-toolbar-divider" />
-            <div className="slack-toolbar-group">
-              <ToolbarButton
-                icon={Link}
-                title="Insert link"
-                onClick={handleLinkToggle}
-                active={showLinkModal}
-              />
-            </div>
-            <div className="slack-toolbar-divider" />
-            <div className="slack-toolbar-group">
-              <ToolbarButton
-                icon={List}
-                title="Bullet list"
-                onClick={formatBulletList}
-                active={formatState.bulletList}
-              />
-              <ToolbarButton
-                icon={ListOrdered}
-                title="Numbered list"
-                onClick={formatNumberedList}
-                active={formatState.orderedList}
-              />
-            </div>
-            <div className="slack-toolbar-divider" />
-            <div className="slack-toolbar-group">
-              <ToolbarButton
-                icon={Quote}
-                title="Quote"
-                onClick={formatQuote}
-                active={formatState.blockquote}
-              />
-              <ToolbarButton
-                icon={Code}
-                title="Inline code"
-                onClick={formatInlineCode}
-                active={formatState.code}
-              />
-              <ToolbarButton
-                icon={Braces}
-                title="Code block"
-                onClick={formatCodeBlock}
-                active={formatState.codeBlock}
-              />
-            </div>
+            {/*
+              FormattingToolbar renders its own groups/dividers.
+              We pass onLinkClick so the link button opens our LinkModal.
+              The `variant="full"` (default) includes all controls including
+              the code-block button and link button.
+            */}
+            <FormattingToolbar
+              editorRef={editorRef}
+              formatState={formatState}
+              onFormatChange={syncFormatState}
+              variant="full"
+              onLinkClick={handleLinkToggle}
+            />
           </div>
         )}
 

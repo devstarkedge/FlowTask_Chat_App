@@ -17,15 +17,12 @@ import {
   X,
   CheckCircle,
   Hash,
-  MessageSquare,
+  Lock,
   ClockFading,
   CalendarClock,
-  Timer,
 } from "lucide-react";
-import toast from "react-hot-toast";
+import { toast } from "react-hot-toast";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
-
-
 
 /* ─── Helpers ───────────────────────────────────────────────────────────── */
 
@@ -34,10 +31,10 @@ function formatScheduledTime(date) {
   const now = new Date();
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const isToday    = d.toDateString() === now.toDateString();
+  const isToday = d.toDateString() === now.toDateString();
   const isTomorrow = d.toDateString() === tomorrow.toDateString();
   const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  if (isToday)    return `Today · ${time}`;
+  if (isToday) return `Today · ${time}`;
   if (isTomorrow) return `Tomorrow · ${time}`;
   return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} · ${time}`;
 }
@@ -46,10 +43,10 @@ function timeUntil(date) {
   const diff = new Date(date) - new Date();
   if (diff <= 0) return "Overdue";
   const mins = Math.floor(diff / 60000);
-  const hrs  = Math.floor(mins / 60);
+  const hrs = Math.floor(mins / 60);
   const days = Math.floor(hrs / 24);
   if (days > 0) return `in ${days}d ${hrs % 24}h`;
-  if (hrs  > 0) return `in ${hrs}h ${mins % 60}m`;
+  if (hrs > 0) return `in ${hrs}h ${mins % 60}m`;
   return `in ${mins}m`;
 }
 
@@ -59,13 +56,82 @@ function truncatePreview(text, max = 90) {
   return stripped.length > max ? stripped.slice(0, max) + "…" : stripped;
 }
 
+/* ─── Avatar helpers (mirrors DraftsSidebar pattern) ─────────────────────── */
+
+const AVATAR_COLORS = [
+  "#1264a3",
+  "#059669",
+  "#7c3aed",
+  "#ea580c",
+  "#0891b2",
+  "#d97706",
+  "#db2777",
+  "#65a30d",
+];
+
+function getInitials(name = "") {
+  return name
+    .replace(/^#/, "")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+}
+
+function avatarBg(name = "") {
+  const idx =
+    name.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0) %
+    AVATAR_COLORS.length;
+  return AVATAR_COLORS[idx];
+}
+
+/* ─── Channel Badge ──────────────────────────────────────────────────────── */
+/* Dynamic: DM → initials avatar + name | private → lock icon | public → hash */
+
+function ChannelBadge({ channel, channelName, isDM }) {
+  if (isDM) {
+    const displayName = channelName.replace(/^#/, "");
+    const initials = getInitials(displayName);
+    const bg = avatarBg(displayName);
+
+    return (
+      <span className="sml-channel-badge sml-channel-badge--dm">
+        <span
+          className="sml-dm-avatar"
+          style={{ background: bg }}
+          aria-hidden="true"
+        >
+          {initials}
+        </span>
+        <span className="sml-channel-name">{displayName}</span>
+      </span>
+    );
+  }
+
+  const isPrivate =
+    channel?.isPrivate ??
+    channel?.private ??
+    channel?.visibility === "private" ??
+    false;
+
+  return (
+    <span className="sml-channel-badge">
+      {isPrivate ? (
+        <Lock size={10} strokeWidth={2.3} />
+      ) : (
+        <Hash size={10} strokeWidth={2.3} />
+      )}
+      <span className="sml-channel-name">{channelName.replace(/^#/, "")}</span>
+    </span>
+  );
+}
+
 /* ─── Skeleton Card ──────────────────────────────────────────────────────── */
+
 function SkeletonCard({ delay = 0 }) {
   return (
-    <div
-      className="sml-skeleton-card"
-      style={{ animationDelay: `${delay}ms` }}
-    >
+    <div className="sml-skeleton-card" style={{ animationDelay: `${delay}ms` }}>
       <div className="sml-skeleton-row">
         <div
           className="sml-skeleton-line"
@@ -85,9 +151,71 @@ function SkeletonCard({ delay = 0 }) {
   );
 }
 
+/* ─── Reschedule Form ────────────────────────────────────────────────────── */
+
+function RescheduleForm({
+  rescheduleDate,
+  setRescheduleDate,
+  handleReschedule,
+  setRescheduleId,
+  isLoading,
+}) {
+  return (
+    <div className="sml-reschedule" onClick={(e) => e.stopPropagation()}>
+      {/* Label row */}
+      <div className="sml-reschedule-label">
+        <CalendarClock size={11} />
+        Pick a new date &amp; time
+      </div>
+
+      {/* Controls row */}
+      <div className="sml-reschedule-controls">
+        <div className="sml-reschedule-input-wrap">
+          <Clock size={12} className="sml-reschedule-input-icon" />
+          <input
+            type="datetime-local"
+            value={rescheduleDate}
+            min={new Date().toISOString().slice(0, 16)}
+            onChange={(e) => setRescheduleDate(e.target.value)}
+            className="sml-reschedule-input"
+            autoFocus
+          />
+        </div>
+
+        <div className="sml-reschedule-btns">
+          <button
+            className="sml-reschedule-cancel"
+            onClick={(e) => {
+              e.stopPropagation();
+              setRescheduleId(null);
+            }}
+            title="Cancel"
+          >
+            <X size={12} />
+          </button>
+          <button
+            className="sml-reschedule-save"
+            onClick={handleReschedule}
+            disabled={isLoading || !rescheduleDate}
+          >
+            {isLoading ? (
+              <Loader2 size={11} className="sml-spin" />
+            ) : (
+              <CheckCircle size={11} />
+            )}
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Message Card ───────────────────────────────────────────────────────── */
+
 function MessageCard({
   msg,
+  channel,
   channelName,
   isDM,
   isPast,
@@ -104,32 +232,29 @@ function MessageCard({
   removing,
 }) {
   const isRescheduling = rescheduleId === msg._id;
-  const isLoading      = actionLoading === msg._id;
-  const preview        = truncatePreview(msg.content || msg.htmlContent);
+  const isLoading = actionLoading === msg._id;
+  const preview = truncatePreview(msg.content || msg.htmlContent);
 
   return (
     <div
       className={[
         "sml-card",
-        isPast    ? "overdue"  : "",
-        removing  ? "removing" : "",
+        isPast ? "overdue" : "",
+        removing ? "removing" : "",
+        isRescheduling ? "rescheduling" : "",
       ]
         .filter(Boolean)
         .join(" ")}
       onClick={() => !isRescheduling && handleNavigate(msg)}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && !isRescheduling && handleNavigate(msg)}
+      onKeyDown={(e) =>
+        e.key === "Enter" && !isRescheduling && handleNavigate(msg)
+      }
     >
       {/* Top row */}
       <div className="sml-card-top">
-        <span className="sml-channel-badge">
-          {isDM
-            ? <MessageSquare size={10} />
-            : <Hash size={10} />
-          }
-          {channelName.replace(/^#/, "")}
-        </span>
+        <ChannelBadge channel={channel} channelName={channelName} isDM={isDM} />
 
         <div className="sml-time-group">
           <span className={`sml-until-badge${isPast ? " overdue" : ""}`}>
@@ -154,7 +279,8 @@ function MessageCard({
           {msg.attachments?.length > 0 && (
             <span className="sml-indicator">
               <Paperclip size={10} />
-              {msg.attachments.length} attachment{msg.attachments.length !== 1 ? "s" : ""}
+              {msg.attachments.length} attachment
+              {msg.attachments.length !== 1 ? "s" : ""}
             </span>
           )}
           {isPast && (
@@ -169,55 +295,30 @@ function MessageCard({
         </div>
       )}
 
-      {/* Reschedule form */}
+      {/* Enhanced reschedule form */}
       {isRescheduling && (
-        <div
-          className="sml-reschedule"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <input
-            type="datetime-local"
-            value={rescheduleDate}
-            min={new Date().toISOString().slice(0, 16)}
-            onChange={(e) => setRescheduleDate(e.target.value)}
-            className="sml-reschedule-input"
-            autoFocus
-          />
-          <button
-            className="sml-reschedule-save"
-            onClick={handleReschedule}
-            disabled={isLoading}
-          >
-            {isLoading
-              ? <Loader2 size={11} className="sml-spin" />
-              : <CheckCircle size={11} />
-            }
-            Save
-          </button>
-          <button
-            className="sml-reschedule-cancel"
-            onClick={(e) => { e.stopPropagation(); setRescheduleId(null); }}
-          >
-            <X size={12} />
-          </button>
-        </div>
+        <RescheduleForm
+          rescheduleDate={rescheduleDate}
+          setRescheduleDate={setRescheduleDate}
+          handleReschedule={handleReschedule}
+          setRescheduleId={setRescheduleId}
+          isLoading={isLoading}
+        />
       )}
 
       {/* Hover actions */}
-      <div
-        className="sml-actions"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="sml-actions" onClick={(e) => e.stopPropagation()}>
         <button
           className="sml-action-btn send"
           onClick={(e) => handleSendNow(e, msg._id)}
           disabled={isLoading}
           title="Send now"
         >
-          {isLoading
-            ? <Loader2 size={13} className="sml-spin" />
-            : <Send size={13} />
-          }
+          {isLoading ? (
+            <Loader2 size={13} className="sml-spin" />
+          ) : (
+            <Send size={13} />
+          )}
         </button>
         <button
           className="sml-action-btn edit"
@@ -241,23 +342,24 @@ function MessageCard({
 }
 
 /* ─── Main Component ─────────────────────────────────────────────────────── */
+
 export default function ScheduledMessagesList({ onCountChange } = {}) {
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
-  const channels          = useChannelStore((s) => s.channels);
+  const channels = useChannelStore((s) => s.channels);
   const setScheduledCount = useScheduledStore((s) => s.setScheduledCount);
-  const navigate          = useNavigate();
+  const navigate = useNavigate();
 
-  const [messages,      setMessages]      = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [searchQuery,   setSearchQuery]   = useState("");
-  const [filter,        setFilter]        = useState("all");
-  const [rescheduleId,  setRescheduleId]  = useState(null);
-  const [rescheduleDate,setRescheduleDate]= useState("");
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [rescheduleId, setRescheduleId] = useState(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
   const [actionLoading, setActionLoading] = useState(null);
-  const [removingIds,   setRemovingIds]   = useState(new Set());
+  const [removingIds, setRemovingIds] = useState(new Set());
   const searchRef = useRef(null);
   const { confirm } = useDeleteConfirm();
-  
+
   /* ── Fetch ── */
   const fetchMessages = useCallback(async () => {
     if (!activeWorkspaceId) return;
@@ -276,7 +378,9 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
     }
   }, [activeWorkspaceId, onCountChange]);
 
-  useEffect(() => { fetchMessages(); }, [fetchMessages]);
+  useEffect(() => {
+    fetchMessages();
+  }, [fetchMessages]);
 
   /* ── Socket: Remove sent scheduled messages in real-time ── */
   useEffect(() => {
@@ -295,9 +399,9 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
       });
     };
 
-    socket.on('scheduledMessage:sent', handleScheduledSent);
+    socket.on("scheduledMessage:sent", handleScheduledSent);
     return () => {
-      socket.off('scheduledMessage:sent', handleScheduledSent);
+      socket.off("scheduledMessage:sent", handleScheduledSent);
     };
   }, [onCountChange]);
 
@@ -318,11 +422,12 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
   const handleCancel = async (e, id) => {
     e.stopPropagation();
     const ok = await confirm({
-      title: 'Cancel scheduled message',
-      message: 'This scheduled message will be permanently cancelled and not sent.',
-      confirmLabel: 'Cancel message',
-    })
-    if (!ok) return
+      title: "Cancel scheduled message",
+      message:
+        "This scheduled message will be permanently cancelled and not sent.",
+      confirmLabel: "Cancel message",
+    });
+    if (!ok) return;
     setActionLoading(id);
     try {
       await scheduledMessageAPI.cancel(id);
@@ -345,8 +450,10 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
   const handleSendNow = async (e, id) => {
     e.stopPropagation();
     setActionLoading(id);
+
     try {
       await scheduledMessageAPI.sendNow(id);
+
       animateRemove(id, () => {
         setMessages((prev) => {
           const next = prev.filter((m) => m._id !== id);
@@ -355,9 +462,10 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
           return next;
         });
       });
-      toast.success("Message sent!");
-    } catch {
-      toast.error("Failed to send");
+
+      toast.success("Message sent successfully!");
+    } catch (error) {
+      toast.error("Failed to send message!");
     } finally {
       setActionLoading(null);
     }
@@ -371,15 +479,23 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
 
   const handleReschedule = async (e) => {
     e.stopPropagation();
-    if (!rescheduleDate) { toast.error("Pick a date and time"); return; }
+    if (!rescheduleDate) {
+      toast.error("Pick a date and time");
+      return;
+    }
     const date = new Date(rescheduleDate);
-    if (date <= new Date()) { toast.error("Must be in the future"); return; }
+    if (date <= new Date()) {
+      toast.error("Must be in the future");
+      return;
+    }
     setActionLoading(rescheduleId);
     try {
       await scheduledMessageAPI.reschedule(rescheduleId, date.toISOString());
       setMessages((prev) =>
         prev.map((m) =>
-          m._id === rescheduleId ? { ...m, scheduledAt: date.toISOString() } : m,
+          m._id === rescheduleId
+            ? { ...m, scheduledAt: date.toISOString() }
+            : m,
         ),
       );
       setRescheduleId(null);
@@ -392,8 +508,9 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
   };
 
   const handleNavigate = (msg) => {
-    const channelId = typeof msg.channelId === "object" ? msg.channelId._id : msg.channelId;
-    const channel   = channels.find((c) => c._id === channelId);
+    const channelId =
+      typeof msg.channelId === "object" ? msg.channelId._id : msg.channelId;
+    const channel = channels.find((c) => c._id === channelId);
     if (!channel) return;
     navigate(
       channel.type === "dm"
@@ -411,48 +528,57 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
   const getChannelName = (channelId) => {
     const ch = getChannel(channelId);
     if (!ch) return "Unknown";
-    if (ch.type === "dm") return ch.dmRecipientName || "Direct Message";
+    if (ch.type === "dm")
+      return ch.dmRecipientName || ch.name || "Direct Message";
     return `#${ch.name}`;
   };
 
   /* ── Filtering ── */
-  const now      = new Date();
+  const now = new Date();
   const todayStr = now.toDateString();
 
   const overdueMessages = messages.filter((m) => new Date(m.scheduledAt) < now);
-  const todayMessages   = messages.filter((m) => {
+  const todayMessages = messages.filter((m) => {
     const d = new Date(m.scheduledAt);
     return d >= now && d.toDateString() === todayStr;
   });
 
   const filtered = messages.filter((m) => {
-    const channelId = typeof m.channelId === "object" ? m.channelId._id : m.channelId;
-    const name    = getChannelName(channelId).toLowerCase();
+    const channelId =
+      typeof m.channelId === "object" ? m.channelId._id : m.channelId;
+    const name = getChannelName(channelId).toLowerCase();
     const content = (m.content || "").toLowerCase();
-    const q       = searchQuery.toLowerCase();
-    const matchesSearch =
-      !q || content.includes(q) || name.includes(q);
-    const isPast  = new Date(m.scheduledAt) < now;
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = !q || content.includes(q) || name.includes(q);
+    const isPast = new Date(m.scheduledAt) < now;
     const isToday = new Date(m.scheduledAt).toDateString() === todayStr;
     const matchesFilter =
       filter === "all" ||
       (filter === "overdue" && isPast) ||
-      (filter === "today"   && isToday && !isPast);
+      (filter === "today" && isToday && !isPast);
     return matchesSearch && matchesFilter;
   });
 
   /* ── Group by date ── */
   const grouped = filtered.reduce((acc, msg) => {
-    const d     = new Date(msg.scheduledAt);
+    const d = new Date(msg.scheduledAt);
     const isPast = d < now;
     const key = isPast
       ? "__overdue__"
       : d.toDateString() === todayStr
         ? "Today"
         : d.toDateString() ===
-            new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toDateString()
+            new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate() + 1,
+            ).toDateString()
           ? "Tomorrow"
-          : d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+          : d.toLocaleDateString([], {
+              weekday: "long",
+              month: "short",
+              day: "numeric",
+            });
     if (!acc[key]) acc[key] = [];
     acc[key].push(msg);
     return acc;
@@ -461,17 +587,17 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
   const groupOrder = Object.keys(grouped).sort((a, b) => {
     if (a === "__overdue__") return -1;
     if (b === "__overdue__") return 1;
-    if (a === "Today")       return -1;
-    if (b === "Today")       return 1;
-    if (a === "Tomorrow")    return -1;
-    if (b === "Tomorrow")    return 1;
+    if (a === "Today") return -1;
+    if (b === "Today") return 1;
+    if (a === "Tomorrow") return -1;
+    if (b === "Tomorrow") return 1;
     return 0;
   });
 
   /* ── Chip data ── */
   const chips = [
-    { key: "all",     label: "All",     count: messages.length },
-    { key: "today",   label: "Today",   count: todayMessages.length },
+    { key: "all", label: "All", count: messages.length },
+    { key: "today", label: "Today", count: todayMessages.length },
     { key: "overdue", label: "Overdue", count: overdueMessages.length },
   ];
 
@@ -480,23 +606,6 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
     <div className="sml-root ds-root">
       {/* Header */}
       <div className="sml-header ds-header">
-        {/* <div className="sml-header-top ds-header__top">
-          <div className="sml-title ds-header__title">
-            <span className="sml-title-icon ds-header__title-icon">
-              <Clock size={14} />
-            </span>
-            Scheduled
-            {messages.length > 0 && (
-              <span
-                className={`sml-count-badge${overdueMessages.length > 0 ? " overdue" : ""}`}
-              >
-                {messages.length}
-              </span>
-            )}
-          </div>
-        </div> */}
-
-        {/* Search */}
         <div className="sml-search ds-search">
           <Search size={13} className="sml-search-icon ds-search__icon" />
           <input
@@ -511,7 +620,10 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
           {searchQuery && (
             <button
               className="sml-search-clear ds-search__clear"
-              onClick={() => { setSearchQuery(""); searchRef.current?.focus(); }}
+              onClick={() => {
+                setSearchQuery("");
+                searchRef.current?.focus();
+              }}
               aria-label="Clear search"
             >
               <X size={10} strokeWidth={3} />
@@ -535,7 +647,11 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
                   className="sml-chip-count"
                   style={
                     key === "overdue" && count > 0 && filter !== key
-                      ? { background: "color-mix(in srgb, var(--accent-red, #e5534b) 16%, transparent)", color: "var(--accent-red, #e5534b)" }
+                      ? {
+                          background:
+                            "color-mix(in srgb, var(--accent-red, #e5534b) 16%, transparent)",
+                          color: "var(--accent-red, #e5534b)",
+                        }
                       : {}
                   }
                 >
@@ -590,14 +706,15 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
                   typeof msg.channelId === "object"
                     ? msg.channelId._id
                     : msg.channelId;
-                const ch          = getChannel(channelId);
+                const ch = getChannel(channelId);
                 const channelName = getChannelName(channelId);
-                const isPast      = new Date(msg.scheduledAt) < now;
+                const isPast = new Date(msg.scheduledAt) < now;
 
                 return (
                   <MessageCard
                     key={msg._id}
                     msg={msg}
+                    channel={ch}
                     channelName={channelName}
                     isDM={ch?.type === "dm"}
                     isPast={isPast}
@@ -628,7 +745,9 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
           {overdueMessages.length > 0 && (
             <>
               <span className="sml-footer-dot" />
-              <span style={{ color: "var(--accent-red, #e5534b)", fontWeight: 600 }}>
+              <span
+                style={{ color: "var(--accent-red, #e5534b)", fontWeight: 600 }}
+              >
                 {overdueMessages.length} overdue
               </span>
             </>
@@ -636,7 +755,12 @@ export default function ScheduledMessagesList({ onCountChange } = {}) {
           {todayMessages.length > 0 && (
             <>
               <span className="sml-footer-dot" />
-              <span style={{ color: "var(--accent-green, #2eb67d)", fontWeight: 600 }}>
+              <span
+                style={{
+                  color: "var(--accent-green, #2eb67d)",
+                  fontWeight: 600,
+                }}
+              >
                 {todayMessages.length} today
               </span>
             </>

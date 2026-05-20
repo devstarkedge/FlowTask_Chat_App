@@ -434,12 +434,34 @@ export const useChatStore = create((set, get) => ({
       const message = data.data.message;
       set((state) => {
         const channelMsgs = state.messagesByChannel[message.channelId] || [];
+        const updatedChannelMessages = channelMsgs.map((m) =>
+          m._id === messageId ? message : m,
+        );
+
+        if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
+          return {
+            messagesByChannel: {
+              ...state.messagesByChannel,
+              [message.channelId]: updatedChannelMessages,
+            },
+            messagesById: {
+              ...state.messagesById,
+              [message._id]: {
+                ...(state.messagesById[message._id] || {}),
+                ...message,
+              },
+            },
+            messageChannelById: {
+              ...state.messageChannelById,
+              [message._id]: message.channelId,
+            },
+          };
+        }
+
         return {
           messagesByChannel: {
             ...state.messagesByChannel,
-            [message.channelId]: channelMsgs.map((m) =>
-              m._id === messageId ? message : m,
-            ),
+            [message.channelId]: updatedChannelMessages,
           },
         };
       });

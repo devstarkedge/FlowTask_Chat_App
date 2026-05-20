@@ -65,12 +65,11 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   const activeWorkspacePanel = useUIStore((s) => s.activeWorkspacePanel);
 
   const getActiveId = () => {
-    // Check if we're on the Later page route or Later panel is active
-    if (
-      activeWorkspacePanel === "later" ||
-      location.pathname.includes("/later")
-    )
-      return "later";
+    // The Workspace sidebar's "Later" icon should only be active when
+    // the Later panel itself is open. Do NOT treat the Later page route
+    // as activating the Workspace sidebar bookmark icon — navigation to
+    // the Later page is handled and highlighted by the NavigationSidebar.
+    if (activeWorkspacePanel === "later") return "later";
 
     const path = location.pathname.replace(basePath, "");
     if (path.startsWith("/dms") || path.startsWith("/dm/")) return "dms";

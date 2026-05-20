@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useNavigate, useParams, useLocation, matchPath } from "react-router-dom";
 import { useChannelStore } from "../../stores/channelStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useChatStore } from "../../stores/chatStore";
@@ -63,6 +63,7 @@ export default function NavigationSidebar({
   onClose,
   onToggleAllThreads,
   onToggleNotifications,
+  showAllThreads = false,
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -77,7 +78,12 @@ export default function NavigationSidebar({
 
   const activeWorkspacePanel = useUIStore((s) => s.activeWorkspacePanel);
   // Check if we're on the Later page or have the Later panel open to avoid conflicting highlighting
-  const isLaterPage = location.pathname.includes('/later') || activeWorkspacePanel === 'later';
+  const isLaterRoute = !!matchPath('/workspace/:workspaceId/later', location.pathname);
+  const isLaterPage = isLaterRoute || activeWorkspacePanel === 'later';
+
+  // Derive whether we're on the Directories page
+  const path = location.pathname.replace(`/workspace/${workspaceId}`, "");
+  const isDirectoriesPage = path.startsWith("/directories");
 
   const hasDraft = (channelId) => {
     const key = `${activeWorkspaceId}:${channelId}:root`;
@@ -285,28 +291,38 @@ export default function NavigationSidebar({
             <NavButton
               icon={MessageSquareText}
               label="Threads"
+              active={showAllThreads}
               onClick={() => onToggleAllThreads?.()}
             />
             {/* Drafts & Scheduled — navigates to Later Page only, never opens panel */}
-            <NavButton
-              icon={Clock}
-              label="Drafts & Scheduled"
-              badge={laterTotalCount}
-              onClick={() => {
-                // Ensure the Later Panel is never opened — clear it first
-                useUIStore.getState().clearActiveWorkspacePanel();
-                // Set the correct default tab
-                useUIStore.getState().setActiveLaterPage(
-                  workspaceDraftCount > 0 ? 'drafts' : 'scheduled'
-                );
-                navigate(`/workspace/${workspaceId}/later`);
-                onClose?.();
-              }}
-            />
+                <NavButton
+                  icon={Clock}
+                  label="Drafts & Scheduled"
+                  badge={laterTotalCount}
+                  active={isLaterPage}
+                  onClick={() => {
+                    // Ensure the Later Panel is never opened — clear it first
+                    useUIStore.getState().clearActiveWorkspacePanel();
+                    // Set the correct default tab
+                    useUIStore.getState().setActiveLaterPage(
+                      workspaceDraftCount > 0 ? 'drafts' : 'scheduled'
+                    );
+                    navigate(`/workspace/${workspaceId}/later`);
+                    onClose?.();
+                  }}
+                />
             <NavButton
               icon={Compass}
               label="Directories"
-              onClick={() => navigate(getDirectoriesPath(workspaceId))}
+              active={isDirectoriesPage}
+              onClick={() => {
+                // Clear active channel so channel highlighting doesn't overlap
+                // with the Directories view.
+                setActiveChannel(null);
+                useUIStore.getState().clearActiveWorkspacePanel();
+                navigate(getDirectoriesPath(workspaceId));
+                onClose?.();
+              }}
             />
           </div>
         )}
@@ -500,11 +516,11 @@ export default function NavigationSidebar({
 
 /* ─── Nav Button ──────────────────────────────────────────────────────── */
 
-function NavButton({ icon: Icon, label, onClick, badge }) {
+function NavButton({ icon: Icon, label, onClick, badge, active }) {
   return (
     <button
       onClick={onClick}
-      className="sidebar-item"
+      className={`sidebar-item ${active ? "active" : ""}`}
     >
       <span className="sidebar-item-icon">
         <Icon size={18} style={{ opacity: 0.8 }} />

@@ -3,6 +3,8 @@ import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useLaterStore } from "../../stores/laterStore";
 import MessageInput from "./MessageInput";
+import RichTextEditor from "./RichTextEditor";
+import FormattingToolbar from "./FormattingToolbar";
 import {
   X,
   MessageSquare,
@@ -16,7 +18,7 @@ import {
   Forward,
   Link2,
   MoreVertical,
-  Pin,
+  Save,
 } from "lucide-react";
 import { Avatar } from "./MemberAvatarGroup";
 import { format } from "date-fns";
@@ -32,7 +34,264 @@ import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 const EMPTY_LIST = [];
 const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
-/* ─── ActionButton (identical to MessageItem's) ───────────────────────────── */
+// ─── Inject inline-editor styles (once) ──────────────────────────────────────
+
+const TP_STYLE_ID = "thread-panel-inline-editor-styles";
+if (typeof document !== "undefined" && !document.getElementById(TP_STYLE_ID)) {
+  const s = document.createElement("style");
+  s.id = TP_STYLE_ID;
+  s.textContent = `
+    /* ── Inline Editor ── */
+    .tp-inline-editor-wrap {
+      width: 100%;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1.5px solid var(--accent-primary, #1264a3);
+      background: var(--bg-primary, #1a1d21);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+      animation: tpInlineEditorIn 140ms cubic-bezier(0.2, 0, 0.13, 1.3) both;
+    }
+    @keyframes tpInlineEditorIn {
+      from { opacity: 0; transform: scaleY(0.94); transform-origin: top; }
+      to   { opacity: 1; transform: scaleY(1); }
+    }
+
+    .tp-inline-editor-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 5px 8px;
+      border-bottom: 1px solid var(--border-primary, rgba(255,255,255,0.1));
+      background: var(--bg-secondary, #222529);
+      flex-wrap: wrap;
+    }
+
+    .tp-inline-editor-content {
+      min-height: 60px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .tp-inline-editor-content .ProseMirror {
+      padding: 10px 14px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text-primary, #d1d2d3);
+      outline: none;
+      min-height: 60px;
+    }
+    .tp-inline-editor-content .ProseMirror p.is-editor-empty:first-child::before {
+      content: attr(data-placeholder);
+      color: var(--text-muted, #666);
+      pointer-events: none;
+      float: left;
+      height: 0;
+    }
+
+    .tp-inline-editor-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px 8px;
+      border-top: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+      background: var(--bg-secondary, #222529);
+      gap: 8px;
+    }
+    .tp-inline-editor-hint {
+      font-size: 11px;
+      color: var(--text-muted, #666);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      letter-spacing: 0.01em;
+      flex-shrink: 1;
+      min-width: 0;
+    }
+    .tp-inline-editor-hint kbd {
+      display: inline-block;
+      padding: 1px 4px;
+      font-size: 10px;
+      font-family: inherit;
+      background: var(--bg-hover, rgba(255,255,255,0.07));
+      border: 1px solid var(--border-secondary, rgba(255,255,255,0.12));
+      border-radius: 3px;
+      color: var(--text-secondary, #9b9b9b);
+      margin: 0 1px;
+    }
+    .tp-inline-editor-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .tp-inline-editor-cancel-btn {
+      height: 28px;
+      padding: 0 12px;
+      font-size: 12.5px;
+      font-weight: 500;
+      font-family: inherit;
+      border-radius: 6px;
+      border: 1px solid var(--border-secondary, rgba(255,255,255,0.15));
+      background: transparent;
+      color: var(--text-secondary, #9b9b9b);
+      cursor: pointer;
+      transition: background 110ms ease, color 110ms ease, border-color 110ms ease;
+      white-space: nowrap;
+    }
+    .tp-inline-editor-cancel-btn:hover {
+      background: var(--bg-hover, rgba(255,255,255,0.07));
+      color: var(--text-primary, #d1d2d3);
+      border-color: var(--border-primary, rgba(255,255,255,0.2));
+    }
+    .tp-inline-editor-save-btn {
+      height: 28px;
+      padding: 0 14px;
+      font-size: 12.5px;
+      font-weight: 600;
+      font-family: inherit;
+      border-radius: 6px;
+      border: none;
+      background: var(--accent-primary, #1264a3);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: background 110ms ease, transform 80ms ease, opacity 110ms ease;
+      white-space: nowrap;
+    }
+    .tp-inline-editor-save-btn:hover {
+      background: color-mix(in srgb, var(--accent-primary, #1264a3) 85%, white 15%);
+    }
+    .tp-inline-editor-save-btn:active {
+      transform: scale(0.96);
+    }
+    .tp-inline-editor-save-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  `;
+  document.head.appendChild(s);
+}
+
+/* ─── InlineEditor ────────────────────────────────────────────────────────── */
+
+/**
+ * Inline rich-text editor for thread message editing.
+ * Uses RichTextEditor (TipTap) + shared FormattingToolbar.
+ * Calls onSave(html, text) so the store can persist both htmlContent and content.
+ */
+function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
+  const editorRef = useRef(null);
+
+  const [formatState, setFormatState] = useState({
+    bold: false,
+    italic: false,
+    underline: false,
+    strike: false,
+    bulletList: false,
+    orderedList: false,
+    blockquote: false,
+    code: false,
+    codeBlock: false,
+  });
+
+  // Sync active marks from TipTap into local state
+  const syncFormatState = useCallback(() => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    setFormatState({
+      bold: ed.isActive("bold"),
+      italic: ed.isActive("italic"),
+      underline: ed.isActive("underline"),
+      strike: ed.isActive("strike"),
+      bulletList: ed.isActive("bulletList"),
+      orderedList: ed.isActive("orderedList"),
+      blockquote: ed.isActive("blockquote"),
+      code: ed.isActive("code"),
+      codeBlock: ed.isActive("codeBlock"),
+    });
+  }, []);
+
+  // Populate editor with the message's existing HTML (or plain text fallback)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const ed = editorRef.current;
+      if (!ed) return;
+      if (initialHtml) {
+        ed.setContent(initialHtml);
+      } else if (initialText) {
+        ed.setContent(initialText);
+      }
+      ed.focus("end");
+      syncFormatState();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [initialHtml, initialText, syncFormatState]);
+
+  // Escape key cancels edit
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onCancel?.();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  const handleSave = useCallback(() => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    const { html, text } = ed.getContent();
+    if (!text?.trim()) return;
+    onSave(html, text);
+  }, [onSave]);
+
+  const handleEditorInput = useCallback(() => {
+    syncFormatState();
+  }, [syncFormatState]);
+
+  return (
+    <div className="tp-inline-editor-wrap">
+      {/* Toolbar — compact variant */}
+      <div className="tp-inline-editor-toolbar">
+        <FormattingToolbar
+          editorRef={editorRef}
+          formatState={formatState}
+          onFormatChange={syncFormatState}
+          variant="compact"
+        />
+      </div>
+
+      {/* TipTap editor */}
+      <div className="tp-inline-editor-content">
+        <RichTextEditor
+          ref={editorRef}
+          placeholder="Edit message…"
+          onInput={handleEditorInput}
+          onSubmit={handleSave}
+        />
+      </div>
+
+      {/* Footer */}
+      <div className="tp-inline-editor-footer">
+        <span className="tp-inline-editor-hint">
+          <kbd>Shift+Enter</kbd> new line · <kbd>Escape</kbd> cancel
+        </span>
+        <div className="tp-inline-editor-actions">
+          <button className="tp-inline-editor-cancel-btn" onClick={onCancel}>
+            Cancel
+          </button>
+          <button className="tp-inline-editor-save-btn" onClick={handleSave}>
+            <Save size={12} />
+            Save changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── ActionButton ────────────────────────────────────────────────────────── */
 function ActionButton({
   icon: Icon,
   title,
@@ -84,7 +343,7 @@ function ActionButton({
   );
 }
 
-/* ─── MoreMenuItem ─────────────────────────────────────────────────────────── */
+/* ─── MoreMenuItem ────────────────────────────────────────────────────────── */
 function MoreMenuItem({ icon: Icon, label, onClick, danger }) {
   return (
     <>
@@ -124,8 +383,6 @@ function ThreadMessage({ message, isRoot = false }) {
     removeReaction,
     editThreadReply,
     deleteThreadReply,
-    pinMessage,
-    unpinMessage,
   } = useChatStore();
   const { toggleSaveMessage } = useLaterStore();
   const isSaved = useLaterStore((s) => s.savedMessageIds.has(message._id));
@@ -133,7 +390,6 @@ function ThreadMessage({ message, isRoot = false }) {
 
   const [showActions, setShowActions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editContent, setEditContent] = useState(message.content);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
@@ -158,7 +414,7 @@ function ThreadMessage({ message, isRoot = false }) {
     !isRoot && // Root message edits go through main channel; suppress in thread view
     Date.now() - new Date(message.createdAt).getTime() < MESSAGE_EDIT_WINDOW_MS;
 
-  // Derive attachments — same logic as MessageItem
+  // Derive attachments
   const derivedAttachments =
     message.fileReferences?.length > 0
       ? message.fileReferences
@@ -216,11 +472,20 @@ function ThreadMessage({ message, isRoot = false }) {
     };
   }, [showMoreMenu]);
 
-  const handleEdit = () => {
-    if (editContent.trim() && editContent !== message.content)
-      editThreadReply(message._id, editContent);
-    setIsEditing(false);
-  };
+  /**
+   * Called by InlineEditor when the user saves.
+   * html  — TipTap HTML (bold, lists, code, etc.) — stored as htmlContent
+   * text  — plain-text equivalent                 — stored as content
+   */
+  const handleEdit = useCallback(
+    (html, text) => {
+      if (text?.trim()) {
+        editThreadReply(message._id, { content: text, htmlContent: html });
+      }
+      setIsEditing(false);
+    },
+    [editThreadReply, message._id],
+  );
 
   const handleReaction = (emoji) => {
     const existing = message.reactions?.find(
@@ -317,38 +582,29 @@ function ThreadMessage({ message, isRoot = false }) {
         {isDeleted ? (
           <p className="thread-message__deleted">This message was deleted</p>
         ) : isEditing ? (
-          <div className="mt-1">
-            <input
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleEdit();
-                if (e.key === "Escape") setIsEditing(false);
-              }}
-              className="input-field"
-              style={{ fontSize: 14, padding: "6px 10px" }}
-              autoFocus
+          /* ── Rich inline editor ── */
+          <div style={{ marginTop: 6 }}>
+            <InlineEditor
+              initialHtml={message.htmlContent || ""}
+              initialText={message.content}
+              onSave={handleEdit}
+              onCancel={() => setIsEditing(false)}
             />
-            <button
-              className="btn btn-sm btn-outline"
-              onClick={() => setIsEditing(false)}
-            >
-              Cancel
-            </button>
-            <button className="btn btn-sm btn-primary" onClick={handleEdit}>
-              Save
-            </button>
           </div>
-        ) : message.htmlContent && message.htmlContent !== message.content ? (
-          <div
-            className="message-content thread-message__content"
-            dangerouslySetInnerHTML={{
-              __html: sanitizeHtml(message.htmlContent),
-            }}
-          />
-        ) : (
-          <p className="thread-message__content">{message.content}</p>
-        )}
+        ) : (() => {
+          // Prefer explicit htmlContent; fall back to content if it carries HTML
+          // tags (e.g. store persisted HTML in content before htmlContent existed).
+          const raw = message.htmlContent || message.content || "";
+          const looksLikeHtml = /<[a-z][\s\S]*>/i.test(raw);
+          return looksLikeHtml ? (
+            <div
+              className="rich-message-content thread-message__content"
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(raw) }}
+            />
+          ) : (
+            <p className="thread-message__content">{raw}</p>
+          );
+        })()}
 
         {/* Attachments */}
         {!isDeleted && derivedAttachments.length > 0 && (
@@ -484,8 +740,8 @@ function ThreadMessage({ message, isRoot = false }) {
                   icon={Edit}
                   title="Edit message"
                   onClick={() => {
-                    setEditContent(message.content);
                     setIsEditing(true);
+                    setShowActions(false);
                   }}
                 />
               )}
@@ -528,19 +784,6 @@ function ThreadMessage({ message, isRoot = false }) {
             padding: "4px 0",
           }}
         >
-          {!isRoot && (
-            <MoreMenuItem
-              icon={Pin}
-              label={message.isPinned ? "Unpin message" : "Pin message"}
-              onClick={() => {
-                message.isPinned
-                  ? unpinMessage(message._id)
-                  : pinMessage(message._id);
-                setShowMoreMenu(false);
-                setShowActions(false);
-              }}
-            />
-          )}
           <MoreMenuItem
             icon={Copy}
             label="Copy text"

@@ -38,10 +38,10 @@ const MODE_ICONS = {
 }
 
 const COLOR_FIELDS = [
-  { key: 'sidebarBg', label: 'Sidebar background' },
-  { key: 'sidebarText', label: 'Sidebar text' },
-  { key: 'accentColor', label: 'Accent color' },
-  { key: 'sidebarActive', label: 'Active item color' },
+  { key: 'sidebarBg', label: 'Colour' },
+  // { key: 'sidebarText', label: 'Sidebar text' },
+  // { key: 'accentColor', label: 'Accent color' },
+  // { key: 'sidebarActive', label: 'Active item color' },
 ]
 
 export default function PreferencesModal({ onClose }) {
@@ -274,10 +274,10 @@ export default function PreferencesModal({ onClose }) {
                       className={`appearance-theme-card ${selected ? 'is-selected' : ''}`}
                       style={{
                         '--theme-card-bg': colors.sidebarBg,
-                        '--theme-card-text': colors.sidebarText,
-                        '--theme-card-hover': colors.sidebarHover,
-                        '--theme-card-active': colors.sidebarActive,
-                        '--theme-card-accent': colors.accentColor,
+                        // '--theme-card-text': colors.sidebarText,
+                        // '--theme-card-hover': colors.sidebarHover,
+                        // '--theme-card-active': colors.sidebarActive,
+                        // '--theme-card-accent': colors.accentColor,
                       }}
                       onClick={() => setDraftAppearance((current) => ({ ...current, sidebarTheme: preset.id }))}
                       aria-pressed={selected}
@@ -304,7 +304,7 @@ export default function PreferencesModal({ onClose }) {
                 title="Custom theme"
                 description="Fine-tune the sidebar and accent colors."
               />
-              <div className="appearance-color-grid">
+              <div className="space-y-6">
                 {COLOR_FIELDS.map((field) => (
                   <ColorField
                     key={field.key}
@@ -429,26 +429,54 @@ function SaveStateIndicator({ state }) {
 
 function ColorField({ label, value, onChange }) {
   return (
-    <label className="appearance-color-field">
-      <span>{label}</span>
-      <div>
-        <input
-          type="color"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          aria-label={label}
-        />
+    <label className="group block">
+      {/* Header */}
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-semibold text-zinc-800">
+          {label}
+        </span>
+      </div>
+
+      {/* Input Area */}
+      <div className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-2 transition-all hover:border-zinc-300 hover:bg-white focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
+        
+        {/* Hidden Native Color Picker */}
+        <div className="relative">
+          <input
+            type="color"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            aria-label={label}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          />
+
+          <div
+            className="h-10 w-10 rounded-xl shadow-inner"
+            style={{ backgroundColor: value }}
+          />
+        </div>
+
+        {/* Hex Input */}
         <input
           type="text"
           value={value}
           onChange={(e) => {
             const next = e.target.value.trim()
-            if (/^#[0-9a-fA-F]{6}$/.test(next)) {
-              onChange(next)
+
+            // allow typing smoothly
+            if (
+              next === "" ||
+              /^#?[0-9a-fA-F]{0,6}$/.test(next)
+            ) {
+              onChange(
+                next.startsWith("#") ? next : `#${next}`
+              )
             }
           }}
           maxLength={7}
           aria-label={`${label} hex value`}
+          className="h-10 flex-1 bg-transparent text-sm font-medium text-zinc-800 outline-none placeholder:text-zinc-400"
+          placeholder="#5b8f80"
         />
       </div>
     </label>

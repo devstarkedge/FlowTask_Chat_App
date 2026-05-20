@@ -807,7 +807,12 @@ export default function ChatLayout() {
           else if (item.path === "activity") setShowNotifications(true);
           else if (item.path === "threads") setShowAllThreads(true);
           else if (item.path === "starred") setShowSaved(true);
-          else navigate(`/workspace/${workspaceId}/${item.path}`);
+          else {
+            // Navigating to workspace pages (e.g. directories) should clear
+            // the active channel so sidebar highlighting doesn't overlap.
+            setActiveChannel(null);
+            navigate(`/workspace/${workspaceId}/${item.path}`);
+          }
           break;
         default:
           break;
@@ -1277,20 +1282,11 @@ export default function ChatLayout() {
   const activeWorkspacePanel = useUIStore((s) => s.activeWorkspacePanel);
   const clearActiveWorkspacePanel = useUIStore((s) => s.clearActiveWorkspacePanel);
 
-  // When navigating to the Later page route, always clear the Later Panel
-  // so both never render at the same time.
-  useEffect(() => {
-    if (isLaterRoute && activeWorkspacePanel === 'later') {
-      clearActiveWorkspacePanel();
-    }
-  }, [isLaterRoute, activeWorkspacePanel, clearActiveWorkspacePanel]);
-
   // Determine what to show in the left context sidebar.
-  // IMPORTANT: the Later Panel is ONLY shown when activeWorkspacePanel === 'later'
-  // AND we are NOT on the Later page route. On the Later page route, LaterPage
-  // renders as the main content via PAGE_ROUTES, and the sidebar shows
-  // the normal NavigationSidebar.
-  const showLaterPanelInSidebar = activeWorkspacePanel === 'later' && !isLaterRoute;
+  // The Later Panel is shown whenever the Workspace UI state marks it active.
+  // This keeps the Workspace Sidebar bookmark action independent from the
+  // /later page route so users can open the panel at any time.
+  const showLaterPanelInSidebar = activeWorkspacePanel === 'later';
 
   const renderContextSidebar = (isMobile = false) => {
     const onJumpToMessage = (msg) => {
@@ -1340,8 +1336,12 @@ export default function ChatLayout() {
       <NavigationSidebar
         mode={isDMRoute ? "dms" : "home"}
         onClose={isMobile ? () => setShowMobileSidebar(false) : undefined}
+        showAllThreads={showAllThreads}
         onToggleAllThreads={() => {
           setShowAllThreads((s) => !s);
+          // Clear active channel so Threads view doesn't overlap with a
+          // selected channel in the sidebar.
+          setActiveChannel(null);
           closeSearch();
           setShowPins(false);
           setShowNotifications(false);

@@ -40,6 +40,7 @@ import fileCleanupService from './services/fileCleanup.service.js';
 import fileUploadService from './services/fileUpload.service.js';
 import webhookRetryService from './services/webhookRetry.service.js';
 import cache from './services/cache.service.js';
+import canvasRoutes from './modules/canvas/canvas.routes.js';
 
 // ─── Express App ─────────────────────────────────────────────────────────────
 const app = express();
@@ -270,6 +271,8 @@ app.use('/api/chat/uploads', express.static(path.resolve(env.UPLOAD_DIR), {
     res.setHeader('X-Content-Type-Options', 'nosniff');
   },
 }));
+
+app.use("/api/chat/canvas", canvasRoutes);
 
 // ─── 404 Catch-All ───────────────────────────────────────────────────────────
 // Use `app.use` with a mounted path to avoid path-to-regexp parsing errors

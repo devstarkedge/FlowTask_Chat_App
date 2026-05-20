@@ -10,6 +10,7 @@ import FilesTab from "./FilesTab";
 import PinnedBar from "./PinnedBar";
 import { WifiOff, Loader2 } from "lucide-react";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
+import CanvasPanel from "../canvas/CanvasPanel";
 
 const EMPTY_LIST = [];
 
@@ -24,15 +25,22 @@ export default function ChatPanel({
   onOpenMobileSidebar,
   onSaveMessage,
 }) {
-  const channel = useChannelStore((s) => s.channels.find((c) => c._id === channelId))
-  const fetchMessages = useChatStore((s) => s.fetchMessages)
-  const fetchPinnedMessages = useChatStore((s) => s.fetchPinnedMessages)
-  const legacyMessages = useChatStore((s) => s.messagesByChannel[channelId] || EMPTY_LIST)
-  const channelMessageIds = useChatStore((s) => s.channelMessageIds[channelId] || EMPTY_LIST)
-  const messagesById = useChatStore((s) => s.messagesById)
-  const connectionStatus = useChatStore((s) => s.connectionStatus)
-  const prevChannelRef = useRef(null)
-  const [activeTab, setActiveTab] = useState('messages')
+  const channel = useChannelStore((s) =>
+    s.channels.find((c) => c._id === channelId),
+  );
+  const fetchMessages = useChatStore((s) => s.fetchMessages);
+  const fetchPinnedMessages = useChatStore((s) => s.fetchPinnedMessages);
+  const legacyMessages = useChatStore(
+    (s) => s.messagesByChannel[channelId] || EMPTY_LIST,
+  );
+  const channelMessageIds = useChatStore(
+    (s) => s.channelMessageIds[channelId] || EMPTY_LIST,
+  );
+  const messagesById = useChatStore((s) => s.messagesById);
+  const connectionStatus = useChatStore((s) => s.connectionStatus);
+  const prevChannelRef = useRef(null);
+  const [activeTab, setActiveTab] = useState("messages");
+  const [canvasMode, setCanvasMode] = useState(null);
 
   const messages = useMemo(() => {
     if (!CHAT_FEATURE_FLAGS.normalizedMessageStore) return legacyMessages;
@@ -95,9 +103,12 @@ export default function ChatPanel({
       )}
 
       {activeTab === "files" ? (
-        <FilesTab
+        <FilesTab channelId={channelId} onOpenFilePreview={onOpenFilePreview} />
+      ) : activeTab === "add-canvas" ? (
+        <CanvasPanel
           channelId={channelId}
-          onOpenFilePreview={onOpenFilePreview}
+          workspaceId={workspaceId}
+          channel={channel}
         />
       ) : (
         <>

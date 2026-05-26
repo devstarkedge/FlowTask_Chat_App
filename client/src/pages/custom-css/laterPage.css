@@ -313,3 +313,20 @@
     font-size: 12.5px;
   }
 }
+
+/* ── Reminder Center ─────────────────────────────────────── */
+.reminder-center {
+  padding: 18px;
+}
+.reminder-center__tabs {
+  display:flex; gap:8px; margin-bottom:12px;
+}
+.reminder-center__tabs button { padding:8px 10px; border-radius:8px; border:1px solid var(--border-secondary); background:transparent; cursor:pointer }
+.reminder-center__tabs button.active { background:var(--bg-hover); color:var(--text-secondary); border-color:var(--border-primary)}
+.reminder-center__list { display:flex; flex-direction:column; gap:10px }
+.saved-card { display:flex; align-items:center; justify-content:space-between; padding:12px; border-radius:10px; background:var(--bg-secondary); border:1px solid var(--border-secondary) }
+.saved-card__meta { display:flex; flex-direction:column }
+.saved-card__title { font-weight:700 }
+.saved-card__when { font-size:12px; color:var(--text-muted) }
+.saved-card__actions button { margin-left:6px; padding:6px 8px; border-radius:8px; border: none; background:transparent; cursor:pointer }
+.empty-state { padding:40px; color:var(--text-muted); text-align:center }

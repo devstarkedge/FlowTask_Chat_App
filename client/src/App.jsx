@@ -5,6 +5,7 @@ import { useThemeStore } from './stores/themeStore'
 
 // Eager load workspace layout (most common route)
 import WorkspaceLayout from './components/layout/WorkspaceLayout'
+import DevTemplateSelector from './pages/DevTemplateSelector'
 
 // Lazy load auth & setup pages (rarely revisited after login)
 const LoginPage = lazy(() => import('./pages/LoginPage'))
@@ -78,6 +79,9 @@ function App() {
         <Route path="/chat/*" element={user ? <Navigate to="/select-workspace" /> : <Navigate to="/login" />} />
 
         {/* Catch-all */}
+        {import.meta.env.DEV && (
+          <Route path="/dev/template" element={<DevTemplateSelector />} />
+        )}
         <Route path="*" element={<Navigate to={user ? '/select-workspace' : '/'} />} />
       </Routes>
     </Suspense>

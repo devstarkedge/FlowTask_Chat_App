@@ -1,71 +1,53 @@
 import express from "express";
-
 import canvasController from "./canvas.controller.js";
-
-// import { protect } from "../../middleware/authMiddleware.js";
-// import { resolveWorkspace } from "../../middleware/workspaceMiddleware.js";
-// import { requireChannelAccess } from "../channels/channel.middleware.js";
 
 const router = express.Router();
 
-// ─────────────────────────────────────────────────────────────
-// Middleware
-// ─────────────────────────────────────────────────────────────
-
-// router.use(protect);
-// router.use(resolveWorkspace);
-
-// ─────────────────────────────────────────────────────────────
-// Get Canvas By Channel
-// GET /api/chat/canvas/:channelId
-// ─────────────────────────────────────────────────────────────
-
+// ── Specific Canvas routes (must be defined before /:channelId or /:canvasId params)
 router.get(
-  "/:channelId",
-  // requireChannelAccess(),
-  canvasController.getCanvas,
+  "/by-id/:canvasId",
+  canvasController.getCanvasById
 );
-
-// ─────────────────────────────────────────────────────────────
-// Create Canvas
-// POST /api/chat/canvas/:channelId
-// ─────────────────────────────────────────────────────────────
 
 router.post(
-  "/:channelId",
-//   requireChannelAccess(),
-  canvasController.createCanvas,
+  "/duplicate/:canvasId",
+  canvasController.duplicateCanvas
 );
 
-// ─────────────────────────────────────────────────────────────
-// Update Canvas
-// PUT /api/chat/canvas/:canvasId
-// ─────────────────────────────────────────────────────────────
-
-router.put(
-  "/update/:canvasId",
-  canvasController.updateCanvas,
+router.get(
+  "/history/:canvasId",
+  canvasController.getCanvasHistory
 );
 
-// ─────────────────────────────────────────────────────────────
-// Delete Canvas
-// DELETE /api/chat/canvas/:canvasId
-// ─────────────────────────────────────────────────────────────
-
-router.delete(
-  "/:canvasId",
-  canvasController.deleteCanvas,
+router.post(
+  "/history/restore/:canvasId/:historyId",
+  canvasController.restoreCanvasVersion
 );
-
-// ─────────────────────────────────────────────────────────────
-// Get All Channel Canvases
-// GET /api/chat/canvas/channel/all/:channelId
-// ─────────────────────────────────────────────────────────────
 
 router.get(
   "/channel/all/:channelId",
-//   requireChannelAccess(),
-  canvasController.getChannelCanvases,
+  canvasController.getChannelCanvases
+);
+
+router.put(
+  "/update/:canvasId",
+  canvasController.updateCanvas
+);
+
+// router.delete(
+//   "/:canvasId",
+//   canvasController.deleteCanvas
+// );
+
+// ── Dynamic parameter fallback routes
+router.get(
+  "/:channelId",
+  canvasController.getCanvas
+);
+
+router.post(
+  "/:channelId",
+  canvasController.createCanvas
 );
 
 export default router;

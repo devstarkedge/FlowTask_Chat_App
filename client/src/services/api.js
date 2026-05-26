@@ -365,9 +365,12 @@ export const savedMessageAPI = {
     api.patch(`/messages/${messageId}/save/status`, { status }),
   updateReminder: (messageId, data) =>
     api.patch(`/messages/${messageId}/save/reminder`, data),
+  snooze: (messageId, data) => api.patch(`/messages/${messageId}/save/reminder/snooze`, data),
   createStandalone: (data) => api.post("/messages/reminders/standalone", data),
   deleteReminder: (reminderId) =>
     api.delete(`/messages/reminders/${reminderId}`),
+  parseText: (text, referenceDate) => api.post('/messages/reminders/parse', { text, referenceDate }),
+  suggestFromMessage: (messageId) => api.post(`/messages/${messageId}/reminder-suggestions`),
 };
 
 // ─── Scheduled Messages ──────────────────────────────────────────────────
@@ -402,10 +405,14 @@ export const adminAPI = {
 
 export const canvasAPI = {
   get: (channelId) => api.get(`/canvas/${channelId}`),
-
+  getById: (canvasId) => api.get(`/canvas/by-id/${canvasId}`),
+  getAllForChannel: (channelId) => api.get(`/canvas/channel/all/${channelId}`),
   create: (channelId, data) => api.post(`/canvas/${channelId}`, data),
-
-  update: (canvasId, data) => api.put(`/canvas/${canvasId}`, data),
+  update: (canvasId, data) => api.put(`/canvas/update/${canvasId}`, data),
+  delete: (canvasId) => api.delete(`/canvas/${canvasId}`),
+  duplicate: (canvasId) => api.post(`/canvas/duplicate/${canvasId}`),
+  getHistory: (canvasId) => api.get(`/canvas/history/${canvasId}`),
+  restoreVersion: (canvasId, historyId) => api.post(`/canvas/history/restore/${canvasId}/${historyId}`),
 };
 
 export default api;

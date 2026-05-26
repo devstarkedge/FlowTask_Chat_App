@@ -5,6 +5,7 @@ import channelRepository from '../modules/channels/channel.repository.js';
 import logger from '../utils/logger.js';
 import { logSocketReconnect } from '../utils/performanceLogger.js';
 import { SOCKET_EVENTS, buildRoomName } from '../config/constants.js';
+import registerCanvasSocket from '../modules/canvas/canvas.socket.js';
 
 
 /**
@@ -263,6 +264,9 @@ export async function initializeSocket(httpServer, corsOptions) {
       socketId: socket.id,
       workspaceId: wsId,
     });
+
+    // Register Canvas Socket Listeners
+    registerCanvasSocket(io, socket);
 
     // Enforce max connections per user (cap at 5 tabs/devices)
     const currentUser = await userRepository.addSocketId(userId, socket.id);

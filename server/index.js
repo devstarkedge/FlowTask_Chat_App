@@ -41,6 +41,7 @@ import fileUploadService from './services/fileUpload.service.js';
 import webhookRetryService from './services/webhookRetry.service.js';
 import cache from './services/cache.service.js';
 import canvasRoutes from './modules/canvas/canvas.routes.js';
+import { startCanvasCollaborationServer, stopCanvasCollaborationServer } from './modules/canvas/canvasCollaboration.server.js';
 
 // ─── Express App ─────────────────────────────────────────────────────────────
 const app = express();
@@ -302,6 +303,9 @@ async function startServer() {
     // 3. Initialize Socket.IO
     await initializeSocket(httpServer, corsOptions);
 
+    // 3b. Start Canvas CRDT collaboration server
+    await startCanvasCollaborationServer();
+
     // 4. Ensure default workspace exists
     const defaultWorkspace = await workspaceService.ensureDefaultWorkspace();
     logger.info('Default workspace ready', { workspaceId: defaultWorkspace._id, slug: defaultWorkspace.slug });
@@ -383,6 +387,7 @@ async function shutdown(signal) {
   // 2. Close Socket.IO first (clean disconnect for clients)
   const { getIO } = await import('./sockets/socketManager.js');
   try {
+    await stopCanvasCollaborationServer();
     const io = getIO();
     if (io) {
       io.close();

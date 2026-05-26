@@ -12,23 +12,23 @@ import {
   MoreVertical,
   ChevronDown,
   BookCopy,
+  Check,
+  X,
 } from "lucide-react";
 import ChannelMemberCount from "./ChannelMemberCount";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
+import { useCanvasStore } from "../../stores/canvasStore";
 import logger from "../../utils/logger";
+import CanvasTabContextMenu from "../canvas/CanvasTabContextMenu";
+import CanvasMenu from "../canvas/CanvasMenu";
 
 const EMPTY_PINS = [];
 
-const HEADER_TABS = [
+const BASE_TABS = [
   { id: "messages", label: "Messages", icon: MessageCircle },
   { id: "files", label: "Files", icon: FileText },
-  {
-    id: "add-canvas",
-    label: "Add canvas",
-    icon: BookCopy,
-  },
 ];
 
 export default function ChatHeader({
@@ -38,52 +38,90 @@ export default function ChatHeader({
   onTogglePins,
   activeTab = "messages",
   onTabChange,
+  // ─── Canvas props ───────────────────────────────────────────────────────────
+  // showCanvasPopup: boolean – whether the CanvasMenu dropdown is open
+  showCanvasPopup,
+  // onOpenCanvasMenu: () => void – called when user clicks the canvas tab button
+  onOpenCanvasMenu,
+  // onCloseCanvasMenu: () => void – called to close the popup (outside click, etc.)
+  onCloseCanvasMenu,
+  // onCanvasSelect: (type: "blank"|"template"|"existing") => void
+  onCanvasSelect,
+  // activeCanvasTitle: string | null – if set, tab label changes to this title
+  activeCanvasTitle,
+  // onRemoveCanvasTab: () => void
+  onRemoveCanvasTab,
 }) {
-  const { membersByChannel, toggleInfoPanel, showInfoPanel } =
-    useChannelStore();
+  const { membersByChannel, toggleInfoPanel, showInfoPanel } = useChannelStore();
   const { user } = useAuthStore();
   const activeThread = useChatStore((s) => s.activeThread);
   const pinnedMessages =
     useChatStore((s) => s.pinnedMessagesByChannel[channel?._id]) ?? EMPTY_PINS;
+  const { updateCanvasMetadata, activeCanvas } = useCanvasStore();
 
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [showTabsDropdown, setShowTabsDropdown] = useState(false);
   const [isStarred, setIsStarred] = useState(false);
   const [narrowTabs, setNarrowTabs] = useState(false);
 
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState(null); // { x, y }
+
+  // Inline rename state
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef(null);
+
   const moreMenuRef = useRef(null);
   const tabsMenuRef = useRef(null);
   const headerRef = useRef(null);
+  // Ref for the canvas popup container (used for outside-click detection)
+  const canvasPopupRef = useRef(null);
+  // Ref for the canvas tab button (so we don't close immediately on the open click)
+  const canvasTabRef = useRef(null);
 
   const isConstrained = showInfoPanel || !!activeThread;
 
-  // Filter out current user's name from DM channel names
   const displayChannelName = useMemo(() => {
     if (!channel) return "";
     if (channel.type !== "dm") return channel.name || channel.slug;
 
     let name = channel.name || channel.slug;
-    if (
-      channel.dmParticipantNames &&
-      Array.isArray(channel.dmParticipantNames)
-    ) {
-      const otherNames = channel.dmParticipantNames.filter(
-        (n) => n !== user?.name,
-      );
-      if (otherNames.length > 0) {
-        name = otherNames.join(", ");
-      }
+    if (channel.dmParticipantNames && Array.isArray(channel.dmParticipantNames)) {
+      const otherNames = channel.dmParticipantNames.filter((n) => n !== user?.name);
+      if (otherNames.length > 0) name = otherNames.join(", ");
     } else if (name && name.includes(",")) {
       const names = name.split(",").map((n) => n.trim());
       const otherNames = names.filter((n) => n !== user?.name);
-      if (otherNames.length > 0) {
-        name = otherNames.join(", ");
-      }
+      if (otherNames.length > 0) name = otherNames.join(", ");
     }
     return name;
   }, [channel, user]);
 
-  // Measure header width — collapse tabs when < 480px
+  // Build dynamic tabs: base tabs + one canvas tab
+  // The canvas tab id is always "canvas". When activeCanvasTitle is set it
+  // shows as a real canvas tab; otherwise it shows as the "Add Canvas" button.
+  const HEADER_TABS = useMemo(() => {
+    const canvasTab = activeCanvasTitle
+      ? {
+          id: "canvas",
+          label: activeCanvasTitle,
+          icon: BookCopy,
+          isCanvas: true,
+          isDynamic: true,
+        }
+      : {
+          id: "canvas",
+          label: "Add Canvas",
+          icon: BookCopy,
+          isCanvas: true,
+          isDynamic: false,
+        };
+
+    return [...BASE_TABS, canvasTab];
+  }, [activeCanvasTitle]);
+
+  // Collapse tabs when header is narrow
   useEffect(() => {
     if (!headerRef.current) return;
     const ro = new ResizeObserver(([entry]) => {
@@ -115,22 +153,100 @@ export default function ChatHeader({
     return () => document.removeEventListener("mousedown", fn);
   }, [showTabsDropdown]);
 
+  // Close canvas popup on outside click.
+  // We use mousedown so it fires before any click handlers and we can check
+  // whether the click was inside the popup or the trigger button.
+  useEffect(() => {
+    if (!showCanvasPopup) return;
+    const fn = (e) => {
+      const insidePopup =
+        canvasPopupRef.current && canvasPopupRef.current.contains(e.target);
+      const insideTrigger =
+        canvasTabRef.current && canvasTabRef.current.contains(e.target);
+      if (!insidePopup && !insideTrigger) {
+        onCloseCanvasMenu?.();
+      }
+    };
+    // Use a small delay so the open-click doesn't immediately close it
+    const timer = setTimeout(() => {
+      document.addEventListener("mousedown", fn);
+    }, 10);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("mousedown", fn);
+    };
+  }, [showCanvasPopup, onCloseCanvasMenu]);
+
+  
+
+  // Focus rename input when rename starts
+  useEffect(() => {
+    if (isRenaming && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [isRenaming]);
+
   if (!channel) return null;
 
   const isPrivate =
     channel.visibility?.toLowerCase() === "private" ||
     channel.type?.toLowerCase() === "private" ||
     channel.isPrivate;
+
   const members = membersByChannel[channel._id] || [];
   const memberCount = channel.memberCount ?? members.length;
   const pinCount = pinnedMessages.length;
 
-  const activeTabObj =
-    HEADER_TABS.find((t) => t.id === activeTab) || HEADER_TABS[0];
+  const activeTabObj = HEADER_TABS.find((t) => t.id === activeTab) || HEADER_TABS[0];
   const overflowTabs = HEADER_TABS.filter((t) => t.id !== activeTab);
 
-  // Dynamic padding — reduced from before
-  const hPad = isConstrained ? 8 : 8;
+  const hPad = 8;
+
+  const handleCanvasTabRightClick = (e) => {
+    e.preventDefault();
+    if (!activeCanvas) return;
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleRenameSubmit = async () => {
+    const trimmed = renameValue.trim();
+    if (trimmed && trimmed !== activeCanvas?.title && activeCanvas?._id) {
+      try {
+        await updateCanvasMetadata(activeCanvas._id, { title: trimmed });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    setIsRenaming(false);
+  };
+
+  const handleRenameKeyDown = (e) => {
+    if (e.key === "Enter") handleRenameSubmit();
+    if (e.key === "Escape") setIsRenaming(false);
+  };
+
+  const startRename = () => {
+    setRenameValue(activeCanvas?.title || "");
+    setIsRenaming(true);
+  };
+
+  // ── Canvas tab click handler ─────────────────────────────────────────────────
+  // If there's already an active canvas → switch to the canvas tab.
+  // If no canvas yet → toggle the CanvasMenu popup.
+  const handleCanvasTabClick = (tab) => {
+    if (tab.isDynamic) {
+      // Real canvas exists – just switch to it
+      onTabChange?.("canvas");
+    } else {
+      // No canvas yet – open/close the popup menu
+      if (showCanvasPopup) {
+        onCloseCanvasMenu?.();
+      } else {
+        onOpenCanvasMenu?.();
+      }
+    }
+  };
 
   return (
     <div
@@ -138,9 +254,7 @@ export default function ChatHeader({
       className="shrink-0 select-none chat-header"
       style={{ position: "sticky", top: 0, zIndex: 20 }}
     >
-      {/* ══════════════════════════════════════════════════════════════
-          TOP ROW — [mobile-btn] [name: flex-1] [actions: shrink-0]
-      ══════════════════════════════════════════════════════════════ */}
+      {/* ── Top Row ── */}
       <div
         className="flex items-center"
         style={{ padding: `8px ${hPad}px 4px`, gap: 3, minHeight: 48 }}
@@ -157,12 +271,7 @@ export default function ChatHeader({
         {/* Channel name */}
         <button
           className="chat-header__channel-trigger flex items-center gap-1.5 min-w-0 flex-1 text-left rounded-lg group"
-          style={{
-            padding: "3px 6px",
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-          }}
+          style={{ padding: "3px 6px", background: "transparent", border: "none", cursor: "pointer" }}
           onClick={toggleInfoPanel}
           title={channel.name || channel.slug}
         >
@@ -181,22 +290,13 @@ export default function ChatHeader({
 
           <h2
             className="font-bold truncate group-hover:underline"
-            style={{
-              fontSize: isConstrained ? 17 : 17,
-              color: "var(--text-primary)",
-              lineHeight: 1.3,
-              minWidth: 0,
-            }}
+            style={{ fontSize: 17, color: "var(--text-primary)", lineHeight: 1.3, minWidth: 0 }}
           >
             {displayChannelName}
           </h2>
 
           {isPrivate && (
-            <Lock
-              size={10}
-              className="shrink-0"
-              style={{ color: "var(--text-muted)" }}
-            />
+            <Lock size={10} className="shrink-0" style={{ color: "var(--text-muted)" }} />
           )}
         </button>
 
@@ -207,24 +307,20 @@ export default function ChatHeader({
           style={{ gap: 2, position: "relative" }}
         >
           {!isConstrained && (
-            <>
-              <ChannelMemberCount
-                count={memberCount}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleInfoPanel();
-                }}
-                className="hide-mobile"
-              />
-            </>
+            <ChannelMemberCount
+              count={memberCount}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleInfoPanel();
+              }}
+              className="hide-mobile"
+            />
           )}
 
           <HdrBtn
             icon={Pin}
             title="Pinned messages"
-            label={
-              pinCount > 0 && !isConstrained ? String(pinCount) : undefined
-            }
+            label={pinCount > 0 && !isConstrained ? String(pinCount) : undefined}
             onClick={onTogglePins}
             size={14}
           />
@@ -257,92 +353,67 @@ export default function ChatHeader({
                   <DropItem
                     icon={Search}
                     label="Search Messages"
-                    onClick={() => {
-                      onToggleSearch();
-                      setShowMoreActions(false);
-                    }}
+                    onClick={() => { onToggleSearch(); setShowMoreActions(false); }}
                   />
                   <DropItem
                     icon={Pin}
                     label="Pinned Messages"
                     sublabel={pinCount > 0 ? `${pinCount} pinned` : undefined}
-                    onClick={() => {
-                      onTogglePins();
-                      setShowMoreActions(false);
-                    }}
+                    onClick={() => { onTogglePins(); setShowMoreActions(false); }}
                   />
                   <DropItem
                     icon={Headphones}
                     label="Huddle"
-                    onClick={() => {
-                      logger.log("Huddle", channel?._id);
-                      setShowMoreActions(false);
-                    }}
+                    onClick={() => { logger.log("Huddle", channel?._id); setShowMoreActions(false); }}
                     className="md:hidden"
                   />
-                  <div
-                    style={{
-                      height: 1,
-                      background: "var(--border-color)",
-                      margin: "4px 10px",
-                    }}
-                  />
+                  <div style={{ height: 1, background: "var(--border-primary)", margin: "4px 10px" }} />
                 </>
               )}
               <DropItem
                 icon={Info}
                 label="Channel Details"
-                onClick={() => {
-                  toggleInfoPanel();
-                  setShowMoreActions(false);
-                }}
+                onClick={() => { toggleInfoPanel(); setShowMoreActions(false); }}
               />
             </div>
           )}
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════
-          TAB BAR
-          Wide  -> all tabs shown with labels (normal)
-          Narrow -> only the active tab shown + "More " button
-                   clicking More reveals the other tabs in a dropdown
-      ══════════════════════════════════════════════════════════════ */}
+      {/* ── Tab Bar ── */}
       <div style={{ padding: `0 ${hPad}px 8px` }}>
         <div className="flex items-center" style={{ minHeight: 34, gap: 2 }}>
           {narrowTabs ? (
-            /* ── Narrow mode: active tab + overflow dropdown ── */
+            // ── Narrow mode: show active tab + "More" dropdown ──────────────
             <>
-              {/* Active tab — always visible */}
               <SlimTab
                 tab={activeTabObj}
                 isActive={true}
-                onClick={() => {}} /* already active */
+                onClick={() => {}}
+                onContextMenu={activeTabObj.isCanvas ? handleCanvasTabRightClick : undefined}
+                isRenaming={isRenaming}
+                renameValue={renameValue}
+                renameInputRef={renameInputRef}
+                onRenameChange={(v) => setRenameValue(v)}
+                onRenameSubmit={handleRenameSubmit}
+                onRenameKeyDown={handleRenameKeyDown}
+                onRenameCancel={() => setIsRenaming(false)}
               />
-
-              {/* More tabs dropdown */}
               <div ref={tabsMenuRef} style={{ position: "relative" }}>
                 <button
                   onClick={() => setShowTabsDropdown((v) => !v)}
                   className={`slim-tab${showTabsDropdown ? " slim-tab--active" : ""}`}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                 >
                   <span className="slim-tab__label">More</span>
                   <ChevronDown
                     size={12}
                     style={{
-                      transform: showTabsDropdown
-                        ? "rotate(180deg)"
-                        : "rotate(0deg)",
+                      transform: showTabsDropdown ? "rotate(180deg)" : "rotate(0deg)",
                       transition: "transform 180ms ease",
                     }}
                   />
                 </button>
-
                 {showTabsDropdown && (
                   <div
                     className="chat-header__menu absolute py-1 z-50 animate-fade-in-up"
@@ -354,7 +425,11 @@ export default function ChatHeader({
                         icon={tab.icon}
                         label={tab.label}
                         onClick={() => {
-                          onTabChange?.(tab.id);
+                          if (tab.id === "canvas") {
+                            handleCanvasTabClick(tab);
+                          } else {
+                            onTabChange?.(tab.id);
+                          }
                           setShowTabsDropdown(false);
                         }}
                       />
@@ -364,29 +439,144 @@ export default function ChatHeader({
               </div>
             </>
           ) : (
-            /* ── Full mode: all tabs with labels ── */
-            HEADER_TABS.map((tab) => (
-              <SlimTab
-                key={tab.id}
-                tab={tab}
-                isActive={activeTab === tab.id}
-                onClick={() => onTabChange?.(tab.id)}
-              />
-            ))
+            // ── Wide mode: show all tabs ─────────────────────────────────────
+            HEADER_TABS.map((tab) => {
+              if (tab.isCanvas) {
+                return (
+                  // Wrapper div is the anchor for the popup – attach the ref here
+                  <div key={tab.id} style={{ position: "relative" }} ref={canvasTabRef}>
+                    <SlimTab
+                      tab={tab}
+                      isActive={activeTab === "canvas" && !!activeCanvasTitle}
+                      onClick={() => handleCanvasTabClick(tab)}
+                      onContextMenu={tab.isDynamic ? handleCanvasTabRightClick : undefined}
+                      isRenaming={isRenaming && tab.isDynamic}
+                      renameValue={renameValue}
+                      renameInputRef={renameInputRef}
+                      onRenameChange={(v) => setRenameValue(v)}
+                      onRenameSubmit={handleRenameSubmit}
+                      onRenameKeyDown={handleRenameKeyDown}
+                      onRenameCancel={() => setIsRenaming(false)}
+                    />
+
+                    {/* ── Canvas Popup Menu ── */}
+                    {showCanvasPopup && (
+                      <div
+                        ref={canvasPopupRef}
+                        style={{
+                          position: "absolute",
+                          top: "calc(100% + 6px)",
+                          left: 0,
+                          zIndex: 50,
+                        }}
+                      >
+                        <CanvasMenu
+                          onSelect={(type) => {
+                            onCloseCanvasMenu?.();
+                            onCanvasSelect?.(type);
+                          }}
+                          onDismiss={() => onCloseCanvasMenu?.()}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <SlimTab
+                  key={tab.id}
+                  tab={tab}
+                  isActive={activeTab === tab.id}
+                  onClick={() => onTabChange?.(tab.id)}
+                />
+              );
+            })
           )}
         </div>
       </div>
+
+      {/* ── Canvas Right-Click Context Menu ── */}
+      {contextMenu && activeCanvas?._id && (
+        <CanvasTabContextMenu
+          canvasId={activeCanvas._id}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onRenameTrigger={startRename}
+          onRemoveTab={() => {
+            onRemoveCanvasTab?.();
+            setContextMenu(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-/* ── SlimTab ────────────────────────────────────────────────────────────── */
-function SlimTab({ tab, isActive, onClick }) {
+/* ── SlimTab ─────────────────────────────────────────────────────────────── */
+function SlimTab({
+  tab,
+  isActive,
+  onClick,
+  onContextMenu,
+  isRenaming,
+  renameValue,
+  renameInputRef,
+  onRenameChange,
+  onRenameSubmit,
+  onRenameKeyDown,
+  onRenameCancel,
+}) {
   const Icon = tab.icon;
+
+  if (isRenaming && tab.isDynamic) {
+    return (
+      <div
+        className="slim-tab slim-tab--active"
+        style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 6px" }}
+      >
+        <Icon size={13} className="slim-tab__icon shrink-0" />
+        <input
+          ref={renameInputRef}
+          value={renameValue}
+          onChange={(e) => onRenameChange(e.target.value)}
+          onKeyDown={onRenameKeyDown}
+          style={{
+            border: "none",
+            background: "transparent",
+            color: "var(--text-primary)",
+            fontSize: 12,
+            fontWeight: 600,
+            outline: "none",
+            width: Math.max(60, renameValue.length * 7),
+            maxWidth: 160,
+          }}
+        />
+        <button
+          onClick={onRenameSubmit}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", color: "var(--accent-green)" }}
+          title="Save"
+        >
+          <Check size={12} />
+        </button>
+        <button
+          onClick={onRenameCancel}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", color: "var(--text-muted)" }}
+          title="Cancel"
+        >
+          <X size={12} />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <button
       onClick={onClick}
+      onContextMenu={onContextMenu}
       className={`slim-tab${isActive ? " slim-tab--active" : ""}`}
+      title={tab.isDynamic ? "Right-click for options" : undefined}
     >
       <Icon size={13} className="slim-tab__icon shrink-0" />
       <span className="slim-tab__label">{tab.label}</span>
@@ -394,15 +584,8 @@ function SlimTab({ tab, isActive, onClick }) {
   );
 }
 
-/* ── HdrBtn ─────────────────────────────────────────────────────────────── */
-function HdrBtn({
-  icon: Icon,
-  title,
-  label,
-  onClick,
-  className = "",
-  size = 14,
-}) {
+/* ── HdrBtn ──────────────────────────────────────────────────────────────── */
+function HdrBtn({ icon: Icon, title, label, onClick, className = "", size = 14 }) {
   return (
     <button
       onClick={onClick}
@@ -416,10 +599,7 @@ function HdrBtn({
     >
       <Icon size={size} />
       {label && (
-        <span
-          className="font-bold hide-mobile leading-none"
-          style={{ fontSize: 11 }}
-        >
+        <span className="font-bold hide-mobile leading-none" style={{ fontSize: 11 }}>
           {label}
         </span>
       )}
@@ -438,22 +618,13 @@ function DropItem({ icon: Icon, label, sublabel, onClick, className = "" }) {
         className,
       ].join(" ")}
     >
-      <Icon
-        size={14}
-        className="shrink-0"
-        style={{ color: "var(--text-muted)" }}
-      />
+      <Icon size={14} className="shrink-0" style={{ color: "var(--text-muted)" }} />
       <span className="flex flex-col min-w-0">
-        <span
-          className="font-semibold truncate"
-          style={{ fontSize: 13, color: "var(--text-primary)" }}
-        >
+        <span className="font-semibold truncate" style={{ fontSize: 13, color: "var(--text-primary)" }}>
           {label}
         </span>
         {sublabel && (
-          <span
-            style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}
-          >
+          <span style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
             {sublabel}
           </span>
         )}

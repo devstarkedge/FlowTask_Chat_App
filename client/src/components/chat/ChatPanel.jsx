@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
+import { useCanvasStore } from "../../stores/canvasStore";
 import { joinChannel, leaveChannel } from "../../services/socket";
 import MessageList from "./MessageList";
 import MessageInput from "./MessageInput";
@@ -38,9 +39,17 @@ export default function ChatPanel({
   );
   const messagesById = useChatStore((s) => s.messagesById);
   const connectionStatus = useChatStore((s) => s.connectionStatus);
+
+  const { activeCanvas, activeCanvasIdByChannel, clearActiveCanvas } =
+    useCanvasStore();
+
   const prevChannelRef = useRef(null);
   const [activeTab, setActiveTab] = useState("messages");
-  const [canvasMode, setCanvasMode] = useState(null);
+  // Controls whether the CanvasMenu popup is open in the header tab bar
+  const [showCanvasPopup, setShowCanvasPopup] = useState(false);
+  // The intent from the header popup: "blank" | "template" | "existing" | null
+  // Passed to CanvasPanel so it knows which view to open immediately on mount.
+  const [canvasIntent, setCanvasIntent] = useState(null);
 
   const messages = useMemo(() => {
     if (!CHAT_FEATURE_FLAGS.normalizedMessageStore) return legacyMessages;
@@ -48,6 +57,7 @@ export default function ChatPanel({
     return channelMessageIds.map((id) => messagesById[id]).filter(Boolean);
   }, [legacyMessages, channelMessageIds, messagesById]);
 
+  // When channel changes, reset tab and leave old channel
   useEffect(() => {
     if (!channelId) return;
 
@@ -59,12 +69,42 @@ export default function ChatPanel({
 
     fetchMessages(channelId);
     fetchPinnedMessages(channelId);
+    // Reset to messages tab and close any open popup
     setActiveTab("messages");
+    setShowCanvasPopup(false);
+    setCanvasIntent(null);
 
     return () => {
       leaveChannel(channelId);
     };
   }, [channelId, fetchMessages, fetchPinnedMessages]);
+
+  // Derive the active canvas title for the header tab label
+  const activeCanvasTitle = useMemo(() => {
+    if (!channelId) return null;
+    const canvasId = activeCanvasIdByChannel?.[channelId];
+    if (!canvasId) return null;
+    if (activeCanvas && activeCanvas._id === canvasId) {
+      return activeCanvas.title || "Canvas";
+    }
+    return null;
+  }, [activeCanvas, activeCanvasIdByChannel, channelId]);
+
+  // Remove canvas tab
+  const handleRemoveCanvasTab = () => {
+    clearActiveCanvas();
+    setActiveTab("messages");
+    setCanvasIntent(null);
+  };
+
+  // Called when user picks an option from the CanvasMenu header popup.
+  // We store the intent and switch to the canvas tab.
+  // CanvasPanel reads the intent on mount and enters the right flow.
+  const handleCanvasSelect = (type) => {
+    setShowCanvasPopup(false);
+    setCanvasIntent(type); // "blank" | "template" | "existing"
+    setActiveTab("canvas");
+  };
 
   const isDMChannel = channel?.type === "dm";
 
@@ -76,17 +116,26 @@ export default function ChatPanel({
         onTogglePins={onTogglePins}
         onOpenMobileSidebar={onOpenMobileSidebar}
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
+          // If the user manually clicks the canvas tab (not via the popup),
+          // don't carry over a stale intent
+          if (tab !== "canvas") setCanvasIntent(null);
+        }}
+        // Canvas-specific props
+        showCanvasPopup={showCanvasPopup}
+        onOpenCanvasMenu={() => setShowCanvasPopup(true)}
+        onCloseCanvasMenu={() => setShowCanvasPopup(false)}
+        onCanvasSelect={handleCanvasSelect}
+        activeCanvasTitle={activeCanvasTitle}
+        onRemoveCanvasTab={handleRemoveCanvasTab}
       />
 
       {/* Connection status banners */}
       {connectionStatus === "connecting" && (
         <div
           className="flex items-center justify-center gap-2 py-1.5 text-xs font-medium animate-fade-in"
-          style={{
-            background: "var(--warning-color)",
-            color: "var(--text-inverse)",
-          }}
+          style={{ background: "var(--warning-color)", color: "var(--text-inverse)" }}
         >
           <Loader2 size={12} className="animate-spin" />
           Reconnecting…
@@ -102,24 +151,22 @@ export default function ChatPanel({
         </div>
       )}
 
-      {activeTab === "files" ? (
-        <FilesTab channelId={channelId} onOpenFilePreview={onOpenFilePreview} />
-      ) : activeTab === "add-canvas" ? (
+      {/* ── Tab Content ── */}
+      {activeTab === "canvas" ? (
         <CanvasPanel
           channelId={channelId}
           workspaceId={workspaceId}
-          channel={channel}
+          // Tell CanvasPanel which flow to open immediately.
+          // After CanvasPanel consumes it, it calls onIntentConsumed so we
+          // clear it and don't re-trigger on future re-renders.
+          intent={canvasIntent}
+          onIntentConsumed={() => setCanvasIntent(null)}
         />
+      ) : activeTab === "files" ? (
+        <FilesTab channelId={channelId} onOpenFilePreview={onOpenFilePreview} />
       ) : (
         <>
-          {/*
-           * PinnedBar sits at the top of the chat, just below the header.
-           * It receives channelId so it can read the correct pin list and
-           * trigger scroll-to via setScrollToMessageId (which MessageList
-           * already listens to).
-           */}
           <PinnedBar channelId={channelId} />
-
           <MessageList
             messages={messages}
             channelId={channelId}
@@ -129,9 +176,7 @@ export default function ChatPanel({
             isDMChannel={isDMChannel}
             onSaveMessage={onSaveMessage}
           />
-
           <TypingIndicator channelId={channelId} />
-
           <MessageInput channelId={channelId} />
         </>
       )}

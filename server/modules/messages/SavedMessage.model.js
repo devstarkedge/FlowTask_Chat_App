@@ -56,7 +56,7 @@ const savedMessageSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['in_progress', 'archived', 'completed'],
+    enum: ['in_progress', 'archived', 'completed', 'dismissed'],
     default: 'in_progress',
   },
   notificationSent: {
@@ -72,6 +72,45 @@ const savedMessageSchema = new Schema({
     enum: ['none', 'daily', 'weekly', 'monthly'],
     default: 'none',
   },
+  // Advanced fields for enhanced reminders
+  recurrenceRule: {
+    // RFC RRULE string (optional) for complex/custom recurrence
+    type: String,
+    default: null,
+  },
+  recurrenceMeta: {
+    // JSON object with recurrence details { frequency, interval, byWeekday, byMonthDay, until }
+    type: Schema.Types.Mixed,
+    default: null,
+  },
+  timezone: {
+    type: String,
+    default: 'UTC',
+  },
+  priority: {
+    type: String,
+    enum: ['low', 'medium', 'high', 'urgent'],
+    default: 'medium',
+  },
+  tags: {
+    type: [String],
+    default: [],
+  },
+  attachments: [{ type: Schema.Types.ObjectId, ref: 'FileAsset' }],
+  // Snooze support
+  snoozedUntil: { type: Date, default: null },
+  snoozeHistory: { type: [Schema.Types.Mixed], default: [] },
+  // Scope of reminder (personal, channel-wide, linked to lists/canvas)
+  scope: {
+    type: String,
+    enum: ['personal', 'channel', 'list', 'canvas'],
+    default: 'personal',
+  },
+  // Generic references for linking reminders to tasks/canvas blocks
+  linkedTaskId: { type: Schema.Types.ObjectId, ref: 'Task', default: null },
+  canvasRef: { type: Schema.Types.Mixed, default: null },
+  // Mention targets for channel reminders (user/role/channel)
+  mentionTargets: { type: [Schema.Types.Mixed], default: [] },
 }, {
   timestamps: true,
 });
@@ -108,7 +147,17 @@ savedMessageSchema.statics.createStandalone = async function (userId, workspaceI
     reminderAt: data.reminderAt,
     reminderDescription: data.reminderDescription || '',
     recurrence: data.recurrence || 'none',
+    recurrenceRule: data.recurrenceRule || null,
+    recurrenceMeta: data.recurrenceMeta || null,
+    timezone: data.timezone || 'UTC',
+    priority: data.priority || 'medium',
+    tags: data.tags || [],
+    attachments: data.attachments || [],
     channelId: data.channelId || null,
+    scope: data.scope || 'personal',
+    linkedTaskId: data.linkedTaskId || null,
+    canvasRef: data.canvasRef || null,
+    mentionTargets: data.mentionTargets || [],
   });
 };
 

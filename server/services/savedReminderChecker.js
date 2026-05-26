@@ -2,33 +2,111 @@ import SavedMessage from '../modules/messages/SavedMessage.model.js';
 import notificationEngine from './notificationEngine.js';
 import { NOTIFICATION_TYPES } from '../config/constants.js';
 import logger from '../utils/logger.js';
+import { DateTime } from 'luxon';
 
 const POLL_INTERVAL_MS = 30_000; // 30s
 const BATCH_SIZE = 50;
 let intervalHandle = null;
 
-function calculateNextReminderAt(current, frequency) {
-  if (!frequency || frequency === 'none') return null;
-  const next = new Date(current);
-  const now = new Date();
-  
-  // Ensure the next occurrence is in the future
+function calculateNextReminderAt(saved) {
+  // saved: { reminderAt, recurrence, recurrenceMeta, recurrenceRule, timezone }
+  if (!saved) return null;
+  const tz = saved.timezone || 'UTC';
+  const now = DateTime.utc().setZone(tz);
+
+  // If recurrenceRule exists, try basic handling via recurrenceMeta first (rrule parsing can be added later)
+  const start = saved.reminderAt ? DateTime.fromJSDate(new Date(saved.reminderAt)).setZone(tz) : now;
+
+  // Use recurrenceMeta when available (supports interval/byWeekday/byMonthDay/until)
+  if (saved.recurrenceMeta && saved.recurrenceMeta.frequency) {
+    const meta = saved.recurrenceMeta;
+    const interval = Math.max(1, parseInt(meta.interval || 1, 10));
+    let candidate = start;
+
+    // Ensure candidate moves forward until it's in the future
+    while (candidate <= now) {
+      switch ((meta.frequency || saved.recurrence || 'none')) {
+        case 'daily':
+          candidate = candidate.plus({ days: interval });
+          break;
+        case 'weekly': {
+          // If byWeekday provided (0-6 or ISO 1-7), try to jump to next matching weekday
+          if (Array.isArray(meta.byWeekday) && meta.byWeekday.length > 0) {
+            const isoNow = candidate.setZone(tz).weekday; // 1..7
+            // Convert provided weekdays to ISO (accept 0-6 or 1-7 strings)
+            const weekdays = meta.byWeekday.map((d) => {
+              const n = parseInt(d, 10);
+              if (Number.isNaN(n)) return null;
+              return n === 0 ? 7 : n; // map 0->7 if used
+            }).filter(Boolean);
+            // Find next weekday in list
+            const future = weekdays
+              .map((wd) => {
+                let diff = wd - isoNow;
+                if (diff <= 0) diff += 7 * interval;
+                return candidate.plus({ days: diff });
+              })
+              .sort((a, b) => a.toMillis() - b.toMillis());
+            if (future.length > 0) {
+              candidate = future[0];
+            } else {
+              candidate = candidate.plus({ weeks: interval });
+            }
+          } else {
+            candidate = candidate.plus({ weeks: interval });
+          }
+        }
+          break;
+        case 'monthly':
+          if (Array.isArray(meta.byMonthDay) && meta.byMonthDay.length > 0) {
+            // Try next matching month-day
+            const nextMonth = candidate.plus({ months: interval });
+            // Pick the smallest byMonthDay that is after candidate
+            const days = meta.byMonthDay.map((d) => parseInt(d, 10)).filter((n) => !Number.isNaN(n));
+            let chosen = null;
+            for (const d of days.sort((a, b) => a - b)) {
+              const c = DateTime.fromObject({ year: nextMonth.year, month: nextMonth.month, day: Math.min(d, DateTime.local(nextMonth.year, nextMonth.month).endOf('month').day), zone: tz });
+              if (c > candidate) {
+                chosen = c;
+                break;
+              }
+            }
+            candidate = chosen || nextMonth;
+          } else {
+            candidate = candidate.plus({ months: interval });
+          }
+          break;
+        default:
+          return null;
+      }
+      // Safety bail-out
+      if (candidate.diff(now, 'years').years > 100) return null;
+    }
+
+    return candidate.toJSDate();
+  }
+
+  // Fallback: simple string-based recurrence (legacy)
+  if (!saved.recurrence || saved.recurrence === 'none') return null;
+
+  let next = DateTime.fromJSDate(new Date(saved.reminderAt)).setZone(tz);
   while (next <= now) {
-    switch (frequency) {
+    switch (saved.recurrence) {
       case 'daily':
-        next.setDate(next.getDate() + 1);
+        next = next.plus({ days: 1 });
         break;
       case 'weekly':
-        next.setDate(next.getDate() + 7);
+        next = next.plus({ weeks: 1 });
         break;
       case 'monthly':
-        next.setMonth(next.getMonth() + 1);
+        next = next.plus({ months: 1 });
         break;
       default:
         return null;
     }
   }
-  return next;
+
+  return next.toJSDate();
 }
 
 async function processDueReminders() {
@@ -40,6 +118,7 @@ async function processDueReminders() {
       reminderAt: { $lte: now },
       status: 'in_progress',
       overdueNotificationSent: { $ne: true },
+      $or: [ { snoozedUntil: null }, { snoozedUntil: { $lte: now } } ],
     }).limit(BATCH_SIZE).lean();
 
     logger.info('[ReminderChecker] Found due reminders', { count: due.length });
@@ -48,7 +127,7 @@ async function processDueReminders() {
 
     for (const saved of due) {
       try {
-        const nextAt = calculateNextReminderAt(saved.reminderAt, saved.recurrence);
+        const nextAt = calculateNextReminderAt(saved);
         
         let updateData;
         if (nextAt) {
@@ -60,7 +139,7 @@ async function processDueReminders() {
               overdueNotificationSent: false 
             } 
           };
-          logger.info(`[ReminderChecker] Rescheduling recurring reminder ${saved._id} to ${nextAt.toISOString()} (${saved.recurrence})`);
+          logger.info(`[ReminderChecker] Rescheduling recurring reminder ${saved._id} to ${new Date(nextAt).toISOString()}`, { recurrence: saved.recurrence, recurrenceRule: saved.recurrenceRule, recurrenceMeta: saved.recurrenceMeta });
         } else {
           // One-time: Mark as sent
           updateData = { 

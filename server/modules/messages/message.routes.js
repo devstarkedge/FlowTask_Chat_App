@@ -21,6 +21,9 @@ import {
   getSavedMessages,
   updateSavedMessageStatus,
   updateSavedMessageReminder,
+  snoozeSavedReminder,
+  parseReminderText,
+  suggestRemindersFromMessage,
   createStandaloneReminder,
   deleteReminder,
   scheduleMessage,
@@ -93,8 +96,11 @@ router.delete('/:id/pin', requireMessageAccess(), unpinMessage);
 router.post('/:id/save', requireMessageAccess(), toggleSaveMessage);
 router.patch('/:id/save/status', requireMessageAccess(), updateSavedMessageStatus);
 router.patch('/:id/save/reminder', requireMessageAccess(), updateSavedMessageReminder);
+router.patch('/:id/save/reminder/snooze', requireMessageAccess(), snoozeSavedReminder);
 router.post('/reminders/standalone', createStandaloneReminder);
+router.post('/reminders/parse', parseReminderText);
 router.delete('/reminders/:id', deleteReminder);
+router.post('/:id/reminder-suggestions', requireMessageAccess(), suggestRemindersFromMessage);
 export default router;
 
 /**

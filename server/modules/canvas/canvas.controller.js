@@ -1,21 +1,12 @@
 import canvasService from "./canvas.service.js";
-
 import asyncHandler from "../../middleware/asyncHandler.js";
 
-// ─────────────────────────────────────────────────────────────
-// Get Canvas
-// ─────────────────────────────────────────────────────────────
-
+// ── Get Canvas metadata (and auto-creates default if not found)
 const getCanvas = asyncHandler(async (req, res) => {
-
   const { channelId } = req.params;
-
   const workspaceId = req.workspaceId;
 
-  const canvas = await canvasService.getCanvas(
-    channelId,
-    workspaceId,
-  );
+  const canvas = await canvasService.getCanvas(channelId, workspaceId);
 
   return res.status(200).json({
     success: true,
@@ -23,16 +14,23 @@ const getCanvas = asyncHandler(async (req, res) => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────
-// Create Canvas
-// ─────────────────────────────────────────────────────────────
-
-const createCanvas = asyncHandler(async (req, res) => {
-
-  const { channelId } = req.params;
-
+// ── Get Canvas with Blocks & Comments
+const getCanvasById = asyncHandler(async (req, res) => {
+  const { canvasId } = req.params;
   const workspaceId = req.workspaceId;
 
+  const details = await canvasService.getCanvasById(canvasId, workspaceId);
+
+  return res.status(200).json({
+    success: true,
+    data: details,
+  });
+});
+
+// ── Create Canvas
+const createCanvas = asyncHandler(async (req, res) => {
+  const { channelId } = req.params;
+  const workspaceId = req.workspaceId;
   const userId = req.user._id;
 
   const canvas = await canvasService.createCanvas(
@@ -41,7 +39,7 @@ const createCanvas = asyncHandler(async (req, res) => {
       channelId,
     },
     userId,
-    workspaceId,
+    workspaceId
   );
 
   return res.status(201).json({
@@ -50,23 +48,17 @@ const createCanvas = asyncHandler(async (req, res) => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────
-// Update Canvas
-// ─────────────────────────────────────────────────────────────
-
+// ── Update Canvas (Title / Cover)
 const updateCanvas = asyncHandler(async (req, res) => {
-
   const { canvasId } = req.params;
-
   const workspaceId = req.workspaceId;
-
   const userId = req.user._id;
 
   const canvas = await canvasService.updateCanvas(
     canvasId,
     req.body,
     userId,
-    workspaceId,
+    workspaceId
   );
 
   return res.status(200).json({
@@ -75,43 +67,32 @@ const updateCanvas = asyncHandler(async (req, res) => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────
-// Delete Canvas
-// ─────────────────────────────────────────────────────────────
+// ── Delete Canvas
+// const deleteCanvas = asyncHandler(async (req, res) => {
+//   const { canvasId } = req.params;
+//   const workspaceId = req.workspaceId;
+//   const userId = req.user._id;
 
-const deleteCanvas = asyncHandler(async (req, res) => {
+//   const result = await canvasService.deleteCanvas(
+//     canvasId,
+//     userId,
+//     workspaceId
+//   );
 
-  const { canvasId } = req.params;
+//   return res.status(200).json({
+//     success: true,
+//     data: result,
+//   });
+// });
 
-  const workspaceId = req.workspaceId;
-
-  const userId = req.user._id;
-
-  const result = await canvasService.deleteCanvas(
-    canvasId,
-    userId,
-    workspaceId,
-  );
-
-  return res.status(200).json({
-    success: true,
-    data: result,
-  });
-});
-
-// ─────────────────────────────────────────────────────────────
-// Get All Channel Canvases
-// ─────────────────────────────────────────────────────────────
-
+// ── Get All Channel Canvases
 const getChannelCanvases = asyncHandler(async (req, res) => {
-
   const { channelId } = req.params;
-
   const workspaceId = req.workspaceId;
 
   const canvases = await canvasService.getChannelCanvases(
     channelId,
-    workspaceId,
+    workspaceId
   );
 
   return res.status(200).json({
@@ -120,10 +101,64 @@ const getChannelCanvases = asyncHandler(async (req, res) => {
   });
 });
 
+// ── Duplicate Canvas
+const duplicateCanvas = asyncHandler(async (req, res) => {
+  const { canvasId } = req.params;
+  const workspaceId = req.workspaceId;
+  const userId = req.user._id;
+
+  const canvas = await canvasService.duplicateCanvas(
+    canvasId,
+    userId,
+    workspaceId
+  );
+
+  return res.status(201).json({
+    success: true,
+    data: canvas,
+  });
+});
+
+// ── Get Canvas Version Snapshots
+const getCanvasHistory = asyncHandler(async (req, res) => {
+  const { canvasId } = req.params;
+  const workspaceId = req.workspaceId;
+
+  const history = await canvasService.getCanvasHistory(canvasId, workspaceId);
+
+  return res.status(200).json({
+    success: true,
+    data: history,
+  });
+});
+
+// ── Restore Canvas snapshot version
+const restoreCanvasVersion = asyncHandler(async (req, res) => {
+  const { canvasId, historyId } = req.params;
+  const workspaceId = req.workspaceId;
+  const userId = req.user._id;
+
+  const result = await canvasService.restoreCanvasVersion(
+    canvasId,
+    historyId,
+    userId,
+    workspaceId
+  );
+
+  return res.status(200).json({
+    success: true,
+    data: result,
+  });
+});
+
 export default {
   getCanvas,
+  getCanvasById,
   createCanvas,
   updateCanvas,
-  deleteCanvas,
+  // deleteCanvas,
   getChannelCanvases,
+  duplicateCanvas,
+  getCanvasHistory,
+  restoreCanvasVersion,
 };

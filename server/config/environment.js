@@ -100,6 +100,10 @@ const env = Object.freeze({
 
   // Redis (optional)
   REDIS_URL: process.env.REDIS_URL || '',
+  CANVAS_COLLAB_ENABLED: process.env.CANVAS_COLLAB_ENABLED !== 'false',
+  CANVAS_COLLAB_PORT: parseInt(process.env.CANVAS_COLLAB_PORT, 10) || ((parseInt(process.env.PORT, 10) || 3200) + 1),
+  CANVAS_COLLAB_DEBOUNCE_MS: parseInt(process.env.CANVAS_COLLAB_DEBOUNCE_MS, 10) || 1200,
+  CANVAS_COLLAB_MAX_DEBOUNCE_MS: parseInt(process.env.CANVAS_COLLAB_MAX_DEBOUNCE_MS, 10) || 8000,
 
   // Proxy
   TRUST_PROXY: parseInt(process.env.TRUST_PROXY, 10) || 0,

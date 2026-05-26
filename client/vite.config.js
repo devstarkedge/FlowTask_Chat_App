@@ -2,6 +2,9 @@ import { defineConfig, loadEnv } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default ({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
@@ -44,6 +47,16 @@ export default ({ mode }) => {
     base: "/",
 
     plugins: [react(), tailwindcss()],
+
+    resolve: {
+      alias: {
+        yjs: path.resolve(__dirname, 'node_modules/yjs'),
+      },
+    },
+
+    optimizeDeps: {
+      include: ['yjs'],
+    },
 
     server: {
       port: 5174,

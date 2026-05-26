@@ -1,4 +1,5 @@
 import messageService from "./message.service.js";
+import * as chrono from 'chrono-node';
 import fileUploadService from "../../services/fileUpload.service.js";
 import asyncHandler from "../../middleware/asyncHandler.js";
 import mongoose from "mongoose";
@@ -643,7 +644,7 @@ export const getSavedMessages = asyncHandler(async (req, res) => {
 export const updateSavedMessageStatus = asyncHandler(async (req, res) => {
   const { status } = req.body;
   
-  if (!['in_progress', 'archived', 'completed'].includes(status)) {
+  if (!['in_progress', 'archived', 'completed', 'dismissed'].includes(status)) {
     return res.status(400).json({ success: false, error: { message: 'Invalid status' } });
   }
 
@@ -678,10 +679,35 @@ export const updateSavedMessageStatus = asyncHandler(async (req, res) => {
  * Update reminder for a saved message by messageId or savedMessage _id.
  */
 export const updateSavedMessageReminder = asyncHandler(async (req, res) => {
-  const { reminderAt, reminderDescription, recurrence } = req.body;
+  const {
+    reminderAt,
+    reminderDescription,
+    recurrence,
+    recurrenceRule,
+    recurrenceMeta,
+    timezone,
+    priority,
+    tags,
+    attachments,
+    scope,
+    linkedTaskId,
+    canvasRef,
+    mentionTargets,
+  } = req.body;
 
   const updateData = { notificationSent: false, overdueNotificationSent: false }; // Reset notification flags when reminder is updated
   if (recurrence !== undefined) updateData.recurrence = recurrence;
+  if (recurrenceRule !== undefined) updateData.recurrenceRule = recurrenceRule || null;
+  if (recurrenceMeta !== undefined) updateData.recurrenceMeta = recurrenceMeta || null;
+  if (timezone !== undefined) updateData.timezone = timezone || 'UTC';
+  if (priority !== undefined) updateData.priority = priority || 'medium';
+  if (tags !== undefined) updateData.tags = tags || [];
+  if (attachments !== undefined) updateData.attachments = attachments || [];
+  if (scope !== undefined) updateData.scope = scope || 'personal';
+  if (linkedTaskId !== undefined) updateData.linkedTaskId = linkedTaskId || null;
+  if (canvasRef !== undefined) updateData.canvasRef = canvasRef || null;
+  if (mentionTargets !== undefined) updateData.mentionTargets = mentionTargets || [];
+
   if (reminderAt !== undefined) {
     if (reminderAt) {
       const schedDate = new Date(reminderAt);
@@ -762,6 +788,45 @@ export const updateSavedMessageReminder = asyncHandler(async (req, res) => {
 });
 
 /**
+ * PATCH /api/chat/messages/:id/save/reminder/snooze
+ * Snooze a reminder until a specified date/time (ISO string expected)
+ */
+export const snoozeSavedReminder = asyncHandler(async (req, res) => {
+  const { snoozeUntil } = req.body;
+  if (!snoozeUntil) return res.status(400).json({ success: false, error: { message: 'snoozeUntil required' } });
+  const when = new Date(snoozeUntil);
+  if (isNaN(when.getTime()) || when <= new Date()) {
+    return res.status(400).json({ success: false, error: { message: 'snoozeUntil must be a future date' } });
+  }
+
+  // Try to find by messageId first, then by _id (for standalone reminders)
+  let saved = await SavedMessage.findOneAndUpdate(
+    { userId: req.user._id, messageId: req.params.id, workspaceId: req.workspaceId },
+    { $set: { snoozedUntil: when }, $push: { snoozeHistory: { snoozedAt: new Date(), snoozeUntil: when, userId: req.user._id } } },
+    { new: true },
+  );
+
+  if (!saved) {
+    saved = await SavedMessage.findOneAndUpdate(
+      { userId: req.user._id, _id: req.params.id, workspaceId: req.workspaceId },
+      { $set: { snoozedUntil: when }, $push: { snoozeHistory: { snoozedAt: new Date(), snoozeUntil: when, userId: req.user._id } } },
+      { new: true },
+    );
+  }
+
+  if (!saved) return res.status(404).json({ success: false, error: { message: 'Saved message not found' } });
+
+  const populated = await SavedMessage.findById(saved._id)
+    .populate({ path: 'messageId', populate: { path: 'authorId', select: 'name avatar' } })
+    .populate('channelId', 'name type')
+    .lean();
+
+  emitToUser(req.user._id, SOCKET_EVENTS.SAVED_MESSAGE_ADDED, { savedMessage: populated }, req.workspaceId);
+
+  res.json({ success: true, data: { saved } });
+});
+
+/**
  * POST /api/chat/messages/reminders/standalone
  * Create a standalone reminder.
  */
@@ -822,6 +887,47 @@ export const createStandaloneReminder = asyncHandler(async (req, res) => {
   }
 
   res.status(201).json({ success: true, data: { reminder } });
+});
+
+/**
+ * POST /api/chat/messages/reminders/parse
+ * Parse freeform text into date suggestions (uses chrono-node)
+ */
+export const parseReminderText = asyncHandler(async (req, res) => {
+  const { text, referenceDate } = req.body;
+  if (!text || typeof text !== 'string') return res.status(400).json({ success: false, error: { message: 'text is required' } });
+  const ref = referenceDate ? new Date(referenceDate) : new Date();
+  const results = chrono.parse(text, ref, { forwardDate: true });
+  const suggestions = results.map((r) => ({
+    text: r.text,
+    start: r.start ? r.start.date().toISOString() : null,
+    end: r.end ? r.end.date().toISOString() : null,
+  }));
+  res.json({ success: true, data: { suggestions } });
+});
+
+/**
+ * POST /api/chat/messages/:id/reminder-suggestions
+ * Analyze a saved message by id and suggest reminders (chrono + heuristics)
+ */
+export const suggestRemindersFromMessage = asyncHandler(async (req, res) => {
+  const msg = await messageService.getMessageById(req.params.id, req.workspaceId);
+  if (!msg) return res.status(404).json({ success: false, error: { message: 'Message not found' } });
+  const content = msg.content || msg.htmlContent || '';
+  const results = chrono.parse(content, new Date(), { forwardDate: true });
+  const suggestions = results.map((r) => ({
+    text: r.text,
+    start: r.start ? r.start.date().toISOString() : null,
+    end: r.end ? r.end.date().toISOString() : null,
+  }));
+
+  // Lightweight heuristic: if none found, look for quick patterns like "in 2 hours", "tomorrow"
+  if (suggestions.length === 0) {
+    const quick = chrono.parse(content, new Date(), { forwardDate: true });
+    quick.forEach((r) => suggestions.push({ text: r.text, start: r.start ? r.start.date().toISOString() : null }));
+  }
+
+  res.json({ success: true, data: { suggestions } });
 });
 
 /**

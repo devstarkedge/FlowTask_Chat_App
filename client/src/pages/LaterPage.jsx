@@ -3,6 +3,7 @@ import { Clock, PencilLine, ClockFading, Sparkles } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import DraftsSidebar from '../components/chat/DraftsSidebar'
 import ScheduledMessagesList from '../components/chat/ScheduledMessagesList'
+import ReminderCenter from '../components/chat/ReminderCenter'
 import { useDraftStore, countWorkspaceDrafts } from '../stores/draftStore'
 import { useUIStore } from '../stores/uiStore'
 import { useScheduledStore } from '../stores/scheduledStore'
@@ -72,6 +73,14 @@ export default function LaterPage() {
       icon: ClockFading,
       color: "var(--accent-yellow)",
       description: "Messages queued to send automatically",
+    },
+    {
+      id: 'reminders',
+      label: 'Reminders',
+      count: savedCount,
+      icon: Clock,
+      color: 'var(--accent-primary)',
+      description: 'Personal and channel reminders',
     },
   ];
 
@@ -175,9 +184,11 @@ export default function LaterPage() {
       >
         {activeTab === "drafts" ? (
           <DraftsSidebar />
-        ) : (
+        ) : activeTab === 'scheduled' ? (
           <ScheduledMessagesList />
-        )}
+        ) : activeTab === 'reminders' ? (
+          <ReminderCenter />
+        ) : null}
       </div>
     </div>
   );

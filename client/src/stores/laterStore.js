@@ -133,6 +133,41 @@ export const useLaterStore = create((set, get) => ({
     }
   },
 
+  snoozeReminder: async (messageId, snoozeUntil) => {
+    try {
+      const { data } = await savedMessageAPI.snooze(messageId, { snoozeUntil });
+      const saved = data.data?.saved;
+      if (saved) {
+        get().addSavedMessage(saved);
+        toast.success('Reminder snoozed');
+      }
+    } catch (err) {
+      console.error('Failed to snooze reminder', err);
+      toast.error('Failed to snooze reminder');
+      throw err;
+    }
+  },
+
+  parseText: async (text, referenceDate) => {
+    try {
+      const { data } = await savedMessageAPI.parseText(text, referenceDate);
+      return data.data?.suggestions || [];
+    } catch (err) {
+      console.error('Failed to parse text for reminders', err);
+      return [];
+    }
+  },
+
+  suggestFromMessage: async (messageId) => {
+    try {
+      const { data } = await savedMessageAPI.suggestFromMessage(messageId);
+      return data.data?.suggestions || [];
+    } catch (err) {
+      console.error('Failed to get suggestions', err);
+      return [];
+    }
+  },
+
   createStandaloneReminder: async (reminderData) => {
     try {
       const { data } = await savedMessageAPI.createStandalone(reminderData);

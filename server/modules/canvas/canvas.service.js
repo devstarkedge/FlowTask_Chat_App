@@ -1,56 +1,239 @@
 import canvasRepository from "./canvas.repository.js";
 import channelRepository from "../channels/channel.repository.js";
-
-import {
-  emitToChannel,
-} from "../../sockets/socketManager.js";
-
+import CanvasBlock from "./canvasBlock.model.js";
+import CanvasComment from "./canvasComment.model.js";
+import CanvasHistory from "./canvasHistory.model.js";
+import ChatUser from "../users/ChatUser.model.js";
+import Message from "../messages/Message.model.js";
+import { emitToChannel } from "../../sockets/socketManager.js";
 import logger from "../../utils/logger.js";
-
+import { MESSAGE_CONTENT_TYPES } from "../../config/constants.js";
 import {
   ValidationError,
   NotFoundError,
-  ForbiddenError,
 } from "../../middleware/errorHandler.js";
 
 class CanvasService {
+  normalizeContent(content) {
+    if (!content || typeof content !== "object") {
+      return { type: "doc", content: [{ type: "paragraph" }] };
+    }
 
-  // ─────────────────────────────────────────────────────────────
-  // Get Canvas
-  // ─────────────────────────────────────────────────────────────
+    if (content.type !== "doc") {
+      return { type: "doc", content: [{ type: "paragraph" }] };
+    }
 
+    return {
+      ...content,
+      content: Array.isArray(content.content) && content.content.length > 0
+        ? content.content
+        : [{ type: "paragraph" }],
+    };
+  }
+
+  buildBlocksFromContent(canvasId, content, context = {}) {
+    const doc = this.normalizeContent(content);
+    const nodeTypeToBlockType = (node) => {
+      if (node.type === "heading") return `heading-${node.attrs?.level || 1}`;
+      if (node.type === "bulletList") return "bullet-list";
+      if (node.type === "orderedList") return "ordered-list";
+      if (node.type === "taskList") return "checklist";
+      if (node.type === "codeBlock") return "code-block";
+      if (node.type === "blockquote") return "quote";
+      if (node.type === "horizontalRule") return "divider";
+      if (node.type === "table") return "table";
+      if (node.type === "image") return "image";
+      return "paragraph";
+    };
+
+    return doc.content.map((node, index) => ({
+      canvasId,
+      workspaceId: context.workspaceId,
+      channelId: context.channelId,
+      createdBy: context.userId,
+      updatedBy: context.userId,
+      type: nodeTypeToBlockType(node),
+      content: node,
+      metadata: {
+        source: "tiptap",
+        schemaVersion: 1,
+      },
+      order: index,
+      version: 1,
+    }));
+  }
+  // ── Helper to build template blocks
+  buildTemplateBlocks(canvasId, type, context = {}) {
+    const defaultBlocks = {
+      blank: [
+        { type: "paragraph", content: "Start writing here...", order: 0 }
+      ],
+      notes: [
+        { type: "heading-1", content: "Notes", order: 0 },
+        { type: "paragraph", content: "Write down your key points...", order: 1 }
+      ],
+      meeting: [
+        { type: "heading-1", content: "Meeting Notes", order: 0 },
+        { type: "heading-2", content: "📋 Agenda", order: 1 },
+        { type: "paragraph", content: "1. Introduce new team goals\n2. Align timelines", order: 2 },
+        { type: "heading-2", content: "📝 Notes", order: 3 },
+        { type: "paragraph", content: "", order: 4 },
+        { type: "heading-2", content: "✅ Action Items", order: 5 },
+        { type: "checklist", content: { text: "Review project milestones", checked: false }, order: 6 },
+        { type: "checklist", content: { text: "Schedule client sync", checked: false }, order: 7 }
+      ],
+      sprint: [
+        { type: "heading-1", content: "Sprint Planning", order: 0 },
+        { type: "heading-2", content: "🎯 Sprint Goal", order: 1 },
+        { type: "paragraph", content: "Deliver core features with 100% sync reliability.", order: 2 },
+        { type: "heading-2", content: "📦 Stories", order: 3 },
+        { type: "checklist", content: { text: "Define MongoDB schema mapping", checked: true }, order: 4 },
+        { type: "checklist", content: { text: "Implement drag-and-drop order updates", checked: false }, order: 5 }
+      ],
+      okr: [
+        { type: "heading-1", content: "OKR Tracker", order: 0 },
+        { type: "heading-2", content: "🎯 Objectives", order: 1 },
+        { type: "paragraph", content: "O1: Enhance developer experience and collaboration.", order: 2 },
+        { type: "heading-2", content: "📊 Key Results", order: 3 },
+        { type: "checklist", content: { text: "KR1: Reduce socket latency by 30%", checked: false }, order: 4 }
+      ],
+      docs: [
+        { type: "heading-1", content: "Project Brief", order: 0 },
+        { type: "heading-2", content: "🎯 Goal", order: 1 },
+        { type: "paragraph", content: "Specify client specifications.", order: 2 },
+        { type: "heading-2", content: "📌 Scope", order: 3 },
+        { type: "paragraph", content: "", order: 4 }
+      ],
+      retro: [
+        { type: "heading-1", content: "Retrospective", order: 0 },
+        { type: "heading-2", content: "✅ What went well", order: 1 },
+        { type: "paragraph", content: "Great communication and faster setup.", order: 2 },
+        { type: "heading-2", content: "🔧 What to improve", order: 3 },
+        { type: "paragraph", content: "", order: 4 }
+      ],
+    };
+
+    const blocks = defaultBlocks[type] || defaultBlocks.blank;
+    return blocks.map((b) => ({
+      ...b,
+      canvasId,
+      workspaceId: context.workspaceId,
+      channelId: context.channelId,
+      createdBy: context.userId,
+      updatedBy: context.userId,
+      version: 1,
+    }));
+  }
+
+  // ── Helper to log activity inside chat
+  async logActivity(workspaceId, channelId, userId, text, eventType, canvasId, canvasTitle, blockId = null) {
+    try {
+      const user = await ChatUser.findById(userId).lean();
+      if (!user) return;
+
+      const message = await Message.create({
+        workspaceId,
+        channelId,
+        authorId: userId,
+        senderSnapshot: {
+          name: user.name,
+          avatar: user.avatar || null,
+        },
+        content: text,
+        contentType: MESSAGE_CONTENT_TYPES.ACTIVITY,
+        activityMeta: {
+          eventType,
+          canvasId: canvasId.toString(),
+          canvasTitle,
+          blockId: blockId ? blockId.toString() : null,
+          actorName: user.name,
+          actorAvatar: user.avatar || null,
+        },
+      });
+
+      // Broadcast new message in real-time
+      emitToChannel(
+        channelId.toString(),
+        "message:created",
+        message.toJSON(),
+        workspaceId
+      );
+    } catch (err) {
+      logger.error("[CANVAS SERVICE] Failed to write canvas activity message", { error: err.message });
+    }
+  }
+
+  // ── Helper to create history snapshot
+  async createHistorySnapshot(canvasId, userId) {
+    try {
+      const canvas = await canvasRepository.update(canvasId, {}); // dummy fetch
+      if (!canvas) return;
+
+      // Check if there is already a recent snapshot within last 2 minutes to prevent spamming
+      const recentSnapshot = await CanvasHistory.findOne({ canvasId }).sort({ timestamp: -1 });
+      if (recentSnapshot && Date.now() - new Date(recentSnapshot.timestamp).getTime() < 120000) {
+        return;
+      }
+
+      const blocks = await CanvasBlock.find({ canvasId }).sort({ order: 1 }).lean();
+      await CanvasHistory.create({
+        canvasId,
+        workspaceId: canvas.workspaceId,
+        channelId: canvas.channelId,
+        snapshot: {
+          title: canvas.title,
+          cover: canvas.cover || null,
+          content: canvas.content || null,
+          blocks: blocks.map((b) => ({
+            type: b.type,
+            content: b.content,
+            metadata: b.metadata || {},
+            order: b.order,
+            columnId: b.columnId,
+            colIndex: b.colIndex,
+            position: b.position || null,
+            version: b.version || 1,
+          })),
+        },
+        editorId: userId,
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      logger.error("[CANVAS SERVICE] History snapshot failed", { error: err.message });
+    }
+  }
+
+  // ── Get Canvas metadata (or auto-create)
   async getCanvas(channelId, workspaceId) {
-
     if (!workspaceId) {
       throw new ValidationError("workspaceId is required");
     }
 
-    const channel = await channelRepository.findById(
-      channelId,
-      { workspaceId }
-    );
-
+    const channel = await channelRepository.findById(channelId, { workspaceId });
     if (!channel) {
       throw new NotFoundError("Channel not found");
     }
 
-    let canvas = await canvasRepository.findByChannel(
-      channelId,
-      workspaceId
-    );
+    let canvas = await canvasRepository.findByChannel(channelId, workspaceId);
 
     // Auto-create default canvas
     if (!canvas) {
-
       canvas = await canvasRepository.create({
         workspaceId,
         channelId,
         title: `${channel.name} Canvas`,
         type: "notes",
-        content: {},
+        content: this.normalizeContent(),
       });
 
-      logger.info("[CANVAS] Auto-created canvas", {
+      // Create default blocks
+      const defaultBlocks = this.buildTemplateBlocks(canvas._id, "notes", {
+        workspaceId,
+        channelId,
+      });
+      await CanvasBlock.insertMany(defaultBlocks);
+
+      logger.info("[CANVAS] Auto-created canvas with blocks", {
         canvasId: canvas._id,
         channelId,
         workspaceId,
@@ -60,112 +243,122 @@ class CanvasService {
     return canvas;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Create Canvas
-  // ─────────────────────────────────────────────────────────────
-
-  async createCanvas(data, userId, workspaceId) {
-
+  // ── Get Canvas by ID with Blocks & Comments
+  async getCanvasById(canvasId, workspaceId) {
     if (!workspaceId) {
       throw new ValidationError("workspaceId is required");
     }
 
+    const canvas = await canvasRepository.findById(canvasId, workspaceId);
+    if (!canvas) {
+      throw new NotFoundError("Canvas not found");
+    }
+
+    const blocks = await CanvasBlock.find({ canvasId }).sort({ order: 1 });
+    const comments = await CanvasComment.find({ canvasId, resolved: false }).populate({
+      path: "authorId",
+      select: "name avatar",
+    });
+
+    return {
+      canvas,
+      blocks,
+      comments,
+    };
+  }
+
+  // ── Create Canvas with Blocks
+  async createCanvas(data, userId, workspaceId) {
+    if (!workspaceId) {
+      throw new ValidationError("workspaceId is required");
+    }
     if (!data.channelId) {
       throw new ValidationError("channelId is required");
     }
 
-    const channel = await channelRepository.findById(
-      data.channelId,
-      { workspaceId }
-    );
-
+    const channel = await channelRepository.findById(data.channelId, { workspaceId });
     if (!channel) {
       throw new NotFoundError("Channel not found");
     }
 
-    // Prevent duplicate canvas per channel
-    const existing = await canvasRepository.findByChannel(
-      data.channelId,
-      workspaceId
-    );
-
-    if (existing) {
-      return existing;
-    }
+    const title = data.title || `${channel.name} Canvas`;
+    const type = data.type || "notes";
+    const content = this.normalizeContent(data.content);
 
     const canvas = await canvasRepository.create({
       workspaceId,
       channelId: data.channelId,
-      title: data.title || `${channel.name} Canvas`,
-      type: data.type || "notes",
-      content: data.content || {},
+      title,
+      type,
+      content,
+      cover: data.cover || null,
       createdBy: userId,
+      updatedBy: userId,
       lastEditedBy: userId,
+      permissions: data.permissions || {
+        visibility: "channel",
+        inheritFromChannel: true,
+      },
     });
 
-    logger.info("[CANVAS] Canvas created", {
+    const blockContext = {
+      workspaceId,
+      channelId: data.channelId,
+      userId,
+    };
+    const templateBlocks = data.content
+      ? this.buildBlocksFromContent(canvas._id, content, blockContext)
+      : this.buildTemplateBlocks(canvas._id, type, blockContext);
+    await CanvasBlock.insertMany(templateBlocks);
+
+    // Write activity message
+    await this.logActivity(
+      workspaceId,
+      data.channelId,
+      userId,
+      `created the Canvas "${title}"`,
+      "CANVAS_CREATED",
+      canvas._id,
+      title
+    );
+
+    logger.info("[CANVAS] Canvas created with blocks", {
       canvasId: canvas._id,
       channelId: data.channelId,
       workspaceId,
-      createdBy: userId,
     });
 
     return canvas;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Update Canvas
-  // ─────────────────────────────────────────────────────────────
-
-  async updateCanvas(
-    canvasId,
-    updates,
-    userId,
-    workspaceId,
-  ) {
-
+  // ── Update Canvas details (Title/Cover)
+  async updateCanvas(canvasId, updates, userId, workspaceId) {
     if (!workspaceId) {
       throw new ValidationError("workspaceId is required");
     }
 
-    const canvas = await canvasRepository.findById(
-      canvasId,
-      workspaceId
-    );
-
+    const canvas = await canvasRepository.findById(canvasId, workspaceId);
     if (!canvas) {
       throw new NotFoundError("Canvas not found");
     }
 
+    // Save history snapshot before modifying
+    await this.createHistorySnapshot(canvasId, userId);
+
     const allowedUpdates = {};
+    if (updates.title !== undefined) allowedUpdates.title = updates.title;
+    if (updates.type !== undefined) allowedUpdates.type = updates.type;
+    if (updates.cover !== undefined) allowedUpdates.cover = updates.cover;
+    if (updates.content !== undefined) allowedUpdates.content = this.normalizeContent(updates.content);
+    if (updates.permissions !== undefined) allowedUpdates.permissions = updates.permissions;
 
-    // Title
-    if (updates.title !== undefined) {
-      allowedUpdates.title = updates.title;
-    }
-
-    // Type
-    if (updates.type !== undefined) {
-      allowedUpdates.type = updates.type;
-    }
-
-    // Content
-    if (updates.content !== undefined) {
-      allowedUpdates.content = updates.content;
-    }
-
+    allowedUpdates.updatedBy = userId;
     allowedUpdates.lastEditedBy = userId;
     allowedUpdates.updatedAt = new Date();
 
-    const updatedCanvas = await canvasRepository.update(
-      canvasId,
-      allowedUpdates
-    );
+    const updatedCanvas = await canvasRepository.update(canvasId, allowedUpdates);
 
-    // ─────────────────────────────────────────────────────────
-    // Realtime Sync
-    // ─────────────────────────────────────────────────────────
-
+    // Broadcast canvas update
     emitToChannel(
       canvas.channelId.toString(),
       "canvas:updated",
@@ -175,95 +368,240 @@ class CanvasService {
         updates: {
           title: updatedCanvas.title,
           type: updatedCanvas.type,
+          cover: updatedCanvas.cover,
           content: updatedCanvas.content,
           updatedAt: updatedCanvas.updatedAt,
           lastEditedBy: userId,
+          updatedBy: userId,
         },
       },
-      workspaceId,
+      workspaceId
     );
 
-    logger.info("[CANVAS] Canvas updated", {
-      canvasId,
-      workspaceId,
-      updatedBy: userId,
-    });
+    // Write update activity message
+    if (updates.title && updates.title !== canvas.title) {
+      await this.logActivity(
+        workspaceId,
+        canvas.channelId,
+        userId,
+        `renamed Canvas to "${updates.title}"`,
+        "CANVAS_UPDATED",
+        canvas._id,
+        updates.title
+      );
+    }
 
+    logger.info("[CANVAS] Canvas updated", { canvasId, workspaceId });
     return updatedCanvas;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Delete Canvas
-  // ─────────────────────────────────────────────────────────────
+  // ── Delete Canvas and all dependencies
+  // async deleteCanvas(canvasId, userId, workspaceId) {
+  //   if (!workspaceId) {
+  //     throw new ValidationError("workspaceId is required");
+  //   }
 
-  async deleteCanvas(
-    canvasId,
-    userId,
-    workspaceId,
-  ) {
+  //   const canvas = await canvasRepository.findById(canvasId, workspaceId);
+  //   if (!canvas) {
+  //     throw new NotFoundError("Canvas not found");
+  //   }
 
+  //   await canvasRepository.delete(canvasId);
+  //   await CanvasBlock.deleteMany({ canvasId });
+  //   await CanvasComment.deleteMany({ canvasId });
+  //   await CanvasHistory.deleteMany({ canvasId });
+
+  //   // Broadcast deletion
+  //   emitToChannel(
+  //     canvas.channelId.toString(),
+  //     "canvas:deleted",
+  //     {
+  //       canvasId,
+  //       channelId: canvas.channelId,
+  //     },
+  //     workspaceId
+  //   );
+
+  //   // Log deletion activity
+  //   await this.logActivity(
+  //     workspaceId,
+  //     canvas.channelId,
+  //     userId,
+  //     `deleted the Canvas "${canvas.title}"`,
+  //     "CANVAS_DELETED",
+  //     canvas._id,
+  //     canvas.title
+  //   );
+
+  //   logger.info("[CANVAS] Canvas deleted successfully", { canvasId, workspaceId });
+
+  //   return { success: true };
+  // }
+
+  // ── Duplicate Canvas
+  async duplicateCanvas(canvasId, userId, workspaceId) {
     if (!workspaceId) {
       throw new ValidationError("workspaceId is required");
     }
 
-    const canvas = await canvasRepository.findById(
-      canvasId,
-      workspaceId
+    const src = await canvasRepository.findById(canvasId, workspaceId);
+    if (!src) {
+      throw new NotFoundError("Source Canvas not found");
+    }
+
+    const title = `Copy of ${src.title}`;
+    const dup = await canvasRepository.create({
+      workspaceId,
+      channelId: src.channelId,
+      title,
+      type: src.type,
+      content: this.normalizeContent(src.content),
+      cover: src.cover || null,
+      createdBy: userId,
+      updatedBy: userId,
+      lastEditedBy: userId,
+      permissions: src.permissions || {
+        visibility: "channel",
+        inheritFromChannel: true,
+      },
+    });
+
+    const srcBlocks = await CanvasBlock.find({ canvasId }).sort({ order: 1 }).lean();
+    const dupBlocks = srcBlocks.map((b) => ({
+      canvasId: dup._id,
+      workspaceId,
+      channelId: src.channelId,
+      type: b.type,
+      content: b.content,
+      metadata: b.metadata || {},
+      order: b.order,
+      columnId: b.columnId,
+      colIndex: b.colIndex,
+      reactions: [],
+      createdBy: userId,
+      updatedBy: userId,
+      position: b.position || { x: 0, y: 0, width: null, height: null },
+      version: 1,
+    }));
+
+    if (dupBlocks.length > 0) {
+      await CanvasBlock.insertMany(dupBlocks);
+    }
+
+    await this.logActivity(
+      workspaceId,
+      src.channelId,
+      userId,
+      `duplicated Canvas "${src.title}" as "${title}"`,
+      "CANVAS_CREATED",
+      dup._id,
+      title
     );
 
+    return dup;
+  }
+
+  // ── Get Canvas Version Snapshots
+  async getCanvasHistory(canvasId, workspaceId) {
+    if (!workspaceId) {
+      throw new ValidationError("workspaceId is required");
+    }
+    return CanvasHistory.find({ canvasId, workspaceId })
+      .populate("editorId", "name avatar")
+      .sort({ timestamp: -1 });
+  }
+
+  // ── Restore Canvas snapshot version
+  async restoreCanvasVersion(canvasId, historyId, userId, workspaceId) {
+    if (!workspaceId) {
+      throw new ValidationError("workspaceId is required");
+    }
+
+    const canvas = await canvasRepository.findById(canvasId, workspaceId);
     if (!canvas) {
       throw new NotFoundError("Canvas not found");
     }
 
-    await canvasRepository.delete(canvasId);
+    const version = await CanvasHistory.findById(historyId);
+    if (!version) {
+      throw new NotFoundError("Version snapshot not found");
+    }
 
+    // Save current state to history as a snapshot before restoring
+    await this.createHistorySnapshot(canvasId, userId);
+
+    // Delete current blocks
+    await CanvasBlock.deleteMany({ canvasId });
+
+    // Update metadata from snapshot
+    canvas.title = version.snapshot.title || canvas.title;
+    canvas.cover = version.snapshot.cover || null;
+    canvas.content = this.normalizeContent(version.snapshot.content);
+    canvas.updatedBy = userId;
+    canvas.lastEditedBy = userId;
+    await canvas.save();
+
+    // Insert blocks from snapshot
+    const restoredBlocks = version.snapshot.blocks.map((b) => ({
+      canvasId,
+      workspaceId,
+      channelId: canvas.channelId,
+      type: b.type,
+      content: b.content,
+      metadata: b.metadata || {},
+      order: b.order,
+      columnId: b.columnId,
+      colIndex: b.colIndex,
+      createdBy: userId,
+      updatedBy: userId,
+      position: b.position || { x: 0, y: 0, width: null, height: null },
+      version: (b.version || 0) + 1,
+    }));
+
+    if (restoredBlocks.length > 0) {
+      await CanvasBlock.insertMany(restoredBlocks);
+    }
+
+    // Broadcast reload event to all room sockets
     emitToChannel(
       canvas.channelId.toString(),
-      "canvas:deleted",
+      "canvas:restored",
       {
         canvasId,
         channelId: canvas.channelId,
+        title: canvas.title,
+        cover: canvas.cover,
+        content: canvas.content,
       },
-      workspaceId,
+      workspaceId
     );
 
-    logger.info("[CANVAS] Canvas deleted", {
-      canvasId,
+    // Write activity message
+    await this.logActivity(
       workspaceId,
-      deletedBy: userId,
-    });
+      canvas.channelId,
+      userId,
+      `restored "${canvas.title}" to a previous version`,
+      "CANVAS_UPDATED",
+      canvas._id,
+      canvas.title
+    );
 
-    return {
-      success: true,
-    };
+    return { success: true };
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Get Channel Canvases
-  // ─────────────────────────────────────────────────────────────
-
-  async getChannelCanvases(
-    channelId,
-    workspaceId,
-  ) {
-
+  // ── Get All canvases in channel
+  async getChannelCanvases(channelId, workspaceId) {
     if (!workspaceId) {
       throw new ValidationError("workspaceId is required");
     }
 
-    const channel = await channelRepository.findById(
-      channelId,
-      { workspaceId }
-    );
-
+    const channel = await channelRepository.findById(channelId, { workspaceId });
     if (!channel) {
       throw new NotFoundError("Channel not found");
     }
 
-    return canvasRepository.findAllByChannel(
-      channelId,
-      workspaceId
-    );
+    return canvasRepository.findAllByChannel(channelId, workspaceId);
   }
 }
 

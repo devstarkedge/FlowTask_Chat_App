@@ -10,6 +10,9 @@ export default function BlockWrapper({ node, editor, getPos }) {
   const blocks = useCanvasStore((s) => s.blocks);
   const openSidebar = useCanvasUiStore((s) => s.openSidebar);
   const setHoveredBlockId = useCanvasUiStore((s) => s.setHoveredBlockId);
+  const presence = useCanvasStore((s) => s.presence);
+  const cursors = useCanvasStore((s) => s.cursors);
+  const typing = useCanvasStore((s) => s.typing);
 
   const attrBlockId = node?.attrs?.blockId;
 
@@ -127,6 +130,46 @@ export default function BlockWrapper({ node, editor, getPos }) {
       </div>
 
       <div className="block-node-right">
+        {/* Per-block presence avatars and typing indicator */}
+        {block?._id && (() => {
+          const presenceList = presence || [];
+
+          const cursorUsers = Object.entries(cursors || {})
+            .map(([userId, c]) => ({ userId, name: c.name, color: c.color, avatar: (presenceList.find(p => p.userId === userId)?.avatar || null), blockId: c.blockId }))
+            .filter(u => u.blockId === block._id);
+
+          const typingUsers = Object.entries(typing?.[block._id] || {}).map(([userId, name]) => ({ userId, name, avatar: (presenceList.find(p => p.userId === userId)?.avatar || null), color: null }));
+
+          // Merge unique users by userId (cursors first)
+          const merged = [];
+          const seen = new Set();
+          cursorUsers.concat(typingUsers).forEach((u) => {
+            if (!seen.has(u.userId)) {
+              seen.add(u.userId);
+              merged.push(u);
+            }
+          });
+
+          const avatars = merged.slice(0, 3);
+          const typingNames = Object.values(typing?.[block._id] || {}).slice(0, 3).join(", ");
+
+          return (
+            <div className="block-presence">
+              <div className="block-presence-avatars">
+                {avatars.map((u) => (
+                  <div key={u.userId} className="block-presence-avatar" style={{ background: u.color || "var(--presence-color)" }} title={u.name}>
+                    {u.avatar ? <img src={u.avatar} alt={u.name} /> : (u.name ? u.name[0] : "?")}
+                  </div>
+                ))}
+                {merged.length > 3 && (
+                  <div className="block-presence-avatar" style={{ background: "var(--bg-secondary)" }}>+{merged.length - 3}</div>
+                )}
+              </div>
+              {typingNames ? <div className="block-typing">{typingNames} is typing…</div> : null}
+            </div>
+          );
+        })()}
+
         <button
           type="button"
           className="block-comment-btn"
@@ -136,6 +179,7 @@ export default function BlockWrapper({ node, editor, getPos }) {
         >
           💬
         </button>
+
         {block?.reactions && (
           <div className="block-reactions" aria-hidden>
             {Object.keys(block.reactions).length}

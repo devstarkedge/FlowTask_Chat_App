@@ -11,7 +11,8 @@ export default function CanvasTabContextMenu({
   onRemoveTab,
 }) {
   const menuRef = useRef(null);
-  const { duplicateCanvas, deleteCanvas } = useCanvasStore();
+  const duplicateCanvas = useCanvasStore((s) => s.duplicateCanvas);
+  const deleteCanvas = useCanvasStore((s) => s.deleteCanvas);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Close context menu on outside click

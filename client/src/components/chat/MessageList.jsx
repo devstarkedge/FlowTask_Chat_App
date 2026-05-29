@@ -36,18 +36,20 @@ export default function MessageList({
   isDMChannel,
   onSaveMessage,
 }) {
-  const {
-    isLoadingMessages,
-    hasMore,
-    fetchMessages,
-    highlightMessageId,
-    setHighlightMessageId,
-    scrollToMessageId,
-    setScrollToMessageId,
-  } = useChatStore();
-  const lastReadByChannel = useChannelStore((s) => s.lastReadByChannel);
+  // Use individual subscriptions to avoid returning new object snapshots
+  // from a single selector (this can trigger React's getSnapshot warning).
+  const isLoadingMessages = useChatStore((s) => s.isLoadingMessages);
+  const hasMore = useChatStore((s) => s.hasMore?.[channelId]);
+  const fetchMessages = useChatStore((s) => s.fetchMessages);
+  const highlightMessageId = useChatStore((s) => s.highlightMessageId);
+  const setHighlightMessageId = useChatStore((s) => s.setHighlightMessageId);
+  const scrollToMessageId = useChatStore((s) => s.scrollToMessageId);
+  const setScrollToMessageId = useChatStore((s) => s.setScrollToMessageId);
+
+  const lastReadMessageId = useChannelStore(
+    (s) => s.lastReadByChannel?.[channelId]
+  );
   const currentUserId = useAuthStore((s) => s.user?._id);
-  const lastReadMessageId = lastReadByChannel[channelId];
 
   const virtuosoRef = useRef(null);
   const lastScrolledHighlightId = useRef(null);
@@ -63,7 +65,7 @@ export default function MessageList({
 
   // ─── Load older messages when user scrolls to top ─────────────────────
   const loadMore = useCallback(() => {
-    if (!hasMore[channelId] || isLoadingMessages || messages.length === 0)
+    if (!hasMore || isLoadingMessages || messages.length === 0)
       return;
     const oldest = messages[0];
     if (oldest) fetchMessages(channelId, { cursor: oldest._id, limit: 80 });
@@ -344,8 +346,11 @@ export default function MessageList({
         alignToBottom={true}
         increaseViewportBy={{ top: 400, bottom: 200 }}
         followOutput={(isAtBottom) => {
+          // Only update the ref here. Avoid calling setState during Virtuoso's
+          // render phase (some Virtuoso internals call `followOutput` while
+          // rendering), which can cause render-update loops. `atBottomStateChange`
+          // will handle updating component state.
           isAtBottomRef.current = isAtBottom;
-          setShowScrollBtn(!isAtBottom);
           return isAtBottom ? "smooth" : false;
         }}
         atBottomStateChange={(atBottom) => {

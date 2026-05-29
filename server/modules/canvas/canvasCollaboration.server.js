@@ -28,6 +28,7 @@ async function resolveUserFromToken(token) {
       return userRepository.findById(decoded.id);
     }
   } catch {
+    logger.debug('[CANVAS COLLAB] verifyAccessToken failed or token not access-type');
     // Try FlowTask token below when enabled.
   }
 
@@ -38,6 +39,7 @@ async function resolveUserFromToken(token) {
         return userRepository.findByFlowTaskId(decoded.id);
       }
     } catch {
+      logger.debug('[CANVAS COLLAB] verifyFlowTaskToken failed');
       return null;
     }
   }
@@ -46,18 +48,127 @@ async function resolveUserFromToken(token) {
 }
 
 async function authenticateCanvasSession({ token, documentName, requestParameters }) {
+  logger.debug('[CANVAS COLLAB] authenticateCanvasSession start', {
+    tokenPresent: Boolean(token),
+    documentName,
+    requestParameters: (function () {
+      try {
+        if (!requestParameters) return null;
+        if (typeof requestParameters.entries === 'function') return Array.from(requestParameters.entries());
+        if (typeof requestParameters === 'object') return Object.entries(requestParameters);
+        return String(requestParameters);
+      } catch (e) {
+        return String(requestParameters);
+      }
+    }()),
+  });
+
+  // Support token delivered in multiple places depending on client/provider
+  // - payload.token (preferred)
+  // - requestParameters.get('token') (query param fallback)
+  // - requestParameters entries with keys like 'authorization' or 'Authorization'
+  let handshakeToken = token;
+  try {
+    if (!handshakeToken && requestParameters) {
+      // Map-like getter (preferred)
+      if (typeof requestParameters.get === 'function') {
+        handshakeToken = requestParameters.get('token') || requestParameters.get('authorization') || requestParameters.get('Authorization') || handshakeToken;
+      }
+
+      // Fallback: iterate entries for Map-like or plain objects
+      if (!handshakeToken) {
+        if (typeof requestParameters.entries === 'function') {
+          for (const [k, v] of requestParameters.entries()) {
+            if (!v) continue;
+            const lk = String(k).toLowerCase();
+            if (lk === 'token' || lk === 'authorization' || lk === 'auth') {
+              handshakeToken = v;
+              break;
+            }
+          }
+        } else if (typeof requestParameters === 'object') {
+          for (const k of Object.keys(requestParameters)) {
+            const v = requestParameters[k];
+            if (!v) continue;
+            const lk = String(k).toLowerCase();
+            if (lk === 'token' || lk === 'authorization' || lk === 'auth') {
+              handshakeToken = v;
+              break;
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    logger.debug('[CANVAS COLLAB] token extraction from requestParameters failed', { err: err?.message || err });
+  }
+
+  if (!handshakeToken) {
+    logger.warn('[CANVAS COLLAB] no token found in handshake payload', { documentName, requestParameters: requestParameters ? Array.from(requestParameters.entries()) : null });
+  } else {
+    logger.debug('[CANVAS COLLAB] handshake token present (sample)', { sample: String(handshakeToken).slice(0, 8) + '...' });
+  }
   const canvasId = parseCanvasDocumentName(documentName);
-  const workspaceId = requestParameters.get("workspaceId");
+  // Extract workspaceId robustly from requestParameters (Map-like or plain object)
+  let workspaceId = null;
+  try {
+    if (requestParameters) {
+      if (typeof requestParameters.get === 'function') {
+        workspaceId = requestParameters.get('workspaceId') || requestParameters.get('workspaceid') || requestParameters.get('workspace');
+      }
+
+      if (!workspaceId) {
+        if (typeof requestParameters.entries === 'function') {
+          for (const [k, v] of requestParameters.entries()) {
+            if (!v) continue;
+            const lk = String(k).toLowerCase();
+            if (lk === 'workspaceid' || lk === 'workspace' || lk === 'workspace_id') {
+              workspaceId = v;
+              break;
+            }
+          }
+        } else if (typeof requestParameters === 'object') {
+          for (const k of Object.keys(requestParameters)) {
+            const v = requestParameters[k];
+            if (!v) continue;
+            const lk = String(k).toLowerCase();
+            if (lk === 'workspaceid' || lk === 'workspace' || lk === 'workspace_id') {
+              workspaceId = v;
+              break;
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    logger.debug('[CANVAS COLLAB] workspaceId extraction from requestParameters failed', { err: err?.message || err });
+  }
 
   if (!canvasId) {
     throw new Error("Invalid canvas document");
+  }
+
+  // If the client did not provide a valid workspaceId, try to derive it
+  // from the canvas document as a safe fallback. This helps support
+  // clients that may omit the workspace context during the WS handshake.
+  if (!workspaceId || !/^[0-9a-fA-F]{24}$/.test(workspaceId)) {
+    try {
+      const foundCanvas = await Canvas.findById(canvasId).select('workspaceId').lean();
+      if (foundCanvas?.workspaceId) {
+        workspaceId = String(foundCanvas.workspaceId);
+        logger.debug('[CANVAS COLLAB] derived workspaceId from canvas', { canvasId, workspaceId });
+      }
+    } catch (err) {
+      logger.debug('[CANVAS COLLAB] failed to derive workspaceId from canvas', { err: err?.message || err });
+    }
   }
 
   if (!workspaceId || !/^[0-9a-fA-F]{24}$/.test(workspaceId)) {
     throw new Error("Workspace context is required");
   }
 
-  const user = await resolveUserFromToken(token);
+  const user = await resolveUserFromToken(handshakeToken);
+  logger.debug('[CANVAS COLLAB] resolved user from token', { userId: user?._id });
   if (!user || !user.isActive) {
     throw new Error("Invalid or expired token");
   }
@@ -69,6 +180,7 @@ async function authenticateCanvasSession({ token, documentName, requestParameter
   }).lean();
 
   if (!membership) {
+    logger.warn('[CANVAS COLLAB] membership check failed', { userId: user._id, workspaceId });
     throw new Error("Not a member of this workspace");
   }
 
@@ -77,7 +189,22 @@ async function authenticateCanvasSession({ token, documentName, requestParameter
     .lean();
 
   if (!canvas) {
+    logger.warn('[CANVAS COLLAB] canvas not found or not in workspace', { canvasId, workspaceId });
     throw new Error("Canvas not found");
+  }
+
+  // Enforce canvas-level permission rules
+  const perms = canvas.permissions || {};
+  if (perms.visibility === 'private') {
+    const allowedUserIds = (perms.allowedUserIds || []).map((id) => String(id));
+    const allowedRoleIds = perms.allowedRoleIds || [];
+    const userIdStr = String(user._id);
+    const memberRole = membership?.role || null;
+
+    if (!allowedUserIds.includes(userIdStr) && !allowedRoleIds.includes(memberRole)) {
+      logger.warn('[CANVAS COLLAB] access denied by canvas permissions', { canvasId, workspaceId, userId: userIdStr, role: memberRole });
+      throw new Error('Access to this canvas is restricted');
+    }
   }
 
   return {
@@ -98,9 +225,14 @@ async function loadCanvasDocument({ documentName, document, context }) {
     .select("+collaborationState")
     .lean();
 
-  if (!canvas?.collaborationState?.length) return;
+  if (!canvas?.collaborationState?.length) {
+    logger.debug('[CANVAS COLLAB] no stored state for canvas — starting fresh', { canvasId });
+    return;
+  }
 
+  const bytes = canvas.collaborationState.length;
   Y.applyUpdate(document, new Uint8Array(canvas.collaborationState));
+  logger.debug('[CANVAS COLLAB] applied stored state', { canvasId, bytes });
 }
 
 async function storeCanvasDocument({ documentName, document, lastContext }) {
@@ -108,6 +240,7 @@ async function storeCanvasDocument({ documentName, document, lastContext }) {
   if (!canvasId) return;
 
   const collaborationState = Buffer.from(Y.encodeStateAsUpdate(document));
+  logger.debug('[CANVAS COLLAB] persisting state', { canvasId, bytes: collaborationState.length, userId: lastContext?.userId });
 
   await Canvas.findByIdAndUpdate(canvasId, {
     $set: {
@@ -154,18 +287,88 @@ export async function startCanvasCollaborationServer() {
     timeout: 30000,
     extensions: buildRedisExtensions(),
     async onAuthenticate(payload) {
-      return authenticateCanvasSession(payload);
+      try {
+        logger.debug('[CANVAS COLLAB] onAuthenticate received', {
+          tokenPresent: Boolean(payload?.token),
+          tokenSample: payload?.token ? String(payload.token).slice(0, 8) + '...' : null,
+          documentName: payload?.documentName,
+          requestParameters: (function () {
+            try {
+              const rp = payload?.requestParameters;
+              if (!rp) return null;
+              if (typeof rp.entries === 'function') return Array.from(rp.entries());
+              if (typeof rp === 'object') return Object.entries(rp);
+              return String(rp);
+            } catch (e) {
+              return String(payload?.requestParameters);
+            }
+          }()),
+        });
+
+        const ctx = await authenticateCanvasSession(payload);
+        logger.debug('[CANVAS COLLAB] authentication success', {
+          canvasId: ctx?.canvasId,
+          workspaceId: ctx?.workspaceId,
+          userId: ctx?.userId,
+        });
+        return ctx;
+      } catch (err) {
+        logger.warn('[CANVAS COLLAB] authentication failed', {
+          reason: err?.message || err,
+          documentName: payload?.documentName,
+          tokenPresent: Boolean(payload?.token),
+        });
+          // Safely serialize requestParameters for logs (Map-like or plain object)
+          let rpSample = null;
+          try {
+            const rp = payload?.requestParameters;
+            if (!rp) rpSample = null;
+            else if (typeof rp.entries === 'function') rpSample = Array.from(rp.entries());
+            else if (typeof rp === 'object') rpSample = Object.entries(rp);
+            else rpSample = String(rp);
+          } catch (e) {
+            rpSample = String(payload?.requestParameters);
+          }
+
+          logger.warn('[CANVAS COLLAB] authentication failed', {
+            reason: err?.message || err,
+            stack: err?.stack || null,
+            documentName: payload?.documentName,
+            tokenPresent: Boolean(payload?.token),
+            requestParameters: rpSample,
+          });
+          throw err;
+      }
     },
     async onLoadDocument(payload) {
+      const canvasId = parseCanvasDocumentName(payload?.documentName);
+      logger.debug('[CANVAS COLLAB] loading document', { canvasId });
       return loadCanvasDocument(payload);
     },
     async onStoreDocument(payload) {
+      const canvasId = parseCanvasDocumentName(payload?.documentName);
+      logger.debug('[CANVAS COLLAB] storing document', { canvasId });
       return storeCanvasDocument(payload);
     },
-    async onAwarenessUpdate({ documentName, states }) {
-      logger.debug("[CANVAS COLLAB] awareness update", {
+    onConnect({ documentName, context, clientsCount }) {
+      logger.info('[CANVAS COLLAB] client connected', {
+        canvasId: parseCanvasDocumentName(documentName),
+        userId: context?.userId,
+        peersNow: clientsCount,
+      });
+    },
+    onDisconnect({ documentName, context, clientsCount }) {
+      logger.info('[CANVAS COLLAB] client disconnected', {
+        canvasId: parseCanvasDocumentName(documentName),
+        userId: context?.userId,
+        peersRemaining: clientsCount,
+      });
+    },
+    onAwarenessUpdate({ documentName, states }) {
+      logger.debug('[CANVAS COLLAB] awareness update', {
         canvasId: parseCanvasDocumentName(documentName),
         peers: states.length,
+        users: states.map((s) => s?.user?.name || s?.clientId).filter(Boolean),
       });
     },
   });

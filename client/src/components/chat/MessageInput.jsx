@@ -190,7 +190,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
-  const { sendMessage } = useChatStore();
+  const sendMessage = useChatStore((s) => s.sendMessage);
   const { clearDraft } = useDraftStore();
 
   const editorRef = useRef(null);

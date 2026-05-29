@@ -2,55 +2,67 @@ import { create } from "zustand";
 import { canvasAPI } from "../services/api";
 import { getSocket } from "../services/socket";
 import { useAuthStore } from "./authStore";
+import { useCanvasUiStore } from "./canvasUiStore";
 import toast from "react-hot-toast";
 import React from "react";
-
-const getUserColor = (userId) => {
-  if (!userId) return "#6366f1";
+// Simple helpers
+const USER_COLORS = ["#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899", "#06b6d4"];
+function getUserColor(userId) {
+  if (!userId) return USER_COLORS[0];
   let hash = 0;
-  for (let i = 0; i < userId.length; i++) {
-    hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < userId.length; i++) hash = (hash << 5) - hash + userId.charCodeAt(i);
+  const idx = Math.abs(hash) % USER_COLORS.length;
+  return USER_COLORS[idx];
+}
+
+// Load persisted open-tabs (lightweight UI state only)
+function loadPersistedOpenTabs() {
+  try {
+    if (typeof localStorage === "undefined") return {};
+    const raw = localStorage.getItem("flowtask.canvas.openTabs.v1") || localStorage.getItem("canvas_open_tabs");
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) || {};
+    return Object.fromEntries(
+      Object.entries(parsed).map(([channelId, list]) => [channelId, (list || []).map((c) => ({ _id: c._id, title: c.title }))])
+    );
+  } catch (e) {
+    return {};
   }
-  const h = Math.abs(hash % 360);
-  return `hsl(${h}, 75%, 55%)`;
-};
+}
 
+// Persist only lightweight UI state for open tabs (id + title). Do NOT store
+// full canvas metadata, content, permissions, or collaborators in localStorage.
+function persistOpenTabs(tabs) {
+  try {
+    if (typeof localStorage === "undefined") return;
+    const sanitized = Object.fromEntries(
+      Object.entries(tabs || {}).map(([channelId, list]) => [channelId, (list || []).map((c) => ({ _id: c._id, title: c.title }))])
+    );
+    // Versioned key for future migrations
+    localStorage.setItem("flowtask.canvas.openTabs.v1", JSON.stringify(sanitized));
+    // Keep legacy key for compatibility (reads prefer the new key first)
+    localStorage.setItem("canvas_open_tabs", JSON.stringify(sanitized));
+  } catch (e) {
+    // ignore
+  }
+}
 export const useCanvasStore = create((set, get) => ({
-  canvasesByChannel: {}, // channelId -> array of canvas metadata
-  activeCanvas: null, // metadata of active canvas
-  blocks: [], // sorted array of blocks
-  comments: [], // active unresolved comments
-  presence: [], // list of active users in room
-  cursors: {}, // userId -> cursor coords { blockId, x, y, name, color }
-  typing: {}, // blockId -> { userId -> name }
-  history: [], // version snapshots
-  activeCanvasIdByChannel: {}, // channelId -> active canvas ID
-  lastDeletedCanvas: null, // snapshot used for Undo
+  // Store state
   isLoading: false,
+  canvasesByChannel: {},
+  activeCanvas: null,
+  blocks: [],
+  comments: [],
+  presence: [],
+  cursors: {},
+  typing: {},
+  history: [],
   currentJoinedRoom: null,
+  activeCanvasIdByChannel: {},
+  openTabsByChannel: loadPersistedOpenTabs(),
+  // Whether we've attached global socket listeners (idempotent)
   globalSocketAttached: false,
-
-  // ── Fetch all canvases in a channel
-  fetchChannelCanvases: async (channelId) => {
-    set({ isLoading: true });
-    // Ensure a global socket listener is attached so remote deletions update lists
-    get().ensureGlobalSocketListeners?.();
-    try {
-      const res = await canvasAPI.getAllForChannel(channelId);
-      if (res.data && res.data.success) {
-        set((state) => ({
-          canvasesByChannel: {
-            ...state.canvasesByChannel,
-            [channelId]: res.data.data,
-          },
-        }));
-      }
-    } catch (err) {
-      console.error("[CanvasStore] fetchChannelCanvases error:", err);
-    } finally {
-      set({ isLoading: false });
-    }
-  },
+  lastDeletedCanvas: null,
 
   // ── Load specific canvas details (REST)
   loadCanvas: async (canvasId) => {
@@ -65,7 +77,7 @@ export const useCanvasStore = create((set, get) => ({
       const res = await canvasAPI.getById(canvasId);
       if (res.data && res.data.success) {
         const { canvas, blocks, comments } = res.data.data;
-        
+
         // Sort blocks by order
         const sortedBlocks = [...blocks].sort((a, b) => a.order - b.order);
 
@@ -94,82 +106,24 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
-  ensureGlobalSocketListeners: () => {
-    const socket = getSocket();
-    if (!socket) return;
-    if (get().globalSocketAttached) return;
-
-    // Handle canvas deletions globally so lists stay in sync across clients
-    socket.on("canvas:deleted", ({ canvasId: cid, channelId }) => {
-      set((state) => {
-        const nextCanvases = { ...state.canvasesByChannel };
-        Object.keys(nextCanvases).forEach((chId) => {
-          nextCanvases[chId] = (nextCanvases[chId] || []).filter((c) => c._id !== cid);
-        });
-
-        const activeIdMap = { ...state.activeCanvasIdByChannel };
-        Object.keys(activeIdMap).forEach((chId) => {
-          if (activeIdMap[chId] === cid) delete activeIdMap[chId];
-        });
-
-        const active = state.activeCanvas && state.activeCanvas._id === cid ? null : state.activeCanvas;
-
-        return {
-          canvasesByChannel: nextCanvases,
-          activeCanvasIdByChannel: activeIdMap,
-          activeCanvas: active,
-        };
-      });
-      // If we're in the deleted canvas room, clear editor
-      if (cid === get().currentJoinedRoom) get().clearActiveCanvas();
-    });
-
-    set({ globalSocketAttached: true });
-  },
-
-  // ── Load default canvas for channel
-  loadDefaultCanvas: async (channelId) => {
-    set({ isLoading: true });
-    try {
-      const res = await canvasAPI.get(channelId);
-      if (res.data && res.data.success) {
-        const canvas = res.data.data;
-        await get().loadCanvas(canvas._id);
-      }
-    } catch (err) {
-      console.error("[CanvasStore] loadDefaultCanvas error:", err);
-    } finally {
-      set({ isLoading: false });
-    }
-  },
-
   // ── Create Canvas
-  createCanvas: async (channelId, data) => {
+  createCanvas: async (channelId, payload) => {
     set({ isLoading: true });
     try {
-      const res = await canvasAPI.create(channelId, data);
+      const res = await canvasAPI.create(channelId, payload);
       if (res.data && res.data.success) {
         const newCanvas = res.data.data;
-        
-        // Add to channel list and mark as active immediately so the editor
-        // can seed content before the full load completes.
         set((state) => {
-          const currentList = state.canvasesByChannel[channelId] || [];
+          const list = state.canvasesByChannel[channelId] || [];
           return {
-            canvasesByChannel: {
-              ...state.canvasesByChannel,
-              [channelId]: [...currentList, newCanvas],
-            },
+            canvasesByChannel: { ...state.canvasesByChannel, [channelId]: [...list, newCanvas] },
             activeCanvas: newCanvas,
-            activeCanvasIdByChannel: {
-              ...state.activeCanvasIdByChannel,
-              [channelId]: newCanvas._id,
-            },
+            activeCanvasIdByChannel: { ...state.activeCanvasIdByChannel, [channelId]: newCanvas._id },
             blocks: [],
           };
         });
 
-        // Load full canvas details (blocks, comments, and room join)
+        // Load the created canvas to attach sockets/providers
         await get().loadCanvas(newCanvas._id);
         return newCanvas;
       }
@@ -180,30 +134,20 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
-  // ── Update Canvas Details (Title/Cover)
+  // ── Update canvas metadata (title, cover, content pointer, etc.)
   updateCanvasMetadata: async (canvasId, updates) => {
     try {
       const res = await canvasAPI.update(canvasId, updates);
       if (res.data && res.data.success) {
         const updated = res.data.data;
         set((state) => {
-          // Update activeCanvas metadata if matches
-          const active = state.activeCanvas && state.activeCanvas._id === canvasId
-            ? { ...state.activeCanvas, ...updated }
-            : state.activeCanvas;
-
-          // Update in channel lists
-          const channelId = updated.channelId;
-          const list = state.canvasesByChannel[channelId] || [];
-          const updatedList = list.map((c) => (c._id === canvasId ? updated : c));
-
-          return {
-            activeCanvas: active,
-            canvasesByChannel: {
-              ...state.canvasesByChannel,
-              [channelId]: updatedList,
-            },
-          };
+          const active = state.activeCanvas && state.activeCanvas._id === canvasId ? { ...state.activeCanvas, ...updated } : state.activeCanvas;
+          const channelId = updated.channelId || (state.activeCanvas && state.activeCanvas.channelId) || null;
+          const nextCanvases = { ...state.canvasesByChannel };
+          if (channelId) {
+            nextCanvases[channelId] = (nextCanvases[channelId] || []).map((c) => (c._id === canvasId ? updated : c));
+          }
+          return { activeCanvas: active, canvasesByChannel: nextCanvases };
         });
         return updated;
       }
@@ -385,6 +329,166 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
+  // ── Fetch canvases for a channel and cache locally
+  fetchChannelCanvases: async (channelId) => {
+    if (!channelId) return [];
+    set({ isLoading: true });
+    try {
+      const res = await canvasAPI.getAllForChannel(channelId);
+      const list = res.data?.data || [];
+      set((state) => ({ canvasesByChannel: { ...state.canvasesByChannel, [channelId]: list } }));
+      return list;
+    } catch (err) {
+      console.error("[CanvasStore] fetchChannelCanvases error:", err);
+      return [];
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  // ── Load a default canvas for a channel (used on initial channel open)
+  loadDefaultCanvas: async (channelId) => {
+    if (!channelId) return;
+    set({ isLoading: true });
+    try {
+      // Prefer cached list
+      let list = get().canvasesByChannel[channelId] || [];
+      if (!list || list.length === 0) {
+        try {
+          list = await get().fetchChannelCanvases(channelId) || [];
+        } catch (e) {
+          list = [];
+        }
+      }
+
+      if (list && list.length > 0) {
+        const preferred = get().activeCanvasIdByChannel[channelId] || list[0]._id;
+        await get().loadCanvas(preferred);
+      } else {
+        // Nothing to load; clear any active canvas for this channel
+        set({ activeCanvas: null });
+      }
+    } catch (err) {
+      console.error("[CanvasStore] loadDefaultCanvas error:", err);
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  // ── Open tabs (shared across clients) ───────────────────────────────────
+  addOpenTab: async (channelId, canvasMeta) => {
+    if (!channelId || !canvasMeta || !canvasMeta._id) return;
+    set((state) => {
+      const list = state.openTabsByChannel[channelId] || [];
+      if (list.some((c) => c._id === canvasMeta._id)) return {};
+      const minimal = { _id: canvasMeta._id, title: canvasMeta.title || "" };
+      return {
+        openTabsByChannel: {
+          ...state.openTabsByChannel,
+          [channelId]: [...list, minimal],
+        },
+      };
+    });
+
+    // Persist local view and emit update to server with minimal metadata
+    try {
+      persistOpenTabs(get().openTabsByChannel);
+    } catch (e) {
+      // ignore
+    }
+
+    try {
+      const socket = getSocket();
+      if (socket) {
+        const tabs = get().openTabsByChannel[channelId]?.map((c) => ({ _id: c._id, title: c.title })) || [];
+        socket.emit("canvas:tabs:update", { channelId, tabs });
+      }
+    } catch (err) {
+      // ignore
+    }
+  },
+
+  removeOpenTab: async (channelId, canvasId) => {
+    if (!channelId || !canvasId) return;
+    set((state) => ({
+      openTabsByChannel: {
+        ...state.openTabsByChannel,
+        [channelId]: (state.openTabsByChannel[channelId] || []).filter((c) => c._id !== canvasId),
+      },
+    }));
+
+    // Persist and notify server
+    try {
+      persistOpenTabs(get().openTabsByChannel);
+    } catch (e) {
+      // ignore
+    }
+
+    try {
+      const socket = getSocket();
+      if (socket) {
+        const tabs = get().openTabsByChannel[channelId]?.map((c) => ({ _id: c._id, title: c.title })) || [];
+        socket.emit("canvas:tabs:update", { channelId, tabs });
+      }
+    } catch (err) {
+      // ignore
+    }
+  },
+
+  setOpenTabs: (channelId, tabs) => {
+    set((state) => {
+      const sanitized = (tabs || []).map((c) => ({ _id: c._id, title: c.title }));
+      const next = { ...state.openTabsByChannel, [channelId]: sanitized };
+      try {
+        persistOpenTabs(next);
+      } catch (e) {}
+      return { openTabsByChannel: next };
+    });
+  },
+
+  requestChannelTabs: (channelId) => {
+    try {
+      // Ensure global listeners are attached so we can receive the response
+      get().ensureGlobalSocketListeners?.();
+      const socket = getSocket();
+      if (socket && channelId) socket.emit("canvas:tabs:request", { channelId });
+    } catch (err) {
+      // ignore
+    }
+  },
+
+  // Attach global socket listeners once per client session.
+  ensureGlobalSocketListeners: () => {
+    const socket = getSocket();
+    if (!socket) return;
+    if (get().globalSocketAttached) return;
+
+    // Server sends authoritative state for a channel
+    socket.on('canvas:tabs:state', ({ channelId, tabs }) => {
+      if (!channelId) return;
+      try {
+        // Normalize incoming tab metadata
+        const normalized = Array.isArray(tabs) ? tabs.map((t) => ({ _id: t._id || t.canvasId || t.id, title: t.title || '' })).filter(Boolean) : [];
+        get().setOpenTabs(channelId, normalized);
+      } catch (err) {
+        // best-effort
+      }
+    });
+
+    // Broadcast updates when another member changes the tabs
+    socket.on('canvas:tabs:updated', ({ channelId, tabs }) => {
+      if (!channelId) return;
+      try {
+        const normalized = Array.isArray(tabs) ? tabs.map((t) => ({ _id: t._id || t.canvasId || t.id, title: t.title || '' })).filter(Boolean) : [];
+        get().setOpenTabs(channelId, normalized);
+      } catch (err) {
+        // best-effort
+      }
+    });
+
+    set({ globalSocketAttached: true });
+  },
+
   // ── Restore Snapshot Version
   restoreVersion: async (canvasId, historyId) => {
     set({ isLoading: true });
@@ -422,26 +526,42 @@ export const useCanvasStore = create((set, get) => ({
   // ── Websocket Room Handlers
   joinCanvasRoom: (canvasId) => {
     const socket = getSocket();
-    if (!socket) return;
+    if (!socket || !canvasId) return;
+
+    // Avoid re-joining same room
+    if (get().currentJoinedRoom === canvasId) return;
+
+    // Leave prior room if present
+    const prev = get().currentJoinedRoom;
+    if (prev && prev !== canvasId) {
+      try {
+        get().leaveCanvasRoom(prev);
+      } catch (e) {
+        // ignore
+      }
+    }
 
     socket.emit("canvas:join", { canvasId });
     set({ currentJoinedRoom: canvasId });
 
-    // Setup socket listeners
-    socket.on("canvas:presence:list", ({ canvasId: cid, users }) => {
+    // Build handlers so we can remove them individually on leave
+    socket._canvasHandlers = socket._canvasHandlers || {};
+    const handlers = {};
+
+    handlers.presenceList = ({ canvasId: cid, users }) => {
       if (cid !== get().currentJoinedRoom) return;
       set({ presence: users });
-    });
+    };
 
-    socket.on("canvas:presence:join", ({ canvasId: cid, user }) => {
+    handlers.presenceJoin = ({ canvasId: cid, user }) => {
       if (cid !== get().currentJoinedRoom) return;
       set((state) => {
         if (state.presence.some((p) => p.userId === user.userId)) return {};
         return { presence: [...state.presence, user] };
       });
-    });
+    };
 
-    socket.on("canvas:presence:leave", ({ canvasId: cid, userId }) => {
+    handlers.presenceLeave = ({ canvasId: cid, userId }) => {
       if (cid !== get().currentJoinedRoom) return;
       set((state) => {
         const nextCursors = { ...state.cursors };
@@ -451,201 +571,194 @@ export const useCanvasStore = create((set, get) => ({
           cursors: nextCursors,
         };
       });
-    });
+    };
 
-    socket.on("canvas:cursor:update", ({ userId, name, blockId, x, y }) => {
+    handlers.cursorUpdate = ({ userId, name, blockId, x, y }) => {
       set((state) => ({
         cursors: {
           ...state.cursors,
-          [userId]: {
-            blockId,
-            x,
-            y,
-            name,
-            color: getUserColor(userId),
-          },
+          [userId]: { blockId, x, y, name, color: getUserColor(userId) },
         },
       }));
-    });
+    };
 
-    socket.on("canvas:typing:update", ({ userId, name, blockId, isTyping }) => {
+    handlers.typingUpdate = ({ userId, name, blockId, isTyping }) => {
       set((state) => {
         const blockTyping = { ...(state.typing[blockId] || {}) };
-        if (isTyping) {
-          blockTyping[userId] = name;
-        } else {
-          delete blockTyping[userId];
-        }
-
-        return {
-          typing: {
-            ...state.typing,
-            [blockId]: blockTyping,
-          },
-        };
+        if (isTyping) blockTyping[userId] = name;
+        else delete blockTyping[userId];
+        return { typing: { ...state.typing, [blockId]: blockTyping } };
       });
-    });
+    };
 
-    socket.on("canvas:block:created", (newBlock) => {
-      set((state) => {
-        const newBlocks = [...state.blocks, newBlock].sort((a, b) => a.order - b.order);
-        return { blocks: newBlocks };
-      });
-    });
+    handlers.blockCreated = (newBlock) => {
+      // If Yjs collaboration is active, the CRDT will drive document structure.
+      // Ignore socket-driven block creation to avoid conflicts and duplicates.
+      const providerStatus = useCanvasUiStore.getState().providerStatus;
+      if (providerStatus === 'connected' || providerStatus === 'synced') return;
 
-    socket.on("canvas:block:updated", ({ blockId, content, type, lastEditedBy }) => {
+      set((state) => ({ blocks: [...state.blocks, newBlock].sort((a, b) => a.order - b.order) }));
+    };
+
+    handlers.blockUpdated = ({ blockId, content, type, lastEditedBy }) => {
       const currentUserId = useAuthStore.getState().user?._id;
-      // Skip socket updates from ourselves to prevent focus loss & resetting text cursor
+      // If collaboration is active, do not let socket updates override CRDT-managed content.
+      const providerStatus = useCanvasUiStore.getState().providerStatus;
+      if (providerStatus === 'connected' || providerStatus === 'synced') {
+        // Still update metadata safely (type/lastEditedBy) but avoid replacing content.
+        set((state) => ({
+          blocks: state.blocks.map((b) => (b._id === blockId ? { ...b, type: type ?? b.type, lastEditedBy: lastEditedBy ?? b.lastEditedBy } : b)),
+        }));
+        return;
+      }
+
       if (lastEditedBy === currentUserId) return;
+      set((state) => ({ blocks: state.blocks.map((b) => (b._id === blockId ? { ...b, content, type } : b)) }));
+    };
 
-      set((state) => {
-        const updatedBlocks = state.blocks.map((b) => {
-          if (b._id === blockId) {
-            return { ...b, content, type };
-          }
-          return b;
-        });
-        return { blocks: updatedBlocks };
-      });
-    });
+    handlers.blockDeleted = ({ blockId }) => {
+      const providerStatus = useCanvasUiStore.getState().providerStatus;
+      if (providerStatus === 'connected' || providerStatus === 'synced') return;
+      set((state) => ({ blocks: state.blocks.filter((b) => b._id !== blockId), comments: state.comments.filter((c) => c.blockId !== blockId) }));
+    };
 
-    socket.on("canvas:block:deleted", ({ blockId }) => {
-      set((state) => ({
-        blocks: state.blocks.filter((b) => b._id !== blockId),
-        comments: state.comments.filter((c) => c.blockId !== blockId),
-      }));
-    });
-
-    socket.on("canvas:block:reordered", ({ blockIdsOrder }) => {
+    handlers.blockReordered = ({ blockIdsOrder }) => {
+      const providerStatus = useCanvasUiStore.getState().providerStatus;
+      if (providerStatus === 'connected' || providerStatus === 'synced') return;
       set((state) => {
         const blocksMap = new Map(state.blocks.map((b) => [b._id, b]));
-        const reordered = blockIdsOrder
-          .map((id) => blocksMap.get(id))
-          .filter(Boolean);
-
-        // Append any blocks that might not be in the ordering array (safety fallback)
-        state.blocks.forEach((b) => {
-          if (!blockIdsOrder.includes(b._id)) {
-            reordered.push(b);
-          }
-        });
-
+        const reordered = blockIdsOrder.map((id) => blocksMap.get(id)).filter(Boolean);
+        state.blocks.forEach((b) => { if (!blockIdsOrder.includes(b._id)) reordered.push(b); });
         return { blocks: reordered };
       });
-    });
+    };
 
-    socket.on("canvas:reaction:updated", ({ blockId, reactions }) => {
-      set((state) => {
-        const updatedBlocks = state.blocks.map((b) => {
-          if (b._id === blockId) {
-            return { ...b, reactions };
-          }
-          return b;
-        });
-        return { blocks: updatedBlocks };
-      });
-    });
+    handlers.reactionUpdated = ({ blockId, reactions }) => {
+      set((state) => ({ blocks: state.blocks.map((b) => (b._id === blockId ? { ...b, reactions } : b)) }));
+    };
 
-    // ── Comment Socket listeners
-    socket.on("canvas:comment:created", (populatedComment) => {
-      set((state) => ({
-        comments: [...state.comments, populatedComment],
-      }));
-    });
+    handlers.commentCreated = (populatedComment) => { set((state) => ({ comments: [...state.comments, populatedComment] })); };
+    handlers.commentReplied = (populatedComment) => { set((state) => ({ comments: state.comments.map((c) => (c._id === populatedComment._id ? populatedComment : c)) })); };
+    handlers.commentResolved = ({ commentId }) => { set((state) => ({ comments: state.comments.filter((c) => c._id !== commentId) })); };
 
-    socket.on("canvas:comment:replied", (populatedComment) => {
-      set((state) => ({
-        comments: state.comments.map((c) =>
-          c._id === populatedComment._id ? populatedComment : c
-        ),
-      }));
-    });
-
-    socket.on("canvas:comment:resolved", ({ commentId }) => {
-      set((state) => ({
-        comments: state.comments.filter((c) => c._id !== commentId),
-      }));
-    });
-
-    socket.on("canvas:restored", ({ canvasId: cid, title, cover }) => {
-      if (cid !== get().currentJoinedRoom) return;
-      // Re-load canvas when restored
-      get().loadCanvas(cid);
-    });
-
-    socket.on("canvas:updated", ({ canvasId: cid, updates }) => {
-      if (cid !== get().currentJoinedRoom) return;
-      set((state) => {
-        if (state.activeCanvas && state.activeCanvas._id === cid) {
-          return {
-            activeCanvas: { ...state.activeCanvas, ...updates },
-          };
-        }
-        return {};
-      });
-    });
-
-    socket.on("canvas:deleted", ({ canvasId: cid, channelId }) => {
-      // Remove deleted canvas from all channel lists and clear any active mappings
+    handlers.restored = ({ canvasId: cid }) => { if (cid !== get().currentJoinedRoom) return; get().loadCanvas(cid); };
+    handlers.updated = ({ canvasId: cid, updates }) => { if (cid !== get().currentJoinedRoom) return; set((state) => ({ activeCanvas: state.activeCanvas && state.activeCanvas._id === cid ? { ...state.activeCanvas, ...updates } : state.activeCanvas })); };
+    handlers.deleted = ({ canvasId: cid }) => {
       set((state) => {
         const nextCanvases = { ...state.canvasesByChannel };
-        Object.keys(nextCanvases).forEach((chId) => {
-          nextCanvases[chId] = (nextCanvases[chId] || []).filter((c) => c._id !== cid);
-        });
-
+        Object.keys(nextCanvases).forEach((chId) => { nextCanvases[chId] = (nextCanvases[chId] || []).filter((c) => c._id !== cid); });
         const activeIdMap = { ...state.activeCanvasIdByChannel };
-        Object.keys(activeIdMap).forEach((chId) => {
-          if (activeIdMap[chId] === cid) delete activeIdMap[chId];
-        });
-
+        Object.keys(activeIdMap).forEach((chId) => { if (activeIdMap[chId] === cid) delete activeIdMap[chId]; });
         const active = state.activeCanvas && state.activeCanvas._id === cid ? null : state.activeCanvas;
 
-        return {
-          canvasesByChannel: nextCanvases,
-          activeCanvasIdByChannel: activeIdMap,
-          activeCanvas: active,
-        };
-      });
+        // Remove deleted canvas from any open tabs across channels
+        const nextOpenTabs = { ...state.openTabsByChannel };
+        Object.keys(nextOpenTabs).forEach((chId) => {
+          nextOpenTabs[chId] = (nextOpenTabs[chId] || []).filter((t) => t._id !== cid);
+        });
 
-      // If we're currently in the deleted canvas room, leave it and clear editor state
-      if (cid === get().currentJoinedRoom) {
-        get().clearActiveCanvas();
+        return { canvasesByChannel: nextCanvases, activeCanvasIdByChannel: activeIdMap, activeCanvas: active, openTabsByChannel: nextOpenTabs };
+      });
+      try {
+        persistOpenTabs(get().openTabsByChannel);
+      } catch (e) {
+        // ignore
       }
-    });
+      if (cid === get().currentJoinedRoom) get().clearActiveCanvas();
+    };
+
+    // Register handlers
+    socket.on("canvas:presence:list", handlers.presenceList);
+    socket.on("canvas:presence:join", handlers.presenceJoin);
+    socket.on("canvas:presence:leave", handlers.presenceLeave);
+    socket.on("canvas:cursor:update", handlers.cursorUpdate);
+    socket.on("canvas:typing:update", handlers.typingUpdate);
+    socket.on("canvas:block:created", handlers.blockCreated);
+    socket.on("canvas:block:updated", handlers.blockUpdated);
+    socket.on("canvas:block:deleted", handlers.blockDeleted);
+    socket.on("canvas:block:reordered", handlers.blockReordered);
+    socket.on("canvas:reaction:updated", handlers.reactionUpdated);
+    socket.on("canvas:comment:created", handlers.commentCreated);
+    socket.on("canvas:comment:replied", handlers.commentReplied);
+    socket.on("canvas:comment:resolved", handlers.commentResolved);
+    socket.on("canvas:restored", handlers.restored);
+    socket.on("canvas:updated", handlers.updated);
+    socket.on("canvas:deleted", handlers.deleted);
+
+    socket._canvasHandlers[canvasId] = handlers;
   },
 
   leaveCanvasRoom: (canvasId) => {
     const socket = getSocket();
     if (!socket) return;
-
     socket.emit("canvas:leave", { canvasId });
 
-    // Tear down socket listeners
-    socket.off("canvas:presence:list");
-    socket.off("canvas:presence:join");
-    socket.off("canvas:presence:leave");
-    socket.off("canvas:cursor:update");
-    socket.off("canvas:typing:update");
-    socket.off("canvas:block:created");
-    socket.off("canvas:block:updated");
-    socket.off("canvas:block:deleted");
-    socket.off("canvas:block:reordered");
-    socket.off("canvas:reaction:updated");
-    socket.off("canvas:comment:created");
-    socket.off("canvas:comment:replied");
-    socket.off("canvas:comment:resolved");
-    socket.off("canvas:restored");
-    socket.off("canvas:updated");
-    socket.off("canvas:deleted");
+    // If we stored per-room handlers, remove only those to avoid clearing
+    // global listeners that other parts of the app rely on.
+    try {
+      if (socket._canvasHandlers && socket._canvasHandlers[canvasId]) {
+        const h = socket._canvasHandlers[canvasId];
+        if (h.presenceList) socket.off("canvas:presence:list", h.presenceList);
+        if (h.presenceJoin) socket.off("canvas:presence:join", h.presenceJoin);
+        if (h.presenceLeave) socket.off("canvas:presence:leave", h.presenceLeave);
+        if (h.cursorUpdate) socket.off("canvas:cursor:update", h.cursorUpdate);
+        if (h.typingUpdate) socket.off("canvas:typing:update", h.typingUpdate);
+        if (h.blockCreated) socket.off("canvas:block:created", h.blockCreated);
+        if (h.blockUpdated) socket.off("canvas:block:updated", h.blockUpdated);
+        if (h.blockDeleted) socket.off("canvas:block:deleted", h.blockDeleted);
+        if (h.blockReordered) socket.off("canvas:block:reordered", h.blockReordered);
+        if (h.reactionUpdated) socket.off("canvas:reaction:updated", h.reactionUpdated);
+        if (h.commentCreated) socket.off("canvas:comment:created", h.commentCreated);
+        if (h.commentReplied) socket.off("canvas:comment:replied", h.commentReplied);
+        if (h.commentResolved) socket.off("canvas:comment:resolved", h.commentResolved);
+        if (h.restored) socket.off("canvas:restored", h.restored);
+        if (h.updated) socket.off("canvas:updated", h.updated);
+        if (h.deleted) socket.off("canvas:deleted", h.deleted);
+        delete socket._canvasHandlers[canvasId];
+      } else {
+        // Fallback: remove commonly used handlers if no per-room tracking exists
+        socket.off("canvas:presence:list");
+        socket.off("canvas:presence:join");
+        socket.off("canvas:presence:leave");
+        socket.off("canvas:cursor:update");
+        socket.off("canvas:typing:update");
+        socket.off("canvas:block:created");
+        socket.off("canvas:block:updated");
+        socket.off("canvas:block:deleted");
+        socket.off("canvas:block:reordered");
+        socket.off("canvas:reaction:updated");
+        socket.off("canvas:comment:created");
+        socket.off("canvas:comment:replied");
+        socket.off("canvas:comment:resolved");
+        socket.off("canvas:restored");
+        socket.off("canvas:updated");
+        socket.off("canvas:deleted");
+      }
 
-    set({ currentJoinedRoom: null });
+      set({ currentJoinedRoom: null });
+    } catch (err) {
+      // best-effort cleanup — don't throw
+      set({ currentJoinedRoom: null });
+    }
   },
 
   // ── Client Triggered Interactions
   updateCursor: (blockId, x, y) => {
     const socket = getSocket();
     const canvasId = get().currentJoinedRoom;
-    if (socket && canvasId) {
+    const currentUserId = useAuthStore.getState().user?._id;
+
+    // Optimistically update local cursor state for immediate UI feedback
+    set((state) => ({
+      cursors: {
+        ...state.cursors,
+        [currentUserId]: { blockId, x, y, name: useAuthStore.getState().user?.name || 'You', color: getUserColor(currentUserId) },
+      },
+    }));
+
+    // If collaboration provider is active, use Yjs awareness instead of socket emission
+    const providerStatus = useCanvasUiStore.getState().providerStatus;
+    if (socket && canvasId && !(providerStatus === 'connected' || providerStatus === 'synced')) {
       socket.emit("canvas:cursor", { canvasId, blockId, x, y });
     }
   },
@@ -653,7 +766,19 @@ export const useCanvasStore = create((set, get) => ({
   setBlockTyping: (blockId, isTyping) => {
     const socket = getSocket();
     const canvasId = get().currentJoinedRoom;
-    if (socket && canvasId) {
+    const currentUserId = useAuthStore.getState().user?._id;
+
+    // Update local typing state immediately
+    set((state) => {
+      const blockTyping = { ...(state.typing[blockId] || {}) };
+      if (isTyping) blockTyping[currentUserId] = useAuthStore.getState().user?.name || 'You';
+      else delete blockTyping[currentUserId];
+      return { typing: { ...state.typing, [blockId]: blockTyping } };
+    });
+
+    // If provider active, awareness is canonical — avoid socket emission
+    const providerStatus = useCanvasUiStore.getState().providerStatus;
+    if (socket && canvasId && !(providerStatus === 'connected' || providerStatus === 'synced')) {
       socket.emit("canvas:typing", { canvasId, blockId, isTyping });
     }
   },
@@ -662,7 +787,11 @@ export const useCanvasStore = create((set, get) => ({
     const socket = getSocket();
     const canvasId = get().currentJoinedRoom;
     if (socket && canvasId) {
-      socket.emit("canvas:block:create", { canvasId, blockData });
+      // If collaboration (CRDT) is active, avoid socket emits for editor content
+      const providerStatus = useCanvasUiStore.getState().providerStatus;
+      if (!(providerStatus === 'connected' || providerStatus === 'synced')) {
+        socket.emit("canvas:block:create", { canvasId, blockData });
+      }
     }
   },
 
@@ -681,7 +810,9 @@ export const useCanvasStore = create((set, get) => ({
       return { blocks: updatedBlocks };
     });
 
-    if (socket && canvasId) {
+    // If collaboration is active, let CRDT handle document updates; otherwise emit socket
+    const providerStatus = useCanvasUiStore.getState().providerStatus;
+    if (socket && canvasId && !(providerStatus === 'connected' || providerStatus === 'synced')) {
       socket.emit("canvas:block:update", { canvasId, blockId, content, type });
     }
   },
@@ -697,7 +828,10 @@ export const useCanvasStore = create((set, get) => ({
     }));
 
     if (socket && canvasId) {
-      socket.emit("canvas:block:delete", { canvasId, blockId });
+      const providerStatus = useCanvasUiStore.getState().providerStatus;
+      if (!(providerStatus === 'connected' || providerStatus === 'synced')) {
+        socket.emit("canvas:block:delete", { canvasId, blockId });
+      }
     }
   },
 
@@ -721,7 +855,10 @@ export const useCanvasStore = create((set, get) => ({
     });
 
     if (socket && canvasId) {
-      socket.emit("canvas:block:reorder", { canvasId, blockIdsOrder });
+      const providerStatus = useCanvasUiStore.getState().providerStatus;
+      if (!(providerStatus === 'connected' || providerStatus === 'synced')) {
+        socket.emit("canvas:block:reorder", { canvasId, blockIdsOrder });
+      }
     }
   },
 

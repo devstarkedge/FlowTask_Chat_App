@@ -12,6 +12,7 @@ import {
   ValidationError,
   NotFoundError,
 } from "../../middleware/errorHandler.js";
+import { MENTION_TYPES } from "../../config/constants.js";
 
 class CanvasService {
   normalizeContent(content) {
@@ -203,7 +204,7 @@ class CanvasService {
     }
   }
 
-  // ── Get Canvas metadata (or auto-create)
+  // ── Get Canvas metadata (does not auto-create; returns existing or null)
   async getCanvas(channelId, workspaceId) {
     if (!workspaceId) {
       throw new ValidationError("workspaceId is required");
@@ -214,32 +215,11 @@ class CanvasService {
       throw new NotFoundError("Channel not found");
     }
 
-    let canvas = await canvasRepository.findByChannel(channelId, workspaceId);
-
-    // Auto-create default canvas
-    if (!canvas) {
-      canvas = await canvasRepository.create({
-        workspaceId,
-        channelId,
-        title: `${channel.name} Canvas`,
-        type: "notes",
-        content: this.normalizeContent(),
-      });
-
-      // Create default blocks
-      const defaultBlocks = this.buildTemplateBlocks(canvas._id, "notes", {
-        workspaceId,
-        channelId,
-      });
-      await CanvasBlock.insertMany(defaultBlocks);
-
-      logger.info("[CANVAS] Auto-created canvas with blocks", {
-        canvasId: canvas._id,
-        channelId,
-        workspaceId,
-      });
-    }
-
+    // Attempt to find an existing canvas for this channel. IMPORTANT: Do
+    // NOT auto-create a default/blank canvas here — canvas creation must be
+    // explicitly initiated by a user action or via an incoming shared canvas
+    // from a collaborator. Returning null is expected when no canvas exists.
+    const canvas = await canvasRepository.findByChannel(channelId, workspaceId);
     return canvas;
   }
 
@@ -389,6 +369,46 @@ class CanvasService {
         canvas._id,
         updates.title
       );
+    }
+
+    // Detect mention nodes inside updated content JSON and run notification engine
+    try {
+      const mentions = [];
+      const walk = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (node.type === 'mention' && node.attrs) {
+          mentions.push({ targetId: node.attrs.id, name: node.attrs.label, type: node.attrs.mentionType === 'channel' ? MENTION_TYPES.CHANNEL : MENTION_TYPES.USER });
+        }
+        if (Array.isArray(node.content)) {
+          node.content.forEach(walk);
+        }
+      };
+
+      if (allowedUpdates.content && Array.isArray(allowedUpdates.content.content)) {
+        allowedUpdates.content.content.forEach(walk);
+      }
+
+      if (mentions.length > 0) {
+        const sender = await ChatUser.findById(userId).lean();
+        const senderSnapshot = sender ? { name: sender.name, avatar: sender.avatar || null } : { name: 'Unknown', avatar: null };
+        const fakeMessage = {
+          _id: updatedCanvas._id,
+          authorId: userId,
+          content: `Updated Canvas: ${updatedCanvas.title || canvas.title || ''}`,
+          senderSnapshot,
+          workspaceId,
+        };
+
+        const channel = await channelRepository.findById(canvas.channelId, { workspaceId });
+        if (channel) {
+          import('../../services/notificationEngine.js').then(({ default: notificationEngine }) => {
+            notificationEngine.processMessage(fakeMessage, channel, { mentions }).catch(() => {});
+          }).catch(() => {});
+        }
+      }
+    } catch (err) {
+      // non-fatal
+      logger.warn('[CANVAS] mention detection failed', { error: err.message });
     }
 
     logger.info("[CANVAS] Canvas updated", { canvasId, workspaceId });

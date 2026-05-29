@@ -28,12 +28,15 @@ function normalizePresence(socketPresence, awarenessUsers) {
 }
 
 export default function PresenceBar({ socketPresence = [], awarenessUsers = [], status }) {
-  const users = normalizePresence(socketPresence, awarenessUsers).slice(0, 6);
-  const overflow = Math.max(0, normalizePresence(socketPresence, awarenessUsers).length - users.length);
+  const allUsers = normalizePresence(socketPresence, awarenessUsers);
+  const users = allUsers.slice(0, 6);
+  const overflow = Math.max(0, allUsers.length - users.length);
+
+  const showStatus = users.length === 0;
 
   return (
     <div className="canvas-presence-bar" aria-label="Canvas presence">
-      <span className={`canvas-collab-status is-${status}`}>{status || "idle"}</span>
+      {showStatus && <span className={`canvas-collab-status is-${status}`}>{status || "idle"}</span>}
       <div className="canvas-avatar-stack">
         {users.map((user) => (
           <span

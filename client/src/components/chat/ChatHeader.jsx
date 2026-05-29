@@ -14,6 +14,7 @@ import {
   BookCopy,
   Check,
   X,
+  Plus,
 } from "lucide-react";
 import ChannelMemberCount from "./ChannelMemberCount";
 import { useChannelStore } from "../../stores/channelStore";
@@ -38,6 +39,10 @@ export default function ChatHeader({
   onTogglePins,
   activeTab = "messages",
   onTabChange,
+  // Multi-tab canvas props
+  openCanvasTabs = [],
+  onOpenAddCanvasModal,
+  onRemoveCanvasTabById,
   // ─── Canvas props ───────────────────────────────────────────────────────────
   // showCanvasPopup: boolean – whether the CanvasMenu dropdown is open
   showCanvasPopup,
@@ -57,7 +62,8 @@ export default function ChatHeader({
   const activeThread = useChatStore((s) => s.activeThread);
   const pinnedMessages =
     useChatStore((s) => s.pinnedMessagesByChannel[channel?._id]) ?? EMPTY_PINS;
-  const { updateCanvasMetadata, activeCanvas } = useCanvasStore();
+  const updateCanvasMetadata = useCanvasStore((s) => s.updateCanvasMetadata);
+  const activeCanvas = useCanvasStore((s) => s.activeCanvas);
 
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [showTabsDropdown, setShowTabsDropdown] = useState(false);
@@ -98,10 +104,23 @@ export default function ChatHeader({
     return name;
   }, [channel, user]);
 
-  // Build dynamic tabs: base tabs + one canvas tab
-  // The canvas tab id is always "canvas". When activeCanvasTitle is set it
-  // shows as a real canvas tab; otherwise it shows as the "Add Canvas" button.
+  // Build dynamic tabs. If `openCanvasTabs` is provided, render each opened
+  // canvas as its own tab and keep a persistent "+" add button at the end.
   const HEADER_TABS = useMemo(() => {
+    if (openCanvasTabs && openCanvasTabs.length > 0) {
+      const canvasTabs = openCanvasTabs.map((c) => ({
+        id: `canvas:${c._id}`,
+        label: c.title || "Untitled canvas",
+        icon: BookCopy,
+        isCanvas: true,
+        isDynamic: true,
+        canvasMeta: c,
+      }));
+
+      const addTab = { id: "canvas:add", label: "Add Canvas", icon: Plus, isCanvas: true, isAdd: true };
+      return [...BASE_TABS, ...canvasTabs, addTab];
+    }
+
     const canvasTab = activeCanvasTitle
       ? {
           id: "canvas",
@@ -119,7 +138,7 @@ export default function ChatHeader({
         };
 
     return [...BASE_TABS, canvasTab];
-  }, [activeCanvasTitle]);
+  }, [activeCanvasTitle, openCanvasTabs]);
 
   // Collapse tabs when header is narrow
   useEffect(() => {
@@ -203,10 +222,24 @@ export default function ChatHeader({
 
   const hPad = 8;
 
-  const handleCanvasTabRightClick = (e) => {
+  const handleCanvasTabRightClick = (canvasId) => (e) => {
     e.preventDefault();
-    if (!activeCanvas) return;
-    setContextMenu({ x: e.clientX, y: e.clientY });
+    if (!canvasId) return;
+    setContextMenu({ x: e.clientX, y: e.clientY, canvasId });
+  };
+
+  const handleContextRename = () => {
+    const cid = contextMenu?.canvasId;
+    if (!cid) return;
+    // If the canvas is already active, start rename immediately.
+    if (cid === activeCanvas?._id) {
+      startRename();
+    } else {
+      // Switch to the canvas tab, then start rename after a short delay.
+      onTabChange?.(`canvas:${cid}`);
+      setTimeout(() => startRename(), 160);
+    }
+    setContextMenu(null);
   };
 
   const handleRenameSubmit = async () => {
@@ -232,19 +265,24 @@ export default function ChatHeader({
   };
 
   // ── Canvas tab click handler ─────────────────────────────────────────────────
-  // If there's already an active canvas → switch to the canvas tab.
-  // If no canvas yet → toggle the CanvasMenu popup.
   const handleCanvasTabClick = (tab) => {
-    if (tab.isDynamic) {
-      // Real canvas exists – just switch to it
-      onTabChange?.("canvas");
-    } else {
-      // No canvas yet – open/close the popup menu
-      if (showCanvasPopup) {
-        onCloseCanvasMenu?.();
-      } else {
-        onOpenCanvasMenu?.();
-      }
+    logger.debug('[ChatHeader] canvas tab clicked', { tabId: tab?.id, isAdd: tab?.isAdd, isDynamic: tab?.isDynamic });
+    if (tab.isAdd) {
+      onOpenAddCanvasModal?.();
+      return;
+    }
+
+    if (tab.isDynamic && tab.id && String(tab.id).startsWith("canvas:")) {
+      onTabChange?.(tab.id);
+      return;
+    }
+
+    // Fallback to previous single-canvas behavior
+    if (tab.isCanvas && !tab.isDynamic) {
+      if (showCanvasPopup) onCloseCanvasMenu?.();
+      else onOpenCanvasMenu?.();
+    } else if (tab.id) {
+      onTabChange?.(tab.id);
     }
   };
 
@@ -441,9 +479,53 @@ export default function ChatHeader({
           ) : (
             // ── Wide mode: show all tabs ─────────────────────────────────────
             HEADER_TABS.map((tab) => {
-              if (tab.isCanvas) {
+              if (tab.isCanvas && tab.isDynamic) {
                 return (
-                  // Wrapper div is the anchor for the popup – attach the ref here
+                  <SlimTab
+                    key={tab.id}
+                    tab={tab}
+                    isActive={activeTab === tab.id}
+                    onClick={() => handleCanvasTabClick(tab)}
+                    onContextMenu={handleCanvasTabRightClick(tab.canvasMeta?._id || (tab.id && String(tab.id).split(":")[1]))}
+                  />
+                );
+              }
+
+              if (tab.isCanvas && tab.isAdd) {
+                return (
+                  <div key={tab.id} style={{ position: "relative" }} ref={canvasTabRef}>
+                    <SlimTab
+                      tab={{ id: tab.id, icon: Plus }}
+                      isActive={false}
+                      onClick={() => handleCanvasTabClick(tab)}
+                    />
+
+                    {showCanvasPopup && (
+                      <div
+                        ref={canvasPopupRef}
+                        style={{
+                          position: "absolute",
+                          top: "calc(100% + 6px)",
+                          left: 0,
+                          zIndex: 50,
+                        }}
+                      >
+                        <CanvasMenu
+                          onSelect={(type) => {
+                            onCloseCanvasMenu?.();
+                            onCanvasSelect?.(type);
+                          }}
+                          onDismiss={() => onCloseCanvasMenu?.()}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              if (tab.isCanvas && !tab.isDynamic) {
+                // Legacy single "canvas" tab behavior
+                return (
                   <div key={tab.id} style={{ position: "relative" }} ref={canvasTabRef}>
                     <SlimTab
                       tab={tab}
@@ -459,7 +541,6 @@ export default function ChatHeader({
                       onRenameCancel={() => setIsRenaming(false)}
                     />
 
-                    {/* ── Canvas Popup Menu ── */}
                     {showCanvasPopup && (
                       <div
                         ref={canvasPopupRef}
@@ -497,15 +578,20 @@ export default function ChatHeader({
       </div>
 
       {/* ── Canvas Right-Click Context Menu ── */}
-      {contextMenu && activeCanvas?._id && (
+      {contextMenu?.canvasId && (
         <CanvasTabContextMenu
-          canvasId={activeCanvas._id}
+          canvasId={contextMenu.canvasId}
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
-          onRenameTrigger={startRename}
+          onRenameTrigger={handleContextRename}
           onRemoveTab={() => {
-            onRemoveCanvasTab?.();
+            // Prefer the explicit remove-by-id handler if provided
+            if (typeof onRemoveCanvasTabById === "function") {
+              onRemoveCanvasTabById(contextMenu.canvasId);
+            } else {
+              onRemoveCanvasTab?.();
+            }
             setContextMenu(null);
           }}
         />

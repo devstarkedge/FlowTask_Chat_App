@@ -176,6 +176,18 @@ const channelSchema = new Schema(
       type: Schema.Types.Mixed,
       default: {},
     },
+    // Persisted canvas tabs for the channel (shared across all members)
+    canvasTabs: [
+      {
+        canvasId: {
+          type: Schema.Types.ObjectId,
+          ref: "Canvas",
+        },
+        title: { type: String, default: "" },
+        createdBy: { type: Schema.Types.ObjectId, ref: "ChatUser", default: null },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
     // ─── Department categorization (from FlowTask board.department) ───
     departmentRef: {
       departmentId: { type: String, default: null },

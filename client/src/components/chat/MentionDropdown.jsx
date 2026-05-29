@@ -111,7 +111,8 @@ const MentionDropdown = memo(function MentionDropdown({
         position: 'absolute',
         bottom: position?.bottom ?? '100%',
         left: position?.left ?? 0,
-        zIndex: 70,
+        // Raise above canvas selection toolbar (z-index:1000)
+        zIndex: 1200,
         minWidth: 220,
         maxWidth: 320,
         maxHeight: 240,
@@ -122,6 +123,7 @@ const MentionDropdown = memo(function MentionDropdown({
         boxShadow: 'var(--shadow-lg)',
         padding: '4px',
         marginBottom: 4,
+        pointerEvents: 'auto',
       }}
     >
       <div

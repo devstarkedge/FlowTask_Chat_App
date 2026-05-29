@@ -397,7 +397,11 @@ body {
   from {
     opacity: 0;
   }
+}
 
+/* ProseMirror: ensure editable content preserves whitespace formatting. */
+.ProseMirror {
+  white-space: pre-wrap;
   to {
     opacity: 1;
   }

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, FileText, Clock, Search, Plus } from "lucide-react";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { canvasAPI } from "../../services/api";
+import logger from "../../utils/logger";
 import CanvasMenu from "./CanvasMenu";
 import CanvasEditor from "./CanvasEditor";
 import TemplateSelector from "./TemplateSelector";
@@ -46,17 +47,17 @@ function EmptyState({ onAdd }) {
             marginBottom: 6,
           }}
         >
-          No canvas yet
+          No canvas available
         </h3>
         <p
           style={{
             fontSize: 12,
             color: "var(--text-muted)",
             lineHeight: 1.6,
-            maxWidth: 200,
+            maxWidth: 240,
           }}
         >
-          Canvases let you create rich documents right inside your channel.
+          Create a new canvas to start collaborating.
         </p>
       </div>
       <button
@@ -83,7 +84,7 @@ function EmptyState({ onAdd }) {
         }
       >
         <Plus size={13} />
-        Add a canvas
+        Create a canvas
       </button>
     </div>
   );
@@ -349,20 +350,18 @@ function LoadingSkeleton() {
 //   "existing" → show ExistingCanvasList
 //   "editor"   → show CanvasEditor
 //
-export default function CanvasPanel({ channelId, workspaceId, intent, onIntentConsumed }) {
+export default function CanvasPanel({ channelId, workspaceId, intent, onIntentConsumed, canvasId, onCreated }) {
   void workspaceId;
   // view: null | "menu" | "template" | "existing" | "editor"
   const [view, setView] = useState(null);
   const [allCanvases, setAllCanvases] = useState([]);
   const queryClient = useQueryClient();
 
-  const {
-    activeCanvas,
-    isLoading,
-    createCanvas,
-    loadDefaultCanvas,
-    fetchChannelCanvases,
-  } = useCanvasStore();
+  const activeCanvas = useCanvasStore((s) => s.activeCanvas);
+  const isLoading = useCanvasStore((s) => s.isLoading);
+  const createCanvas = useCanvasStore((s) => s.createCanvas);
+  const loadDefaultCanvas = useCanvasStore((s) => s.loadDefaultCanvas);
+  const fetchChannelCanvases = useCanvasStore((s) => s.fetchChannelCanvases);
 
   const channelCanvasesQuery = useQuery({
     queryKey: ["canvas", "channel", channelId],
@@ -412,15 +411,25 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
     if (lastIntentRef.current === intent) return; // already handled
     lastIntentRef.current = intent;
 
-    onIntentConsumed?.(); // tell ChatPanel to clear it
-
-    if (intent === "blank") {
-      handleCreateBlank();
-    } else if (intent === "template") {
-      setView("template");
-    } else if (intent === "existing") {
-      handleLoadExisting();
-    }
+    // Process the intent first, then notify parent to clear it. This
+    // avoids a re-entrant parent state update (clearing the intent)
+    // from interrupting our intent handling and potentially causing
+    // nested renders that lead to update loops.
+    (async () => {
+      try {
+        if (intent === "blank") {
+          await handleCreateBlank();
+        } else if (intent === "template") {
+          setView("template");
+        } else if (intent === "existing") {
+          await handleLoadExisting();
+        }
+      } finally {
+        // Always tell the parent we consumed the intent after handling
+        // it so the parent's state changes don't interfere mid-processing.
+        onIntentConsumed?.();
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intent, channelId]);
 
@@ -429,15 +438,38 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
     lastIntentRef.current = null;
   }, [channelId]);
 
+  // If parent requests a specific canvas to load (e.g. via tab click), load it.
+  useEffect(() => {
+    if (!canvasId || !channelId) return;
+    logger.debug('[CanvasPanel] canvasId prop changed', { canvasId, channelId });
+    // If already loaded, just show editor
+    const storeActive = useCanvasStore.getState().activeCanvas;
+    if (storeActive && storeActive._id === canvasId) {
+      setView("editor");
+      return;
+    }
+
+    (async () => {
+      try {
+        await useCanvasStore.getState().loadCanvas(canvasId);
+        setView("editor");
+      } catch (err) {
+        console.error("[CanvasPanel] failed to load canvasId:", err);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasId, channelId]);
+
   // ── Create blank canvas ────────────────────────────────────────────────────
   const handleCreateBlank = useCallback(async () => {
     try {
-      await createCanvas(channelId, {
+      const newCanvas = await createCanvas(channelId, {
         title: "Untitled canvas",
         content: { type: "doc", content: [{ type: "paragraph" }] },
       });
       queryClient.invalidateQueries({ queryKey: ["canvas", "channel", channelId] });
       setView("editor");
+      if (newCanvas) onCreated?.(newCanvas);
     } catch (err) {
       console.error("[CanvasPanel] createBlank error:", err);
     }
@@ -564,9 +596,10 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
         const payload = { title, content };
         if (canvasCover) payload.cover = canvasCover;
 
-        await createCanvas(channelId, payload);
+        const newCanvas = await createCanvas(channelId, payload);
         queryClient.invalidateQueries({ queryKey: ["canvas", "channel", channelId] });
         setView("editor");
+        if (newCanvas) onCreated?.(newCanvas);
       } catch (err) {
         console.error("[CanvasPanel] createFromTemplate error:", err);
       }
@@ -581,6 +614,7 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
         const { loadCanvas } = useCanvasStore.getState();
         await loadCanvas(canvas._id);
         setView("editor");
+        onCreated?.(canvas);
       } catch (err) {
         console.error("[CanvasPanel] loadExisting error:", err);
       }

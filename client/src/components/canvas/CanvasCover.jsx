@@ -19,7 +19,7 @@ const SOLID_COLORS = [
 ];
 
 export default function CanvasCover({ cover, canvasId, canvasTitle, onClose }) {
-  const { updateCanvasMetadata } = useCanvasStore();
+  const updateCanvasMetadata = useCanvasStore((s) => s.updateCanvasMetadata);
   const [activeTab, setActiveTab] = useState("gradient"); // gradient | color | image
   const [customImageUrl, setCustomImageUrl] = useState("");
   const [isDragging, setIsDragging] = useState(false);

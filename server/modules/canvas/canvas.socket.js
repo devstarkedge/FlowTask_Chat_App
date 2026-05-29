@@ -4,6 +4,7 @@ import CanvasComment from "./canvasComment.model.js";
 import canvasService from "./canvas.service.js";
 import redisClient from "../../utils/redisClient.js";
 import logger from "../../utils/logger.js";
+import channelRepository from "../channels/channel.repository.js";
 
 // Helper to construct Redis presence keys
 const getPresenceKey = (canvasId) => `canvas:presence:${canvasId}`;
@@ -91,6 +92,66 @@ export default function registerCanvasSocket(io, socket) {
       logger.info("[CANVAS SOCKET] User left canvas room", { canvasId, userId });
     } catch (error) {
       logger.error("[CANVAS SOCKET] Error in canvas:leave", { error: error.message, userId });
+    }
+  });
+
+  // ── Channel-level Canvas Tabs (shared across clients)
+  const getChannelTabsKey = (workspaceId, channelId) => `canvas:tabs:${workspaceId}:${channelId}`;
+
+  // Client requests the current tabs for a channel
+  socket.on("canvas:tabs:request", async ({ channelId }) => {
+    try {
+      if (!channelId || !workspaceId) return;
+      // Prefer persisted DB state (authoritative)
+      try {
+        const channel = await channelRepository.findById(channelId, { workspaceId });
+        if (channel && Array.isArray(channel.canvasTabs) && channel.canvasTabs.length > 0) {
+          const tabs = channel.canvasTabs.map((t) => ({ _id: t.canvasId ? String(t.canvasId) : null, title: t.title || "" })).filter((x) => x._id);
+          socket.emit("canvas:tabs:state", { channelId, tabs });
+          return;
+        }
+      } catch (err) {
+        logger.debug('[CANVAS SOCKET] canvas:tabs:request DB lookup failed', { error: err.message });
+      }
+
+      // Fallback to Redis cache
+      const key = getChannelTabsKey(workspaceId, channelId);
+      const raw = await redisClient.get(key);
+      const tabs = raw ? JSON.parse(raw) : [];
+      socket.emit("canvas:tabs:state", { channelId, tabs });
+    } catch (err) {
+      logger.error('[CANVAS SOCKET] canvas:tabs:request error', { error: err.message });
+    }
+  });
+
+  // Client updates the tabs for a channel — persist and broadcast
+  socket.on("canvas:tabs:update", async ({ channelId, tabs }) => {
+    try {
+      if (!channelId || !workspaceId) return;
+      // Normalize incoming minimal metadata
+      const normalized = Array.isArray(tabs) ? tabs.map((t) => ({ _id: String(t._id), title: t.title || "" })) : [];
+
+      // Persist authoritative list to DB (channel.canvasTabs)
+      try {
+        const dbTabs = normalized.map((t) => ({ canvasId: t._id, title: t.title, createdBy: user._id, createdAt: new Date() }));
+        await channelRepository.update(channelId, { canvasTabs: dbTabs }, workspaceId);
+      } catch (err) {
+        logger.error('[CANVAS SOCKET] Failed to persist canvas tabs to DB', { error: err.message, channelId, userId });
+      }
+
+      // Update Redis cache for fast reads
+      try {
+        const key = getChannelTabsKey(workspaceId, channelId);
+        await redisClient.set(key, JSON.stringify(normalized));
+      } catch (err) {
+        logger.debug('[CANVAS SOCKET] Failed to update Redis cache for canvas tabs', { error: err.message });
+      }
+
+      // Broadcast to all sockets in the channel room
+      const channelRoom = `ws:${workspaceId}:channel:${channelId}`;
+      io.to(channelRoom).emit("canvas:tabs:updated", { channelId, tabs: normalized });
+    } catch (err) {
+      logger.error('[CANVAS SOCKET] canvas:tabs:update error', { error: err.message });
     }
   });
 

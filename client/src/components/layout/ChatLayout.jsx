@@ -826,6 +826,14 @@ export default function ChatLayout() {
     setIsSearchOpen(false);
   }, []);
 
+  // Stable handlers to pass down to ChatPanel (avoid recreating inline functions)
+  const handleTogglePins = useCallback(() => {
+    togglePinnedPanel();
+    closeSearch();
+  }, [togglePinnedPanel, closeSearch]);
+
+  const handleOpenMobileSidebar = useCallback(() => setShowMobileSidebar(true), []);
+
   const openGlobalSearch = useCallback(() => {
     globalSearchRef.current?.open({ mode: "global" });
     setShowPins(false);
@@ -1433,14 +1441,11 @@ export default function ChatLayout() {
                     selectedChannelId={resolveNotificationChannelId(
                       selectedNotification,
                     )}
-                    onOpenMobileSidebar={() => setShowMobileSidebar(true)}
+                    onOpenMobileSidebar={handleOpenMobileSidebar}
                     workspaceId={workspaceId}
                     onOpenThread={openThread}
                     onToggleSearch={toggleLocalSearch}
-                    onTogglePins={() => {
-                      togglePinnedPanel();
-                      closeSearch();
-                    }}
+                    onTogglePins={handleTogglePins}
                     onOpenProfile={openProfile}
                     onOpenFilePreview={openFilePreview}
                     onSaveMessage={handleSaveMessage}
@@ -1457,7 +1462,7 @@ export default function ChatLayout() {
                     }}
                     onDownload={handleDownload}
                     onOpenInChat={handleOpenFileInChat}
-                    onOpenMobileSidebar={() => setShowMobileSidebar(true)}
+                    onOpenMobileSidebar={handleOpenMobileSidebar}
                   />
                 );
               // Check page routes — this includes /later which renders LaterPage
@@ -1486,19 +1491,14 @@ export default function ChatLayout() {
                   workspaceId={workspaceId}
                   onOpenThread={openThread}
                   onToggleSearch={toggleLocalSearch}
-                  onTogglePins={() => {
-                    togglePinnedPanel();
-                    closeSearch();
-                  }}
+                  onTogglePins={handleTogglePins}
                   onOpenProfile={openProfile}
                   onOpenFilePreview={openFilePreview}
-                  onOpenMobileSidebar={() => setShowMobileSidebar(true)}
+                  onOpenMobileSidebar={handleOpenMobileSidebar}
                   onSaveMessage={handleSaveMessage}
                 />
               ) : (
-                <WelcomeScreen
-                  onOpenMobileSidebar={() => setShowMobileSidebar(true)}
-                />
+                <WelcomeScreen onOpenMobileSidebar={handleOpenMobileSidebar} />
               );
             })()}
           </ErrorBoundary>

@@ -16,7 +16,7 @@ const BLOCK_TYPES = [
     { type: "bullet-list", label: "Bullet List", desc: "Simple unordered list",                icon: List },
     { type: "numbered-list",label:"Numbered List",desc: "Ordered step-by-step list",           icon: ListOrdered },
     { type: "checklist",   label: "Checklist",   desc: "Trackable to-do items",                icon: CheckSquare },
-  ]},
+  ]}, 
   { group: "Content", items: [
     { type: "quote",       label: "Quote",       desc: "Highlight a key message",              icon: Quote },
     { type: "code",        label: "Code Block",  desc: "Monospace code snippet",               icon: Code2 },

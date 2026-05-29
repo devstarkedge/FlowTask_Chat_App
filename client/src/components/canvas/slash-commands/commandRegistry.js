@@ -15,6 +15,10 @@ import {
   Quote,
   Table2,
   Type,
+  AudioLines,
+  Video,
+  FilePenLine,
+  Pilcrow,
 } from "lucide-react";
 // import MentionDropdown from "../../chat/MentionDropdown";
 import { useCallback } from "react";
@@ -38,12 +42,24 @@ export const COMMAND_GROUPS = [
     label: "Basic",
     commands: [
       {
-        id: "text",
-        label: "Text",
-        description: "Start with plain text",
-        icon: Type,
-        keywords: ["paragraph", "body"],
-        run: (editor) => editor.chain().focus().setParagraph().run(),
+        id: "Canvas",
+        label: "Canvas",
+        description: "Import a canvas template to get started quickly",
+        icon: FilePenLine,
+        keywords: ["template", "starter"],
+        run: (editor) => {
+          const template = window.prompt(
+            "Enter template name (e.g. 'Project Plan')",
+          );
+        },
+      },
+      {
+        id: "checklist",
+        label: "Checklist",
+        description: "Track tasks with checkboxes",
+        icon: CheckSquare,
+        keywords: ["todo", "task", "check"],
+        run: (editor) => editor.chain().focus().toggleTaskList().run(),
       },
       {
         id: "heading",
@@ -55,12 +71,33 @@ export const COMMAND_GROUPS = [
           editor.chain().focus().toggleHeading({ level: 1 }).run(),
       },
       {
-        id: "checklist",
-        label: "Checklist",
-        description: "Track tasks with checkboxes",
-        icon: CheckSquare,
-        keywords: ["todo", "task", "check"],
-        run: (editor) => editor.chain().focus().toggleTaskList().run(),
+        id: "paragraph",
+        label: "Paragraph",
+        description: "Regular text block",
+        icon: Pilcrow,
+        keywords: ["text", "body"],
+        run: (editor) => insertParagraph(editor),
+      },
+      {
+        id: "table",
+        label: "Table",
+        description: "Insert a 3 by 3 table",
+        icon: Table2,
+        keywords: ["grid", "cells"],
+        run: (editor) =>
+          editor
+            .chain()
+            .focus()
+            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+            .run(),
+      },
+      {
+        id: "divider",
+        label: "Divider",
+        description: "Separate sections",
+        icon: Minus,
+        keywords: ["rule", "separator"],
+        run: (editor) => editor.chain().focus().setHorizontalRule().run(),
       },
       {
         id: "bullet-list",
@@ -85,6 +122,28 @@ export const COMMAND_GROUPS = [
     label: "Media",
     commands: [
       {
+        id: "video-clip",
+        label: "Video Clip",
+        description: "Embed a video URL",
+        icon: Video,
+        keywords: ["video", "clip"],
+        run: (editor) => {
+          const src = window.prompt("Video URL");
+          if (src) editor.chain().focus().setVideo({ src }).run();
+        },
+      },
+      {
+        id: "audio-clip",
+        label: "Audio Clip",
+        description: "Embed an audio URL",
+        icon: AudioLines,
+        keywords: ["audio", "sound"],
+        run: (editor) => {
+          const src = window.prompt("Audio URL");
+          if (src) editor.chain().focus().setAudio({ src }).run();
+        },
+      },
+      {
         id: "image",
         label: "Image",
         description: "Embed an image URL",
@@ -103,51 +162,12 @@ export const COMMAND_GROUPS = [
         keywords: ["attachment", "upload"],
         run: (editor) => insertParagraph(editor, "Attach a file"),
       },
-      {
-        id: "embed",
-        label: "Embed",
-        description: "Paste a link preview",
-        icon: Link,
-        keywords: ["url", "preview"],
-        run: (editor) => {
-          const href = window.prompt("Embed URL");
-          if (href) {
-            editor
-              .chain()
-              .focus()
-              .insertContent({
-                type: "paragraph",
-                content: [
-                  {
-                    type: "text",
-                    text: href,
-                    marks: [{ type: "link", attrs: { href } }],
-                  },
-                ],
-              })
-              .run();
-          }
-        },
-      },
     ],
   },
   {
     id: "advanced",
     label: "Advanced",
     commands: [
-      {
-        id: "table",
-        label: "Table",
-        description: "Insert a 3 by 3 table",
-        icon: Table2,
-        keywords: ["grid", "cells"],
-        run: (editor) =>
-          editor
-            .chain()
-            .focus()
-            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-            .run(),
-      },
       {
         id: "code",
         label: "Code",
@@ -177,14 +197,6 @@ export const COMMAND_GROUPS = [
         keywords: ["blockquote"],
         run: (editor) => editor.chain().focus().toggleBlockquote().run(),
       },
-      {
-        id: "divider",
-        label: "Divider",
-        description: "Separate sections",
-        icon: Minus,
-        keywords: ["rule", "separator"],
-        run: (editor) => editor.chain().focus().setHorizontalRule().run(),
-      },
     ],
   },
   {
@@ -197,11 +209,7 @@ export const COMMAND_GROUPS = [
         description: "Mention a teammate",
         icon: AtSign,
         keywords: ["person", "user"],
-        onClick: () => {
-          editorRef.current?.insertText("@");
-          detectMention();
-        },
-        run: (editor) => insertParagraph(editor, "@"),
+        run: (editor) => editor.chain().focus().insertContent("@").run(),
       },
       {
         id: "reminder",

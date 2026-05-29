@@ -344,7 +344,7 @@ class FlowTaskService {
    */
   async getSubtasksByBoard(boardId, token) {
     try {
-      const res = await this._request(`/api/subtasks?board=${boardId}&select=assignees,task,title`, token);
+      const res = await this.get(`/api/subtasks?board=${boardId}&select=assignees,task,title`, token);
       return res.data || res || [];
     } catch (error) {
       logger.warn('FlowTask getSubtasksByBoard failed', { boardId, error: error.message });
@@ -360,7 +360,7 @@ class FlowTaskService {
    */
   async getNanosByBoard(boardId, token) {
     try {
-      const res = await this._request(`/api/subtask-nanos?board=${boardId}&select=assignees,subtask,task,title`, token);
+      const res = await this.get(`/api/subtask-nanos?board=${boardId}&select=assignees,subtask,task,title`, token);
       return res.data || res || [];
     } catch (error) {
       logger.warn('FlowTask getNanosByBoard failed', { boardId, error: error.message });

@@ -302,6 +302,15 @@ export async function initializeSocket(httpServer, corsOptions) {
         const chRoom = buildRoomName(wsId, 'channel', channel._id);
         socket.join(chRoom);
         initialChannelIds.push(channel._id.toString());
+        // Send persisted canvas tabs for this channel to the connecting socket
+        try {
+          if (Array.isArray(channel.canvasTabs) && channel.canvasTabs.length > 0) {
+            const tabs = channel.canvasTabs.map((t) => ({ _id: t.canvasId ? String(t.canvasId) : null, title: t.title || "" })).filter((x) => x._id);
+            if (tabs.length > 0) socket.emit('canvas:tabs:state', { channelId: channel._id.toString(), tabs });
+          }
+        } catch (err) {
+          logger.debug('Failed to emit canvas tabs on initial join', { error: err.message, channelId: channel._id });
+        }
       }
     } catch (error) {
       logger.error('Failed to join channel rooms', {
@@ -367,6 +376,15 @@ export async function initializeSocket(httpServer, corsOptions) {
         if (permissionEngine.canViewAllChannels(user, { workspaceId: wsId })) {
           const joinRoom = buildRoomName(wsId, 'channel', channelId);
           socket.join(joinRoom);
+          // Emit persisted canvas tabs for this channel to the joining socket
+          try {
+            if (channel && Array.isArray(channel.canvasTabs) && channel.canvasTabs.length > 0) {
+              const tabs = channel.canvasTabs.map((t) => ({ _id: t.canvasId ? String(t.canvasId) : null, title: t.title || "" })).filter((x) => x._id);
+              if (tabs.length > 0) socket.emit('canvas:tabs:state', { channelId: channelId.toString(), tabs });
+            }
+          } catch (err) {
+            logger.debug('Failed to emit canvas tabs on channel:join (view all)', { error: err.message, channelId });
+          }
           return;
         }
 
@@ -381,6 +399,14 @@ export async function initializeSocket(httpServer, corsOptions) {
           }
           const joinRoom = buildRoomName(wsId, 'channel', channelId);
           socket.join(joinRoom);
+          try {
+            if (channel && Array.isArray(channel.canvasTabs) && channel.canvasTabs.length > 0) {
+              const tabs = channel.canvasTabs.map((t) => ({ _id: t.canvasId ? String(t.canvasId) : null, title: t.title || "" })).filter((x) => x._id);
+              if (tabs.length > 0) socket.emit('canvas:tabs:state', { channelId: channelId.toString(), tabs });
+            }
+          } catch (err) {
+            logger.debug('Failed to emit canvas tabs on channel:join (dm)', { error: err.message, channelId });
+          }
           return;
         }
 
@@ -388,6 +414,14 @@ export async function initializeSocket(httpServer, corsOptions) {
         if (channel.visibility === 'public' && channel.type !== 'dm') {
           const joinRoom = buildRoomName(wsId, 'channel', channelId);
           socket.join(joinRoom);
+          try {
+            if (channel && Array.isArray(channel.canvasTabs) && channel.canvasTabs.length > 0) {
+              const tabs = channel.canvasTabs.map((t) => ({ _id: t.canvasId ? String(t.canvasId) : null, title: t.title || "" })).filter((x) => x._id);
+              if (tabs.length > 0) socket.emit('canvas:tabs:state', { channelId: channelId.toString(), tabs });
+            }
+          } catch (err) {
+            logger.debug('Failed to emit canvas tabs on channel:join (public)', { error: err.message, channelId });
+          }
           return;
         }
         // Check membership
@@ -397,6 +431,14 @@ export async function initializeSocket(httpServer, corsOptions) {
         }
         const joinRoom = buildRoomName(wsId, 'channel', channelId);
         socket.join(joinRoom);
+        try {
+          if (channel && Array.isArray(channel.canvasTabs) && channel.canvasTabs.length > 0) {
+            const tabs = channel.canvasTabs.map((t) => ({ _id: t.canvasId ? String(t.canvasId) : null, title: t.title || "" })).filter((x) => x._id);
+            if (tabs.length > 0) socket.emit('canvas:tabs:state', { channelId: channelId.toString(), tabs });
+          }
+        } catch (err) {
+          logger.debug('Failed to emit canvas tabs on channel:join (member)', { error: err.message, channelId });
+        }
       } catch (error) {
         logger.error('Socket channel:join failed', { userId, channelId, error: error.message });
         socket.emit('error', { message: 'Failed to join channel' });
@@ -525,8 +567,16 @@ export async function initializeSocket(httpServer, corsOptions) {
         const newChannels = await channelRepository.findByMember(userId, { workspaceId: newWorkspaceId });
         initialChannelIds = newChannels.map((c) => c._id.toString());
 
-        for (const channelId of initialChannelIds) {
-          socket.join(buildRoomName(newWorkspaceId, 'channel', channelId));
+        for (const channel of newChannels) {
+          socket.join(buildRoomName(newWorkspaceId, 'channel', channel._id));
+          try {
+            if (Array.isArray(channel.canvasTabs) && channel.canvasTabs.length > 0) {
+              const tabs = channel.canvasTabs.map((t) => ({ _id: t.canvasId ? String(t.canvasId) : null, title: t.title || "" })).filter((x) => x._id);
+              if (tabs.length > 0) socket.emit('canvas:tabs:state', { channelId: channel._id.toString(), tabs });
+            }
+          } catch (err) {
+            logger.debug('Failed to emit canvas tabs on workspace switch for channel', { error: err.message, channelId: channel._id });
+          }
         }
 
         // Broadcast presence to NEW workspace channels

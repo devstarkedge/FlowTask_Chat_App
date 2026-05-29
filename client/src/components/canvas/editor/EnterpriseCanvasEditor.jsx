@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { EditorContent } from "@tiptap/react";
 import debounce from "lodash/debounce";
 import { ArrowLeft, MoreHorizontal, Share2, Tag } from "lucide-react";
@@ -10,12 +10,14 @@ import CommentThreadSidebar from "../comments/CommentThreadSidebar";
 import CanvasHistoryPanel from "../history/CanvasHistoryPanel";
 import PresenceBar from "../realtime/PresenceBar";
 import { useCanvasCollaboration } from "../realtime/useCanvasCollaboration";
+import CursorOverlay from "../realtime/CursorOverlay";
 import SlashCommandMenu from "../slash-commands/SlashCommandMenu";
 import EditorToolbar from "../toolbars/EditorToolbar";
 import SelectionToolbar from "../toolbars/SelectionToolbar";
 import { useCanvasEditor } from "./useCanvasEditor";
 import "../canvas-enterprise.css";
 import BlockList from "../blocks/BlockList";
+import MentionDropdown from "../../chat/MentionDropdown";
 
 // How long to wait for the WebSocket to connect before showing the editor
 // anyway. This prevents an infinite "Loading canvas..." when the
@@ -71,6 +73,86 @@ export default function EnterpriseCanvasEditor({ canvas, onSave, onBack }) {
     provider,
     ydoc,
   });
+
+  // Mention dropdown state
+  const [mentionType, setMentionType] = useState(null); // 'user' | 'channel' | null
+  const [mentionQuery, setMentionQuery] = useState("");
+
+  // Detect @ or # typed before cursor
+  useEffect(() => {
+    if (!editor) return undefined;
+
+    const detect = () => {
+      try {
+        const { state } = editor;
+        const { from } = state.selection;
+        const textBefore = state.doc.textBetween(Math.max(0, from - 50), from, "\n");
+        if (!textBefore) {
+          setMentionType(null);
+          setMentionQuery("");
+          return;
+        }
+
+        const match = textBefore.match(/([@#])([^\s@#]*)$/);
+        if (match) {
+          const triggerChar = match[1];
+          const query = match[2];
+          setMentionType(triggerChar === "@" ? "user" : "channel");
+          setMentionQuery(query);
+        } else {
+          setMentionType(null);
+          setMentionQuery("");
+        }
+      } catch (err) {
+        // ignore parse errors
+      }
+    };
+
+    // Run once immediately and then on editor updates / selection changes
+    detect();
+    editor.on("update", detect);
+    editor.on("selectionUpdate", detect);
+    return () => {
+      try {
+        editor.off("update", detect);
+        editor.off("selectionUpdate", detect);
+      } catch (e) {
+        /* noop */
+      }
+    };
+  }, [editor]);
+
+  const handleMentionSelect = useCallback(
+    (item) => {
+      if (!editor) return;
+
+      try {
+        const { state } = editor;
+        const { from } = state.selection;
+        const textBefore = state.doc.textBetween(Math.max(0, from - 50), from, "\n");
+        const match = textBefore.match(/([@#])([^\s@#]*)$/);
+        if (match) {
+          const deleteCount = match[0].length;
+          editor.chain().focus().deleteRange({ from: from - deleteCount, to: from }).run();
+        }
+
+        editor
+          .chain()
+          .focus()
+          .insertContent([
+            { type: "mention", attrs: { id: item.id, label: item.name, mentionType: mentionType === "user" ? "user" : "channel" } },
+            { type: "text", text: " " },
+          ])
+          .run();
+
+        setMentionType(null);
+        setMentionQuery("");
+      } catch (err) {
+        // ignore
+      }
+    },
+    [editor, mentionType],
+  );
 
   // Reset the timeout whenever the canvas or provider changes.
   useEffect(() => {
@@ -150,8 +232,8 @@ export default function EnterpriseCanvasEditor({ canvas, onSave, onBack }) {
 
   return (
     <div className="canvas-enterprise-shell">
-      {/* <div className="canvas-topbar"> */}
-        {/* <div className="canvas-topbar-left">
+      <div className="canvas-topbar">
+        <div className="canvas-topbar-left">
           {onBack && (
             <button
               type="button"
@@ -162,15 +244,15 @@ export default function EnterpriseCanvasEditor({ canvas, onSave, onBack }) {
               <ArrowLeft size={16} />
             </button>
           )}
-        </div> */}
+        </div>
 
-        {/* <PresenceBar
+        <PresenceBar
           socketPresence={presence}
           awarenessUsers={awarenessUsers}
           status={status}
-        /> */}
+        />
 
-        {/* <div className="canvas-topbar-actions">
+        <div className="canvas-topbar-actions">
           <button type="button" className="canvas-command-button">
             <Share2 size={14} />
             Share
@@ -186,8 +268,8 @@ export default function EnterpriseCanvasEditor({ canvas, onSave, onBack }) {
           >
             <MoreHorizontal size={17} />
           </button>
-        </div> */}
-      {/* </div> */}
+        </div>
+      </div>
 
       <div className="canvas-workspace">
         <main className="canvas-scroll-surface">
@@ -219,7 +301,20 @@ export default function EnterpriseCanvasEditor({ canvas, onSave, onBack }) {
 
             {/* <BlockList /> */}
 
-            <EditorContent editor={editor} />
+            <div style={{ position: "relative" }}>
+              <EditorContent editor={editor} />
+              {mentionType && (
+                <MentionDropdown
+                  type={mentionType}
+                  query={mentionQuery}
+                  channelId={canvas?.channelId}
+                  position={{ bottom: "100%", left: 0 }}
+                  onSelect={handleMentionSelect}
+                  onClose={() => setMentionType(null)}
+                />
+              )}
+            </div>
+            <CursorOverlay awarenessUsers={awarenessUsers} />
           </article>
         </main>
 

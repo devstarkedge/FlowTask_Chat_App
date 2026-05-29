@@ -1,7 +1,7 @@
 import canvasService from "./canvas.service.js";
 import asyncHandler from "../../middleware/asyncHandler.js";
 
-// ── Get Canvas metadata (and auto-creates default if not found)
+// ── Get Canvas metadata (returns existing canvas or null; no auto-create)
 const getCanvas = asyncHandler(async (req, res) => {
   const { channelId } = req.params;
   const workspaceId = req.workspaceId;

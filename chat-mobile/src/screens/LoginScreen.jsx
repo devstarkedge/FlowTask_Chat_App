@@ -183,7 +183,7 @@ const LoginScreen = ({ navigation, route }) => {
             )}
 
             {/* Error Message */}
-            {error && (
+            {!!error && (
               <View style={styles.errorBox}>
                 <Lock size={14} color="#dc2626" style={{ marginRight: 8 }} />
                 <Text style={styles.errorText}>{error}</Text>

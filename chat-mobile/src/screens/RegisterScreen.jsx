@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { Eye, EyeOff, MessageCircle, ArrowRight, Lock, Check } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
@@ -52,12 +51,13 @@ const RegisterScreen = ({ navigation }) => {
     if (field === 'email') newValue = value.replace(/\s/g, '').toLowerCase();
     if (field === 'password' || field === 'confirmPassword') newValue = value.replace(/\s/g, '');
     setForm((f) => ({ ...f, [field]: newValue }));
-    clearError();
+    if (error) clearError();
   };
 
   const passwordChecks = [
     { label: 'At least 8 characters', ok: form.password.length >= 8 },
     { label: 'Contains uppercase', ok: /[A-Z]/.test(form.password) },
+    { label: 'Contains lowercase', ok: /[a-z]/.test(form.password) },
     { label: 'Contains number', ok: /\d/.test(form.password) },
     {
       label: 'Passwords match',
@@ -71,12 +71,11 @@ const RegisterScreen = ({ navigation }) => {
   const strength = getStrength(form.password);
 
   const handleSubmit = async () => {
-    clearError();
+    if (error) clearError();
     if (!form.name.trim() || !form.email.trim()) {
       Toast.show({
         type: 'error',
         text1: 'Please fill in all fields',
-        position: 'top',
       });
       return;
     }
@@ -84,7 +83,6 @@ const RegisterScreen = ({ navigation }) => {
       Toast.show({
         type: 'error',
         text1: 'Please fix password requirements',
-        position: 'top',
       });
       return;
     }
@@ -100,14 +98,12 @@ const RegisterScreen = ({ navigation }) => {
         type: 'success',
         text1: 'Account created!',
         text2: 'Check your email for verification',
-        position: 'top',
       });
     } catch {
       // Error handled by store
     }
   };
 
-  // Success page
   if (success) {
     return (
       <SafeAreaView style={styles.container}>
@@ -125,16 +121,12 @@ const RegisterScreen = ({ navigation }) => {
             <View style={styles.successIcon}>
               <Check size={32} color="white" strokeWidth={3} />
             </View>
-
             <Text style={styles.successHeading}>Account created!</Text>
             <Text style={styles.successText}>
-              We've sent a verification email to{' '}
-              <Text style={styles.successEmail}>{form.email}</Text>.
-            </Text>
-            <Text style={styles.successText}>
+              We've sent a verification email to {' '}
+              <Text style={styles.successEmail}>{form.email}.</Text>
               Please verify your email to sign in.
             </Text>
-
             <TouchableOpacity
               style={styles.successButton}
               onPress={() => navigation.navigate('Login')}
@@ -159,7 +151,6 @@ const RegisterScreen = ({ navigation }) => {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* Header */}
           <View style={styles.header}>
             <View style={styles.logo}>
               <View style={styles.logoIcon}>
@@ -169,7 +160,6 @@ const RegisterScreen = ({ navigation }) => {
             </View>
           </View>
 
-          {/* Intro Section */}
           <View style={styles.introSection}>
             <Text style={styles.heading}>Create your account</Text>
             <Text style={styles.subheading}>
@@ -177,17 +167,14 @@ const RegisterScreen = ({ navigation }) => {
             </Text>
           </View>
 
-          {/* Form Card */}
           <View style={styles.card}>
-            {/* Error Message */}
-            {error && (
+            {!!error && (
               <View style={styles.errorBox}>
                 <Lock size={14} color="#dc2626" style={{ marginRight: 8 }} />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
 
-            {/* Full Name Field */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Full Name</Text>
               <TextInput
@@ -200,7 +187,6 @@ const RegisterScreen = ({ navigation }) => {
               />
             </View>
 
-            {/* Email Field */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Email Address</Text>
               <TextInput
@@ -214,7 +200,6 @@ const RegisterScreen = ({ navigation }) => {
               />
             </View>
 
-            {/* Password Field */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.passwordWrapper}>
@@ -230,33 +215,25 @@ const RegisterScreen = ({ navigation }) => {
                   style={styles.eyeButton}
                   onPress={() => setShowPassword(!showPassword)}
                 >
-                  {showPassword ? (
-                    <EyeOff size={18} color="#9ca3af" />
-                  ) : (
-                    <Eye size={18} color="#9ca3af" />
-                  )}
+                  {showPassword ? <EyeOff size={18} color="#9ca3af" /> : <Eye size={18} color="#9ca3af" />}
                 </TouchableOpacity>
               </View>
 
-              {/* Strength Bar */}
-              {form.password && (
-                <View>
-                  <View style={styles.strengthBar}>
-                    <View
-                      style={[
-                        styles.strengthFill,
-                        {
-                          width: `${strength.pct}%`,
-                          backgroundColor: strength.color,
-                        },
-                      ]}
-                    />
-                  </View>
+              {form.password ? (
+                <View style={styles.strengthBar}>
+                  <View
+                    style={[
+                      styles.strengthFill,
+                      {
+                        width: `${strength.pct}%`,
+                        backgroundColor: strength.color,
+                      },
+                    ]}
+                  />
                 </View>
-              )}
+              ) : null}
             </View>
 
-            {/* Confirm Password Field */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Confirm Password</Text>
               <View style={styles.passwordWrapper}>
@@ -277,42 +254,26 @@ const RegisterScreen = ({ navigation }) => {
                   style={styles.eyeButton}
                   onPress={() => setShowConfirm(!showConfirm)}
                 >
-                  {showConfirm ? (
-                    <EyeOff size={18} color="#9ca3af" />
-                  ) : (
-                    <Eye size={18} color="#9ca3af" />
-                  )}
+                  {showConfirm ? <EyeOff size={18} color="#9ca3af" /> : <Eye size={18} color="#9ca3af" />}
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* Password Requirements */}
-            {form.password && (
+            {form.password ? (
               <View style={styles.checksContainer}>
                 {passwordChecks.map(({ label, ok }) => (
                   <View key={label} style={[styles.checkItem, ok && styles.checkItemOk]}>
-                    <View
-                      style={[
-                        styles.checkCircle,
-                        ok && styles.checkCircleOk,
-                      ]}
-                    >
+                    <View style={[styles.checkCircle, ok && styles.checkCircleOk]}>
                       {ok && <Check size={10} color="white" strokeWidth={3} />}
                     </View>
-                    <Text style={[styles.checkLabel, ok && styles.checkLabelOk]}>
-                      {label}
-                    </Text>
+                    <Text style={[styles.checkLabel, ok && styles.checkLabelOk]}>{label}</Text>
                   </View>
                 ))}
               </View>
-            )}
+            ) : null}
 
-            {/* Submit Button */}
             <TouchableOpacity
-              style={[
-                styles.submitButton,
-                (isLoading || !allChecks) && styles.submitButtonDisabled,
-              ]}
+              style={[styles.submitButton, (isLoading || !allChecks) && styles.submitButtonDisabled]}
               onPress={handleSubmit}
               disabled={isLoading || !allChecks}
               activeOpacity={0.85}
@@ -327,7 +288,6 @@ const RegisterScreen = ({ navigation }) => {
               )}
             </TouchableOpacity>
 
-            {/* Footer Link */}
             <View style={styles.footerLink}>
               <Text style={styles.footerText}>Already have an account? </Text>
               <TouchableOpacity onPress={() => navigation.navigate('Login')}>

@@ -19,6 +19,10 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "apiUrl": "http://172.16.16.33:3200/api/chat",
+      "socketUrl": "http://172.16.16.33:3200"
     }
   }
 }

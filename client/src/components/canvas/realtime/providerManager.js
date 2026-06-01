@@ -30,18 +30,103 @@ async function createProvider({ workspaceId, canvasId, url, tokenGetter }) {
 
   let authRetryInProgress = false;
 
+  let reconnectAttempts = 0;
+  const maxReconnectAttempts = 5;  // Reduced from 10 to prevent infinite loops
+  let reconnectTimer = null;
+  let heartbeatTimer = null;
+  let isDestroyed = false;
+  let consecutiveFailures = 0;
+  const maxConsecutiveFailures = 3;
+
+  const scheduleReconnect = () => {
+    if (isDestroyed || reconnectAttempts >= maxReconnectAttempts) {
+      if (reconnectAttempts >= maxReconnectAttempts) {
+        logger.error('[COLLAB MANAGER] max reconnection attempts reached, giving up', { key, attempts: reconnectAttempts });
+      }
+      return;
+    }
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+    reconnectAttempts++;
+    logger.debug('[COLLAB MANAGER] scheduling reconnect', { key, attempt: reconnectAttempts, delayMs: delay });
+    reconnectTimer = setTimeout(() => {
+      if (!isDestroyed && provider.status !== 'connected') {
+        try {
+          provider.connect();
+        } catch (err) {
+          logger.warn('[COLLAB MANAGER] reconnect failed', { key, err: err?.message || err });
+          consecutiveFailures++;
+          if (consecutiveFailures >= maxConsecutiveFailures) {
+            logger.error('[COLLAB MANAGER] too many consecutive failures, stopping reconnection', { key });
+            return;
+          }
+          scheduleReconnect();
+        }
+      }
+    }, delay);
+  };
+
+  const startHeartbeat = () => {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatTimer = setInterval(() => {
+      if (isDestroyed) return;
+      if (provider.status === 'connected' && provider.awareness) {
+        try {
+          const local = provider.awareness.getLocalState();
+          if (local) {
+            provider.awareness.setLocalState(local);
+          }
+        } catch (err) {
+          logger.debug('[COLLAB MANAGER] heartbeat failed', { key });
+        }
+      }
+    }, 30000);
+  };
+
   const provider = new HocuspocusProvider({
     url,
     name: `canvas:${canvasId}`,
     document: ydoc,
     token: () => tokenGetter(),
     parameters: { workspaceId },
-    autoConnect: false,
-    // Centralized lifecycle logging
-    onConnect: () => logger.debug('[COLLAB MANAGER] provider connected', { key }),
-    onStatus: ({ status }) => logger.debug('[COLLAB MANAGER] provider status', { key, status }),
-    onSynced: ({ state }) => logger.debug('[COLLAB MANAGER] provider synced', { key, state }),
-    onClose: ({ event } = {}) => logger.debug('[COLLAB MANAGER] provider closed', { key, code: event?.code, reason: event?.reason }),
+    connect: true,
+    broadcast: true,
+    forceSyncInterval: 5000,
+    onConnect: () => {
+      logger.info('[COLLAB MANAGER] provider connected', { key });
+      reconnectAttempts = 0;
+      consecutiveFailures = 0;  // Reset on successful connection
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      startHeartbeat();
+    },
+    onStatus: ({ status }) => {
+      logger.debug('[COLLAB MANAGER] provider status', { key, status });
+      if (status === 'disconnected' && !isDestroyed) {
+        consecutiveFailures++;
+        if (consecutiveFailures < maxConsecutiveFailures) {
+          scheduleReconnect();
+        } else {
+          logger.error('[COLLAB MANAGER] too many disconnects, stopping reconnection', { key, failures: consecutiveFailures });
+        }
+      }
+    },
+    onSynced: ({ state }) => {
+      logger.info('[COLLAB MANAGER] provider synced', { key, state });
+    },
+    onClose: ({ event } = {}) => {
+      logger.warn('[COLLAB MANAGER] provider closed', { key, code: event?.code, reason: event?.reason });
+      if (!isDestroyed && consecutiveFailures < maxConsecutiveFailures) {
+        scheduleReconnect();
+      }
+    },
+    onDisconnect: ({ event } = {}) => {
+      logger.warn('[COLLAB MANAGER] provider disconnected', { key, code: event?.code, reason: event?.reason });
+      if (!isDestroyed && consecutiveFailures < maxConsecutiveFailures) {
+        scheduleReconnect();
+      }
+    },
     onAwarenessChange: () => logger.debug('[COLLAB MANAGER] awareness changed', { key }),
     onAuthenticationFailed: async () => {
       logger.warn('[COLLAB MANAGER] provider authentication failed — attempting token refresh', { key });
@@ -50,13 +135,15 @@ async function createProvider({ workspaceId, canvasId, url, tokenGetter }) {
       try {
         await authAPI.me();
         const token = tokenGetter();
-        if (token) {
-          // Try reconnecting with refreshed token
+        if (token && !isDestroyed) {
           try {
+            provider.disconnect();
+            await new Promise(resolve => setTimeout(resolve, 500));
             provider.connect();
             logger.info('[COLLAB MANAGER] reconnected provider after token refresh', { key });
           } catch (err) {
             logger.warn('[COLLAB MANAGER] reconnect after token refresh failed', { key, err: err?.message || err });
+            scheduleReconnect();
           }
         }
       } catch (err) {
@@ -67,14 +154,7 @@ async function createProvider({ workspaceId, canvasId, url, tokenGetter }) {
     },
   });
 
-  // Connect asynchronously to avoid strict-mode double-connect races
-  setTimeout(() => {
-    try {
-      provider.connect();
-    } catch (err) {
-      logger.warn('[COLLAB MANAGER] provider.connect() threw synchronously', { key, err: err?.message || err });
-    }
-  }, 50);
+  // Provider connects automatically with connect: true
 
   const entry = {
     provider,
@@ -83,6 +163,11 @@ async function createProvider({ workspaceId, canvasId, url, tokenGetter }) {
     key,
     createdAt: Date.now(),
     destroyTimer: null,
+    cleanup: () => {
+      isDestroyed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+    },
   };
 
   // Instrument Yjs document updates for debugging transaction flow.
@@ -204,6 +289,7 @@ function releaseProvider(key) {
   entry.destroyTimer = setTimeout(async () => {
     try {
       logger.info('[COLLAB MANAGER] destroying provider (idle)', { key });
+      if (entry.cleanup) entry.cleanup();
       try {
         entry.provider.destroy();
       } catch (err) {
@@ -217,7 +303,7 @@ function releaseProvider(key) {
     } finally {
       providers.delete(key);
     }
-  }, 900);
+  }, 2000);
 }
 
 export { acquireProvider };

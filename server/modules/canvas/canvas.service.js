@@ -291,6 +291,49 @@ class CanvasService {
       : this.buildTemplateBlocks(canvas._id, type, blockContext);
     await CanvasBlock.insertMany(templateBlocks);
 
+    // Atomically register the canvas as an open tab in the channel
+    try {
+      await channelRepository.update(
+        data.channelId,
+        {
+          $push: {
+            canvasTabs: {
+              canvasId: canvas._id,
+              title: canvas.title,
+              createdBy: userId,
+              createdAt: new Date(),
+            },
+          },
+        },
+        workspaceId
+      );
+    } catch (err) {
+      logger.warn('[CANVAS] Failed to add canvas to channel tabs', {
+        canvasId: canvas._id,
+        channelId: data.channelId,
+        error: err.message,
+      });
+    }
+
+    // Broadcast the updated tab list to all channel members
+    try {
+      const updatedChannel = await channelRepository.findById(data.channelId, { workspaceId });
+      if (updatedChannel?.canvasTabs) {
+        const tabs = updatedChannel.canvasTabs.map((t) => ({
+          _id: String(t.canvasId),
+          title: t.title || '',
+        }));
+        emitToChannel(
+          data.channelId.toString(),
+          'canvas:tabs:updated',
+          { channelId: data.channelId, tabs },
+          workspaceId
+        );
+      }
+    } catch (err) {
+      logger.debug('[CANVAS] Failed to broadcast tab update', { error: err.message });
+    }
+
     // Write activity message
     await this.logActivity(
       workspaceId,

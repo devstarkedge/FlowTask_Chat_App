@@ -37,6 +37,7 @@ export function useCanvasCollaboration(canvasId) {
   const ydocRef = useRef(null);
   const [status, setStatus] = useState("idle");
   const [awarenessUsers, setAwarenessUsers] = useState([]);
+  const awarenessUpdateTimerRef = useRef(null);
 
   useEffect(() => {
     if (!canvasId || !workspaceId) {
@@ -134,11 +135,16 @@ export function useCanvasCollaboration(canvasId) {
 
         handleAwareness = () => {
           if (!mounted) return;
-          try {
-            const users = readAwarenessUsers(providerRef.current);
-            logger.debug('[Canvas Collab] awareness changed', { canvasId, peers: users.length });
-            setAwarenessUsers(users);
-          } catch (e) { /* ignore */ }
+          if (awarenessUpdateTimerRef.current) return;
+          awarenessUpdateTimerRef.current = setTimeout(() => {
+            awarenessUpdateTimerRef.current = null;
+            if (!mounted) return;
+            try {
+              const users = readAwarenessUsers(providerRef.current);
+              logger.debug('[Canvas Collab] awareness changed', { canvasId, peers: users.length });
+              setAwarenessUsers(users);
+            } catch (e) { /* ignore */ }
+          }, 100);
         };
 
         provider.on('status', handleStatus);
@@ -173,6 +179,10 @@ export function useCanvasCollaboration(canvasId) {
 
     return () => {
       mounted = false;
+      if (awarenessUpdateTimerRef.current) {
+        clearTimeout(awarenessUpdateTimerRef.current);
+        awarenessUpdateTimerRef.current = null;
+      }
       try {
         if (providerRef.current) {
           try {

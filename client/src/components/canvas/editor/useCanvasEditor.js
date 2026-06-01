@@ -125,6 +125,14 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
   const [saveStatus, setSaveStatus] = useState("saved");
   const [wordCount, setWordCount] = useState(0);
   const cursorPluginRegistered = useRef(false);
+  const providerRef = useRef(provider);
+  const ydocRef = useRef(ydoc);
+
+  // Update refs when provider/ydoc change
+  useEffect(() => {
+    providerRef.current = provider;
+    ydocRef.current = ydoc;
+  }, [provider, ydoc]);
 
   // withCollab is declared here (at hook scope) so it is always
   // defined before any reference to it — previously this was missing from
@@ -226,25 +234,37 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
     ];
 
     if (withCollab) {
-      // Collaboration brings y-prosemirror undo/redo — no extra History needed.
-      // Auto-detect the Yjs fragment name if possible so the extension binds
-      // to the same fragment used by other clients/older deployments.
+      // Determine fragment name upfront (default to 'prosemirror')
       let chosenField = 'prosemirror';
       try {
         if (ydoc && typeof ydoc.getXmlFragment === 'function') {
           const p = ydoc.getXmlFragment('prosemirror');
           const d = ydoc.getXmlFragment('document');
-          if (p && typeof p.length === 'number' && p.length > 0) chosenField = 'prosemirror';
-          else if (d && typeof d.length === 'number' && d.length > 0) chosenField = 'document';
-          else chosenField = 'prosemirror';
+          if (d && typeof d.length === 'number' && d.length > 0) {
+            chosenField = 'document';
+          }
         }
       } catch (e) {
-        chosenField = 'prosemirror';
+        // default to prosemirror
       }
 
-      try {
-        console.debug('[Canvas Collab] deferring Collaboration extension registration until provider sync', { chosenField });
-      } catch (e) {}
+      // Register Collaboration extension IMMEDIATELY
+      list.push(
+        Collaboration.configure({
+          document: ydoc,
+          field: chosenField,
+        })
+      );
+
+      // Register CollaborationCursor extension IMMEDIATELY
+      list.push(
+        CollaborationCursor.configure({
+          provider,
+          user: cursorUser(user),
+        })
+      );
+
+      logger.debug('[Canvas Collab] Collaboration extensions registered upfront', { chosenField });
     }
 
     // Deduplicate by extension name (guards against HMR double-mount).
@@ -299,18 +319,28 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
       handleDOMEvents: {
         focus: () => {
           setFocused(true);
-          provider?.awareness?.setLocalStateField("user", {
-            ...provider.awareness.getLocalState()?.user,
-            activity: "editing canvas",
-          });
+          const prov = providerRef.current;
+          if (prov?.awareness) {
+            try {
+              prov.awareness.setLocalStateField("user", {
+                ...prov.awareness.getLocalState()?.user,
+                activity: "editing canvas",
+              });
+            } catch (e) {}
+          }
           return false;
         },
         blur: () => {
           setFocused(false);
-          provider?.awareness?.setLocalStateField("user", {
-            ...provider.awareness.getLocalState()?.user,
-            activity: "viewing canvas",
-          });
+          const prov = providerRef.current;
+          if (prov?.awareness) {
+            try {
+              prov.awareness.setLocalStateField("user", {
+                ...prov.awareness.getLocalState()?.user,
+                activity: "viewing canvas",
+              });
+            } catch (e) {}
+          }
           return false;
         },
       },
@@ -373,80 +403,6 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
       editorInstance.view.dispatch(tr);
     }
   };
-
-  // ------------------------------------------------------------------
-  // Register Collaboration and CollaborationCursor dynamically after the
-  // WebSocket connects so awareness.doc is guaranteed to exist and we can
-  // detect the correct Yjs fragment to bind to (prevents fragment mismatch).
-  // ------------------------------------------------------------------
-  useEffect(() => {
-    if (!editor || !provider) {
-      cursorPluginRegistered.current = false;
-      return undefined;
-    }
-
-    const tryRegisterCollabAndCursor = () => {
-      if (!provider.awareness?.doc) return;
-
-      // Register Collaboration extension dynamically (choose fragment after sync)
-      try {
-        if (!cursorPluginRegistered.current) {
-          // Determine best fragment name now that Y.Doc may be populated
-          let chosenField = 'prosemirror';
-          try {
-            if (ydoc && typeof ydoc.getXmlFragment === 'function') {
-              const p = ydoc.getXmlFragment('prosemirror');
-              const d = ydoc.getXmlFragment('document');
-              if (p && typeof p.length === 'number' && p.length > 0) chosenField = 'prosemirror';
-              else if (d && typeof d.length === 'number' && d.length > 0) chosenField = 'document';
-              else chosenField = 'prosemirror';
-            }
-          } catch (e) {
-            chosenField = 'prosemirror';
-          }
-
-          try {
-            const collabExt = Collaboration.configure({ document: ydoc, field: chosenField });
-            const collabCtx = { name: collabExt.name, options: collabExt.options, storage: {}, editor };
-            const collabPlugins = collabExt.addProseMirrorPlugins?.call(collabCtx) ?? [];
-            collabPlugins.forEach((plugin) => editor.registerPlugin(plugin));
-          } catch (err) {
-            console.warn('[Collaboration] deferred registration failed:', err);
-          }
-
-          // Register CollaborationCursor plugin (relies on awareness.doc)
-          try {
-            const ext = CollaborationCursor.configure({ provider, user: cursorUser(user) });
-            const ctx = { name: ext.name, options: ext.options, storage: {}, editor };
-            const plugins = ext.addProseMirrorPlugins?.call(ctx) ?? [];
-            plugins.forEach((plugin) => editor.registerPlugin(plugin));
-            cursorPluginRegistered.current = true;
-          } catch (err) {
-            console.warn('[CollaborationCursor] deferred registration failed:', err);
-          }
-        }
-      } catch (err) {
-        console.warn('[Canvas Collab] tryRegisterCollabAndCursor failed', err);
-      }
-    };
-
-    const handleStatus = ({ status }) => {
-      if (status === 'connected' || status === 'synced') tryRegisterCollabAndCursor();
-    };
-
-    if (provider.synced || provider.status === 'connected') {
-      tryRegisterCollabAndCursor();
-    }
-
-    provider.on('status', handleStatus);
-    provider.on('synced', tryRegisterCollabAndCursor);
-
-    return () => {
-      try { provider.off('status', handleStatus); } catch (e) {}
-      try { provider.off('synced', tryRegisterCollabAndCursor); } catch (e) {}
-      cursorPluginRegistered.current = false;
-    };
-  }, [editor, provider, user, ydoc]);
 
   // ------------------------------------------------------------------
   // Diagnostics: observe Yjs updates and editor update events to help
@@ -527,8 +483,8 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
         const y = Math.round(rect.top - containerRect.top);
         useCanvasStore.getState().updateCursor(blockId, x, y);
         try {
-          const local = provider?.awareness?.getLocalState()?.user || {};
-          provider?.awareness?.setLocalStateField('user', { ...local, cursor: { blockId, x, y } });
+          const local = providerRef.current?.awareness?.getLocalState()?.user || {};
+          providerRef.current?.awareness?.setLocalStateField('user', { ...local, cursor: { blockId, x, y } });
         } catch (e) {
           // ignore awareness update errors
         }
@@ -561,9 +517,9 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
     const stopTypingDebounced = debounce((blockId) => {
       if (blockId) useCanvasStore.getState().setBlockTyping(blockId, false);
       try {
-        const local = provider?.awareness?.getLocalState()?.user || {};
+        const local = providerRef.current?.awareness?.getLocalState()?.user || {};
         // Clear typing/activity state when typing stops
-        provider?.awareness?.setLocalStateField('user', { ...local, activity: 'viewing canvas', typing: false });
+        providerRef.current?.awareness?.setLocalStateField('user', { ...local, activity: 'viewing canvas', typing: false });
       } catch (e) {
         // ignore
       }
@@ -609,8 +565,8 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
           const y = Math.round(coords.top - containerRect.top);
           useCanvasStore.getState().updateCursor(blockId, x, y);
           try {
-            const local = provider?.awareness?.getLocalState()?.user || {};
-            provider?.awareness?.setLocalStateField('user', { ...local, cursor: { blockId, x, y }, activity: 'typing', typing: true });
+            const local = providerRef.current?.awareness?.getLocalState()?.user || {};
+            providerRef.current?.awareness?.setLocalStateField('user', { ...local, cursor: { blockId, x, y }, activity: 'typing', typing: true });
           } catch (e) {
             // ignore awareness set errors
           }
@@ -644,152 +600,52 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
   // Seed initial content once Yjs doc is synced from server.
   // ------------------------------------------------------------------
   useEffect(() => {
-    if (!editor || !ydoc || !canvas?.content) return undefined;
+    if (!editor || !ydocRef.current || !canvas?.content) return undefined;
 
-    const meta = ydoc.getMap("canvasMeta");
+    const doc = ydocRef.current;
+    const prov = providerRef.current;
+    const meta = doc.getMap('canvasMeta');
+    let seeded = false;
 
-    // Local guard to prevent duplicate concurrent seeds within this
-    // hook instance (helps with StrictMode double-mount / rapid events).
-    let seedInProgress = false;
-    let seededLocally = false;
+    const seedIfNeeded = () => {
+      if (seeded || meta.get('seeded')) return;
 
-    const seedIfNeeded = async () => {
-      try {
-        logger.debug('[Canvas Collab] seedIfNeeded invoked', { canvasId: canvas?._id });
+      // Check if the Yjs fragment is empty
+      const fragment = doc.getXmlFragment('prosemirror');
+      const isEmpty = !fragment || fragment.length === 0;
 
-        // If another local seed already happened, skip.
-        if (seededLocally) {
-          logger.debug('[Canvas Collab] seed skipped (already seeded locally)', { canvasId: canvas?._id });
-          return;
-        }
-
-        // If shared meta marks seeded, skip.
-        if (meta.get("seeded")) {
-          logger.debug('[Canvas Collab] seed skipped (meta seeded)', { canvasId: canvas?._id });
-          seededLocally = true;
-          return;
-        }
-
-        // Prevent re-entrancy
-        if (seedInProgress) {
-          logger.debug('[Canvas Collab] seed already in progress, skipping duplicate invocation', { canvasId: canvas?._id });
-          return;
-        }
-        seedInProgress = true;
-
+      if (isEmpty) {
         const newJSON = sanitizeDocJSON(canvas.content || EMPTY_DOC);
-        const currentJSON = typeof editor.getJSON === "function" ? editor.getJSON() : null;
-        const shouldSetContent = editor.isEmpty || !currentJSON || JSON.stringify(currentJSON) !== JSON.stringify(newJSON);
-
-        // Decide whether it's safe to write into the editor (and thus
-        // propagate into Y.Doc via the collaboration plugin). Only write
-        // immediately when offline or when the provider is already bound
-        // to awareness/doc or already synced. Otherwise defer until sync.
-        const providerBound = provider && provider.awareness && provider.awareness.doc;
-        const canWriteNow = !provider || provider.synced || (provider.status === 'connected' && providerBound);
-
-        if (shouldSetContent) {
-          if (canWriteNow) {
-            logger.debug('[Canvas Collab] seed started', { canvasId: canvas?._id });
-            try {
-              editor.commands.setContent(newJSON, false);
-              try { convertTokensToVariableNodes(editor); } catch (e) { /* ignore */ }
-            } catch (e) {
-              logger.warn('[Canvas Collab] setContent failed during seed', { canvasId: canvas?._id, err: e?.message || e });
-            }
-          } else {
-            logger.debug('[Canvas Collab] seeding deferred until provider sync/awareness', { canvasId: canvas?._id, synced: provider?.synced, status: provider?.status });
-          }
+        try {
+          editor.commands.setContent(newJSON, false);
+          convertTokensToVariableNodes(editor);
+          meta.set('seeded', true);
+          seeded = true;
+          logger.info('[Canvas Collab] Seeded initial content', { canvasId: canvas._id });
+        } catch (err) {
+          logger.warn('[Canvas Collab] Seeding failed', { error: err.message });
         }
-
-        // Only mark as seeded in shared Yjs meta when provider isn't present
-        // or has finished syncing / is bound. We mark seeded after writing
-        // to ensure other peers don't see seeded=true before content lands.
-        if (!provider || canWriteNow) {
-          try {
-            // Use a transaction to ensure the seeded flag is set atomically
-            // on the Y.Doc shared map.
-            ydoc.transact(() => {
-              meta.set("seeded", true);
-            });
-            seededLocally = true;
-            logger.debug('[Canvas Collab] seed completed', { canvasId: canvas?._id });
-          } catch (e) {
-            logger.warn('[Canvas Collab] marking meta.seeded failed', { canvasId: canvas?._id, err: e?.message || e });
-          }
-        } else {
-          logger.debug('[Canvas Collab] will mark seeded after sync', { canvasId: canvas?._id });
-        }
-      } finally {
-        seedInProgress = false;
+      } else {
+        logger.debug('[Canvas Collab] Yjs fragment not empty, skipping seed', { canvasId: canvas._id });
+        seeded = true;
       }
     };
 
-    const handleSynced = ({ state }) => {
-      try {
-        if (state) {
-          logger.debug('[Canvas Collab] provider synced (handler)', { canvasId: canvas?._id });
-          window.requestAnimationFrame(() => seedIfNeeded());
-        }
-      } catch (e) {}
-    };
-
-    if (provider) {
-      logger.debug('[Canvas Collab] seeding: waiting for provider sync', { canvasId: canvas?._id, synced: provider.synced, status: provider.status });
-
-      const providerBound = provider.awareness && provider.awareness.doc;
-      if (provider.synced || (provider.status === 'connected' && providerBound)) {
-        window.requestAnimationFrame(() => seedIfNeeded());
-      }
-
-      // Still listen for a proper 'synced' event to handle late syncs.
-      provider.on("synced", handleSynced);
-
-      // Also listen for status transitions to 'connected' — some
-      // deployments emit status changes but not a 'synced' event for
-      // empty documents, so seed when we observe a connected status and
-      // awareness is available.
-      const handleStatusForSeed = ({ status }) => {
-        if (status === 'connected') {
-          try {
-            if (provider.awareness && provider.awareness.doc) {
-              window.requestAnimationFrame(() => seedIfNeeded());
-            } else {
-              setTimeout(() => {
-                try {
-                  if (provider.awareness && provider.awareness.doc) window.requestAnimationFrame(() => seedIfNeeded());
-                } catch (e) {}
-              }, 100);
-            }
-          } catch (e) {
-            window.requestAnimationFrame(() => seedIfNeeded());
-          }
-        }
-      };
-      provider.on('status', handleStatusForSeed);
+    // Seed immediately if provider is synced, otherwise wait for sync
+    if (!prov || prov.synced) {
+      seedIfNeeded();
     } else {
-      // Offline / no provider: seed immediately so the user sees content.
-      try {
-        logger.debug('[Canvas Collab] seeding: offline mode, seeding immediately', { canvasId: canvas?._id });
-        seedIfNeeded();
-      } catch (err) {
-        /* ignore */
-      }
+      const handleSynced = () => seedIfNeeded();
+      prov.on('synced', handleSynced);
+      return () => {
+        try { prov.off('synced', handleSynced); } catch (e) {}
+      };
     }
-
-    return () => {
-      try {
-        if (provider) {
-          try { provider.off("synced", handleSynced); } catch (e) {}
-          try { provider.off("status", handleStatusForSeed); } catch (e) {}
-        }
-      } catch (e) {}
-    };
-  }, [canvas?.content, editor, provider, ydoc]);
+  }, [canvas?.content, editor]);
 
   // For non-collab mode, convert tokens after initial content is set
   useEffect(() => {
-    if (!editor || provider) return undefined;
+    if (!editor || providerRef.current) return undefined;
     try {
       // Ensure editor mirrors the latest canvas content when not in
       // collaboration mode, but avoid setting content when it's already
@@ -811,7 +667,7 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
       console.warn("convertTokensToVariableNodes failed", e);
     }
     // run on editor/content changes
-  }, [editor, provider, canvas?.content]);
+  }, [editor, canvas?.content]);
 
   // ------------------------------------------------------------------
   // Ctrl/Cmd+S shortcut.

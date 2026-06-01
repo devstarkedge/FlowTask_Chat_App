@@ -1,3 +1,5 @@
+import React, { useMemo } from "react";
+
 function initials(name = "") {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -27,16 +29,16 @@ function normalizePresence(socketPresence, awarenessUsers) {
   return Array.from(users.values()).filter((user) => user.id);
 }
 
-export default function PresenceBar({ socketPresence = [], awarenessUsers = [], status }) {
-  const allUsers = normalizePresence(socketPresence, awarenessUsers);
-  const users = allUsers.slice(0, 6);
-  const overflow = Math.max(0, allUsers.length - users.length);
-
-  const showStatus = users.length === 0;
+const PresenceBar = React.memo(({ socketPresence = [], awarenessUsers = [], status }) => {
+  const allUsers = useMemo(
+    () => normalizePresence(socketPresence, awarenessUsers),
+    [socketPresence, awarenessUsers]
+  );
+  const users = useMemo(() => allUsers.slice(0, 6), [allUsers]);
+  const overflow = useMemo(() => Math.max(0, allUsers.length - users.length), [allUsers, users]);
 
   return (
     <div className="canvas-presence-bar" aria-label="Canvas presence">
-      {showStatus && <span className={`canvas-collab-status is-${status}`}>{status || "idle"}</span>}
       <div className="canvas-avatar-stack">
         {users.map((user) => (
           <span
@@ -50,11 +52,13 @@ export default function PresenceBar({ socketPresence = [], awarenessUsers = [], 
         ))}
         {overflow > 0 && <span className="canvas-presence-avatar is-overflow">+{overflow}</span>}
       </div>
-      {users[0] && (
+      {users.length > 0 && (
         <span className="canvas-presence-copy">
-          {initials(users[0].name)} {users[0].activity || "viewing canvas"}
+          {users.length} {users.length === 1 ? 'person' : 'people'} editing
         </span>
       )}
     </div>
   );
-}
+});
+
+export default PresenceBar;

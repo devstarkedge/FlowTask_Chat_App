@@ -1,47 +1,53 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useCanvasStore } from "../../../stores/canvasStore";
 
-export default function CursorOverlay({ awarenessUsers = [] }) {
+const CursorOverlay = React.memo(({ awarenessUsers = [] }) => {
   const socketCursors = useCanvasStore((s) => s.cursors || {});
   const socketTyping = useCanvasStore((s) => s.typing || {});
 
   // Build cursor map: awareness cursors take precedence over socket cursors
-  const cursorMap = {};
+  const cursorMap = useMemo(() => {
+    const map = {};
+    
+    (awarenessUsers || []).forEach((u) => {
+      if (!u || !u.id) return;
+      if (u.cursor && u.cursor.blockId) {
+        map[u.id] = {
+          blockId: u.cursor.blockId,
+          x: typeof u.cursor.x === 'number' ? u.cursor.x : null,
+          y: typeof u.cursor.y === 'number' ? u.cursor.y : null,
+          name: u.name || 'Anonymous',
+          color: u.color || '#4e7cff',
+        };
+      }
+    });
 
-  (awarenessUsers || []).forEach((u) => {
-    if (!u || !u.id) return;
-    if (u.cursor && u.cursor.blockId) {
-      cursorMap[u.id] = {
-        blockId: u.cursor.blockId,
-        x: typeof u.cursor.x === 'number' ? u.cursor.x : null,
-        y: typeof u.cursor.y === 'number' ? u.cursor.y : null,
-        name: u.name || 'Anonymous',
-        color: u.color || '#4e7cff',
-      };
-    }
-  });
+    Object.keys(socketCursors || {}).forEach((k) => {
+      if (map[k]) return; // awareness wins
+      const c = socketCursors[k];
+      if (!c || !c.blockId) return;
+      map[k] = { blockId: c.blockId, x: c.x, y: c.y, name: c.name || 'Anonymous', color: c.color || '#4e7cff' };
+    });
+    
+    return map;
+  }, [awarenessUsers, socketCursors]);
 
-  Object.keys(socketCursors || {}).forEach((k) => {
-    if (cursorMap[k]) return; // awareness wins
-    const c = socketCursors[k];
-    if (!c || !c.blockId) return;
-    cursorMap[k] = { blockId: c.blockId, x: c.x, y: c.y, name: c.name || 'Anonymous', color: c.color || '#4e7cff' };
-  });
+  const cursorEntries = useMemo(() => Object.entries(cursorMap || {}), [cursorMap]);
 
-  const cursorEntries = Object.entries(cursorMap || {});
-
-  // Merge typing info: awareness typing flags (if present) first, then socket-based
-  const typingBlocks = {};
-  (awarenessUsers || []).forEach((u) => {
-    if (!u || !u.id) return;
-    if (u.typing && u.cursor && u.cursor.blockId) {
-      typingBlocks[u.cursor.blockId] = typingBlocks[u.cursor.blockId] || {};
-      typingBlocks[u.cursor.blockId][u.id] = u.name || 'Anonymous';
-    }
-  });
-  Object.entries(socketTyping || {}).forEach(([blockId, users]) => {
-    typingBlocks[blockId] = { ...(typingBlocks[blockId] || {}), ...(users || {}) };
-  });
+  const typingBlocks = useMemo(() => {
+    const blocks = {};
+    (awarenessUsers || []).forEach((u) => {
+      if (!u || !u.id) return;
+      if (u.typing && u.cursor && u.cursor.blockId) {
+        blocks[u.cursor.blockId] = blocks[u.cursor.blockId] || {};
+        blocks[u.cursor.blockId][u.id] = u.name || 'Anonymous';
+      }
+    });
+    Object.entries(socketTyping || {}).forEach(([blockId, users]) => {
+      blocks[blockId] = { ...(blocks[blockId] || {}), ...(users || {}) };
+    });
+    return blocks;
+  }, [awarenessUsers, socketTyping]);
 
   if (!cursorEntries.length && Object.keys(typingBlocks).length === 0) return null;
 
@@ -113,4 +119,6 @@ export default function CursorOverlay({ awarenessUsers = [] }) {
       )}
     </div>
   );
-}
+});
+
+export default CursorOverlay;

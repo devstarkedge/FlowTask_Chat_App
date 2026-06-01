@@ -113,15 +113,11 @@ export const useCanvasStore = create((set, get) => ({
       const res = await canvasAPI.create(channelId, payload);
       if (res.data && res.data.success) {
         const newCanvas = res.data.data;
-        set((state) => {
-          const list = state.canvasesByChannel[channelId] || [];
-          return {
-            canvasesByChannel: { ...state.canvasesByChannel, [channelId]: [...list, newCanvas] },
-            activeCanvas: newCanvas,
-            activeCanvasIdByChannel: { ...state.activeCanvasIdByChannel, [channelId]: newCanvas._id },
-            blocks: [],
-          };
-        });
+        set((state) => ({
+          activeCanvas: newCanvas,
+          activeCanvasIdByChannel: { ...state.activeCanvasIdByChannel, [channelId]: newCanvas._id },
+          blocks: [],
+        }));
 
         // Load the created canvas to attach sockets/providers
         await get().loadCanvas(newCanvas._id);

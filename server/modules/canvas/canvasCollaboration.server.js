@@ -221,18 +221,45 @@ async function loadCanvasDocument({ documentName, document, context }) {
   const canvasId = context?.canvasId || parseCanvasDocumentName(documentName);
   if (!canvasId) return;
 
-  const canvas = await Canvas.findById(canvasId)
-    .select("+collaborationState")
-    .lean();
+  try {
+    const canvas = await Canvas.findById(canvasId)
+      .select("+collaborationState")
+      .lean();
 
-  if (!canvas?.collaborationState?.length) {
-    logger.debug('[CANVAS COLLAB] no stored state for canvas — starting fresh', { canvasId });
-    return;
+    if (!canvas?.collaborationState?.length) {
+      logger.debug('[CANVAS COLLAB] no stored state for canvas — starting fresh', { canvasId });
+      return;
+    }
+
+    const bytes = canvas.collaborationState.length;
+    
+    // Validate the buffer before applying
+    if (!Buffer.isBuffer(canvas.collaborationState)) {
+      logger.warn('[CANVAS COLLAB] collaborationState is not a Buffer, skipping', { canvasId, type: typeof canvas.collaborationState });
+      return;
+    }
+
+    // Try to apply the update, catch any Yjs parsing errors
+    try {
+      Y.applyUpdate(document, new Uint8Array(canvas.collaborationState));
+      logger.debug('[CANVAS COLLAB] applied stored state', { canvasId, bytes });
+    } catch (applyErr) {
+      logger.warn('[CANVAS COLLAB] failed to apply stored state (corrupted?), starting fresh', { 
+        canvasId, 
+        bytes,
+        error: applyErr?.message || applyErr 
+      });
+      // Don't throw - just start with empty document
+      // The client will seed initial content if needed
+    }
+  } catch (err) {
+    logger.error('[CANVAS COLLAB] loadCanvasDocument error', { 
+      canvasId, 
+      error: err?.message || err,
+      stack: err?.stack 
+    });
+    // Don't throw - allow connection to proceed with empty document
   }
-
-  const bytes = canvas.collaborationState.length;
-  Y.applyUpdate(document, new Uint8Array(canvas.collaborationState));
-  logger.debug('[CANVAS COLLAB] applied stored state', { canvasId, bytes });
 }
 
 async function storeCanvasDocument({ documentName, document, lastContext }) {
@@ -284,7 +311,8 @@ export async function startCanvasCollaborationServer() {
     quiet: true,
     debounce: env.CANVAS_COLLAB_DEBOUNCE_MS,
     maxDebounce: env.CANVAS_COLLAB_MAX_DEBOUNCE_MS,
-    timeout: 30000,
+    timeout: 60000,
+    maxConnectionsPerDocument: 100,
     extensions: buildRedisExtensions(),
     async onAuthenticate(payload) {
       try {
@@ -357,18 +385,23 @@ export async function startCanvasCollaborationServer() {
         peersNow: clientsCount,
       });
     },
-    onDisconnect({ documentName, context, clientsCount }) {
+    onDisconnect({ documentName, context, clientsCount, reason }) {
       logger.info('[CANVAS COLLAB] client disconnected', {
         canvasId: parseCanvasDocumentName(documentName),
         userId: context?.userId,
         peersRemaining: clientsCount,
+        reason: reason || 'unknown',
       });
     },
-    onAwarenessUpdate({ documentName, states }) {
+    onAwarenessUpdate({ documentName, states, added, updated, removed }) {
+      const activeStates = states.filter(s => s && s.user);
       logger.debug('[CANVAS COLLAB] awareness update', {
         canvasId: parseCanvasDocumentName(documentName),
-        peers: states.length,
-        users: states.map((s) => s?.user?.name || s?.clientId).filter(Boolean),
+        peers: activeStates.length,
+        added: added.length,
+        updated: updated.length,
+        removed: removed.length,
+        users: activeStates.map((s) => s?.user?.name || s?.clientId).filter(Boolean),
       });
     },
   });

@@ -5,10 +5,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Modal,
   Pressable,
   Animated,
+  Platform,
 } from "react-native";
+import AccessibleModal from "./AccessibleModal";
 import { useThemeStore } from "../stores/themeStore";
 import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
@@ -42,6 +43,7 @@ import {
   ChevronRight,
   Smile,
 } from "lucide-react-native";
+import { rnShadowToBoxShadow } from "../utils/styleUtils";
 
 const AccountDrawer = ({ visible, onClose, navigation }) => {
   const { colors } = useThemeStore();
@@ -61,7 +63,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
     if (visible) {
       Animated.spring(slideAnim, {
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
         tension: 65,
         friction: 11,
       }).start();
@@ -69,7 +71,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 250,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
       }).start();
     }
   }, [visible]);
@@ -83,6 +85,13 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
     onClose();
     disconnectSocket();
     await logout();
+  };
+
+  const handleClose = () => {
+    if (Platform.OS === "web") {
+      document.activeElement?.blur();
+    }
+    onClose();
   };
 
   const navigateTo = (screen) => {
@@ -132,7 +141,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
   );
 
   return (
-    <Modal
+    <AccessibleModal
       visible={visible}
       transparent
       animationType="fade"
@@ -196,7 +205,14 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
                 styles.statusCard,
                 { backgroundColor: colors.backgroundSecondary },
               ]}
-              onPress={() => setStatusModalVisible(true)}
+              onPress={() => {
+                if (Platform.OS === 'web') {
+                  document.activeElement?.blur();
+                  setTimeout(() => setStatusModalVisible(true), 0);
+                } else {
+                  setStatusModalVisible(true);
+                }
+              }}
               activeOpacity={0.7}
             >
               <Smile size={20} color={colors.textSecondary} />
@@ -214,12 +230,26 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
               <MenuItem
                 icon={BellOff}
                 label="Pause notifications"
-                onPress={() => setPauseNotificationsVisible(true)}
+                onPress={() => {
+                  if (Platform.OS === 'web') {
+                    document.activeElement?.blur();
+                    setTimeout(() => setPauseNotificationsVisible(true), 0);
+                  } else {
+                    setPauseNotificationsVisible(true);
+                  }
+                }}
               />
               <MenuItem
                 icon={Activity}
                 label="Set yourself as away"
-                onPress={() => setPresenceModalVisible(true)}
+                onPress={() => {
+                  if (Platform.OS === 'web') {
+                    document.activeElement?.blur();
+                    setTimeout(() => setPresenceModalVisible(true), 0);
+                  } else {
+                    setPresenceModalVisible(true);
+                  }
+                }}
               />
             </View>
 
@@ -268,7 +298,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
         visible={presenceModalVisible}
         onClose={() => setPresenceModalVisible(false)}
       />
-    </Modal>
+    </AccessibleModal>
   );
 };
 
@@ -283,11 +313,22 @@ const createStyles = (colors) =>
       maxHeight: "90%",
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: -4 },
-      shadowOpacity: 0.15,
-      shadowRadius: 12,
-      elevation: 8,
+      ...(Platform.OS !== "web"
+        ? {
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: 0.15,
+            shadowRadius: 12,
+            elevation: 8,
+          }
+        : {
+            boxShadow: rnShadowToBoxShadow(
+              "#000",
+              { width: 0, height: -4 },
+              0.15,
+              12,
+            ),
+          }),
     },
     header: {
       flexDirection: "row",

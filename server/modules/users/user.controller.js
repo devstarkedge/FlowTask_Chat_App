@@ -275,3 +275,27 @@ export const saveDndSchedule = asyncHandler(async (req, res) => {
   const user = await userService.saveDndSchedule(req.user._id, schedule)
   res.json({ success: true, data: { dndSchedule: user.chatPreferences?.dndSchedule || {} } })
 })
+
+/**
+ * Update theme preferences
+ * PUT /users/preferences/theme
+ * Body: { theme: { mode, sidebarTheme, accentColor, customColors } }
+ */
+export const updateThemePreferences = asyncHandler(async (req, res) => {
+  const { theme } = req.body;
+  const user = await ChatUser.findByIdAndUpdate(
+    req.user._id,
+    { 'chatPreferences.theme': theme },
+    { new: true, runValidators: true }
+  ).select('chatPreferences');
+  res.json({ success: true, data: { theme: user.chatPreferences?.theme || {} } });
+});
+
+/**
+ * Get theme preferences
+ * GET /users/preferences/theme
+ */
+export const getThemePreferences = asyncHandler(async (req, res) => {
+  const user = await ChatUser.findById(req.user._id).select('chatPreferences').lean();
+  res.json({ success: true, data: { theme: user.chatPreferences?.theme || {} } });
+});

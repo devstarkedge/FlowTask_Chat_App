@@ -7,27 +7,29 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
+import { useThemeStore } from '../stores/themeStore';
 import { Hash, Users, Pin, Bell, Settings } from 'lucide-react-native';
 
 const ChannelDetailsScreen = ({ route }) => {
   const { channelName, memberCount = 0 } = route.params || {};
+  const { colors } = useThemeStore();
 
   const DetailItem = ({ icon: Icon, label, onPress }) => (
     <TouchableOpacity style={styles.detailItem} onPress={onPress}>
-      <Icon size={20} color="#6b7280" />
-      <Text style={styles.detailLabel}>{label}</Text>
+      <Icon size={20} color={colors.textSecondary} />
+      <Text style={[styles.detailLabel, { color: colors.textPrimary }]}>{label}</Text>
     </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView>
-        <View style={styles.header}>
-          <View style={styles.channelIcon}>
-            <Hash size={32} color="#6366f1" />
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <View style={[styles.channelIcon, { backgroundColor: colors.primaryLight }]}>
+            <Hash size={32} color={colors.primary} />
           </View>
-          <Text style={styles.channelName}>{channelName}</Text>
-          <Text style={styles.memberCount}>{memberCount} members</Text>
+          <Text style={[styles.channelName, { color: colors.textPrimary }]}>{channelName}</Text>
+          <Text style={[styles.memberCount, { color: colors.textSecondary }]}>{memberCount} members</Text>
         </View>
 
         <View style={styles.section}>
@@ -44,19 +46,16 @@ const ChannelDetailsScreen = ({ route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
   },
   header: {
     alignItems: 'center',
     paddingVertical: 32,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
   },
   channelIcon: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#eef2ff',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -64,11 +63,9 @@ const styles = StyleSheet.create({
   channelName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#111827',
   },
   memberCount: {
     fontSize: 14,
-    color: '#6b7280',
     marginTop: 4,
   },
   section: {
@@ -83,7 +80,6 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 15,
-    color: '#374151',
     fontWeight: '500',
   },
 });

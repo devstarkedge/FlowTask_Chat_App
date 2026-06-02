@@ -25,7 +25,7 @@ import {
 } from 'lucide-react-native';
 
 const PreferencesScreen = ({ navigation }) => {
-  const { colors, theme, setTheme, sidebarTheme, setSidebarTheme } = useThemeStore();
+  const { colors, mode, setMode, sidebarTheme, setSidebarTheme, accentColor, setAccentColor, effectiveTheme } = useThemeStore();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   const styles = createStyles(colors);
@@ -34,6 +34,14 @@ const PreferencesScreen = ({ navigation }) => {
     { value: 'light', label: 'Light', icon: Sun },
     { value: 'dark', label: 'Dark', icon: Moon },
     { value: 'system', label: 'System', icon: Smartphone },
+  ];
+
+  const accentColorOptions = [
+    { value: 'blue', label: 'Blue', color: '#3B82F6' },
+    { value: 'purple', label: 'Purple', color: '#8B5CF6' },
+    { value: 'green', label: 'Green', color: '#10B981' },
+    { value: 'orange', label: 'Orange', color: '#F97316' },
+    { value: 'red', label: 'Red', color: '#EF4444' },
   ];
 
   const themeColors = [
@@ -67,7 +75,7 @@ const PreferencesScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={colors.effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle={effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
       
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -83,39 +91,43 @@ const PreferencesScreen = ({ navigation }) => {
         <View style={styles.section}>
           <SectionTitle title="APPEARANCE" />
           <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-            {themeOptions.map((option) => (
-              <TouchableOpacity
-                key={option.value}
-                style={styles.themeOption}
-                onPress={() => setTheme(option.value)}
-                activeOpacity={0.7}
-              >
-                <option.icon size={22} color={colors.textSecondary} />
-                <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
-                  {option.label}
-                </Text>
-                <View
-                  style={[
-                    styles.radio,
-                    { borderColor: colors.border },
-                    theme === option.value && {
-                      backgroundColor: colors.primary,
-                      borderColor: colors.primary,
-                    },
-                  ]}
+            {themeOptions.map((option) => {
+              const Icon = option.icon;
+              const isSelected = mode === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={styles.themeOption}
+                  onPress={() => setMode(option.value)}
+                  activeOpacity={0.7}
                 >
-                  {theme === option.value && (
-                    <View style={[styles.radioInner, { backgroundColor: colors.textInverse }]} />
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
+                  <Icon size={22} color={isSelected ? colors.primary : colors.textSecondary} />
+                  <Text style={[styles.optionLabel, { color: colors.textPrimary }]}> 
+                    {option.label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.radio,
+                      { borderColor: colors.border },
+                      isSelected && {
+                        backgroundColor: colors.primary,
+                        borderColor: colors.primary,
+                      },
+                    ]}
+                  >
+                    {isSelected && (
+                      <View style={[styles.radioInner, { backgroundColor: colors.textInverse }]} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
         {/* Theme Colors */}
         <View style={styles.section}>
-          <SectionTitle title="THEME" />
+          <SectionTitle title="SIDEBAR THEME" />
           <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
             <View style={styles.colorGrid}>
               {themeColors.map((color) => (
@@ -130,6 +142,34 @@ const PreferencesScreen = ({ navigation }) => {
                       styles.colorCircle,
                       { backgroundColor: color.color },
                       sidebarTheme === color.value && styles.colorCircleSelected,
+                    ]}
+                  />
+                  <Text style={[styles.colorLabel, { color: colors.textPrimary }]}>
+                    {color.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {/* Accent Colors */}
+        <View style={styles.section}>
+          <SectionTitle title="ACCENT COLOR" />
+          <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
+            <View style={styles.colorGrid}>
+              {accentColorOptions.map((color) => (
+                <TouchableOpacity
+                  key={color.value}
+                  style={styles.colorOption}
+                  onPress={() => setAccentColor(color.value)}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.colorCircle,
+                      { backgroundColor: color.color },
+                      accentColor === color.value && styles.colorCircleSelected,
                     ]}
                   />
                   <Text style={[styles.colorLabel, { color: colors.textPrimary }]}>
@@ -264,8 +304,8 @@ const createStyles = (colors) => StyleSheet.create({
   themeOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    gap: 14,
+    paddingVertical: 14,
+    gap: 12,
   },
   optionLabel: {
     flex: 1,
@@ -273,17 +313,17 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '500',
   },
   radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     borderWidth: 2,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   colorGrid: {
     flexDirection: 'row',
@@ -294,25 +334,25 @@ const createStyles = (colors) => StyleSheet.create({
   colorOption: {
     alignItems: 'center',
     gap: 8,
-    width: '30%',
+    width: '18%',
   },
   colorCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 3,
     borderColor: 'transparent',
   },
   colorCircleSelected: {
-    borderColor: '#fff',
+    borderColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 4,
+    elevation: 3,
   },
   colorLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
   },

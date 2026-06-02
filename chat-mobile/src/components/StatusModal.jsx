@@ -4,13 +4,15 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Modal,
   Pressable,
   TextInput,
   ScrollView,
+  Platform,
 } from 'react-native';
+import AccessibleModal from './AccessibleModal';
 import { useThemeStore } from '../stores/themeStore';
 import { X, Clock } from 'lucide-react-native';
+import { rnShadowToBoxShadow } from '../utils/styleUtils';
 
 const StatusModal = ({ visible, onClose }) => {
   const { colors } = useThemeStore();
@@ -37,16 +39,23 @@ const StatusModal = ({ visible, onClose }) => {
     { label: "Don't clear", value: null },
   ];
 
+  const handleClose = () => {
+    if (Platform.OS === 'web') {
+      document.activeElement?.blur();
+    }
+    onClose();
+  };
+
   const styles = createStyles(colors);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
+    <AccessibleModal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+      <Pressable style={styles.overlay} onPress={handleClose}>
         <View style={[styles.modal, { backgroundColor: colors.background }]} onStartShouldSetResponder={() => true}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Set a status</Text>
-            <TouchableOpacity onPress={onClose}>
+            <TouchableOpacity onPress={handleClose}>
               <X size={24} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
@@ -115,7 +124,12 @@ const StatusModal = ({ visible, onClose }) => {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.button, styles.saveButton, { backgroundColor: colors.primary }]}
-                onPress={onClose}
+                onPress={() => {
+                  if (Platform.OS === 'web') {
+                    document.activeElement?.blur();
+                  }
+                  onClose();
+                }}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.buttonText, { color: colors.textInverse }]}>Save</Text>
@@ -124,7 +138,7 @@ const StatusModal = ({ visible, onClose }) => {
           </ScrollView>
         </View>
       </Pressable>
-    </Modal>
+    </AccessibleModal>
   );
 };
 
@@ -139,11 +153,15 @@ const createStyles = (colors) => StyleSheet.create({
     width: '90%',
     maxHeight: '80%',
     borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
+    ...(Platform.OS !== 'web'
+      ? {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.2,
+          shadowRadius: 12,
+          elevation: 8,
+        }
+      : { boxShadow: rnShadowToBoxShadow('#000', { width: 0, height: 4 }, 0.2, 12) }),
   },
   header: {
     flexDirection: 'row',

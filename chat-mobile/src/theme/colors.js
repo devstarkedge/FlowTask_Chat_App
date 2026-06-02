@@ -1,5 +1,40 @@
 // Theme color system for FlowTask Chat Mobile
 // Supports Light, Dark, and Custom Workspace Themes
+// Matches web application architecture
+
+// Accent color presets
+export const accentColors = {
+  blue: {
+    primary: '#3B82F6',
+    primaryHover: '#2563EB',
+    primaryLight: '#DBEAFE',
+    headerGradient: ['#3B82F6', '#2563EB'],
+  },
+  purple: {
+    primary: '#8B5CF6',
+    primaryHover: '#7C3AED',
+    primaryLight: '#EDE9FE',
+    headerGradient: ['#8B5CF6', '#7C3AED'],
+  },
+  green: {
+    primary: '#10B981',
+    primaryHover: '#059669',
+    primaryLight: '#D1FAE5',
+    headerGradient: ['#10B981', '#059669'],
+  },
+  orange: {
+    primary: '#F97316',
+    primaryHover: '#EA580C',
+    primaryLight: '#FFEDD5',
+    headerGradient: ['#F97316', '#EA580C'],
+  },
+  red: {
+    primary: '#EF4444',
+    primaryHover: '#DC2626',
+    primaryLight: '#FEE2E2',
+    headerGradient: ['#EF4444', '#DC2626'],
+  },
+};
 
 export const lightTheme = {
   // Background
@@ -47,6 +82,9 @@ export const lightTheme = {
   border: '#E5E7EB',
   borderLight: '#F3F4F6',
   borderDark: '#D1D5DB',
+  
+  // Card
+  card: '#F9FAFB',
   
   // Message
   messageBubbleSent: '#6366F1',
@@ -116,6 +154,9 @@ export const darkTheme = {
   borderLight: '#4B5563',
   borderDark: '#1F2937',
   
+  // Card
+  card: '#374151',
+  
   // Message
   messageBubbleSent: '#6366F1',
   messageBubbleReceived: '#374151',
@@ -181,12 +222,23 @@ export const sidebarPresets = {
   },
 };
 
-export const getTheme = (mode = 'light', sidebarTheme = 'aubergine') => {
+export const getTheme = (mode = 'light', sidebarTheme = 'aubergine', accentColor = 'blue', customColors = {}, workspaceTheme = null) => {
   const base = mode === 'dark' ? darkTheme : lightTheme;
   const sidebar = sidebarPresets[sidebarTheme] || sidebarPresets.aubergine;
+  const accent = accentColors[accentColor] || accentColors.blue;
+  
+  // Workspace theme override
+  const workspace = workspaceTheme ? {
+    primary: workspaceTheme.primary || accent.primary,
+    headerGradient: workspaceTheme.headerGradient || accent.headerGradient,
+    sidebar: workspaceTheme.sidebar || sidebar.sidebar,
+  } : {};
   
   return {
     ...base,
     ...sidebar,
+    ...accent,
+    ...workspace,
+    ...customColors,
   };
 };

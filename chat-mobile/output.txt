@@ -1,0 +1,104 @@
+env: load .env
+env: export API_BASE_URL FLOWTASK_ENABLED SOCKET_URL
+Starting project at d:\Tisha\FlowTask_Chat_App\chat-mobile
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Failed to construct transformer:  Error: Cannot find module 'babel-preset-expo'
+Require stack:
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\files\plugins.js
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\files\index.js
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\index.js
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\node_modules\@expo\metro-config\build\serializer\treeShakeSerializerPlugin.js
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\node_modules\@expo\metro-config\build\serializer\withExpoSerializers.js
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\node_modules\@expo\metro-config\build\ExpoMetroConfig.js
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\node_modules\@expo\metro-config\build\config\loadUserConfig.js
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\node_modules\@expo\metro-config\build\index.js
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\node_modules\@expo\cli\build\src\start\server\metro\instantiateMetro.js
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\node_modules\@expo\cli\build\src\start\server\metro\MetroBundlerDevServer.js
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\node_modules\@expo\cli\build\src\start\server\DevServerManager.js
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\node_modules\@expo\cli\build\src\start\startAsync.js
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\node_modules\@expo\cli\build\src\start\index.js
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\node_modules\@expo\cli\build\bin\cli
+- d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\bin\cli
+
+Make sure that all the Babel plugins and presets you are using
+are defined as dependencies or devDependencies in your package.json
+file. It's possible that the missing plugin is loaded by a preset
+you are using that forgot to add the plugin to its dependencies: you
+can workaround this problem by explicitly adding the missing package
+to your top-level package.json.
+
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1456:15)
+    at resolve (node:internal/modules/helpers:163:19)
+    at tryRequireResolve (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\files\plugins.js:128:11)
+    at resolveStandardizedNameForRequire (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\files\plugins.js:162:19)
+    at resolveStandardizedName (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\files\plugins.js:183:12)
+    at loadPreset (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\files\plugins.js:68:7)
+    at loadPreset.next (<anonymous>)
+    at createDescriptor (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\config-descriptors.js:140:16)
+    at createDescriptor.next (<anonymous>)
+    at evaluateSync (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\gensync\index.js:251:28)
+    at d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\gensync\index.js:31:34
+    at Array.map (<anonymous>)
+    at gensync.sync (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\gensync\index.js:31:22)
+    at gensync.all (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\gensync\index.js:210:24)
+    at Generator.next (<anonymous>)
+    at createDescriptors (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\config-descriptors.js:102:41)
+    at createDescriptors.next (<anonymous>)
+    at createPresetDescriptors (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\config-descriptors.js:96:17)
+    at createPresetDescriptors.next (<anonymous>)
+    at d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\gensync-utils\functional.js:22:27
+    at Generator.next (<anonymous>)
+    at mergeChainOpts (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\config-chain.js:350:34)
+    at mergeChainOpts.next (<anonymous>)
+    at chainWalker (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\config-chain.js:316:14)
+    at chainWalker.next (<anonymous>)
+    at loadFileChain (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\config-chain.js:191:24)
+    at loadFileChain.next (<anonymous>)
+    at mergeExtendsChain (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\config-chain.js:328:28)
+    at mergeExtendsChain.next (<anonymous>)
+    at chainWalker (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\config-chain.js:312:20)
+    at chainWalker.next (<anonymous>)
+    at buildRootChain (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\config-chain.js:56:36)
+    at buildRootChain.next (<anonymous>)
+    at loadPrivatePartialConfig (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\partial.js:72:62)
+    at loadPrivatePartialConfig.next (<anonymous>)
+    at loadPartialConfig (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\partial.js:115:25)
+    at loadPartialConfig.next (<anonymous>)
+    at evaluateSync (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\gensync\index.js:251:28)
+    at sync (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\gensync\index.js:89:14)
+    at stopHiding - secret - don't use this - v1 (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\errors\rewrite-stack-trace.js:47:12)
+    at loadPartialConfigSync (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\@babel\core\lib\config\index.js:37:84)
+    at Object.getCacheKey (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\node_modules\@expo\metro-config\build\babel-transformer.js:190:66)
+    at Object.getCacheKey (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\expo\node_modules\@expo\metro-config\build\transform-worker\metro-transform-worker.js:643:28)
+    at getTransformCacheKey (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\metro\src\DeltaBundler\getTransformCacheKey.js:17:19)
+    at new Transformer (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\metro\src\DeltaBundler\Transformer.js:40:43)
+    at d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\metro\src\Bundler.js:25:29
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at process.processTimers (node:internal/timers:538:9)
+    at async Bundler.ready (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\metro\src\Bundler.js:62:5)
+    at async IncrementalBundler.ready (d:\Tisha\FlowTask_Chat_App\chat-mobile\node_modules\metro\src\IncrementalBundler.js:310:5) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\@babel\\core\\lib\\config\\files\\plugins.js',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\@babel\\core\\lib\\config\\files\\index.js',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\@babel\\core\\lib\\index.js',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\expo\\node_modules\\@expo\\metro-config\\build\\serializer\\treeShakeSerializerPlugin.js',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\expo\\node_modules\\@expo\\metro-config\\build\\serializer\\withExpoSerializers.js',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\expo\\node_modules\\@expo\\metro-config\\build\\ExpoMetroConfig.js',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\expo\\node_modules\\@expo\\metro-config\\build\\config\\loadUserConfig.js',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\expo\\node_modules\\@expo\\metro-config\\build\\index.js',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\expo\\node_modules\\@expo\\cli\\build\\src\\start\\server\\metro\\instantiateMetro.js',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\expo\\node_modules\\@expo\\cli\\build\\src\\start\\server\\metro\\MetroBundlerDevServer.js',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\expo\\node_modules\\@expo\\cli\\build\\src\\start\\server\\DevServerManager.js',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\expo\\node_modules\\@expo\\cli\\build\\src\\start\\startAsync.js',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\expo\\node_modules\\@expo\\cli\\build\\src\\start\\index.js',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\expo\\node_modules\\@expo\\cli\\build\\bin\\cli',
+    'd:\\Tisha\\FlowTask_Chat_App\\chat-mobile\\node_modules\\expo\\bin\\cli'
+  ]
+}
+Waiting on http://localhost:8083
+An update for expo is available: 56.0.7 → ~56.0.8
+2 other packages may need updating. Run npx expo install --check for details.
+Logs for your project will appear below.

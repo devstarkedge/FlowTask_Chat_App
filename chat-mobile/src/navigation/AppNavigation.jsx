@@ -4,7 +4,14 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useThemeStore } from "../stores/themeStore";
-import { Hash, MessageSquare, Bell, MoreHorizontal, Home } from "lucide-react-native";
+import {
+  Hash,
+  MessageSquare,
+  Bell,
+  MoreHorizontal,
+  Home,
+  Search,
+} from "lucide-react-native";
 import DrawerNavigation from "../components/DrawerNavigation";
 
 // Unauth Screens
@@ -14,7 +21,8 @@ import RegisterScreen from "../screens/RegisterScreen";
 
 // Auth Screens
 import WorkspaceSelectorScreen from "../screens/WorkspaceSelectorScreen";
-import HomeScreen from "../screens/HomeScreen";
+import HomeScreenEnhanced from "../screens/HomeScreen";
+const HomeScreen = HomeScreenEnhanced;
 import ChannelListScreen from "../screens/ChannelListScreen";
 import DMListScreen from "../screens/DMListScreen";
 import ActivityScreen from "../screens/ActivityScreen";
@@ -30,13 +38,15 @@ import DraftsScreen from "../screens/DraftsScreen";
 import ScheduledScreen from "../screens/ScheduledScreen";
 import NotificationsScreen from "../screens/NotificationsScreen";
 import PreferencesScreen from "../screens/PreferencesScreen";
+import FilesScreen from "../screens/FilesScreen";
+import SearchScreen from "../screens/SearchScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function BottomTabs({ navigation }) {
   const { colors } = useThemeStore();
-  
+
   return (
     <>
       <Tab.Navigator
@@ -53,7 +63,7 @@ function BottomTabs({ navigation }) {
           },
           tabBarLabelStyle: {
             fontSize: 11,
-            fontWeight: '600',
+            fontWeight: "600",
           },
           headerStyle: {
             backgroundColor: colors.background,
@@ -66,7 +76,7 @@ function BottomTabs({ navigation }) {
           component={HomeScreen}
           options={{
             headerShown: false,
-            tabBarLabel: 'Home',
+            tabBarLabel: "Home",
             tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
           }}
         />
@@ -74,10 +84,12 @@ function BottomTabs({ navigation }) {
           name="DMsTab"
           component={DMListScreen}
           options={{
-            title: 'DMs',
+            title: "DMs",
             headerShown: false,
-            tabBarLabel: 'DMs',
-            tabBarIcon: ({ color, size }) => <MessageSquare size={size} color={color} />,
+            tabBarLabel: "DMs",
+            tabBarIcon: ({ color, size }) => (
+              <MessageSquare size={size} color={color} />
+            ),
           }}
         />
         <Tab.Screen
@@ -85,7 +97,7 @@ function BottomTabs({ navigation }) {
           component={ActivityScreen}
           options={{
             headerShown: false,
-            tabBarLabel: 'Activity',
+            tabBarLabel: "Activity",
             tabBarIcon: ({ color, size }) => <Bell size={size} color={color} />,
           }}
         />
@@ -94,8 +106,21 @@ function BottomTabs({ navigation }) {
           component={ProfileScreen}
           options={{
             headerShown: false,
-            tabBarLabel: 'More',
-            tabBarIcon: ({ color, size }) => <MoreHorizontal size={size} color={color} />,
+            tabBarLabel: "More",
+            tabBarIcon: ({ color, size }) => (
+              <MoreHorizontal size={size} color={color} />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="SearchTab"
+          component={SearchScreen}
+          options={{
+            headerShown: false,
+            tabBarLabel: "Search",
+            tabBarIcon: ({ color, size }) => (
+              <Search size={size} color={color} />
+            ),
           }}
         />
       </Tab.Navigator>
@@ -112,8 +137,8 @@ export default function AppNavigation() {
   if (!isInitialized || !themeInitialized) return null;
 
   return (
-    <Stack.Navigator 
-      screenOptions={{ 
+    <Stack.Navigator
+      screenOptions={{
         headerShown: false,
         headerStyle: {
           backgroundColor: colors.background,
@@ -132,77 +157,93 @@ export default function AppNavigation() {
         </>
       ) : !activeWorkspaceId ? (
         <>
-          <Stack.Screen name="WorkspaceSelector" component={WorkspaceSelectorScreen} />
-          <Stack.Screen name="CreateWorkspace" component={CreateWorkspaceScreen} />
+          <Stack.Screen
+            name="WorkspaceSelector"
+            component={WorkspaceSelectorScreen}
+          />
+          <Stack.Screen
+            name="CreateWorkspace"
+            component={CreateWorkspaceScreen}
+          />
         </>
       ) : (
         <>
           <Stack.Screen name="Main" component={BottomTabs} />
-          <Stack.Screen 
-            name="Chat" 
-            component={ChatScreen} 
-            options={{ 
+          <Stack.Screen
+            name="Chat"
+            component={ChatScreen}
+            options={{
               headerShown: false,
-            }} 
+            }}
           />
-          <Stack.Screen 
-            name="DirectMessage" 
-            component={DirectMessageScreen} 
-            options={{ headerShown: false }} 
+          <Stack.Screen
+            name="DirectMessage"
+            component={DirectMessageScreen}
+            options={{ headerShown: false }}
           />
-          <Stack.Screen 
-            name="ChannelDetails" 
-            component={ChannelDetailsScreen} 
-            options={{ 
-              headerShown: true, 
-              title: 'Channel Details',
-            }} 
-          />
-          <Stack.Screen 
-            name="Settings" 
-            component={SettingsScreen} 
-            options={{ 
-              headerShown: true, 
-              title: 'Settings',
-            }} 
-          />
-          <Stack.Screen 
-            name="Threads" 
-            component={ThreadsScreen} 
-            options={{ headerShown: false }} 
-          />
-          <Stack.Screen 
-            name="Later" 
-            component={LaterScreen} 
-            options={{ headerShown: false }} 
-          />
-          <Stack.Screen 
-            name="Drafts" 
-            component={DraftsScreen} 
-            options={{ headerShown: false }} 
-          />
-          <Stack.Screen 
-            name="Scheduled" 
-            component={ScheduledScreen} 
-            options={{ headerShown: false }} 
-          />
-          <Stack.Screen 
-            name="Notifications" 
-            component={NotificationsScreen} 
-            options={{ 
+          <Stack.Screen
+            name="ChannelDetails"
+            component={ChannelDetailsScreen}
+            options={{
               headerShown: true,
-              title: 'Notifications',
-            }} 
+              title: "Channel Details",
+            }}
           />
-          <Stack.Screen 
-            name="Preferences" 
-            component={PreferencesScreen} 
-            options={{ headerShown: false }} 
+          <Stack.Screen
+            name="Settings"
+            component={SettingsScreen}
+            options={{
+              headerShown: true,
+              title: "Settings",
+            }}
           />
-          <Stack.Screen 
-            name="Profile" 
-            component={ProfileScreen} 
-            options={{ headerShown: false }} 
+          <Stack.Screen
+            name="Threads"
+            component={ThreadsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Later"
+            component={LaterScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Drafts"
+            component={DraftsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Scheduled"
+            component={ScheduledScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Notifications"
+            component={NotificationsScreen}
+            options={{
+              headerShown: true,
+              title: "Notifications",
+            }}
+          />
+          <Stack.Screen
+            name="Preferences"
+            component={PreferencesScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Profile"
+            component={ProfileScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Files"
+            component={FilesScreen}
+            options={{ headerShown: true, title: "Files" }}
+          />
+          <Stack.Screen
+            name="Search"
+            component={SearchScreen}
+            options={{ headerShown: true, title: "Search" }}
           />
         </>
       )}

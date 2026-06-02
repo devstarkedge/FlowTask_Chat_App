@@ -4,11 +4,13 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Modal,
   Pressable,
+  Platform,
 } from 'react-native';
+import AccessibleModal from './AccessibleModal';
 import { useThemeStore } from '../stores/themeStore';
 import { X, Clock } from 'lucide-react-native';
+import { rnShadowToBoxShadow } from '../utils/styleUtils';
 
 const PauseNotificationsModal = ({ visible, onClose }) => {
   const { colors } = useThemeStore();
@@ -25,19 +27,29 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
 
   const handleSelect = (duration) => {
     console.log('Pause notifications for:', duration);
+    if (Platform.OS === 'web') {
+      document.activeElement?.blur();
+    }
+    onClose();
+  };
+
+  const handleClose = () => {
+    if (Platform.OS === 'web') {
+      document.activeElement?.blur();
+    }
     onClose();
   };
 
   const styles = createStyles(colors);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
+    <AccessibleModal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+      <Pressable style={styles.overlay} onPress={handleClose}>
         <View style={[styles.modal, { backgroundColor: colors.background }]} onStartShouldSetResponder={() => true}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Pause notifications</Text>
-            <TouchableOpacity onPress={onClose}>
+            <TouchableOpacity onPress={handleClose}>
               <X size={24} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
@@ -61,7 +73,7 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
           </View>
         </View>
       </Pressable>
-    </Modal>
+    </AccessibleModal>
   );
 };
 
@@ -75,11 +87,15 @@ const createStyles = (colors) => StyleSheet.create({
   modal: {
     width: '85%',
     borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
+    ...(Platform.OS !== 'web'
+      ? {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.2,
+          shadowRadius: 12,
+          elevation: 8,
+        }
+      : { boxShadow: rnShadowToBoxShadow('#000', { width: 0, height: 4 }, 0.2, 12) }),
   },
   header: {
     flexDirection: 'row',

@@ -129,25 +129,7 @@ const ChannelListScreen = ({ navigation }) => {
       style={[styles.sectionHeader, { backgroundColor: colors.background }]}
       onPress={() => toggleSection(section)}
       activeOpacity={0.7}
-    >
-      {sectionsExpanded[section] ? (
-        <ChevronDown size={16} color={colors.textSecondary} />
-      ) : (
-        <ChevronRight size={16} color={colors.textSecondary} />
-      )}
-      <Icon size={16} color={colors.textSecondary} />
-      <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-        {title}
-      </Text>
-      {count > 0 && (
-        <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>
-          {count}
-        </Text>
-      )}
-      <TouchableOpacity style={styles.sectionAction}>
-        <Plus size={18} color={colors.primary} />
-      </TouchableOpacity>
-    </TouchableOpacity>
+    >{sectionsExpanded[section] ? (<ChevronDown size={16} color={colors.textSecondary} />) : (<ChevronRight size={16} color={colors.textSecondary} />)}<Icon size={16} color={colors.textSecondary} /><Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{title}</Text>{count > 0 && (<Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{count}</Text>)}<TouchableOpacity style={styles.sectionAction}><Plus size={18} color={colors.primary} /></TouchableOpacity></TouchableOpacity>
     );
   };
 

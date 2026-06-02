@@ -11,6 +11,8 @@ import {
   resumeNotifications,
   getDndStatus,
   saveDndSchedule,
+  updateThemePreferences,
+  getThemePreferences,
 } from './user.controller.js';
 import { protect } from '../auth/auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
@@ -44,6 +46,10 @@ router.post('/dnd/pause', protect, pauseNotifications);
 router.post('/dnd/resume', protect, resumeNotifications);
 router.get('/dnd/status', protect, getDndStatus);
 router.post('/dnd/schedule', protect, saveDndSchedule);
+
+// Theme Preferences
+router.put('/preferences/theme', protect, updateThemePreferences);
+router.get('/preferences/theme', protect, getThemePreferences);
 
 // Presence
 router.put('/presence', protect, setPresence);

@@ -146,17 +146,11 @@ const LaterScreen = ({ navigation }) => {
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: colors.backgroundTertiary }]}
             onPress={() => handleStatusChange(item._id, 'completed')}
-          >
-            <CheckCircle2 size={14} color={colors.success} />
-            <Text style={[styles.actionText, { color: colors.textSecondary }]}>Complete</Text>
-          </TouchableOpacity>
+          ><CheckCircle2 size={14} color={colors.success} /><Text style={[styles.actionText, { color: colors.textSecondary }]}>Complete</Text></TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: colors.backgroundTertiary }]}
             onPress={() => handleStatusChange(item._id, 'archived')}
-          >
-            <Archive size={14} color={colors.textSecondary} />
-            <Text style={[styles.actionText, { color: colors.textSecondary }]}>Archive</Text>
-          </TouchableOpacity>
+          ><Archive size={14} color={colors.textSecondary} /><Text style={[styles.actionText, { color: colors.textSecondary }]}>Archive</Text></TouchableOpacity>
         </View>
       </TouchableOpacity>
     );

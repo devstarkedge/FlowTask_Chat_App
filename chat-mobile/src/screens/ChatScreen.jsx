@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useChannelStore } from '../stores/channelStore';
 import { useThemeStore } from '../stores/themeStore';
 import { emitTyping } from '../services/socket';
+import Avatar from '../components/Avatar';
 import { 
   Send, 
   Hash, 
@@ -32,7 +33,9 @@ import {
   Volume2,
   Phone,
   Video,
+  FileText,
 } from 'lucide-react-native';
+import SearchBar from '../components/SearchBar';
 
 const ChatScreen = ({ route, navigation }) => {
   const { channelId, channelName } = route.params;
@@ -49,21 +52,47 @@ const ChatScreen = ({ route, navigation }) => {
   
   const [text, setText] = useState('');
   const [showOptions, setShowOptions] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [currentMatch, setCurrentMatch] = useState(0);
   const messages = messagesByChannel[channelId] || [];
+  const displayedMessages = useMemo(() => [...messages].reverse(), [messages]);
   const typingUsers = Object.values(typingByChannel[channelId] || {});
   const channel = channels.find(ch => ch._id === channelId);
   const memberCount = channel?.members?.length || 0;
-  const onlineCount = 8; // TODO: Get from real data
+  const onlineCount = channel?.members?.filter(m => m.onlineStatus === 'online').length || 0;
   
   const isDM = channel?.type === 'dm';
   const isSystem = channel?.type === 'system';
   const isPrivate = channel?.visibility === 'private' || channel?.type === 'private';
+  // Get DM user from channel members
+  const dmUser = isDM ? channel?.members?.find(m => m._id !== user?._id) : null;
   
   const flatListRef = useRef(null);
 
   useEffect(() => {
     fetchMessages(channelId);
   }, [channelId]);
+
+  useEffect(() => {
+    if (!searchQuery) {
+      setSearchResults([]);
+      setCurrentMatch(0);
+      return;
+    }
+    const q = searchQuery.trim().toLowerCase();
+    const matches = [];
+    displayedMessages.forEach((m, idx) => {
+      if (m?.content && m.content.toLowerCase().includes(q)) matches.push(idx);
+    });
+    setSearchResults(matches);
+    setCurrentMatch(0);
+    if (matches.length > 0) {
+      // small timeout to allow UI to render
+      setTimeout(() => scrollToIndex(matches[0]), 80);
+    }
+  }, [searchQuery, displayedMessages]);
 
   const handleSend = () => {
     if (text.trim()) {
@@ -78,24 +107,56 @@ const ChatScreen = ({ route, navigation }) => {
     emitTyping(channelId, val.length > 0);
   };
 
-  const renderMessage = ({ item }) => {
+  const scrollToIndex = (index) => {
+    if (!flatListRef.current || index == null) return;
+    try {
+      flatListRef.current.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+    } catch (err) {
+      // fallback using approximate height
+      const approxItemHeight = 80;
+      flatListRef.current.scrollToOffset({ offset: index * approxItemHeight, animated: true });
+    }
+  };
+
+  const goToNextMatch = () => {
+    if (!searchResults.length) return;
+    const next = (currentMatch + 1) % searchResults.length;
+    setCurrentMatch(next);
+    scrollToIndex(searchResults[next]);
+  };
+
+  const goToPrevMatch = () => {
+    if (!searchResults.length) return;
+    const prev = (currentMatch - 1 + searchResults.length) % searchResults.length;
+    setCurrentMatch(prev);
+    scrollToIndex(searchResults[prev]);
+  };
+
+  const renderMessage = ({ item, index }) => {
     const isMe = item.authorId?._id === user?._id || item.authorId === user?._id;
+    const isMatch = searchQuery && item?.content && item.content.toLowerCase().includes(searchQuery.toLowerCase());
+    const isHighlighted = isMatch && searchResults.length && searchResults[currentMatch] === index;
+    
+    const messageSender = item.senderSnapshot || item.authorId;
+    
     return (
       <View style={[styles.messageContainer, isMe ? styles.myMessage : styles.theirMessage]}>
         {!isMe && (
-          <View style={[styles.avatarMini, { backgroundColor: colors.backgroundTertiary }]}>
-            <Text style={[styles.avatarMiniText, { color: colors.textSecondary }]}>
-              {item.senderSnapshot?.name?.substring(0, 1).toUpperCase() || '?'}
-            </Text>
-          </View>
+          <Avatar 
+            user={messageSender}
+            size={28}
+            showStatus={false}
+            style={{ marginTop: 4 }}
+          />
         )}
         <View style={[
-          styles.bubble, 
-          { backgroundColor: isMe ? colors.messageBubbleSent : colors.messageBubbleReceived }
+          styles.bubble,
+          { backgroundColor: isMe ? colors.messageBubbleSent : colors.messageBubbleReceived },
+          isHighlighted && { borderWidth: 2, borderColor: colors.primary }
         ]}>
           {!isMe && (
             <Text style={[styles.senderName, { color: colors.textSecondary }]}>
-              {item.senderSnapshot?.name}
+              {messageSender?.name || 'Unknown'}
             </Text>
           )}
           <Text style={[
@@ -131,12 +192,11 @@ const ChatScreen = ({ route, navigation }) => {
         <View style={styles.headerCenter}>
           <View style={styles.headerTitleRow}>
             {isDM ? (
-              <View style={[styles.dmAvatar, { backgroundColor: colors.backgroundTertiary }]}>
-                <Text style={[styles.dmAvatarText, { color: colors.textSecondary }]}>
-                  {channelName?.substring(0, 1).toUpperCase()}
-                </Text>
-                <View style={[styles.dmStatus, { backgroundColor: colors.online }]} />
-              </View>
+              <Avatar 
+                user={dmUser || { name: channelName }}
+                size={32}
+                showStatus={true}
+              />
             ) : isSystem ? (
               <Volume2 size={20} color={colors.textSecondary} />
             ) : isPrivate ? (
@@ -149,18 +209,12 @@ const ChatScreen = ({ route, navigation }) => {
             </Text>
           </View>
           {!isDM && (
-            <View style={styles.headerSubtitle}>
-              <Text style={[styles.memberCount, { color: colors.textSecondary }]}>
-                {memberCount} Members
-              </Text>
-              <View style={[styles.onlineDot, { backgroundColor: colors.online }]} />
-              <Text style={[styles.onlineCount, { color: colors.online }]}>
-                {onlineCount} Online
-              </Text>
-            </View>
+            <View style={styles.headerSubtitle}><Text style={[styles.memberCount, { color: colors.textSecondary }]}>{memberCount} Members</Text><View style={[styles.onlineDot, { backgroundColor: colors.online }]} /><Text style={[styles.onlineCount, { color: colors.online }]}>{onlineCount} Online</Text></View>
           )}
-          {isDM && (
-            <Text style={[styles.dmStatus, { color: colors.online }]}>Online</Text>
+          {isDM && dmUser && (
+            <Text style={[styles.dmStatusText, { color: dmUser.onlineStatus === 'online' ? colors.online : colors.textSecondary }]}>
+              {dmUser.onlineStatus === 'online' ? 'Online' : 'Offline'}
+            </Text>
           )}
         </View>
 
@@ -193,24 +247,17 @@ const ChatScreen = ({ route, navigation }) => {
               setShowOptions(false);
               navigation.navigate('ChannelDetails', { channelName, memberCount });
             }}
-          >
-            <Users size={18} color={colors.textSecondary} />
-            <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-              {isDM ? 'View Profile' : 'Channel Info'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.optionItem}>
-            <Search size={18} color={colors.textSecondary} />
-            <Text style={[styles.optionText, { color: colors.textPrimary }]}>Search</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.optionItem}>
-            <Pin size={18} color={colors.textSecondary} />
-            <Text style={[styles.optionText, { color: colors.textPrimary }]}>Pinned Messages</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.optionItem}>
-            <Bell size={18} color={colors.textSecondary} />
-            <Text style={[styles.optionText, { color: colors.textPrimary }]}>Notifications</Text>
-          </TouchableOpacity>
+          ><Users size={18} color={colors.textSecondary} /><Text style={[styles.optionText, { color: colors.textPrimary }]}>{isDM ? 'View Profile' : 'Channel Info'}</Text></TouchableOpacity>
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => { setShowOptions(false); navigation.navigate('Files', { channelId, channelName }); }}
+            ><FileText size={18} color={colors.textSecondary} /><Text style={[styles.optionText, { color: colors.textPrimary }]}>Files</Text></TouchableOpacity>
+          <TouchableOpacity
+            style={styles.optionItem}
+            onPress={() => { setShowOptions(false); setShowSearch(true); }}
+          ><Search size={18} color={colors.textSecondary} /><Text style={[styles.optionText, { color: colors.textPrimary }]}>Search</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.optionItem}><Pin size={18} color={colors.textSecondary} /><Text style={[styles.optionText, { color: colors.textPrimary }]}>Pinned Messages</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.optionItem}><Bell size={18} color={colors.textSecondary} /><Text style={[styles.optionText, { color: colors.textPrimary }]}>Notifications</Text></TouchableOpacity>
         </View>
       )}
 
@@ -221,7 +268,7 @@ const ChatScreen = ({ route, navigation }) => {
       >
         <FlatList
           ref={flatListRef}
-          data={[...messages].reverse()}
+          data={displayedMessages}
           renderItem={renderMessage}
           keyExtractor={(item) => item._id}
           inverted
@@ -232,31 +279,33 @@ const ChatScreen = ({ route, navigation }) => {
 
         {/* Typing Indicator */}
         {typingUsers.length > 0 && (
-          <View style={styles.typingIndicator}>
-            <Text style={[styles.typingText, { color: colors.textSecondary }]}>
-              {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
-            </Text>
-          </View>
+          <View style={styles.typingIndicator}><Text style={[styles.typingText, { color: colors.textSecondary }]}>{typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...</Text></View>
+        )}
+
+        {/* Search Bar (above input) */}
+        {showSearch && (
+          <SearchBar
+            query={searchQuery}
+            onChangeQuery={(q) => setSearchQuery(q)}
+            onClose={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]); }}
+            onNext={goToNextMatch}
+            onPrev={goToPrevMatch}
+            currentIndex={currentMatch}
+            total={searchResults.length}
+          />
         )}
 
         {/* Input Bar */}
         <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
-          <TouchableOpacity style={styles.attachButton}>
-            <ImageIcon size={22} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground }]}>
-            <TextInput
+          <TouchableOpacity style={styles.attachButton}><ImageIcon size={22} color={colors.textSecondary} /></TouchableOpacity>
+          <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground }]}><TextInput
               style={[styles.input, { color: colors.inputText }]}
               placeholder="Message..."
               placeholderTextColor={colors.inputPlaceholder}
               value={text}
               onChangeText={handleTextChange}
               multiline
-            />
-            <TouchableOpacity>
-              <Smile size={22} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
+            /><TouchableOpacity><Smile size={22} color={colors.textSecondary} /></TouchableOpacity></View>
           <TouchableOpacity 
             style={[
               styles.sendButton, 
@@ -264,9 +313,7 @@ const ChatScreen = ({ route, navigation }) => {
             ]} 
             onPress={handleSend}
             disabled={!text.trim()}
-          >
-            <Send size={18} color={colors.textInverse} />
-          </TouchableOpacity>
+          ><Send size={18} color={colors.textInverse} /></TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -296,28 +343,6 @@ const createStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  dmAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  dmAvatarText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  dmStatus: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 2,
-    borderColor: 'white',
-  },
   headerTitle: {
     fontSize: 17,
     fontWeight: '700',
@@ -340,6 +365,11 @@ const createStyles = (colors) => StyleSheet.create({
   },
   onlineCount: {
     fontSize: 12,
+  },
+  dmStatusText: {
+    fontSize: 12,
+    marginTop: 2,
+    marginLeft: 40,
   },
   headerActions: {
     flexDirection: 'row',
@@ -377,18 +407,6 @@ const createStyles = (colors) => StyleSheet.create({
   theirMessage: {
     alignSelf: 'flex-start',
     gap: 8,
-  },
-  avatarMini: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  avatarMiniText: {
-    fontSize: 11,
-    fontWeight: '700',
   },
   bubble: {
     paddingHorizontal: 12,

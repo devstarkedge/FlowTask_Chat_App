@@ -87,4 +87,23 @@ export const scheduledAPI = {
   update: (id, data) => api.patch(`/messages/scheduled/${id}`, data),
 };
 
+// Messages API (partial) — add helper for proxying file assets
+export const messageAPI = {
+  getFileProxyUrl: (assetId) => `${api.defaults.baseURL}/messages/files/${encodeURIComponent(assetId)}/proxy`,
+};
+
+// Files API — reuse backend endpoints used by web client
+export const fileAPI = {
+  listWorkspace: (params) => api.get('/messages/files', { params }),
+  listByChannel: (channelId, params) => api.get(`/channels/${channelId}/files`, { params }),
+  deleteFromChannel: (channelId, fileId) => api.delete(`/channels/${channelId}/files/${fileId}`),
+};
+
+// Search API (global workspace search)
+export const searchAPI = {
+  search: ({ q = '', scope = null, limit = null, cursor = null, signal = undefined } = {}) =>
+    api.get('/search', { params: { q, scope, limit, cursor }, signal }),
+  global: (q, options = {}) => searchAPI.search({ q, ...options }),
+};
+
 export default api;

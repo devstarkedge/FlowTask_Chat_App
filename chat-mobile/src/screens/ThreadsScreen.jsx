@@ -13,7 +13,7 @@ import {
 import { useThreadStore } from '../stores/threadStore';
 import { useThemeStore } from '../stores/themeStore';
 import { 
-  ArrowLeft,
+  CircleChevronLeft,
   MessageSquare,
   CheckCircle2,
   Circle,
@@ -150,7 +150,7 @@ const ThreadsScreen = ({ navigation }) => {
           style={styles.backButton} 
           onPress={() => navigation.goBack()}
         >
-          <ArrowLeft size={24} color={colors.textPrimary} />
+          <CircleChevronLeft size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Threads</Text>
         <View style={{ width: 40 }} />

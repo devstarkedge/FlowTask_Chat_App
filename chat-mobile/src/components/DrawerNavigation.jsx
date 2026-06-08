@@ -16,6 +16,8 @@ import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useAuthStore } from "../stores/authStore";
 import { useThemeStore } from "../stores/themeStore";
 import { disconnectSocket } from "../services/socket";
+import WorkspaceAvatar from "./WorkspaceAvatar";
+import Avatar from "./Avatar";
 import {
   X,
   Hash,
@@ -30,7 +32,7 @@ import {
   Bookmark,
   AtSign,
   Home,
-  ChevronDown,
+  CircleChevronDown ,
   Lock,
   Volume2,
   Edit3,
@@ -88,17 +90,13 @@ const DrawerNavigation = ({ navigation }) => {
           {/* Workspace Header */}
           <View style={styles.header}>
             <View style={styles.workspaceInfo}>
-              <View style={styles.workspaceLogo}>
-                <Text style={styles.workspaceLogoText}>
-                  {activeWorkspace?.name?.substring(0, 1).toUpperCase()}
-                </Text>
-              </View>
+              <WorkspaceAvatar workspace={activeWorkspace} size={48} showBorder />
               <View style={styles.workspaceDetails}>
                 <View style={styles.workspaceNameRow}>
                   <Text style={styles.workspaceName} numberOfLines={1}>
                     {activeWorkspace?.name}
                   </Text>
-                  <ChevronDown size={16} color={colors.sidebarText} />
+                  <CircleChevronDown  size={16} color={colors.sidebarText} />
                 </View>
                 <View style={styles.userStatus}>
                   <View style={styles.statusDot} />
@@ -289,19 +287,6 @@ const createStyles = (colors) =>
       alignItems: "flex-start",
       gap: 12,
       flex: 1,
-    },
-    workspaceLogo: {
-      width: 48,
-      height: 48,
-      borderRadius: 12,
-      backgroundColor: colors.sidebarActive,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    workspaceLogoText: {
-      color: colors.sidebarActiveText,
-      fontWeight: "800",
-      fontSize: 20,
     },
     workspaceDetails: {
       flex: 1,

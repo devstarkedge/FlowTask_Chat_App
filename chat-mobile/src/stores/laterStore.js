@@ -9,14 +9,14 @@ export const useLaterStore = create(
       savedMessages: [],
       savedCount: 0,
       isLoading: false,
-      savedMessageIds: new Set(),
+      savedMessageIds: [],
 
       fetchSavedMessages: async () => {
         set({ isLoading: true });
         try {
           const { data } = await laterAPI.list();
           const messages = data.data?.messages || [];
-          const ids = new Set(messages.map(m => m.messageId?._id).filter(Boolean));
+          const ids = messages.map(m => m.messageId?._id).filter(Boolean);
           set({ 
             savedMessages: messages, 
             savedCount: messages.length,
@@ -32,21 +32,21 @@ export const useLaterStore = create(
       toggleSaveMessage: async (messageId, channelId) => {
         if (!messageId) return;
         
-        const wasSaved = get().savedMessageIds.has(messageId);
+        const wasSaved = get().savedMessageIds.includes(messageId);
         const prevSavedMessages = [...get().savedMessages];
-        const prevIds = new Set(get().savedMessageIds);
+        const prevIds = [...get().savedMessageIds];
 
         try {
-          const newIds = new Set(prevIds);
+          let newIds;
           if (wasSaved) {
-            newIds.delete(messageId);
+            newIds = prevIds.filter(id => id !== messageId);
             set({ 
               savedMessageIds: newIds,
               savedMessages: prevSavedMessages.filter(m => m.messageId?._id !== messageId),
               savedCount: get().savedCount - 1,
             });
           } else {
-            newIds.add(messageId);
+            newIds = [...prevIds, messageId];
             set({ savedMessageIds: newIds, savedCount: get().savedCount + 1 });
           }
 
@@ -81,8 +81,19 @@ export const useLaterStore = create(
         }
       },
 
+      // Local-only status update — used by socket handler to avoid API feedback loop
+      updateSavedMessageStatus: (messageId, status) => {
+        set((state) => ({
+          savedMessages: state.savedMessages.map((m) =>
+            (m._id === messageId || m.messageId?._id === messageId)
+              ? { ...m, status }
+              : m
+          ),
+        }));
+      },
+
       isMessageSaved: (messageId) => {
-        return get().savedMessageIds.has(messageId);
+        return get().savedMessageIds.includes(messageId);
       },
 
       addSavedMessage: (savedMessage) => {
@@ -96,9 +107,9 @@ export const useLaterStore = create(
             newMessages = [savedMessage, ...newMessages];
           }
 
-          const newIds = new Set(state.savedMessageIds);
-          if (savedMessage.messageId?._id) {
-            newIds.add(savedMessage.messageId._id);
+          const newIds = [...state.savedMessageIds];
+          if (savedMessage.messageId?._id && !newIds.includes(savedMessage.messageId._id)) {
+            newIds.push(savedMessage.messageId._id);
           }
           return {
             savedMessages: newMessages,
@@ -110,8 +121,7 @@ export const useLaterStore = create(
 
       removeSavedMessage: (messageId) => {
         set((state) => {
-          const newIds = new Set(state.savedMessageIds);
-          newIds.delete(messageId);
+          const newIds = state.savedMessageIds.filter(id => id !== messageId);
           const newMessages = state.savedMessages.filter((m) => m.messageId?._id !== messageId);
           return {
             savedMessages: newMessages,
@@ -124,7 +134,7 @@ export const useLaterStore = create(
       clearSavedMessages: () => set({ 
         savedMessages: [], 
         savedCount: 0,
-        savedMessageIds: new Set() 
+        savedMessageIds: []
       }),
     }),
     {

@@ -3,25 +3,26 @@ import { View, Text, Image, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useThemeStore } from '../stores/themeStore';
 
-const WORKSPACE_GRADIENTS = [
-  ['#3B82F6', '#2563EB'],  // Blue
-  ['#8B5CF6', '#7C3AED'],  // Purple
-  ['#10B981', '#059669'],  // Green
-  ['#F97316', '#EA580C'],  // Orange
-  ['#EF4444', '#DC2626'],  // Red
-  ['#06B6D4', '#0891B2'],  // Cyan
+const defaultGradients = (colors) => [
+  [colors.primary, colors.primaryHover || colors.primary],
+  [colors.primaryHover || colors.primary, colors.primary],
+  [colors.success, colors.primary],
+  [colors.warning || colors.primary, colors.error || colors.primary],
+  [colors.inputBackground, colors.card],
+  [(colors.headerGradient && colors.headerGradient[0]) || colors.primary, (colors.headerGradient && colors.headerGradient[1]) || colors.primaryHover || colors.primary],
 ];
 
-const getWorkspaceGradient = (workspaceName, index = 0) => {
-  if (!workspaceName) return WORKSPACE_GRADIENTS[0];
-  
+const getWorkspaceGradient = (workspaceName, colors, index = 0) => {
+  const gradients = defaultGradients(colors);
+  if (!workspaceName) return gradients[0];
+
   let hash = 0;
   for (let i = 0; i < workspaceName.length; i++) {
     hash = workspaceName.charCodeAt(i) + ((hash << 5) - hash);
   }
-  
-  const gradientIndex = Math.abs(hash) % WORKSPACE_GRADIENTS.length;
-  return WORKSPACE_GRADIENTS[gradientIndex];
+
+  const gradientIndex = Math.abs(hash) % gradients.length;
+  return gradients[gradientIndex];
 };
 
 const WorkspaceAvatar = ({ 
@@ -36,7 +37,7 @@ const WorkspaceAvatar = ({
   const workspaceLogo = workspace?.logo;
   const workspaceName = workspace?.name || 'W';
   const initial = workspaceName[0]?.toUpperCase() || 'W';
-  const gradient = getWorkspaceGradient(workspaceName, index);
+  const gradient = getWorkspaceGradient(workspaceName, colors, index);
 
   if (workspaceLogo) {
     return (
@@ -50,7 +51,7 @@ const WorkspaceAvatar = ({
               height: size,
               borderRadius: size * 0.25,
               borderWidth: showBorder ? 2 : 0,
-              borderColor: showBorder ? 'rgba(255,255,255,0.5)' : 'transparent',
+                borderColor: showBorder ? `${colors.messageTextSent}80` : 'transparent',
             },
           ]}
         />
@@ -70,7 +71,7 @@ const WorkspaceAvatar = ({
           height: size,
           borderRadius: size * 0.25,
           borderWidth: showBorder ? 2 : 0,
-          borderColor: showBorder ? 'rgba(255,255,255,0.5)' : 'transparent',
+            borderColor: showBorder ? `${colors.messageTextSent}80` : 'transparent',
         },
         style,
       ]}
@@ -78,7 +79,7 @@ const WorkspaceAvatar = ({
       <Text
         style={[
           styles.initial,
-          { fontSize: size * 0.45, color: '#FFFFFF' },
+          { fontSize: size * 0.45, color: colors.messageTextSent },
         ]}
       >
         {initial}

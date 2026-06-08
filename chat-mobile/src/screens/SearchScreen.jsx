@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Activity
 import { useThemeStore } from '../stores/themeStore';
 import { searchAPI } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Search, X } from 'lucide-react-native';
+import { Search, X, Hash, Lock, MessageSquare } from 'lucide-react-native';
+import Avatar from '../components/Avatar';
 import Toast from 'react-native-toast-message';
 
 const RECENT_KEY = 'recent_searches';
@@ -92,15 +93,43 @@ export default function SearchScreen({ navigation }) {
             if (it.type === 'channel' || it.type === 'dm') {
               navigation.navigate('Chat', { channelId: it._id, channelName: it.name });
             } else if (it.type === 'user') {
-              navigation.navigate('DirectMessage', { userId: it.id || it._id });
+              navigation.navigate('Chat', { channelId: it.id || it._id, channelName: it.name || it.label });
             } else if (it.type === 'file') {
               navigation.navigate('Files', { channelId: it.channelId });
+            } else if (it.type === 'message') {
+              const chId = it.channelId?._id || it.channelId;
+              navigation.navigate('Chat', {
+                channelId: chId || it.channel,
+                channelName: it.channelName || 'Chat',
+                messageId: it._id,
+              });
+            } else if (it.type === 'thread') {
+              navigation.navigate('ThreadDetail', {
+                rootMessageId: it._id || it.rootMessageId,
+                channelId: it.channelId?._id || it.channelId,
+                channelName: it.channelName || 'Thread',
+                rootContent: it.snippet || it.content || '',
+                replyCount: it.replyCount || 0,
+              });
             } else {
               Alert.alert(it.label || it.name || it.fileName || 'Result', it.snippet || '');
             }
-          }} style={{ paddingVertical: 8 }}>
-            <Text style={{ color: colors.textPrimary }}>{it.name || it.label || it.fileName || it.title}</Text>
-            {it.snippet ? <Text style={{ color: colors.textTertiary, marginTop: 4 }}>{it.snippet}</Text> : null}
+          }} style={styles.resultRow}>
+            {it.type === 'user' ? (
+              <Avatar user={it} size={32} showStatus />
+            ) : it.type === 'channel' ? (
+              <View style={[styles.resultIcon, { backgroundColor: colors.backgroundSecondary }]}>
+                {it.visibility === 'private' ? <Lock size={16} color={colors.textSecondary} /> : <Hash size={16} color={colors.textSecondary} />}
+              </View>
+            ) : it.type === 'dm' ? (
+              <View style={[styles.resultIcon, { backgroundColor: colors.backgroundSecondary }]}>
+                <MessageSquare size={16} color={colors.textSecondary} />
+              </View>
+            ) : null}
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.textPrimary, fontWeight: '500' }}>{it.name || it.label || it.fileName || it.title}</Text>
+              {it.snippet ? <Text style={{ color: colors.textTertiary, marginTop: 4 }}>{it.snippet}</Text> : null}
+            </View>
           </TouchableOpacity>
         ))}
       </View>
@@ -140,4 +169,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   searchBox: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, padding: 8, borderWidth: 1 },
   scopePill: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, marginRight: 8, marginBottom: 8 },
+  resultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 10 },
+  resultIcon: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
 });

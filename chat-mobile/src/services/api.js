@@ -1,12 +1,12 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
+import { secureGet, secureSet, secureMultiRemove } from '../utils/secureStorage';
+import ENV from '../config/environment';
 
-// In Expo/React Native, we use the local machine IP for development
-// Preference: 1. Environment variable 2. Hardcoded fallback
-const BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://172.16.16.33:3200/api/chat';
+// Use ENV (which already resolves app.json extra + .env + production fallback)
+const BASE_URL = ENV.API_BASE_URL;
 
-console.log('[API] Initializing with BASE_URL:', BASE_URL);
+console.log('[API] Active BASE_URL:', BASE_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -16,28 +16,119 @@ const api = axios.create({
   },
 });
 
-// Interceptor for outgoing requests
-api.interceptors.request.use(async (config) => {
-  try {
-    const token = await AsyncStorage.getItem('chat_access_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    
-    const workspaceId = await AsyncStorage.getItem('active_workspace_id');
-    if (workspaceId) {
-      config.headers['X-Workspace-Id'] = workspaceId;
-    }
+// In-memory token cache to avoid async AsyncStorage reads on every request
+let cachedToken = null;
+let cachedWorkspaceId = null;
+let cachedFlowtaskToken = null;
 
-    const flowtaskToken = await AsyncStorage.getItem('flowtask_token');
-    if (flowtaskToken) {
-      config.headers['X-FlowTask-Token'] = flowtaskToken;
-    }
-  } catch (err) {
-    console.error('[API Request Error]', err);
+/**
+ * Pre-load tokens into memory cache. Called once during auth init.
+ */
+export const primeApiCache = async () => {
+  try {
+    cachedToken = await secureGet('chat_access_token');
+    cachedWorkspaceId = await AsyncStorage.getItem('active_workspace_id');
+    cachedFlowtaskToken = await secureGet('flowtask_token');
+  } catch {
+    // Silently fail — interceptor will fall back to AsyncStorage
+  }
+};
+
+/**
+ * Update cached token after login/refresh.
+ */
+export const setCachedToken = (token) => {
+  cachedToken = token;
+};
+
+/**
+ * Update cached workspace ID after workspace switch.
+ */
+export const setCachedWorkspaceId = (workspaceId) => {
+  cachedWorkspaceId = workspaceId;
+};
+
+/**
+ * Clear all cached values on logout.
+ */
+export const clearApiCache = () => {
+  cachedToken = null;
+  cachedWorkspaceId = null;
+  cachedFlowtaskToken = null;
+};
+
+// Synchronous request interceptor — uses cached values
+api.interceptors.request.use((config) => {
+  if (cachedToken) {
+    config.headers.Authorization = `Bearer ${cachedToken}`;
+  }
+  if (cachedWorkspaceId) {
+    config.headers['X-Workspace-Id'] = cachedWorkspaceId;
+  }
+  if (cachedFlowtaskToken) {
+    config.headers['X-FlowTask-Token'] = cachedFlowtaskToken;
   }
   return config;
 });
+
+// Refresh lock — prevent concurrent refresh requests (server rotates tokens)
+let refreshPromise = null;
+
+const performRefresh = async () => {
+  const refreshToken = await secureGet('chat_refresh_token');
+  if (!refreshToken) throw new Error('No refresh token');
+
+  const { data } = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken });
+  const newAccessToken = data.data?.accessToken;
+  const newRefreshToken = data.data?.refreshToken;
+
+  if (!newAccessToken) throw new Error('No access token in refresh response');
+
+  // Update cache and storage
+  cachedToken = newAccessToken;
+  await secureSet('chat_access_token', newAccessToken);
+  if (newRefreshToken) {
+    await secureSet('chat_refresh_token', newRefreshToken);
+  }
+
+  return newAccessToken;
+};
+
+// Response interceptor — handle 401 and token refresh
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    // If 401 and we haven't already retried, attempt token refresh
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      // Use shared promise so concurrent 401s share a single refresh
+      if (!refreshPromise) {
+        refreshPromise = performRefresh().finally(() => {
+          refreshPromise = null;
+        });
+      }
+
+      try {
+        const newToken = await refreshPromise;
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return api(originalRequest);
+      } catch {
+        // Refresh failed — clear tokens, user will be redirected to login
+        clearApiCache();
+        await secureMultiRemove([
+          'chat_access_token',
+          'chat_refresh_token',
+        ]);
+        await AsyncStorage.removeItem('chat_user');
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 // Auth API endpoints
 export const authAPI = {
@@ -92,11 +183,45 @@ export const messageAPI = {
   getFileProxyUrl: (assetId) => `${api.defaults.baseURL}/messages/files/${encodeURIComponent(assetId)}/proxy`,
 };
 
+// Reactions API
+export const reactionAPI = {
+  add: (messageId, emoji) => api.post(`/messages/${messageId}/reactions`, { emoji }),
+  remove: (messageId, emoji) => api.delete(`/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`),
+};
+
 // Files API — reuse backend endpoints used by web client
 export const fileAPI = {
   listWorkspace: (params) => api.get('/messages/files', { params }),
   listByChannel: (channelId, params) => api.get(`/channels/${channelId}/files`, { params }),
   deleteFromChannel: (channelId, fileId) => api.delete(`/channels/${channelId}/files/${fileId}`),
+  uploadFiles: (channelId, formData, onProgress) =>
+    api.post(`/channels/${channelId}/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000,
+      onUploadProgress: onProgress,
+    }),
+};
+
+// Users API — presence and custom status
+export const usersAPI = {
+  setPresence: (status) => api.put('/users/presence', { status }),
+  setCustomStatus: (data) => api.put('/users/custom-status', data),
+  getChannelMembers: (channelId) => api.get(`/channels/${channelId}/members`),
+};
+
+// Pinned messages API
+export const pinsAPI = {
+  list: (channelId) => api.get(`/channels/${channelId}/pins`),
+  pin: (messageId) => api.post(`/messages/${messageId}/pin`),
+  unpin: (messageId) => api.delete(`/messages/${messageId}/pin`),
+};
+
+// Push Notification API — register/remove device push tokens
+export const pushAPI = {
+  registerToken: (token, deviceId, platform = 'mobile') =>
+    api.post('/push/fcm-token', { token, deviceId, platform }),
+  removeToken: (token) =>
+    api.delete('/push/fcm-token', { data: { token } }),
 };
 
 // Search API (global workspace search)

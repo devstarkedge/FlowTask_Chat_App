@@ -13,7 +13,7 @@ import {
 import { useLaterStore } from '../stores/laterStore';
 import { useThemeStore } from '../stores/themeStore';
 import { 
-  ArrowLeft,
+  CircleChevronLeft,
   Bookmark,
   Hash,
   MessageSquare,
@@ -168,7 +168,7 @@ const LaterScreen = ({ navigation }) => {
           style={styles.backButton} 
           onPress={() => navigation.goBack()}
         >
-          <ArrowLeft size={24} color={colors.textPrimary} />
+          <CircleChevronLeft size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Later</Text>
         <View style={{ width: 40 }} />

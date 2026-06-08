@@ -12,8 +12,9 @@ import {
 import { useDraftStore, getWorkspaceDrafts } from '../stores/draftStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useThemeStore } from '../stores/themeStore';
+import { useChannelStore } from '../stores/channelStore';
 import { 
-  ArrowLeft,
+  CircleChevronLeft,
   Edit3,
   Hash,
   MessageSquare,
@@ -26,6 +27,7 @@ const DraftsScreen = ({ navigation }) => {
   const clearDraft = useDraftStore(state => state.clearDraft);
   const fetchDrafts = useDraftStore(state => state.fetchDrafts);
   const { activeWorkspace } = useWorkspaceStore();
+  const { channels } = useChannelStore();
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchDraftsRef = useRef(fetchDrafts);
@@ -46,8 +48,10 @@ const DraftsScreen = ({ navigation }) => {
   };
 
   const handleDraftPress = (draft) => {
+    const channel = channels.find(ch => ch._id === draft.channelId);
     navigation.navigate('Chat', {
       channelId: draft.channelId,
+      channelName: channel?.name || 'Chat',
       threadId: draft.threadId,
       loadDraft: true,
     });
@@ -116,7 +120,7 @@ const DraftsScreen = ({ navigation }) => {
           style={styles.backButton} 
           onPress={() => navigation.goBack()}
         >
-          <ArrowLeft size={24} color={colors.textPrimary} />
+          <CircleChevronLeft size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Drafts</Text>
         <View style={{ width: 40 }} />

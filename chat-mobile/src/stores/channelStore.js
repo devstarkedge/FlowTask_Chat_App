@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { channelAPI } from '../services/api';
+import { channelAPI, usersAPI } from '../services/api';
 
 export const useChannelStore = create(
   persist(
@@ -9,6 +9,7 @@ export const useChannelStore = create(
       channels: [],
       activeChannelId: null,
       unreads: {},
+      membersByChannel: {},
       isLoading: false,
 
       fetchChannels: async () => {
@@ -83,6 +84,21 @@ export const useChannelStore = create(
 
           return { channels, unreads };
         });
+      },
+
+      fetchMembers: async (channelId) => {
+        try {
+          const { data } = await usersAPI.getChannelMembers(channelId);
+          const members = data.data?.members || data.data || [];
+          set((state) => ({
+            membersByChannel: {
+              ...state.membersByChannel,
+              [channelId]: members,
+            },
+          }));
+        } catch (error) {
+          console.error('Failed to fetch channel members:', error);
+        }
       },
     }),
     {

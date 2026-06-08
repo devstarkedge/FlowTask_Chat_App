@@ -15,24 +15,22 @@ import {
 import DrawerNavigation from "../components/DrawerNavigation";
 
 // Unauth Screens
-import LandingScreen from "../screens/LandingScreen";
-import LoginScreen from "../screens/LoginScreen";
-import RegisterScreen from "../screens/RegisterScreen";
+import LandingScreen from "../screens/Authentication/LandingScreen";
+import LoginScreen from "../screens/Authentication/LoginScreen";
+import RegisterScreen from "../screens/Authentication/RegisterScreen";
 
 // Auth Screens
 import WorkspaceSelectorScreen from "../screens/WorkspaceSelectorScreen";
 import HomeScreenEnhanced from "../screens/HomeScreen";
 const HomeScreen = HomeScreenEnhanced;
-import ChannelListScreen from "../screens/ChannelListScreen";
 import DMListScreen from "../screens/DMListScreen";
-import ActivityScreen from "../screens/ActivityScreen";
-import ProfileScreen from "../screens/ProfileScreen";
-import ChatScreen from "../screens/ChatScreen";
-import DirectMessageScreen from "../screens/DirectMessageScreen";
+import ActivityScreen from "../screens/Activity/ActivityScreen";
+import ProfileScreen from "../screens/Authentication/ProfileScreen";
+import ChatScreen from "../screens/Chat/ChatScreen";
 import ChannelDetailsScreen from "../screens/ChannelDetailsScreen";
-import SettingsScreen from "../screens/SettingsScreen";
-import CreateWorkspaceScreen from "../screens/CreateWorkspaceScreen";
+import CreateWorkspaceScreen from "../screens/Add-Workspace/CreateWorkspaceScreen";
 import ThreadsScreen from "../screens/ThreadsScreen";
+import ThreadDetailScreen from "../screens/ThreadDetailScreen";
 import LaterScreen from "../screens/LaterScreen";
 import DraftsScreen from "../screens/DraftsScreen";
 import ScheduledScreen from "../screens/ScheduledScreen";
@@ -40,6 +38,8 @@ import NotificationsScreen from "../screens/NotificationsScreen";
 import PreferencesScreen from "../screens/PreferencesScreen";
 import FilesScreen from "../screens/FilesScreen";
 import SearchScreen from "../screens/SearchScreen";
+import PinnedMessagesScreen from "../screens/PinnedMessagesScreen";
+
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -103,7 +103,7 @@ function BottomTabs({ navigation }) {
         />
         <Tab.Screen
           name="MoreTab"
-          component={ProfileScreen}
+          component={FilesScreen}
           options={{
             headerShown: false,
             tabBarLabel: "More",
@@ -177,11 +177,6 @@ export default function AppNavigation() {
             }}
           />
           <Stack.Screen
-            name="DirectMessage"
-            component={DirectMessageScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
             name="ChannelDetails"
             component={ChannelDetailsScreen}
             options={{
@@ -190,16 +185,13 @@ export default function AppNavigation() {
             }}
           />
           <Stack.Screen
-            name="Settings"
-            component={SettingsScreen}
-            options={{
-              headerShown: true,
-              title: "Settings",
-            }}
-          />
-          <Stack.Screen
             name="Threads"
             component={ThreadsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="ThreadDetail"
+            component={ThreadDetailScreen}
             options={{ headerShown: false }}
           />
           <Stack.Screen
@@ -244,6 +236,11 @@ export default function AppNavigation() {
             name="Search"
             component={SearchScreen}
             options={{ headerShown: true, title: "Search" }}
+          />
+          <Stack.Screen
+            name="PinnedMessages"
+            component={PinnedMessagesScreen}
+            options={{ headerShown: false }}
           />
         </>
       )}

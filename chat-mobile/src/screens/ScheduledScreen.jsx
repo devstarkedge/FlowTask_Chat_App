@@ -14,7 +14,7 @@ import {
 import { useScheduledStore } from '../stores/scheduledStore';
 import { useThemeStore } from '../stores/themeStore';
 import { 
-  ArrowLeft,
+  CircleChevronLeft,
   Clock,
   Hash,
   Trash2,
@@ -130,7 +130,7 @@ const ScheduledScreen = ({ navigation }) => {
           style={styles.backButton} 
           onPress={() => navigation.goBack()}
         >
-          <ArrowLeft size={24} color={colors.textPrimary} />
+          <CircleChevronLeft size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Scheduled</Text>
         <View style={{ width: 40 }} />

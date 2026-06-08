@@ -1,13 +1,17 @@
 {
   "expo": {
-    "name": "chat-mobile-js",
+    "name": "FlowTask-Chat",
     "slug": "chat-mobile-js",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mohitgahlyan.chatmobilejs",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -15,14 +19,21 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "package": "com.mohitgahlyan.chatmobilejs"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiUrl": "http://172.16.16.33:3200/api/chat",
-      "socketUrl": "http://172.16.16.33:3200"
-    }
+      "apiUrl": "https://chat-app-api-cyyl.onrender.com/api/chat",
+      "socketUrl": "https://chat-app-api-cyyl.onrender.com",
+      "eas": {
+        "projectId": "dcfa4a56-c26e-4daf-9e3b-751f3136bd8d"
+      }
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
   }
 }

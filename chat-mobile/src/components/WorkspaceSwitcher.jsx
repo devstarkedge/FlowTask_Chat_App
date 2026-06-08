@@ -30,6 +30,7 @@ import { disconnectSocket } from "../services/socket";
 import { workspaceAPI } from "../services/api";
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import AccessibleModal from "./AccessibleModal";
+import WorkspaceAvatar from "./WorkspaceAvatar";
 
 const { width } = Dimensions.get("window");
 const DRAWER_WIDTH = width * 0.85;
@@ -163,41 +164,42 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
         <TouchableOpacity
           style={[
             styles.workspaceCard,
-            { backgroundColor: colors.background },
-            isActive && { backgroundColor: colors.backgroundSecondary },
+            {
+              backgroundColor: isActive
+                ? colors.primary
+                : colors.backgroundSecondary,
+            },
           ]}
           onPress={() => handleWorkspaceSwitch(workspace._id)}
           activeOpacity={0.7}
         >
           <View style={styles.workspaceContent}>
-            <View
-              style={[
-                styles.workspaceLogo,
-                { backgroundColor: colors.primary },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.workspaceLogoText,
-                  { color: colors.textInverse },
-                ]}
-              >
-                {workspace.name?.substring(0, 1).toUpperCase()}
-              </Text>
-            </View>
+            <WorkspaceAvatar
+              workspace={workspace}
+              size={48}
+              showBorder
+              style={{
+                borderWidth: 2,
+                borderColor: isActive ? colors.background : colors.border,
+              }}
+            />
             <View style={styles.workspaceInfo}>
               <Text
-                style={[styles.workspaceName, { color: colors.textPrimary }]}
+                style={[
+                  styles.workspaceName,
+                  { color: isActive ? colors.textInverse : colors.textPrimary },
+                ]}
               >
                 {workspace.name}
               </Text>
               <Text
-                style={[styles.workspaceUrl, { color: colors.textSecondary }]}
-              >
-                {workspace.slug}.flowtask.com
-              </Text>
-              <Text
-                style={[styles.workspaceRole, { color: colors.textTertiary }]}
+                style={[
+                  styles.workspaceRole,
+                  {
+                    color: isActive ? colors.textInverse : colors.textTertiary,
+                    opacity: 0.8,
+                  },
+                ]}
               >
                 {userRole.charAt(0).toUpperCase() + userRole.slice(1)}
               </Text>
@@ -211,7 +213,10 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
               )
             }
           >
-            <MoreVertical size={20} color={colors.textSecondary} />
+            <MoreVertical
+              size={20}
+              color={isActive ? colors.textInverse : colors.textSecondary}
+            />
           </TouchableOpacity>
         </TouchableOpacity>
 
@@ -252,12 +257,15 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
     <TouchableOpacity
       style={styles.footerButton}
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={0.6}
     >
-      <Icon size={20} color={colors.textPrimary} strokeWidth={1.5} />
+      <View style={styles.footerButtonIconContainer}>
+        <Icon size={20} color={colors.primary} strokeWidth={1.5} />
+      </View>
       <Text style={[styles.footerButtonText, { color: colors.textPrimary }]}>
         {label}
       </Text>
+      <View style={{ flex: 1 }} />
     </TouchableOpacity>
   );
 
@@ -291,97 +299,104 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
           </Text>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text
-                style={[styles.loadingText, { color: colors.textSecondary }]}
-              >
-                Loading workspaces...
-              </Text>
-            </View>
-          ) : error ? (
-            <View style={styles.errorContainer}>
-              <Text style={[styles.errorText, { color: colors.error }]}>
-                {error}
-              </Text>
-              <TouchableOpacity
-                style={[
-                  styles.retryButton,
-                  { backgroundColor: colors.primary },
-                ]}
-                onPress={fetchWorkspaces}
-              >
+        <View style={styles.drawerContent}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={!isLoading && !error && workspaces.length > 0}
+          >
+            {isLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
                 <Text
-                  style={[
-                    styles.retryButtonText,
-                    { color: colors.textInverse },
-                  ]}
+                  style={[styles.loadingText, { color: colors.textSecondary }]}
                 >
-                  Retry
+                  Loading workspaces...
                 </Text>
-              </TouchableOpacity>
-            </View>
-          ) : workspaces.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                No workspaces found
-              </Text>
-              <TouchableOpacity
-                style={[
-                  styles.createButton,
-                  { backgroundColor: colors.primary },
-                ]}
-                onPress={() => {
-                  onClose();
-                  navigation?.navigate("CreateWorkspace");
-                }}
-              >
+              </View>
+            ) : error ? (
+              <View style={styles.errorContainer}>
+                <Text style={[styles.errorText, { color: colors.error }]}>
+                  {error}
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.retryButton,
+                    { backgroundColor: colors.primary },
+                  ]}
+                  onPress={fetchWorkspaces}
+                >
+                  <Text
+                    style={[
+                      styles.retryButtonText,
+                      { color: colors.textInverse },
+                    ]}
+                  >
+                    Retry
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : workspaces.length === 0 ? (
+              <View style={styles.emptyContainer}>
                 <Text
-                  style={[
-                    styles.createButtonText,
-                    { color: colors.textInverse },
-                  ]}
+                  style={[styles.emptyText, { color: colors.textSecondary }]}
                 >
-                  Create Workspace
+                  No workspaces found
                 </Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.workspaceList}>
-              {workspaces.map((workspace) => (
-                <WorkspaceCard key={workspace._id} workspace={workspace} />
-              ))}
-            </View>
-          )}
+                <TouchableOpacity
+                  style={[
+                    styles.createButton,
+                    { backgroundColor: colors.primary },
+                  ]}
+                  onPress={() => {
+                    onClose();
+                    navigation?.navigate("CreateWorkspace");
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.createButtonText,
+                      { color: colors.textInverse },
+                    ]}
+                  >
+                    Create Workspace
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.workspaceList}>
+                {workspaces.map((workspace) => (
+                  <WorkspaceCard key={workspace._id} workspace={workspace} />
+                ))}
+              </View>
+            )}
+          </ScrollView>
+        </View>
 
-          <View style={[styles.footer, { borderTopColor: colors.border }]}>
-            <FooterButton
-              icon={Plus}
-              label="Add a Workspace"
-              onPress={() => {
-                onClose();
-                navigation?.navigate("CreateWorkspace");
-              }}
-            />
-            <FooterButton
-              icon={Settings}
-              label="Preferences"
-              onPress={() => {
-                onClose();
-                navigation?.navigate("Preferences");
-              }}
-            />
-            <FooterButton
-              icon={HelpCircle}
-              label="Help"
-              onPress={() => {
-                onClose();
-              }}
-            />
-          </View>
-        </ScrollView>
+        <View style={[styles.footer, { borderTopColor: colors.border }]}>
+          <FooterButton
+            icon={Plus}
+            label="Add a Workspace"
+            onPress={() => {
+              onClose();
+              navigation?.navigate("CreateWorkspace");
+            }}
+          />
+          <FooterButton
+            icon={Settings}
+            label="Preferences"
+            onPress={() => {
+              onClose();
+              navigation?.navigate("Preferences");
+            }}
+          />
+          <FooterButton
+            icon={HelpCircle}
+            label="Help"
+            onPress={() => {
+              onClose();
+            }}
+          />
+        </View>
       </Animated.View>
 
       <AccessibleModal
@@ -529,12 +544,10 @@ const createStyles = (colors) =>
       top: 0,
       bottom: 0,
       width: DRAWER_WIDTH,
+      flexDirection: "column",
       ...(Platform.OS !== "web"
         ? {
-            shadowColor: "#000",
-            shadowOffset: { width: 2, height: 0 },
-            shadowOpacity: 0.25,
-            shadowRadius: 8,
+            boxShadow: "2px 0px 8px rgba(0, 0, 0, 0.25)",
             elevation: 5,
           }
         : {
@@ -547,71 +560,102 @@ const createStyles = (colors) =>
           }),
     },
     header: {
-      paddingHorizontal: 24,
-      paddingVertical: 20,
-      paddingTop: 60,
+      paddingHorizontal: 20,
+      paddingVertical: 14,
       borderBottomWidth: 1,
     },
     headerTitle: {
       fontSize: 28,
       fontWeight: "700",
+      letterSpacing: -0.4,
+      marginBottom: 0,
+    },
+    drawerContent: {
+      flex: 1,
+      overflow: "hidden",
     },
     workspaceList: {
-      paddingVertical: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 8,
     },
     workspaceCard: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingHorizontal: 6,
+      paddingVertical: 7,
       marginHorizontal: 12,
-      marginVertical: 4,
+      marginVertical: 8,
       borderRadius: 12,
+      ...(Platform.OS !== "web"
+        ? {
+            boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.08)",
+            elevation: 1,
+          }
+        : {
+            boxShadow: rnShadowToBoxShadow(
+              "#000",
+              { width: 0, height: 2 },
+              0.08,
+              4,
+            ),
+          }),
     },
     workspaceContent: {
       flexDirection: "row",
       alignItems: "center",
       flex: 1,
-      gap: 14,
-    },
-    workspaceLogo: {
-      width: 56,
-      height: 56,
-      borderRadius: 14,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    workspaceLogoText: {
-      fontSize: 24,
-      fontWeight: "800",
+      gap: 9,
     },
     workspaceInfo: {
       flex: 1,
+      justifyContent: "center",
     },
     workspaceName: {
-      fontSize: 17,
+      fontSize: 13,
       fontWeight: "700",
-      marginBottom: 2,
+      marginBottom: 4,
+      letterSpacing: -0.2,
+      lineHeight: 22,
     },
     workspaceUrl: {
-      fontSize: 14,
-      marginBottom: 2,
+      fontSize: 13,
+      marginBottom: 3,
+      fontWeight: "500",
+      lineHeight: 18,
     },
     workspaceRole: {
       fontSize: 12,
       fontWeight: "600",
+      textTransform: "capitalize",
+      lineHeight: 16,
     },
     moreButton: {
       padding: 8,
+      marginLeft: 8,
+      justifyContent: "center",
+      alignItems: "center",
     },
     actionMenu: {
       marginHorizontal: 12,
-      marginTop: -4,
+      marginTop: 0,
       marginBottom: 8,
-      borderRadius: 8,
+      borderRadius: 10,
       borderWidth: 1,
       overflow: "hidden",
+      ...(Platform.OS !== "web"
+        ? {
+            boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.05)",
+            elevation: 1,
+          }
+        : {
+            boxShadow: rnShadowToBoxShadow(
+              "#000",
+              { width: 0, height: 1 },
+              0.05,
+              2,
+            ),
+          }),
     },
     actionMenuItem: {
       flexDirection: "row",
@@ -619,72 +663,102 @@ const createStyles = (colors) =>
       paddingHorizontal: 16,
       paddingVertical: 12,
       gap: 12,
+      minHeight: 48,
     },
     actionMenuText: {
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: "500",
+      lineHeight: 20,
     },
     footer: {
       borderTopWidth: 1,
-      marginTop: 12,
-      paddingTop: 8,
-      paddingBottom: 40,
+      // paddingVertical: 2,
+      paddingBottom: Platform.OS === "web" ? 11 : 15,
     },
     footerButton: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 24,
-      paddingVertical: 16,
-      gap: 14,
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+      gap: 3,
+      minHeight: 52,
+    },
+    footerButtonIconContainer: {
+      width: 28,
+      height: 16,
+      justifyContent: "center",
+      alignItems: "center",
+      flexShrink: 0,
     },
     footerButtonText: {
       flex: 1,
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: "500",
+      letterSpacing: -0.2,
+      lineHeight: 16,
     },
     loadingContainer: {
-      padding: 40,
+      padding: 60,
       alignItems: "center",
-      gap: 12,
+      gap: 18,
+      justifyContent: "center",
     },
     loadingText: {
       fontSize: 14,
+      fontWeight: "500",
+      lineHeight: 20,
     },
     errorContainer: {
       padding: 40,
       alignItems: "center",
       gap: 16,
+      justifyContent: "center",
     },
     errorText: {
       fontSize: 14,
       textAlign: "center",
+      fontWeight: "500",
+      lineHeight: 20,
     },
     retryButton: {
-      paddingHorizontal: 24,
+      paddingHorizontal: 28,
       paddingVertical: 12,
-      borderRadius: 8,
+      borderRadius: 10,
+      marginTop: 8,
+      minHeight: 44,
+      justifyContent: "center",
     },
     retryButtonText: {
       fontSize: 15,
       fontWeight: "600",
+      lineHeight: 21,
+      textAlign: "center",
     },
     emptyContainer: {
-      padding: 40,
+      padding: 60,
       alignItems: "center",
-      gap: 16,
+      gap: 24,
+      justifyContent: "center",
     },
     emptyText: {
       fontSize: 14,
       textAlign: "center",
+      fontWeight: "500",
+      lineHeight: 20,
     },
     createButton: {
-      paddingHorizontal: 24,
+      paddingHorizontal: 28,
       paddingVertical: 12,
-      borderRadius: 8,
+      borderRadius: 10,
+      marginTop: 8,
+      minHeight: 44,
+      justifyContent: "center",
     },
     createButtonText: {
       fontSize: 15,
       fontWeight: "600",
+      lineHeight: 21,
+      textAlign: "center",
     },
     modalOverlay: {
       flex: 1,
@@ -694,65 +768,99 @@ const createStyles = (colors) =>
     },
     inviteModal: {
       width: "85%",
-      borderRadius: 12,
+      borderRadius: 16,
       overflow: "hidden",
+      ...(Platform.OS !== "web"
+        ? {
+            boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.15)",
+            elevation: 8,
+          }
+        : {
+            boxShadow: rnShadowToBoxShadow(
+              "#000",
+              { width: 0, height: 4 },
+              0.15,
+              12,
+            ),
+          }),
     },
     inviteHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      padding: 20,
+      paddingHorizontal: 20,
+      paddingVertical: 18,
       borderBottomWidth: 1,
+      minHeight: 64,
     },
     inviteTitle: {
       fontSize: 20,
       fontWeight: "700",
+      letterSpacing: -0.3,
+      lineHeight: 28,
+      flex: 1,
     },
     inviteContent: {
-      padding: 20,
-      gap: 16,
+      paddingHorizontal: 20,
+      paddingVertical: 22,
+      gap: 18,
     },
     inviteLabel: {
       fontSize: 14,
       fontWeight: "600",
       marginBottom: 8,
+      lineHeight: 20,
     },
     inviteInput: {
       borderWidth: 1,
-      borderRadius: 8,
+      borderRadius: 10,
       paddingHorizontal: 16,
       paddingVertical: 12,
       fontSize: 15,
+      fontWeight: "500",
+      lineHeight: 21,
+      minHeight: 48,
     },
     roleButtons: {
       flexDirection: "row",
-      gap: 12,
+      gap: 10,
+      marginTop: 4,
     },
     roleButton: {
       flex: 1,
       paddingVertical: 12,
-      borderRadius: 8,
+      paddingHorizontal: 12,
+      borderRadius: 10,
       borderWidth: 1,
       alignItems: "center",
+      justifyContent: "center",
+      minHeight: 44,
     },
     roleButtonText: {
       fontSize: 14,
       fontWeight: "600",
+      lineHeight: 20,
+      textAlign: "center",
     },
     inviteActions: {
       flexDirection: "row",
-      padding: 20,
+      paddingHorizontal: 20,
+      paddingVertical: 18,
       gap: 12,
     },
     inviteButton: {
       flex: 1,
-      paddingVertical: 14,
-      borderRadius: 8,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 10,
       alignItems: "center",
+      justifyContent: "center",
+      minHeight: 44,
     },
     inviteButtonText: {
       fontSize: 15,
       fontWeight: "600",
+      lineHeight: 21,
     },
   });
 

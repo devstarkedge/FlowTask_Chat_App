@@ -22,20 +22,25 @@ const LOCK_TIME_MS = 15 * 60 * 1000; // 15 minutes
 
 const chatPreferencesSchema = new Schema({
   theme: {
-    type: String,
-    enum: ['light', 'dark', 'system'],
-    default: 'system',
-  },
-  sidebarTheme: {
-    type: String,
-    enum: ['aubergine', 'purple', 'blue', 'green', 'graphite', 'custom'],
-    default: 'aubergine',
-  },
-  customTheme: {
-    sidebarBg: { type: String, default: '#3f0e40' },
-    sidebarText: { type: String, default: '#f8edf7' },
-    accentColor: { type: String, default: '#1264a3' },
-    sidebarActive: { type: String, default: '#1164a3' },
+    mode: {
+      type: String,
+      enum: ['light', 'dark', 'system'],
+      default: 'system',
+    },
+    sidebarTheme: {
+      type: String,
+      enum: ['aubergine', 'purple', 'blue', 'green', 'graphite', 'custom'],
+      default: 'aubergine',
+    },
+    accentColor: {
+      type: String,
+      default: 'blue',
+    },
+    customColors: {
+      type: Map,
+      of: String,
+      default: new Map(),
+    },
   },
   notificationSound: {
     type: Boolean,
@@ -123,7 +128,7 @@ const chatPreferencesSchema = new Schema({
     deviceId: { type: String, default: null },
     platform: {
       type: String,
-      enum: ['web', 'android', 'ios', 'desktop'],
+      enum: ['web', 'android', 'ios', 'desktop', 'expo'],
       default: 'web',
     },
     createdAt: { type: Date, default: Date.now },

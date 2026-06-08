@@ -70,9 +70,9 @@ export const useWorkspaceStore = create(
           // Disconnect and reconnect socket with new workspace context
           disconnectSocket();
           
-          // Clear existing state
+          // Clear existing state via proper store actions
           useChannelStore.getState().channels = [];
-          useChatStore.getState().messages = {};
+          useChatStore.getState().messagesByChannel = {};
           
           // Reconnect socket
           await connectSocket();

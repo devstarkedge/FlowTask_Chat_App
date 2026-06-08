@@ -8,21 +8,27 @@ import {
   TouchableOpacity,
   StatusBar,
 } from 'react-native';
-import { useThemeStore } from '../stores/themeStore';
-import { useAuthStore } from '../stores/authStore';
-import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useThemeStore } from '../../stores/themeStore';
+import { useAuthStore } from '../../stores/authStore';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
 import {
   User,
   Mail,
   Briefcase,
-  ChevronLeft,
-  Edit,
+  CircleChevronLeft,
+  CircleChevronRight,
+  Settings,
+  Bell,
+  Palette,
+  LogOut,
 } from 'lucide-react-native';
+import Avatar from '../../components/Avatar';
 
 const ProfileScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
   const { user } = useAuthStore();
   const { activeWorkspace } = useWorkspaceStore();
+  const logout = useAuthStore((s) => s.logout);
 
   const styles = createStyles(colors);
 
@@ -33,7 +39,7 @@ const ProfileScreen = ({ navigation }) => {
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <ChevronLeft size={24} color={colors.textPrimary} />
+          <CircleChevronLeft size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Profile</Text>
         <View style={{ width: 40 }} />
@@ -42,14 +48,10 @@ const ProfileScreen = ({ navigation }) => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Header */}
         <View style={[styles.profileHeader, { backgroundColor: colors.backgroundSecondary }]}>
-          <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-            <Text style={[styles.avatarText, { color: colors.textInverse }]}>
-              {user?.name?.substring(0, 1).toUpperCase()}
-            </Text>
-          </View>
+          <Avatar user={user} size={100}  />
           <Text style={[styles.name, { color: colors.textPrimary }]}>{user?.name}</Text>
           <View style={styles.statusRow}>
-            <View style={[styles.statusDot, { backgroundColor: colors.online }]} />
+            {/* <View style={[styles.statusDot, { backgroundColor: colors.online }]} /> */}
             <Text style={[styles.statusText, { color: colors.online }]}>Active</Text>
           </View>
         </View>
@@ -88,6 +90,27 @@ const ProfileScreen = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Quick Links */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            SETTINGS
+          </Text>
+          <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
+            <LinkRow icon={Palette} label="Preferences" colors={colors} onPress={() => navigation.navigate('Preferences')} />
+            <LinkRow icon={Bell} label="Notifications" colors={colors} onPress={() => navigation.navigate('Notifications')} />
+          </View>
+        </View>
+
+        {/* Logout */}
+        <View style={styles.section}>
+          <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
+            <TouchableOpacity style={styles.logoutRow} onPress={logout} activeOpacity={0.7}>
+              <LogOut size={20} color={colors.error} />
+              <Text style={[styles.logoutLabel, { color: colors.error }]}>Log Out</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
@@ -111,6 +134,19 @@ const InfoRow = ({ icon: Icon, label, value, colors }) => {
     </View>
   );
 };
+
+const LinkRow = ({ icon: Icon, label, colors, onPress }) => (
+  <TouchableOpacity style={prStyles.linkRow} onPress={onPress} activeOpacity={0.7}>
+    <Icon size={20} color={colors.textSecondary} />
+    <Text style={[prStyles.linkLabel, { color: colors.textPrimary, flex: 1 }]}>{label}</Text>
+    <CircleChevronRight size={20} color={colors.textTertiary} />
+  </TouchableOpacity>
+);
+
+const prStyles = StyleSheet.create({
+  linkRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 },
+  linkLabel: { fontSize: 15, fontWeight: '500' },
+});
 
 const createStyles = (colors) => StyleSheet.create({
   container: {
@@ -216,6 +252,16 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '600',
     flex: 1,
     textAlign: 'right',
+  },
+  logoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 4,
+  },
+  logoutLabel: {
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
 

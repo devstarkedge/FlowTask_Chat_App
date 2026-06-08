@@ -283,12 +283,105 @@ export const saveDndSchedule = asyncHandler(async (req, res) => {
  */
 export const updateThemePreferences = asyncHandler(async (req, res) => {
   const { theme } = req.body;
+  
+  if (!theme || typeof theme !== 'object') {
+    return res.status(400).json({ success: false, error: 'Theme object is required' });
+  }
+
+  // First, check if user has old theme schema and migrate if needed
+  const userCheck = await ChatUser.findById(req.user._id).select('chatPreferences').lean();
+  
+  if (!userCheck) {
+    return res.status(404).json({ success: false, error: 'User not found' });
+  }
+  
+  const currentTheme = userCheck.chatPreferences?.theme;
+  
+  // If theme is still a string (old schema), replace entirely
+  if (typeof currentTheme === 'string') {
+    const newTheme = {
+      mode: theme.mode || currentTheme,
+      sidebarTheme: theme.sidebarTheme || 'aubergine',
+      accentColor: theme.accentColor || 'blue',
+      customColors: theme.customColors || {},
+    };
+    
+    const user = await ChatUser.findByIdAndUpdate(
+      req.user._id,
+      { 
+        $set: { 'chatPreferences.theme': newTheme },
+        $unset: { 
+          'chatPreferences.sidebarTheme': '',
+          'chatPreferences.customTheme': '',
+        },
+      },
+      { new: true, runValidators: true }
+    ).select('chatPreferences');
+    
+    return res.json({ 
+      success: true, 
+      data: { 
+        theme: {
+          mode: newTheme.mode,
+          sidebarTheme: newTheme.sidebarTheme,
+          accentColor: newTheme.accentColor,
+          customColors: newTheme.customColors || {},
+        }
+      } 
+    });
+  }
+
+  // Normal update path for new schema
+  const updatePayload = {};
+  
+  if (theme.mode) {
+    updatePayload['chatPreferences.theme.mode'] = theme.mode;
+  }
+  
+  if (theme.sidebarTheme) {
+    updatePayload['chatPreferences.theme.sidebarTheme'] = theme.sidebarTheme;
+  }
+  
+  if (theme.accentColor) {
+    updatePayload['chatPreferences.theme.accentColor'] = theme.accentColor;
+  }
+  
+  // Store customColors as plain object (Mongoose will handle Map conversion)
+  if (theme.customColors !== undefined) {
+    updatePayload['chatPreferences.theme.customColors'] = theme.customColors || {};
+  }
+
   const user = await ChatUser.findByIdAndUpdate(
     req.user._id,
-    { 'chatPreferences.theme': theme },
+    { $set: updatePayload },
     { new: true, runValidators: true }
   ).select('chatPreferences');
-  res.json({ success: true, data: { theme: user.chatPreferences?.theme || {} } });
+  
+  if (!user) {
+    return res.status(404).json({ success: false, error: 'User not found' });
+  }
+  
+  // Build response theme object
+  const responseTheme = {
+    mode: user.chatPreferences?.theme?.mode || 'system',
+    sidebarTheme: user.chatPreferences?.theme?.sidebarTheme || 'aubergine',
+    accentColor: user.chatPreferences?.theme?.accentColor || 'blue',
+    customColors: {},
+  };
+  
+  // Handle customColors (whether Map or plain object)
+  const customColors = user.chatPreferences?.theme?.customColors;
+  if (customColors) {
+    if (customColors instanceof Map) {
+      customColors.forEach((value, key) => {
+        responseTheme.customColors[key] = value;
+      });
+    } else if (typeof customColors === 'object') {
+      responseTheme.customColors = customColors;
+    }
+  }
+  
+  res.json({ success: true, data: { theme: responseTheme } });
 });
 
 /**
@@ -297,5 +390,28 @@ export const updateThemePreferences = asyncHandler(async (req, res) => {
  */
 export const getThemePreferences = asyncHandler(async (req, res) => {
   const user = await ChatUser.findById(req.user._id).select('chatPreferences').lean();
-  res.json({ success: true, data: { theme: user.chatPreferences?.theme || {} } });
+  
+  if (!user) {
+    return res.status(404).json({ success: false, error: 'User not found' });
+  }
+  
+  // Convert Map to plain object for JSON response
+  const responseTheme = {
+    mode: user.chatPreferences?.theme?.mode || 'system',
+    sidebarTheme: user.chatPreferences?.theme?.sidebarTheme || 'aubergine',
+    accentColor: user.chatPreferences?.theme?.accentColor || 'blue',
+    customColors: {},
+  };
+  
+  // Handle Map serialization
+  if (user.chatPreferences?.theme?.customColors) {
+    const customColors = user.chatPreferences.theme.customColors;
+    
+    // Check if it's a Map (Mongoose converts to plain object in lean queries)
+    if (customColors && typeof customColors === 'object') {
+      responseTheme.customColors = customColors;
+    }
+  }
+  
+  res.json({ success: true, data: { theme: responseTheme } });
 });

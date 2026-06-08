@@ -523,11 +523,11 @@ class NotificationEngine {
   }
 
   /**
-   * Send push notification (Web Push + FCM).
+   * Send push notification (Web Push + FCM + Expo).
    * @private
    */
   async _sendPush(recipientId, notification, recipient, prefs) {
-    // Check if desktop push is enabled
+    // Skip if no push channel is enabled
     if (!prefs.global?.desktopPush && !prefs.global?.mobilePush) return;
 
     const payload = {
@@ -548,11 +548,10 @@ class NotificationEngine {
       },
     };
 
-    // Send via Web Push (VAPID)
+    // Send via Web Push (VAPID) — desktop browsers
     if (prefs.global?.desktopPush) {
       try {
         await pushService.sendToUser(recipientId, payload);
-        // Mark push as sent
         await Notification.findByIdAndUpdate(notification._id, {
           $set: { pushSentAt: new Date() },
         });
@@ -563,8 +562,27 @@ class NotificationEngine {
       }
     }
 
-    // FCM would be sent here if configured
-    // await pushService.sendViaFCM(recipientId, payload);
+    // Send via FCM — Android/iOS when Firebase is configured
+    if (prefs.global?.mobilePush) {
+      try {
+        await pushService.sendViaFCM(recipientId, payload);
+      } catch (err) {
+        logger.warn('NotificationEngine: FCM push failed', {
+          recipientId, error: err?.message,
+        });
+      }
+    }
+
+    // Send via Expo Push — mobile app (expo-server-sdk)
+    if (prefs.global?.mobilePush) {
+      try {
+        await pushService.sendViaExpo(recipientId, payload);
+      } catch (err) {
+        logger.warn('NotificationEngine: Expo push failed', {
+          recipientId, error: err?.message,
+        });
+      }
+    }
   }
 
   /**

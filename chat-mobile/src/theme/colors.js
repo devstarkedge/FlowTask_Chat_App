@@ -1,4 +1,4 @@
-// Theme color system for FlowTask Chat Mobile
+// Theme color system for FlowTask-Chat Mobile
 // Supports Light, Dark, and Custom Workspace Themes
 // Matches web application architecture
 
@@ -178,67 +178,54 @@ export const darkTheme = {
   shadowDark: 'rgba(0, 0, 0, 0.5)',
 };
 
-// Sidebar theme presets (matching web client)
-export const sidebarPresets = {
-  aubergine: {
-    sidebar: '#3F0E40',
-    sidebarText: '#F8EDF7',
-    sidebarHover: 'rgba(255, 255, 255, 0.12)',
-    sidebarActive: '#1164A3',
-    sidebarActiveText: '#FFFFFF',
-    primary: '#1264A3',
-  },
-  purple: {
-    sidebar: '#4A154B',
-    sidebarText: '#FBF4FF',
-    sidebarHover: 'rgba(255, 255, 255, 0.13)',
-    sidebarActive: '#7C3AED',
-    sidebarActiveText: '#FFFFFF',
-    primary: '#7C3AED',
-  },
-  blue: {
-    sidebar: '#0F3D5E',
-    sidebarText: '#EDF7FF',
-    sidebarHover: 'rgba(255, 255, 255, 0.12)',
-    sidebarActive: '#1D6FB8',
-    sidebarActiveText: '#FFFFFF',
-    primary: '#1D6FB8',
-  },
-  green: {
-    sidebar: '#0F5132',
-    sidebarText: '#ECFFF5',
-    sidebarHover: 'rgba(255, 255, 255, 0.12)',
-    sidebarActive: '#11875D',
-    sidebarActiveText: '#FFFFFF',
-    primary: '#11875D',
-  },
-  graphite: {
-    sidebar: '#1F2428',
-    sidebarText: '#F5F7F8',
-    sidebarHover: 'rgba(255, 255, 255, 0.11)',
-    sidebarActive: '#3F7FBF',
-    sidebarActiveText: '#FFFFFF',
-    primary: '#3F7FBF',
-  },
-};
-
-export const getTheme = (mode = 'light', sidebarTheme = 'aubergine', accentColor = 'blue', customColors = {}, workspaceTheme = null) => {
+/**
+ * Build a merged theme object.
+ * @param {'light'|'dark'} mode
+ * @param {string} accentColor  – preset name or 'custom'
+ * @param {string|null} customColor – hex value when accentColor === 'custom'
+ * @param {object|null} workspaceTheme – optional workspace override
+ */
+export const getTheme = (mode = 'light', accentColor = 'blue', customColor = null, workspaceTheme = null) => {
   const base = mode === 'dark' ? darkTheme : lightTheme;
-  const sidebar = sidebarPresets[sidebarTheme] || sidebarPresets.aubergine;
-  const accent = accentColors[accentColor] || accentColors.blue;
-  
+
+  let accent;
+  if (accentColor === 'custom' && customColor) {
+    // Derive accent palette from the picked hex
+    const num = parseInt(customColor.replace('#', ''), 16);
+    const r = (num >> 16) & 0xff;
+    const g = (num >> 8) & 0xff;
+    const b = num & 0xff;
+    const dr = Math.max(0, Math.min(255, Math.floor(r * 0.88)));
+    const dg = Math.max(0, Math.min(255, Math.floor(g * 0.88)));
+    const db = Math.max(0, Math.min(255, Math.floor(b * 0.88)));
+    const hover = '#' + ((1 << 24) + (dr << 16) + (dg << 8) + db).toString(16).slice(1).toUpperCase();
+    const lr = Math.min(255, Math.floor(r + (255 - r) * 0.88));
+    const lg = Math.min(255, Math.floor(g + (255 - g) * 0.88));
+    const lb = Math.min(255, Math.floor(b + (255 - b) * 0.88));
+    const light = '#' + ((1 << 24) + (lr << 16) + (lg << 8) + lb).toString(16).slice(1).toUpperCase();
+    accent = {
+      primary: customColor,
+      primaryHover: hover,
+      primaryLight: mode === 'dark' ? hover : light,
+      headerGradient: [customColor, hover],
+    };
+  } else {
+    accent = accentColors[accentColor] || accentColors.blue;
+  }
+
   // Workspace theme override
-  const workspace = workspaceTheme ? {
-    primary: workspaceTheme.primary || accent.primary,
-    headerGradient: workspaceTheme.headerGradient || accent.headerGradient,
-    sidebar: workspaceTheme.sidebar || sidebar.sidebar,
-  } : {};
-  
+  const workspace = workspaceTheme
+    ? {
+        primary: workspaceTheme.primary || accent.primary,
+        headerGradient: workspaceTheme.headerGradient || accent.headerGradient,
+        sidebar: workspaceTheme.sidebar || base.sidebar,
+      }
+    : {};
+
   return {
     ...base,
-    ...sidebar,
     ...accent,
     ...workspace,
-    ...customColors,
+    effectiveTheme: mode,
   };
 };

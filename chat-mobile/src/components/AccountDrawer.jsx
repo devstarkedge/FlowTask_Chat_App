@@ -10,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 import AccessibleModal from "./AccessibleModal";
+import Avatar from "./Avatar";
 import { useThemeStore } from "../stores/themeStore";
 import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
@@ -40,7 +41,7 @@ import {
   FileText,
   Send,
   LogOut,
-  ChevronRight,
+  CircleChevronRight ,
   Smile,
 } from "lucide-react-native";
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
@@ -107,28 +108,34 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
     onPress,
     badge,
     showChevron = true,
-  }) => (
-    <TouchableOpacity
-      style={styles.menuItem}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <Icon size={22} color={colors.textPrimary} strokeWidth={1.5} />
-      <Text style={[styles.menuLabel, { color: colors.textPrimary }]}>
-        {label}
-      </Text>
-      {badge && (
-        <View
-          style={[styles.badge, { backgroundColor: colors.badgeBackground }]}
-        >
-          <Text style={[styles.badgeText, { color: colors.badgeText }]}>
-            {badge}
-          </Text>
+  }) => {
+    const [pressed, setPressed] = useState(false);
+
+    return (
+      <Pressable
+        style={({ pressed }) => [
+          styles.menuItem,
+          pressed && { backgroundColor: colors.backgroundSecondary },
+        ]}
+        onPress={onPress}
+        onPressIn={() => setPressed(true)}
+        onPressOut={() => setPressed(false)}
+      >
+        <View style={styles.menuIconContainer}>
+          <Icon size={22} color={colors.primary} strokeWidth={1.8} />
         </View>
-      )}
-      {showChevron && <ChevronRight size={20} color={colors.textTertiary} />}
-    </TouchableOpacity>
-  );
+        <Text style={[styles.menuLabel, { color: colors.textPrimary }]}>
+          {label}
+        </Text>
+        {badge && (
+          <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+            <Text style={[styles.badgeText, { color: "white" }]}>{badge}</Text>
+          </View>
+        )}
+        {showChevron && <CircleChevronRight size={20} color={colors.textTertiary} />}
+      </Pressable>
+    );
+  };
 
   const SectionDivider = () => (
     <View style={[styles.divider, { backgroundColor: colors.border }]} />
@@ -151,17 +158,20 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
         <Animated.View
           style={[
             styles.drawer,
-            { backgroundColor: colors.background, transform: [{ translateY }] },
+            {
+              backgroundColor: colors.background,
+              transform: [{ translateY }],
+            },
           ]}
           onStartShouldSetResponder={() => true}
         >
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <X size={24} color={colors.textPrimary} />
+              <X size={24} color={colors.textPrimary} strokeWidth={2} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-              You
+              Account
             </Text>
             <View style={{ width: 40 }} />
           </View>
@@ -169,27 +179,18 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Profile Section */}
             <View style={styles.profileSection}>
-              <View
-                style={[styles.avatar, { backgroundColor: colors.primary }]}
-              >
-                <Text
-                  style={[styles.avatarText, { color: colors.textInverse }]}
-                >
-                  {user?.name?.substring(0, 1).toUpperCase()}
-                </Text>
-                <View
-                  style={[
-                    styles.statusIndicator,
-                    { backgroundColor: colors.online },
-                  ]}
-                />
+              <View style={styles.avatarWrapper}>
+                <Avatar user={user} size={80} />
               </View>
               <Text style={[styles.userName, { color: colors.textPrimary }]}>
                 {user?.name}
               </Text>
               <View style={styles.statusRow}>
                 <View
-                  style={[styles.statusDot, { backgroundColor: colors.online }]}
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: colors.online || "#31a24c" },
+                  ]}
                 />
                 <Text
                   style={[styles.statusText, { color: colors.textSecondary }]}
@@ -200,28 +201,37 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
             </View>
 
             {/* Status Section */}
-            <TouchableOpacity
-              style={[
-                styles.statusCard,
-                { backgroundColor: colors.backgroundSecondary },
-              ]}
-              onPress={() => {
-                if (Platform.OS === 'web') {
-                  document.activeElement?.blur();
-                  setTimeout(() => setStatusModalVisible(true), 0);
-                } else {
-                  setStatusModalVisible(true);
-                }
-              }}
-              activeOpacity={0.7}
-            >
-              <Smile size={20} color={colors.textSecondary} />
-              <Text
-                style={[styles.statusCardText, { color: colors.textSecondary }]}
+            <View style={styles.statusCardContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.statusCard,
+                  {
+                    backgroundColor:
+                      colors.primary + "15" || "rgba(0,0,0,0.05)",
+                    borderColor: colors.primary + "30" || "rgba(0,0,0,0.1)",
+                  },
+                ]}
+                onPress={() => {
+                  if (Platform.OS === "web") {
+                    document.activeElement?.blur();
+                    setTimeout(() => setStatusModalVisible(true), 0);
+                  } else {
+                    setStatusModalVisible(true);
+                  }
+                }}
+                activeOpacity={0.7}
               >
-                What's your status?
-              </Text>
-            </TouchableOpacity>
+                <Smile size={20} color={colors.primary} strokeWidth={2} />
+                <Text
+                  style={[
+                    styles.statusCardText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  What's your status?
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <SectionDivider />
 
@@ -231,7 +241,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
                 icon={BellOff}
                 label="Pause notifications"
                 onPress={() => {
-                  if (Platform.OS === 'web') {
+                  if (Platform.OS === "web") {
                     document.activeElement?.blur();
                     setTimeout(() => setPauseNotificationsVisible(true), 0);
                   } else {
@@ -243,7 +253,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
                 icon={Activity}
                 label="Set yourself as away"
                 onPress={() => {
-                  if (Platform.OS === 'web') {
+                  if (Platform.OS === "web") {
                     document.activeElement?.blur();
                     setTimeout(() => setPresenceModalVisible(true), 0);
                   } else {
@@ -276,9 +286,21 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
               <MenuItem
                 icon={Settings}
                 label="Preferences"
-                onPress={() => navigateTo("Settings")}
+                onPress={() => navigateTo("Preferences")}
               />
             </View>
+
+            {/* <SectionDivider /> */}
+
+            {/* Logout Section */}
+            {/* <View style={styles.section}>
+              <MenuItem
+                icon={LogOut}
+                label="Sign out"
+                onPress={handleLogout}
+                showChevron={false}
+              />
+            </View> */}
 
             <View style={{ height: 40 }} />
           </ScrollView>
@@ -311,15 +333,11 @@ const createStyles = (colors) =>
     },
     drawer: {
       maxHeight: "90%",
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
       ...(Platform.OS !== "web"
         ? {
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.15,
-            shadowRadius: 12,
-            elevation: 8,
+            boxShadow: "0px -4px 12px rgba(0, 0, 0, 0.15)",
           }
         : {
             boxShadow: rnShadowToBoxShadow(
@@ -339,16 +357,23 @@ const createStyles = (colors) =>
       borderBottomWidth: 1,
     },
     closeButton: {
-      padding: 4,
+      padding: 8,
+      borderRadius: 8,
     },
     headerTitle: {
       fontSize: 18,
       fontWeight: "700",
+      letterSpacing: -0.5,
     },
     profileSection: {
       alignItems: "center",
-      paddingVertical: 24,
+      paddingVertical: 28,
       paddingHorizontal: 20,
+    },
+    avatarWrapper: {
+      marginBottom: 16,
+      boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+      elevation: 4,
     },
     avatar: {
       width: 80,
@@ -356,7 +381,6 @@ const createStyles = (colors) =>
       borderRadius: 40,
       justifyContent: "center",
       alignItems: "center",
-      marginBottom: 12,
       position: "relative",
     },
     avatarText: {
@@ -374,9 +398,10 @@ const createStyles = (colors) =>
       borderColor: "white",
     },
     userName: {
-      fontSize: 22,
-      fontWeight: "700",
-      marginBottom: 6,
+      fontSize: 24,
+      fontWeight: "800",
+      marginBottom: 8,
+      letterSpacing: -0.5,
     },
     statusRow: {
       flexDirection: "row",
@@ -389,24 +414,28 @@ const createStyles = (colors) =>
       borderRadius: 4,
     },
     statusText: {
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: "500",
+    },
+    statusCardContainer: {
+      paddingHorizontal: 20,
+      marginVertical: 12,
     },
     statusCard: {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
-      marginHorizontal: 20,
-      marginVertical: 12,
       padding: 16,
-      borderRadius: 12,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: "transparent",
     },
     statusCardText: {
       fontSize: 15,
-      fontWeight: "500",
+      fontWeight: "600",
     },
     section: {
-      paddingHorizontal: 20,
+      paddingHorizontal: 12,
       paddingVertical: 8,
     },
     sectionTitle: {
@@ -415,32 +444,50 @@ const createStyles = (colors) =>
       letterSpacing: 0.5,
       marginBottom: 8,
       marginTop: 4,
+      paddingHorizontal: 8,
     },
     menuItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: 14,
+      paddingVertical: 12,
+      paddingHorizontal: 8,
+      marginVertical: 2,
+      borderRadius: 12,
       gap: 14,
+      transition: "background-color 200ms ease",
+    },
+    menuIconContainer: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: "rgba(0,0,0,0.02)",
     },
     menuLabel: {
       flex: 1,
       fontSize: 16,
       fontWeight: "500",
+      letterSpacing: -0.3,
     },
     badge: {
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      borderRadius: 10,
-      minWidth: 20,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+      minWidth: 24,
       alignItems: "center",
+      justifyContent: "center",
+      marginRight: 8,
     },
     badgeText: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
     },
     divider: {
       height: 1,
       marginVertical: 12,
+      marginHorizontal: 20,
+      opacity: 0.5,
     },
     logoutButton: {
       flexDirection: "row",

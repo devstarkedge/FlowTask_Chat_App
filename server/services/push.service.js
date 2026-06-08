@@ -4,6 +4,18 @@ import userRepository from '../modules/users/user.repository.js'
 import logger from '../utils/logger.js'
 import firebaseAdmin from '../config/firebaseAdmin.js'
 
+// Expo Push Notifications SDK (for mobile app push)
+let Expo;
+try {
+  const mod = await import('expo-server-sdk');
+  Expo = mod.Expo;
+} catch {
+  Expo = null;
+}
+
+// Singleton Expo push client
+const _expoClient = Expo ? new Expo({ accessToken: env.EXPO_ACCESS_TOKEN || undefined }) : null;
+
 // Support CommonJS/ESM interop: web-push may export default in runtime
 const wp = webpush?.default ?? webpush;
 const _firebaseAdmin = firebaseAdmin.initializeFirebase()
@@ -255,25 +267,110 @@ export async function removeFCMToken(userId, token) {
   }, { returnDocument: 'after' })
 }
 
+// ─── Expo Push (Mobile App) ─────────────────────────────────────────────────────
+
+/**
+ * Send push notification to the mobile app via Expo Push service.
+ * Reads fcmTokens where platform === 'expo' from the user's chatPreferences.
+ *
+ * @param {string} userId - ChatUser _id
+ * @param {object} payload - { title, body, icon, badge, tag, data }
+ * @returns {{ sent: number }}
+ */
+export async function sendViaExpo(userId, payload) {
+  if (!_expoClient) {
+    return { sent: 0, reason: 'expo_sdk_not_available' };
+  }
+
+  try {
+    const user = await userRepository.findById(userId);
+    const allTokens = user?.chatPreferences?.fcmTokens || [];
+    // Filter for Expo push tokens (platform === 'expo')
+    const expoTokens = allTokens
+      .filter((t) => t.platform === 'expo' && t.token)
+      .map((t) => t.token);
+
+    if (expoTokens.length === 0) return { sent: 0 };
+
+    // Build Expo push messages
+    const messages = [];
+    for (const token of expoTokens) {
+      if (!Expo.isExpoPushToken(token)) {
+        logger.warn('Invalid Expo push token', { userId, token: token.slice(0, 20) });
+        continue;
+      }
+      messages.push({
+        to: token,
+        sound: 'default',
+        title: payload.title,
+        body: payload.body,
+        data: payload.data || {},
+        badge: payload.badge ? 1 : undefined,
+        channelId: 'default',
+        priority: payload.data?.priority === 'high' ? 'high' : 'default',
+      });
+    }
+
+    if (messages.length === 0) return { sent: 0 };
+
+    // Send in chunks (Expo limits to 100 messages per request)
+    const chunks = _expoClient.chunkPushNotifications(messages);
+    let sent = 0;
+    const expiredTokens = [];
+
+    for (const chunk of chunks) {
+      try {
+        const receipts = await _expoClient.sendPushNotificationsAsync(chunk);
+        for (let i = 0; i < receipts.length; i++) {
+          const receipt = receipts[i];
+          if (receipt.status === 'ok') {
+            sent++;
+          } else if (receipt.status === 'error') {
+            if (receipt.details?.error === 'DeviceNotRegistered' || receipt.details?.error === 'InvalidCredentials') {
+              expiredTokens.push(chunk[i].to);
+            }
+            logger.warn('Expo push receipt error', { userId, error: receipt.message });
+          }
+        }
+      } catch (err) {
+        logger.error('Expo push chunk failed', { userId, error: err.message });
+      }
+    }
+
+    // Clean up expired tokens
+    for (const token of expiredTokens) {
+      await removeFCMToken(userId, token);
+    }
+
+    return { sent };
+  } catch (error) {
+    logger.error('sendViaExpo failed', { userId, error: error.message });
+    return { sent: 0 };
+  }
+}
+
 // ─── Multi-Device Push Management ────────────────────────────────────────────
 
 /**
- * Send push to all devices (Web Push + FCM).
+ * Send push to all devices (Web Push + FCM + Expo).
  * Used by the notification engine for cross-platform delivery.
  */
 export async function sendToAllDevices(userId, payload) {
   const results = await Promise.allSettled([
     sendToUser(userId, payload),
     sendViaFCM(userId, payload),
+    sendViaExpo(userId, payload),
   ])
 
   const webResult = results[0].status === 'fulfilled' ? results[0].value : { sent: 0 }
   const fcmResult = results[1].status === 'fulfilled' ? results[1].value : { sent: 0 }
+  const expoResult = results[2].status === 'fulfilled' ? results[2].value : { sent: 0 }
 
   return {
     webPush: webResult.sent,
     fcm: fcmResult.sent,
-    total: webResult.sent + fcmResult.sent,
+    expo: expoResult.sent,
+    total: webResult.sent + fcmResult.sent + expoResult.sent,
   }
 }
 
@@ -300,6 +397,7 @@ export default {
   sendToUser,
   sendToSubscription,
   sendViaFCM,
+  sendViaExpo,
   registerFCMToken,
   removeFCMToken,
   sendToAllDevices,

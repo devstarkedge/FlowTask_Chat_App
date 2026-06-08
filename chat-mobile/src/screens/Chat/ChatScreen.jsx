@@ -1,0 +1,1164 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  FlatList,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  StatusBar,
+  Alert,
+  Image,
+  Linking,
+} from "react-native";
+import * as Clipboard from "expo-clipboard";
+import { useChatStore } from "../../stores/chatStore";
+import { useAuthStore } from "../../stores/authStore";
+import { useChannelStore } from "../../stores/channelStore";
+import { useThemeStore } from "../../stores/themeStore";
+import { useLaterStore } from "../../stores/laterStore";
+import { laterAPI, pinsAPI } from "../../services/api";
+import { emitTyping } from "../../services/socket";
+import Avatar from "../../components/Avatar";
+import RichText from "../../components/RichText";
+import ReactionBar from "../../components/ReactionBar";
+import EmojiPickerModal from "../../components/EmojiPickerModal";
+import ReminderModal from "../../components/ReminderModal";
+import {
+  Send,
+  Hash,
+  MoreVertical,
+  Image as ImageIcon,
+  Smile,
+  Users,
+  Search,
+  Pin,
+  Bell,
+  CircleChevronLeft,
+  Lock,
+  Volume2,
+  Phone,
+  Video,
+  FileText,
+  MessageSquare,
+  Reply,
+  Edit3,
+  Trash2,
+  Bookmark,
+  Copy,
+  ExternalLink,
+} from "lucide-react-native";
+import SearchBar from "../../components/SearchBar";
+import MessageComposer from "../../components/MessageComposer";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const getAuthorId = (msg) => {
+  if (!msg) return null;
+  if (typeof msg.authorId === "string") return msg.authorId;
+  return msg.authorId?._id || msg.senderSnapshot?._id || null;
+};
+
+const isSameDay = (d1, d2) => {
+  const a = new Date(d1);
+  const b = new Date(d2);
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+};
+
+const formatDateSeparator = (dateStr) => {
+  const date = new Date(dateStr);
+  const now = new Date();
+  if (isSameDay(date, now)) return "Today";
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (isSameDay(date, yesterday)) return "Yesterday";
+  return date.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+};
+
+const formatTime = (dateStr) => {
+  return new Date(dateStr).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const isImageUrl = (url) => {
+  if (!url) return false;
+  return /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$/i.test(url);
+};
+
+// ─── ChatScreen ──────────────────────────────────────────────────────────────
+
+const ChatScreen = ({ route, navigation }) => {
+  const { channelId, channelName } = route.params;
+  const {
+    messagesByChannel,
+    fetchMessages,
+    sendMessage,
+    isLoadingMessages,
+    typingByChannel,
+    hasMore,
+    addReaction,
+    removeReaction,
+    editMessage,
+    deleteMessage,
+  } = useChatStore();
+  const { user } = useAuthStore();
+  const { channels } = useChannelStore();
+  const { membersByChannel, fetchMembers } = useChannelStore();
+  const { colors } = useThemeStore();
+  const { activeWorkspaceId } = useWorkspaceStore();
+  const { toggleSaveMessage, isMessageSaved } = useLaterStore();
+
+  const [text, setText] = useState("");
+  const [showOptions, setShowOptions] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [currentMatch, setCurrentMatch] = useState(0);
+  const [emojiPickerTarget, setEmojiPickerTarget] = useState(null); // messageId or null
+  const [replyingTo, setReplyingTo] = useState(null); // message object or null
+  const [editingMessage, setEditingMessage] = useState(null); // message object or null
+  const [reminderTarget, setReminderTarget] = useState(null); // messageId or null
+
+  const messages = messagesByChannel[channelId] || [];
+  const displayedMessages = useMemo(() => [...messages].reverse(), [messages]);
+  const typingUsers = Object.values(typingByChannel[channelId] || {});
+  const channel = channels.find((ch) => ch._id === channelId);
+  const memberCount = channel?.members?.length || 0;
+  const onlineCount =
+    channel?.members?.filter((m) => m.onlineStatus === "online").length || 0;
+
+  const isDM = channel?.type === "dm";
+  const isSystem = channel?.type === "system";
+  const isPrivate =
+    channel?.visibility === "private" || channel?.type === "private";
+  const dmUser = isDM
+    ? channel?.members?.find((m) => m._id !== user?._id)
+    : null;
+
+  const flatListRef = useRef(null);
+
+  useEffect(() => {
+    fetchMessages(channelId);
+    fetchMembers(channelId);
+  }, [channelId]);
+
+  useEffect(() => {
+    if (!searchQuery) {
+      setSearchResults([]);
+      setCurrentMatch(0);
+      return;
+    }
+    const q = searchQuery.trim().toLowerCase();
+    const matches = [];
+    displayedMessages.forEach((m, idx) => {
+      if (m?.content && m.content.toLowerCase().includes(q)) matches.push(idx);
+    });
+    setSearchResults(matches);
+    setCurrentMatch(0);
+    if (matches.length > 0) {
+      setTimeout(() => scrollToIndex(matches[0]), 80);
+    }
+  }, [searchQuery, displayedMessages]);
+
+  const handleSend = (content, options) => {
+    sendMessage(channelId, content, options);
+  };
+
+  const scrollToIndex = (index) => {
+    if (!flatListRef.current || index == null) return;
+    try {
+      flatListRef.current.scrollToIndex({
+        index,
+        animated: true,
+        viewPosition: 0.5,
+      });
+    } catch (err) {
+      const approxItemHeight = 80;
+      flatListRef.current.scrollToOffset({
+        offset: index * approxItemHeight,
+        animated: true,
+      });
+    }
+  };
+
+  const goToNextMatch = () => {
+    if (!searchResults.length) return;
+    const next = (currentMatch + 1) % searchResults.length;
+    setCurrentMatch(next);
+    scrollToIndex(searchResults[next]);
+  };
+
+  const goToPrevMatch = () => {
+    if (!searchResults.length) return;
+    const prev =
+      (currentMatch - 1 + searchResults.length) % searchResults.length;
+    setCurrentMatch(prev);
+    scrollToIndex(searchResults[prev]);
+  };
+
+  // ─── Long-Press Context Menu ──────────────────────────────────────────────
+  const showMessageActions = useCallback(
+    (item) => {
+      const isMe =
+        item.authorId?._id === user?._id || item.authorId === user?._id;
+      const saved = isMessageSaved?.(item._id);
+      const pinned = item.isPinned;
+
+      const buttons = [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Copy",
+          onPress: () => {
+            Clipboard.setStringAsync(item.content || "");
+          },
+        },
+        {
+          text: "Reply",
+          onPress: () => {
+            setReplyingTo(item);
+            setEditingMessage(null);
+          },
+        },
+        {
+          text: "React",
+          onPress: () => setEmojiPickerTarget(item._id),
+        },
+        {
+          text: saved ? "Unsave" : "Save & Remind",
+          onPress: () => {
+            toggleSaveMessage?.(item._id);
+            if (!saved) setReminderTarget(item._id);
+          },
+        },
+        {
+          text: pinned ? "Unpin" : "Pin",
+          onPress: async () => {
+            try {
+              if (pinned) await pinsAPI.unpin(item._id);
+              else await pinsAPI.pin(item._id);
+            } catch (err) {
+              console.error('Pin action failed:', err);
+              Alert.alert('Error', 'Could not update pin status.');
+            }
+          },
+        },
+        {
+          text: "View Thread",
+          onPress: () => {
+            navigation.navigate("ThreadDetail", {
+              rootMessageId: item._id,
+              channelId,
+              channelName,
+              rootContent: item.content,
+              rootHtmlContent: item.htmlContent,
+              replyCount: item.replyCount || 0,
+              rootAuthor: item.senderSnapshot || item.authorId,
+            });
+          },
+        },
+      ];
+
+      if (isMe) {
+        buttons.push({
+          text: "Edit",
+          onPress: () => {
+            setEditingMessage(item);
+            setReplyingTo(null);
+            setText(item.content || "");
+          },
+        });
+        buttons.push({
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            Alert.alert("Delete Message", "Are you sure?", [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Delete",
+                style: "destructive",
+                onPress: () => deleteMessage(item._id, channelId),
+              },
+            ]);
+          },
+        });
+      }
+
+      if (Platform.OS === "ios" || Platform.OS === "android") {
+        Alert.alert(
+          "Message Actions",
+          item.content?.slice(0, 80) || "",
+          buttons
+        );
+      }
+    },
+    [user, channelId, channelName, navigation, toggleSaveMessage, isMessageSaved, deleteMessage]
+  );
+
+  // ─── Render: Date Separator ───────────────────────────────────────────────
+  const renderDateSeparator = (dateStr) => (
+    <View style={styles.dateSeparatorContainer} key={`date-${dateStr}`}>
+      <View style={[styles.dateSeparatorLine, { backgroundColor: colors.border }]} />
+      <Text style={[styles.dateSeparatorText, { color: colors.textSecondary }]}>
+        {formatDateSeparator(dateStr)}
+      </Text>
+      <View style={[styles.dateSeparatorLine, { backgroundColor: colors.border }]} />
+    </View>
+  );
+
+  // ─── Render: Message ──────────────────────────────────────────────────────
+  const renderMessage = ({ item, index }) => {
+    const isMe =
+      item.authorId?._id === user?._id || item.authorId === user?._id;
+    const isMatch =
+      searchQuery &&
+      item?.content &&
+      item.content.toLowerCase().includes(searchQuery.toLowerCase());
+    const isHighlighted =
+      isMatch && searchResults.length && searchResults[currentMatch] === index;
+
+    const messageSender = item.senderSnapshot || item.authorId;
+
+    // Message grouping: compact if same author and within 5 minutes of prev message
+    const prevItem = displayedMessages[index + 1]; // inverted list, so +1 is previous
+    const isCompact =
+      prevItem &&
+      getAuthorId(item) === getAuthorId(prevItem) &&
+      !item.isActivity &&
+      !prevItem.isActivity &&
+      Math.abs(new Date(item.createdAt) - new Date(prevItem.createdAt)) <
+        5 * 60 * 1000;
+
+    // Date separator: show if date differs from previous message
+    const showDateSep =
+      !prevItem || !isSameDay(item.createdAt, prevItem.createdAt);
+
+    // Thread indicator
+    const hasThread = (item.replyCount || 0) > 0;
+
+    // File attachments
+    const attachments = item.attachments || item.files || [];
+    const imageAttachments = attachments.filter(
+      (f) => f.mimeType?.startsWith("image/") || isImageUrl(f.url)
+    );
+    const fileAttachments = attachments.filter(
+      (f) => !f.mimeType?.startsWith("image/") && !isImageUrl(f.url)
+    );
+
+    const contentColor = isMe
+      ? colors.messageTextSent
+      : colors.messageTextReceived;
+
+    return (
+      <View>
+        {showDateSep && renderDateSeparator(item.createdAt)}
+
+        <TouchableOpacity
+          style={[
+            styles.messageContainer,
+            isMe ? styles.myMessage : styles.theirMessage,
+            isCompact && styles.messageCompact,
+          ]}
+          onLongPress={() => showMessageActions(item)}
+          activeOpacity={0.85}
+          delayLongPress={300}
+        >
+          {/* Avatar (hidden for compact/grouped messages) */}
+          {!isMe && !isCompact && (
+            <Avatar
+              user={messageSender}
+              size={32}
+              showStatus={false}
+              style={{ marginTop: 2 }}
+            />
+          )}
+          {!isMe && isCompact && <View style={{ width: 32 }} />}
+
+          <View style={{ flexShrink: 1 }}>
+            {/* Sender name (hidden for compact) */}
+            {!isMe && !isCompact && (
+              <View style={styles.senderRow}>
+                <Text
+                  style={[styles.senderName, { color: colors.textSecondary }]}
+                >
+                  {messageSender?.name || "Unknown"}
+                </Text>
+                <Text
+                  style={[styles.timestamp, { color: colors.textTertiary }]}
+                >
+                  {formatTime(item.createdAt)}
+                </Text>
+              </View>
+            )}
+
+            {/* Reply preview */}
+            {item.parentMessageId && item.replyTo && (
+              <View
+                style={[
+                  styles.replyPreview,
+                  { borderLeftColor: colors.primary },
+                ]}
+              >
+                <Reply size={12} color={colors.textSecondary} />
+                <Text
+                  style={[styles.replyPreviewText, { color: colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {item.replyTo.senderName || "User"}:{ " " }
+                  {item.replyTo.content || "..."}
+                </Text>
+              </View>
+            )}
+
+            {/* Message bubble */}
+            <View
+              style={[
+                styles.bubble,
+                {
+                  backgroundColor: isMe
+                    ? colors.messageBubbleSent
+                    : colors.messageBubbleReceived,
+                },
+                isHighlighted && {
+                  borderWidth: 2,
+                  borderColor: colors.primary,
+                },
+              ]}
+            >
+              {/* Content — rich text or plain */}
+              {item.htmlContent ? (
+                <RichText
+                  html={item.htmlContent}
+                  text={item.content}
+                  colors={{
+                    ...colors,
+                    textPrimary: contentColor,
+                    codeBackground: isMe
+                      ? "rgba(255,255,255,0.15)"
+                      : colors.codeBackground,
+                    codeBlockBackground: isMe
+                      ? "rgba(0,0,0,0.2)"
+                      : colors.codeBlockBackground,
+                    codeBlockText: isMe ? "#fff" : colors.codeBlockText,
+                  }}
+                  baseStyle={{ color: contentColor, fontSize: 15, lineHeight: 22 }}
+                />
+              ) : (
+                <Text
+                  style={[styles.messageText, { color: contentColor }]}
+                >
+                  {item.content}
+                </Text>
+              )}
+
+              {/* Image attachments */}
+              {imageAttachments.length > 0 && (
+                <View style={styles.attachmentRow}>
+                  {imageAttachments.map((file, i) => (
+                    <TouchableOpacity
+                      key={file._id || i}
+                      onPress={() => {
+                        if (file.url) Linking.openURL(file.url);
+                      }}
+                    >
+                      <Image
+                        source={{
+                          uri: file.thumbnailUrl || file.url,
+                        }}
+                        style={styles.imageAttachment}
+                        resizeMode="cover"
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {/* File attachments */}
+              {fileAttachments.length > 0 &&
+                fileAttachments.map((file, i) => (
+                  <TouchableOpacity
+                    key={file._id || i}
+                    style={[
+                      styles.fileAttachment,
+                      { backgroundColor: isMe ? "rgba(255,255,255,0.1)" : colors.cardBackground },
+                    ]}
+                    onPress={() => {
+                      if (file.url) Linking.openURL(file.url);
+                    }}
+                  >
+                    <FileText size={16} color={contentColor} />
+                    <Text
+                      style={{ color: contentColor, fontSize: 13, flex: 1 }}
+                      numberOfLines={1}
+                    >
+                      {file.fileName || file.name || "File"}
+                    </Text>
+                    <ExternalLink size={14} color={contentColor} />
+                  </TouchableOpacity>
+                ))}
+
+              {/* Timestamp row */}
+              <View style={styles.timestampRow}>
+                <Text
+                  style={[
+                    styles.timestamp,
+                    {
+                      color: isMe
+                        ? colors.messageTextSent
+                        : colors.textTertiary,
+                      opacity: 0.7,
+                    },
+                  ]}
+                >
+                  {formatTime(item.createdAt)}
+                </Text>
+                {item.isEdited && (
+                  <Text
+                    style={[
+                      styles.editedLabel,
+                      {
+                        color: isMe
+                          ? colors.messageTextSent
+                          : colors.textTertiary,
+                      },
+                    ]}
+                  >
+                    {" "}
+                    (edited)
+                  </Text>
+                )}
+                {item.pending && (
+                  <Text style={[styles.editedLabel, { color: colors.textTertiary }]}>
+                    {" "}
+                    sending...
+                  </Text>
+                )}
+                {item.failed && (
+                  <Text style={[styles.editedLabel, { color: colors.error }]}>
+                    {" "}
+                    failed
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            {/* Reactions */}
+            <ReactionBar
+              reactions={item.reactions}
+              messageId={item._id}
+              currentUserId={user?._id}
+              onAddReaction={(emoji) => addReaction(item._id, emoji)}
+              onRemoveReaction={(emoji) => removeReaction(item._id, emoji)}
+              onOpenPicker={() => setEmojiPickerTarget(item._id)}
+              colors={colors}
+            />
+
+            {/* Thread indicator */}
+            {hasThread && (
+              <TouchableOpacity
+                style={[
+                  styles.threadIndicator,
+                  { borderColor: colors.border },
+                ]}
+                onPress={() => {
+                  navigation.navigate("ThreadDetail", {
+                    rootMessageId: item._id,
+                    channelId,
+                    channelName,
+                    rootContent: item.content,
+                    rootHtmlContent: item.htmlContent,
+                    replyCount: item.replyCount || 0,
+                    rootAuthor: item.senderSnapshot || item.authorId,
+                  });
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.threadAvatars}>
+                  {(item.threadParticipants || []).slice(0, 3).map((p, i) => (
+                    <Avatar
+                      key={p._id || i}
+                      user={p}
+                      size={18}
+                      showStatus={false}
+                      style={{ marginLeft: i > 0 ? -6 : 0 }}
+                    />
+                  ))}
+                </View>
+                <MessageSquare size={14} color={colors.primary} />
+                <Text style={[styles.threadText, { color: colors.primary }]}>
+                  {item.replyCount}{" "}
+                  {item.replyCount === 1 ? "reply" : "replies"}
+                </Text>
+                {item.lastReplyAt && (
+                  <Text
+                    style={[styles.threadTime, { color: colors.textTertiary }]}
+                  >
+                    Last reply {formatTime(item.lastReplyAt)}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const styles = createStyles(colors);
+
+  return (
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
+      <StatusBar
+        barStyle={
+          colors.effectiveTheme === "dark" ? "light-content" : "dark-content"
+        }
+      />
+
+      {/* Custom Header */}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <CircleChevronLeft size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+
+        <View style={styles.headerCenter}>
+          <View style={styles.headerTitleRow}>
+            {isDM ? (
+              <Avatar
+                user={dmUser || { name: channelName }}
+                size={32}
+                showStatus={true}
+              />
+            ) : isSystem ? (
+              <Volume2 size={20} color={colors.textSecondary} />
+            ) : isPrivate ? (
+              <Lock size={20} color={colors.textSecondary} />
+            ) : (
+              <Hash size={20} color={colors.textSecondary} />
+            )}
+            <Text
+              style={[styles.headerTitle, { color: colors.textPrimary }]}
+              numberOfLines={1}
+            >
+              {channelName}
+            </Text>
+          </View>
+          {!isDM && (
+            <View style={styles.headerSubtitle}>
+              <Text
+                style={[styles.memberCount, { color: colors.textSecondary }]}
+              >
+                {memberCount} Members
+              </Text>
+              <View
+                style={[styles.onlineDot, { backgroundColor: colors.online }]}
+              />
+              <Text style={[styles.onlineCount, { color: colors.online }]}>
+                {onlineCount} Online
+              </Text>
+            </View>
+          )}
+          {isDM && dmUser && (
+            <Text
+              style={[
+                styles.dmStatusText,
+                {
+                  color:
+                    dmUser.onlineStatus === "online"
+                      ? colors.online
+                      : colors.textSecondary,
+                },
+              ]}
+            >
+              {dmUser.onlineStatus === "online" ? "Online" : "Offline"}
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.headerActions}>
+          {isDM && (
+            <>
+              <TouchableOpacity style={styles.headerButton}>
+                <Phone size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.headerButton}>
+                <Video size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </>
+          )}
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => setShowOptions(!showOptions)}
+          >
+            <MoreVertical size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Options Menu */}
+      {showOptions && (
+        <View
+          style={[
+            styles.optionsMenu,
+            {
+              backgroundColor: colors.background,
+              borderBottomColor: colors.border,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.optionItem}
+            onPress={() => {
+              setShowOptions(false);
+              navigation.navigate("ChannelDetails", {
+                channelName,
+                memberCount,
+              });
+            }}
+          >
+            <Users size={18} color={colors.textSecondary} />
+            <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+              {isDM ? "View Profile" : "Channel Info"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.optionItem}
+            onPress={() => {
+              setShowOptions(false);
+              navigation.navigate("Files", { channelId, channelName });
+            }}
+          >
+            <FileText size={18} color={colors.textSecondary} />
+            <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+              Files
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.optionItem}
+            onPress={() => {
+              setShowOptions(false);
+              setShowSearch(true);
+            }}
+          >
+            <Search size={18} color={colors.textSecondary} />
+            <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+              Search
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.optionItem}
+            onPress={() => {
+              setShowOptions(false);
+              navigation.navigate('PinnedMessages', { channelId, channelName });
+            }}
+          >
+            <Pin size={18} color={colors.textSecondary} />
+            <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+              Pinned Messages
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.optionItem}
+            onPress={() => {
+              setShowOptions(false);
+              navigation.navigate('Preferences', { channelId, channelName });
+            }}
+          >
+            <Bell size={18} color={colors.textSecondary} />
+            <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+              Notifications
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
+        <FlatList
+          ref={flatListRef}
+          data={displayedMessages}
+          renderItem={renderMessage}
+          keyExtractor={(item) => item._id}
+          inverted
+          contentContainerStyle={styles.messageList}
+          onEndReached={() => {
+            if (hasMore[channelId] && !isLoadingMessages) {
+              const oldest = messages[0];
+              if (oldest) fetchMessages(channelId, oldest._id);
+            }
+          }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            isLoadingMessages ? (
+              <ActivityIndicator
+                style={{ margin: 10 }}
+                color={colors.primary}
+              />
+            ) : null
+          }
+        />
+
+        {/* Typing Indicator */}
+        {typingUsers.length > 0 && (
+          <View style={styles.typingIndicator}>
+            <Text style={[styles.typingText, { color: colors.textSecondary }]}>
+              {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"}{" "}
+              typing...
+            </Text>
+          </View>
+        )}
+
+        {/* Search Bar (above input) */}
+        {showSearch && (
+          <SearchBar
+            query={searchQuery}
+            onChangeQuery={(q) => setSearchQuery(q)}
+            onClose={() => {
+              setShowSearch(false);
+              setSearchQuery("");
+              setSearchResults([]);
+            }}
+            onNext={goToNextMatch}
+            onPrev={goToPrevMatch}
+            currentIndex={currentMatch}
+            total={searchResults.length}
+          />
+        )}
+
+        {/* Message Composer */}
+        <MessageComposer
+          channelId={channelId}
+          channelName={channelName}
+          workspaceId={activeWorkspaceId}
+          colors={colors}
+          text={text}
+          onChangeText={setText}
+          members={membersByChannel[channelId] || []}
+          onSend={(content, options) => {
+            if (editingMessage) {
+              editMessage(editingMessage._id, channelId, content, options?.htmlContent);
+              setEditingMessage(null);
+            } else {
+              sendMessage(channelId, content, options);
+            }
+            setReplyingTo(null);
+          }}
+          replyingTo={replyingTo}
+          editingMessage={editingMessage}
+          onCancelReply={() => { setReplyingTo(null); setText(""); }}
+          onCancelEdit={() => { setEditingMessage(null); setText(""); }}
+        />
+      </KeyboardAvoidingView>
+
+      {/* Reminder Modal */}
+      <ReminderModal
+        visible={!!reminderTarget}
+        onClose={() => setReminderTarget(null)}
+        onSetReminder={async (reminderAt) => {
+          if (reminderTarget) {
+            try {
+              await laterAPI.updateReminder(reminderTarget, { reminderAt });
+            } catch (err) {
+              console.error('Failed to set reminder:', err);
+            }
+          }
+        }}
+        colors={colors}
+      />
+
+      {/* Emoji Picker for Reactions (opened from long-press menu) */}
+      <EmojiPickerModal
+        visible={!!emojiPickerTarget}
+        onClose={() => setEmojiPickerTarget(null)}
+        onSelect={(emoji) => {
+          if (emojiPickerTarget) {
+            addReaction(emojiPickerTarget, emoji);
+          }
+          setEmojiPickerTarget(null);
+        }}
+        colors={colors}
+      />
+    </SafeAreaView>
+  );
+};
+
+const createStyles = (colors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      gap: 8,
+    },
+    backButton: {
+      padding: 4,
+    },
+    headerCenter: {
+      flex: 1,
+    },
+    headerTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    headerTitle: {
+      fontSize: 17,
+      fontWeight: "700",
+      flex: 1,
+    },
+    headerSubtitle: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 2,
+      marginLeft: 28,
+    },
+    memberCount: {
+      fontSize: 12,
+    },
+    onlineDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+    },
+    onlineCount: {
+      fontSize: 12,
+    },
+    dmStatusText: {
+      fontSize: 12,
+      marginTop: 2,
+      marginLeft: 40,
+    },
+    headerActions: {
+      flexDirection: "row",
+      gap: 4,
+    },
+    headerButton: {
+      padding: 8,
+    },
+    optionsMenu: {
+      borderBottomWidth: 1,
+      paddingVertical: 8,
+    },
+    optionItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      gap: 12,
+    },
+    optionText: {
+      fontSize: 15,
+    },
+    messageList: {
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+    },
+    messageContainer: {
+      flexDirection: "row",
+      marginBottom: 4,
+      maxWidth: "85%",
+      gap: 8,
+    },
+    messageCompact: {
+      marginBottom: 1,
+    },
+    myMessage: {
+      alignSelf: "flex-end",
+    },
+    theirMessage: {
+      alignSelf: "flex-start",
+    },
+    bubble: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 18,
+      maxWidth: "100%",
+    },
+    senderRow: {
+      flexDirection: "row",
+      alignItems: "baseline",
+      gap: 8,
+      marginBottom: 2,
+      marginLeft: 4,
+    },
+    senderName: {
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    messageText: {
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    timestamp: {
+      fontSize: 10,
+    },
+    timestampRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 4,
+      alignSelf: "flex-end",
+    },
+    editedLabel: {
+      fontSize: 10,
+      fontStyle: "italic",
+    },
+    replyPreview: {
+      flexDirection: "row",
+      alignItems: "center",
+      borderLeftWidth: 3,
+      paddingLeft: 8,
+      marginBottom: 4,
+      marginLeft: 4,
+      gap: 4,
+    },
+    replyPreviewText: {
+      fontSize: 12,
+      flex: 1,
+    },
+    attachmentRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+      marginTop: 6,
+    },
+    imageAttachment: {
+      width: 200,
+      height: 150,
+      borderRadius: 8,
+    },
+    fileAttachment: {
+      flexDirection: "row",
+      alignItems: "center",
+      padding: 8,
+      borderRadius: 8,
+      marginTop: 4,
+      gap: 8,
+    },
+    threadIndicator: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      gap: 6,
+    },
+    threadAvatars: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    threadText: {
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    threadTime: {
+      fontSize: 11,
+      marginLeft: "auto",
+    },
+    dateSeparatorContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginVertical: 12,
+      paddingHorizontal: 8,
+    },
+    dateSeparatorLine: {
+      flex: 1,
+      height: StyleSheet.hairlineWidth,
+    },
+    dateSeparatorText: {
+      fontSize: 12,
+      fontWeight: "600",
+      paddingHorizontal: 12,
+    },
+    composerBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderLeftWidth: 3,
+      gap: 8,
+    },
+    composerBannerLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    composerBannerText: {
+      fontSize: 13,
+      marginTop: 1,
+    },
+    typingIndicator: {
+      paddingHorizontal: 20,
+      paddingVertical: 4,
+    },
+    typingText: {
+      fontSize: 12,
+      fontStyle: "italic",
+    },
+    inputBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderTopWidth: 1,
+      gap: 8,
+    },
+    attachButton: {
+      padding: 8,
+    },
+    inputContainer: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      borderRadius: 20,
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+    },
+    input: {
+      flex: 1,
+      fontSize: 15,
+      maxHeight: 100,
+      paddingVertical: 8,
+      ...(Platform.OS === "web" && {
+        outlineWidth: 0,
+        outlineStyle: "none",
+      }),
+    },
+    sendButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+  });
+
+export default ChatScreen;

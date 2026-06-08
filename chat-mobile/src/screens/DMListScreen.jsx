@@ -1,57 +1,79 @@
-import React, { useEffect } from 'react';
+import React, { useMemo, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   SafeAreaView,
   FlatList,
-  TouchableOpacity,
   TextInput,
-} from 'react-native';
-import { useChannelStore } from '../stores/channelStore';
-import { useAuthStore } from '../stores/authStore';
-import { useThemeStore } from '../stores/themeStore';
-import Avatar from '../components/Avatar';
-import { MessageSquare, Search } from 'lucide-react-native';
+  TouchableOpacity,
+  StatusBar,
+  Image,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { useChannelStore } from "../stores/channelStore";
+import { useAuthStore } from "../stores/authStore";
+import { useThemeStore } from "../stores/themeStore";
+import { useWorkspaceStore } from "../stores/workspaceStore";
+import DMListItem from "../components/DMListItem";
+import WorkspaceAvatar from "../components/WorkspaceAvatar";
+import Avatar from "../components/Avatar";
+import { MessageSquare, Search } from "lucide-react-native";
 
 const DMListScreen = ({ navigation }) => {
   const { channels, setActiveChannel } = useChannelStore();
   const { user } = useAuthStore();
-  const { colors } = useThemeStore();
-  const dmChannels = channels.filter((ch) => ch.type === 'dm');
+  const { colors, effectiveTheme } = useThemeStore();
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const unreads = useChannelStore((state) => state.unreads) || {};
+  const dmChannels = useMemo(
+    () => channels.filter((ch) => ch.type === "dm"),
+    [channels],
+  );
 
-  const renderDM = ({ item }) => {
-    // Get DM user from channel members
-    const dmUser = item.members?.find(m => m._id !== user?._id) || { name: item.name };
-    
-    return (
-      <TouchableOpacity
-        style={[styles.dmItem, { backgroundColor: colors.background }]}
-        onPress={() => {
-          setActiveChannel(item._id);
-          navigation.navigate('DirectMessage', { channelId: item._id, name: item.name });
-        }}
-      >
-        <Avatar 
-          user={dmUser}
-          size={44}
-          showStatus={true}
-        />
-        <View style={styles.dmInfo}>
-          <Text style={[styles.dmName, { color: colors.textPrimary }]}>{dmUser.name || item.name}</Text>
-          {item.lastMessagePreview && (
-            <Text style={[styles.lastMessage, { color: colors.textSecondary }]} numberOfLines={1}>
-              {item.lastMessagePreview}
-            </Text>
-          )}
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  const handleDMPress = useCallback(
+    (channel) => {
+      setActiveChannel(channel._id);
+      navigation.navigate("Chat", {
+        channelId: channel._id,
+        channelName: channel.name,
+      });
+    },
+    [navigation, setActiveChannel],
+  );
+
+  const renderDM = useCallback(
+    ({ item }) => (
+      <DMListItem
+        channel={item}
+        onPress={handleDMPress}
+        unreadCount={unreads[item._id] || 0}
+      />
+    ),
+    [handleDMPress, unreads],
+  );
+
+  const keyExtractor = useCallback((item) => item._id, []);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.searchBar, { backgroundColor: colors.inputBackground }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
+      <StatusBar
+        barStyle={effectiveTheme === "dark" ? "light-content" : "dark-content"}
+      />
+
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+          DM's List
+        </Text>
+      </View>
+
+      {/* Search Bar */}
+      <View
+        style={[styles.searchBar, { backgroundColor: colors.inputBackground }]}
+      >
         <Search size={18} color={colors.inputPlaceholder} />
         <TextInput
           style={[styles.searchInput, { color: colors.inputText }]}
@@ -59,14 +81,17 @@ const DMListScreen = ({ navigation }) => {
           placeholderTextColor={colors.inputPlaceholder}
         />
       </View>
+
       <FlatList
         data={dmChannels}
         renderItem={renderDM}
-        keyExtractor={(item) => item._id}
+        keyExtractor={keyExtractor}
         ListEmptyComponent={
           <View style={styles.empty}>
             <MessageSquare size={48} color={colors.border} />
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No direct messages yet</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              No direct messages yet
+            </Text>
           </View>
         }
       />
@@ -78,9 +103,51 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  header: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  headerGradient: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 14,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.2)",
+    elevation: 8,
+  },
+  headerContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  workspaceInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  workspaceName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "white",
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 2,
+  },
   searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     margin: 16,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -91,27 +158,9 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
   },
-  dmItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  dmInfo: {
-    flex: 1,
-  },
-  dmName: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  lastMessage: {
-    fontSize: 13,
-    marginTop: 2,
-  },
   empty: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingTop: 80,
   },
   emptyText: {

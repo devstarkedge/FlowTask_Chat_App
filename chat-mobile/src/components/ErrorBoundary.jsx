@@ -1,5 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useThemeStore } from '../stores/themeStore';
+import logger from '../utils/logger';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -14,9 +17,7 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     this.setState({ errorInfo });
     // In production, send to error reporting service (Sentry, Bugsnag, etc.)
-    if (__DEV__) {
-      console.error('[ErrorBoundary]', error, errorInfo);
-    }
+    logger.error('[ErrorBoundary]', error, errorInfo);
   }
 
   handleReset = () => {
@@ -25,24 +26,25 @@ class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      const colors = useThemeStore.getState().colors;
       return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
           <View style={styles.content}>
             <Text style={styles.emoji}>⚠️</Text>
-            <Text style={styles.title}>Something went wrong</Text>
-            <Text style={styles.message}>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>Something went wrong</Text>
+            <Text style={[styles.message, { color: colors.textSecondary }]}>
               The app encountered an unexpected error. Please try restarting.
             </Text>
             {__DEV__ && this.state.error && (
-              <View style={styles.debugContainer}>
-                <Text style={styles.debugTitle}>Debug Info</Text>
-                <Text style={styles.debugText} numberOfLines={8}>
+              <View style={[styles.debugContainer, { backgroundColor: colors.backgroundTertiary }]}>
+                <Text style={[styles.debugTitle, { color: colors.textTertiary }]}>Debug Info</Text>
+                <Text style={[styles.debugText, { color: colors.error }]} numberOfLines={8}>
                   {this.state.error.toString()}
                 </Text>
               </View>
             )}
-            <TouchableOpacity style={styles.button} onPress={this.handleReset}>
-              <Text style={styles.buttonText}>Try Again</Text>
+            <TouchableOpacity style={[styles.button, { backgroundColor: colors.primary }]} onPress={this.handleReset}>
+              <Text style={[styles.buttonText, { color: colors.textOnPrimary }]}>Try Again</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -56,7 +58,6 @@ class ErrorBoundary extends React.Component {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
   },
   content: {
     flex: 1,
@@ -71,18 +72,15 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
     marginBottom: 8,
   },
   message: {
     fontSize: 15,
-    color: '#6B7280',
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 22,
   },
   debugContainer: {
-    backgroundColor: '#F3F4F6',
     borderRadius: 8,
     padding: 12,
     marginBottom: 24,
@@ -91,22 +89,18 @@ const styles = StyleSheet.create({
   debugTitle: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#9CA3AF',
     marginBottom: 4,
   },
   debugText: {
     fontSize: 11,
-    color: '#EF4444',
     fontFamily: 'monospace',
   },
   button: {
-    backgroundColor: '#3B82F6',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 10,
   },
   buttonText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '600',
   },

@@ -9,6 +9,7 @@ import {
   Dimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { useThemeStore } from "../stores/themeStore";
 
 /* ── HSV ↔ RGB helpers ── */
 const hsvToRgb = (h, s, v) => {
@@ -79,6 +80,7 @@ const ColorPickerModal = ({
   initialHex,
   onPreview,
 }) => {
+  const { colors } = useThemeStore();
   const initRgb = hexToRgb(initialHex);
   const initHsv = rgbToHsv(initRgb.r, initRgb.g, initRgb.b);
 
@@ -182,9 +184,9 @@ const ColorPickerModal = ({
 
   return (
     <Modal visible={visible} animationType="fade" transparent>
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          <Text style={styles.title}>Choose Accent Color</Text>
+      <View style={[styles.overlay, { backgroundColor: colors.backdrop }]}>
+        <View style={[styles.container, { backgroundColor: colors.background, boxShadow: `0px 8px 20px ${colors.shadowXl}` }]}>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Choose Accent Color</Text>
 
           {/* ── Saturation / Brightness square ── */}
           <View
@@ -206,7 +208,7 @@ const ColorPickerModal = ({
             <View
               style={[
                 styles.circleSelector,
-                { left: satX - 14, top: satY - 14 },
+                { left: satX - 14, top: satY - 14, borderColor: colors.textOnPrimary, boxShadow: `0px 2px 6px ${colors.shadowXxl}` },
               ]}
             />
           </View>
@@ -231,16 +233,16 @@ const ColorPickerModal = ({
               style={StyleSheet.absoluteFill}
             />
             <View
-              style={[styles.hueSelector, { left: Math.max(0, hueX - 10) }]}
+              style={[styles.hueSelector, { left: Math.max(0, hueX - 10), borderColor: colors.textOnPrimary, boxShadow: `0px 1px 4px ${colors.shadowLg}` }]}
             />
           </View>
 
           {/* ── Live preview + hex + rgb ── */}
           <View style={styles.infoRow}>
-            <View style={[styles.swatch, { backgroundColor: curHex }]} />
+            <View style={[styles.swatch, { backgroundColor: curHex, borderColor: colors.border }]} />
             <View style={styles.infoText}>
-              <Text style={styles.hexText}>{curHex}</Text>
-              <Text style={styles.rgbText}>
+              <Text style={[styles.hexText, { color: colors.textPrimary }]}>{curHex}</Text>
+              <Text style={[styles.rgbText, { color: colors.textSecondary }]}>
                 R:{curRgb.r} G:{curRgb.g} B:{curRgb.b}
               </Text>
             </View>
@@ -249,18 +251,18 @@ const ColorPickerModal = ({
           {/* ── Actions ── */}
           <View style={styles.actionsRow}>
             <TouchableOpacity
-              style={styles.cancelBtn}
+              style={[styles.cancelBtn, { backgroundColor: colors.backgroundTertiary }]}
               onPress={handleCancel}
               activeOpacity={0.7}
             >
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.applyBtn, { backgroundColor: curHex }]}
               onPress={handleApply}
               activeOpacity={0.7}
             >
-              <Text style={styles.applyText}>Apply</Text>
+              <Text style={[styles.applyText, { color: colors.textOnPrimary }]}>Apply</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -272,23 +274,19 @@ const ColorPickerModal = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
     justifyContent: "center",
     alignItems: "center",
   },
   container: {
     width: "92%",
-    backgroundColor: "#FFFFFF",
     borderRadius: 20,
     padding: 22,
     alignItems: "center",
-    boxShadow: "0px 8px 20px rgba(0, 0, 0, 0.25)",
     elevation: 12,
   },
   title: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#1F2937",
     marginBottom: 18,
   },
 
@@ -304,8 +302,6 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     borderWidth: 3,
-    borderColor: "#FFFFFF",
-    boxShadow: "0px 2px 6px rgba(0, 0, 0, 0.35)",
     elevation: 6,
   },
 
@@ -323,8 +319,6 @@ const styles = StyleSheet.create({
     height: HUE_H + 8,
     borderRadius: 10,
     borderWidth: 3,
-    borderColor: "#FFFFFF",
-    boxShadow: "0px 1px 4px rgba(0, 0, 0, 0.3)",
     elevation: 5,
   },
 
@@ -341,7 +335,6 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
   },
   infoText: {
     flex: 1,
@@ -351,11 +344,9 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     fontFamily: "monospace",
-    color: "#1F2937",
   },
   rgbText: {
     fontSize: 13,
-    color: "#6B7280",
     fontWeight: "500",
     fontFamily: "monospace",
   },
@@ -372,12 +363,10 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     paddingHorizontal: 22,
     borderRadius: 12,
-    backgroundColor: "#F3F4F6",
   },
   cancelText: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#4B5563",
   },
   applyBtn: {
     paddingVertical: 11,
@@ -387,7 +376,6 @@ const styles = StyleSheet.create({
   applyText: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#FFFFFF",
   },
 });
 

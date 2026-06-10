@@ -7,19 +7,18 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
-  TouchableOpacity,
   FlatList,
-  ActivityIndicator,
   RefreshControl,
-  StatusBar,
+  TouchableOpacity,
   Alert,
+  Platform,
 } from 'react-native';
-import { CircleChevronLeft, Pin, Unpin, Trash2 } from 'lucide-react-native';
+import { CircleChevronLeft, Pin } from 'lucide-react-native';
 import { useThemeStore } from '../stores/themeStore';
 import { useAuthStore } from '../stores/authStore';
 import { pinsAPI } from '../services/api';
-import Avatar from '../components/Avatar';
+import logger from '../utils/logger';
+import { ScreenLayout, ScreenHeader, LoadingState, EmptyState, AppAvatar } from '../components/common';
 import RichText from '../components/RichText';
 
 const formatTime = (dateStr) => {
@@ -49,7 +48,7 @@ const PinnedMessagesScreen = ({ route, navigation }) => {
       const items = data.data?.messages || data.data?.pins || data.data || [];
       setPinnedMessages(Array.isArray(items) ? items : []);
     } catch (err) {
-      console.error('Failed to fetch pinned messages:', err);
+      logger.error('Failed to fetch pinned messages:', err);
       setError('Could not load pinned messages');
     } finally {
       setIsLoading(false);
@@ -71,7 +70,7 @@ const PinnedMessagesScreen = ({ route, navigation }) => {
             await pinsAPI.unpin(messageId);
             setPinnedMessages(prev => prev.filter(m => m._id !== messageId));
           } catch (err) {
-            console.error('Failed to unpin:', err);
+            logger.error('Failed to unpin:', err);
             Alert.alert('Error', 'Could not unpin message');
           }
         },
@@ -84,9 +83,9 @@ const PinnedMessagesScreen = ({ route, navigation }) => {
     const authorName = typeof author === 'string' ? 'Unknown' : (author.name || 'Unknown');
 
     return (
-      <View style={[styles.messageCard, { backgroundColor: colors.cardBackground || colors.inputBackground }]}>
+      <View style={[styles.messageCard, { backgroundColor: colors.card }]}>
         <View style={styles.authorRow}>
-          <Avatar user={author} size={28} showStatus={false} />
+          <AppAvatar user={author} size={28} showStatus={false} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.authorName, { color: colors.textPrimary }]}>
               {authorName}
@@ -127,8 +126,7 @@ const PinnedMessagesScreen = ({ route, navigation }) => {
   const styles = createStyles(colors);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={colors.effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
+    <ScreenLayout>
 
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -147,26 +145,11 @@ const PinnedMessagesScreen = ({ route, navigation }) => {
 
       {/* Content */}
       {isLoading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <LoadingState />
       ) : error ? (
-        <View style={styles.centerContainer}>
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{error}</Text>
-          <TouchableOpacity onPress={fetchPinned} style={[styles.retryBtn, { backgroundColor: colors.primary }]}>
-            <Text style={{ color: '#fff', fontWeight: '600' }}>Retry</Text>
-          </TouchableOpacity>
-        </View>
+        <EmptyState title={error} actionLabel="Retry" onAction={fetchPinned} />
       ) : pinnedMessages.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Pin size={48} color={colors.textTertiary} />
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            No pinned messages
-          </Text>
-          <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>
-            Long-press a message and select "Pin" to pin it here
-          </Text>
-        </View>
+        <EmptyState icon={Pin} title="No pinned messages" subtitle={'Long-press a message and select "Pin" to pin it here'} />
       ) : (
         <FlatList
           data={pinnedMessages}
@@ -174,12 +157,16 @@ const PinnedMessagesScreen = ({ route, navigation }) => {
           keyExtractor={(item) => item._id}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS !== 'web'}
           refreshControl={
             <RefreshControl refreshing={false} onRefresh={fetchPinned} tintColor={colors.primary} />
           }
         />
       )}
-    </SafeAreaView>
+    </ScreenLayout>
   );
 };
 
@@ -224,21 +211,6 @@ const createStyles = (colors) =>
       marginTop: 4,
     },
     unpinText: { fontSize: 12, fontWeight: '600' },
-    centerContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      gap: 12,
-      paddingHorizontal: 32,
-    },
-    emptyText: { fontSize: 15, fontWeight: '600' },
-    emptySubtext: { fontSize: 13, textAlign: 'center' },
-    retryBtn: {
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 8,
-      marginTop: 8,
-    },
   });
 
 export default PinnedMessagesScreen;

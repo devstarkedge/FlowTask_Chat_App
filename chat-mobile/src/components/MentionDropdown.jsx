@@ -17,7 +17,7 @@ import {
   FlatList,
   StyleSheet,
 } from 'react-native';
-import Avatar from './Avatar';
+import { AppAvatar } from './common';
 
 const MentionDropdown = React.memo(function MentionDropdown({
   members = [],
@@ -51,7 +51,7 @@ const MentionDropdown = React.memo(function MentionDropdown({
             onPress={() => onSelect(item)}
             activeOpacity={0.7}
           >
-            <Avatar user={item} size={28} showStatus={false} />
+            <AppAvatar user={item} size={28} showStatus={false} />
             <View style={styles.memberInfo}>
               <Text style={[styles.memberName, { color: colors.textPrimary }]} numberOfLines={1}>
                 {item.name || 'Unknown'}

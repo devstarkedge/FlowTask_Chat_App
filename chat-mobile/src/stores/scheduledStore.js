@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import storage from '../services/storage';
 import { scheduledAPI } from '../services/api';
+import logger from '../utils/logger';
 
 export const useScheduledStore = create(
   persist(
@@ -31,7 +32,7 @@ export const useScheduledStore = create(
           });
         } catch (error) {
           set({ isLoading: false, scheduledMessages: [], scheduledCount: 0 });
-          console.error('Failed to fetch scheduled messages:', error);
+          logger.error('Failed to fetch scheduled messages:', error);
         }
       },
 
@@ -68,7 +69,7 @@ export const useScheduledStore = create(
           await scheduledAPI.cancel(id);
           get().removeScheduledMessage(id);
         } catch (error) {
-          console.error('Failed to cancel scheduled message:', error);
+          logger.error('Failed to cancel scheduled message:', error);
           throw error;
         }
       },
@@ -82,7 +83,7 @@ export const useScheduledStore = create(
       },
 
       handleScheduledFailed: ({ scheduledMessageId, error }) => {
-        console.error('Scheduled message failed:', scheduledMessageId, error);
+        logger.error('Scheduled message failed:', scheduledMessageId, error);
       },
 
       clearScheduledMessages: () => set({ 
@@ -93,7 +94,7 @@ export const useScheduledStore = create(
     }),
     {
       name: 'flowtask-scheduled-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => storage),
       partialize: (state) => ({ 
         scheduledCount: state.scheduledCount,
       }),

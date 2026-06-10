@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../../stores/themeStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
@@ -22,22 +22,23 @@ import {
   Palette,
   LogOut,
 } from 'lucide-react-native';
-import Avatar from '../../components/Avatar';
+import { AppAvatar } from '../../components/common';
 
 const ProfileScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
   const { user } = useAuthStore();
   const { activeWorkspace } = useWorkspaceStore();
+  const insets = useSafeAreaInsets();
   const logout = useAuthStore((s) => s.logout);
 
   const styles = createStyles(colors);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <StatusBar barStyle={colors.effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
       
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border, paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <CircleChevronLeft size={24} color={colors.textPrimary} />
         </TouchableOpacity>
@@ -48,7 +49,7 @@ const ProfileScreen = ({ navigation }) => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Header */}
         <View style={[styles.profileHeader, { backgroundColor: colors.backgroundSecondary }]}>
-          <Avatar user={user} size={100}  />
+          <AppAvatar user={user} size={100}  />
           <Text style={[styles.name, { color: colors.textPrimary }]}>{user?.name}</Text>
           <View style={styles.statusRow}>
             {/* <View style={[styles.statusDot, { backgroundColor: colors.online }]} /> */}

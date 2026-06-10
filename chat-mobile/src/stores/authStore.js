@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import storage from '../services/storage';
 import { authAPI } from '../services/api';
 import { primeApiCache, setCachedToken, clearApiCache } from '../services/api';
 import { secureSet, secureGet, secureMultiRemove } from '../utils/secureStorage';
@@ -18,7 +18,7 @@ export const useAuthStore = create((set, get) => ({
     try {
       const accessToken = await secureGet('chat_access_token');
       const refreshToken = await secureGet('chat_refresh_token');
-      const userJson = await AsyncStorage.getItem('chat_user');
+      const userJson = await storage.getItem('chat_user');
       const user = userJson ? JSON.parse(userJson) : null;
       
       // Prime the synchronous API interceptor cache
@@ -50,7 +50,7 @@ export const useAuthStore = create((set, get) => ({
       
       await secureSet('chat_access_token', accessToken);
       await secureSet('chat_refresh_token', refreshToken);
-      await AsyncStorage.setItem('chat_user', JSON.stringify(user));
+      await storage.setItem('chat_user', JSON.stringify(user));
       
       setCachedToken(accessToken);
       set({ accessToken, refreshToken, user, isLoading: false });
@@ -70,7 +70,7 @@ export const useAuthStore = create((set, get) => ({
       
       await secureSet('chat_access_token', accessToken);
       await secureSet('chat_refresh_token', refreshToken);
-      await AsyncStorage.setItem('chat_user', JSON.stringify(user));
+      await storage.setItem('chat_user', JSON.stringify(user));
       if (flowTaskToken) await secureSet('flowtask_token', flowTaskToken);
       
       setCachedToken(accessToken);
@@ -113,7 +113,7 @@ export const useAuthStore = create((set, get) => ({
       'chat_refresh_token',
       'flowtask_token',
     ]);
-    await AsyncStorage.removeItem('chat_user');
+    await storage.removeItem('chat_user');
     
     // Clear auth store state
     set({ accessToken: null, refreshToken: null, user: null, error: null });

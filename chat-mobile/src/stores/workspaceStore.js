@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { workspaceAPI } from '../services/api';
+import storage from '../services/storage';
+import logger from '../utils/logger';
+import { workspaceAPI, setCachedWorkspaceId } from '../services/api';
 
 export const useWorkspaceStore = create(
   persist(
@@ -35,7 +36,7 @@ export const useWorkspaceStore = create(
         } catch (error) {
           const msg = error.userMessage || 'Failed to fetch workspaces';
           set({ isLoading: false, error: msg });
-          console.error('[WorkspaceStore] Fetch error:', msg);
+          logger.error('[WorkspaceStore] Fetch error:', msg);
           throw error;
         }
       },
@@ -48,8 +49,10 @@ export const useWorkspaceStore = create(
             activeWorkspaceId: workspaceId,
             activeWorkspace: workspace,
           });
-          await AsyncStorage.setItem('active_workspace_id', workspaceId);
-          console.log('[WorkspaceStore] Switched to workspace:', workspace.name);
+          await storage.setItem('active_workspace_id', workspaceId);
+          // CRITICAL: Update in-memory API cache so X-Workspace-Id header is sent
+          setCachedWorkspaceId(workspaceId);
+          logger.info('[WorkspaceStore] Switched to workspace:', workspace.name);
           
           // Trigger full context refresh
           await get().refreshWorkspaceContext();
@@ -86,9 +89,24 @@ export const useWorkspaceStore = create(
             useScheduledStore.getState().fetchScheduledMessages?.() || Promise.resolve(),
           ]);
           
-          console.log('[WorkspaceStore] Context refreshed successfully');
+          logger.info('[WorkspaceStore] Context refreshed successfully');
         } catch (error) {
-          console.error('[WorkspaceStore] Failed to refresh context:', error);
+          logger.error('[WorkspaceStore] Failed to refresh context:', error);
+        }
+      },
+
+      joinByInviteCode: async (inviteCode) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { data } = await workspaceAPI.joinByInviteCode(inviteCode);
+          const workspace = data.data?.workspace || data.data;
+          set({ isLoading: false });
+          return workspace;
+        } catch (error) {
+          const msg = error.response?.data?.message || error.userMessage || 'Failed to join workspace';
+          set({ isLoading: false, error: msg });
+          logger.error('[WorkspaceStore] Join error:', msg);
+          throw error;
         }
       },
 
@@ -99,14 +117,14 @@ export const useWorkspaceStore = create(
           activeWorkspace: null,
           error: null,
         });
-        AsyncStorage.removeItem('active_workspace_id');
+        storage.removeItem('active_workspace_id');
       },
 
       clearError: () => set({ error: null }),
     }),
     {
       name: 'flowtask-workspace-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => storage),
       partialize: (state) => ({
         activeWorkspaceId: state.activeWorkspaceId,
         activeWorkspace: state.activeWorkspace,

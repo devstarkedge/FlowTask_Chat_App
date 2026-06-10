@@ -3,6 +3,7 @@ import { useAuthStore } from './authStore';
 import { useChannelStore } from './channelStore';
 import { reactionAPI } from '../services/api';
 import api from '../services/api';
+import logger from '../utils/logger';
 
 export const useChatStore = create((set, get) => ({
   messagesByChannel: {},
@@ -40,7 +41,7 @@ export const useChatStore = create((set, get) => ({
       });
     } catch (error) {
       set({ isLoadingMessages: false });
-      console.error('Failed to fetch messages:', error);
+      logger.error('Failed to fetch messages:', error);
     }
   },
 
@@ -88,7 +89,7 @@ export const useChatStore = create((set, get) => ({
       }
       return serverMessage;
     } catch (error) {
-      console.error('Failed to send message:', error);
+      logger.error('Failed to send message:', error);
       // Mark as failed
       set((state) => ({
         messagesByChannel: {
@@ -149,7 +150,7 @@ export const useChatStore = create((set, get) => ({
     } catch (error) {
       // Revert on failure
       get().removeReactionLocal(messageId, emoji, user._id);
-      console.error('Failed to add reaction:', error);
+      logger.error('Failed to add reaction:', error);
     }
   },
 
@@ -165,56 +166,70 @@ export const useChatStore = create((set, get) => ({
     } catch (error) {
       // Revert on failure
       get().addReactionLocal(messageId, emoji, { _id: user._id, name: user.name });
-      console.error('Failed to remove reaction:', error);
+      logger.error('Failed to remove reaction:', error);
     }
   },
 
   addReactionLocal: (messageId, emoji, user) => {
     set((state) => {
-      const newMessagesByChannel = {};
-      for (const [chId, msgs] of Object.entries(state.messagesByChannel)) {
-        newMessagesByChannel[chId] = msgs.map(m => {
-          if (m._id !== messageId) return m;
-          const reactions = [...(m.reactions || [])];
-          const existing = reactions.find(r => r.emoji === emoji);
-          if (existing) {
-            if (existing.userIds?.includes(user._id)) return m; // already reacted
-            existing.users = [...(existing.users || []), user];
-            existing.userIds = [...(existing.userIds || []), user._id];
-            existing.count = (existing.count || 0) + 1;
-          } else {
-            reactions.push({ emoji, users: [user], userIds: [user._id], count: 1 });
-          }
-          return { ...m, reactions };
-        });
-      }
-      return { messagesByChannel: newMessagesByChannel };
+      // Only update the channel that contains the message (avoid full-scan)
+      const targetChannelId = Object.keys(state.messagesByChannel).find(chId =>
+        state.messagesByChannel[chId].some(m => m._id === messageId)
+      );
+      if (!targetChannelId) return state;
+
+      return {
+        messagesByChannel: {
+          ...state.messagesByChannel,
+          [targetChannelId]: state.messagesByChannel[targetChannelId].map(m => {
+            if (m._id !== messageId) return m;
+            const reactions = [...(m.reactions || [])];
+            const existing = reactions.find(r => r.emoji === emoji);
+            if (existing) {
+              if (existing.userIds?.includes(user._id)) return m;
+              existing.users = [...(existing.users || []), user];
+              existing.userIds = [...(existing.userIds || []), user._id];
+              existing.count = (existing.count || 0) + 1;
+            } else {
+              reactions.push({ emoji, users: [user], userIds: [user._id], count: 1 });
+            }
+            return { ...m, reactions };
+          }),
+        },
+      };
     });
   },
 
   removeReactionLocal: (messageId, emoji, userId) => {
     set((state) => {
-      const newMessagesByChannel = {};
-      for (const [chId, msgs] of Object.entries(state.messagesByChannel)) {
-        newMessagesByChannel[chId] = msgs.map(m => {
-          if (m._id !== messageId) return m;
-          const reactions = (m.reactions || []).map(r => {
-            if (r.emoji !== emoji) return r;
-            const users = (r.users || []).filter(u => u._id !== userId);
-            const userIds = (r.userIds || []).filter(id => id !== userId);
-            return { ...r, users, userIds, count: users.length };
-          }).filter(r => r.count > 0);
-          return { ...m, reactions };
-        });
-      }
-      return { messagesByChannel: newMessagesByChannel };
+      const targetChannelId = Object.keys(state.messagesByChannel).find(chId =>
+        state.messagesByChannel[chId].some(m => m._id === messageId)
+      );
+      if (!targetChannelId) return state;
+
+      return {
+        messagesByChannel: {
+          ...state.messagesByChannel,
+          [targetChannelId]: state.messagesByChannel[targetChannelId].map(m => {
+            if (m._id !== messageId) return m;
+            const reactions = (m.reactions || []).map(r => {
+              if (r.emoji !== emoji) return r;
+              const users = (r.users || []).filter(u => u._id !== userId);
+              const userIds = (r.userIds || []).filter(id => id !== userId);
+              return { ...r, users, userIds, count: users.length };
+            }).filter(r => r.count > 0);
+            return { ...m, reactions };
+          }),
+        },
+      };
     });
   },
 
   // ─── Edit / Delete Message ──────────────────────────────────────────────────
-  editMessage: async (messageId, channelId, content, htmlContent) => {
+  editMessage: async (messageId, channelId, content) => {
     try {
-      const { data } = await api.put(`/messages/${messageId}`, { content, htmlContent });
+      // Server editMessageSchema only accepts { content } — do NOT send htmlContent
+      const { data } = await api.put(`/messages/${messageId}`, { content });
       const updated = data.data?.message || data.data;
       set((state) => ({
         messagesByChannel: {
@@ -225,7 +240,7 @@ export const useChatStore = create((set, get) => ({
         },
       }));
     } catch (error) {
-      console.error('Failed to edit message:', error);
+      logger.error('Failed to edit message:', error);
       throw error;
     }
   },
@@ -240,7 +255,7 @@ export const useChatStore = create((set, get) => ({
         },
       }));
     } catch (error) {
-      console.error('Failed to delete message:', error);
+      logger.error('Failed to delete message:', error);
       throw error;
     }
   },
@@ -275,14 +290,18 @@ export const useChatStore = create((set, get) => ({
   updateMessage: (message) => {
     if (!message?._id) return;
     const channelId = message.channelId;
+    if (!channelId) return;
     set((state) => {
-      const newMessagesByChannel = {};
-      for (const [chId, msgs] of Object.entries(state.messagesByChannel)) {
-        newMessagesByChannel[chId] = msgs.map(m =>
-          m._id === message._id ? { ...m, ...message } : m
-        );
-      }
-      return { messagesByChannel: newMessagesByChannel };
+      const msgs = state.messagesByChannel[channelId];
+      if (!msgs) return state;
+      return {
+        messagesByChannel: {
+          ...state.messagesByChannel,
+          [channelId]: msgs.map(m =>
+            m._id === message._id ? { ...m, ...message } : m
+          ),
+        },
+      };
     });
   },
 

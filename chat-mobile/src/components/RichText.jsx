@@ -165,8 +165,8 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
           {
             fontFamily: 'monospace',
             fontSize: (parentStyles.fontSize || 15) * 0.875,
-            backgroundColor: colors.codeBackground || 'rgba(255,255,255,0.08)',
-            color: colors.codeText || '#e8c46a',
+            backgroundColor: colors.backgroundTertiary,
+            color: colors.warning,
             paddingHorizontal: 5,
             paddingVertical: 1,
             borderRadius: 4,
@@ -183,11 +183,11 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
       const codeText = extractText(node);
       return (
         <View key={key} style={[styles.codeBlock, {
-          backgroundColor: colors.codeBlockBackground || 'rgba(0,0,0,0.25)',
-          borderColor: colors.border || 'rgba(255,255,255,0.1)',
+          backgroundColor: colors.backgroundSecondary,
+          borderColor: colors.border,
         }]}>
           <Text style={[styles.codeBlockText, {
-            color: colors.codeBlockText || colors.textPrimary || '#d1d2d3',
+            color: colors.textPrimary,
           }]}>
             {codeText}
           </Text>
@@ -198,10 +198,10 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
     case 'blockquote': {
       return (
         <View key={key} style={[styles.blockquote, {
-          borderLeftColor: colors.primary || '#1264a3',
+          borderLeftColor: colors.primary,
         }]}>
-          <Text style={[styles.blockquoteText, { color: colors.textSecondary || '#9b9b9b' }]}>
-            {node.children.map((c, i) => renderNode(c, colors, { fontStyle: 'italic', color: colors.textSecondary || '#9b9b9b' }, depth))}
+          <Text style={[styles.blockquoteText, { color: colors.textSecondary }]}>
+            {node.children.map((c, i) => renderNode(c, colors, { fontStyle: 'italic', color: colors.textSecondary }, depth))}
           </Text>
         </View>
       );
@@ -260,10 +260,10 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
       return (
         <Text
           key={key}
-          style={[parentStyles, { color: colors.linkColor || '#4da8ff', textDecorationLine: 'underline' }]}
+          style={[parentStyles, { color: colors.info, textDecorationLine: 'underline' }]}
           onPress={() => { if (href) Linking.openURL(href).catch(() => {}); }}
         >
-          {node.children.map((c, i) => renderNode(c, colors, { ...parentStyles, color: colors.linkColor || '#4da8ff', textDecorationLine: 'underline' }, depth))}
+          {node.children.map((c, i) => renderNode(c, colors, { ...parentStyles, color: colors.info, textDecorationLine: 'underline' }, depth))}
         </Text>
       );
     }
@@ -277,8 +277,8 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
           <Text key={key} style={[
             parentStyles,
             {
-              backgroundColor: colors.mentionBackground || 'rgba(18,100,163,0.18)',
-              color: colors.mentionText || colors.primary || '#4da8ff',
+              backgroundColor: colors.primaryLight,
+              color: colors.primary,
               borderRadius: 4,
               paddingHorizontal: 4,
               fontWeight: '600',
@@ -295,7 +295,7 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
     }
 
     case 'hr': {
-      return <View key={key} style={[styles.hr, { backgroundColor: colors.border || '#333' }]} />;
+      return <View key={key} style={[styles.hr, { backgroundColor: colors.border }]} />;
     }
 
     case 'img': {

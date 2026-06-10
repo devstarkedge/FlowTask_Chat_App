@@ -1,24 +1,20 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
-  TouchableOpacity,
   FlatList,
-  ActivityIndicator,
-  StatusBar,
   RefreshControl,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { useThemeStore } from '../stores/themeStore';
+import { formatRelativeTime, formatScheduledDate } from '../utils/dateUtils';
+import { ScreenLayout, ScreenHeader, LoadingState, EmptyState } from '../components/common';
 import { 
-  CircleChevronLeft,
   Clock,
-  Hash,
   Trash2,
-  Send,
 } from 'lucide-react-native';
 
 const ScheduledScreen = ({ navigation }) => {
@@ -33,18 +29,16 @@ const ScheduledScreen = ({ navigation }) => {
   fetchScheduledMessagesRef.current = fetchScheduledMessages;
 
   useEffect(() => {
-    console.log('ScheduledScreen mounted');
     fetchScheduledMessagesRef.current();
-    return () => console.log('ScheduledScreen unmounted');
   }, []);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchScheduledMessages();
     setRefreshing(false);
-  };
+  }, [fetchScheduledMessages]);
 
-  const handleCancel = (message) => {
+  const handleCancel = useCallback((message) => {
     Alert.alert(
       'Cancel Scheduled Message',
       'Are you sure you want to cancel this scheduled message?',
@@ -63,9 +57,9 @@ const ScheduledScreen = ({ navigation }) => {
         },
       ]
     );
-  };
+  }, [cancelScheduledMessage]);
 
-  const renderScheduledItem = ({ item }) => {
+  const renderScheduledItem = useCallback(({ item }) => {
     const scheduledDate = new Date(item.scheduledFor);
     const isPast = scheduledDate < new Date();
     
@@ -106,7 +100,7 @@ const ScheduledScreen = ({ navigation }) => {
 
         <View style={styles.scheduledMeta}>
           <Text style={[styles.metaText, { color: colors.textTertiary }]}>
-            Created {formatDate(item.createdAt)}
+            Created {formatRelativeTime(item.createdAt)}
           </Text>
           {isPast && (
             <View style={[styles.statusBadge, { backgroundColor: colors.error + '20' }]}>
@@ -116,41 +110,19 @@ const ScheduledScreen = ({ navigation }) => {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [colors, handleCancel]);
 
   const styles = createStyles(colors);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={colors.effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
-      
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => navigation.goBack()}
-        >
-          <CircleChevronLeft size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Scheduled</Text>
-        <View style={{ width: 40 }} />
-      </View>
+    <ScreenLayout>
+      <ScreenHeader title="Scheduled" onBack={() => navigation.goBack()} />
 
       {/* Content */}
       {isLoading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <LoadingState />
       ) : scheduledMessages.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Clock size={48} color={colors.textTertiary} />
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            No scheduled messages
-          </Text>
-          <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>
-            Schedule messages to send later
-          </Text>
-        </View>
+        <EmptyState icon={Clock} title="No scheduled messages" subtitle="Schedule messages to send later" />
       ) : (
         <FlatList
           data={scheduledMessages}
@@ -158,6 +130,10 @@ const ScheduledScreen = ({ navigation }) => {
           keyExtractor={(item) => item._id}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews
           refreshControl={
             <RefreshControl 
               refreshing={refreshing} 
@@ -167,71 +143,11 @@ const ScheduledScreen = ({ navigation }) => {
           }
         />
       )}
-    </SafeAreaView>
+    </ScreenLayout>
   );
 };
 
-const formatDate = (dateString) => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diff = now - date;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString();
-};
-
-const formatScheduledDate = (dateString) => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  const isToday = date.toDateString() === now.toDateString();
-  const isTomorrow = date.toDateString() === tomorrow.toDateString();
-
-  const timeStr = date.toLocaleTimeString('en-US', { 
-    hour: 'numeric', 
-    minute: '2-digit',
-    hour12: true 
-  });
-
-  if (isToday) return `Today at ${timeStr}`;
-  if (isTomorrow) return `Tomorrow at ${timeStr}`;
-  
-  return date.toLocaleDateString('en-US', { 
-    month: 'short', 
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  });
-};
-
 const createStyles = (colors) => StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
   listContainer: {
     padding: 16,
     gap: 12,
@@ -290,21 +206,6 @@ const createStyles = (colors) => StyleSheet.create({
   statusText: {
     fontSize: 11,
     fontWeight: '600',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 32,
-  },
-  emptyText: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  emptySubtext: {
-    fontSize: 14,
-    textAlign: 'center',
   },
 });
 

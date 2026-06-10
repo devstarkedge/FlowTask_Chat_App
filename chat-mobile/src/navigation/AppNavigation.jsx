@@ -1,18 +1,22 @@
 import React from "react";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useThemeStore } from "../stores/themeStore";
+import { useNotificationStore } from "../stores/notificationStore";
 import {
   Hash,
   MessageSquare,
   Bell,
-  MoreHorizontal,
   Home,
   Search,
+  MoreHorizontal,
 } from "lucide-react-native";
 import DrawerNavigation from "../components/DrawerNavigation";
+import WorkspaceSwitcher from "../components/WorkspaceSwitcher";
 
 // Unauth Screens
 import LandingScreen from "../screens/Authentication/LandingScreen";
@@ -21,10 +25,10 @@ import RegisterScreen from "../screens/Authentication/RegisterScreen";
 
 // Auth Screens
 import WorkspaceSelectorScreen from "../screens/WorkspaceSelectorScreen";
-import HomeScreenEnhanced from "../screens/HomeScreen";
-const HomeScreen = HomeScreenEnhanced;
+import HomeScreen from "../screens/HomeScreen";
 import DMListScreen from "../screens/DMListScreen";
 import ActivityScreen from "../screens/Activity/ActivityScreen";
+import YouScreen from "../screens/YouScreen";
 import ProfileScreen from "../screens/Authentication/ProfileScreen";
 import ChatScreen from "../screens/Chat/ChatScreen";
 import ChannelDetailsScreen from "../screens/ChannelDetailsScreen";
@@ -39,56 +43,104 @@ import PreferencesScreen from "../screens/PreferencesScreen";
 import FilesScreen from "../screens/FilesScreen";
 import SearchScreen from "../screens/SearchScreen";
 import PinnedMessagesScreen from "../screens/PinnedMessagesScreen";
-
+import PeopleScreen from "../screens/PeopleScreen";
+import NewMessageScreen from "../screens/NewMessageScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+// ─── Badge Component ────────────────────────────────────────────────────────
+
+const TabBadge = ({ count, color }) => {
+  const { colors } = useThemeStore();
+  if (!count || count <= 0) return null;
+  return (
+    <View style={[badgeStyles.badge, { backgroundColor: color }]}>
+      <Text style={[badgeStyles.text, { color: colors.textOnPrimary }]}>{count > 99 ? "99+" : count}</Text>
+    </View>
+  );
+};
+
+const badgeStyles = StyleSheet.create({
+  badge: {
+    position: "absolute",
+    top: -2,
+    right: -10,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  text: {
+    fontSize: 9,
+    fontWeight: "700",
+  },
+});
+
+// ─── Workspace Switcher Screen Wrapper ──────────────────────────────────────
+
+function WorkspaceSwitcherScreen({ navigation }) {
+  const [visible, setVisible] = React.useState(true);
+  return (
+    <WorkspaceSwitcher
+      visible={visible}
+      onClose={() => navigation.goBack()}
+      navigation={navigation}
+    />
+  );
+}
+
+// ─── Bottom Tabs ────────────────────────────────────────────────────────────
+
 function BottomTabs({ navigation }) {
   const { colors } = useThemeStore();
+  const insets = useSafeAreaInsets();
+  const unreadCount = useNotificationStore((s) => s.unreadCount) || 0;
 
   return (
     <>
       <Tab.Navigator
         screenOptions={{
           tabBarActiveTintColor: colors.primary,
-          tabBarInactiveTintColor: colors.textTertiary,
+          tabBarInactiveTintColor: colors.textSecondary,
           tabBarStyle: {
-            backgroundColor: colors.background,
-            borderTopWidth: 1,
+            backgroundColor: colors.backgroundSecondary,
+            borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: colors.border,
-            paddingBottom: 8,
-            paddingTop: 8,
-            height: 60,
+            paddingBottom: insets.bottom > 0 ? insets.bottom : 4,
+            paddingTop: 4,
+            height: 50 + (insets.bottom > 0 ? insets.bottom : 0),
           },
           tabBarLabelStyle: {
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: "600",
+            marginTop: 1,
           },
-          headerStyle: {
-            backgroundColor: colors.background,
+          tabBarIconStyle: {
+            marginTop: 2,
           },
-          headerTintColor: colors.textPrimary,
+          headerShown: false,
         }}
       >
         <Tab.Screen
           name="HomeTab"
           component={HomeScreen}
           options={{
-            headerShown: false,
             tabBarLabel: "Home",
-            tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
+            tabBarIcon: ({ color }) => (
+              <Home size={22} color={color} />
+            ),
           }}
         />
         <Tab.Screen
           name="DMsTab"
           component={DMListScreen}
           options={{
-            title: "DMs",
-            headerShown: false,
             tabBarLabel: "DMs",
-            tabBarIcon: ({ color, size }) => (
-              <MessageSquare size={size} color={color} />
+            tabBarIcon: ({ color }) => (
+              <MessageSquare size={22} color={color} />
             ),
           }}
         />
@@ -96,19 +148,22 @@ function BottomTabs({ navigation }) {
           name="ActivityTab"
           component={ActivityScreen}
           options={{
-            headerShown: false,
             tabBarLabel: "Activity",
-            tabBarIcon: ({ color, size }) => <Bell size={size} color={color} />,
+            tabBarIcon: ({ color }) => (
+              <View>
+                <Bell size={22} color={color} />
+                <TabBadge count={unreadCount} color={colors.primary} />
+              </View>
+            ),
           }}
         />
         <Tab.Screen
           name="MoreTab"
-          component={FilesScreen}
+          component={YouScreen}
           options={{
-            headerShown: false,
             tabBarLabel: "More",
-            tabBarIcon: ({ color, size }) => (
-              <MoreHorizontal size={size} color={color} />
+            tabBarIcon: ({ color }) => (
+              <MoreHorizontal size={22} color={color} />
             ),
           }}
         />
@@ -116,10 +171,20 @@ function BottomTabs({ navigation }) {
           name="SearchTab"
           component={SearchScreen}
           options={{
-            headerShown: false,
-            tabBarLabel: "Search",
-            tabBarIcon: ({ color, size }) => (
-              <Search size={size} color={color} />
+            tabBarLabel: "",
+            tabBarIcon: ({ focused }) => (
+              <View
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  backgroundColor: focused ? colors.primary : colors.backgroundTertiary,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <Search size={18} color={focused ? colors.textInverse : colors.textPrimary} />
+              </View>
             ),
           }}
         />
@@ -128,6 +193,8 @@ function BottomTabs({ navigation }) {
     </>
   );
 }
+
+// ─── Main Navigation ────────────────────────────────────────────────────────
 
 export default function AppNavigation() {
   const { accessToken, isInitialized } = useAuthStore();
@@ -170,19 +237,27 @@ export default function AppNavigation() {
         <>
           <Stack.Screen name="Main" component={BottomTabs} />
           <Stack.Screen
-            name="Chat"
-            component={ChatScreen}
+            name="WorkspaceSwitcher"
+            component={WorkspaceSwitcherScreen}
             options={{
               headerShown: false,
+              animation: "fade",
+              presentation: "transparentModal",
             }}
+          />
+          <Stack.Screen
+            name="CreateWorkspace"
+            component={CreateWorkspaceScreen}
+          />
+          <Stack.Screen
+            name="Chat"
+            component={ChatScreen}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="ChannelDetails"
             component={ChannelDetailsScreen}
-            options={{
-              headerShown: true,
-              title: "Channel Details",
-            }}
+            options={{ headerShown: true, title: "Channel Details" }}
           />
           <Stack.Screen
             name="Threads"
@@ -212,10 +287,7 @@ export default function AppNavigation() {
           <Stack.Screen
             name="Notifications"
             component={NotificationsScreen}
-            options={{
-              headerShown: true,
-              title: "Notifications",
-            }}
+            options={{ headerShown: true, title: "Notifications" }}
           />
           <Stack.Screen
             name="Preferences"
@@ -241,6 +313,20 @@ export default function AppNavigation() {
             name="PinnedMessages"
             component={PinnedMessagesScreen}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="People"
+            component={PeopleScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="NewMessage"
+            component={NewMessageScreen}
+            options={{ 
+              headerShown: false,
+              presentation: 'modal',
+              animation: 'slide_from_bottom',
+            }}
           />
         </>
       )}

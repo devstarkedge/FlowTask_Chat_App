@@ -1,27 +1,24 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
-  TouchableOpacity,
   FlatList,
-  ActivityIndicator,
-  StatusBar,
   RefreshControl,
+  TouchableOpacity,
 } from 'react-native';
 import { useLaterStore } from '../stores/laterStore';
 import { useThemeStore } from '../stores/themeStore';
+import { formatRelativeTime } from '../utils/dateUtils';
+import { ScreenLayout, ScreenHeader, FilterTabs, LoadingState, EmptyState } from '../components/common';
 import { 
-  CircleChevronLeft,
   Bookmark,
-  Hash,
-  MessageSquare,
   Clock,
   CheckCircle2,
   Archive,
   X,
 } from 'lucide-react-native';
+import logger from '../utils/logger';
 
 const LaterScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
@@ -37,48 +34,46 @@ const LaterScreen = ({ navigation }) => {
   fetchSavedMessagesRef.current = fetchSavedMessages;
 
   useEffect(() => {
-    console.log('LaterScreen mounted');
     fetchSavedMessagesRef.current();
-    return () => console.log('LaterScreen unmounted');
   }, []);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchSavedMessages();
     setRefreshing(false);
-  };
+  }, [fetchSavedMessages]);
 
-  const filteredMessages = savedMessages.filter(msg => {
+  const filteredMessages = useMemo(() => savedMessages.filter(msg => {
     if (filter === 'all') return true;
     return msg.status === filter;
-  });
+  }), [savedMessages, filter]);
 
-  const handleMessagePress = (savedMessage) => {
+  const handleMessagePress = useCallback((savedMessage) => {
     if (savedMessage.messageId) {
       navigation.navigate('Chat', {
         channelId: savedMessage.channelId?._id,
         messageId: savedMessage.messageId._id,
       });
     }
-  };
+  }, [navigation]);
 
-  const handleStatusChange = async (messageId, newStatus) => {
+  const handleStatusChange = useCallback(async (messageId, newStatus) => {
     try {
       await updateStatus(messageId, newStatus);
     } catch (error) {
-      console.error('Failed to update status:', error);
+      logger.error('Failed to update status:', error);
     }
-  };
+  }, [updateStatus]);
 
-  const handleRemove = async (messageId) => {
+  const handleRemove = useCallback(async (messageId) => {
     try {
       await toggleSaveMessage(messageId);
     } catch (error) {
-      console.error('Failed to remove:', error);
+      logger.error('Failed to remove:', error);
     }
-  };
+  }, [toggleSaveMessage]);
 
-  const renderSavedItem = ({ item }) => {
+  const renderSavedItem = useCallback(({ item }) => {
     const message = item.messageId;
     const channel = item.channelId;
     
@@ -130,13 +125,13 @@ const LaterScreen = ({ navigation }) => {
 
         <View style={styles.savedMeta}>
           <Text style={[styles.metaText, { color: colors.textTertiary }]}>
-            Saved {formatDate(item.createdAt)}
+            Saved {formatRelativeTime(item.createdAt)}
           </Text>
           {item.reminderAt && (
             <View style={styles.reminderBadge}>
               <Clock size={12} color={colors.warning} />
               <Text style={[styles.reminderText, { color: colors.warning }]}>
-                {formatDate(item.reminderAt)}
+                {formatRelativeTime(item.reminderAt)}
               </Text>
             </View>
           )}
@@ -154,90 +149,25 @@ const LaterScreen = ({ navigation }) => {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [colors, handleMessagePress, handleRemove, handleStatusChange]);
 
   const styles = createStyles(colors);
+  const filterTabs = [
+    { key: 'in_progress', label: 'In Progress' },
+    { key: 'completed', label: 'Completed' },
+    { key: 'archived', label: 'Archived' },
+  ];
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={colors.effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
-      
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => navigation.goBack()}
-        >
-          <CircleChevronLeft size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Later</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      {/* Filter Tabs */}
-      <View style={[styles.filterContainer, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === 'in_progress' && { borderBottomColor: colors.primary }
-          ]}
-          onPress={() => setFilter('in_progress')}
-        >
-          <Text 
-            style={[
-              styles.filterText,
-              { color: filter === 'in_progress' ? colors.primary : colors.textSecondary }
-            ]}
-          >
-            In Progress
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === 'completed' && { borderBottomColor: colors.primary }
-          ]}
-          onPress={() => setFilter('completed')}
-        >
-          <Text 
-            style={[
-              styles.filterText,
-              { color: filter === 'completed' ? colors.primary : colors.textSecondary }
-            ]}
-          >
-            Completed
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === 'archived' && { borderBottomColor: colors.primary }
-          ]}
-          onPress={() => setFilter('archived')}
-        >
-          <Text 
-            style={[
-              styles.filterText,
-              { color: filter === 'archived' ? colors.primary : colors.textSecondary }
-            ]}
-          >
-            Archived
-          </Text>
-        </TouchableOpacity>
-      </View>
+    <ScreenLayout>
+      <ScreenHeader title="Later" onBack={() => navigation.goBack()} />
+      <FilterTabs tabs={filterTabs} activeTab={filter} onTabChange={setFilter} />
 
       {/* Content */}
       {isLoading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <LoadingState />
       ) : filteredMessages.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Bookmark size={48} color={colors.textTertiary} />
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            No saved items
-          </Text>
-        </View>
+        <EmptyState icon={Bookmark} title="No saved items" />
       ) : (
         <FlatList
           data={filteredMessages}
@@ -245,6 +175,10 @@ const LaterScreen = ({ navigation }) => {
           keyExtractor={(item) => item._id}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews
           refreshControl={
             <RefreshControl 
               refreshing={refreshing} 
@@ -254,59 +188,11 @@ const LaterScreen = ({ navigation }) => {
           }
         />
       )}
-    </SafeAreaView>
+    </ScreenLayout>
   );
 };
 
-const formatDate = (dateString) => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diff = now - date;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString();
-};
-
 const createStyles = (colors) => StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-  },
-  filterTab: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  filterText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
   listContainer: {
     padding: 16,
     gap: 12,
@@ -385,15 +271,6 @@ const createStyles = (colors) => StyleSheet.create({
   actionText: {
     fontSize: 12,
     fontWeight: '600',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 15,
   },
 });
 

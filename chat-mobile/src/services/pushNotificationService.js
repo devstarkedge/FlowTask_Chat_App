@@ -12,8 +12,9 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import storage from './storage';
 import { pushAPI } from './api';
+import logger from '../utils/logger';
 
 const PUSH_TOKEN_KEY = 'expo_push_token';
 
@@ -45,7 +46,7 @@ Notifications.setNotificationHandler({
  */
 export async function registerForPushNotifications() {
   if (!Device.isDevice) {
-    console.log('[Push] Push notifications require a physical device');
+    logger.info('[Push] Push notifications require a physical device');
     return null;
   }
 
@@ -60,7 +61,7 @@ export async function registerForPushNotifications() {
     }
 
     if (finalStatus !== 'granted') {
-      console.log('[Push] Permission denied');
+      logger.warn('[Push] Permission denied');
       return null;
     }
 
@@ -87,14 +88,14 @@ export async function registerForPushNotifications() {
     const token = tokenData.data;
 
     if (!token) {
-      console.warn('[Push] Could not obtain push token');
+      logger.warn('[Push] Could not obtain push token');
       return null;
     }
 
     // 3. Avoid re-registering the same token
-    const savedToken = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
+    const savedToken = await storage.getItem(PUSH_TOKEN_KEY);
     if (savedToken === token) {
-      console.log('[Push] Token unchanged, skipping re-registration');
+      logger.info('[Push] Token unchanged, skipping re-registration');
       return token;
     }
 
@@ -102,15 +103,15 @@ export async function registerForPushNotifications() {
     const deviceId = Device.osInternalId || Device.deviceId || 'unknown';
     await pushAPI.registerToken(token, deviceId, 'expo');
 
-    await AsyncStorage.setItem(PUSH_TOKEN_KEY, token);
-    console.log('[Push] Token registered with server');
+    await storage.setItem(PUSH_TOKEN_KEY, token);
+    logger.info('[Push] Token registered with server');
 
     // 5. Attach foreground / response listeners
     _attachListeners();
 
     return token;
   } catch (error) {
-    console.error('[Push] registerForPushNotifications failed:', error.message);
+    logger.error('[Push] registerForPushNotifications failed:', error.message);
     return null;
   }
 }
@@ -121,15 +122,15 @@ export async function registerForPushNotifications() {
  */
 export async function unregisterPushNotifications() {
   try {
-    const token = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
+    const token = await storage.getItem(PUSH_TOKEN_KEY);
     if (token) {
       await pushAPI.removeToken(token).catch(() => {});
     }
-    await AsyncStorage.removeItem(PUSH_TOKEN_KEY);
+    await storage.removeItem(PUSH_TOKEN_KEY);
     _detachListeners();
-    console.log('[Push] Token unregistered');
+    logger.info('[Push] Token unregistered');
   } catch (error) {
-    console.error('[Push] unregister failed:', error.message);
+    logger.error('[Push] unregister failed:', error.message);
   }
 }
 
@@ -138,7 +139,7 @@ export async function unregisterPushNotifications() {
  */
 export async function isPushEnabled() {
   try {
-    const token = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
+    const token = await storage.getItem(PUSH_TOKEN_KEY);
     if (!token) return false;
     const { status } = await Notifications.getPermissionsAsync();
     return status === 'granted';
@@ -163,7 +164,7 @@ export async function showLocalNotification({ title, body, data = {} }) {
       trigger: null, // immediate
     });
   } catch (error) {
-    console.error('[Push] showLocalNotification failed:', error.message);
+    logger.error('[Push] showLocalNotification failed:', error.message);
   }
 }
 

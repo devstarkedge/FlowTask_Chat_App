@@ -1,6 +1,95 @@
 // Theme color system for FlowTask-Chat Mobile
 // Supports Light, Dark, and Custom Workspace Themes
 // Matches web application architecture
+import { Platform } from 'react-native';
+
+// ─── Utility: derive rgba from hex + alpha ──────────────────────────────────
+
+/**
+ * Convert a hex color to an rgba() string.
+ * @param {string} hex  – e.g. '#3B82F6'
+ * @param {number} alpha – 0..1
+ * @returns {string} rgba(r,g,b,a)
+ */
+export const withAlpha = (hex, alpha) => {
+  if (!hex || typeof hex !== 'string') return `rgba(0,0,0,${alpha})`;
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = (num >> 16) & 0xff;
+  const g = (num >> 8) & 0xff;
+  const b = num & 0xff;
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+
+// ─── Design Tokens (theme-agnostic) ─────────────────────────────────────────
+
+export const fontSizes = {
+  xs: 11,
+  sm: 13,
+  md: 15,
+  lg: 17,
+  xl: 20,
+  xxl: 24,
+};
+
+export const fontWeights = {
+  regular: '400',
+  medium: '500',
+  semiBold: '600',
+  bold: '700',
+  extraBold: '800',
+};
+
+export const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  xxxl: 32,
+};
+
+export const radius = {
+  sm: 6,
+  md: 8,
+  lg: 12,
+  xl: 16,
+  full: 999,
+};
+
+// Platform-aware shadow tokens (consumed via getTheme)
+
+export const shadows = {
+  sm: Platform.select({
+    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
+    android: { elevation: 2 },
+    default: {},
+  }),
+  md: Platform.select({
+    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4, elevation: 3 },
+    android: { elevation: 4 },
+    default: {},
+  }),
+  lg: Platform.select({
+    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 6 },
+    android: { elevation: 8 },
+    default: {},
+  }),
+};
+
+// Avatar fallback color palette
+export const avatarColors = [
+  '#e91e63',
+  '#9c27b0',
+  '#673ab7',
+  '#3f51b5',
+  '#2196f3',
+  '#009688',
+  '#4caf50',
+  '#ff9800',
+  '#ff5722',
+  '#795548',
+];
 
 // Accent color presets
 export const accentColors = {
@@ -105,6 +194,34 @@ export const lightTheme = {
   // Shadow
   shadow: 'rgba(0, 0, 0, 0.1)',
   shadowDark: 'rgba(0, 0, 0, 0.2)',
+
+  // Shadow alpha tokens
+  shadowSm: 'rgba(0, 0, 0, 0.1)',
+  shadowMd: 'rgba(0, 0, 0, 0.15)',
+  shadowLg: 'rgba(0, 0, 0, 0.2)',
+  shadowXl: 'rgba(0, 0, 0, 0.25)',
+  shadowXxl: 'rgba(0, 0, 0, 0.35)',
+
+  // Overlay / Backdrop
+  overlay: 'rgba(0, 0, 0, 0.5)',
+  backdrop: 'rgba(0, 0, 0, 0.55)',
+
+  // Surface overlays (white-based, for sidebars/drawers)
+  surfaceOverlay: 'rgba(255, 255, 255, 0.12)',
+  surfaceOverlayLight: 'rgba(255, 255, 255, 0.15)',
+  surfaceOverlayMedium: 'rgba(255, 255, 255, 0.2)',
+  surfaceOverlayHeavy: 'rgba(255, 255, 255, 0.5)',
+
+  // Primary overlays (computed dynamically in getTheme)
+  primaryOverlay: 'rgba(99, 102, 241, 0.08)',
+  primaryOverlayLight: 'rgba(99, 102, 241, 0.04)',
+  primaryOverlayBorder: 'rgba(99, 102, 241, 0.05)',
+
+  // Text on primary
+  textOnPrimary: '#FFFFFF',
+
+  // Danger
+  danger: '#e01e5a',
 };
 
 export const darkTheme = {
@@ -176,6 +293,34 @@ export const darkTheme = {
   // Shadow
   shadow: 'rgba(0, 0, 0, 0.3)',
   shadowDark: 'rgba(0, 0, 0, 0.5)',
+
+  // Shadow alpha tokens
+  shadowSm: 'rgba(0, 0, 0, 0.2)',
+  shadowMd: 'rgba(0, 0, 0, 0.25)',
+  shadowLg: 'rgba(0, 0, 0, 0.35)',
+  shadowXl: 'rgba(0, 0, 0, 0.45)',
+  shadowXxl: 'rgba(0, 0, 0, 0.55)',
+
+  // Overlay / Backdrop
+  overlay: 'rgba(0, 0, 0, 0.6)',
+  backdrop: 'rgba(0, 0, 0, 0.65)',
+
+  // Surface overlays (white-based, for sidebars/drawers)
+  surfaceOverlay: 'rgba(255, 255, 255, 0.1)',
+  surfaceOverlayLight: 'rgba(255, 255, 255, 0.12)',
+  surfaceOverlayMedium: 'rgba(255, 255, 255, 0.15)',
+  surfaceOverlayHeavy: 'rgba(255, 255, 255, 0.3)',
+
+  // Primary overlays (computed dynamically in getTheme)
+  primaryOverlay: 'rgba(99, 102, 241, 0.12)',
+  primaryOverlayLight: 'rgba(99, 102, 241, 0.06)',
+  primaryOverlayBorder: 'rgba(99, 102, 241, 0.08)',
+
+  // Text on primary
+  textOnPrimary: '#FFFFFF',
+
+  // Danger
+  danger: '#e01e5a',
 };
 
 /**
@@ -222,10 +367,33 @@ export const getTheme = (mode = 'light', accentColor = 'blue', customColor = nul
       }
     : {};
 
+  // Resolve final primary color after workspace override
+  const finalPrimary = workspace.primary || accent.primary;
+
+  // Compute primary overlay tokens dynamically from the active accent
+  const primaryOverlays = {
+    primaryOverlay: withAlpha(finalPrimary, mode === 'dark' ? 0.12 : 0.08),
+    primaryOverlayLight: withAlpha(finalPrimary, mode === 'dark' ? 0.06 : 0.04),
+    primaryOverlayBorder: withAlpha(finalPrimary, mode === 'dark' ? 0.08 : 0.05),
+  };
+
+  // Message bubble sent should follow accent
+  const messageOverrides = {
+    messageBubbleSent: finalPrimary,
+  };
+
   return {
     ...base,
     ...accent,
     ...workspace,
+    ...primaryOverlays,
+    ...messageOverrides,
     effectiveTheme: mode,
+    fontSizes,
+    fontWeights,
+    spacing,
+    radius,
+    shadows,
+    avatarColors,
   };
 };

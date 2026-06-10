@@ -31,25 +31,25 @@ const EmojiPickerModal = React.memo(function EmojiPickerModal({ visible, onClose
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity
-        style={styles.overlay}
+        style={[styles.overlay, { backgroundColor: colors.overlay }]}
         activeOpacity={1}
         onPress={onClose}
       >
         <TouchableOpacity
           activeOpacity={1}
           style={[styles.container, {
-            backgroundColor: colors.background || '#1a1a1a',
-            borderColor: colors.border || '#333',
+            backgroundColor: colors.background,
+            borderColor: colors.border,
           }]}
           onPress={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <View style={[styles.header, { borderBottomColor: colors.border || '#333' }]}>
-            <Text style={[styles.title, { color: colors.textPrimary || '#fff' }]}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>
               Reactions
             </Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <X size={20} color={colors.textSecondary || '#aaa'} />
+              <X size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -82,7 +82,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   container: {
     width: '85%',

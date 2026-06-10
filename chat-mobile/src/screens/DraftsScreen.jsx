@@ -1,20 +1,19 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
-  TouchableOpacity,
   FlatList,
-  StatusBar,
   RefreshControl,
+  TouchableOpacity,
 } from 'react-native';
 import { useDraftStore, getWorkspaceDrafts } from '../stores/draftStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
+import { formatRelativeTime } from '../utils/dateUtils';
+import { ScreenLayout, ScreenHeader, EmptyState } from '../components/common';
 import { 
-  CircleChevronLeft,
   Edit3,
   Hash,
   MessageSquare,
@@ -33,21 +32,19 @@ const DraftsScreen = ({ navigation }) => {
   const fetchDraftsRef = useRef(fetchDrafts);
   fetchDraftsRef.current = fetchDrafts;
 
-  const workspaceDrafts = getWorkspaceDrafts(drafts, activeWorkspace?._id);
+  const workspaceDrafts = useMemo(() => getWorkspaceDrafts(drafts, activeWorkspace?._id), [drafts, activeWorkspace?._id]);
 
   useEffect(() => {
-    console.log('DraftsScreen mounted');
     fetchDraftsRef.current(activeWorkspace?._id);
-    return () => console.log('DraftsScreen unmounted');
   }, [activeWorkspace?._id]);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchDrafts(activeWorkspace?._id);
     setRefreshing(false);
-  };
+  }, [fetchDrafts, activeWorkspace?._id]);
 
-  const handleDraftPress = (draft) => {
+  const handleDraftPress = useCallback((draft) => {
     const channel = channels.find(ch => ch._id === draft.channelId);
     navigation.navigate('Chat', {
       channelId: draft.channelId,
@@ -55,13 +52,13 @@ const DraftsScreen = ({ navigation }) => {
       threadId: draft.threadId,
       loadDraft: true,
     });
-  };
+  }, [channels, navigation]);
 
-  const handleDeleteDraft = (draft) => {
+  const handleDeleteDraft = useCallback((draft) => {
     clearDraft(draft.channelId, draft.workspaceId, draft.threadId);
-  };
+  }, [clearDraft]);
 
-  const renderDraftItem = ({ item }) => {
+  const renderDraftItem = useCallback(({ item }) => {
     const isThread = item.threadId && item.threadId !== 'root';
     
     return (
@@ -101,42 +98,22 @@ const DraftsScreen = ({ navigation }) => {
 
         <View style={styles.draftMeta}>
           <Text style={[styles.metaText, { color: colors.textTertiary }]}>
-            {formatDate(item.timestamp)}
+            {formatRelativeTime(item.timestamp)}
           </Text>
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [colors, handleDraftPress, handleDeleteDraft]);
 
   const styles = createStyles(colors);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={colors.effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
-      
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => navigation.goBack()}
-        >
-          <CircleChevronLeft size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Drafts</Text>
-        <View style={{ width: 40 }} />
-      </View>
+    <ScreenLayout>
+      <ScreenHeader title="Drafts" onBack={() => navigation.goBack()} />
 
       {/* Content */}
       {workspaceDrafts.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Edit3 size={48} color={colors.textTertiary} />
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            No drafts
-          </Text>
-          <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>
-            Your unsent messages will appear here
-          </Text>
-        </View>
+        <EmptyState icon={Edit3} title="No drafts" subtitle="Your unsent messages will appear here" />
       ) : (
         <FlatList
           data={workspaceDrafts}
@@ -144,6 +121,10 @@ const DraftsScreen = ({ navigation }) => {
           keyExtractor={(item) => item._key}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews
           refreshControl={
             <RefreshControl 
               refreshing={refreshing} 
@@ -153,44 +134,11 @@ const DraftsScreen = ({ navigation }) => {
           }
         />
       )}
-    </SafeAreaView>
+    </ScreenLayout>
   );
 };
 
-const formatDate = (timestamp) => {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diff = now - date;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString();
-};
-
 const createStyles = (colors) => StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
   listContainer: {
     padding: 16,
     gap: 12,
@@ -233,21 +181,6 @@ const createStyles = (colors) => StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 32,
-  },
-  emptyText: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  emptySubtext: {
-    fontSize: 14,
-    textAlign: 'center',
   },
 });
 

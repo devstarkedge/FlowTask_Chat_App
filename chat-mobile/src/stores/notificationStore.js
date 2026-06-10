@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import api from '../services/api';
+import logger from '../utils/logger';
 
 export const useNotificationStore = create((set, get) => ({
   notifications: [],
@@ -9,16 +10,25 @@ export const useNotificationStore = create((set, get) => ({
   hasMore: false,
   cursor: null,
   activeFilter: 'all', // all | dms | mentions | threads
+  _lastFetchAt: 0,
 
   fetchNotifications: async (cursor = null) => {
-    set({ isLoading: true, error: null });
+    // Cooldown: prevent re-fetch within 3 seconds to avoid loops
+    const now = Date.now();
+    if (!cursor && now - get()._lastFetchAt < 3000) return;
+
+    set({ isLoading: true, error: null, _lastFetchAt: now });
     try {
       const params = { limit: 30 };
       if (cursor) params.cursor = cursor;
       const { data } = await api.get('/notifications', { params });
-      const items = data.data?.notifications || data.data?.items || [];
-      const hasMore = data.data?.hasMore || false;
-      const nextCursor = data.data?.cursor || null;
+
+      // Server returns { success, notifications, hasMore, nextCursor } at top level
+      // but some endpoints may wrap in data.data — handle both
+      const payload = data?.data || data || {};
+      const items = payload.notifications || payload.items || [];
+      const hasMore = payload.hasMore ?? false;
+      const nextCursor = payload.nextCursor || payload.cursor || null;
 
       set((state) => {
         // Normalize read/isRead fields from API
@@ -35,7 +45,7 @@ export const useNotificationStore = create((set, get) => ({
         return { notifications: unique, hasMore, cursor: nextCursor, isLoading: false, error: null };
       });
     } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+      logger.error('Failed to fetch notifications:', error?.response?.data?.error?.message || error.message);
       set({ isLoading: false, error: error.message || 'Failed to load activity' });
     }
   },
@@ -43,9 +53,10 @@ export const useNotificationStore = create((set, get) => ({
   fetchUnreadCount: async () => {
     try {
       const { data } = await api.get('/notifications/unread-count');
-      set({ unreadCount: data.data?.count || data.data || 0 });
+      const payload = data?.data || data || {};
+      set({ unreadCount: payload.count || 0 });
     } catch (error) {
-      console.error('Failed to fetch unread count:', error);
+      logger.error('Failed to fetch unread count:', error?.response?.data?.error?.message || error.message);
     }
   },
 
@@ -59,7 +70,7 @@ export const useNotificationStore = create((set, get) => ({
         unreadCount: Math.max(0, state.unreadCount - 1),
       }));
     } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+      logger.error('Failed to mark notification as read:', error);
     }
   },
 
@@ -71,7 +82,7 @@ export const useNotificationStore = create((set, get) => ({
         unreadCount: 0,
       }));
     } catch (error) {
-      console.error('Failed to mark all as read:', error);
+      logger.error('Failed to mark all as read:', error);
     }
   },
 

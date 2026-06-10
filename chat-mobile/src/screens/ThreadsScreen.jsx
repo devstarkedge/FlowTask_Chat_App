@@ -1,25 +1,24 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
-  TouchableOpacity,
   FlatList,
-  ActivityIndicator,
-  StatusBar,
   RefreshControl,
+  TouchableOpacity,
 } from 'react-native';
 import { useThreadStore } from '../stores/threadStore';
 import { useThemeStore } from '../stores/themeStore';
+import { formatRelativeTime } from '../utils/dateUtils';
+import { ScreenLayout, ScreenHeader, FilterTabs, LoadingState, EmptyState } from '../components/common';
 import { 
-  CircleChevronLeft,
   MessageSquare,
   CheckCircle2,
   Circle,
   Lock,
   Hash,
 } from 'lucide-react-native';
+import logger from '../utils/logger';
 
 const ThreadsScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
@@ -35,31 +34,29 @@ const ThreadsScreen = ({ navigation }) => {
   fetchThreadsRef.current = fetchThreads;
 
   useEffect(() => {
-    console.log('ThreadsScreen mounted');
     fetchThreadsRef.current();
-    return () => console.log('ThreadsScreen unmounted');
   }, []);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchThreads();
     setRefreshing(false);
-  };
+  }, [fetchThreads]);
 
-  const filteredThreads = threads.filter(thread => {
+  const filteredThreads = useMemo(() => threads.filter(thread => {
     if (filter === 'unread') return thread.hasUnread;
     if (filter === 'resolved') return thread.isResolved;
     return true;
-  });
+  }), [threads, filter]);
 
-  const handleThreadPress = (thread) => {
+  const handleThreadPress = useCallback((thread) => {
     navigation.navigate('ThreadDetail', { 
       threadId: thread._id,
       channelId: thread.channelId,
     });
-  };
+  }, [navigation]);
 
-  const handleToggleResolve = async (thread) => {
+  const handleToggleResolve = useCallback(async (thread) => {
     try {
       if (thread.isResolved) {
         await unresolveThread(thread._id);
@@ -67,11 +64,11 @@ const ThreadsScreen = ({ navigation }) => {
         await resolveThread(thread._id);
       }
     } catch (error) {
-      console.error('Failed to toggle resolve:', error);
+      logger.error('Failed to toggle resolve:', error);
     }
-  };
+  }, [resolveThread, unresolveThread]);
 
-  const renderThreadItem = ({ item }) => {
+  const renderThreadItem = useCallback(({ item }) => {
     const hasUnread = item.hasUnread;
     const isResolved = item.isResolved;
     
@@ -126,7 +123,7 @@ const ThreadsScreen = ({ navigation }) => {
           </View>
           {item.lastReplyAt && (
             <Text style={[styles.metaText, { color: colors.textTertiary }]}>
-              {formatDate(item.lastReplyAt)}
+              {formatRelativeTime(item.lastReplyAt)}
             </Text>
           )}
         </View>
@@ -136,90 +133,25 @@ const ThreadsScreen = ({ navigation }) => {
         )}
       </TouchableOpacity>
     );
-  };
+  }, [colors, handleThreadPress, handleToggleResolve]);
 
   const styles = createStyles(colors);
+  const filterTabs = [
+    { key: 'all', label: 'All' },
+    { key: 'unread', label: 'Unread' },
+    { key: 'resolved', label: 'Resolved' },
+  ];
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={colors.effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
-      
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => navigation.goBack()}
-        >
-          <CircleChevronLeft size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Threads</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      {/* Filter Tabs */}
-      <View style={[styles.filterContainer, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === 'all' && { borderBottomColor: colors.primary }
-          ]}
-          onPress={() => setFilter('all')}
-        >
-          <Text 
-            style={[
-              styles.filterText,
-              { color: filter === 'all' ? colors.primary : colors.textSecondary }
-            ]}
-          >
-            All
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === 'unread' && { borderBottomColor: colors.primary }
-          ]}
-          onPress={() => setFilter('unread')}
-        >
-          <Text 
-            style={[
-              styles.filterText,
-              { color: filter === 'unread' ? colors.primary : colors.textSecondary }
-            ]}
-          >
-            Unread
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === 'resolved' && { borderBottomColor: colors.primary }
-          ]}
-          onPress={() => setFilter('resolved')}
-        >
-          <Text 
-            style={[
-              styles.filterText,
-              { color: filter === 'resolved' ? colors.primary : colors.textSecondary }
-            ]}
-          >
-            Resolved
-          </Text>
-        </TouchableOpacity>
-      </View>
+    <ScreenLayout>
+      <ScreenHeader title="Threads" onBack={() => navigation.goBack()} />
+      <FilterTabs tabs={filterTabs} activeTab={filter} onTabChange={setFilter} />
 
       {/* Content */}
       {isLoading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <LoadingState />
       ) : filteredThreads.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <MessageSquare size={48} color={colors.textTertiary} />
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            No threads found
-          </Text>
-        </View>
+        <EmptyState icon={MessageSquare} title="No threads found" />
       ) : (
         <FlatList
           data={filteredThreads}
@@ -227,6 +159,10 @@ const ThreadsScreen = ({ navigation }) => {
           keyExtractor={(item) => item._id}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews
           refreshControl={
             <RefreshControl 
               refreshing={refreshing} 
@@ -236,59 +172,11 @@ const ThreadsScreen = ({ navigation }) => {
           }
         />
       )}
-    </SafeAreaView>
+    </ScreenLayout>
   );
 };
 
-const formatDate = (dateString) => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diff = now - date;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString();
-};
-
 const createStyles = (colors) => StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-  },
-  filterTab: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
   listContainer: {
     padding: 16,
     gap: 12,
@@ -349,15 +237,6 @@ const createStyles = (colors) => StyleSheet.create({
     width: 4,
     borderTopLeftRadius: 12,
     borderBottomLeftRadius: 12,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 15,
   },
 });
 

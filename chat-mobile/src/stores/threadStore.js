@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import storage from '../services/storage';
 import { threadAPI } from '../services/api';
 import { useAuthStore } from './authStore';
 import api from '../services/api';
+import logger from '../utils/logger';
 
 export const useThreadStore = create(
   persist(
@@ -22,7 +23,7 @@ export const useThreadStore = create(
           set({ threads, unreadThreadCount: unreadCount, isLoading: false });
         } catch (error) {
           set({ isLoading: false, threads: [], unreadThreadCount: 0 });
-          console.error('Failed to fetch threads:', error);
+          logger.error('Failed to fetch threads:', error);
         }
       },
 
@@ -89,7 +90,7 @@ export const useThreadStore = create(
           await threadAPI.resolve(threadId);
           get().updateThread(threadId, { isResolved: true });
         } catch (error) {
-          console.error('Failed to resolve thread:', error);
+          logger.error('Failed to resolve thread:', error);
           throw error;
         }
       },
@@ -99,7 +100,7 @@ export const useThreadStore = create(
           await threadAPI.unresolve(threadId);
           get().updateThread(threadId, { isResolved: false });
         } catch (error) {
-          console.error('Failed to unresolve thread:', error);
+          logger.error('Failed to unresolve thread:', error);
           throw error;
         }
       },
@@ -138,7 +139,7 @@ export const useThreadStore = create(
             };
           });
         } catch (error) {
-          console.error('Failed to fetch thread replies:', error);
+          logger.error('Failed to fetch thread replies:', error);
           set({ isLoadingReplies: false });
         }
       },
@@ -193,7 +194,7 @@ export const useThreadStore = create(
           }));
           return serverReply;
         } catch (error) {
-          console.error('Failed to send thread reply:', error);
+          logger.error('Failed to send thread reply:', error);
           set((state) => ({
             threadRepliesByRoot: {
               ...state.threadRepliesByRoot,
@@ -217,7 +218,7 @@ export const useThreadStore = create(
     }),
     {
       name: 'flowtask-thread-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => storage),
       partialize: (state) => ({ 
         activeThreadId: state.activeThreadId,
         unreadThreadCount: state.unreadThreadCount,

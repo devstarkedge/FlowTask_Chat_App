@@ -1,16 +1,19 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Alert, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { searchAPI } from '../services/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import storage from '../services/storage';
 import { Search, X, Hash, Lock, MessageSquare } from 'lucide-react-native';
-import Avatar from '../components/Avatar';
+import { AppAvatar } from '../components/common';
 import Toast from 'react-native-toast-message';
+import logger from '../utils/logger';
 
 const RECENT_KEY = 'recent_searches';
 
 export default function SearchScreen({ navigation }) {
   const { colors } = useThemeStore();
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState('all');
   const [loading, setLoading] = useState(false);
@@ -20,13 +23,13 @@ export default function SearchScreen({ navigation }) {
 
   useEffect(() => { loadRecent() }, []);
   const loadRecent = async () => {
-    try { const raw = await AsyncStorage.getItem(RECENT_KEY); if (raw) setRecent(JSON.parse(raw)); } catch (err) { }
+    try { const raw = await storage.getItem(RECENT_KEY); if (raw) setRecent(JSON.parse(raw)); } catch (err) { }
   };
 
   const saveRecent = async (q) => {
     try {
       const updated = [q, ...(recent || []).filter(r => r !== q)].slice(0, 10);
-      await AsyncStorage.setItem(RECENT_KEY, JSON.stringify(updated));
+      await storage.setItem(RECENT_KEY, JSON.stringify(updated));
       setRecent(updated);
     } catch {}
   };
@@ -46,41 +49,12 @@ export default function SearchScreen({ navigation }) {
       setResults(data);
       await saveRecent(q);
     } catch (err) {
-      console.error('Search failed', err?.response?.data || err.message || err);
+      logger.error('Search failed', err?.response?.data || err.message || err);
       Toast.show({ type: 'error', text1: 'Search failed' });
     } finally { setLoading(false); }
   };
 
   const scopes = ['all','channels','dms','messages','threads','files','members','drafts','scheduled'];
-
-  const renderTop = () => (
-    <View style={{ padding: 12 }}>
-      <View style={[styles.searchBox, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}> 
-        <Search size={18} color={colors.textSecondary} />
-        <TextInput style={{ flex: 1, marginLeft: 8, color: colors.inputText }} placeholder="Search" placeholderTextColor={colors.inputPlaceholder} value={query} onChangeText={setQuery} />
-        {query ? <TouchableOpacity onPress={() => setQuery('')}><X size={18} color={colors.textSecondary} /></TouchableOpacity> : null}
-      </View>
-
-      <View style={{ flexDirection: 'row', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
-        {scopes.map(s => (
-          <TouchableOpacity key={s} onPress={() => setScope(s)} style={[styles.scopePill, scope === s && { backgroundColor: colors.primary }]}>
-            <Text style={{ color: scope === s ? '#fff' : colors.textSecondary, fontWeight: '700' }}>{s}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {recent && recent.length > 0 && !query && (
-        <View style={{ marginTop: 12 }}>
-          <Text style={{ color: colors.textTertiary, fontWeight: '700', marginBottom: 8 }}>Recent searches</Text>
-          {recent.map(r => (
-            <TouchableOpacity key={r} onPress={() => setQuery(r)} style={{ paddingVertical: 8 }}>
-              <Text style={{ color: colors.textPrimary }}>{r}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-    </View>
-  );
 
   const renderResultSection = (sectionKey, items) => {
     if (!items || items.length === 0) return null;
@@ -116,7 +90,7 @@ export default function SearchScreen({ navigation }) {
             }
           }} style={styles.resultRow}>
             {it.type === 'user' ? (
-              <Avatar user={it} size={32} showStatus />
+              <AppAvatar user={it} size={32} showStatus />
             ) : it.type === 'channel' ? (
               <View style={[styles.resultIcon, { backgroundColor: colors.backgroundSecondary }]}>
                 {it.visibility === 'private' ? <Lock size={16} color={colors.textSecondary} /> : <Hash size={16} color={colors.textSecondary} />}
@@ -137,8 +111,34 @@ export default function SearchScreen({ navigation }) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}> 
-      {renderTop()}
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <View style={{ padding: 12, paddingTop: insets.top + 8 }}>
+        <View style={[styles.searchBox, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
+          <Search size={18} color={colors.textSecondary} />
+          <TextInput style={{ flex: 1, marginLeft: 8, color: colors.inputText }} placeholder="Search" placeholderTextColor={colors.inputPlaceholder} value={query} onChangeText={setQuery} />
+          {query ? <TouchableOpacity onPress={() => setQuery('')}><X size={18} color={colors.textSecondary} /></TouchableOpacity> : null}
+        </View>
+
+        <View style={{ flexDirection: 'row', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
+          {scopes.map(s => (
+            <TouchableOpacity key={s} onPress={() => setScope(s)} style={[styles.scopePill, scope === s && { backgroundColor: colors.primary }]}>
+              <Text style={{ color: scope === s ? '#fff' : colors.textSecondary, fontWeight: '700' }}>{s}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {recent && recent.length > 0 && !query && (
+          <View style={{ marginTop: 12 }}>
+            <Text style={{ color: colors.textTertiary, fontWeight: '700', marginBottom: 8 }}>Recent searches</Text>
+            {recent.map(r => (
+              <TouchableOpacity key={r} onPress={() => setQuery(r)} style={{ paddingVertical: 8 }}>
+                <Text style={{ color: colors.textPrimary }}>{r}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
+
       {loading && <ActivityIndicator style={{ marginTop: 8 }} />}
       {results ? (
         <FlatList
@@ -161,7 +161,7 @@ export default function SearchScreen({ navigation }) {
           <Text style={{ color: colors.textTertiary }}>Type to search across channels, messages, files, people and more.</Text>
         </View>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 

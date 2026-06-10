@@ -46,6 +46,7 @@ import {
   CaseSensitive,
   Loader2,
 } from "lucide-react-native";
+import logger from '../utils/logger';
 import { useDraftStore } from "../stores/draftStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useScheduledStore } from "../stores/scheduledStore";
@@ -375,7 +376,7 @@ const MessageComposer = React.memo(function MessageComposer({
           return result;
         });
       } catch (err) {
-        console.error("[Composer] File upload failed:", err);
+        logger.error("[Composer] File upload failed:", err);
         // Mark the failed files so user can remove them
         setPendingFiles((prev) =>
           prev.map((f) =>
@@ -459,9 +460,9 @@ const MessageComposer = React.memo(function MessageComposer({
           style={[
             styles.banner,
             {
-              backgroundColor: colors.cardBackground || colors.inputBackground,
+              backgroundColor: colors.card,
               borderLeftColor: editingMessage
-                ? colors.warning || "#e8c46a"
+                ? colors.warning
                 : colors.primary,
             },
           ]}
@@ -530,7 +531,7 @@ const MessageComposer = React.memo(function MessageComposer({
                 styles.pendingFileChip,
                 { backgroundColor: colors.inputBackground },
                 file.uploadFailed && {
-                  borderColor: colors.error || "#e53935",
+                  borderColor: colors.error,
                   borderWidth: 1,
                 },
               ]}
@@ -538,7 +539,7 @@ const MessageComposer = React.memo(function MessageComposer({
               {file.uploading ? (
                 <Loader2 size={12} color={colors.primary} />
               ) : file.uploadFailed ? (
-                <X size={12} color={colors.error || "#e53935"} />
+                <X size={12} color={colors.error} />
               ) : (
                 <FileText size={12} color={colors.textSecondary} />
               )}

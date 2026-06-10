@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useThemeStore } from '../stores/themeStore';
-import Avatar from './Avatar';
+import { AppAvatar } from './common';
 
 /**
  * Shared DM list row used in both HomeScreen DM section and DMListScreen.
@@ -26,7 +26,7 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
 
   const content = (
     <>
-      <Avatar user={dmUser} size={44} showStatus />
+      <AppAvatar user={dmUser} size={44} showStatus />
 
       <View style={styles.info}>
         <Text

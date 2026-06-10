@@ -6,8 +6,9 @@ import { useChannelStore } from '../stores/channelStore';
 import { useThreadStore } from '../stores/threadStore';
 import { useLaterStore } from '../stores/laterStore';
 import { useScheduledStore } from '../stores/scheduledStore';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import storage from './storage';
 import ENV from '../config/environment';
+import logger from '../utils/logger';
 
 let socket = null;
 let isConnecting = false;
@@ -16,15 +17,15 @@ let currentWorkspaceId = null;
 // Use ENV (which already resolves app.json extra + .env + production fallback)
 const SOCKET_URL = ENV.SOCKET_URL;
 
-console.log('[Socket] Active SOCKET_URL:', SOCKET_URL);
+logger.info('[Socket] Active SOCKET_URL:', SOCKET_URL);
 
 export const connectSocket = async () => {
   const token = useAuthStore.getState().accessToken;
-  const workspaceId = await AsyncStorage.getItem('active_workspace_id');
+  const workspaceId = await storage.getItem('active_workspace_id');
 
 
   if (!token || !workspaceId) {
-    console.warn('[Socket] Missing token or workspaceId, cannot connect');
+    logger.warn('[Socket] Missing token or workspaceId, cannot connect');
     return null;
   }
 
@@ -46,7 +47,7 @@ export const connectSocket = async () => {
   isConnecting = true;
   currentWorkspaceId = workspaceId;
 
-  console.log('[Socket] Creating new socket connection to:', SOCKET_URL);
+  logger.info('[Socket] Creating new socket connection to:', SOCKET_URL);
 
   socket = io(SOCKET_URL, {
     auth: {
@@ -61,7 +62,7 @@ export const connectSocket = async () => {
   });
 
   socket.on('connect', () => {
-    console.log('[Socket] ✅ Connected to server');
+    logger.info('[Socket] ✅ Connected to server');
     isConnecting = false;
     useChatStore.getState().setConnectionStatus('connected');
     
@@ -73,7 +74,7 @@ export const connectSocket = async () => {
   });
 
   socket.on('disconnect', (reason) => {
-    console.log('[Socket] ❌ Disconnected:', reason);
+    logger.info('[Socket] ❌ Disconnected:', reason);
     isConnecting = false;
     useChatStore.getState().setConnectionStatus('disconnected');
     
@@ -85,7 +86,7 @@ export const connectSocket = async () => {
   });
 
   socket.on('connect_error', (error) => {
-    console.error('[Socket] Connection error:', error.message);
+    logger.error('[Socket] Connection error:', error.message);
     isConnecting = false;
   });
 
@@ -236,7 +237,7 @@ export const connectSocket = async () => {
   socket.on('scheduledMessage:failed', (payload) => {
     const { scheduledMessageId, error } = payload;
     useScheduledStore.getState().handleScheduledFailed(payload);
-    console.error('[Socket] Scheduled message failed:', scheduledMessageId, error);
+    logger.error('[Socket] Scheduled message failed:', scheduledMessageId, error);
   });
 
   socket.on('scheduledMessage:deleted', (payload) => {
@@ -311,7 +312,7 @@ export const connectSocket = async () => {
         useDraftStore.getState().setDraft(channelId, html || '', text || '', wsId, threadId || null);
       }
     } catch (err) {
-      console.error('[Socket] draft:updated handler error:', err.message);
+      logger.error('[Socket] draft:updated handler error:', err.message);
     }
   });
 
@@ -322,13 +323,13 @@ export const connectSocket = async () => {
         useDraftStore.getState().clearDraft(channelId, wsId, threadId || null);
       }
     } catch (err) {
-      console.error('[Socket] draft:deleted handler error:', err.message);
+      logger.error('[Socket] draft:deleted handler error:', err.message);
     }
   });
 
   // ─── Reconnect re-sync ──────────────────────────────────────────────────
   socket.on('reconnect', () => {
-    console.log('[Socket] Reconnected, re-syncing state...');
+    logger.info('[Socket] Reconnected, re-syncing state...');
     useChatStore.getState().setConnectionStatus('connected');
     try {
       const channelStore = useChannelStore.getState();
@@ -344,7 +345,7 @@ export const connectSocket = async () => {
         }
       });
     } catch (err) {
-      console.error('[Socket] Failed to re-sync after reconnect:', err.message);
+      logger.error('[Socket] Failed to re-sync after reconnect:', err.message);
     }
   });
 
@@ -353,7 +354,7 @@ export const connectSocket = async () => {
 
 export const disconnectSocket = () => {
   if (socket) {
-    console.log('[Socket] Manually disconnecting socket');
+    logger.info('[Socket] Manually disconnecting socket');
     socket.removeAllListeners();
     socket.disconnect();
     socket = null;

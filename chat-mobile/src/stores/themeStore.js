@@ -1,8 +1,9 @@
 import { create } from 'zustand';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import storage from '../services/storage';
 import { Appearance } from 'react-native';
 import { getTheme } from '../theme/colors';
 import api from '../services/api';
+import logger from '../utils/logger';
 
 const THEME_STORAGE_KEY = '@flowtask_theme';
 
@@ -20,7 +21,7 @@ export const useThemeStore = create((set, get) => ({
 
   init: async () => {
     try {
-      const stored = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+      const stored = await storage.getItem(THEME_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         // Support legacy customColors key
@@ -40,7 +41,7 @@ export const useThemeStore = create((set, get) => ({
         set({ isInitialized: true });
       }
     } catch (error) {
-      console.error('Failed to load theme:', error);
+      logger.error('Failed to load theme:', error);
       set({ isInitialized: true });
     }
 
@@ -51,17 +52,24 @@ export const useThemeStore = create((set, get) => ({
       if (token) {
         const response = await api.get('/users/preferences/theme');
         if (response.data?.success && response.data.data?.theme) {
-          const serverTheme = response.data.data.theme;
-          if (serverTheme.mode || serverTheme.accentColor || serverTheme.customColor || serverTheme.customTheme) {
+          let serverTheme = response.data.data.theme;
+          if (typeof serverTheme === 'string') {
+            try {
+              serverTheme = JSON.parse(serverTheme);
+            } catch (e) {
+              logger.warn('Failed to parse server theme string:', e);
+            }
+          }
+          if (serverTheme && (serverTheme.mode || serverTheme.accentColor || serverTheme.customColor || serverTheme.customColors)) {
             const mode = serverTheme.mode || get().mode;
             const accentColor = serverTheme.accentColor || get().accentColor;
             const customColor =
               serverTheme.customColor ||
-              serverTheme.customTheme?.primary ||
+              serverTheme.customColors?.primary ||
               get().customColor;
             const effectiveTheme = getEffectiveTheme(mode);
             set({
-              mode,
+              mode, 
               accentColor,
               customColor,
               effectiveTheme,
@@ -72,7 +80,7 @@ export const useThemeStore = create((set, get) => ({
         }
       }
     } catch (error) {
-      console.warn('Failed to fetch theme from server:', error.message);
+      logger.warn('Failed to fetch theme from server:', error.message);
     }
 
     // Listen to system theme changes
@@ -152,7 +160,7 @@ export const useThemeStore = create((set, get) => ({
 
   saveToStorage: async () => {
     const { mode, accentColor, customColor } = get();
-    await AsyncStorage.setItem(
+    await storage.setItem(
       THEME_STORAGE_KEY,
       JSON.stringify({ mode, accentColor, customColor })
     );
@@ -165,13 +173,13 @@ export const useThemeStore = create((set, get) => ({
         theme: {
           mode,
           accentColor,
-          customColor: customColor || null,
-          customTheme: customColor ? { primary: customColor } : {},
+          sidebarTheme: accentColor === 'custom' ? 'custom' : 'aubergine',
+          customColors: customColor ? { primary: customColor } : {},
         },
       };
       await api.put('/users/preferences/theme', payload);
     } catch (error) {
-      console.error('[THEME] Failed to sync theme to backend:', error.response?.data || error.message);
+      logger.error('[THEME] Failed to sync theme to backend:', error.response?.data || error.message);
     }
   },
 

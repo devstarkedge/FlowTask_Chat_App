@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import storage from '../services/storage';
 
 const DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -147,7 +147,7 @@ export const useDraftStore = create(
     }),
     {
       name: 'flowtask-drafts-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => storage),
       partialize: (state) => ({ drafts: state.drafts }),
       onRehydrateStorage: () => (state) => {
         state?.cleanupExpired();

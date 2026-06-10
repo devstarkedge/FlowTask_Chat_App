@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { LogOut, Plus, CircleChevronRight, Briefcase } from 'lucide-react-native';
 import { useAuthStore } from '../stores/authStore';

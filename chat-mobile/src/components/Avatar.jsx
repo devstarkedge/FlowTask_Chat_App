@@ -1,5 +1,6 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { View, Text, Image, StyleSheet } from "react-native";
+import { useShallow } from 'zustand/react/shallow';
 import { useThemeStore } from "../stores/themeStore";
 
 const AVATAR_COLORS = [
@@ -15,13 +16,14 @@ const AVATAR_COLORS = [
   "#795548",
 ];
 
-const getAvatarColor = (name) => {
-  if (!name) return AVATAR_COLORS[0];
+const getAvatarColor = (name, palette) => {
+  const colors = palette || AVATAR_COLORS;
+  if (!name) return colors[0];
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  return colors[Math.abs(hash) % colors.length];
 };
 
 const Avatar = React.memo(
@@ -33,7 +35,7 @@ const Avatar = React.memo(
     showCustomStatus = false,
     style,
   }) => {
-    const { colors } = useThemeStore();
+    const { colors } = useThemeStore(useShallow((s) => ({ colors: s.colors })));
     const [imgError, setImgError] = useState(false);
     const handleError = useCallback(() => setImgError(true), []);
     const data = user || member || {};
@@ -43,7 +45,11 @@ const Avatar = React.memo(
     const isDnd =
       data.onlineStatus === "dnd" || data.chatPreferences?.dnd?.enabled;
 
-    const avatarUrl = data.avatar || data.profileImage;
+    // Backend uses 'avatar' primarily; also handle avatarUrl, profileImage, profilePicture, image
+    const avatarUrl = useMemo(
+      () => data.avatar || data.avatarUrl || data.profileImage || data.profilePicture || data.image || null,
+      [data.avatar, data.avatarUrl, data.profileImage, data.profilePicture, data.image]
+    );
     const displayName =
       data?.name ||
       data?.displayName ||
@@ -57,7 +63,7 @@ const Avatar = React.memo(
       (displayName || "").toString().trim().charAt(0) ||
       (data?._id ? String(data._id).charAt(0) : "U");
     const initials = rawInitial.toUpperCase();
-    const bgColor = getAvatarColor(displayName);
+    const bgColor = getAvatarColor(displayName, colors.avatarColors);
     const statusSize = Math.max(10, size * 0.3);
 
     return (
@@ -84,7 +90,7 @@ const Avatar = React.memo(
             <Text
               style={[
                 styles.initial,
-                { fontSize: size * 0.4, color: "#FFFFFF" },
+                { fontSize: size * 0.4, color: colors.textOnPrimary },
               ]}
             >
               {initials}

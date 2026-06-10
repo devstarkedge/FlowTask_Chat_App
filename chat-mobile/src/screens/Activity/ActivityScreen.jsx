@@ -1,412 +1,301 @@
-/**
- * ActivityScreen — fetches real notification data from backend.
- * Matches web app NotificationPanel with filter tabs, mark as read,
- * pagination, and navigation to source messages.
- */
-import React, { useEffect, useCallback } from 'react';
+import React, { useCallback, useState, useMemo } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
-  TouchableOpacity,
   FlatList,
-  ActivityIndicator,
-  StatusBar,
+  TouchableOpacity,
   RefreshControl,
-} from 'react-native';
-import { useThemeStore } from '../../stores/themeStore';
-import { useNotificationStore } from '../../stores/notificationStore';
-import Avatar from '../../components/Avatar';
-import {
-  Bell,
-  MessageSquare,
-  Heart,
-  AtSign,
-  Hash,
-  CheckCheck,
-  User,
-  AlertCircle,
-  RefreshCw,
-} from 'lucide-react-native';
+  ActivityIndicator,
+} from "react-native";
+import { useNotificationStore } from "../../stores/notificationStore";
+import { useThemeStore } from "../../stores/themeStore";
+import { AppAvatar, AppScreen } from "../../components/common";
 
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  const now = new Date();
-  const diff = now - date;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
+const FILTERS = [
+  { key: "all", label: "All" },
+  { key: "mentions", label: "Mentions" },
+  { key: "replies", label: "Replies" },
+];
 
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString();
-};
+// ─── Activity Row (Slack mobile: blue unread bar, avatar, text, time) ────────
 
-const getNotificationIcon = (type, colors) => {
-  const t = (type || '').toLowerCase();
-  if (t.includes('mention')) return <AtSign size={16} color={colors.primary} />;
-  if (t.includes('reaction')) return <Heart size={16} color={colors.error || '#e53935'} />;
-  if (t.includes('thread')) return <MessageSquare size={16} color={colors.success || '#43a047'} />;
-  if (t.includes('dm') || t.includes('direct')) return <User size={16} color={colors.primary} />;
-  return <Bell size={16} color={colors.textSecondary} />;
-};
+const ActivityRow = React.memo(({ item, colors }) => {
+  const senderName = item.senderName || item.sender?.name || "Someone";
+  const sender = { name: senderName, avatar: item.senderAvatar || item.sender?.avatar };
+  const isUnread = !item.read && !item.isRead;
 
-const getNotificationText = (notification) => {
-  // Try various text fields the server might send
-  return (
-    notification.message ||
-    notification.text ||
-    notification.content ||
-    notification.body ||
-    `${notification.senderName || 'Someone'} ${notification.action || 'interacted with'} ${notification.targetType || 'a message'}`
-  );
-};
+  const channelName = item.channelName || item.channel?.name || "";
+  const body = item.body || item.content || item.message || "";
 
-const ActivityScreen = ({ navigation }) => {
-  const { colors } = useThemeStore();
-  const {
-    notifications,
-    unreadCount,
-    isLoading,
-    error,
-    hasMore,
-    cursor,
-    activeFilter,
-    fetchNotifications,
-    fetchUnreadCount,
-    markAsRead,
-    markAllAsRead,
-    setFilter,
-    getFilteredNotifications,
-  } = useNotificationStore();
+  // Time formatting
+  const timeStr = useMemo(() => {
+    if (!item.createdAt) return "";
+    const date = new Date(item.createdAt);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHrs = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
 
-  useEffect(() => {
-    fetchNotifications();
-    fetchUnreadCount();
-  }, []);
+    if (diffMin < 1) return "now";
+    if (diffMin < 60) return `${diffMin}m`;
+    if (diffHrs < 24) return `${diffHrs}h`;
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7) return `${diffDays}d`;
+    return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  }, [item.createdAt]);
 
-  const filteredNotifications = getFilteredNotifications();
-
-  const onRefresh = useCallback(async () => {
-    await fetchNotifications();
-    await fetchUnreadCount();
-  }, []);
-
-  const handlePressNotification = useCallback((notification) => {
-    // Mark as read
-    if (!notification.read) {
-      markAsRead(notification._id);
-    }
-
-    // Navigate to source
-    const channelId = notification.channelId?._id || notification.channelId;
-    const channelName = notification.channelId?.name || notification.channelName;
-    if (channelId) {
-      navigation.navigate('Chat', {
-        channelId,
-        channelName: channelName || 'Chat',
-        messageId: notification.messageId?._id || notification.messageId,
-      });
-    }
-  }, [navigation, markAsRead]);
-
-  const renderNotification = useCallback(({ item }) => {
-    const sender = item.sender || item.senderId;
-
-    return (
-      <TouchableOpacity
-        style={[styles.activityItem, {
-          backgroundColor: item.read ? 'transparent' : (colors.cardBackground || 'rgba(74,158,255,0.04)'),
-        }]}
-        onPress={() => handlePressNotification(item)}
-        activeOpacity={0.7}
-      >
-        {/* Icon or avatar */}
-        {sender && (typeof sender === 'object' && sender.name) ? (
-          <Avatar user={sender} size={36} showStatus={false} />
-        ) : (
-          <View style={[styles.iconContainer, { backgroundColor: colors.cardBackground || 'rgba(255,255,255,0.05)' }]}>
-            {getNotificationIcon(item.type || item.notificationType, colors)}
-          </View>
-        )}
-
-        {/* Content */}
-        <View style={styles.activityInfo}>
-          <Text style={[styles.activityText, { color: colors.textPrimary }]} numberOfLines={2}>
-            {getNotificationText(item)}
-          </Text>
-          <View style={styles.activityMeta}>
-            {(item.channelId?.name || item.channelName) && (
-              <View style={styles.channelBadge}>
-                <Hash size={10} color={colors.textTertiary} />
-                <Text style={[styles.channelName, { color: colors.textTertiary }]}>
-                  {item.channelId?.name || item.channelName}
-                </Text>
-              </View>
-            )}
-            <Text style={[styles.activityTime, { color: colors.textTertiary }]}>
-              {formatDate(item.createdAt)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Unread dot */}
-        {!item.read && (
-          <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
-        )}
-      </TouchableOpacity>
-    );
-  }, [colors, handlePressNotification]);
-
-  const styles = createStyles(colors);
-  const filters = [
-    { key: 'all', label: 'All' },
-    { key: 'mentions', label: 'Mentions' },
-    { key: 'reactions', label: 'Reactions' },
-    { key: 'threads', label: 'Threads' },
-  ];
+  const typeLabel = item.type === "mention" ? "mentioned you"
+    : item.type === "reaction" ? "reacted to your message"
+    : item.type === "reply" ? "replied to your thread"
+    : item.type === "dm" ? "sent you a DM"
+    : "posted";
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={colors.effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
-
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Activity</Text>
-        {unreadCount > 0 && (
-          <View style={[styles.badgeContainer, { backgroundColor: colors.primary }]}>
-            <Text style={styles.badgeText}>{unreadCount}</Text>
-          </View>
-        )}
-        <View style={{ flex: 1 }} />
-        {unreadCount > 0 && (
-          <TouchableOpacity onPress={markAllAsRead} style={styles.markAllButton}>
-            <CheckCheck size={18} color={colors.primary} />
-            <Text style={[styles.markAllText, { color: colors.primary }]}>Mark all read</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Filter Tabs */}
-      <View style={[styles.filterContainer, { borderBottomColor: colors.border }]}>
-        {filters.map(f => (
-          <TouchableOpacity
-            key={f.key}
-            style={[
-              styles.filterTab,
-              activeFilter === f.key && { borderBottomColor: colors.primary },
-            ]}
-            onPress={() => setFilter(f.key)}
-          >
-            <Text
-              style={[
-                styles.filterText,
-                { color: activeFilter === f.key ? colors.primary : colors.textSecondary },
-              ]}
-            >
-              {f.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Content */}
-      {error && filteredNotifications.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <AlertCircle size={48} color={colors.error || '#e53935'} />
-          <Text style={[styles.emptyText, { color: colors.textPrimary }]}>
-            Something went wrong
-          </Text>
-          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-            {error}
-          </Text>
-          <TouchableOpacity
-            onPress={() => { fetchNotifications(); fetchUnreadCount(); }}
-            style={[styles.retryButton, { backgroundColor: colors.primary }]}
-          >
-            <RefreshCw size={14} color="#fff" />
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      ) : isLoading && filteredNotifications.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
-      ) : filteredNotifications.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Bell size={48} color={colors.textTertiary} />
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            No activity yet
-          </Text>
-          <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>
-            Mentions, reactions, and thread replies will appear here
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredNotifications}
-          renderItem={renderNotification}
-          keyExtractor={(item) => item._id}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-          onEndReached={() => {
-            if (hasMore && !isLoading) {
-              fetchNotifications(cursor);
-            }
-          }}
-          onEndReachedThreshold={0.3}
-          ListFooterComponent={
-            isLoading ? (
-              <ActivityIndicator style={{ margin: 16 }} color={colors.primary} />
-            ) : null
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={false}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-            />
-          }
-        />
+    <View style={arStyles.container}>
+      {/* Unread indicator (thin blue bar) */}
+      {isUnread && (
+        <View style={[arStyles.unreadBar, { backgroundColor: colors.primary }]} />
       )}
-    </SafeAreaView>
+      <View style={arStyles.row}>
+        <AppAvatar user={sender} size={28} showStatus={false} />
+        <View style={arStyles.textCol}>
+          <Text style={arStyles.body} numberOfLines={2}>
+            <Text style={{ fontWeight: "700", color: colors.textPrimary }}>
+              {sender.name}{" "}
+            </Text>
+            <Text style={{ color: colors.textSecondary }}>
+              {typeLabel}
+            </Text>
+            {channelName ? (
+              <Text style={{ color: colors.textSecondary }}>
+                {" "}in{" "}
+                <Text style={{ fontWeight: "600", color: colors.textPrimary }}>
+                  #{channelName}
+                </Text>
+              </Text>
+            ) : null}
+          </Text>
+          {body ? (
+            <Text style={[arStyles.preview, { color: colors.textTertiary }]} numberOfLines={1}>
+              {body}
+            </Text>
+          ) : null}
+        </View>
+        <Text style={[arStyles.time, { color: colors.textTertiary }]}>{timeStr}</Text>
+      </View>
+    </View>
   );
-};
+});
 
-const createStyles = (colors) => StyleSheet.create({
+const arStyles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexDirection: "row",
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+  unreadBar: {
+    width: 3,
+    alignSelf: "stretch",
+    borderRadius: 2,
+    marginVertical: 4,
+    marginLeft: 8,
+  },
+  row: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     gap: 8,
   },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  badgeContainer: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  markAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  markAllText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-  },
-  filterTab: {
-    paddingVertical: 12,
-    paddingHorizontal: 22,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  filterText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  listContainer: {
-    padding: 12,
-    gap: 4,
-  },
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    gap: 12,
-  },
-  iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  activityInfo: {
+  textCol: {
     flex: 1,
-  },
-  activityText: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 4,
-  },
-  activityMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  channelBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 2,
   },
-  channelName: {
+  body: {
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  preview: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  time: {
     fontSize: 12,
+    marginTop: 2,
   },
-  activityTime: {
-    fontSize: 12,
+});
+
+// ─── Main Component ──────────────────────────────────────────────────────────
+
+const ActivityScreen = ({ navigation }) => {
+  if (!navigation) navigation = { navigate: () => {} };
+
+  const { colors, effectiveTheme } = useThemeStore();
+  const {
+    notifications, unreadCount, fetchNotifications, markAllAsRead,
+    isLoading, hasMore, cursor,
+  } = useNotificationStore();
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [didInitialFetch, setDidInitialFetch] = useState(false);
+
+  // Fetch on mount
+  React.useEffect(() => {
+    if (!didInitialFetch) {
+      setDidInitialFetch(true);
+      fetchNotifications();
+      useNotificationStore.getState().fetchUnreadCount();
+    }
+  }, [didInitialFetch, fetchNotifications]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchNotifications();
+    setRefreshing(false);
+  }, [fetchNotifications]);
+
+  const loadMore = useCallback(() => {
+    if (!isLoading && hasMore && cursor) {
+      fetchNotifications(cursor);
+    }
+  }, [isLoading, hasMore, cursor, fetchNotifications]);
+
+  const handleFilterChange = useCallback(
+    (key) => {
+      setActiveFilter(key);
+      useNotificationStore.getState().setFilter(key);
+      fetchNotifications();
+    },
+    [fetchNotifications]
+  );
+
+  const renderItem = useCallback(
+    ({ item }) => <ActivityRow item={item} colors={colors} />,
+    [colors]
+  );
+
+  return (
+    <AppScreen style={[styles.container, { backgroundColor: colors.background }]} edges={["top"]}>
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Activity</Text>
+        {unreadCount > 0 && (
+          <TouchableOpacity onPress={markAllAsRead} hitSlop={8}>
+            <Text style={[styles.markRead, { color: colors.primary }]}>
+              Mark all read
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Filter tabs — minimal text links */}
+      <View style={styles.tabs}>
+        {FILTERS.map((f) => {
+          const isActive = activeFilter === f.key;
+          return (
+            <TouchableOpacity
+              key={f.key}
+              style={[
+                styles.tab,
+                isActive && [styles.tabActive, { borderBottomColor: colors.primary }],
+              ]}
+              onPress={() => handleFilterChange(f.key)}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  {
+                    color: isActive ? colors.primary : colors.textTertiary,
+                    fontWeight: isActive ? "700" : "500",
+                  },
+                ]}
+              >
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* List */}
+      <FlatList
+        data={notifications || []}
+        keyExtractor={(item) => item._id || String(item.createdAt)}
+        renderItem={renderItem}
+        showsVerticalScrollIndicator={false}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.3}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        ItemSeparatorComponent={<View style={[styles.separator, { backgroundColor: colors.border }]} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
+        ListEmptyComponent={
+          !isLoading && !refreshing ? (
+            <View style={styles.empty}>
+              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
+                No activity yet
+              </Text>
+            </View>
+          ) : null
+        }
+        ListFooterComponent={
+          isLoading && !refreshing ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{ paddingVertical: 20 }} />
+          ) : null
+        }
+      />
+    </AppScreen>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
   },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  title: {
+    fontSize: 17,
+    fontWeight: "800",
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 32,
+  markRead: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  tabs: {
+    flexDirection: "row",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  tab: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+  },
+  tabActive: {
+    borderBottomWidth: 2,
+  },
+  tabText: {
+    fontSize: 13,
+  },
+  separator: {
+    height: 1,
+    marginLeft: 56,
+  },
+  empty: {
+    alignItems: "center",
+    paddingTop: 60,
   },
   emptyText: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  emptySubtext: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 6,
-    marginTop: 8,
-  },
-  retryText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
   },
 });
 

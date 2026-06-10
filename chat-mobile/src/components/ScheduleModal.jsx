@@ -79,25 +79,25 @@ const ScheduleModal = React.memo(function ScheduleModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
+      <TouchableOpacity style={[styles.overlay, { backgroundColor: colors.overlay }]} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity
           activeOpacity={1}
           style={[styles.container, {
-            backgroundColor: colors.background || '#1a1a1a',
-            borderColor: colors.border || '#333',
+            backgroundColor: colors.background,
+            borderColor: colors.border,
           }]}
           onPress={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <View style={[styles.header, { borderBottomColor: colors.border || '#333' }]}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Clock size={18} color={colors.primary || '#4a9eff'} />
-              <Text style={[styles.title, { color: colors.textPrimary || '#fff' }]}>
+              <Clock size={18} color={colors.primary} />
+              <Text style={[styles.title, { color: colors.textPrimary }]}>
                 Schedule Message
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <X size={20} color={colors.textSecondary || '#aaa'} />
+              <X size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -108,14 +108,14 @@ const ScheduleModal = React.memo(function ScheduleModal({
               return (
                 <TouchableOpacity
                   key={i}
-                  style={[styles.optionRow, { borderBottomColor: colors.border || '#222' }]}
+                  style={[styles.optionRow, { borderBottomColor: colors.border }]}
                   onPress={() => {
                     onSchedule(opt.date);
                   }}
                   activeOpacity={0.7}
                 >
-                  <Icon size={18} color={colors.textSecondary || '#aaa'} />
-                  <Text style={[styles.optionText, { color: colors.textPrimary || '#fff' }]}>
+                  <Icon size={18} color={colors.textSecondary} />
+                  <Text style={[styles.optionText, { color: colors.textPrimary }]}>
                     {opt.label}
                   </Text>
                 </TouchableOpacity>
@@ -124,9 +124,9 @@ const ScheduleModal = React.memo(function ScheduleModal({
           </View>
 
           {/* Custom Date */}
-          <View style={[styles.customSection, { borderTopColor: colors.border || '#333' }]}>
+          <View style={[styles.customSection, { borderTopColor: colors.border }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <Calendar size={16} color={colors.textSecondary || '#aaa'} />
+              <Calendar size={16} color={colors.textSecondary} />
               <Text style={[styles.customLabel, { color: colors.textSecondary }]}>
                 Custom date & time
               </Text>
@@ -134,18 +134,18 @@ const ScheduleModal = React.memo(function ScheduleModal({
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
               <TextInput
                 style={[styles.dateInput, {
-                  color: colors.inputText || '#fff',
-                  backgroundColor: colors.inputBackground || '#2a2a2a',
-                  borderColor: colors.border || '#333',
+                  color: colors.inputText,
+                  backgroundColor: colors.inputBackground,
+                  borderColor: colors.border,
                 }]}
                 placeholder="YYYY-MM-DDThh:mm"
-                placeholderTextColor={colors.inputPlaceholder || '#666'}
+                placeholderTextColor={colors.inputPlaceholder}
                 value={customDate}
                 onChangeText={setCustomDate}
                 autoCapitalize="none"
               />
               <TouchableOpacity
-                style={[styles.scheduleButton, { backgroundColor: colors.primary || '#4a9eff' }]}
+                style={[styles.scheduleButton, { backgroundColor: colors.primary }]}
                 onPress={handleCustomSubmit}
                 disabled={!customDate}
               >
@@ -166,7 +166,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   container: {
     width: '85%',

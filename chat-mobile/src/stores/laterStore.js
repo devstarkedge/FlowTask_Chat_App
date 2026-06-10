@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import storage from '../services/storage';
 import { laterAPI } from '../services/api';
+import logger from '../utils/logger';
 
 export const useLaterStore = create(
   persist(
@@ -25,7 +26,7 @@ export const useLaterStore = create(
           });
         } catch (error) {
           set({ isLoading: false, savedMessages: [], savedCount: 0 });
-          console.error('Failed to fetch saved messages:', error);
+          logger.error('Failed to fetch saved messages:', error);
         }
       },
 
@@ -60,7 +61,7 @@ export const useLaterStore = create(
           }
         } catch (error) {
           set({ savedMessages: prevSavedMessages, savedMessageIds: prevIds });
-          console.error('Failed to toggle save:', error);
+          logger.error('Failed to toggle save:', error);
         }
       },
 
@@ -77,7 +78,7 @@ export const useLaterStore = create(
           await laterAPI.updateStatus(messageId, status);
         } catch (error) {
           get().fetchSavedMessages();
-          console.error('Failed to update status:', error);
+          logger.error('Failed to update status:', error);
         }
       },
 
@@ -139,7 +140,7 @@ export const useLaterStore = create(
     }),
     {
       name: 'flowtask-later-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => storage),
       partialize: (state) => ({ 
         savedCount: state.savedCount,
       }),

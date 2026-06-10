@@ -3,31 +3,21 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   SectionList,
-  ScrollView,
   StatusBar,
   RefreshControl,
   ActivityIndicator,
+  Platform,
+  ScrollView,
   Image,
 } from "react-native";
-import Animated, {
-  FadeInDown,
-  FadeIn,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from "react-native-reanimated";
-import { LinearGradient } from "expo-linear-gradient";
-
-import WorkspaceSwitcher from "../components/WorkspaceSwitcher";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { AppAvatar } from "../components/common";
 import AccountDrawer from "../components/AccountDrawer";
-import DMListItem from "../components/DMListItem";
-import WorkspaceAvatar from "../components/WorkspaceAvatar";
-import Avatar from "../components/Avatar";
-
+import CustomizeHomeModal from "../components/CustomizeHomeModal";
+import CreateNewBottomSheet from "../components/CreateNewBottomSheet";
+import { useUIStore } from "../stores/uiStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useAuthStore } from "../stores/authStore";
 import { useThemeStore } from "../stores/themeStore";
@@ -36,280 +26,242 @@ import { useThreadStore } from "../stores/threadStore";
 import { useLaterStore } from "../stores/laterStore";
 import { useDraftStore } from "../stores/draftStore";
 import { useScheduledStore } from "../stores/scheduledStore";
-
 import {
-  MessageSquare,
-  Bookmark,
-  Edit3,
-  Clock,
   Hash,
   Lock,
   Volume2,
-  CircleChevronDown ,
+  MessageSquare,
+  Bookmark,
+  Headphones,
+  Layers,
   Plus,
+  ChevronUp,
+  ChevronDown,
+  Menu,
+  Settings,
+  Send,
+  Edit3,
+  Clock,
 } from "lucide-react-native";
+import CreateChannelModal from "../components/CreateChannelModal";
 
-const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+// ─── Quick Access Card ──────────────────────────────────────────────────────
 
-// ─── Extracted Sub-Components ────────────────────────────────────────────────
-
-const QuickActionCard = React.memo(
-  ({ icon: Icon, title, count, onPress, color, index }) => {
-    const scale = useSharedValue(1);
-    const animatedStyle = useAnimatedStyle(
-      () => ({ transform: [{ scale: scale.value }] }),
-      [],
-    );
-
-    return (
-      <Animated.View entering={FadeInDown.delay(index * 100).springify()}>
-        <AnimatedTouchable
-          style={[hqStyles.quickCard, animatedStyle]}
-          onPressIn={() => {
-            scale.value = withSpring(0.95);
-          }}
-          onPressOut={() => {
-            scale.value = withSpring(1);
-          }}
-          onPress={onPress}
-          activeOpacity={1}
-        >
-          <View
-            style={[hqStyles.quickCardIcon, { backgroundColor: color + "15" }]}
-          >
-            <Icon size={20} color={color} strokeWidth={2} />
-          </View>
-          <Text style={[hqStyles.quickCardTitle, { color }]}>{title}</Text>
-          <Text style={hqStyles.quickCardCount}>
-            {count} {count === 1 ? "item" : "items"}
-          </Text>
-        </AnimatedTouchable>
-      </Animated.View>
-    );
-  },
+const QuickCard = React.memo(
+  ({ icon: Icon, label, subtitle, onPress, colors }) => (
+    <TouchableOpacity
+      style={[
+        qcStyles.card,
+        { backgroundColor: colors.card, borderColor: colors.border },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <Icon size={20} color={colors.textSecondary} strokeWidth={1.5} />
+      <Text style={[qcStyles.label, { color: colors.textPrimary }]}>
+        {label}
+      </Text>
+      <Text style={[qcStyles.subtitle, { color: colors.textSecondary }]}>
+        {subtitle}
+      </Text>
+    </TouchableOpacity>
+  ),
 );
 
-const hqStyles = StyleSheet.create({
-  quickCard: {
-    width: 85,
-    padding: 5,
-    borderRadius: 16,
-    gap: 10,
-    boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.08)",
-    elevation: 3,
-  },
-  quickCardIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 14,
+const qcStyles = StyleSheet.create({
+  card: {
+    width: 88,
+    height: 80,
+    borderRadius: 10,
+    borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 6,
+    gap: 3,
   },
-  quickCardTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    marginTop: 2,
-    alognItems: "center"
+  label: {
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
   },
-  quickCardCount: {
-    fontSize: 13,
-    fontWeight: "500",
+  subtitle: {
+    fontSize: 11,
+    textAlign: "center",
   },
 });
 
-const ChannelItem = React.memo(({ channel, unreadCount, onPress, colors }) => {
-  const isSystem = channel.type === "system";
+// ─── Section Header ─────────────────────────────────────────────────────────
+
+const SectionHeader = React.memo(
+  ({ title, icon: Icon, sectionKey, isExpanded, onToggle, colors }) => (
+    <TouchableOpacity
+      style={shStyles.header}
+      onPress={() => onToggle(sectionKey)}
+      activeOpacity={0.7}
+    >
+      <View style={shStyles.left}>
+        {Icon && <Icon size={14} color={colors.textPrimary} strokeWidth={2} />}
+        <Text style={[shStyles.title, { color: colors.textPrimary }]}>
+          {title}
+        </Text>
+      </View>
+      {isExpanded ? (
+        <ChevronUp size={16} color={colors.textSecondary} />
+      ) : (
+        <ChevronDown size={16} color={colors.textSecondary} />
+      )}
+    </TouchableOpacity>
+  ),
+);
+
+const shStyles = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 6,
+  },
+  left: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
+});
+
+// ─── Channel Row ────────────────────────────────────────────────────────────
+
+const ChannelRow = React.memo(({ channel, unreadCount, onPress, colors }) => {
   const isPrivate = channel.visibility === "private";
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(
-    () => ({
-      transform: [{ scale: scale.value }],
-    }),
-    [],
-  );
-
-  const IconComponent = isSystem ? Volume2 : isPrivate ? Lock : Hash;
-  const iconSize = isSystem ? 16 : isPrivate ? 16 : 18;
+  const isSystem = channel.type === "system";
+  const Icon = isSystem ? Volume2 : isPrivate ? Lock : Hash;
 
   return (
-    <AnimatedTouchable
-      style={[ciStyles.channelItem, animatedStyle]}
-      onPressIn={() => {
-        scale.value = withTiming(0.98);
-      }}
-      onPressOut={() => {
-        scale.value = withTiming(1);
-      }}
+    <TouchableOpacity
+      style={chStyles.row}
       onPress={() => onPress(channel)}
-      activeOpacity={1}
+      activeOpacity={0.5}
     >
-      <View style={ciStyles.channelIconContainer}>
-        <View style={[ciStyles.iconWrapper, { backgroundColor: colors.card }]}>
-          <IconComponent
-            size={iconSize}
-            color={colors.textPrimary}
-            strokeWidth={2}
-          />
-        </View>
-      </View>
-      <View style={ciStyles.channelInfo}>
-        <Text
-          style={[
-            ciStyles.channelName,
-            {
-              color:
-                unreadCount > 0 ? colors.textPrimary : colors.textSecondary,
-            },
-            unreadCount > 0 && ciStyles.unreadName,
-          ]}
-          numberOfLines={1}
-        >
-          {channel.name}
-        </Text>
-        {!!channel.lastMessagePreview && (
-          <Text
-            style={[ciStyles.lastMessage, { color: colors.textTertiary }]}
-            numberOfLines={1}
-          >
-            {channel.lastMessagePreview}
-          </Text>
-        )}
-      </View>
+      <Icon
+        size={16}
+        color={unreadCount > 0 ? colors.textPrimary : colors.textTertiary}
+        strokeWidth={1.5}
+      />
+      <Text
+        style={[
+          chStyles.name,
+          {
+            color: unreadCount > 0 ? colors.textPrimary : colors.textSecondary,
+            fontWeight: unreadCount > 0 ? "700" : "400",
+            flex: 1,
+          },
+        ]}
+        numberOfLines={1}
+      >
+        {channel.name}
+      </Text>
       {unreadCount > 0 && (
-        <Animated.View
-          entering={FadeIn}
-          style={[
-            ciStyles.unreadBadge,
-            { backgroundColor: colors.badgeBackground },
-          ]}
-        >
-          <Text style={[ciStyles.unreadText, { color: colors.badgeText }]}>
+        <View style={[chStyles.badge, { backgroundColor: colors.primary }]}>
+          <Text style={[chStyles.badgeText, { color: colors.textOnPrimary }]}>
             {unreadCount > 99 ? "99+" : unreadCount}
           </Text>
-        </Animated.View>
+        </View>
       )}
-    </AnimatedTouchable>
+    </TouchableOpacity>
   );
 });
 
-const ciStyles = StyleSheet.create({
-  channelItem: {
+const chStyles = StyleSheet.create({
+  row: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-    marginHorizontal: 12,
-    marginVertical: 2,
-    borderRadius: 12,
+    paddingVertical: 6,
+    gap: 8,
+    minHeight: 36,
   },
-  channelIconContainer: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
+  name: {
+    fontSize: 15,
   },
-  iconWrapper: {
-    width: 36,
-    height: 36,
+  badge: {
+    minWidth: 20,
+    height: 20,
     borderRadius: 10,
+    paddingHorizontal: 6,
     justifyContent: "center",
     alignItems: "center",
   },
-  channelInfo: { flex: 1 },
-  channelName: { fontSize: 15, fontWeight: "500" },
-  unreadName: { fontWeight: "700" },
-  lastMessage: { fontSize: 13, marginTop: 2 },
-  unreadBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    minWidth: 24,
-    alignItems: "center",
-    justifyContent: "center",
+  badgeText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
-  unreadText: { fontSize: 12, fontWeight: "700" },
 });
 
-const DMItemRow = React.memo(({ channel, unreadCount, onPress, colors }) => {
-  const scale = useSharedValue(1);
+// ─── "+ Add channel" Row ────────────────────────────────────────────────────
 
-  const animatedStyle = useAnimatedStyle(
-    () => ({ transform: [{ scale: scale.value }] }),
-    [],
-  );
+const AddChannelRow = ({ onPress, colors }) => (
+  <TouchableOpacity style={addStyles.row} onPress={onPress} activeOpacity={0.5}>
+    <Plus size={16} color={colors.textTertiary} strokeWidth={1.5} />
+    <Text style={[addStyles.text, { color: colors.textTertiary }]}>
+      Add channel
+    </Text>
+  </TouchableOpacity>
+);
 
-  return (
-    <AnimatedTouchable
-      style={[ciStyles.channelItem, animatedStyle]}
-      onPressIn={() => {
-        scale.value = withTiming(0.98);
-      }}
-      onPressOut={() => {
-        scale.value = withTiming(1);
-      }}
-      onPress={() => onPress(channel)}
-      activeOpacity={1}
-    >
-      <DMListItem
-        channel={channel}
-        onPress={onPress}
-        unreadCount={unreadCount}
-        touchable={false}
-        containerStyle={{
-          paddingHorizontal: 0,
-          paddingVertical: 0,
-          backgroundColor: "transparent",
-        }}
-      />
-    </AnimatedTouchable>
-  );
+const addStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  text: {
+    fontSize: 14,
+  },
 });
 
-const SectionHeader = React.memo(
-  ({ title, count, icon: Icon, section, isExpanded, onToggle, colors }) => {
-    const rotation = useSharedValue(isExpanded ? 0 : -90);
+// ─── DM Row ─────────────────────────────────────────────────────────────────
 
-    React.useEffect(() => {
-      rotation.value = withTiming(isExpanded ? 0 : -90);
-    }, [isExpanded]);
-
-    const animatedStyle = useAnimatedStyle(
-      () => ({ transform: [{ rotate: `${rotation.value}deg` }] }),
-      [],
-    );
+const DMRow = React.memo(
+  ({ channel, unreadCount, onPress, colors, isSelf }) => {
+    const dmUser = {
+      _id: channel.dmRecipientId,
+      name: channel.name,
+      avatar: channel.avatar,
+      onlineStatus: channel.onlineStatus || "offline",
+    };
 
     return (
       <TouchableOpacity
-        style={[
-          shStyles.sectionHeader,
-          { backgroundColor: colors.backgroundSecondary },
-        ]}
-        onPress={() => onToggle(section)}
-        activeOpacity={0.7}
+        style={dmStyles.row}
+        onPress={() => onPress(channel)}
+        activeOpacity={0.5}
       >
-        <View style={shStyles.leftGroup}>
-          <Animated.View style={animatedStyle}>
-            <CircleChevronDown 
-              size={16}
-              color={colors.textSecondary}
-              strokeWidth={2.5}
-            />
-          </Animated.View>
-          {Icon && (
-            <Icon size={16} color={colors.textPrimary} strokeWidth={2.5} />
-          )}
-          <Text style={[shStyles.sectionTitle, { color: colors.textPrimary }]}>
-            {title}
-          </Text>
-        </View>
-        {count > 0 && (
-          <View style={[shStyles.countBadge, { backgroundColor: colors.card }]}>
-            <Text
-              style={[shStyles.sectionCount, { color: colors.textSecondary }]}
-            >
-              {count}
+        <AppAvatar user={dmUser} size={28} showStatus statusSize={8} />
+        <Text
+          style={[
+            dmStyles.name,
+            {
+              color:
+                unreadCount > 0 ? colors.textPrimary : colors.textSecondary,
+              fontWeight: unreadCount > 0 ? "700" : "400",
+              flex: 1,
+            },
+          ]}
+          numberOfLines={1}
+        >
+          {isSelf ? "You" : channel.name}
+        </Text>
+        {unreadCount > 0 && (
+          <View style={[dmStyles.badge, { backgroundColor: colors.primary }]}>
+            <Text style={[dmStyles.badgeText, { color: colors.textOnPrimary }]}>
+              {unreadCount > 99 ? "99+" : unreadCount}
             </Text>
           </View>
         )}
@@ -318,82 +270,70 @@ const SectionHeader = React.memo(
   },
 );
 
-const shStyles = StyleSheet.create({
-  sectionHeader: {
+const dmStyles = StyleSheet.create({
+  row: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginVertical: 8,
-    marginHorizontal: 12,
-    borderRadius: 12,
+    paddingVertical: 6,
     gap: 8,
+    minHeight: 40,
   },
-  leftGroup: {
-    flexDirection: "row",
+  name: {
+    fontSize: 15,
+  },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    justifyContent: "center",
     alignItems: "center",
-    flex: 1,
-    gap: 10,
   },
-  sectionTitle: {
-    flex: 1,
-    fontSize: 13,
+  badgeText: {
+    fontSize: 11,
     fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
-  countBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  sectionCount: { fontSize: 12, fontWeight: "600" },
 });
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 const HomeScreen = ({ navigation }) => {
-  if (!navigation) {
-    navigation = { navigate: () => {} };
-  }
+  if (!navigation) navigation = { navigate: () => {} };
 
   const { colors, effectiveTheme } = useThemeStore();
-  const activeWorkspace = useWorkspaceStore((state) => state.activeWorkspace);
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
   const { user } = useAuthStore();
-  const channels = useChannelStore((state) => state.channels) || [];
-  const fetchChannels = useChannelStore((state) => state.fetchChannels);
-  const setActiveChannel = useChannelStore((state) => state.setActiveChannel);
-  const unreads = useChannelStore((state) => state.unreads) || {};
-  const unreadThreadCount =
-    useThreadStore((state) => state.unreadThreadCount) || 0;
-  const fetchThreads = useThreadStore((state) => state.fetchThreads);
-  const savedCount = useLaterStore((state) => state.savedCount) || 0;
-  const fetchSavedMessages = useLaterStore((state) => state.fetchSavedMessages);
-  const draftCount = useDraftStore((state) => state.draftCount) || 0;
-  const fetchDrafts = useDraftStore((state) => state.fetchDrafts);
-  const scheduledCount =
-    useScheduledStore((state) => state.scheduledCount) || 0;
+  const { enabledHomeCards, toggleHomeCard } = useUIStore();
+  const channels = useChannelStore((s) => s.channels) || [];
+  const fetchChannels = useChannelStore((s) => s.fetchChannels);
+  const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
+  const unreads = useChannelStore((s) => s.unreads) || {};
+  const starredIds = useChannelStore((s) => s.starredIds) || [];
+  const [createChannelVisible, setCreateChannelVisible] = useState(false);
+  const unreadThreadCount = useThreadStore((s) => s.unreadThreadCount) || 0;
+  const fetchThreads = useThreadStore((s) => s.fetchThreads);
+  const savedCount = useLaterStore((s) => s.savedCount) || 0;
+  const fetchSavedMessages = useLaterStore((s) => s.fetchSavedMessages);
+  const draftCount = useDraftStore((s) => s.draftCount) || 0;
+  const fetchDrafts = useDraftStore((s) => s.fetchDrafts);
+  const scheduledCount = useScheduledStore((s) => s.scheduledCount) || 0;
   const fetchScheduledMessages = useScheduledStore(
-    (state) => state.fetchScheduledMessages,
+    (s) => s.fetchScheduledMessages,
   );
 
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [workspaceSwitcherVisible, setWorkspaceSwitcherVisible] =
-    useState(false);
-  const [accountDrawerVisible, setAccountDrawerVisible] = useState(false);
   const [sectionsExpanded, setSectionsExpanded] = useState({
-    system: true,
-    public: true,
-    private: true,
+    unreads: true,
+    channels: true,
     dms: true,
   });
   const [error, setError] = useState(null);
+  const [accountDrawerVisible, setAccountDrawerVisible] = useState(false);
+  const [customizeModalVisible, setCustomizeModalVisible] = useState(false);
+  const [createNewVisible, setCreateNewVisible] = useState(false);
 
-  const fabScale = useSharedValue(1);
-
-  // Load data on workspace change
   const loadData = useCallback(async () => {
     if (!activeWorkspace?._id) {
       setIsLoading(false);
@@ -433,8 +373,8 @@ const HomeScreen = ({ navigation }) => {
     setRefreshing(false);
   }, [loadData]);
 
-  const toggleSection = useCallback((section) => {
-    setSectionsExpanded((prev) => ({ ...prev, [section]: !prev[section] }));
+  const toggleSection = useCallback((key) => {
+    setSectionsExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
   const handleChannelPress = useCallback(
@@ -458,83 +398,69 @@ const HomeScreen = ({ navigation }) => {
     [navigation, setActiveChannel],
   );
 
-  // Memoized channel categories
-  const { systemChannels, publicChannels, privateChannels, dms } =
-    useMemo(() => {
-      const system = [];
-      const pub = [];
-      const priv = [];
-      const dm = [];
-      for (const ch of channels) {
-        if (ch.type === "system") system.push(ch);
-        else if (ch.type === "dm") dm.push(ch);
-        else if (ch.visibility === "private") priv.push(ch);
-        else pub.push(ch);
-      }
-      return {
-        systemChannels: system,
-        publicChannels: pub,
-        privateChannels: priv,
-        dms: dm,
-      };
-    }, [channels]);
+  // Categorize channels
+  const { unreadChannels, regularChannels, dmChannels } = useMemo(() => {
+    const nonDM = channels.filter((c) => c.type !== "dm");
+    const unread = nonDM.filter((c) => (unreads[c._id] || 0) > 0);
+    const regular = nonDM.filter((c) => (unreads[c._id] || 0) === 0);
+    const dms = channels.filter((c) => c.type === "dm");
 
-  // Build SectionList data
+    dms.sort((a, b) => {
+      const aIsSelf = a.dmRecipientId === user?._id;
+      const bIsSelf = b.dmRecipientId === user?._id;
+      if (aIsSelf && !bIsSelf) return -1;
+      if (!aIsSelf && bIsSelf) return 1;
+      const aTime = new Date(
+        a.lastMessageAt || a.lastMessage?.createdAt || 0,
+      ).getTime();
+      const bTime = new Date(
+        b.lastMessageAt || b.lastMessage?.createdAt || 0,
+      ).getTime();
+      return bTime - aTime;
+    });
+
+    return {
+      unreadChannels: unread,
+      regularChannels: regular,
+      dmChannels: dms,
+    };
+  }, [channels, unreads, user]);
+
   const sections = useMemo(() => {
     const result = [];
-    if (systemChannels.length > 0) {
-      result.push({
-        key: "system",
-        title: "SYSTEM CHANNELS",
-        icon: Volume2,
-        data: sectionsExpanded.system ? systemChannels : [],
-        count: systemChannels.length,
-        type: "channel",
-      });
-    }
     result.push({
-      key: "public",
-      title: "CHANNELS",
-      icon: Hash,
-      data: sectionsExpanded.public ? publicChannels : [],
-      count: publicChannels.length,
+      key: "unreads",
+      title: "Unreads",
+      icon: null,
+      data: sectionsExpanded.unreads ? unreadChannels : [],
       type: "channel",
+      showAddChannel: true,
     });
-    if (privateChannels.length > 0) {
-      result.push({
-        key: "private",
-        title: "PRIVATE CHANNELS",
-        icon: Lock,
-        data: sectionsExpanded.private ? privateChannels : [],
-        count: privateChannels.length,
-        type: "channel",
-      });
-    }
+    result.push({
+      key: "channels",
+      title: "Channels",
+      icon: Hash,
+      data: sectionsExpanded.channels ? regularChannels : [],
+      type: "channel",
+      showAddChannel: true,
+    });
     result.push({
       key: "dms",
-      title: "DIRECT MESSAGES",
-      icon: MessageSquare,
-      data: sectionsExpanded.dms ? dms : [],
-      count: dms.length,
+      title: "Direct Messages",
+      icon: null,
+      data: sectionsExpanded.dms ? dmChannels : [],
       type: "dm",
+      showAddChannel: false,
     });
     return result;
-  }, [systemChannels, publicChannels, privateChannels, dms, sectionsExpanded]);
-
-  const styles = useMemo(() => createStyles(colors), [colors]);
-
-  const fabAnimatedStyle = useAnimatedStyle(
-    () => ({ transform: [{ scale: fabScale.value }] }),
-    [],
-  );
+  }, [unreadChannels, regularChannels, dmChannels, sectionsExpanded]);
 
   const renderSectionHeader = useCallback(
     ({ section }) => (
       <SectionHeader
         title={section.title}
-        count={section.count}
         icon={section.icon}
-        section={section.key}
+        sectionKey={section.key}
         isExpanded={sectionsExpanded[section.key]}
         onToggle={toggleSection}
         colors={colors}
@@ -543,21 +469,37 @@ const HomeScreen = ({ navigation }) => {
     [sectionsExpanded, toggleSection, colors],
   );
 
+  const renderSectionFooter = useCallback(
+    ({ section }) => {
+      if (!section.showAddChannel || !sectionsExpanded[section.key])
+        return null;
+      return (
+        <AddChannelRow
+          onPress={() => setCreateChannelVisible(true)}
+          colors={colors}
+        />
+      );
+    },
+    [sectionsExpanded, navigation, colors],
+  );
+
   const renderItem = useCallback(
     ({ item, section }) => {
       const unreadCount = unreads[item._id] || 0;
       if (section.type === "dm") {
+        const isSelf = item.dmRecipientId === user?._id;
         return (
-          <DMItemRow
+          <DMRow
             channel={item}
             unreadCount={unreadCount}
             onPress={handleDMPress}
             colors={colors}
+            isSelf={isSelf}
           />
         );
       }
       return (
-        <ChannelItem
+        <ChannelRow
           channel={item}
           unreadCount={unreadCount}
           onPress={handleChannelPress}
@@ -565,63 +507,115 @@ const HomeScreen = ({ navigation }) => {
         />
       );
     },
-    [unreads, handleChannelPress, handleDMPress, colors],
+    [unreads, handleChannelPress, handleDMPress, colors, user],
   );
 
-  const keyExtractor = useCallback((item) => item._id, []);
+  // Quick access cards
+  const quickCardsTotal =
+    unreadThreadCount + savedCount + draftCount + scheduledCount;
 
-  const ListHeaderComponent = useMemo(
+  // Filter cards based on user preferences
+  const visibleCards = useMemo(() => {
+    const cards = [];
+    if (enabledHomeCards.catchUp !== false) {
+      cards.push({
+        key: "catchUp",
+        icon: Layers,
+        label: "Catch Up",
+        subtitle: `${quickCardsTotal} new`,
+        onPress: () => navigation.navigate("Threads"),
+      });
+    }
+    if (enabledHomeCards.threads !== false) {
+      cards.push({
+        key: "threads",
+        icon: MessageSquare,
+        label: "Threads",
+        subtitle: `${unreadThreadCount} new`,
+        onPress: () => navigation.navigate("Threads"),
+      });
+    }
+    if (enabledHomeCards.huddles !== false) {
+      cards.push({
+        key: "huddles",
+        icon: Headphones,
+        label: "Huddles",
+        subtitle: "0 live",
+        onPress: () => {},
+      });
+    }
+    if (enabledHomeCards.later !== false) {
+      cards.push({
+        key: "later",
+        icon: Bookmark,
+        label: "Later",
+        subtitle: `${savedCount} items`,
+        onPress: () => navigation.navigate("Later"),
+      });
+    }
+    if (enabledHomeCards.drafts !== false) {
+      cards.push({
+        key: "drafts",
+        icon: Edit3,
+        label: "Drafts",
+        subtitle: `${draftCount} items`,
+        onPress: () => navigation.navigate("Drafts"),
+      });
+    }
+    if (enabledHomeCards.scheduled !== false) {
+      cards.push({
+        key: "scheduled",
+        icon: Clock,
+        label: "Scheduled",
+        subtitle: `${scheduledCount} items`,
+        onPress: () => navigation.navigate("Scheduled"),
+      });
+    }
+    if (enabledHomeCards.settings !== false) {
+      cards.push({
+        key: "settings",
+        icon: Settings,
+        label: "Settings",
+        subtitle: "Customize",
+        onPress: () => setCustomizeModalVisible(true),
+      });
+    }
+    return cards;
+  }, [
+    enabledHomeCards,
+    quickCardsTotal,
+    unreadThreadCount,
+    savedCount,
+    draftCount,
+    scheduledCount,
+    navigation,
+  ]);
+
+  const ListHeader = useMemo(
     () => (
-      <View style={styles.quickActionsSection}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.quickActionsScroll}
-        >
-          <QuickActionCard
-            icon={MessageSquare}
-            title="Threads"
-            count={unreadThreadCount}
-            color={colors.primary}
-            onPress={() => navigation.navigate("Threads")}
-            index={0}
-          />
-          <QuickActionCard
-            icon={Bookmark}
-            title="Later"
-            count={savedCount}
-            color={colors.warning}
-            onPress={() => navigation.navigate("Later")}
-            index={2}
-          />
-          <QuickActionCard
-            icon={Edit3}
-            title="Drafts"
-            count={draftCount}
-            color={colors.success}
-            onPress={() => navigation.navigate("Drafts")}
-            index={3}
-          />
-          <QuickActionCard
-            icon={Clock}
-            title="Scheduled"
-            count={scheduledCount}
-            color={colors.error}
-            onPress={() => navigation.navigate("Scheduled")}
-            index={4}
-          />
-        </ScrollView>
+      <View style={{ backgroundColor: colors.backgroundSecondary }}>
+        {visibleCards.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.cardsRow}
+            style={{ backgroundColor: colors.backgroundSecondary }}
+          >
+            {visibleCards.map((card) => (
+              <QuickCard
+                key={card.key}
+                icon={card.icon}
+                label={card.label}
+                subtitle={card.subtitle}
+                onPress={card.onPress}
+                colors={colors}
+              />
+            ))}
+          </ScrollView>
+        )}
       </View>
     ),
-    [
-      unreadThreadCount,
-      savedCount,
-      draftCount,
-      scheduledCount,
-      colors,
-      navigation,
-      styles,
-    ],
+    [visibleCards, colors],
   );
 
   if (error) {
@@ -633,14 +627,11 @@ const HomeScreen = ({ navigation }) => {
           <Text style={[styles.errorText, { color: colors.textPrimary }]}>
             Error loading data
           </Text>
-          <Text style={[styles.errorSubtext, { color: colors.textSecondary }]}>
-            {error}
-          </Text>
           <TouchableOpacity
-            style={[styles.errorButton, { backgroundColor: colors.primary }]}
+            style={[styles.errorBtn, { backgroundColor: colors.primary }]}
             onPress={loadData}
           >
-            <Text style={{ color: colors.messageTextSent, fontWeight: "600" }}>
+            <Text style={{ color: colors.textInverse, fontWeight: "600" }}>
               Try Again
             </Text>
           </TouchableOpacity>
@@ -650,57 +641,48 @@ const HomeScreen = ({ navigation }) => {
   }
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: colors.backgroundSecondary },
+      ]}
     >
-      <StatusBar
-        barStyle={effectiveTheme === "dark" ? "light-content" : "dark-content"}
-      />
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
 
-      <LinearGradient
-        colors={colors.headerGradient || [colors.primary, colors.primaryHover]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.headerGradient}
-      >
-        <View style={styles.headerContent}>
+      {/* ─── Dark Header Bar ─── */}
+      <SafeAreaView edges={["top"]} style={{ backgroundColor: colors.primary }}>
+        <View style={styles.header}>
           <TouchableOpacity
-            style={styles.workspaceInfo}
-            onPress={() => setWorkspaceSwitcherVisible(true)}
-            activeOpacity={0.8}
+            style={styles.headerLeft}
+            onPress={() => navigation.navigate("WorkspaceSwitcher")}
+            activeOpacity={0.7}
           >
-            <Image
-              source={require("../../assets/logo.png")}
-              style={styles.logo}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.workspaceName} numberOfLines={1}>
-                {activeWorkspace?.name || "Workspace"}
-              </Text>
+            <View
+              style={[
+                styles.wsLogo,
+                { backgroundColor: colors.primaryOverlay },
+              ]}
+            >
+              <Image
+                source={require("../../assets/logo.png")}
+                style={styles.logo}
+              />
             </View>
+            <Text
+              style={[styles.wsName, { color: colors.textOnPrimary }]}
+              numberOfLines={1}
+            >
+              {activeWorkspace?.name || "Workspace"}
+            </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.avatarButton}
-            onPress={() => setAccountDrawerVisible(true)}
-            activeOpacity={0.8}
-          >
-            <Avatar user={user} size={40} showStatus />
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity onPress={() => setAccountDrawerVisible(true)}>
+              <AppAvatar user={user} size={30} showStatus statusSize={8} />
+            </TouchableOpacity>
+          </View>
         </View>
-      </LinearGradient>
-
-      <WorkspaceSwitcher
-        visible={workspaceSwitcherVisible}
-        onClose={() => setWorkspaceSwitcherVisible(false)}
-        navigation={navigation}
-      />
-
-      <AccountDrawer
-        visible={accountDrawerVisible}
-        onClose={() => setAccountDrawerVisible(false)}
-        navigation={navigation}
-      />
+      </SafeAreaView>
 
       {isLoading ? (
         <View style={styles.loaderContainer}>
@@ -709,123 +691,162 @@ const HomeScreen = ({ navigation }) => {
       ) : (
         <SectionList
           sections={sections}
-          keyExtractor={keyExtractor}
+          keyExtractor={(item) => item._id}
           renderItem={renderItem}
           renderSectionHeader={renderSectionHeader}
-          ListHeaderComponent={ListHeaderComponent}
+          renderSectionFooter={renderSectionFooter}
+          ListHeaderComponent={ListHeader}
           ListFooterComponent={<View style={{ height: 100 }} />}
           showsVerticalScrollIndicator={false}
           stickySectionHeadersEnabled={false}
+          initialNumToRender={20}
+          maxToRenderPerBatch={10}
+          windowSize={11}
+          removeClippedSubviews={Platform.OS !== "web"}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
               tintColor={colors.primary}
-              colors={[colors.primary]}
             />
           }
+          style={{ backgroundColor: colors.backgroundSecondary }}
         />
       )}
 
-      <AnimatedTouchable
+      {/* Floating "+" button for create new menu */}
+      <TouchableOpacity
         style={[
           styles.fab,
-          { backgroundColor: colors.primary },
-          fabAnimatedStyle,
+          {
+            backgroundColor: colors.primary,
+            shadowColor: colors.shadow || "#000",
+          },
         ]}
-        onPressIn={() => {
-          fabScale.value = withSpring(0.9);
-        }}
-        onPressOut={() => {
-          fabScale.value = withSpring(1);
-        }}
-        onPress={() => navigation.navigate("CreateMessage")}
-        activeOpacity={1}
+        onPress={() => setCreateNewVisible(true)}
+        activeOpacity={0.8}
       >
-        <Plus size={28} color={colors.messageTextSent} strokeWidth={2.5} />
-      </AnimatedTouchable>
-    </SafeAreaView>
+        <Plus size={24} color={colors.textOnPrimary} strokeWidth={2.5} />
+      </TouchableOpacity>
+
+      <AccountDrawer
+        visible={accountDrawerVisible}
+        onClose={() => setAccountDrawerVisible(false)}
+        navigation={navigation}
+      />
+
+      <CustomizeHomeModal
+        visible={customizeModalVisible}
+        onClose={() => setCustomizeModalVisible(false)}
+        enabledCards={enabledHomeCards}
+        onToggleCard={toggleHomeCard}
+      />
+
+      <CreateNewBottomSheet
+        visible={createNewVisible}
+        onClose={() => setCreateNewVisible(false)}
+        navigation={navigation}
+      />
+
+      <CreateChannelModal
+        visible={createChannelVisible}
+        onClose={() => setCreateChannelVisible(false)}
+        navigation={navigation}
+        onCreated={(channel) => {
+          console.log("Channel created:", channel?.name);
+        }}
+      />
+    </View>
   );
 };
 
-const createStyles = (colors) =>
-  StyleSheet.create({
-    container: { flex: 1 },
-    headerGradient: {
-      paddingHorizontal: 16,
-      paddingTop: 12,
-      paddingBottom: 14,
-      borderBottomLeftRadius: 20,
-      borderBottomRightRadius: 20,
-      boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.2)",
-      elevation: 8,
-    },
-    headerContent: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-    },
-    workspaceInfo: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      flex: 1,
-    },
-    logo: {
-      width: 40,
-      height: 40,
-      borderRadius: 8,
-    },
-    workspaceName: {
-      fontSize: 17,
-      fontWeight: "700",
-      color: colors.messageTextSent,
-    },
-    avatarButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      justifyContent: "center",
-      alignItems: "center",
-      overflow: "hidden",
-    },
-    loaderContainer: {
-      flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    errorContainer: {
-      flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
-      padding: 20,
-    },
-    errorText: { fontSize: 18, fontWeight: "600", marginBottom: 10 },
-    errorSubtext: { fontSize: 14, marginBottom: 20, textAlign: "center" },
-    errorButton: {
-      paddingHorizontal: 20,
-      paddingVertical: 10,
-      borderRadius: 8,
-    },
-    quickActionsSection: {
-      paddingVertical: 20,
-    },
-    quickActionsScroll: {
-      paddingHorizontal: 12,
-      gap: 12,
-    },
-    fab: {
-      position: "absolute",
-      bottom: 24,
-      right: 24,
-      width: 60,
-      height: 60,
-      borderRadius: 30,
-      justifyContent: "center",
-      alignItems: "center",
-      boxShadow: "0px 6px 12px rgba(0, 0, 0, 0.3)",
-      elevation: 12,
-    },
-  });
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 8,
+  },
+  wsLogo: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  logo: {
+    width: 22,
+    height: 22,
+    resizeMode: "contain",
+  },
+  wsLogoText: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  wsName: {
+    fontSize: 16,
+    fontWeight: "800",
+    flex: 1,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  settingsBtn: {
+    padding: 4,
+  },
+  menuBtn: {
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  cardsRow: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    gap: 12,
+  },
+  errorText: { fontSize: 16, fontWeight: "600" },
+  errorBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 6,
+  },
+  fab: {
+    position: "absolute",
+    right: 20,
+    bottom: 80,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+});
 
 export default HomeScreen;

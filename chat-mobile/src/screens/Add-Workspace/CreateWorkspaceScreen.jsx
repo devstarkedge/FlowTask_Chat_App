@@ -1,17 +1,209 @@
-import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../../stores/themeStore';
+import { useAuthStore } from '../../stores/authStore';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
+import {
+  X,
+  Mail,
+  Info,
+  Check,
+  Grid,
+  UserPlus,
+  Plus,
+} from 'lucide-react-native';
+import CreateWorkspaceModal from '../../components/workspace/CreateWorkspaceModal';
+import Toast from 'react-native-toast-message';
 
-const CreateWorkspaceScreen = () => {
+const CreateWorkspaceScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
+  const { user, logout } = useAuthStore();
+  const { joinByInviteCode, switchWorkspace, fetchWorkspaces } = useWorkspaceStore();
+
+  const [createVisible, setCreateVisible] = useState(false);
+  const [joinVisible, setJoinVisible] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState(null);
+
   const styles = createStyles(colors);
 
+  const handleSignOut = () => {
+    Alert.alert(
+      'Sign out',
+      'Are you sure you want to sign out to log in to another workspace?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleJoinWorkspace = async () => {
+    const code = inviteCode.trim();
+    if (!code) {
+      setJoinError('Invite code is required');
+      return;
+    }
+
+    setJoining(true);
+    setJoinError(null);
+    try {
+      const workspace = await joinByInviteCode(code);
+      Toast.show({
+        type: 'success',
+        text1: 'Joined successfully',
+        text2: `Welcome to ${workspace.name}`,
+      });
+      setJoinVisible(false);
+      setInviteCode('');
+      
+      await fetchWorkspaces();
+      if (workspace?._id) {
+        await switchWorkspace(workspace._id);
+        navigation.navigate('Main');
+      }
+    } catch (err) {
+      const msg = err.response?.data?.error?.message || err.message || 'Failed to join workspace';
+      setJoinError(msg);
+    } finally {
+      setJoining(false);
+    }
+  };
+
   return (
-    <SafeAreaView style={styles.container}> 
-      <View style={styles.content}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Create Workspace</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Coming soon...</Text>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn} hitSlop={12}>
+          <X size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Add workspaces</Text>
+        <View style={styles.placeholder} />
       </View>
+
+      {/* Account Row */}
+      <View style={styles.emailRow}>
+        <Mail size={20} color={colors.textSecondary} style={styles.icon} />
+        <Text style={styles.emailText}>{user?.email || 'tisha.g@starkedge.com'}</Text>
+        <TouchableOpacity hitSlop={8}>
+          <Info size={20} color={colors.primary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Signed-in Status Card */}
+      <View style={styles.statusCard}>
+        <View style={styles.checkmarkWrapper}>
+          <Check size={16} color={colors.textSecondary} />
+        </View>
+        <Text style={styles.statusText}>You’re signed in to all workspaces for this email</Text>
+      </View>
+
+      {/* Divider */}
+      <View style={styles.divider} />
+
+      {/* Options Section */}
+      <Text style={styles.sectionTitle}>Not the workspaces you’re looking for?</Text>
+
+      <TouchableOpacity style={styles.optionRow} onPress={handleSignOut} activeOpacity={0.6}>
+        <Grid size={22} color={colors.textSecondary} />
+        <Text style={styles.optionLabel}>Sign in to another workspace</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.optionRow} onPress={() => setJoinVisible(true)} activeOpacity={0.6}>
+        <UserPlus size={22} color={colors.textSecondary} />
+        <Text style={styles.optionLabel}>Join another workspace</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.optionRow} onPress={() => setCreateVisible(true)} activeOpacity={0.6}>
+        <Plus size={22} color={colors.textSecondary} />
+        <Text style={styles.optionLabel}>Create a new workspace</Text>
+      </TouchableOpacity>
+
+      {/* Modals */}
+      <CreateWorkspaceModal
+        visible={createVisible}
+        onClose={() => setCreateVisible(false)}
+        navigation={navigation}
+      />
+
+      <Modal
+        visible={joinVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          setJoinVisible(false);
+          setJoinError(null);
+          setInviteCode('');
+        }}
+      >
+        <SafeAreaView style={styles.modalContainer} edges={['top', 'bottom']}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity
+              onPress={() => {
+                setJoinVisible(false);
+                setJoinError(null);
+                setInviteCode('');
+              }}
+              style={styles.modalCloseBtn}
+              hitSlop={12}
+            >
+              <X size={22} color={colors.textPrimary} />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Join workspace</Text>
+            <TouchableOpacity
+              onPress={handleJoinWorkspace}
+              disabled={joining || !inviteCode.trim()}
+              style={[styles.modalActionBtn, (!inviteCode.trim() || joining) && { opacity: 0.4 }]}
+            >
+              {joining ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.modalActionBtnText}>Join</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.modalForm}>
+            <Text style={styles.modalLabel}>Invite Code</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="e.g. WS-123456"
+              placeholderTextColor={colors.inputPlaceholder}
+              value={inviteCode}
+              onChangeText={(text) => {
+                setInviteCode(text);
+                setJoinError(null);
+              }}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              autoFocus
+            />
+            {joinError && (
+              <Text style={styles.modalErrorText}>{joinError}</Text>
+            )}
+            <Text style={styles.modalHint}>
+              Enter the invite code shared by your workspace administrator to join.
+            </Text>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -22,21 +214,159 @@ const createStyles = (colors) =>
       flex: 1,
       backgroundColor: colors.background,
     },
-    content: {
-      flex: 1,
-      justifyContent: 'center',
+    header: {
+      flexDirection: 'row',
       alignItems: 'center',
-      padding: 20,
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 14,
     },
-    title: {
-      fontSize: 24,
+    closeBtn: {
+      padding: 4,
+    },
+    headerTitle: {
+      fontSize: 18,
       fontWeight: '700',
       color: colors.textPrimary,
-      marginBottom: 8,
     },
-    subtitle: {
+    placeholder: {
+      width: 32,
+    },
+    emailRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      marginTop: 8,
+    },
+    icon: {
+      marginRight: 16,
+    },
+    emailText: {
       fontSize: 16,
+      color: colors.textPrimary,
+      fontWeight: '500',
+      flex: 1,
+    },
+    statusCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.backgroundTertiary || '#f1f5f9',
+      marginHorizontal: 20,
+      marginTop: 4,
+      padding: 14,
+      borderRadius: 12,
+      gap: 12,
+    },
+    checkmarkWrapper: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      backgroundColor: colors.border || '#cbd5e1',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    statusText: {
+      fontSize: 15,
+      color: colors.textPrimary,
+      fontWeight: '500',
+      flex: 1,
+      lineHeight: 20,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: colors.borderLight || '#e2e8f0',
+      marginVertical: 24,
+    },
+    sectionTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginHorizontal: 20,
+      marginBottom: 16,
+    },
+    optionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+      gap: 14,
+    },
+    optionLabel: {
+      fontSize: 16,
+      color: colors.textPrimary,
+      fontWeight: '500',
+    },
+    // Modal Styles
+    modalContainer: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border || '#cbd5e1',
+    },
+    modalCloseBtn: {
+      padding: 4,
+    },
+    modalTitle: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: colors.textPrimary,
+      flex: 1,
+      textAlign: 'center',
+    },
+    modalActionBtn: {
+      backgroundColor: colors.primary,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+      minWidth: 60,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modalActionBtnText: {
+      color: colors.textOnPrimary || '#fff',
+      fontWeight: '700',
+      fontSize: 14,
+    },
+    modalForm: {
+      padding: 20,
+    },
+    modalLabel: {
+      fontSize: 13,
+      fontWeight: '700',
       color: colors.textSecondary,
+      marginBottom: 8,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    modalInput: {
+      borderWidth: 1,
+      borderColor: colors.border || '#cbd5e1',
+      backgroundColor: colors.inputBackground || '#f8fafc',
+      color: colors.inputText || colors.textPrimary,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      fontSize: 15,
+    },
+    modalErrorText: {
+      color: colors.error || '#ef4444',
+      fontSize: 13,
+      marginTop: 6,
+      fontWeight: '500',
+    },
+    modalHint: {
+      fontSize: 12,
+      color: colors.textTertiary,
+      marginTop: 12,
+      lineHeight: 18,
     },
   });
 

@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import logger from '../utils/logger';
 
 /**
  * Centralized environment configuration for mobile app
@@ -17,19 +18,19 @@ const validateEnv = () => {
   const missing = required.filter(key => !ENV[key]);
   
   if (missing.length > 0) {
-    console.warn(`[ENV] Missing environment variables: ${missing.join(', ')}`);
-    console.warn('[ENV] Using default production values');
+    logger.warn(`[ENV] Missing environment variables: ${missing.join(', ')}`);
+    logger.warn('[ENV] Using default production values');
   }
 
   // ── Startup diagnostic logs ──────────────────────────────────────────────
-  console.log('═══════════════════════════════════════════════════');
-  console.log('[ENV] FlowTask-Chat Mobile — Environment Report');
-  console.log('[ENV] API_BASE_URL :', ENV.API_BASE_URL);
-  console.log('[ENV] SOCKET_URL   :', ENV.SOCKET_URL);
-  console.log('[ENV] FLOWTASK     :', ENV.FLOWTASK_ENABLED ? 'enabled' : 'disabled');
-  console.log('[ENV] Login endpoint  :', `${ENV.API_BASE_URL}/auth/login`);
-  console.log('[ENV] Channel endpoint:', `${ENV.API_BASE_URL}/channels`);
-  console.log('═══════════════════════════════════════════════════');
+  logger.info('═══════════════════════════════════════════════════');
+  logger.info('[ENV] FlowTask-Chat Mobile — Environment Report');
+  logger.info('[ENV] API_BASE_URL :', ENV.API_BASE_URL);
+  logger.info('[ENV] SOCKET_URL   :', ENV.SOCKET_URL);
+  logger.info('[ENV] FLOWTASK     :', ENV.FLOWTASK_ENABLED ? 'enabled' : 'disabled');
+  logger.info('[ENV] Login endpoint  :', `${ENV.API_BASE_URL}/auth/login`);
+  logger.info('[ENV] Channel endpoint:', `${ENV.API_BASE_URL}/channels`);
+  logger.info('═══════════════════════════════════════════════════');
 };
 
 validateEnv();

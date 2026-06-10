@@ -12,6 +12,7 @@ import { useThemeStore } from "../stores/themeStore";
 import { usersAPI } from "../services/api";
 import { X, Circle } from "lucide-react-native";
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
+import logger from '../utils/logger';
 
 const PresenceModal = ({ visible, onClose }) => {
   const { colors } = useThemeStore();
@@ -47,7 +48,7 @@ const PresenceModal = ({ visible, onClose }) => {
     try {
       await usersAPI.setPresence(presence.value);
     } catch (err) {
-      console.error('Failed to set presence:', err);
+      logger.error('Failed to set presence:', err);
     }
     if (Platform.OS === "web") {
       document.activeElement?.blur();
@@ -133,7 +134,7 @@ const createStyles = (colors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      backgroundColor: colors.overlay,
       justifyContent: "center",
       alignItems: "center",
     },
@@ -142,7 +143,7 @@ const createStyles = (colors) =>
       borderRadius: 16,
       ...(Platform.OS !== "web"
         ? {
-            boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.2)",
+            boxShadow: `0px 4px 12px ${colors.shadowLg}`,
             elevation: 8,
           }
         : {

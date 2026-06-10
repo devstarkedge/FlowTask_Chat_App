@@ -31,11 +31,11 @@ const ReactionBar = React.memo(function ReactionBar({
     // Show only the add button if no reactions
     return (
       <TouchableOpacity
-        style={[styles.addButton, { borderColor: colors.border || '#333' }]}
+        style={[styles.addButton, { borderColor: colors.border }]}
         onPress={onOpenPicker}
         activeOpacity={0.7}
       >
-        <SmilePlus size={14} color={colors.textTertiary || '#888'} />
+        <SmilePlus size={14} color={colors.textTertiary} />
       </TouchableOpacity>
     );
   }
@@ -52,11 +52,11 @@ const ReactionBar = React.memo(function ReactionBar({
               styles.pill,
               {
                 backgroundColor: hasReacted
-                  ? (colors.reactionActiveBg || 'rgba(74,158,255,0.15)')
-                  : (colors.reactionBg || 'rgba(255,255,255,0.05)'),
+                  ? (colors.primaryLight || colors.primary)
+                  : (colors.backgroundTertiary || colors.background),
                 borderColor: hasReacted
-                  ? (colors.primary || '#4a9eff')
-                  : (colors.border || '#333'),
+                  ? colors.primary
+                  : colors.border,
               },
             ]}
             onPress={() => {
@@ -70,7 +70,7 @@ const ReactionBar = React.memo(function ReactionBar({
           >
             <Text style={styles.emoji}>{r.emoji}</Text>
             <Text style={[styles.count, {
-              color: hasReacted ? (colors.primary || '#4a9eff') : (colors.textSecondary || '#aaa'),
+              color: hasReacted ? colors.primary : colors.textSecondary,
             }]}>
               {r.count}
             </Text>
@@ -78,11 +78,11 @@ const ReactionBar = React.memo(function ReactionBar({
         );
       })}
       <TouchableOpacity
-        style={[styles.addButton, { borderColor: colors.border || '#333' }]}
+        style={[styles.addButton, { borderColor: colors.border }]}
         onPress={onOpenPicker}
         activeOpacity={0.7}
       >
-        <SmilePlus size={14} color={colors.textTertiary || '#888'} />
+        <SmilePlus size={14} color={colors.textTertiary} />
       </TouchableOpacity>
     </View>
   );

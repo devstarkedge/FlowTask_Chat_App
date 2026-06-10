@@ -4,12 +4,12 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   StyleSheet,
   Dimensions,
   FlatList,
   Image,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Zap,
   Shield,
@@ -318,7 +318,7 @@ const createStyles = (colors) =>
     heroSection: {
       paddingHorizontal: 20,
       paddingVertical: 32,
-      backgroundColor: "rgba(99, 102, 241, 0.08)",
+      backgroundColor: colors.primaryOverlay,
     },
     badge: {
       flexDirection: "row",
@@ -431,7 +431,7 @@ const createStyles = (colors) =>
     benefitsSection: {
       paddingHorizontal: 20,
       paddingVertical: 32,
-      backgroundColor: "rgba(99, 102, 241, 0.04)",
+      backgroundColor: colors.primaryOverlayLight,
     },
     benefitItem: {
       flexDirection: "row",
@@ -439,7 +439,7 @@ const createStyles = (colors) =>
       gap: 12,
       paddingVertical: 12,
       borderBottomWidth: 1,
-      borderBottomColor: "rgba(0, 0, 0, 0.05)",
+      borderBottomColor: colors.borderLight,
     },
     benefitCheck: { marginTop: 2 },
     benefitText: {
@@ -492,7 +492,7 @@ const createStyles = (colors) =>
     ctaSection: {
       paddingHorizontal: 20,
       paddingVertical: 32,
-      backgroundColor: "rgba(99, 102, 241, 0.08)",
+      backgroundColor: colors.primaryOverlay,
       alignItems: "center",
     },
     ctaHeading: {
@@ -521,8 +521,8 @@ const createStyles = (colors) =>
       paddingHorizontal: 20,
       paddingVertical: 20,
       borderTopWidth: 1,
-      borderTopColor: "rgba(0, 0, 0, 0.04)",
-      backgroundColor: "rgba(255, 255, 255, 0.5)",
+      borderTopColor: colors.borderLight,
+      backgroundColor: colors.surfaceOverlayHeavy,
       alignItems: "center",
     },
     footerText: { fontSize: 12, color: colors.textTertiary },

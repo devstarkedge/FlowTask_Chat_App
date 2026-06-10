@@ -80,25 +80,25 @@ const ReminderModal = React.memo(function ReminderModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
+      <TouchableOpacity style={[styles.overlay, { backgroundColor: colors.overlay }]} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity
           activeOpacity={1}
           style={[styles.container, {
-            backgroundColor: colors.background || '#1a1a1a',
-            borderColor: colors.border || '#333',
+            backgroundColor: colors.background,
+            borderColor: colors.border,
           }]}
           onPress={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <View style={[styles.header, { borderBottomColor: colors.border || '#333' }]}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Bell size={18} color={colors.primary || '#4a9eff'} />
-              <Text style={[styles.title, { color: colors.textPrimary || '#fff' }]}>
+              <Bell size={18} color={colors.primary} />
+              <Text style={[styles.title, { color: colors.textPrimary }]}>
                 Set Reminder
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <X size={20} color={colors.textSecondary || '#aaa'} />
+              <X size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -110,12 +110,12 @@ const ReminderModal = React.memo(function ReminderModal({
                 return (
                   <TouchableOpacity
                     key={i}
-                    style={[styles.optionRow, { borderBottomColor: colors.border || '#222' }]}
+                    style={[styles.optionRow, { borderBottomColor: colors.border }]}
                     onPress={() => handleQuickSelect(opt.date)}
                     activeOpacity={0.7}
                   >
-                    <Icon size={18} color={colors.textSecondary || '#aaa'} />
-                    <Text style={[styles.optionText, { color: colors.textPrimary || '#fff' }]}>
+                    <Icon size={18} color={colors.textSecondary} />
+                    <Text style={[styles.optionText, { color: colors.textPrimary }]}>
                       {opt.label}
                     </Text>
                   </TouchableOpacity>
@@ -128,8 +128,8 @@ const ReminderModal = React.memo(function ReminderModal({
                 onPress={() => setShowCustom(true)}
                 activeOpacity={0.7}
               >
-                <Calendar size={18} color={colors.primary || '#4a9eff'} />
-                <Text style={[styles.optionText, { color: colors.primary || '#4a9eff' }]}>
+                <Calendar size={18} color={colors.primary} />
+                <Text style={[styles.optionText, { color: colors.primary }]}>
                   Custom date & time
                 </Text>
               </TouchableOpacity>
@@ -137,13 +137,13 @@ const ReminderModal = React.memo(function ReminderModal({
           ) : (
             <View style={styles.customContainer}>
               <TouchableOpacity onPress={() => setShowCustom(false)} style={{ marginBottom: 12 }}>
-                <Text style={{ color: colors.primary || '#4a9eff', fontSize: 14 }}>
+                <Text style={{ color: colors.primary, fontSize: 14 }}>
                   ← Back to quick options
                 </Text>
               </TouchableOpacity>
 
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <Calendar size={16} color={colors.textSecondary || '#aaa'} />
+                <Calendar size={16} color={colors.textSecondary} />
                 <Text style={[styles.customLabel, { color: colors.textSecondary }]}>
                   Custom date & time
                 </Text>
@@ -152,18 +152,18 @@ const ReminderModal = React.memo(function ReminderModal({
               <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                 <TextInput
                   style={[styles.dateInput, {
-                    color: colors.inputText || '#fff',
-                    backgroundColor: colors.inputBackground || '#2a2a2a',
-                    borderColor: colors.border || '#333',
+                    color: colors.inputText,
+                    backgroundColor: colors.inputBackground,
+                    borderColor: colors.border,
                   }]}
                   placeholder="YYYY-MM-DDThh:mm"
-                  placeholderTextColor={colors.inputPlaceholder || '#666'}
+                  placeholderTextColor={colors.inputPlaceholder}
                   value={customDate}
                   onChangeText={setCustomDate}
                   autoCapitalize="none"
                 />
                 <TouchableOpacity
-                  style={[styles.setButton, { backgroundColor: colors.primary || '#4a9eff' }]}
+                  style={[styles.setButton, { backgroundColor: colors.primary }]}
                   onPress={handleCustomSubmit}
                   disabled={!customDate}
                 >
@@ -183,7 +183,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   container: {
     width: '85%',

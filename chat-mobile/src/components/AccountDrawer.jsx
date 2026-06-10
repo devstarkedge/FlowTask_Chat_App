@@ -10,7 +10,7 @@ import {
   Platform,
 } from "react-native";
 import AccessibleModal from "./AccessibleModal";
-import Avatar from "./Avatar";
+import { AppAvatar } from "./common";
 import { useThemeStore } from "../stores/themeStore";
 import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
@@ -19,6 +19,7 @@ import { useThreadStore } from "../stores/threadStore";
 import { useDraftStore } from "../stores/draftStore";
 import { useScheduledStore } from "../stores/scheduledStore";
 import { disconnectSocket } from "../services/socket";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import StatusModal from "./StatusModal";
 import PauseNotificationsModal from "./PauseNotificationsModal";
 import PresenceModal from "./PresenceModal";
@@ -54,6 +55,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
   const { unreadThreadCount = 0 } = useThreadStore();
   const { draftCount = 0 } = useDraftStore();
   const { scheduledCount = 0 } = useScheduledStore();
+  const insets = useSafeAreaInsets();
   const [slideAnim] = useState(new Animated.Value(0));
   const [statusModalVisible, setStatusModalVisible] = useState(false);
   const [pauseNotificationsVisible, setPauseNotificationsVisible] =
@@ -129,7 +131,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
         </Text>
         {badge && (
           <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-            <Text style={[styles.badgeText, { color: "white" }]}>{badge}</Text>
+            <Text style={[styles.badgeText, { color: colors.textOnPrimary }]}>{badge}</Text>
           </View>
         )}
         {showChevron && <CircleChevronRight size={20} color={colors.textTertiary} />}
@@ -171,7 +173,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
               <X size={24} color={colors.textPrimary} strokeWidth={2} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-              Account
+              You
             </Text>
             <View style={{ width: 40 }} />
           </View>
@@ -179,24 +181,28 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Profile Section */}
             <View style={styles.profileSection}>
-              <View style={styles.avatarWrapper}>
-                <Avatar user={user} size={80} />
-              </View>
-              <Text style={[styles.userName, { color: colors.textPrimary }]}>
-                {user?.name}
-              </Text>
-              <View style={styles.statusRow}>
-                <View
-                  style={[
-                    styles.statusDot,
-                    { backgroundColor: colors.online || "#31a24c" },
-                  ]}
-                />
-                <Text
-                  style={[styles.statusText, { color: colors.textSecondary }]}
-                >
-                  Active
-                </Text>
+              <View style={styles.profileRow}>
+                  <View style={styles.avatarWrapper}>
+                  <AppAvatar user={user} size={56} showStatus />
+                </View>
+                <View style={styles.profileInfo}>
+                  <Text style={[styles.userName, { color: colors.textPrimary }]}>
+                    {user?.name}
+                  </Text>
+                  <View style={styles.statusRow}>
+                    <View
+                      style={[
+                        styles.statusDot,
+                        { backgroundColor: colors.online },
+                      ]}
+                    />
+                    <Text
+                      style={[styles.statusText, { color: colors.textSecondary }]}
+                    >
+                      Active
+                    </Text>
+                  </View>
+                </View>
               </View>
             </View>
 
@@ -206,9 +212,8 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
                 style={[
                   styles.statusCard,
                   {
-                    backgroundColor:
-                      colors.primary + "15" || "rgba(0,0,0,0.05)",
-                    borderColor: colors.primary + "30" || "rgba(0,0,0,0.1)",
+                    backgroundColor: colors.primaryOverlay,
+                    borderColor: colors.primaryOverlayBorder,
                   },
                 ]}
                 onPress={() => {
@@ -302,7 +307,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
               />
             </View> */}
 
-            <View style={{ height: 40 }} />
+            <View style={{ height: Math.max(insets.bottom, 20) }} />
           </ScrollView>
         </Animated.View>
       </Pressable>
@@ -328,7 +333,7 @@ const createStyles = (colors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      backgroundColor: colors.overlay,
       justifyContent: "flex-end",
     },
     drawer: {
@@ -337,11 +342,11 @@ const createStyles = (colors) =>
       borderTopRightRadius: 24,
       ...(Platform.OS !== "web"
         ? {
-            boxShadow: "0px -4px 12px rgba(0, 0, 0, 0.15)",
+            boxShadow: `0px -4px 12px ${colors.shadowMd}`,
           }
         : {
             boxShadow: rnShadowToBoxShadow(
-              "#000",
+              '#000',
               { width: 0, height: -4 },
               0.15,
               12,
@@ -366,14 +371,23 @@ const createStyles = (colors) =>
       letterSpacing: -0.5,
     },
     profileSection: {
-      alignItems: "center",
-      paddingVertical: 28,
       paddingHorizontal: 20,
+      paddingVertical: 16,
+    },
+    profileRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+    },
+    profileInfo: {
+      flex: 1,
     },
     avatarWrapper: {
-      marginBottom: 16,
-      boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
-      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
     },
     avatar: {
       width: 80,
@@ -395,13 +409,13 @@ const createStyles = (colors) =>
       height: 20,
       borderRadius: 10,
       borderWidth: 3,
-      borderColor: "white",
+      borderColor: colors.background,
     },
     userName: {
-      fontSize: 24,
+      fontSize: 18,
       fontWeight: "800",
-      marginBottom: 8,
-      letterSpacing: -0.5,
+      marginBottom: 4,
+      letterSpacing: -0.3,
     },
     statusRow: {
       flexDirection: "row",
@@ -462,7 +476,7 @@ const createStyles = (colors) =>
       borderRadius: 10,
       justifyContent: "center",
       alignItems: "center",
-      backgroundColor: "rgba(0,0,0,0.02)",
+      backgroundColor: colors.backgroundSecondary,
     },
     menuLabel: {
       flex: 1,

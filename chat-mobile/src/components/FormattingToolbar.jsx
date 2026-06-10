@@ -85,7 +85,7 @@ const FormattingToolbar = React.memo(function FormattingToolbar({
     onChangeText(newText);
   }, [text, onChangeText]);
 
-  const btnStyle = [styles.button, { borderColor: colors.border || 'rgba(255,255,255,0.1)' }];
+  const btnStyle = [styles.button, { borderColor: colors.border }];
 
   return (
     <View style={[styles.container, { borderTopColor: colors.border, backgroundColor: colors.background }]}>

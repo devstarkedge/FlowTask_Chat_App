@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from "./src/navigation/AppNavigation";
 import { useAuthStore } from "./src/stores/authStore";
 import { useThemeStore } from "./src/stores/themeStore";
@@ -8,6 +9,7 @@ import { connectSocket, disconnectSocket } from "./src/services/socket";
 import { registerForPushNotifications, setNavigationRef } from "./src/services/pushNotificationService";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 import Toast from "react-native-toast-message";
+import ThemeProvider from './src/theme/ThemeProvider';
 
 const navigationRef = createNavigationContainerRef();
 
@@ -67,11 +69,15 @@ export default function App() {
   }, []);
 
   return (
-    <ErrorBoundary>
-      <NavigationContainer ref={navigationRef}>
-        <AppNavigator />
-        <Toast />
-      </NavigationContainer>
-    </ErrorBoundary>
+    <SafeAreaProvider>
+      <ErrorBoundary>
+        <ThemeProvider>
+          <NavigationContainer ref={navigationRef}>
+            <AppNavigator />
+            <Toast />
+          </NavigationContainer>
+        </ThemeProvider>
+      </ErrorBoundary>
+    </SafeAreaProvider>
   );
 }

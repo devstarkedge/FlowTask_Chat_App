@@ -29,6 +29,8 @@ import {
 } from "lucide-react-native";
 import Toast from "react-native-toast-message";
 import * as Clipboard from "expo-clipboard";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import logger from '../utils/logger';
 
 function formatSize(bytes) {
   if (!bytes) return "0 B";
@@ -58,6 +60,7 @@ function getFileKind(mimeType = "") {
 export default function FilesScreen({ route, navigation }) {
   const { channelId, channelName } = route.params || {};
   const { colors } = useThemeStore();
+  const insets = useSafeAreaInsets();
   const [files, setFiles] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [query, setQuery] = useState("");
@@ -77,7 +80,7 @@ export default function FilesScreen({ route, navigation }) {
       const items = res?.data?.data?.items || res?.data?.items || [];
       setFiles(items);
     } catch (err) {
-      console.error(
+      logger.error(
         "Failed to load files",
         err?.response?.data || err?.message || err,
       );
@@ -131,7 +134,7 @@ export default function FilesScreen({ route, navigation }) {
       if (supported) Linking.openURL(url);
       else Toast.show({ type: "error", text1: "Cannot open file" });
     } catch (err) {
-      console.error(err);
+      logger.error(err);
       Toast.show({ type: "error", text1: "Failed to open file" });
     }
   };
@@ -146,7 +149,7 @@ export default function FilesScreen({ route, navigation }) {
       if (supported) Linking.openURL(url);
       else Toast.show({ type: "error", text1: "Cannot download file" });
     } catch (err) {
-      console.error(err);
+      logger.error(err);
       Toast.show({ type: "error", text1: "Download failed" });
     }
   };
@@ -156,7 +159,7 @@ export default function FilesScreen({ route, navigation }) {
       const url = file.url || messageAPI.getFileProxyUrl(file._id);
       await Share.share({ message: `${file.fileName}\n${url}` });
     } catch (err) {
-      console.error(err);
+      logger.error(err);
       Toast.show({ type: "error", text1: "Share failed" });
     }
   };
@@ -168,7 +171,7 @@ export default function FilesScreen({ route, navigation }) {
       await Clipboard.setStringAsync(url);
       Toast.show({ type: "success", text1: "Link copied" });
     } catch (err) {
-      console.error(err);
+      logger.error(err);
       Toast.show({ type: "error", text1: "Failed to copy link" });
     }
   };
@@ -192,7 +195,7 @@ export default function FilesScreen({ route, navigation }) {
             );
             Toast.show({ type: "success", text1: "File removed" });
           } catch (err) {
-            console.error(err);
+            logger.error(err);
             Toast.show({ type: "error", text1: "Failed to delete" });
           }
         },
@@ -273,13 +276,14 @@ export default function FilesScreen({ route, navigation }) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View
         style={[
           styles.header,
           {
             borderBottomColor: colors.border,
             backgroundColor: colors.backgroundSecondary,
+            paddingTop: insets.top + 8,
           },
         ]}
       >
@@ -357,6 +361,10 @@ export default function FilesScreen({ route, navigation }) {
           keyExtractor={(item) => item.referenceId || item._id}
           renderItem={renderItem}
           contentContainerStyle={{ padding: 12 }}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS !== 'web'}
         />
       )}
 
@@ -381,7 +389,7 @@ export default function FilesScreen({ route, navigation }) {
           )}
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 

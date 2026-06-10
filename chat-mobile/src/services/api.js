@@ -1,12 +1,13 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import storage from './storage';
 import { secureGet, secureSet, secureMultiRemove } from '../utils/secureStorage';
 import ENV from '../config/environment';
+import logger from '../utils/logger';
 
 // Use ENV (which already resolves app.json extra + .env + production fallback)
 const BASE_URL = ENV.API_BASE_URL;
 
-console.log('[API] Active BASE_URL:', BASE_URL);
+logger.info('[API] Active BASE_URL:', BASE_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -27,7 +28,7 @@ let cachedFlowtaskToken = null;
 export const primeApiCache = async () => {
   try {
     cachedToken = await secureGet('chat_access_token');
-    cachedWorkspaceId = await AsyncStorage.getItem('active_workspace_id');
+    cachedWorkspaceId = await storage.getItem('active_workspace_id');
     cachedFlowtaskToken = await secureGet('flowtask_token');
   } catch {
     // Silently fail — interceptor will fall back to AsyncStorage
@@ -122,7 +123,7 @@ api.interceptors.response.use(
           'chat_access_token',
           'chat_refresh_token',
         ]);
-        await AsyncStorage.removeItem('chat_user');
+        await storage.removeItem('chat_user');
       }
     }
 
@@ -143,6 +144,8 @@ export const authAPI = {
 // Workspace API
 export const workspaceAPI = {
   mine: () => api.get('/workspaces/mine'),
+  create: (data) => api.post('/workspaces', data),
+  joinByInviteCode: (inviteCode) => api.post('/workspaces/join', { inviteCode }),
   inviteByEmail: (workspaceId, email, role) => api.post(`/workspaces/${workspaceId}/invite-email`, { email, role }),
   leave: (workspaceId) => api.post(`/workspaces/${workspaceId}/leave`),
 };
@@ -150,6 +153,16 @@ export const workspaceAPI = {
 // Channel API
 export const channelAPI = {
   list: () => api.get('/channels'),
+  create: (data) => api.post('/channels', data),
+  createDM: (userId) => api.post('/channels/dm', { userId }),
+  archive: (id) => api.post(`/channels/${id}/archive`),
+  leave: (id) => api.post(`/channels/${id}/leave`),
+  pin: (id) => api.put(`/channels/${id}/pin`),
+  star: (id) => api.put(`/channels/${id}/star`),
+  addMember: (id, userId) => api.post(`/channels/${id}/members`, { userId }),
+  removeMember: (id, userId) => api.delete(`/channels/${id}/members/${userId}`),
+  search: (q) => api.get('/channels/search', { params: { q } }),
+  get: (id) => api.get(`/channels/${id}`),
 };
 
 // Thread API
@@ -161,13 +174,13 @@ export const threadAPI = {
   unresolve: (id) => api.post(`/threads/${id}/unresolve`),
 };
 
-// Later (Saved Messages) API
+// Later (Saved Messages) API — endpoints match server routes: /messages/:id/save/*
 export const laterAPI = {
   list: (status) => api.get('/messages/saved', { params: { status } }),
-  toggle: (messageId) => api.post(`/messages/save/${messageId}`),
-  updateStatus: (messageId, status) => api.patch(`/messages/saved/${messageId}/status`, { status }),
-  updateReminder: (messageId, reminderData) => api.patch(`/messages/saved/${messageId}/reminder`, reminderData),
-  delete: (messageId) => api.delete(`/messages/saved/${messageId}`),
+  toggle: (messageId) => api.post(`/messages/${messageId}/save`),
+  updateStatus: (messageId, status) => api.patch(`/messages/${messageId}/save/status`, { status }),
+  updateReminder: (messageId, reminderData) => api.patch(`/messages/${messageId}/save/reminder`, reminderData),
+  delete: (messageId) => api.delete(`/messages/${messageId}/save`),
 };
 
 // Scheduled Messages API
@@ -229,6 +242,27 @@ export const searchAPI = {
   search: ({ q = '', scope = null, limit = null, cursor = null, signal = undefined } = {}) =>
     api.get('/search', { params: { q, scope, limit, cursor }, signal }),
   global: (q, options = {}) => searchAPI.search({ q, ...options }),
+};
+
+// Directories API — browse workspace people, channels, groups
+export const directoriesAPI = {
+  getUsers: (params) => api.get('/directories/users', { params }),
+  getChannels: (params) => api.get('/directories/channels', { params }),
+  getGroups: () => api.get('/directories/groups'),
+  getExternal: () => api.get('/directories/external'),
+  getInvitations: () => api.get('/directories/invitations'),
+};
+
+// Notification Preferences API
+export const notificationPrefAPI = {
+  get: () => api.get('/notifications/preferences'),
+  update: (data) => api.put('/notifications/preferences', data),
+  pause: (data) => api.put('/notifications/preferences/pause', data),
+  resume: () => api.post('/notifications/preferences/resume'),
+  updateKeywords: (keywords) => api.put('/notifications/preferences/keywords', { keywords }),
+  updateVIP: (userIds) => api.put('/notifications/preferences/vip', { userIds }),
+  updateChannel: (channelId, data) => api.put(`/notifications/preferences/channel/${channelId}`, data),
+  removeChannel: (channelId) => api.delete(`/notifications/preferences/channel/${channelId}`),
 };
 
 export default api;

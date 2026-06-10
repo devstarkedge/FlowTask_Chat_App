@@ -5,13 +5,13 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Eye, EyeOff, MessageCircle, CircleChevronRight, Lock, Check } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useAuthStore } from '../../stores/authStore';

@@ -3,13 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   StatusBar,
   Switch,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { accentColors } from '../theme/colors';
 import {
@@ -85,7 +85,7 @@ const PreferencesScreen = ({ navigation }) => {
     { value: 'green', label: 'Green', color: accentColors.green.primary },
     { value: 'orange', label: 'Orange', color: accentColors.orange.primary },
     { value: 'red', label: 'Red', color: accentColors.red.primary },
-    { value: 'custom', label: 'Custom', color: customColor || '#888888' },
+    { value: 'custom', label: 'Custom', color: customColor || colors.textTertiary },
   ];
 
   const handleAccentPress = (option) => {
@@ -175,7 +175,7 @@ const PreferencesScreen = ({ navigation }) => {
                         <View style={styles.checkDot} />
                       )}
                       {isCustom && !isActive && (
-                        <Palette size={18} color="#fff" />
+                        <Palette size={18} color={colors.textOnPrimary} />
                       )}
                     </View>
                     <Text
@@ -196,7 +196,7 @@ const PreferencesScreen = ({ navigation }) => {
           <ColorPickerModal
             visible={pickerOpen}
             onClose={() => setPickerOpen(false)}
-            initialHex={customColor || '#E040FB'}
+            initialHex={customColor || colors.primary}
             onPreview={(hex) => previewCustomColor(hex)}
             onApply={(hex) => {
               setCustomColor(hex);
@@ -295,7 +295,7 @@ const createStyles = (colors) =>
       justifyContent: 'center',
     },
     colorCircleSelected: {
-      borderColor: '#FFFFFF',
+      borderColor: colors.textOnPrimary,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 3 },
       shadowOpacity: 0.2,
@@ -306,7 +306,7 @@ const createStyles = (colors) =>
       width: 10,
       height: 10,
       borderRadius: 5,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: colors.textOnPrimary,
     },
     colorLabel: {
       fontSize: 12,

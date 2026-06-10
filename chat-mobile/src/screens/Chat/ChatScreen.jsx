@@ -3,19 +3,18 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   FlatList,
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  StatusBar,
   Alert,
   Image,
   Linking,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
+import { useShallow } from 'zustand/react/shallow';
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useChannelStore } from "../../stores/channelStore";
@@ -23,7 +22,7 @@ import { useThemeStore } from "../../stores/themeStore";
 import { useLaterStore } from "../../stores/laterStore";
 import { laterAPI, pinsAPI } from "../../services/api";
 import { emitTyping } from "../../services/socket";
-import Avatar from "../../components/Avatar";
+import { AppAvatar, AppScreen } from "../../components/common";
 import RichText from "../../components/RichText";
 import ReactionBar from "../../components/ReactionBar";
 import EmojiPickerModal from "../../components/EmojiPickerModal";
@@ -55,6 +54,7 @@ import {
 import SearchBar from "../../components/SearchBar";
 import MessageComposer from "../../components/MessageComposer";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import logger from '../../utils/logger';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -105,24 +105,37 @@ const isImageUrl = (url) => {
 
 const ChatScreen = ({ route, navigation }) => {
   const { channelId, channelName } = route.params;
+
+  // Granular store subscriptions — prevent unnecessary re-renders
+  const messages = useChatStore(useShallow((s) => s.messagesByChannel[channelId] || []));
+  const isLoadingMessages = useChatStore((s) => s.isLoadingMessages);
+  const typingByChannel = useChatStore((s) => s.typingByChannel);
+  const channelHasMore = useChatStore((s) => s.hasMore[channelId]);
   const {
-    messagesByChannel,
     fetchMessages,
     sendMessage,
-    isLoadingMessages,
-    typingByChannel,
-    hasMore,
     addReaction,
     removeReaction,
     editMessage,
     deleteMessage,
-  } = useChatStore();
-  const { user } = useAuthStore();
-  const { channels } = useChannelStore();
-  const { membersByChannel, fetchMembers } = useChannelStore();
-  const { colors } = useThemeStore();
-  const { activeWorkspaceId } = useWorkspaceStore();
-  const { toggleSaveMessage, isMessageSaved } = useLaterStore();
+  } = useChatStore(
+    useShallow((s) => ({
+      fetchMessages: s.fetchMessages,
+      sendMessage: s.sendMessage,
+      addReaction: s.addReaction,
+      removeReaction: s.removeReaction,
+      editMessage: s.editMessage,
+      deleteMessage: s.deleteMessage,
+    }))
+  );
+  const user = useAuthStore(useShallow((s) => s.user));
+  const channels = useChannelStore(useShallow((s) => s.channels));
+  const membersByChannel = useChannelStore(useShallow((s) => s.membersByChannel));
+  const fetchMembers = useChannelStore((s) => s.fetchMembers);
+  const { colors } = useThemeStore(useShallow((s) => ({ colors: s.colors })));
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const toggleSaveMessage = useLaterStore((s) => s.toggleSaveMessage);
+  const isMessageSaved = useLaterStore((s) => s.isMessageSaved);
 
   const [text, setText] = useState("");
   const [showOptions, setShowOptions] = useState(false);
@@ -135,46 +148,82 @@ const ChatScreen = ({ route, navigation }) => {
   const [editingMessage, setEditingMessage] = useState(null); // message object or null
   const [reminderTarget, setReminderTarget] = useState(null); // messageId or null
 
-  const messages = messagesByChannel[channelId] || [];
   const displayedMessages = useMemo(() => [...messages].reverse(), [messages]);
-  const typingUsers = Object.values(typingByChannel[channelId] || {});
-  const channel = channels.find((ch) => ch._id === channelId);
-  const memberCount = channel?.members?.length || 0;
-  const onlineCount =
-    channel?.members?.filter((m) => m.onlineStatus === "online").length || 0;
+
+  // Memoize derived values to prevent re-render loops
+  const typingUsers = useMemo(
+    () => Object.values(typingByChannel[channelId] || {}),
+    [typingByChannel, channelId]
+  );
+  const channel = useMemo(
+    () => channels.find((ch) => ch._id === channelId),
+    [channels, channelId]
+  );
+
+  // Full user objects from fetchMembers — has avatar, name, onlineStatus
+  const channelMembers = membersByChannel[channelId] || [];
+
+  const memberCount = useMemo(
+    () => channelMembers.length || channel?.members?.length || 0,
+    [channelMembers, channel]
+  );
+  const onlineCount = useMemo(
+    () => channelMembers.filter((m) => m.onlineStatus === "online").length,
+    [channelMembers]
+  );
 
   const isDM = channel?.type === "dm";
   const isSystem = channel?.type === "system";
   const isPrivate =
     channel?.visibility === "private" || channel?.type === "private";
-  const dmUser = isDM
-    ? channel?.members?.find((m) => m._id !== user?._id)
-    : null;
+
+  // Build dmUser from membersByChannel (full user objects with avatar/name/onlineStatus)
+  // Fallback to channel-level decorated fields (server sets name & avatar on DM channels)
+  const dmUser = useMemo(() => {
+    if (!isDM) return null;
+    // Try membersByChannel first — has full user data including avatar
+    const other = channelMembers.find((m) => m._id !== user?._id);
+    if (other) return other;
+    // Fallback to channel decorated fields
+    return {
+      _id: channel?.dmRecipientId,
+      name: channel?.name || channelName,
+      avatar: channel?.avatar || null,
+      onlineStatus: channel?.onlineStatus || 'offline',
+    };
+  }, [isDM, channelMembers, channel, user, channelName]);
 
   const flatListRef = useRef(null);
 
   useEffect(() => {
     fetchMessages(channelId);
     fetchMembers(channelId);
-  }, [channelId]);
+  }, [channelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Debounced search — avoid re-running on every displayedMessages change
+  const searchTimeoutRef = useRef(null);
   useEffect(() => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     if (!searchQuery) {
       setSearchResults([]);
       setCurrentMatch(0);
       return;
     }
-    const q = searchQuery.trim().toLowerCase();
-    const matches = [];
-    displayedMessages.forEach((m, idx) => {
-      if (m?.content && m.content.toLowerCase().includes(q)) matches.push(idx);
-    });
-    setSearchResults(matches);
-    setCurrentMatch(0);
-    if (matches.length > 0) {
-      setTimeout(() => scrollToIndex(matches[0]), 80);
-    }
-  }, [searchQuery, displayedMessages]);
+    searchTimeoutRef.current = setTimeout(() => {
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) { setSearchResults([]); setCurrentMatch(0); return; }
+      const matches = [];
+      displayedMessages.forEach((m, idx) => {
+        if (m?.content && m.content.toLowerCase().includes(q)) matches.push(idx);
+      });
+      setSearchResults(matches);
+      setCurrentMatch(0);
+      if (matches.length > 0) {
+        setTimeout(() => scrollToIndex(matches[0]), 80);
+      }
+    }, 200); // 200ms debounce
+    return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
+  }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSend = (content, options) => {
     sendMessage(channelId, content, options);
@@ -253,7 +302,7 @@ const ChatScreen = ({ route, navigation }) => {
               if (pinned) await pinsAPI.unpin(item._id);
               else await pinsAPI.pin(item._id);
             } catch (err) {
-              console.error('Pin action failed:', err);
+              logger.error('Pin action failed:', err);
               Alert.alert('Error', 'Could not update pin status.');
             }
           },
@@ -322,7 +371,7 @@ const ChatScreen = ({ route, navigation }) => {
   );
 
   // ─── Render: Message ──────────────────────────────────────────────────────
-  const renderMessage = ({ item, index }) => {
+  const renderMessage = useCallback(({ item, index }) => {
     const isMe =
       item.authorId?._id === user?._id || item.authorId === user?._id;
     const isMatch =
@@ -380,7 +429,7 @@ const ChatScreen = ({ route, navigation }) => {
         >
           {/* Avatar (hidden for compact/grouped messages) */}
           {!isMe && !isCompact && (
-            <Avatar
+            <AppAvatar
               user={messageSender}
               size={32}
               showStatus={false}
@@ -449,12 +498,12 @@ const ChatScreen = ({ route, navigation }) => {
                     ...colors,
                     textPrimary: contentColor,
                     codeBackground: isMe
-                      ? "rgba(255,255,255,0.15)"
+                      ? colors.surfaceOverlayLight
                       : colors.codeBackground,
                     codeBlockBackground: isMe
-                      ? "rgba(0,0,0,0.2)"
+                      ? colors.shadowMd
                       : colors.codeBlockBackground,
-                    codeBlockText: isMe ? "#fff" : colors.codeBlockText,
+                    codeBlockText: isMe ? colors.textOnPrimary : colors.codeBlockText,
                   }}
                   baseStyle={{ color: contentColor, fontSize: 15, lineHeight: 22 }}
                 />
@@ -495,7 +544,7 @@ const ChatScreen = ({ route, navigation }) => {
                     key={file._id || i}
                     style={[
                       styles.fileAttachment,
-                      { backgroundColor: isMe ? "rgba(255,255,255,0.1)" : colors.cardBackground },
+                      { backgroundColor: isMe ? colors.surfaceOverlay : colors.cardBackground },
                     ]}
                     onPress={() => {
                       if (file.url) Linking.openURL(file.url);
@@ -590,7 +639,7 @@ const ChatScreen = ({ route, navigation }) => {
               >
                 <View style={styles.threadAvatars}>
                   {(item.threadParticipants || []).slice(0, 3).map((p, i) => (
-                    <Avatar
+                    <AppAvatar
                       key={p._id || i}
                       user={p}
                       size={18}
@@ -617,19 +666,12 @@ const ChatScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </View>
     );
-  };
+  }, [user, colors, searchQuery, searchResults, currentMatch, displayedMessages, showMessageActions, addReaction, removeReaction, navigation, channelId, channelName]);
 
-  const styles = createStyles(colors);
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
-    >
-      <StatusBar
-        barStyle={
-          colors.effectiveTheme === "dark" ? "light-content" : "dark-content"
-        }
-      />
+    <AppScreen style={[styles.container, { backgroundColor: colors.background }]}> 
 
       {/* Custom Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -643,7 +685,7 @@ const ChatScreen = ({ route, navigation }) => {
         <View style={styles.headerCenter}>
           <View style={styles.headerTitleRow}>
             {isDM ? (
-              <Avatar
+              <AppAvatar
                 user={dmUser || { name: channelName }}
                 size={32}
                 showStatus={true}
@@ -804,12 +846,16 @@ const ChatScreen = ({ route, navigation }) => {
           inverted
           contentContainerStyle={styles.messageList}
           onEndReached={() => {
-            if (hasMore[channelId] && !isLoadingMessages) {
+            if (channelHasMore && !isLoadingMessages) {
               const oldest = messages[0];
               if (oldest) fetchMessages(channelId, oldest._id);
             }
           }}
           onEndReachedThreshold={0.3}
+          initialNumToRender={15}
+          maxToRenderPerBatch={10}
+          windowSize={11}
+          removeClippedSubviews={Platform.OS !== 'web'}
           ListFooterComponent={
             isLoadingMessages ? (
               <ActivityIndicator
@@ -858,7 +904,7 @@ const ChatScreen = ({ route, navigation }) => {
           members={membersByChannel[channelId] || []}
           onSend={(content, options) => {
             if (editingMessage) {
-              editMessage(editingMessage._id, channelId, content, options?.htmlContent);
+              editMessage(editingMessage._id, channelId, content);
               setEditingMessage(null);
             } else {
               sendMessage(channelId, content, options);
@@ -881,7 +927,7 @@ const ChatScreen = ({ route, navigation }) => {
             try {
               await laterAPI.updateReminder(reminderTarget, { reminderAt });
             } catch (err) {
-              console.error('Failed to set reminder:', err);
+              logger.error('Failed to set reminder:', err);
             }
           }
         }}
@@ -900,7 +946,7 @@ const ChatScreen = ({ route, navigation }) => {
         }}
         colors={colors}
       />
-    </SafeAreaView>
+      </AppScreen>
   );
 };
 

@@ -13,48 +13,30 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   FlatList,
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
-  StatusBar,
   Alert,
 } from 'react-native';
 import { useThreadStore } from '../stores/threadStore';
 import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useChatStore } from '../stores/chatStore';
-import Avatar from '../components/Avatar';
+import { formatMessageTime, formatRelativeTime } from '../utils/dateUtils';
+import { ScreenLayout, AppAvatar } from '../components/common';
 import RichText from '../components/RichText';
 import ReactionBar from '../components/ReactionBar';
 import EmojiPickerModal from '../components/EmojiPickerModal';
+import LoadingState from '../components/common/LoadingState';
 import {
   CircleChevronLeft,
   Send,
   MessageSquare,
-  Users,
 } from 'lucide-react-native';
 
-const formatTime = (dateStr) => {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-};
-
-const formatRelativeTime = (dateStr) => {
-  if (!dateStr) return '';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
-};
+const formatTime = formatMessageTime;
 
 const ThreadDetailScreen = ({ route, navigation }) => {
   const {
@@ -118,7 +100,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
 
     return (
       <View style={[styles.replyContainer, isMe ? styles.myReply : styles.theirReply]}>
-        <Avatar user={sender} size={28} showStatus={false} />
+      <AppAvatar user={sender} size={28} showStatus={false} />
         <View style={{ flexShrink: 1 }}>
           <View style={styles.replyHeader}>
             <Text style={[styles.replyAuthor, { color: colors.textSecondary }]}>
@@ -164,8 +146,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
   const styles = createStyles(colors);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={colors.effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
+    <ScreenLayout>
 
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -181,9 +162,9 @@ const ThreadDetailScreen = ({ route, navigation }) => {
       </View>
 
       {/* Root message */}
-      <View style={[styles.rootMessageContainer, { borderBottomColor: colors.border, backgroundColor: colors.cardBackground || 'rgba(255,255,255,0.02)' }]}>
+      <View style={[styles.rootMessageContainer, { borderBottomColor: colors.border, backgroundColor: colors.card }]}>
         <View style={styles.rootMessageHeader}>
-          <Avatar user={effectiveRoot.senderSnapshot || effectiveRoot.authorId} size={36} showStatus={false} />
+          <AppAvatar user={effectiveRoot.senderSnapshot || effectiveRoot.authorId} size={36} showStatus={false} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.rootAuthor, { color: colors.textPrimary }]}>
               {effectiveRoot.senderSnapshot?.name || effectiveRoot.authorId?.name || 'Unknown'}
@@ -243,6 +224,10 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           renderItem={renderReply}
           keyExtractor={(item) => item._id}
           contentContainerStyle={styles.repliesList}
+          initialNumToRender={15}
+          maxToRenderPerBatch={10}
+          windowSize={11}
+          removeClippedSubviews={Platform.OS !== 'web'}
           onEndReached={() => {
             if (threadHasMore[rootMessageId] && !isLoadingReplies) {
               const oldest = replies[0];
@@ -265,7 +250,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           }
           ListFooterComponent={
             isLoadingReplies ? (
-              <ActivityIndicator style={{ margin: 16 }} color={colors.primary} />
+              <LoadingState size="small" style={{ margin: 16 }} />
             ) : null
           }
         />
@@ -303,7 +288,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         }}
         colors={colors}
       />
-    </SafeAreaView>
+    </ScreenLayout>
   );
 };
 

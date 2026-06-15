@@ -6,6 +6,8 @@ import { useChannelStore } from "../../stores/channelStore";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { Avatar } from "../chat/MemberAvatarGroup";
 
+const EMPTY_MEMBERS = [];
+
 const PERMISSIONS = [
   { value: "private", label: "Invite only", desc: "Only people you add" },
   { value: "channel", label: "Channel Members", desc: "Everyone in this channel" },
@@ -23,8 +25,8 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
   const dropdownRef = useRef(null);
 
   const members = useChannelStore(
-    (s) => s.membersByChannel[channelId] || []
-  );
+    (s) => s.membersByChannel[channelId]
+  ) ?? EMPTY_MEMBERS;
   const fetchMembers = useChannelStore((s) => s.fetchMembers);
   const updateCanvasMetadata = useCanvasStore((s) => s.updateCanvasMetadata);
 

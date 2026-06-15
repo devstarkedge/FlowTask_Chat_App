@@ -55,6 +55,8 @@ const fileReferenceSchema = new Schema({
 // Workspace-scoped indexes
 fileReferenceSchema.index({ workspaceId: 1, fileId: 1, createdAt: -1 });
 fileReferenceSchema.index({ workspaceId: 1, channelId: 1 });
+// Covering index for workspace files listing (getWorkspaceFiles query)
+fileReferenceSchema.index({ workspaceId: 1, channelId: 1, contextType: 1, createdAt: -1 });
 
 // Prevent exact duplicate references linking same file to same message within workspace
 fileReferenceSchema.index(

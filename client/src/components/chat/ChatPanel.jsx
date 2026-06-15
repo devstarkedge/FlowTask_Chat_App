@@ -43,10 +43,24 @@ export default function ChatPanel({
   const messagesById = useChatStore((s) => s.messagesById);
   const connectionStatus = useChatStore((s) => s.connectionStatus);
 
+  // Debounce the connection banner: only show if status stays non-connected
+  // for more than 1.5s. This prevents brief reconnect blips from flashing a banner.
+  const [showConnectionBanner, setShowConnectionBanner] = useState(false);
+  useEffect(() => {
+    if (connectionStatus === "connected") {
+      setShowConnectionBanner(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowConnectionBanner(true), 1500);
+    return () => clearTimeout(timer);
+  }, [connectionStatus]);
+
   // Canvas store: split selectors for the same reasons as above.
   const activeCanvas = useCanvasStore((s) => s.activeCanvas);
   const activeCanvasIdByChannel = useCanvasStore((s) => s.activeCanvasIdByChannel);
   const clearActiveCanvas = useCanvasStore((s) => s.clearActiveCanvas);
+  const setActiveCanvasId = useCanvasStore((s) => s.setActiveCanvasId);
+  const loadCanvas = useCanvasStore((s) => s.loadCanvas);
   // Opened canvas tabs are centralized in the canvas store (channel-scoped)
   const openCanvasTabs = useCanvasStore((s) => s.openTabsByChannel?.[channelId] || EMPTY_LIST);
   const addOpenTab = useCanvasStore((s) => s.addOpenTab);
@@ -98,20 +112,36 @@ export default function ChatPanel({
 
   // Note: persistence now handled by server-side channel tabs; client keeps local view in store
 
-  // Derive the active canvas title for the header tab label
+  // Derive the active canvas title for the header tab label.
+  // Uses activeCanvas first (most up-to-date), falls back to openCanvasTabs
+  // for immediate title even when activeCanvas hasn't loaded yet.
   const activeCanvasTitle = useMemo(() => {
     if (!channelId) return null;
     const canvasId = activeCanvasIdByChannel?.[channelId];
     if (!canvasId) return null;
+    
+    // First, try activeCanvas (most authoritative if it matches)
     if (activeCanvas && activeCanvas._id === canvasId) {
       return activeCanvas.title || "Canvas";
     }
+    
+    // Fall back to openTabs which has the title from the tab data
+    const tabMeta = (openCanvasTabs || []).find((t) => t._id === canvasId);
+    if (tabMeta) {
+      return tabMeta.title || "Canvas";
+    }
+    
     return null;
-  }, [activeCanvas, activeCanvasIdByChannel, channelId]);
+  }, [activeCanvas, activeCanvasIdByChannel, channelId, openCanvasTabs]);
 
   // Remove canvas tab (delegates to canvas store which will broadcast)
+  // Smart removal: switches to adjacent canvas tab if available, otherwise messages
   const handleRemoveCanvasTab = useCallback(
     (canvasId) => {
+      // Find adjacent tab before removal
+      const tabs = openCanvasTabs || [];
+      const removedIdx = tabs.findIndex((t) => t._id === canvasId);
+
       if (canvasId) {
         try {
           removeOpenTab(channelId, canvasId);
@@ -119,11 +149,22 @@ export default function ChatPanel({
           // ignore
         }
       }
-      clearActiveCanvas();
-      setActiveTab("messages");
+
+      // Switch to adjacent canvas tab if available
+      const remaining = tabs.filter((t) => t._id !== canvasId);
+      if (remaining.length > 0 && removedIdx >= 0) {
+        const nextIdx = Math.min(removedIdx, remaining.length - 1);
+        const nextCanvasId = remaining[nextIdx]._id;
+        // Optimistically update activeCanvasId so header shows correct title immediately
+        setActiveCanvasId(channelId, nextCanvasId);
+        setActiveTab(`canvas:${nextCanvasId}`);
+      } else {
+        clearActiveCanvas();
+        setActiveTab("messages");
+      }
       setCanvasIntent(null);
     },
-    [removeOpenTab, channelId, clearActiveCanvas, setActiveTab, setCanvasIntent],
+    [removeOpenTab, channelId, openCanvasTabs, clearActiveCanvas, setActiveTab, setCanvasIntent, setActiveCanvasId],
   );
 
   // Called when user picks an option from the CanvasMenu header popup.
@@ -147,18 +188,28 @@ export default function ChatPanel({
       // (e.g., double load or duplicate provider initialization).
       if (tab === activeTab) return;
       setActiveTab(tab);
-      // If user manually clicked messages (not a canvas:<id>), clear any intent
-      if (!tab || !String(tab).startsWith("canvas:")) setCanvasIntent(null);
+      
+      // If switching to a canvas tab, optimistically set the active canvas ID
+      // so the header title updates immediately (before canvas data loads).
+      if (tab && String(tab).startsWith("canvas:")) {
+        const canvasId = String(tab).split(":")[1];
+        if (canvasId && channelId) {
+          setActiveCanvasId(channelId, canvasId);
+        }
+      } else {
+        // If user manually clicked messages (not a canvas:<id>), clear any intent
+        setCanvasIntent(null);
+      }
     },
-    [activeTab, setActiveTab, setCanvasIntent],
+    [activeTab, setActiveTab, setCanvasIntent, setActiveCanvasId, channelId],
   );
 
   const handleOpenCanvasMenu = useCallback(() => setShowCanvasPopup(true), []);
   const handleCloseCanvasMenu = useCallback(() => setShowCanvasPopup(false), []);
   const handleOpenAddCanvasModal = handleOpenCanvasMenu;
   const handleRemoveCanvasTabById = useCallback(
-    (id) => removeOpenTab(channelId, id),
-    [removeOpenTab, channelId],
+    (id) => handleRemoveCanvasTab(id),
+    [handleRemoveCanvasTab],
   );
 
   const isCanvasTabOpen = useCallback(
@@ -211,8 +262,8 @@ export default function ChatPanel({
         onRemoveCanvasTabById={handleRemoveCanvasTabById}
       />
 
-      {/* Connection status banners */}
-      {connectionStatus === "connecting" && (
+      {/* Connection status banners — only shown after 1.5s debounce */}
+      {showConnectionBanner && connectionStatus === "connecting" && (
         <div
           className="flex items-center justify-center gap-2 py-1.5 text-xs font-medium animate-fade-in"
           style={{ background: "var(--warning-color)", color: "var(--text-inverse)" }}
@@ -221,10 +272,10 @@ export default function ChatPanel({
           Reconnecting…
         </div>
       )}
-      {connectionStatus === "disconnected" && (
+      {showConnectionBanner && connectionStatus === "disconnected" && (
         <div
           className="flex items-center justify-center gap-2 py-1.5 text-xs font-medium animate-fade-in"
-          style={{ background: "var(--danger-color)", color: "#ffffff" }}
+          style={{ background: "var(--danger-color)", color: "var(--text-white)" }}
         >
           <WifiOff size={12} />
           Connection lost. Trying to reconnect…

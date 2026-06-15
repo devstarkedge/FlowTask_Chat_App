@@ -262,6 +262,28 @@ export const useWorkspaceStore = create(
         }
       },
 
+      // Update member role in store (for socket events, no API call)
+      updateMemberRoleInStore: (userId, newRole) => {
+        set((state) => ({
+          members: state.members.map((m) =>
+            (m.userId?._id === userId || m.userId === userId || m._id === userId)
+              ? { ...m, role: newRole }
+              : m
+          ),
+        }))
+      },
+
+      // Update member profile in store (for socket events, no API call)
+      updateMemberProfile: (userId, updates) => {
+        set((state) => ({
+          members: state.members.map((m) =>
+            (m.userId?._id === userId || m.userId === userId || m._id === userId)
+              ? { ...m, ...updates }
+              : m
+          ),
+        }))
+      },
+
       // ─── Invite Code ─────────────────────────────────────────────────
       joinByInviteCode: async (inviteCode) => {
         set({ isLoading: true, error: null })

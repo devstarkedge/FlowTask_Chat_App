@@ -17,7 +17,7 @@ export default function PushNotificationPrompt({ prompt }) {
           position: "fixed",
           inset: 0,
           background:
-            "linear-gradient(rgba(15,23,42,0.55), rgba(15,23,42,0.7))",
+            "linear-gradient(var(--bg-overlay-light, rgba(15,23,42,0.55)), var(--bg-overlay-dark, rgba(15,23,42,0.7)))",
           backdropFilter: "blur(10px)",
           WebkitBackdropFilter: "blur(10px)",
           zIndex: 9999,
@@ -78,7 +78,7 @@ export default function PushNotificationPrompt({ prompt }) {
                   height: 34,
                   borderRadius: 10,
                   border: "1px solid var(--border-primary)",
-                  background: "rgba(255,255,255,0.65)",
+                  background: "var(--bg-secondary, rgba(255,255,255,0.65))",
                   backdropFilter: "blur(10px)",
                   display: "flex",
                   alignItems: "center",
@@ -142,7 +142,7 @@ export default function PushNotificationPrompt({ prompt }) {
                 style={{
                   padding: 16,
                   borderRadius: 18,
-                  background: "rgba(255,255,255,0.7)",
+                  background: "var(--bg-card, rgba(255,255,255,0.7))",
                   border: "1px solid var(--border-primary)",
                   marginBottom: 24,
                 }}
@@ -194,7 +194,7 @@ export default function PushNotificationPrompt({ prompt }) {
                   borderRadius: 16,
                   border: "1px solid var(--border-primary)",
                   background:
-                    "linear-gradient(180deg, #ffffff, rgba(255,255,255,0.85))",
+                    "var(--bg-button-secondary, linear-gradient(180deg, var(--bg-primary, #ffffff), var(--bg-secondary, rgba(255,255,255,0.85))))",
                   color: "var(--text-primary)",
                   fontSize: 14,
                   fontWeight: 700,
@@ -304,7 +304,7 @@ export default function PushNotificationPrompt({ prompt }) {
                       gap: 14,
                       padding: "14px 16px",
                       borderRadius: 18,
-                      background: "rgba(255,255,255,0.7)",
+                      background: "var(--bg-card, rgba(255,255,255,0.7))",
                       border: "1px solid var(--border-primary)",
                     }}
                   >
@@ -384,7 +384,7 @@ export default function PushNotificationPrompt({ prompt }) {
                     height: 52,
                     borderRadius: 18,
                     border: "1px solid var(--border-primary)",
-                    background: "rgba(255,255,255,0.65)",
+                    background: "var(--bg-button-disabled, rgba(255,255,255,0.65))",
                     color: "var(--text-secondary)",
                     fontSize: 14,
                     fontWeight: 700,

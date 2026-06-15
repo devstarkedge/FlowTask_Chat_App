@@ -146,5 +146,14 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // Update user role (for socket events, no API call)
+  updateUserRole: (newRole, workspaceId) => {
+    set((state) => {
+      if (!state.user) return state;
+      const updatedUser = { ...state.user, role: newRole };
+      return { user: updatedUser };
+    });
+  },
+
   clearError: () => set({ error: null }),
 }));

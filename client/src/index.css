@@ -160,6 +160,21 @@
 
   --scrollbar-thumb: #2a2578;
   --scrollbar-thumb-hover: #3d36a0;
+
+  /*  UI elements */
+  --bg-overlay-light: rgba(15, 23, 42, 0.55);
+  --bg-overlay-dark: rgba(15, 23, 42, 0.7);
+  --bg-button-secondary: linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
+  --bg-button-disabled: rgba(255, 255, 255, 0.15);
+
+  /* Status colors */
+  --danger-primary: #f87171;
+  --success-primary: #22c55e;
+  --bg-success: rgba(34, 197, 94, 0.1);
+  --bg-danger: rgba(248, 113, 113, 0.1);
+  --border-success: rgba(34, 197, 94, 0.3);
+  --border-danger: rgba(248, 113, 113, 0.3);
+  --text-on-accent: #ffffff;
 }
 
 /* ─── Light Theme ───────────────────────────────────────────────────────── */
@@ -206,6 +221,21 @@
 
   --scrollbar-thumb: #d1d5db;
   --scrollbar-thumb-hover: #9ca3af;
+
+  /* Additional UI elements */
+  --bg-overlay-light: rgba(15, 23, 42, 0.55);
+  --bg-overlay-dark: rgba(15, 23, 42, 0.7);
+  --bg-button-secondary: linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
+  --bg-button-disabled: rgba(0, 0, 0, 0.05);
+
+  /* Status colors */
+  --danger-primary: #ef4444;
+  --success-primary: #16a34a;
+  --bg-success: rgba(22, 163, 74, 0.08);
+  --bg-danger: rgba(239, 68, 68, 0.08);
+  --border-success: rgba(22, 163, 74, 0.25);
+  --border-danger: rgba(239, 68, 68, 0.25);
+  --text-on-accent: #ffffff;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -402,6 +432,7 @@ body {
 /* ProseMirror: ensure editable content preserves whitespace formatting. */
 .ProseMirror {
   white-space: pre-wrap;
+
   to {
     opacity: 1;
   }
@@ -1148,31 +1179,192 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
-/*  EMOJI PICKER                                                             */
+/*  EMOJI PICKER - Production-ready Slack-quality styling                    */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
-.emoji-grid {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 2px;
+/* Main picker container */
+.epr-main {
+  --epr-picker-border-radius: var(--radius-xl) !important;
+  --epr-picker-border-color: var(--border-primary) !important;
+  --epr-bg-color: var(--bg-primary) !important;
+  box-shadow: var(--shadow-lg) !important;
+  font-family: inherit !important;
 }
 
-.emoji-grid button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-sm);
-  border: none;
+/* Override library's internal CSS variables for theme consistency */
+.epr-main {
+  /* Search & Header */
+  --epr-search-input-bg-color: var(--bg-secondary) !important;
+  --epr-search-input-bg-color-active: var(--bg-secondary) !important;
+  --epr-search-input-text-color: var(--text-primary) !important;
+  --epr-search-input-placeholder-color: var(--text-muted) !important;
+  --epr-search-border-color: var(--border-primary) !important;
+  --epr-search-border-color-active: var(--accent-primary) !important;
+  --epr-search-input-border-radius: var(--radius-md) !important;
+
+  /* Category navigation */
+  --epr-category-icon-active-color: var(--accent-primary) !important;
+  --epr-category-label-bg-color: var(--bg-primary) !important;
+  --epr-category-label-text-color: var(--text-secondary) !important;
+
+  /* Emoji hover/focus */
+  --epr-hover-bg-color: var(--bg-hover) !important;
+  --epr-focus-bg-color: var(--bg-active) !important;
+  --epr-highlight-color: var(--accent-primary) !important;
+  --epr-text-color: var(--text-secondary) !important;
+}
+
+/* Search input styling */
+.epr-search__input {
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: var(--radius-md) !important;
+  font-size: 13px !important;
+  padding: 8px 12px 8px 36px !important;
+  transition: var(--transition-fast) !important;
+}
+
+.epr-search__input::placeholder {
+  color: var(--text-muted) !important;
+}
+
+.epr-search__input:focus {
+  outline: none !important;
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 15%, transparent) !important;
+}
+
+/* Category navigation */
+.epr-category-navigation {
+  background: var(--bg-primary) !important;
+  border-bottom: 1px solid var(--border-primary) !important;
+  padding: 8px 12px !important;
+  gap: 4px !important;
+}
+
+.epr-category-navigation__button {
+  background: transparent !important;
+  border: none !important;
+  border-radius: var(--radius-md) !important;
+  cursor: pointer !important;
+  transition: var(--transition-fast) !important;
+  padding: 6px 8px !important;
+  font-size: 18px !important;
+}
+
+.epr-category-navigation__button:hover {
+  background: var(--bg-hover) !important;
+}
+
+.epr-category-navigation__button.epr-active {
+  background: var(--bg-active) !important;
+  color: var(--accent-primary) !important;
+}
+
+/* Emoji grid area */
+.epr-body {
+  background: var(--bg-primary) !important;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.epr-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.epr-body::-webkit-scrollbar-track {
   background: transparent;
-  cursor: pointer;
-  font-size: 18px;
-  transition: background var(--transition-fast);
 }
 
-.emoji-grid button:hover {
-  background: var(--bg-hover);
+.epr-body::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+.epr-body::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Category sections */
+.epr-emoji-category {
+  background: var(--bg-primary) !important;
+}
+
+.epr-emoji-category__label {
+  color: var(--text-secondary) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  padding: 10px 12px 6px !important;
+  letter-spacing: 0.5px !important;
+  background: var(--bg-primary) !important;
+  backdrop-filter: blur(8px);
+}
+
+/* Individual emoji buttons */
+.epr-emoji {
+  background: transparent !important;
+  border: none !important;
+  border-radius: var(--radius-md) !important;
+  cursor: pointer !important;
+  padding: 4px !important;
+  transition: var(--transition-fast) !important;
+  font-size: 20px !important;
+}
+
+.epr-emoji:hover {
+  background: var(--bg-hover) !important;
+  transform: scale(1.1);
+}
+
+.epr-emoji:focus-visible {
+  outline: 2px solid var(--accent-primary) !important;
+  outline-offset: 2px !important;
+}
+
+/* Empty search state */
+.epr-body:has(.epr-emoji-category-label:empty) .epr-emoji-category__label {
+  color: var(--text-muted) !important;
+  font-size: 13px !important;
+  text-transform: none !important;
+}
+
+/* Hide preview footer for compact design */
+.epr-footer {
+  display: none !important;
+}
+
+/* Dark theme overrides (applied when .epr-dark-theme class present) */
+.epr-dark-theme {
+  --epr-bg-color: var(--bg-primary) !important;
+  --epr-picker-border-color: var(--border-primary) !important;
+}
+
+/* Animation for open/close */
+@keyframes emojiPickerFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.emoji-picker-wrapper {
+  animation: emojiPickerFadeIn 150ms ease-out;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  FLOATING PORTAL (React Portal wrapper for dropdowns, pickers, etc.)      */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+.floating-portal {
+  animation: emojiPickerFadeIn 150ms ease-out;
+  pointer-events: auto;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -1703,12 +1895,26 @@ body {
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(2px);
   border-radius: calc(var(--radius-lg) - 1px);
   padding: 0 8px;
+  z-index: 2;
+  gap: 6px;
+}
+
+.slack-input-preview-loading .upload-spinner {
+  color: #fff;
+}
+
+.slack-input-preview-loading .upload-progress-text {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .slack-input-preview-remove {
@@ -2225,6 +2431,10 @@ body {
   to {
     transform: rotate(360deg);
   }
+}
+
+.animate-spin {
+  animation: spin 700ms linear infinite;
 }
 
 .slack-file-preview-remove {
@@ -13894,4 +14104,1039 @@ textarea:focus-visible,
 .slack-composer.editing-scheduled {
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+
+/* Canvas editor UI*/
+
+/* Canvas Editor UI - Clean Minimal Design */
+
+.canvas-editor-ui-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+/* ============================================
+   TAB NAVIGATION (Optional - only if tabs prop provided)
+   ============================================ */
+
+.canvas-tab-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  background-color: var(--bg-secondary);
+  min-height: 44px;
+}
+
+.canvas-tabs-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.canvas-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.canvas-tab:hover {
+  color: var(--text-secondary);
+  background-color: var(--bg-hover);
+}
+
+.canvas-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+.canvas-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.canvas-tab-label {
+  white-space: nowrap;
+}
+
+.canvas-tab-add {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.canvas-tab-add:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
+.canvas-topbar-menu {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.canvas-topbar-menu:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* ============================================
+   MAIN EDITOR CONTAINER
+   ============================================ */
+
+.canvas-editor-container {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.canvas-scroll-surface {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.canvas-document-surface {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px 36px;
+  min-height: 100%;
+}
+
+/* Cover strip (when present) */
+.canvas-cover-strip {
+  width: 100vw;
+  height: 160px;
+  margin-left: calc(-50vw + 50%);
+  margin-top: -32px;
+  background-position: center;
+  background-size: cover;
+}
+
+/* ============================================
+   ADD COVER BUTTON
+   ============================================ */
+
+.canvas-add-cover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin-bottom: 12px;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-primary);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.canvas-add-cover-btn.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.canvas-add-cover-btn:hover {
+  border-color: var(--accent-primary);
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.canvas-add-cover-btn svg {
+  flex-shrink: 0;
+  stroke-width: 2.5;
+}
+
+/* ============================================
+   TITLE INPUT
+   ============================================ */
+
+.canvas-title-input {
+  width: 100%;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 12px;
+  padding: 8px 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+.canvas-title-input::placeholder {
+  color: var(--text-muted);
+}
+
+.canvas-title-input:focus {
+  background-color: transparent;
+}
+
+/* ============================================
+   SUBTITLE & TEMPLATE SUGGESTION
+   ============================================ */
+
+.canvas-subtitle {
+  font-size: 16px;
+  color: var(--text-muted);
+  margin: 0 0 12px 0;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.canvas-template-suggestion {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0 0 32px 0;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.canvas-template-link {
+  background: none;
+  border: none;
+  color: var(--accent-primary);
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: 14px;
+  padding: 0;
+  font-weight: 400;
+}
+
+.canvas-template-link:hover {
+  color: var(--accent-primary-hover);
+}
+
+/* ============================================
+   EDITOR CONTENT
+   ============================================ */
+
+.canvas-editor-ui-shell .ProseMirror {
+  outline: none;
+  min-height: 120px;
+}
+
+.canvas-editor-ui-shell .ProseMirror p {
+  margin: 4px 0;
+  line-height: 1.65;
+  font-size: 15px;
+}
+
+.canvas-editor-ui-shell .ProseMirror p:first-child {
+  margin-top: 0;
+}
+
+.canvas-editor-ui-shell .ProseMirror h1 {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 24px 0 8px 0;
+  line-height: 1.3;
+}
+
+.canvas-editor-ui-shell .ProseMirror h2 {
+  font-size: 21px;
+  font-weight: 650;
+  margin: 20px 0 6px 0;
+  line-height: 1.3;
+}
+
+.canvas-editor-ui-shell .ProseMirror h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 16px 0 4px 0;
+  line-height: 1.35;
+}
+
+/* ============================================
+   BOTTOM TOOLBAR - Notion-style full-width bar
+   ============================================ */
+
+/* Full-width fixed toolbar container */
+.canvas-bottom-toolbar-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  pointer-events: none;
+  padding-bottom: 8px;
+}
+
+/* The full-width bar */
+.canvas-bottom-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  background: var(--bg-primary);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.08),
+    0 8px 32px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  transform: translateY(20px);
+  pointer-events: none;
+  transition:
+    opacity 200ms ease,
+    transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.canvas-bottom-toolbar.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Divider between toolbar groups */
+.canvas-toolbar-divider {
+  display: inline-block;
+  width: 1px;
+  height: 20px;
+  background: var(--border-primary);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* Shared toolbar button style */
+.canvas-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    color 150ms ease;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.canvas-toolbar-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.canvas-toolbar-btn.is-active {
+  background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
+  color: var(--accent-primary);
+}
+
+.canvas-toolbar-btn.is-active:hover {
+  background: color-mix(in srgb, var(--accent-primary) 28%, transparent);
+}
+
+.canvas-toolbar-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.canvas-toolbar-btn:disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+/* Plus / Insert toggle button - subtle Notion-style */
+.canvas-toolbar-toggle {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+  transition:
+    background 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.canvas-toolbar-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.canvas-toolbar-toggle.is-active {
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  color: var(--accent-primary);
+  border-color: color-mix(in srgb, var(--accent-primary) 30%, transparent);
+}
+
+/* AA label (Heading shortcut) */
+.canvas-toolbar-aa-label {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: -0.02em;
+}
+
+/* ============================================
+   LOADING STATE
+   ============================================ */
+
+.canvas-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.canvas-loading span {
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--border-primary);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: canvas-spin 0.8s linear infinite;
+  margin-right: 12px;
+}
+
+@keyframes canvas-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 768px) {
+  .canvas-document-surface {
+    padding: 20px 16px;
+  }
+
+  .canvas-cover-strip {
+    height: 120px;
+    margin: -20px -16px 14px -16px;
+  }
+
+  .canvas-title-input {
+    font-size: 24px;
+  }
+
+  .canvas-tab {
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+
+  .canvas-bottom-toolbar {
+    gap: 2px;
+    padding: 5px 6px;
+    bottom: 12px;
+  }
+
+  .canvas-toolbar-btn {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+@media (max-width: 480px) {
+  .canvas-document-surface {
+    padding: 16px 12px;
+  }
+
+  .canvas-title-input {
+    font-size: 20px;
+  }
+
+  .canvas-subtitle {
+    font-size: 14px;
+  }
+
+  .canvas-tab-label {
+    display: none;
+  }
+
+  .canvas-tab {
+    padding: 6px 4px;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* ENHANCED CANVAS INSERT MENU                                               */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+.canvas-insert-menu-enhanced {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 340px;
+  max-height: 520px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.06);
+  animation: menuOpen 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  z-index: 1005;
+  overflow: hidden;
+}
+
+/* Search Bar */
+.canvas-insert-menu-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-primary);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.canvas-insert-menu-search-bar .search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.canvas-insert-menu-search-bar .search-input {
+  flex: 1;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+
+.canvas-insert-menu-search-bar .search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.canvas-insert-menu-search-bar .search-input:focus {
+  background: var(--bg-hover);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
+}
+
+.canvas-insert-menu-search-bar .search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 140ms ease, color 140ms ease;
+  flex-shrink: 0;
+}
+
+.canvas-insert-menu-search-bar .search-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Menu Content Container */
+.canvas-insert-menu-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 0;
+}
+
+/* Group Container */
+.menu-group {
+  padding: 0;
+}
+
+.menu-group + .menu-group {
+  padding-top: 4px;
+}
+
+/* Group Label */
+.menu-group-label {
+  padding: 10px 14px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+}
+
+/* Menu Item Wrapper */
+.canvas-menu-item-wrapper-enhanced {
+  position: relative;
+  padding: 0 8px;
+  margin-bottom: 2px;
+}
+
+.canvas-menu-item-wrapper-enhanced.has-submenu {
+  position: relative;
+}
+
+/* Menu Item Button */
+.canvas-menu-item-enhanced {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 50px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: all 80ms ease;
+  font-family: inherit;
+  border-radius: 8px;
+  position: relative;
+}
+
+.canvas-menu-item-enhanced:hover,
+.canvas-menu-item-enhanced.is-active {
+  background: var(--bg-hover);
+}
+
+.canvas-menu-item-enhanced.is-active {
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+
+/* Icon Background */
+.menu-item-icon-bg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  color: var(--accent-primary);
+  flex-shrink: 0;
+  transition: all 140ms ease;
+}
+
+.canvas-menu-item-enhanced:hover .menu-item-icon-bg,
+.canvas-menu-item-enhanced.is-active .menu-item-icon-bg {
+  background: color-mix(in srgb, var(--accent-primary) 22%, transparent);
+  transform: scale(1.05);
+}
+
+.menu-item-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* Menu Item Content */
+.menu-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.menu-item-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.menu-item-description {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+/* Arrow Icon for Submenu */
+.menu-item-arrow {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: color 140ms ease, transform 140ms ease;
+}
+
+.canvas-menu-item-enhanced:hover .menu-item-arrow,
+.canvas-menu-item-enhanced.is-active .menu-item-arrow {
+  color: var(--text-primary);
+  transform: translateX(2px);
+}
+
+/* Shortcut Badge */
+.menu-item-shortcut {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  background: var(--bg-secondary);
+  padding: 4px 8px;
+  border-radius: 5px;
+  margin-left: auto;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.3px;
+}
+
+.canvas-menu-item-enhanced:hover .menu-item-shortcut {
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  color: var(--accent-primary);
+}
+
+/* Empty State */
+.menu-empty-state {
+  padding: 48px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.menu-empty-state p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.menu-empty-state span {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Scrollbar Styling */
+.canvas-insert-menu-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.canvas-insert-menu-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.canvas-insert-menu-content::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 3px;
+}
+
+.canvas-insert-menu-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Animation */
+@keyframes menuOpen {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+  .canvas-insert-menu-enhanced {
+    width: calc(100vw - 24px);
+    max-height: 60vh;
+  }
+
+  .canvas-menu-item-enhanced {
+    min-height: 48px;
+    padding: 6px 8px;
+    gap: 10px;
+  }
+
+  .menu-item-icon-bg {
+    width: 34px;
+    height: 34px;
+  }
+
+  .menu-item-label {
+    font-size: 13px;
+  }
+
+  .menu-item-description {
+    font-size: 11px;
+  }
+
+  .menu-item-shortcut {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+}
+
+/* Dark Mode Support (if using CSS variables) */
+@media (prefers-color-scheme: dark) {
+  .canvas-insert-menu-enhanced {
+    background: var(--bg-primary);
+    border-color: var(--border-primary);
+  }
+
+  .menu-item-icon-bg {
+    background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  }
+}
+
+/* Light Mode Specific */
+@media (prefers-color-scheme: light) {
+  .menu-item-icon-bg {
+    background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  }
+
+  .canvas-menu-item-enhanced:hover .menu-item-icon-bg {
+    background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CANVAS ENTERPRISE OVERRIDES
+   The old canvas CSS in this file conflicts with canvas-enterprise.css.
+   These overrides ensure the enterprise styles win.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Neutralize old ProseMirror typography that has higher specificity */
+.canvas-editor-ui-shell .ProseMirror h1 {
+  font-size: 36px !important;
+  line-height: 1.25 !important;
+  font-weight: 700 !important;
+  margin: 40px 0 12px !important;
+}
+
+.canvas-editor-ui-shell .ProseMirror h2 {
+  font-size: 26px !important;
+  line-height: 1.3 !important;
+  font-weight: 650 !important;
+  margin: 32px 0 10px !important;
+}
+
+.canvas-editor-ui-shell .ProseMirror h3 {
+  font-size: 20px !important;
+  line-height: 1.35 !important;
+  font-weight: 600 !important;
+  margin: 24px 0 8px !important;
+}
+
+.canvas-editor-ui-shell .ProseMirror p {
+  font-size: 16px !important;
+  line-height: 1.75 !important;
+  margin: 4px 0 !important;
+}
+
+.canvas-editor-ui-shell .ProseMirror {
+  min-height: 460px !important;
+  font-size: 16px !important;
+  line-height: 1.75 !important;
+}
+
+/* Override old document surface max-width and padding */
+/* .canvas-document-surface {
+  max-width: none !important;
+  padding: 48px 48px 180px !important;
+} */
+
+/* Override old cover strip rules */
+/* .canvas-cover-strip {
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-top: 0 !important;
+  height: 240px !important;
+} */
+
+/* Override old scroll surface */
+.canvas-scroll-surface {
+  overflow: auto !important;
+}
+
+/* Override old title input */
+.canvas-title-input {
+  font-size: 48px !important;
+  line-height: 1.15 !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.025em !important;
+  padding: 4px 0 !important;
+  margin: 0 0 12px !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+}
+
+/* Disable old toolbar styles — let canvas-enterprise.css win */
+.canvas-bottom-toolbar-container {
+  padding-bottom: 20px !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+
+.canvas-bottom-toolbar {
+  border-radius: 999px !important;
+  height: 52px !important;
+  padding: 6px 12px !important;
+  gap: 3px !important;
+  background: color-mix(in srgb, var(--bg-primary) 75%, rgba(255,255,255,0.05)) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.4) !important;
+  backdrop-filter: blur(24px) saturate(1.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  transform: translateY(16px) scale(0.96) !important;
+}
+
+.canvas-bottom-toolbar.is-visible {
+  transform: translateY(0) scale(1) !important;
+}
+
+.canvas-toolbar-divider {
+  height: 24px !important;
+  background: color-mix(in srgb, var(--border-primary) 60%, transparent) !important;
+}
+
+.canvas-toolbar-btn {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 8px !important;
+}
+
+.canvas-toolbar-toggle {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 50% !important;
+}
+
+.canvas-loading {
+  /* enterprise styles are in canvas-enterprise.css */
+}
+
+/* Override old conflicting responsive rules — match enterprise breakpoints */
+@media (max-width: 840px) {
+  .canvas-title-input {
+    font-size: 28px !important;
+  }
+  .canvas-cover-strip {
+    height: 200px !important;
+    width: calc(100% + 48px) !important;
+    margin-left: -24px !important;
+    margin-right: -24px !important;
+    margin-top: -28px !important;
+  }
+  .canvas-document-surface {
+    width: calc(100% - 28px) !important;
+    padding: 28px 24px 160px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .canvas-title-input {
+    font-size: 24px !important;
+  }
+  .canvas-cover-strip {
+    height: 180px !important;
+    width: calc(100% + 32px) !important;
+    margin-left: -16px !important;
+    margin-right: -16px !important;
+    margin-top: -20px !important;
+    margin-bottom: 14px !important;
+  }
+  .canvas-document-surface {
+    padding: 20px 16px 140px !important;
+    width: calc(100% - 20px) !important;
+  }
+  .canvas-bottom-toolbar {
+    height: 46px !important;
+    padding: 5px 8px !important;
+    gap: 2px !important;
+  }
+  .canvas-toolbar-btn {
+    width: 30px !important;
+    height: 30px !important;
+  }
+  .canvas-toolbar-toggle {
+    width: 32px !important;
+    height: 32px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .canvas-title-input {
+    font-size: 22px !important;
+  }
+  .canvas-document-surface {
+    padding: 16px 12px 120px !important;
+  }
+  .canvas-bottom-toolbar {
+    padding: 4px 6px !important;
+    gap: 1px !important;
+    height: 42px !important;
+  }
+  .canvas-toolbar-btn {
+    width: 28px !important;
+    height: 28px !important;
+  }
+  .canvas-toolbar-toggle {
+    width: 30px !important;
+    height: 30px !important;
+  }
 }

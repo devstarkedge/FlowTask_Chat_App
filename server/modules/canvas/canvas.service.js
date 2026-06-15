@@ -224,7 +224,7 @@ class CanvasService {
   }
 
   // ── Get Canvas by ID with Blocks & Comments
-  async getCanvasById(canvasId, workspaceId) {
+  async getCanvasById(canvasId, workspaceId, userId) {
     if (!workspaceId) {
       throw new ValidationError("workspaceId is required");
     }
@@ -232,6 +232,11 @@ class CanvasService {
     const canvas = await canvasRepository.findById(canvasId, workspaceId);
     if (!canvas) {
       throw new NotFoundError("Canvas not found");
+    }
+
+    // Track view count (non-blocking)
+    if (userId) {
+      this.incrementViewCount(canvasId, userId).catch(() => {});
     }
 
     const blocks = await CanvasBlock.find({ canvasId }).sort({ order: 1 });
@@ -459,47 +464,47 @@ class CanvasService {
   }
 
   // ── Delete Canvas and all dependencies
-  // async deleteCanvas(canvasId, userId, workspaceId) {
-  //   if (!workspaceId) {
-  //     throw new ValidationError("workspaceId is required");
-  //   }
+  async deleteCanvas(canvasId, userId, workspaceId) {
+    if (!workspaceId) {
+      throw new ValidationError("workspaceId is required");
+    }
 
-  //   const canvas = await canvasRepository.findById(canvasId, workspaceId);
-  //   if (!canvas) {
-  //     throw new NotFoundError("Canvas not found");
-  //   }
+    const canvas = await canvasRepository.findById(canvasId, workspaceId);
+    if (!canvas) {
+      throw new NotFoundError("Canvas not found");
+    }
 
-  //   await canvasRepository.delete(canvasId);
-  //   await CanvasBlock.deleteMany({ canvasId });
-  //   await CanvasComment.deleteMany({ canvasId });
-  //   await CanvasHistory.deleteMany({ canvasId });
+    await canvasRepository.delete(canvasId);
+    await CanvasBlock.deleteMany({ canvasId });
+    await CanvasComment.deleteMany({ canvasId });
+    await CanvasHistory.deleteMany({ canvasId });
 
-  //   // Broadcast deletion
-  //   emitToChannel(
-  //     canvas.channelId.toString(),
-  //     "canvas:deleted",
-  //     {
-  //       canvasId,
-  //       channelId: canvas.channelId,
-  //     },
-  //     workspaceId
-  //   );
+    // Broadcast deletion
+    emitToChannel(
+      canvas.channelId.toString(),
+      "canvas:deleted",
+      {
+        canvasId,
+        channelId: canvas.channelId,
+      },
+      workspaceId
+    );
 
-  //   // Log deletion activity
-  //   await this.logActivity(
-  //     workspaceId,
-  //     canvas.channelId,
-  //     userId,
-  //     `deleted the Canvas "${canvas.title}"`,
-  //     "CANVAS_DELETED",
-  //     canvas._id,
-  //     canvas.title
-  //   );
+    // Log deletion activity
+    await this.logActivity(
+      workspaceId,
+      canvas.channelId,
+      userId,
+      `deleted the Canvas "${canvas.title}"`,
+      "CANVAS_DELETED",
+      canvas._id,
+      canvas.title
+    );
 
-  //   logger.info("[CANVAS] Canvas deleted successfully", { canvasId, workspaceId });
+    logger.info("[CANVAS] Canvas deleted successfully", { canvasId, workspaceId });
 
-  //   return { success: true };
-  // }
+    return { success: true };
+  }
 
   // ── Duplicate Canvas
   async duplicateCanvas(canvasId, userId, workspaceId) {
@@ -665,6 +670,78 @@ class CanvasService {
     }
 
     return canvasRepository.findAllByChannel(channelId, workspaceId);
+  }
+
+  // ── Toggle Save for Later
+  async toggleSaveForLater(canvasId, userId) {
+    const canvas = await canvasRepository.findById(canvasId);
+    if (!canvas) {
+      throw new NotFoundError("Canvas not found");
+    }
+
+    const userIdStr = userId.toString();
+    const alreadySaved = canvas.savedForLaterBy?.some(id => id.toString() === userIdStr);
+
+    if (alreadySaved) {
+      canvas.savedForLaterBy = canvas.savedForLaterBy.filter(id => id.toString() !== userIdStr);
+    } else {
+      if (!canvas.savedForLaterBy) canvas.savedForLaterBy = [];
+      canvas.savedForLaterBy.push(userId);
+      canvas.savedForLaterStatus = "in_progress";
+    }
+    await canvas.save();
+    return { saved: !alreadySaved };
+  }
+
+  // ── Update Saved Status
+  async updateSavedStatus(canvasId, userId, status) {
+    const canvas = await canvasRepository.findById(canvasId);
+    if (!canvas) {
+      throw new NotFoundError("Canvas not found");
+    }
+
+    const userIdStr = userId.toString();
+    const isSaved = canvas.savedForLaterBy?.some(id => id.toString() === userIdStr);
+    if (!isSaved) {
+      throw new ValidationError("Canvas is not saved for later");
+    }
+
+    canvas.savedForLaterStatus = status;
+    await canvas.save();
+    return canvas;
+  }
+
+  // ── Get Saved Canvases
+  async getSavedCanvases(userId, workspaceId, status) {
+    const query = {
+      workspaceId,
+      savedForLaterBy: userId,
+    };
+    if (status) {
+      query.savedForLaterStatus = status;
+    }
+    const Canvas = (await import("./canvas.model.js")).default;
+    return Canvas.find(query).sort({ updatedAt: -1 }).lean();
+  }
+
+  // ── Increment View Count
+  async incrementViewCount(canvasId, userId) {
+    try {
+      const Canvas = (await import("./canvas.model.js")).default;
+      const canvas = await Canvas.findById(canvasId);
+      if (!canvas) return;
+
+      const userIdStr = userId.toString();
+      const alreadyViewed = canvas.viewedBy?.some(id => id.toString() === userIdStr);
+      if (!alreadyViewed) {
+        if (!canvas.viewedBy) canvas.viewedBy = [];
+        canvas.viewedBy.push(userId);
+        canvas.viewCount = (canvas.viewCount || 0) + 1;
+        await canvas.save();
+      }
+    } catch (err) {
+      logger.warn('[CANVAS] incrementViewCount failed', { error: err.message });
+    }
   }
 }
 

@@ -1,7 +1,8 @@
 import { createPortal } from "react-dom";
 import { useDownloadStore } from "../../stores/downloadStore";
 import { useEffect, useState, useRef } from "react";
-import { fileAPI } from "../../services/api";
+import { fileAPI, messageAPI } from "../../services/api";
+import { getFileUrl } from "../../utils/fileProxy";
 import {
   X,
   Download,
@@ -15,10 +16,20 @@ import {
   Clock,
   FolderOpen,
   RefreshCw,
-  ChevronDown,
+  Eye,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import {
+  getChannelPath,
+  getDMPath,
+  getThreadPath,
+} from "../../utils/chatRoutes";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useChatStore } from "../../stores/chatStore";
 import "./custom-css/DownloadModal.css";
 import { openPreview } from "../../services/previewService";
+import toast from "react-hot-toast";
+import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 
 /* ─────────────────────────────────────────────────────────────────────────
    HELPERS
@@ -119,11 +130,11 @@ function FileIcon({ name, mime, size = 16, thumbnailUrl, fileUrl }) {
     return (
       <div
         className="dl-file-icon"
-        style={{ 
-          background: bg, 
+        style={{
+          background: bg,
           borderColor: border,
           padding: 0,
-          overflow: "hidden"
+          overflow: "hidden",
         }}
       >
         <img
@@ -132,11 +143,16 @@ function FileIcon({ name, mime, size = 16, thumbnailUrl, fileUrl }) {
           style={{
             width: "100%",
             height: "100%",
-            objectFit: "cover"
+            objectFit: "cover",
           }}
           onError={() => {
             // If we were showing the thumbnail and a fileUrl exists, try that next
-            if (currentSrc && thumbnailUrl && currentSrc === thumbnailUrl && fileUrl) {
+            if (
+              currentSrc &&
+              thumbnailUrl &&
+              currentSrc === thumbnailUrl &&
+              fileUrl
+            ) {
               setCurrentSrc(fileUrl);
               return;
             }
@@ -147,7 +163,7 @@ function FileIcon({ name, mime, size = 16, thumbnailUrl, fileUrl }) {
       </div>
     );
   }
-  
+
   return (
     <div
       className="dl-file-icon"
@@ -216,13 +232,19 @@ function EmptyState({ icon: Icon, title, sub }) {
 ───────────────────────────────────────────────────────────────────────── */
 export default function DownloadsModal({ isOpen, onClose, channelId }) {
   const downloads = useDownloadStore((state) => state.downloads);
+  const removeDownload = useDownloadStore((s) => s.removeDownload);
+  const { confirm: confirmDelete } = useDeleteConfirm();
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
   const overlayRef = useRef(null);
-  const removeDownload = useDownloadStore((s) => s.removeDownload);
-  
+  const navigate = useNavigate();
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+
+  // Chat store actions for open-in-chat navigation
+  const setScrollToMessageId = useChatStore((s) => s.setScrollToMessageId);
+  const setHighlightMessageId = useChatStore((s) => s.setHighlightMessageId);
 
   const fetchFiles = async () => {
     // const [activeTab, setActiveTab] = useState("recent");
@@ -230,16 +252,32 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
     setLoading(true);
     try {
       const res = await fileAPI.listByChannel(channelId, { limit: 50 });
-      setFiles(res.data.data.items || []);
-    } catch {
-      /* silent */
+      const items = res.data.data.items || [];
+      setFiles(items);
+    } catch (err) {
+      console.error("[DownloadsModal] Failed to fetch files:", err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isOpen) fetchFiles();
+    if (isOpen) {
+      fetchFiles();
+      // Debug: log downloads to see what data we have
+      console.log(
+        "[DownloadsModal] Current downloads:",
+        downloads.map((d) => ({
+          id: d.id,
+          name: d.name,
+          channelId: d.channelId,
+          messageId: d.messageId,
+          contextType: d.contextType,
+          workspaceId: d.workspaceId,
+          status: d.status,
+        })),
+      );
+    }
   }, [channelId, isOpen]);
 
   /* close on backdrop click */
@@ -265,9 +303,133 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
     setRefreshing(false);
   };
 
+  /* ── Open in Chat: navigate to original message and highlight it ── */
+  const handleOpenInChat = async (file) => {
+    if (!file || !file.channelId || !file.messageId) {
+      console.warn(
+        "[DownloadsModal] Missing channelId or messageId, cannot navigate",
+      );
+      toast.error(
+        "Original message not found. This download may be from an older version.",
+      );
+      return;
+    }
+
+    const ws = file.workspaceId || activeWorkspaceId;
+
+    // Check if message is in current store
+    const messages =
+      useChatStore.getState().messagesByChannel[file.channelId] || [];
+    const messageInStore = messages.find((m) => m._id === file.messageId);
+
+    // If not in store, fetch it from backend
+    if (!messageInStore) {
+      try {
+        console.log(
+          "[DownloadsModal] Message not in cache, fetching from backend...",
+        );
+        const loadingToast = toast.loading("Loading original message...");
+
+        const { data } = await messageAPI.around(
+          file.channelId,
+          file.messageId,
+          { limit: 24 },
+        );
+        const fetchedMessages = data?.data?.items || [];
+
+        toast.dismiss(loadingToast);
+
+        if (fetchedMessages.length === 0) {
+          toast.error("Original message not found");
+          return;
+        }
+
+        console.log(
+          "[DownloadsModal] Successfully fetched message from backend",
+        );
+      } catch (err) {
+        console.error("[DownloadsModal] Failed to fetch message:", err);
+        toast.error("Failed to load original message");
+        return;
+      }
+    }
+
+    let path;
+
+    // Determine conversation type from stored metadata
+    if (file.contextType === "dm") {
+      path = getDMPath(ws, file.channelId, file.messageId);
+    } else if (file.contextType === "thread") {
+      path = getThreadPath(ws, file.channelId, file.channelId, file.messageId);
+    } else {
+      // Default to channel path (covers channels and unknown types)
+      path = getChannelPath(ws, file.channelId, file.messageId);
+    }
+
+    // Close modal FIRST, then navigate
+    // The ChatLayout will handle the messageId route and auto-highlight
+    onClose();
+
+    // Use setTimeout to ensure modal closes before navigation
+    setTimeout(() => {
+      navigate(path);
+    }, 50);
+  };
+
+  /* ── Preview: open file/image preview modal ── */
+  const handlePreview = (file) => {
+    if (!file) return;
+    const url = getFileUrl(file) || file.blobUrl || file.url || file.secureUrl;
+    if (!url) return;
+
+    const preview = {
+      url,
+      blobUrl: file.blobUrl || null,
+      remoteUrl: file.url || file.secureUrl || null,
+      originalName: file.name,
+      fileName: file.name,
+      mimeType: file.type,
+      fileSize: file.size,
+      _id: file.assetId || file._id,
+    };
+
+    const all = downloads
+      .slice()
+      .reverse()
+      .map((f) => ({
+        url: getFileUrl(f) || f.blobUrl || f.url || f.secureUrl,
+        blobUrl: f.blobUrl || null,
+        remoteUrl: f.url || f.secureUrl || null,
+        originalName: f.name,
+        fileName: f.name,
+        mimeType: f.type,
+        fileSize: f.size,
+        _id: f.assetId || f._id,
+      }));
+
+    openPreview(preview, all);
+  };
+
+  /* ── Delete: show confirmation dialog then remove ── */
+  const handleDeleteRequest = async (file) => {
+    const isImage = file.type && file.type.startsWith("image/");
+
+    try {
+      removeDownload(file.id);
+      toast.success(`${isImage ? "Image" : "File"} removed from downloads`, {
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error("Failed to remove download:", error);
+      toast.error(`Failed to remove ${isImage ? "image" : "file"}`, {
+        duration: 5000,
+      });
+    }
+  };
+
   const handleOpenFile = (file) => {
     if (!file) return;
-    const url = file.blobUrl || file.url || file.secureUrl;
+    const url = getFileUrl(file) || file.blobUrl || file.url || file.secureUrl;
     if (!url) return;
     const preview = {
       url,
@@ -277,22 +439,24 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
       fileName: file.name,
       mimeType: file.type,
       fileSize: file.size,
+      _id: file.assetId || file._id,
     };
     const all = downloads
       .slice()
       .reverse()
       .map((f) => ({
-        url: f.blobUrl || f.url || f.secureUrl,
+        url: getFileUrl(f) || f.blobUrl || f.url || f.secureUrl,
         blobUrl: f.blobUrl || null,
         remoteUrl: f.url || f.secureUrl || null,
         originalName: f.name,
         fileName: f.name,
         mimeType: f.type,
         fileSize: f.size,
+        _id: f.assetId || f._id,
       }));
     openPreview(preview, all);
   };
-  
+
   /* bulk download trigger */
   const triggerDownload = async (url, name) => {
     try {
@@ -360,69 +524,116 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
                 {downloads
                   .slice()
                   .reverse()
-                  .map((file, i) => (
-                    <div
-                      key={file.id || i}
-                      className="dl-row"
-                      style={{ animationDelay: `${i * 0.04}s` }}
-                    >
-                      <FileIcon 
-                        name={file.name} 
-                        mime={file.type}
-                        thumbnailUrl={file.thumbnailUrl}
-                        fileUrl={file.blobUrl || file.url || file.secureUrl}
-                      />
+                  .map((file, i) => {
+                    // Create a truly unique key using multiple identifiers
+                    const uniqueKey = file.id
+                      ? `${file.id}-${i}`
+                      : `download-${file.assetId || file.url}-${i}-${Date.now()}`;
 
-                      {/* FILE INFO */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p className="dl-file-name">
-                          {file.name || "Unnamed file"}
-                        </p>
-
-                        {/* STATUS TEXT */}
-                        {file.status === "completed" ? (
-                          <div
-                            className="dl-file-meta"
-                            style={{ cursor: "pointer", color: "#3b82f6" }}
-                            onClick={() => handleOpenFile(file)}
-                          ></div>
-                        ) : file.status === "downloading" ? (
-                          <div className="dl-file-meta">
-                            Downloading... {file.progress || 0}%
-                          </div>
-                        ) : (
-                          <div className="dl-file-meta">Failed</div>
-                        )}
-                      </div>
-
-                      {/* ACTION BUTTONS */}
-                      <div style={{ display: "flex", gap: 6 }}>
-                        {file.status === "completed" && (
-                          <button
-                            className="dl-action-btn done"
-                            onClick={() => handleOpenFile(file)}
-                            title="Open file"
-                          >
-                            <FolderOpen size={14} />
-                          </button>
-                        )}
-
-                        {file.status === "downloading" && (
-                          <button className="dl-action-btn downloading">
-                            <RefreshCw size={14} />
-                          </button>
-                        )}
-
-                        <button
-                          className="dl-action-btn"
-                          onClick={() => removeDownload(file.id)}
-                          title="Remove"
+                    return (
+                      <div
+                        key={uniqueKey}
+                        className="dl-row"
+                        style={{ animationDelay: `${i * 0.04}s` }}
+                      >
+                        {/* FILE THUMBNAIL / ICON - Click to preview */}
+                        <div
+                          className="dl-file-icon-wrapper"
+                          onClick={() => handlePreview(file)}
+                          title="Preview"
+                          style={{ cursor: "pointer" }}
                         >
-                          <X size={14} />
-                        </button>
+                          <FileIcon
+                            name={file.name}
+                            mime={file.type}
+                            thumbnailUrl={file.thumbnailUrl}
+                            fileUrl={
+                              file.blobUrl ||
+                              file.url ||
+                              file.secureUrl
+                            }
+                          />
+                        </div>
+
+                        {/* FILE INFO */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p className="dl-file-name">
+                            {file.name || "Unnamed file"}
+                          </p>
+
+                          {/* STATUS TEXT */}
+                          {file.status === "completed" ? (
+                            <div
+                              className="dl-file-meta"
+                              style={{ cursor: "pointer", color: "#3b82f6" }}
+                              onClick={() => handlePreview(file)}
+                            ></div>
+                          ) : file.status === "downloading" ? (
+                            <div className="dl-file-meta">
+                              Downloading... {file.progress || 0}%
+                            </div>
+                          ) : (
+                            <div className="dl-file-meta">Failed</div>
+                          )}
+                        </div>
+
+                        {/* ACTION BUTTONS */}
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {file.status === "completed" && (
+                            <>
+                              {/* Open in Chat button - always show, but disable if missing navigation data */}
+                              <button
+                                className="dl-action-btn"
+                                title={
+                                  file.channelId && file.messageId
+                                    ? "Open in Chat"
+                                    : "Original message not found"
+                                }
+                                aria-label="Open in Chat"
+                                disabled={!file.channelId || !file.messageId}
+                                style={{
+                                  opacity:
+                                    !file.channelId || !file.messageId
+                                      ? 0.4
+                                      : 1,
+                                  cursor:
+                                    !file.channelId || !file.messageId
+                                      ? "not-allowed"
+                                      : "pointer",
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (file.channelId && file.messageId) {
+                                    handleOpenInChat(file);
+                                  }
+                                }}
+                              >
+                                <FolderOpen size={14} />
+                              </button>
+                            </>
+                          )}
+
+                          {file.status === "downloading" && (
+                            <button
+                              className="dl-action-btn downloading"
+                              aria-label="Downloading"
+                            >
+                              <RefreshCw size={14} />
+                            </button>
+                          )}
+
+                          {/* Delete button */}
+                          <button
+                            className="dl-action-btn"
+                            onClick={() => removeDownload(file.id)}
+                            title="Remove"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </>
             )}
           </div>

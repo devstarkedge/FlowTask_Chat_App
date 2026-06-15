@@ -287,6 +287,10 @@ export async function initializeSocket(httpServer, corsOptions) {
     // Personal room (workspace-scoped)
     const userRoom = buildRoomName(wsId, 'user', userId);
     socket.join(userRoom);
+    
+    // Workspace-scoped room for workspace-wide broadcasts
+    const workspaceRoom = `ws:${wsId}:workspace`;
+    socket.join(workspaceRoom);
 
     // Department rooms
     for (const deptId of user.departmentIds) {
@@ -559,6 +563,10 @@ export async function initializeSocket(httpServer, corsOptions) {
         // Re-join rooms for new workspace
         const newUserRoom = buildRoomName(newWorkspaceId, 'user', userId);
         socket.join(newUserRoom);
+        
+        // Join workspace-scoped room for workspace-wide broadcasts
+        const workspaceRoom = `ws:${newWorkspaceId}:workspace`;
+        socket.join(workspaceRoom);
 
         for (const deptId of user.departmentIds) {
           socket.join(buildRoomName(newWorkspaceId, 'dept', deptId));
@@ -912,6 +920,19 @@ export function emitToAll(event, data) {
   }
 
   io.emit(event, data);
+}
+
+/**
+ * Emit event to all sockets in a workspace room.
+ * Used for broadcasting events to all members of a workspace.
+ * @param {string} workspaceId
+ * @param {string} event
+ * @param {object} data
+ */
+export function emitToWorkspace(workspaceId, event, data) {
+  if (!io || !workspaceId) return;
+  const room = `ws:${workspaceId}:workspace`;
+  io.to(room).emit(event, data);
 }
 
 /**

@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import EmojiPicker from "./EmojiPicker";
+import EmojiPickerPortal from "./EmojiPickerPortal";
 import MentionDropdown from "./MentionDropdown";
 import RichTextEditor from "./RichTextEditor";
 import ScheduleMessageModal from "./ScheduleMessageModal";
@@ -197,6 +197,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   const fileInputRef = useRef(null);
   const containerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const emojiButtonRef = useRef(null);
   // Ref mirror of pendingFiles so useDraftAutoSave always reads the latest value
   // without needing pendingFiles in its dependency array
   const pendingFilesRef = useRef(pendingFiles);
@@ -855,15 +856,18 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
                       </span>
                     )}
                   </div>
-                  {/* Upload progress overlay */}
+                  {/* Upload spinner overlay */}
                   {file.uploading && (
                     <div className="slack-input-preview-loading">
-                      <div className="slack-upload-progress">
-                        <div
-                          className="slack-upload-progress-bar"
-                          style={{ width: `${file.progress || 0}%` }}
-                        />
-                      </div>
+                      <Loader2
+                        size={24}
+                        className="animate-spin upload-spinner"
+                      />
+                      {typeof file.progress === "number" && file.progress > 0 && (
+                        <span className="upload-progress-text">
+                          {file.progress}%
+                        </span>
+                      )}
                     </div>
                   )}
                   {/* Remove button */}
@@ -905,7 +909,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
               active={showToolbar}
               size={16}
             />
-            <div className="relative">
+            <span ref={emojiButtonRef}>
               <ToolbarButton
                 icon={Smile}
                 title="Emoji"
@@ -913,14 +917,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
                 active={showEmoji}
                 size={18}
               />
-              {showEmoji && (
-                <EmojiPicker
-                  onSelect={insertEmoji}
-                  onClose={() => setShowEmoji(false)}
-                  position="top"
-                />
-              )}
-            </div>
+            </span>
             <ToolbarButton
               icon={AtSign}
               title="Mention someone"
@@ -1013,6 +1010,16 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
         className="hidden"
         onChange={handleFileSelect}
         accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/x-msvideo,video/webm,video/mpeg,audio/mpeg,audio/wav,audio/ogg,audio/flac,audio/aac,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv,text/markdown,text/html,text/css,text/javascript,text/typescript,text/x-python,text/x-java-source,text/x-c,text/x-scss,text/x-sql,text/yaml,text/x-env,application/json,application/xml,application/zip,application/x-rar-compressed,application/x-7z-compressed,application/gzip,application/x-tar"
+      />
+
+      {/* Emoji Picker Portal - renders at body level, never gets clipped */}
+      <EmojiPickerPortal
+        anchorRef={emojiButtonRef}
+        isOpen={showEmoji}
+        onClose={() => setShowEmoji(false)}
+        onSelect={insertEmoji}
+        position="top-start"
+        zIndex={1050}
       />
 
       <p className="slack-composer-hint">

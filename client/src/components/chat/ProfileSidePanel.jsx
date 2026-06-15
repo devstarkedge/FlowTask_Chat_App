@@ -22,32 +22,32 @@ import toast from "react-hot-toast";
 
 const STATUS_META = {
   online: {
-    color: "#22c55e",
+    color: "var(--status-online)",
     label: "Active now",
     bg: "rgba(34,197,94,0.1)",
     border: "rgba(34,197,94,0.25)",
-    text: "#4ade80",
+    text: "var(--accent-green)",
   },
   away: {
-    color: "#eab308",
+    color: "var(--status-away)",
     label: "Away",
     bg: "rgba(234,179,8,0.1)",
     border: "rgba(234,179,8,0.25)",
-    text: "#fbbf24",
+    text: "var(--accent-yellow)",
   },
   dnd: {
-    color: "#ef4444",
+    color: "var(--status-dnd)",
     label: "Do Not Disturb",
     bg: "rgba(239,68,68,0.1)",
     border: "rgba(239,68,68,0.25)",
-    text: "#f87171",
+    text: "var(--accent-red)",
   },
   offline: {
-    color: "#71717a",
+    color: "var(--status-offline)",
     label: "Offline",
     bg: "rgba(113,113,122,0.1)",
     border: "rgba(113,113,122,0.25)",
-    text: "#a1a1aa",
+    text: "var(--text-muted)",
   },
 };
 
@@ -251,7 +251,7 @@ export default function ProfileSidePanel({ user, onClose }) {
                 justifyContent: "center",
                 fontSize: 28,
                 fontWeight: 800,
-                color: "#fff",
+                color: "var(--text-white)",
                 background: "linear-gradient(135deg,#7c3aed,#1264a3)",
               }}
             >
@@ -382,7 +382,7 @@ export default function ProfileSidePanel({ user, onClose }) {
                 borderRadius: 10,
                 border: "none",
                 background: "linear-gradient(135deg,#7c3aed,#1264a3)",
-                color: "#fff",
+                color: "var(--text-white)",
                 fontSize: 13,
                 fontWeight: 700,
                 cursor: sendingDM ? "not-allowed" : "pointer",
@@ -532,7 +532,7 @@ export default function ProfileSidePanel({ user, onClose }) {
                     padding: "1px 7px",
                     borderRadius: 20,
                     background: "rgba(124,58,237,0.18)",
-                    color: "#c4b5fd",
+                    color: "var(--accent-purple)",
                   }}
                 >
                   {role}
@@ -597,7 +597,7 @@ export default function ProfileSidePanel({ user, onClose }) {
                       borderRadius: 8,
                       background: "rgba(124,58,237,0.12)",
                       border: "1px solid rgba(124,58,237,0.25)",
-                      color: "#a78bfa",
+                      color: "var(--accent-purple)",
                       fontWeight: 600,
                     }}
                   >

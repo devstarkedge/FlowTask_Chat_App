@@ -10,6 +10,7 @@ export const useWorkspaceStore = create(
       workspaces: [],
       activeWorkspaceId: null,
       activeWorkspace: null,
+      members: [],
       isLoading: false,
       error: null,
 
@@ -118,6 +119,28 @@ export const useWorkspaceStore = create(
           error: null,
         });
         storage.removeItem('active_workspace_id');
+      },
+
+      // Update member role in store (for socket events, no API call)
+      updateMemberRoleInStore: (userId, newRole) => {
+        set((state) => ({
+          members: state.members.map((m) =>
+            (m.userId?._id === userId || m.userId === userId || m._id === userId)
+              ? { ...m, role: newRole }
+              : m
+          ),
+        }))
+      },
+
+      // Update member profile in store (for socket events, no API call)
+      updateMemberProfile: (userId, updates) => {
+        set((state) => ({
+          members: state.members.map((m) =>
+            (m.userId?._id === userId || m.userId === userId || m._id === userId)
+              ? { ...m, ...updates }
+              : m
+          ),
+        }))
       },
 
       clearError: () => set({ error: null }),

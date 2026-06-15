@@ -32,9 +32,11 @@ import { useLaterStore } from "../../stores/laterStore";
 import SlackFileCard from "./SlackFileCard";
 import { Avatar } from "./MemberAvatarGroup";
 import EmojiPicker from "./EmojiPicker";
+import EmojiPickerPortal from "./EmojiPickerPortal";
 import { sanitizeHtml } from "../../utils/sanitize";
 import toast from "react-hot-toast";
 import { handleDownload } from "../../utils/handleDownload";
+import { getFileUrl, getFileAssetId } from "../../utils/fileProxy";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import RichTextEditor from "./RichTextEditor";
 import FormattingToolbar from "./FormattingToolbar";
@@ -406,6 +408,7 @@ const MessageItem = memo(
 
     const messageRef = useRef(null);
     const moreMenuRef = useRef(null);
+    const emojiButtonRef = useRef(null);
 
     // ── Pinned-highlight animation ───────────────────────────────────────────
     useEffect(() => {
@@ -532,7 +535,17 @@ const MessageItem = memo(
         ? message.fileReferences
             .map((ref) =>
               ref.fileId
-                ? { ...ref.fileId, url: ref.fileId.secureUrl || ref.fileId.url }
+                ? {
+                    ...ref.fileId,
+                    url: getFileUrl(ref.fileId) || ref.fileId.url,
+                    // Include FileReference metadata for navigation
+                    messageId: ref.messageId || message._id,
+                    channelId: ref.channelId || message.channelId,
+                    workspaceId: ref.workspaceId || message.workspaceId,
+                    contextType:
+                      ref.contextType ||
+                      (message.threadId ? "thread" : "channel"),
+                  }
                 : null,
             )
             .filter(Boolean)
@@ -940,11 +953,13 @@ const MessageItem = memo(
                   boxShadow: "var(--shadow-md)",
                 }}
               >
-                <ActionButton
-                  icon={Smile}
-                  title="Add reaction"
-                  onClick={() => setShowReactionPicker(!showReactionPicker)}
-                />
+                <span ref={emojiButtonRef}>
+                  <ActionButton
+                    icon={Smile}
+                    title="Add reaction"
+                    onClick={() => setShowReactionPicker(!showReactionPicker)}
+                  />
+                </span>
                 <ActionButton
                   icon={MessageSquare}
                   title="Reply in thread"
@@ -1021,32 +1036,34 @@ const MessageItem = memo(
                   setShowActions(false);
                 }}
               />
-              <MoreMenuItem
-                icon={Copy}
-                label="Copy text"
-                onClick={async () => {
-                  try {
-                    if (navigator?.clipboard?.writeText)
-                      await navigator.clipboard.writeText(
-                        message.content || "",
-                      );
-                    else {
-                      const ta = document.createElement("textarea");
-                      ta.value = message.content || "";
-                      ta.style.cssText = "position:fixed;opacity:0";
-                      document.body.appendChild(ta);
-                      ta.select();
-                      document.execCommand("copy");
-                      document.body.removeChild(ta);
+              {message.content?.trim() && (
+                <MoreMenuItem
+                  icon={Copy}
+                  label="Copy text"
+                  onClick={async () => {
+                    try {
+                      if (navigator?.clipboard?.writeText) {
+                        await navigator.clipboard.writeText(message.content);
+                      } else {
+                        const ta = document.createElement("textarea");
+                        ta.value = message.content;
+                        ta.style.cssText = "position:fixed;opacity:0";
+                        document.body.appendChild(ta);
+                        ta.select();
+                        document.execCommand("copy");
+                        document.body.removeChild(ta);
+                      }
+
+                      toast.success("Copied to clipboard", { duration: 1500 });
+                    } catch {
+                      toast.error("Copy failed");
                     }
-                    toast.success("Copied to clipboard", { duration: 1500 });
-                  } catch {
-                    toast.error("Copy failed");
-                  }
-                  setShowMoreMenu(false);
-                  setShowActions(false);
-                }}
-              />
+
+                    setShowMoreMenu(false);
+                    setShowActions(false);
+                  }}
+                />
+              )}
               <MoreMenuItem
                 icon={Link2}
                 label="Copy link"
@@ -1075,22 +1092,21 @@ const MessageItem = memo(
             </div>
           )}
 
-          {/* Reaction picker */}
-          {showReactionPicker && (
-            <div className="absolute -top-3 right-5 z-20">
-              <EmojiPicker
-                onSelect={(emoji) => {
-                  handleReaction(emoji);
-                  setShowActions(false);
-                }}
-                onClose={() => {
-                  setShowReactionPicker(false);
-                  setShowActions(false);
-                }}
-                position="top"
-              />
-            </div>
-          )}
+          {/* Reaction picker (Portal-based to prevent clipping) */}
+          <EmojiPickerPortal
+            anchorRef={emojiButtonRef}
+            isOpen={showReactionPicker}
+            onClose={() => {
+              setShowReactionPicker(false);
+              setShowActions(false);
+            }}
+            onSelect={(emoji) => {
+              handleReaction(emoji);
+              setShowActions(false);
+            }}
+            position="top-start"
+            zIndex={1050}
+          />
         </div>
       </div>
     );

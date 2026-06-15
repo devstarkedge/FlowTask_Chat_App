@@ -713,7 +713,7 @@ export default function CreateChannelModal({ onClose }) {
               />
               <div className="ccm-header__ring-inner">
                 {isPublic
-                  ? <Globe size={18} style={{ color: "#34d399" }} />
+                  ? <Globe size={18} style={{ color: "var(--accent-green)" }} />
                   : <Lock size={18} style={{ color: "var(--accent-primary)" }} />}
               </div>
             </div>

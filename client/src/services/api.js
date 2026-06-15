@@ -413,6 +413,9 @@ export const canvasAPI = {
   duplicate: (canvasId) => api.post(`/canvas/duplicate/${canvasId}`),
   getHistory: (canvasId) => api.get(`/canvas/history/${canvasId}`),
   restoreVersion: (canvasId, historyId) => api.post(`/canvas/history/restore/${canvasId}/${historyId}`),
+  toggleSaveForLater: (canvasId) => api.post(`/canvas/save-later/${canvasId}`),
+  updateSavedStatus: (canvasId, status) => api.patch(`/canvas/save-later/${canvasId}/status`, { status }),
+  getSavedCanvases: (channelId, status) => api.get(`/canvas/saved/${channelId}`, { params: { status } }),
 };
 
 export default api;

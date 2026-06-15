@@ -1,7 +1,7 @@
 import DownloadsModal from "./DownloadsModal";
 import { useUIStore } from "../../stores/uiStore";
 
-export default function DownloadsModalWrapper() {
+export default function DownloadsModalWrapper({ channelId }) {
   const isDownloadsOpen = useUIStore((s) => s.isDownloadsOpen);
   const closeDownloads = useUIStore((s) => s.closeDownloads);
 
@@ -9,7 +9,7 @@ export default function DownloadsModalWrapper() {
     <DownloadsModal
       isOpen={isDownloadsOpen}
       onClose={closeDownloads}
-    //   channelId={channelId}
+      channelId={channelId}
     />
   );
 }

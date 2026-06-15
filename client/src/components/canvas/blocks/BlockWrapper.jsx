@@ -76,10 +76,26 @@ export default function BlockWrapper({ node, editor, getPos }) {
       <div className="block-node-left">
         <button
           type="button"
+          className="block-node-add-btn"
+          onClick={() => {
+            try {
+              const pos = typeof getPos === "function" ? getPos() : null;
+              if (typeof pos !== "number") return;
+              const endPos = pos + node.nodeSize;
+              editor.chain().focus().insertContentAt(endPos, { type: "paragraph" }).run();
+            } catch (e) {}
+          }}
+          aria-label="Add block below"
+          title="Add block"
+        >
+          +
+        </button>
+        <button
+          type="button"
           className="block-node-handle"
           onMouseDown={(e) => e.preventDefault()}
           aria-label="Block actions"
-          title="Block actions"
+          title="Drag to move"
         >
           ☰
         </button>

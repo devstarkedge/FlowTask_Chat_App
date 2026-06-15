@@ -10,14 +10,26 @@ export const useDownloadStore = create(
         const url = file.url || file.secureUrl;
         if (!url) return null;
 
-        const exists = get().downloads.find((d) => d.url === url);
-
-        if (exists) {
-          return { ...exists, alreadyExists: true };
+        // Use assetId for deduplication (more reliable than URL)
+        // Fall back to URL if assetId is not available
+        const dedupKey = file.assetId || url;
+        const existing = get().downloads.filter((d) => {
+          const key = d.assetId || d.url;
+          return key === dedupKey;
+        });
+        
+        // Cap duplicates at 4 entries per file
+        if (existing.length >= 4) {
+          return { ...existing[0], alreadyExists: true };
         }
 
+        // Generate unique ID using crypto.randomUUID if available, fallback to timestamp + random
+        const uniqueId = typeof crypto !== 'undefined' && crypto.randomUUID 
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
         const newDownload = {
-          id: Date.now(),
+          id: uniqueId,
           name: file.name || "Unnamed file",
           url,
           size: file.size || "—",
@@ -27,6 +39,12 @@ export const useDownloadStore = create(
           progress: 0,
           blobUrl: null,
           createdAt: new Date().toISOString(),
+          // file origin references to enable "open folder" navigation
+          workspaceId: file.workspaceId || null,
+          channelId: file.channelId || null,
+          messageId: file.messageId || null,
+          assetId: file.assetId || null,
+          contextType: file.contextType || null,
         };
 
         set((state) => ({
@@ -66,6 +84,11 @@ export const useDownloadStore = create(
           progress: d.progress,
           // do not persist blobUrl as it is session-scoped
           blobUrl: null,
+          workspaceId: d.workspaceId || null,
+          channelId: d.channelId || null,
+          messageId: d.messageId || null,
+          assetId: d.assetId || null,
+          contextType: d.contextType || null,
           createdAt: d.createdAt,
         })),
       }),

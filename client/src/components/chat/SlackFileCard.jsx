@@ -15,6 +15,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { handleDownload } from "../../utils/handleDownload";
+import { getFileUrl } from "../../utils/fileProxy";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -26,19 +27,15 @@ function formatFileSize(bytes) {
 }
 
 function getFileKind(mime = "", name = "") {
+  const ext = getFileExtension(name);
   if (mime?.startsWith("image/")) return "image";
   if (mime?.startsWith("video/")) return "video";
   if (mime?.startsWith("audio/")) return "audio";
-  const ext = (name.split(".").pop() || "").toLowerCase();
-  if (/^(zip|rar|7z|tar|gz|gzip)$/.test(ext)) return "archive";
-  if (mime?.includes("zip") || mime?.includes("rar") || mime?.includes("tar") || mime?.includes("gzip") || mime?.includes("7z")) return "archive";
-  if (/^(js|ts|py|java|c|cpp|json|xml|html|css|scss|sql|yaml|env)$/.test(ext)) return "code";
-  if (/^(txt|md)$/.test(ext)) return "text";
-  if (mime === "text/csv" || ext === "csv") return "csv";
   if (mime === "application/pdf" || ext === "pdf") return "pdf";
   if (/^(doc|docx)$/.test(ext) || mime?.includes("word") || mime?.includes("msword")) return "word";
   if (/^(xls|xlsx)$/.test(ext) || mime?.includes("excel") || mime?.includes("spreadsheet")) return "spreadsheet";
   if (/^(ppt|pptx)$/.test(ext) || mime?.includes("presentation") || mime?.includes("powerpoint")) return "presentation";
+  if (ext === 'csv') return 'csv';
   if (mime?.startsWith("text/")) return "code";
   if (mime?.includes("json") || mime?.includes("xml")) return "code";
   return "file";
@@ -63,21 +60,21 @@ function KindIcon({ kind, size = 18 }) {
   if (kind === "image")
     return <ImageIcon size={size} style={{ color: "var(--accent-primary)" }} />;
   if (kind === "video")
-    return <Film size={size} style={{ color: "#a855f7" }} />;
+    return <Film size={size} style={{ color: "var(--accent-purple)" }} />;
   if (kind === "audio")
-    return <Music size={size} style={{ color: "#22c55e" }} />;
+    return <Music size={size} style={{ color: "var(--accent-green)" }} />;
   if (kind === "archive")
-    return <FileArchive size={size} style={{ color: "#ea580c" }} />;
+    return <FileArchive size={size} style={{ color: "var(--accent-orange)" }} />;
   if (kind === "code" || kind === "text")
-    return <FileCode size={size} style={{ color: "#059669" }} />;
+    return <FileCode size={size} style={{ color: "var(--accent-green)" }} />;
   if (kind === "csv" || kind === "spreadsheet")
-    return <Table2 size={size} style={{ color: "#22c55e" }} />;
+    return <Table2 size={size} style={{ color: "var(--accent-green)" }} />;
   if (kind === "pdf")
-    return <FileText size={size} style={{ color: "#ef4444" }} />;
+    return <FileText size={size} style={{ color: "var(--accent-red)" }} />;
   if (kind === "word")
-    return <FileText size={size} style={{ color: "#3b82f6" }} />;
+    return <FileText size={size} style={{ color: "var(--accent-primary)" }} />;
   if (kind === "presentation")
-    return <FileText size={size} style={{ color: "#f59e0b" }} />;
+    return <FileText size={size} style={{ color: "var(--accent-yellow)" }} />;
   return <File size={size} style={{ color: "var(--text-muted)" }} />;
 }
 
@@ -363,99 +360,14 @@ function FileCardGeneric({ file, onOpen, kind }) {
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
-export default function SlackFileCard({
-  file,
-  onOpen,
-  onDownload,
-  compact = false,
-  isSingle = false,
-}) {
+export default function SlackFileCard({ file, onOpen, onDownload, compact = false, isSingle = false }) {
   if (!file) return null;
-
   const name = file.originalName || file.fileName || file.name || "File";
   const mime = file.mimeType || file.type || "";
-  const thumb = file.thumbnailUrl || file.secureUrl || file.url || file.preview || null;
   const kind = getFileKind(mime, name);
 
-  // ── Image: inline thumbnail with click-to-preview ──
-  if (kind === "image" && thumb) {
-    return (
-      <div
-        className="slack-image-attachment group"
-        onClick={() => onOpen?.(file)}
-        style={{
-          position: "relative",
-          cursor: "pointer",
-          borderRadius: "var(--radius-lg)",
-          overflow: "hidden",
-          border: "1px solid var(--border-secondary)",
-          maxWidth: isSingle ? "360px" : "240px",
-          minWidth: "100px",
-          minHeight: "80px",
-          display: "inline-block",
-          backgroundColor: "var(--bg-secondary)",
-          lineHeight: 0,
-        }}
-      >
-        <img
-          src={thumb}
-          alt={name}
-          style={{
-            maxWidth: "100%",
-            height: "auto",
-            maxHeight: "350px",
-            objectFit: "contain",
-            display: "block",
-          }}
-          loading="lazy"
-        />
-        {/* Hover overlay with download button */}
-        <div className="slack-image-attachment-overlay">
-          <button
-            className="slack-file-download"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDownload(file);
-            }}
-            aria-label="Download"
-            title="Download"
-          >
-            <Download size={16} />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Video: inline player ──
-  if (kind === "video") {
-    return <VideoCard file={file} onOpen={onOpen} />;
-  }
-
-  // ── Audio: inline player ──
-  if (kind === "audio") {
-    return <AudioCard file={file} />;
-  }
-
-  // ── Code / Text: inline code preview ──
-  if (kind === "code" || kind === "text") {
-    const url = file.secureUrl || file.url;
-    if (url && !compact) {
-      return <CodePreviewBlock file={file} onOpen={onOpen} />;
-    }
-    return <FileCardGeneric file={file} onOpen={onOpen} kind={kind} />;
-  }
-
-  // ── CSV: inline table preview ──
-  if (kind === "csv") {
-    const url = file.secureUrl || file.url;
-    if (url && !compact) {
-      return <CsvPreviewBlock file={file} onOpen={onOpen} />;
-    }
-    return <FileCardGeneric file={file} onOpen={onOpen} kind={kind} />;
-  }
-
-  // ── PDF / Word / Spreadsheet / Archive / Presentation / Generic: card ──
+  // Render a compact, consistent file row inside message list. Actual
+  // content preview is moved to the FilePreviewModal (opened via onOpen).
   return <FileCardGeneric file={file} onOpen={onOpen} kind={kind} />;
 }
 

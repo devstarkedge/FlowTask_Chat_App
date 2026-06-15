@@ -243,20 +243,33 @@ export const useLaterStore = create((set, get) => ({
   // Real-time socket handler: add or update saved message
   addSavedMessage: (savedMessage) => {
     set((state) => {
-      const index = state.savedMessages.findIndex(m => m._id === savedMessage._id);
+      const incomingMessageId = savedMessage.messageId?._id;
+
+      // Dedup: first try by _id (if non-null), then by messageId._id
+      let index = -1;
+      if (savedMessage._id) {
+        index = state.savedMessages.findIndex(m => m._id === savedMessage._id);
+      }
+      if (index === -1 && incomingMessageId) {
+        index = state.savedMessages.findIndex(m => m.messageId?._id === incomingMessageId);
+      }
+
       let newMessages = [...state.savedMessages];
-      
       if (index !== -1) {
-        // Update existing
-        newMessages[index] = { ...newMessages[index], ...savedMessage };
+        // Update existing (merge, preserving _id if incoming is null)
+        newMessages[index] = {
+          ...newMessages[index],
+          ...savedMessage,
+          _id: savedMessage._id || newMessages[index]._id,
+        };
       } else {
         // Add new
         newMessages = [savedMessage, ...newMessages];
       }
 
       const newIds = new Set(state.savedMessageIds);
-      if (savedMessage.messageId?._id) {
-        newIds.add(savedMessage.messageId._id);
+      if (incomingMessageId) {
+        newIds.add(incomingMessageId);
       }
       return {
         savedMessages: newMessages,

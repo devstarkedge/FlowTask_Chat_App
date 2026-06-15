@@ -4,6 +4,7 @@ export const useCanvasUiStore = create((set, get) => ({
   focused: false,
   hoveredBlockId: null,
   activeSidebar: null,
+  viewingVersion: null, // { historyId, editorName, editorAvatar, timestamp }
   dragging: {
     active: false,
     blockIds: [],
@@ -26,7 +27,9 @@ export const useCanvasUiStore = create((set, get) => ({
   setHoveredBlockId: (hoveredBlockId) => set({ hoveredBlockId }),
   setProviderStatus: (providerStatus) => set({ providerStatus }),
   openSidebar: (activeSidebar) => set({ activeSidebar }),
-  closeSidebar: () => set({ activeSidebar: null }),
+  closeSidebar: () => set({ activeSidebar: null, viewingVersion: null }),
+  setViewingVersion: (viewingVersion) => set({ viewingVersion }),
+  clearViewingVersion: () => set({ viewingVersion: null }),
   setDragging: (dragging) => set({ dragging }),
   showSelectionToolbar: (position) =>
     set({

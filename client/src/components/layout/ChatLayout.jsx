@@ -17,7 +17,9 @@ import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useNotificationStore } from "../../stores/notificationStore";
+import { useLaterStore } from "../../stores/laterStore";
 import { emitPresenceUpdate, getSocket } from "../../services/socket";
+import { conversationPresence } from "../../services/conversationPresence";
 import usePushSubscription from "../../hooks/usePushSubscription";
 import ErrorBoundary from "../ErrorBoundary";
 import WorkspaceSidebar from "./WorkspaceSidebar";
@@ -1166,6 +1168,23 @@ export default function ChatLayout() {
     setShowMobileSidebar(false);
   }, [activeChannelId]);
 
+  // Track conversation presence for unread count management
+  useEffect(() => {
+    if (activeChannelId) {
+      // Determine conversation type from channel
+      const channel = channels.find(c => c._id === activeChannelId);
+      const type = channel?.type === 'dm' ? 'dm' : 'channel';
+      conversationPresence.setActive(activeChannelId, type);
+    } else {
+      conversationPresence.clearActive();
+    }
+    
+    return () => {
+      // Cleanup when component unmounts or activeChannelId changes
+      conversationPresence.clearActive();
+    };
+  }, [activeChannelId, channels]);
+
   const openThread = (thread) => {
     const channelId =
       typeof thread.channelId === "object"
@@ -1209,12 +1228,44 @@ export default function ChatLayout() {
   }, [openFilePreview]);
 
   const handleSaveMessage = useCallback(async (messageId) => {
+    if (!messageId) return;
+
+    const laterStore = useLaterStore.getState();
+    const wasSaved = laterStore.savedMessageIds.has(messageId);
+    const prevIds = new Set(laterStore.savedMessageIds);
+    const prevSavedMessages = [...laterStore.savedMessages];
+
+    // ── Optimistic update: toggle saved state instantly ──
+    const newIds = new Set(prevIds);
+    if (wasSaved) {
+      newIds.delete(messageId);
+      useLaterStore.setState({
+        savedMessageIds: newIds,
+        savedMessages: prevSavedMessages.filter((m) => m.messageId?._id !== messageId),
+      });
+    } else {
+      newIds.add(messageId);
+      useLaterStore.setState({ savedMessageIds: newIds });
+    }
+
     try {
       const { data } = await savedMessageAPI.toggle(messageId);
-      toast.success(data.data?.saved ? "Message saved" : "Message unsaved", {
+      const { saved, savedMessage } = data.data;
+      toast.success(saved ? "Message saved" : "Message unsaved", {
         duration: 1500,
       });
+      // Reconcile full saved-message record from server response
+      if (saved && savedMessage) {
+        useLaterStore.getState().addSavedMessage(savedMessage);
+      } else if (!saved) {
+        useLaterStore.getState().removeSavedMessage(messageId);
+      }
     } catch {
+      // Rollback on failure
+      useLaterStore.setState({
+        savedMessageIds: prevIds,
+        savedMessages: prevSavedMessages,
+      });
       toast.error("Failed to save message");
     }
   }, []);
@@ -1561,14 +1612,16 @@ export default function ChatLayout() {
         </div>
       </div>
       {previewFile && (
-        <FilePreviewModal
-          file={previewFile}
-          files={previewFiles}
-          onClose={() => {
-            setPreviewFile(null);
-            setPreviewFiles([]);
-          }}
-        />
+        <ErrorBoundary name="FilePreviewModal">
+          <FilePreviewModal
+            file={previewFile}
+            files={previewFiles}
+            onClose={() => {
+              setPreviewFile(null);
+              setPreviewFiles([]);
+            }}
+          />
+        </ErrorBoundary>
       )}
       {showShortcuts && (
         <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
@@ -1823,7 +1876,7 @@ function FilesMainPane({ selectedFile, files, onPreview, onDownload, onOpenInCha
                 borderColor: "color-mix(in srgb, #3b82f6 20%, transparent)",
               }}
             >
-              <FolderOpen size={26} style={{ color: "#3b82f6", opacity: 0.8 }} />
+              <FolderOpen size={26} style={{ color: "var(--accent-primary)", opacity: 0.8 }} />
             </div>
             <p className="cl-empty-pane__title">Select a file</p>
             <p className="cl-empty-pane__sub">
@@ -1877,8 +1930,8 @@ function FilesMainPane({ selectedFile, files, onPreview, onDownload, onOpenInCha
                 )}
                 {isAudio && selectedFile.url && (
                   <div style={{ width: "100%", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-                    <div style={{ width: 64, height: 64, borderRadius: 18, display: "flex", alignItems: "center", justifyContent: "center", background: "color-mix(in srgb, #10b981 12%, transparent)", border: "1px solid color-mix(in srgb, #10b981 22%, transparent)" }}>
-                      <Volume2 size={28} style={{ color: "#10b981" }} />
+                    <div style={{ width: 64, height: 64, borderRadius: 18, display: "flex", alignItems: "center", justifyContent: "center", background: "color-mix(in srgb, var(--accent-green) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-green) 22%, transparent)" }}>
+                      <Volume2 size={28} style={{ color: "var(--accent-green)" }} />
                     </div>
                     <p style={{ color: "var(--text-secondary)", fontSize: 13, fontWeight: 600, margin: 0 }}>{fileName}</p>
                     <audio src={selectedFile.url} controls style={{ width: "100%", maxWidth: 400 }} />

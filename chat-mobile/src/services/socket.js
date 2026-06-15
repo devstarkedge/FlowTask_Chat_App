@@ -327,6 +327,41 @@ export const connectSocket = async () => {
     }
   });
 
+  // ─── Role & Profile Update Events ──────────────────────────────────────
+  socket.on('user:role_updated', ({ userId, oldRole, newRole, workspaceId }) => {
+    const currentUserId = useAuthStore.getState().user?._id;
+    if (userId === currentUserId) {
+      useAuthStore.getState().updateUserRole(newRole, workspaceId);
+      const { useWorkspaceStore } = require('../stores/workspaceStore');
+      useWorkspaceStore.getState().fetchWorkspaces();
+      logger.info('[Socket] User role updated', { userId, oldRole, newRole, workspaceId });
+    }
+  });
+
+  socket.on('workspace:member_updated', ({ userId, newRole, workspaceId }) => {
+    const { useWorkspaceStore } = require('../stores/workspaceStore');
+    const store = useWorkspaceStore.getState();
+    if (store.activeWorkspaceId === workspaceId) {
+      store.updateMemberRoleInStore(userId, newRole);
+    }
+    logger.info('[Socket] Workspace member role updated', { userId, newRole, workspaceId });
+  });
+
+  socket.on('user:profile_updated', ({ userId, updates, workspaceId }) => {
+    const currentUserId = useAuthStore.getState().user?._id;
+    if (userId === currentUserId) {
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser) {
+        useAuthStore.setState({
+          user: { ...currentUser, ...updates }
+        });
+      }
+    }
+    const { useWorkspaceStore } = require('../stores/workspaceStore');
+    useWorkspaceStore.getState().updateMemberProfile(userId, updates);
+    logger.info('[Socket] User profile updated', { userId, fields: Object.keys(updates || {}) });
+  });
+
   // ─── Reconnect re-sync ──────────────────────────────────────────────────
   socket.on('reconnect', () => {
     logger.info('[Socket] Reconnected, re-syncing state...');

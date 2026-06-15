@@ -7,6 +7,7 @@ import MessageItem from "./MessageItem";
 import AutoActivityMessage from "./AutoActivityMessage";
 import { MessageCircle, ChevronDown } from "lucide-react";
 import { Virtuoso } from "react-virtuoso";
+import { useLocation, useNavigate } from "react-router-dom";
 
 // ─── Highlight pulse CSS (injected once) ─────────────────────────────────────
 const HIGHLIGHT_STYLE_ID = "pm-highlight-pulse";
@@ -53,6 +54,23 @@ export default function MessageList({
 
   const virtuosoRef = useRef(null);
   const lastScrolledHighlightId = useRef(null);
+
+  // Deep-link navigation from DownloadsModal folder icon
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [pendingMessageScroll, setPendingMessageScroll] = useState(null);
+
+  // Extract messageId from URL path (e.g., /workspace/:wsId/channel/:channelId/message/:messageId)
+  useEffect(() => {
+    const pathParts = location.pathname.split('/');
+    const messageIndex = pathParts.indexOf('message');
+    if (messageIndex !== -1 && messageIndex + 1 < pathParts.length) {
+      const messageIdFromUrl = pathParts[messageIndex + 1];
+      if (messageIdFromUrl) {
+        setPendingMessageScroll(messageIdFromUrl);
+      }
+    }
+  }, [location.pathname]);
 
   // Tracks whether the user is at (or very near) the bottom of the list.
   const isAtBottomRef = useRef(true);
@@ -219,6 +237,45 @@ export default function MessageList({
 
     return flattened;
   }, [messages, lastReadMessageId]);
+
+  // ─── Auto-scroll to message from deep-link (DownloadsModal folder navigation) ──
+  useEffect(() => {
+    if (!pendingMessageScroll || !virtuosoRef.current || flattenedItems.length === 0) {
+      return;
+    }
+
+    const idx = flattenedItems.findIndex((item) => item._id === pendingMessageScroll);
+    
+    if (idx !== -1) {
+      // Message is loaded in the current view - scroll to it
+      setTimeout(() => {
+        virtuosoRef.current.scrollToIndex({
+          index: idx,
+          align: "center",
+          behavior: "smooth",
+        });
+        
+        // Trigger highlight animation
+        setHighlightMessageId(pendingMessageScroll);
+        
+        // Clear highlight after 4 seconds
+        setTimeout(() => {
+          setHighlightMessageId(null);
+        }, 4000);
+      }, 200);
+      
+      // Clean up URL by removing the /message/:messageId part
+      const pathWithoutMessage = location.pathname.split('/').filter((part, i, arr) => {
+        if (part === 'message') return false;
+        if (i > 0 && arr[i - 1] === 'message') return false;
+        return true;
+      }).join('/');
+      
+      navigate(pathWithoutMessage || location.pathname, { replace: true });
+      setPendingMessageScroll(null);
+    }
+    // If message not yet loaded, we'll scroll when it appears in flattenedItems
+  }, [pendingMessageScroll, flattenedItems, setHighlightMessageId, location.pathname, navigate]);
 
   // ─── Scroll to highlighted / linked message ────────────────────────────
   useEffect(() => {

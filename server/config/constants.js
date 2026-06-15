@@ -294,6 +294,8 @@ export const SOCKET_EVENTS = Object.freeze({
 
   // FlowTask Sync
   USER_ACTIVATED: 'user:activated',
+  USER_ROLE_UPDATED: 'user:role_updated',
+  USER_PROFILE_UPDATED: 'user:profile_updated',
 });
 
 // ─── Notification Types ──────────────────────────────────────────────────────

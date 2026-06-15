@@ -24,6 +24,21 @@ router.post(
   canvasController.restoreCanvasVersion
 );
 
+router.post(
+  "/save-later/:canvasId",
+  canvasController.toggleCanvasSaveForLater
+);
+
+router.patch(
+  "/save-later/:canvasId/status",
+  canvasController.updateCanvasSavedStatus
+);
+
+router.get(
+  "/saved/:channelId",
+  canvasController.getSavedCanvases
+);
+
 router.get(
   "/channel/all/:channelId",
   canvasController.getChannelCanvases
@@ -34,10 +49,10 @@ router.put(
   canvasController.updateCanvas
 );
 
-// router.delete(
-//   "/:canvasId",
-//   canvasController.deleteCanvas
-// );
+router.delete(
+  "/:canvasId",
+  canvasController.deleteCanvas
+);
 
 // ── Dynamic parameter fallback routes
 router.get(

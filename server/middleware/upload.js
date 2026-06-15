@@ -13,15 +13,15 @@ import { validateUploadedFileMagic } from '../utils/fileMagicValidator.js';
 
 // Ensure upload directory exists
 const uploadDir = path.resolve(env.UPLOAD_DIR);
+  'image/svg+xml';
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
 // Allowed MIME types
-// NOTE: SVG excluded due to XSS risk (can embed JavaScript)
 const ALLOWED_TYPES = new Set([
-  // ── Images (SVG excluded — XSS vector) ───────────────────────────────
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  // ── Images (SVG allowed — sanitized by Cloudinary, served as attachment) ──
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
 
   // ── Video ─────────────────────────────────────────────────────────────
   'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/mpeg',
@@ -63,6 +63,7 @@ const ALLOWED_TYPES = new Set([
 const MIME_TO_EXT = {
   'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp',
   'video/mp4': '.mp4', 'video/quicktime': '.mov', 'video/x-msvideo': '.avi',
+  'image/svg+xml': '.svg',
   'video/webm': '.webm', 'video/mpeg': '.mpeg',
   'audio/mpeg': '.mp3', 'audio/wav': '.wav', 'audio/ogg': '.ogg',
   'audio/flac': '.flac', 'audio/aac': '.aac',

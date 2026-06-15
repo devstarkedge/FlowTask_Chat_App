@@ -28,6 +28,10 @@ import './stores/themeStore'
 import 'prosemirror-view/style/prosemirror.css'
 import './index.css'
 
+// Initialize conversation presence tracking for unread count management
+import { conversationPresence } from './services/conversationPresence'
+conversationPresence.setup()
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

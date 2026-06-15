@@ -1,9 +1,27 @@
 import { useDownloadStore } from "../stores/downloadStore";
 import toast from "react-hot-toast";
+import { messageAPI } from "../services/api";
 
 export const handleDownload = async (file) => {
+  console.log('[handleDownload] Input file object:', {
+    _id: file._id,
+    fileName: file.fileName,
+    messageId: file.messageId,
+    channelId: file.channelId,
+    workspaceId: file.workspaceId,
+    contextType: file.contextType,
+    hasMeta: !!file.meta,
+  });
+  
   const { addDownload, updateDownload } =
     useDownloadStore.getState();
+
+  // Use proxy URL for Cloudinary files to bypass 401 errors
+  const rawUrl = file.url || file.secureUrl;
+  const assetId = file._id || file.fileId || file.assetId;
+  const isCloudinaryUrl = rawUrl && rawUrl.includes('cloudinary.com');
+  const useProxy = isCloudinaryUrl && assetId && !rawUrl.startsWith('/');
+  const finalUrl = useProxy ? messageAPI.getFileProxyUrl(assetId) : rawUrl;
 
   const mappedFile = {
     name:
@@ -11,11 +29,26 @@ export const handleDownload = async (file) => {
       file.originalName ||
       file.name ||
       "Unnamed file",
-    url: file.url || file.secureUrl,
+    url: finalUrl,
     size: file.fileSize || file.size,
     type: file.mimeType || file.type || "",
     thumbnailUrl: file.thumbnailUrl || null,
+    // include origin references when available to support navigation
+    assetId: assetId || file.publicId || null,
+    workspaceId: file.workspaceId || null,
+    channelId: file.channelId || file.roomId || (file.meta && file.meta.channelId) || null,
+    messageId: file.messageId || file.msgId || file.originMessageId || (file.meta && file.meta.messageId) || null,
+    contextType: file.contextType || (file.isDM ? 'dm' : file.isThread ? 'thread' : null),
   };
+  
+  console.log('[handleDownload] Mapped file for download store:', {
+    assetId: mappedFile.assetId,
+    messageId: mappedFile.messageId,
+    channelId: mappedFile.channelId,
+    workspaceId: mappedFile.workspaceId,
+    contextType: mappedFile.contextType,
+    usingProxy: useProxy,
+  });
 
   const downloadItem = addDownload(mappedFile);
 

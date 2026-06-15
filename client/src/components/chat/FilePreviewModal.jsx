@@ -36,6 +36,50 @@ function getLanguageLabelFromExt(ext) {
 }
 
 /**
+ * Detect actual MIME type from binary content (magic bytes)
+ * This prevents rendering issues when metadata doesn't match actual file content
+ */
+function detectMimeType(buf, declaredMime, fileName) {
+  const uint8Array = new Uint8Array(buf)
+  const firstBytes = String.fromCharCode(...uint8Array.slice(0, 16))
+  
+  // PNG: 89 50 4E 47
+  if (uint8Array[0] === 0x89 && uint8Array[1] === 0x50 && 
+      uint8Array[2] === 0x4E && uint8Array[3] === 0x47) {
+    return { detected: 'image/png', reason: 'PNG magic bytes' }
+  }
+  
+  // JPEG: FF D8 FF
+  if (uint8Array[0] === 0xFF && uint8Array[1] === 0xD8 && uint8Array[2] === 0xFF) {
+    return { detected: 'image/jpeg', reason: 'JPEG magic bytes' }
+  }
+  
+  // GIF: 47 49 46 38
+  if (firstBytes.startsWith('GIF8')) {
+    return { detected: 'image/gif', reason: 'GIF magic bytes' }
+  }
+  
+  // WebP: 52 49 46 46 ... 57 45 42 50
+  if (firstBytes.startsWith('RIFF') && firstBytes.slice(8, 12) === 'WEBP') {
+    return { detected: 'image/webp', reason: 'WebP magic bytes' }
+  }
+  
+  // SVG: starts with '<' or '<?xml'
+  if (firstBytes.startsWith('<svg') || firstBytes.startsWith('<?xml') || 
+      firstBytes.startsWith('<!DOCTYPE') || firstBytes.startsWith('<')) {
+    return { detected: 'image/svg+xml', reason: 'SVG XML content' }
+  }
+  
+  // PDF: 25 50 44 46
+  if (firstBytes.startsWith('%PDF')) {
+    return { detected: 'application/pdf', reason: 'PDF magic bytes' }
+  }
+  
+  // Fallback to declared MIME
+  return { detected: declaredMime, reason: 'Fallback to declared MIME' }
+}
+
+/**
  * Fetch any workspace file as an ArrayBuffer via the authenticated server proxy.
  * Routes Cloudinary assets through /api/chat/messages/files/:assetId/proxy to
  * bypass CDN access restrictions and Chrome extension interference.
@@ -68,21 +112,81 @@ async function fetchFileBuffer(currentFile) {
   return res.arrayBuffer()
 }
 
-export default function FilePreviewModal({ file, files = [], onClose }) {
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [zoom, setZoom] = useState(1)
-  const [rotation, setRotation] = useState(0)
+/**
+ * Custom hook to manage text/code file loading
+ * Isolated to prevent closure issues with state setters
+ */
+function useTextFileLoader(currentFile, isText, isCsv) {
   const [textContent, setTextContent] = useState(null)
   const [textLoading, setTextLoading] = useState(false)
   const [textError, setTextError] = useState(null)
   const [copied, setCopied] = useState(false)
   const [csvShowAll, setCsvShowAll] = useState(false)
+
+  useEffect(() => {
+    // Safety check
+    if (typeof setTextLoading !== 'function') {
+      console.error('[useTextFileLoader] setTextLoading is corrupted!', typeof setTextLoading)
+      return
+    }
+
+    setTextContent(null)
+    setTextError(null)
+    setCopied(false)
+    setCsvShowAll(false)
+    if (!currentFile || (!isText && !isCsv)) return
+    let cancelled = false
+
+    console.log('[FilePreviewModal] Loading text content:', {
+      fileId: currentFile._id || currentFile.fileId,
+      fileName: currentFile.originalName || currentFile.fileName,
+      mimeType: currentFile.mimeType,
+    })
+
+    setTextLoading(true)
+    ;(async () => {
+      try {
+        console.log("PDF FILE OBJECT", currentFile);
+        const buf = await fetchFileBuffer(currentFile)
+        if (cancelled) return
+        setTextContent(new TextDecoder().decode(buf))
+        console.log('[FilePreviewModal] Text content loaded successfully')
+      } catch (err) {
+        if (!cancelled) {
+          setTextError(err.message || 'Failed to load file')
+          console.error('[FilePreviewModal] Failed to load text content:', err)
+        }
+      } finally {
+        if (!cancelled) setTextLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [currentFile, isText, isCsv])
+
+  return { textContent, textLoading, textError, copied, setCopied, csvShowAll, setCsvShowAll }
+}
+
+export default function FilePreviewModal({ file, files = [], onClose }) {
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [zoom, setZoom] = useState(1)
+  const [rotation, setRotation] = useState(0)
   const containerRef = useRef(null)
   const addDownload = useDownloadStore((s) => s.addDownload);
   const [pdfBlobUrl, setPdfBlobUrl] = useState(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfError, setPdfError] = useState(null)
   const pdfUrlRef = useRef(null)
+
+  // Image blob URL to avoid 401 errors from Cloudinary
+  const [imageBlobUrl, setImageBlobUrl] = useState(null)
+  const [imageLoading, setImageLoading] = useState(false)
+  const [imageError, setImageError] = useState(null)
+  const imageUrlRef = useRef(null)
+
+  // SVG raw content for inline rendering
+  const [svgContent, setSvgContent] = useState(null)
+  const [svgLoading, setSvgLoading] = useState(false)
+  const [svgError, setSvgError] = useState(null)
 
   // XLSX (spreadsheet) preview state
   const [xlsxData, setXlsxData] = useState(null)
@@ -94,6 +198,49 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   const [docxHtml, setDocxHtml] = useState(null)
   const [docxLoading, setDocxLoading] = useState(false)
   const [docxError, setDocxError] = useState(null)
+
+  // Compute current file and derived values BEFORE any early returns
+  const currentFile = files[currentIndex] || file
+  const mime = currentFile?.mimeType || ''
+  const fileName = currentFile?.originalName || currentFile?.fileName || ''
+  const ext = getExtension(fileName)
+  const isImage = currentFile && (IMAGE_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t) || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext))
+  const isSvg = currentFile && (mime === 'image/svg+xml' || ext === 'svg')
+  const isVideo = currentFile && (VIDEO_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t) || ['mp4', 'webm', 'mov', 'avi'].includes(ext))
+  const isAudio = currentFile && (AUDIO_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t) || ['mp3', 'wav', 'ogg', 'flac', 'aac'].includes(ext))
+  const isPdf = currentFile && (PDF_TYPES.some((t) => mime === t) || ext === 'pdf')
+  // SVG should not be treated as text even though it contains XML
+  const isText = currentFile && !isSvg && (TEXT_CODE_TYPES.some((t) => mime === t || mime.startsWith('text/')) || TEXT_EXTS.includes(ext))
+  const isCsv = currentFile && (mime === 'text/csv' || ext === 'csv')
+  const isJson = currentFile && (mime === 'application/json' || ext === 'json')
+  const isHtml = currentFile && (mime === 'text/html' || ext === 'html')
+  const isCss = currentFile && (mime === 'text/css' || ext === 'css')
+  const isJs = currentFile && (['text/javascript', 'application/javascript'].includes(mime) || ext === 'js')
+  const isXml = currentFile && (mime === 'application/xml' || ext === 'xml')
+  const isYaml = currentFile && (['text/yaml', 'application/x-yaml'].includes(mime) || ext === 'yaml')
+  const isMarkdown = currentFile && (mime === 'text/markdown' || ext === 'md')
+  const isCsvPreview = currentFile && (mime === 'text/csv' || ext === 'csv')
+  const isXlsx = currentFile && (['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'].includes(mime) || ['xls', 'xlsx'].includes(ext))
+  const isDocx = currentFile && (['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(mime) || ['doc', 'docx'].includes(ext))
+
+  // Only allow Copy Text for text-based / structured text file types
+  const canCopyText = isText || isJson || isHtml || isCss || isJs || isXml || isYaml || isMarkdown || isCsvPreview
+
+  // Use custom hook for text file loading (isolated to prevent closure issues)
+  const { textContent, textLoading, textError, copied, setCopied, csvShowAll, setCsvShowAll } = useTextFileLoader(currentFile, isText, isCsv)
+
+  // ─── Helper functions (must be before hooks that use them) ───────────────
+  const prev = useCallback(() => {
+    setCurrentIndex((i) => (i > 0 ? i - 1 : files.length - 1))
+    setZoom(1)
+    setRotation(0)
+  }, [files.length])
+
+  const next = useCallback(() => {
+    setCurrentIndex((i) => (i < files.length - 1 ? i + 1 : 0))
+    setZoom(1)
+    setRotation(0)
+  }, [files.length])
 
   useEffect(() => {
     if (file && files.length > 0) {
@@ -112,26 +259,14 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [currentIndex, files])
+  }, [currentIndex, files, prev, next, onClose])
 
-  const currentFile = files[currentIndex] || file
-  if (!currentFile) return null
-
-  const mime = currentFile.mimeType || ''
-  const fileName = currentFile.originalName || currentFile.fileName || ''
-  const ext = getExtension(fileName)
-  const isImage = IMAGE_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t) || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)
-  const isVideo = VIDEO_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t) || ['mp4', 'webm', 'mov', 'avi'].includes(ext)
-  const isAudio = AUDIO_TYPES.some((t) => mime.startsWith(t.split('/')[0]) || mime === t) || ['mp3', 'wav', 'ogg', 'flac', 'aac'].includes(ext)
-  const isPdf = PDF_TYPES.some((t) => mime === t) || ext === 'pdf'
-  const isText = TEXT_CODE_TYPES.some((t) => mime === t || mime.startsWith('text/')) || TEXT_EXTS.includes(ext)
-  const isCsv = mime === 'text/csv' || ext === 'csv'
-  const isJson = mime === 'application/json' || ext === 'json'
-  const isXlsx = ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'].includes(mime) || ['xls', 'xlsx'].includes(ext)
-  const isDocx = ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(mime) || ['doc', 'docx'].includes(ext)
+  // ─── All useEffect hooks MUST be before the early return ─────────────────
 
   // Fetch PDF as blob to avoid 401 from Chrome's PDF viewer extension making
   // unauthenticated requests when it intercepts the iframe src URL.
+  const [pdfRetryCount, setPdfRetryCount] = useState(0)
+  
   useEffect(() => {
     setPdfBlobUrl(null)
     setPdfError(null)
@@ -139,11 +274,18 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
       URL.revokeObjectURL(pdfUrlRef.current)
       pdfUrlRef.current = null
     }
-    if (!isPdf) return
+    if (!currentFile || !isPdf) return
     let cancelled = false
     setPdfLoading(true)
     ;(async () => {
       try {
+        console.log('[FilePreviewModal] Fetching PDF:', {
+          fileId: currentFile._id || currentFile.fileId,
+          fileName: currentFile.originalName || currentFile.fileName,
+          mimeType: currentFile.mimeType,
+          secureUrl: currentFile.secureUrl,
+        })
+        
         const buf = await fetchFileBuffer(currentFile)
         if (cancelled) return
         const blob = new Blob([buf], { type: 'application/pdf' })
@@ -151,7 +293,10 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
         pdfUrlRef.current = objectUrl
         setPdfBlobUrl(objectUrl)
       } catch (err) {
-        if (!cancelled) setPdfError(err.message || 'Failed to load PDF')
+        if (!cancelled) {
+          console.error('[FilePreviewModal] PDF fetch failed:', err)
+          setPdfError(err.message || 'Failed to load PDF')
+        }
       } finally {
         if (!cancelled) setPdfLoading(false)
       }
@@ -163,7 +308,118 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
         pdfUrlRef.current = null
       }
     }
-  }, [currentFile, isPdf]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentFile, isPdf, pdfRetryCount]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch images as blob to avoid 401 errors from Cloudinary CDN access restrictions
+  useEffect(() => {
+    setImageBlobUrl(null)
+    setImageError(null)
+    if (imageUrlRef.current) {
+      URL.revokeObjectURL(imageUrlRef.current)
+      imageUrlRef.current = null
+    }
+    if (!currentFile || !isImage || isSvg) return; // SVG handled separately
+    let cancelled = false
+    setImageLoading(true)
+    ;(async () => {
+      try {
+        const buf = await fetchFileBuffer(currentFile)
+        if (cancelled) return
+        
+        // Detect actual MIME type from binary content
+        const { detected: detectedMime, reason } = detectMimeType(
+          buf, 
+          currentFile.mimeType || 'image/png',
+          currentFile.originalName || ''
+        )
+        
+        console.log('[FilePreviewModal] Image binary detection:', {
+          fileName: currentFile.originalName,
+          declaredMime: currentFile.mimeType,
+          detectedMime,
+          detectionReason: reason,
+        })
+        
+        // Create blob with DETECTED MIME, not declared MIME
+        const blob = new Blob([buf], { type: detectedMime })
+        const objectUrl = URL.createObjectURL(blob)
+        imageUrlRef.current = objectUrl
+        setImageBlobUrl(objectUrl)
+      } catch (err) {
+        if (!cancelled) setImageError(err.message || 'Failed to load image')
+      } finally {
+        if (!cancelled) setImageLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (imageUrlRef.current) {
+        URL.revokeObjectURL(imageUrlRef.current)
+        imageUrlRef.current = null
+      }
+    }
+  }, [currentFile, isImage, isSvg]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch SVG as raw text for inline rendering (better than blob for SVGs)
+  useEffect(() => {
+    setSvgContent(null)
+    setSvgError(null)
+    if (!currentFile || !isSvg) return
+    let cancelled = false
+    setSvgLoading(true)
+    
+    console.log('[FilePreviewModal] Loading SVG:', {
+      fileId: currentFile._id || currentFile.fileId,
+      fileName: currentFile.originalName || currentFile.fileName,
+      mimeType: currentFile.mimeType,
+    })
+    
+    ;(async () => {
+      try {
+        const buf = await fetchFileBuffer(currentFile)
+        if (cancelled) return
+        
+        // Detect actual file type from binary content
+        const { detected: detectedMime, reason } = detectMimeType(
+          buf,
+          currentFile.mimeType || 'image/svg+xml',
+          currentFile.originalName || ''
+        )
+        
+        console.log('[FilePreviewModal] SVG file content analysis:', {
+          declaredMime: currentFile.mimeType,
+          detectedMime,
+          detectionReason: reason,
+        })
+        
+        if (detectedMime !== 'image/svg+xml') {
+          // File is NOT actually SVG (PNG/JPG renamed to .svg)
+          // Fall back to blob URL with CORRECT MIME type
+          const blob = new Blob([buf], { type: detectedMime })
+          const objectUrl = URL.createObjectURL(blob)
+          imageUrlRef.current = objectUrl
+          setImageBlobUrl(objectUrl)
+          setSvgContent(null)
+          setSvgLoading(false)
+          return
+        }
+        
+        // Real SVG - render as inline text
+        const text = new TextDecoder().decode(buf)
+        console.log('[FilePreviewModal] SVG loaded successfully, length:', text.length)
+        console.log('[FilePreviewModal] SVG preview (first 200 chars):', text.substring(0, 200))
+        setSvgContent(text)
+      } catch (err) {
+        if (!cancelled) {
+          setSvgError(err.message || 'Failed to load SVG')
+          console.error('[FilePreviewModal] Failed to load SVG:', err)
+        }
+      } finally {
+        if (!cancelled) setSvgLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [currentFile, isSvg]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // XLSX / Excel preview — SheetJS is dynamically imported so it's code-split
   useEffect(() => {
@@ -171,7 +427,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
     setXlsxError(null)
     setXlsxActiveSheet(0)
     setXlsxShowAll(false)
-    if (!isXlsx) return
+    if (!currentFile || !isXlsx) return
     let cancelled = false
     setXlsxLoading(true)
     ;(async () => {
@@ -198,7 +454,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   useEffect(() => {
     setDocxHtml(null)
     setDocxError(null)
-    if (!isDocx) return
+    if (!currentFile || !isDocx) return
     let cancelled = false
     setDocxLoading(true)
     ;(async () => {
@@ -217,43 +473,8 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
     return () => { cancelled = true }
   }, [currentFile, isDocx]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch text content for code/text/JSON preview
-  // Routes through the authenticated server proxy (fetchFileBuffer) so that:
-  //  1. Cloudinary CDN access restrictions are bypassed
-  //  2. '/placeholder-loading' assets are handled gracefully (no HTML bleed-through)
-  useEffect(() => {
-    setTextContent(null)
-    setTextError(null)
-    setCopied(false)
-    setCsvShowAll(false)
-    if (!isText && !isCsv) return
-    let cancelled = false
-    setTextLoading(true)
-    (async () => {
-      try {
-        const buf = await fetchFileBuffer(currentFile)
-        if (cancelled) return
-        setTextContent(new TextDecoder().decode(buf))
-      } catch (err) {
-        if (!cancelled) setTextError(err.message || 'Failed to load file')
-      } finally {
-        if (!cancelled) setTextLoading(false)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [currentFile, isText, isCsv]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const prev = () => {
-    setCurrentIndex((i) => (i > 0 ? i - 1 : files.length - 1))
-    setZoom(1)
-    setRotation(0)
-  }
-
-  const next = () => {
-    setCurrentIndex((i) => (i < files.length - 1 ? i + 1 : 0))
-    setZoom(1)
-    setRotation(0)
-  }
+  // Early return AFTER all hooks
+  if (!currentFile) return null
 
   // Mouse wheel zoom for images
   const handleWheel = useCallback((e) => {
@@ -333,7 +554,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <FileTypeIcon mimeType={mime} />
           <div>
-              <p style={{ color: 'white', fontWeight: 600, fontSize: 14 }}>
+              <p style={{ color: 'var(--text-white)', fontWeight: 600, fontSize: 14 }}>
                 {currentFile.originalName || currentFile.fileName || 'File'}
               </p>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4 }}>
@@ -368,7 +589,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
               <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
             </>
           )}
-          {(isText || isCsv) && textContent && (
+          {canCopyText && textContent && (
             <>
               <ToolbarBtn icon={copied ? Check : Copy} onClick={handleCopy} />
               <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
@@ -389,7 +610,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
               width: 40, height: 40, borderRadius: '50%',
               background: 'rgba(0,0,0,0.5)', border: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', color: 'white', zIndex: 10,
+              cursor: 'pointer', color: 'var(--text-white)', zIndex: 10,
               transition: 'background var(--transition-fast)',
             }}
             onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.8)'}
@@ -404,7 +625,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
               width: 40, height: 40, borderRadius: '50%',
               background: 'rgba(0,0,0,0.5)', border: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', color: 'white', zIndex: 10,
+              cursor: 'pointer', color: 'var(--text-white)', zIndex: 10,
               transition: 'background var(--transition-fast)',
             }}
             onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.8)'}
@@ -424,18 +645,130 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
         }}
       >
         {isImage && (
-          <img
-            src={currentFile.url}
-            alt={currentFile.originalName || 'Preview'}
-            style={{
-              maxWidth: '100%', maxHeight: '100%',
-              objectFit: 'contain',
-              transform: `scale(${zoom}) rotate(${rotation}deg)`,
-              transition: 'transform 0.2s ease',
-              borderRadius: 4,
-            }}
-            draggable={false}
-          />
+          // SVG: render inline with special handling
+          isSvg ? (
+            svgLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 36, height: 36,
+                  border: '3px solid rgba(255,255,255,0.15)',
+                  borderTopColor: 'rgba(255,255,255,0.8)',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
+                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Loading SVG…</p>
+              </div>
+            ) : svgError ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: 40, background: 'rgba(0,0,0,0.35)', borderRadius: 16 }}>
+                <FileText size={48} style={{ color: 'var(--accent-red)' }} />
+                <p style={{ color: 'var(--text-white)', fontWeight: 600, fontSize: 15 }}>Failed to load SVG</p>
+                <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{svgError}</p>
+                <button
+                  type="button"
+                  onClick={() => handleDownload(currentFile)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'rgba(255,255,255,0.15)', border: 'none',
+                    color: 'var(--text-white)', padding: '8px 20px', borderRadius: 8,
+                    cursor: 'pointer', fontSize: 14, marginTop: 4,
+                  }}
+                >
+                  <Download size={14} /> Download Instead
+                </button>
+              </div>
+            ) : svgContent ? (
+              // Real SVG content - render inline
+              <div
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transform: `scale(${zoom}) rotate(${rotation}deg)`,
+                  transition: 'transform 0.2s ease',
+                }}
+              >
+                <style>{`
+                  .svg-preview-container svg {
+                    max-width: 100%;
+                    max-height: 100%;
+                    width: auto;
+                    height: auto;
+                    object-fit: contain;
+                  }
+                `}</style>
+                <div
+                  className="svg-preview-container"
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    overflow: 'auto',
+                  }}
+                  dangerouslySetInnerHTML={{ __html: svgContent }}
+                />
+              </div>
+            ) : imageBlobUrl ? (
+              // File was detected as SVG but isn't actually SVG - use blob URL
+              <img
+                src={imageBlobUrl}
+                alt={currentFile.originalName || 'Preview'}
+                style={{
+                  maxWidth: '100%', maxHeight: '100%',
+                  objectFit: 'contain',
+                  transform: `scale(${zoom}) rotate(${rotation}deg)`,
+                  transition: 'transform 0.2s ease',
+                  borderRadius: 4,
+                }}
+                draggable={false}
+              />
+            ) : null
+          ) : (
+            // Regular images (JPEG, PNG, GIF, WebP): use blob URL
+            imageLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 36, height: 36,
+                  border: '3px solid rgba(255,255,255,0.15)',
+                  borderTopColor: 'rgba(255,255,255,0.8)',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
+                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Loading image…</p>
+              </div>
+            ) : imageError ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: 40, background: 'rgba(0,0,0,0.35)', borderRadius: 16 }}>
+                <FileText size={48} style={{ color: 'var(--accent-red)' }} />
+                <p style={{ color: 'var(--text-white)', fontWeight: 600, fontSize: 15 }}>Failed to load image</p>
+                <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{imageError}</p>
+                <button
+                  type="button"
+                  onClick={() => handleDownload(currentFile)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'rgba(255,255,255,0.15)', border: 'none',
+                    color: 'var(--text-white)', padding: '8px 20px', borderRadius: 8,
+                    cursor: 'pointer', fontSize: 14, marginTop: 4,
+                  }}
+                >
+                  <Download size={14} /> Download Instead
+                </button>
+              </div>
+            ) : imageBlobUrl ? (
+              <img
+                src={imageBlobUrl}
+                alt={currentFile.originalName || 'Preview'}
+                style={{
+                  maxWidth: '100%', maxHeight: '100%',
+                  objectFit: 'contain',
+                  transform: `scale(${zoom}) rotate(${rotation}deg)`,
+                  transition: 'transform 0.2s ease',
+                  borderRadius: 4,
+                }}
+                draggable={false}
+              />
+            ) : null
+          )
         )}
         {isPdf && (
           pdfLoading ? (
@@ -451,21 +784,50 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             </div>
           ) : pdfError ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: 40, background: 'rgba(0,0,0,0.35)', borderRadius: 16 }}>
-              <FileText size={48} style={{ color: '#ef4444' }} />
-              <p style={{ color: 'white', fontWeight: 600, fontSize: 15 }}>Failed to load PDF</p>
-              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{pdfError}</p>
-              <button
-                type="button"
-                onClick={() => handleDownload(currentFile)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  background: 'rgba(255,255,255,0.15)', border: 'none',
-                  color: 'white', padding: '8px 20px', borderRadius: 8,
-                  cursor: 'pointer', fontSize: 14, marginTop: 4,
-                }}
-              >
-                <Download size={14} /> Download Instead
-              </button>
+              <FileText size={48} style={{ color: 'var(--accent-red)' }} />
+              <p style={{ color: 'var(--text-white)', fontWeight: 600, fontSize: 15 }}>Failed to load PDF</p>
+              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>
+                {pdfError.includes('HTTP 502')
+                  ? 'Unable to preview PDF. The server encountered an error while fetching the file. Try downloading or retrying.'
+                  : pdfError.includes('Failed to fetch from Cloudinary')
+                  ? 'Unable to load PDF preview. The file may still be processing or temporarily unavailable.'
+                  : pdfError.includes('HTTP 401') || pdfError.includes('HTTP 403')
+                  ? 'Access denied. Please check your permissions.'
+                  : pdfError.includes('HTTP 404')
+                  ? 'PDF file not found. It may have been deleted.'
+                  : pdfError.includes('processing')
+                  ? 'File is still processing. Please wait a moment and try again.'
+                  : pdfError}
+              </p>
+              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => handleDownload(currentFile)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'rgba(255,255,255,0.15)', border: 'none',
+                    color: 'var(--text-white)', padding: '8px 20px', borderRadius: 8,
+                    cursor: 'pointer', fontSize: 14,
+                  }}
+                >
+                  <Download size={14} /> Download PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    console.log('[FilePreviewModal] Retrying PDF fetch...')
+                    setPdfRetryCount(prev => prev + 1)
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'rgba(255,255,255,0.15)', border: 'none',
+                    color: 'var(--text-white)', padding: '8px 20px', borderRadius: 8,
+                    cursor: 'pointer', fontSize: 14,
+                  }}
+                >
+                  <RotateCw size={14} /> Retry
+                </button>
+              </div>
             </div>
           ) : pdfBlobUrl ? (
             <iframe
@@ -491,7 +853,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             padding: 40, background: 'rgba(0,0,0,0.3)', borderRadius: 16,
           }}>
             <Music size={48} style={{ color: 'var(--accent-primary)' }} />
-            <p style={{ color: 'white', fontWeight: 600 }}>
+            <p style={{ color: 'var(--text-white)', fontWeight: 600 }}>
               {currentFile.originalName || 'Audio File'}
             </p>
             <audio src={currentFile.url} controls autoPlay style={{ width: 320 }} />
@@ -569,12 +931,12 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             )}
             {textError && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 40 }}>
-                <FileText size={36} style={{ color: '#ef4444' }} />
+                <FileText size={36} style={{ color: 'var(--accent-red)' }} />
                 <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{textError}</p>
                 <button
                   type="button"
                   onClick={() => handleDownload(currentFile)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.15)', border: 'none', color: 'var(--text-white)', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}
                 >
                   <Download size={14} /> Download Instead
                 </button>
@@ -589,7 +951,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
                 }}>
                   <span style={{
                     fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
-                    color: '#059669', background: 'rgba(5,150,105,0.15)',
+                    color: 'var(--accent-green)', background: 'rgba(5,150,105,0.15)',
                     padding: '2px 8px', borderRadius: 4, textTransform: 'uppercase',
                   }}>
                     {getLanguageLabelFromExt(ext)}
@@ -635,10 +997,10 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             </div>
           ) : xlsxError ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: 40, background: 'rgba(0,0,0,0.35)', borderRadius: 16 }}>
-              <FileText size={48} style={{ color: '#ef4444' }} />
-              <p style={{ color: 'white', fontWeight: 600, fontSize: 15 }}>Failed to load spreadsheet</p>
+              <FileText size={48} style={{ color: 'var(--accent-red)' }} />
+              <p style={{ color: 'var(--text-white)', fontWeight: 600, fontSize: 15 }}>Failed to load spreadsheet</p>
               <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{xlsxError}</p>
-              <button type="button" onClick={() => handleDownload(currentFile)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 14, marginTop: 4 }}>
+              <button type="button" onClick={() => handleDownload(currentFile)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.15)', border: 'none', color: 'var(--text-white)', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 14, marginTop: 4 }}>
                 <Download size={14} /> Download Instead
               </button>
             </div>
@@ -668,10 +1030,10 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             </div>
           ) : docxError ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: 40, background: 'rgba(0,0,0,0.35)', borderRadius: 16 }}>
-              <FileText size={48} style={{ color: '#ef4444' }} />
-              <p style={{ color: 'white', fontWeight: 600, fontSize: 15 }}>Failed to load document</p>
+              <FileText size={48} style={{ color: 'var(--accent-red)' }} />
+              <p style={{ color: 'var(--text-white)', fontWeight: 600, fontSize: 15 }}>Failed to load document</p>
               <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{docxError}</p>
-              <button type="button" onClick={() => handleDownload(currentFile)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 14, marginTop: 4 }}>
+              <button type="button" onClick={() => handleDownload(currentFile)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.15)', border: 'none', color: 'var(--text-white)', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 14, marginTop: 4 }}>
                 <Download size={14} /> Download Instead
               </button>
             </div>
@@ -686,7 +1048,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             padding: 40, background: 'rgba(0,0,0,0.3)', borderRadius: 16,
           }}>
             <File size={48} style={{ color: 'var(--text-muted)' }} />
-            <p style={{ color: 'white', fontWeight: 600 }}>
+            <p style={{ color: 'var(--text-white)', fontWeight: 600 }}>
               {currentFile.originalName || 'File'}
             </p>
             <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
@@ -744,7 +1106,7 @@ function ToolbarBtn({ icon: Icon, onClick }) {
         width: 32, height: 32, borderRadius: 'var(--radius-md)',
         background: 'rgba(255,255,255,0.1)', border: 'none',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        cursor: 'pointer', color: 'white',
+        cursor: 'pointer', color: 'var(--text-white)',
         transition: 'background var(--transition-fast)',
       }}
       onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
@@ -767,7 +1129,7 @@ function FileTypeIcon({ mimeType }) {
       background: 'rgba(255,255,255,0.1)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <Icon size={16} style={{ color: 'white' }} />
+      <Icon size={16} style={{ color: 'var(--text-white)' }} />
     </div>
   )
 }
@@ -793,7 +1155,7 @@ function XlsxPreview({ sheets, activeSheet, onChangeSheet, showAll, onShowAll })
   const hasMore = allRows.length > 201
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)', borderRadius: 8, overflow: 'hidden' }}>
       {/* Sheet tabs */}
       {sheets.length > 1 && (
         <div style={{ display: 'flex', overflowX: 'auto', background: '#f1f3f4', borderBottom: '1px solid #dadce0', flexShrink: 0 }}>
@@ -819,7 +1181,7 @@ function XlsxPreview({ sheets, activeSheet, onChangeSheet, showAll, onShowAll })
       {/* Spreadsheet table */}
       <div style={{ flex: 1, overflow: 'auto' }}>
         {allRows.length === 0 ? (
-          <p style={{ padding: 32, color: '#9aa0a6', textAlign: 'center', fontSize: 14 }}>Empty sheet</p>
+          <p style={{ padding: 32, color: 'var(--text-muted)', textAlign: 'center', fontSize: 14 }}>Empty sheet</p>
         ) : (
           <>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: "'Segoe UI', Arial, sans-serif" }}>
@@ -832,7 +1194,7 @@ function XlsxPreview({ sheets, activeSheet, onChangeSheet, showAll, onShowAll })
                       key={ci}
                       style={{
                         padding: '7px 10px', textAlign: 'left', fontWeight: 600,
-                        color: '#202124', background: '#f8f9fa',
+                        color: 'var(--text-primary)', background: 'var(--bg-secondary)',
                         borderRight: '1px solid #e8eaed', borderBottom: '2px solid #dadce0',
                         whiteSpace: 'nowrap', minWidth: 80,
                       }}
@@ -846,7 +1208,7 @@ function XlsxPreview({ sheets, activeSheet, onChangeSheet, showAll, onShowAll })
                 {bodyRows.map((row, ri) => (
                   <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#f8fffe' }}>
                     <td style={{
-                      padding: '5px 8px', color: '#9aa0a6', fontSize: 11, textAlign: 'right',
+                      padding: '5px 8px', color: 'var(--text-muted)', fontSize: 11, textAlign: 'right',
                       borderRight: '1px solid #e8eaed', borderBottom: '1px solid #f0f0f0',
                       background: '#f8f9fa', userSelect: 'none',
                     }}>
@@ -857,7 +1219,7 @@ function XlsxPreview({ sheets, activeSheet, onChangeSheet, showAll, onShowAll })
                         key={ci}
                         title={String(row[ci] ?? '')}
                         style={{
-                          padding: '5px 10px', color: '#202124',
+                          padding: '5px 10px', color: 'var(--text-primary)',
                           borderRight: '1px solid #f0f0f0', borderBottom: '1px solid #f0f0f0',
                           whiteSpace: 'nowrap', maxWidth: 300,
                           overflow: 'hidden', textOverflow: 'ellipsis',
@@ -874,7 +1236,7 @@ function XlsxPreview({ sheets, activeSheet, onChangeSheet, showAll, onShowAll })
               <div style={{ textAlign: 'center', padding: '12px 0' }}>
                 <button
                   onClick={onShowAll}
-                  style={{ background: '#f1f3f4', border: 'none', color: '#1a73e8', padding: '6px 18px', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+                  style={{ background: 'var(--bg-hover)', border: 'none', color: 'var(--accent-primary)', padding: '6px 18px', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
                 >
                   Show all {allRows.length - 1} rows
                 </button>
@@ -893,16 +1255,16 @@ function XlsxPreview({ sheets, activeSheet, onChangeSheet, showAll, onShowAll })
  */
 function DocxPreview({ html }) {
   return (
-    <div style={{ width: '100%', height: '100%', overflow: 'auto', background: '#e8eaed', padding: '24px 0' }}>
+    <div style={{ width: '100%', height: '100%', overflow: 'auto', background: 'var(--bg-secondary)', padding: '24px 0' }}>
       <div style={{
-        maxWidth: 816, margin: '0 auto 24px', background: '#fff',
+        maxWidth: 816, margin: '0 auto 24px', background: 'var(--bg-primary)',
         padding: '72px 80px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08)',
+        boxShadow: 'var(--shadow-md)',
         minHeight: 400,
       }}>
         {/* Scoped styles for mammoth-generated HTML elements */}
         <style>{`
-          .docx-content h1,.docx-content h2,.docx-content h3,.docx-content h4 { margin: 0.9em 0 0.4em; font-weight: 700; color: #202124; }
+          .docx-content h1,.docx-content h2,.docx-content h3,.docx-content h4 { margin: 0.9em 0 0.4em; font-weight: 700; color: var(--text-primary); }
           .docx-content h1 { font-size: 24px; } .docx-content h2 { font-size: 20px; } .docx-content h3 { font-size: 16px; }
           .docx-content p { margin: 0.4em 0; }
           .docx-content table { border-collapse: collapse; width: 100%; margin: 1em 0; }
@@ -913,7 +1275,7 @@ function DocxPreview({ html }) {
         `}</style>
         <div
           className="docx-content"
-          style={{ lineHeight: 1.7, color: '#333', fontSize: 14, fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif" }}
+          style={{ lineHeight: 1.7, color: 'var(--text-primary)', fontSize: 14, fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif" }}
           dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>

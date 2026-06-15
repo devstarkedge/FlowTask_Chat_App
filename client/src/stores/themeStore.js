@@ -144,8 +144,26 @@ function sanitizeAppearance(value) {
 function readStoredAppearance() {
   if (!isBrowser) return DEFAULT_APPEARANCE
 
-  const saved = safeParse(localStorage.getItem(APPEARANCE_STORAGE_KEY))
-  if (saved) return sanitizeAppearance(saved)
+  const raw = localStorage.getItem(APPEARANCE_STORAGE_KEY)
+  if (raw != null) {
+    // Try to parse JSON (expected shape is an object). If parsing
+    // succeeds and yields an object, use it. If parsing yields a
+    // primitive string like "dark" (or raw contains an unquoted
+    // legacy value), accept it as a mode.
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') return sanitizeAppearance(parsed)
+      if (typeof parsed === 'string' && ['light', 'dark', 'system'].includes(parsed)) {
+        return sanitizeAppearance({ ...DEFAULT_APPEARANCE, mode: parsed })
+      }
+    } catch (err) {
+      // raw might be an unquoted legacy string (e.g. dark)
+      if (['light', 'dark', 'system'].includes(raw)) {
+        return sanitizeAppearance({ ...DEFAULT_APPEARANCE, mode: raw })
+      }
+      // otherwise fall through to check legacy key
+    }
+  }
 
   const legacyTheme = localStorage.getItem(LEGACY_THEME_KEY)
   if (['light', 'dark', 'system'].includes(legacyTheme)) {
@@ -157,8 +175,20 @@ function readStoredAppearance() {
 
 function persistAppearance(appearance) {
   if (!isBrowser) return
-  localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(appearance))
-  localStorage.setItem(LEGACY_THEME_KEY, appearance.mode)
+  try {
+    console.log('[Theme] persistAppearance called with:', appearance)
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(appearance))
+    localStorage.setItem(LEGACY_THEME_KEY, appearance.mode)
+    console.log('[Theme] localStorage updated successfully')
+    console.log('[Theme] chat_appearance:', localStorage.getItem(APPEARANCE_STORAGE_KEY))
+    console.log('[Theme] chat_theme:', localStorage.getItem(LEGACY_THEME_KEY))
+  } catch (err) {
+    // Don't let localStorage failures break the app; log for debugging.
+    // This can fail in strict private-mode browsers or when quota is exceeded.
+    // Failing to persist is non-fatal; the in-memory store still reflects the choice.
+    // eslint-disable-next-line no-console
+    console.error('[Theme] Failed to persist appearance to localStorage:', err)
+  }
 }
 
 export function getSidebarThemeColors(sidebarTheme, customTheme = DEFAULT_CUSTOM_THEME) {
@@ -185,10 +215,49 @@ function applyAppearance(appearance, options = {}) {
   const root = document.documentElement
   const sidebar = getSidebarThemeColors(appearance.sidebarTheme, appearance.customTheme)
 
+  // Debug: log previous and upcoming theme state for troubleshooting
+  try {
+    console.log('[Theme] applyAppearance called with:', { appearance, options })
+    console.log('[Theme] applyAppearance before:', {
+      dataTheme: root.getAttribute('data-theme'),
+      dataThemeMode: root.getAttribute('data-theme-mode'),
+      dataSidebarTheme: root.getAttribute('data-sidebar-theme'),
+      colorScheme: root.style.colorScheme,
+      sidebarBgVar: root.style.getPropertyValue('--sidebar-bg'),
+    })
+  } catch (e) {
+    // ignore logging failures
+  }
+
   root.setAttribute('data-theme', effectiveTheme)
   root.setAttribute('data-theme-mode', appearance.mode)
   root.setAttribute('data-sidebar-theme', appearance.sidebarTheme)
+  // Also set attributes on <body> to support places that read theme from body
+  try {
+    if (document.body) {
+      document.body.setAttribute('data-theme', effectiveTheme)
+      document.body.setAttribute('data-theme-mode', appearance.mode)
+      document.body.setAttribute('data-sidebar-theme', appearance.sidebarTheme)
+    }
+  } catch (e) {
+    // ignore body attribute failures
+  }
+
   root.style.colorScheme = effectiveTheme
+
+  try {
+    console.log('[Theme] applyAppearance after:', {
+      dataTheme: root.getAttribute('data-theme'),
+      dataThemeMode: root.getAttribute('data-theme-mode'),
+      dataSidebarTheme: root.getAttribute('data-sidebar-theme'),
+      colorScheme: root.style.colorScheme,
+      sidebarBgVar: root.style.getPropertyValue('--sidebar-bg'),
+      effectiveTheme,
+      persisted: persist,
+    })
+  } catch (e) {
+    // ignore
+  }
 
   root.style.setProperty('--sidebar-bg', sidebar.sidebarBg)
   root.style.setProperty('--sidebar-text', sidebar.sidebarText)
@@ -198,6 +267,11 @@ function applyAppearance(appearance, options = {}) {
   root.style.setProperty('--accent-color', sidebar.accentColor)
   root.style.setProperty('--accent-primary', sidebar.accentColor)
   root.style.setProperty('--border-focus', sidebar.accentColor)
+
+  // Dispatch custom event to notify all components of theme change
+  window.dispatchEvent(new CustomEvent('themeChanged', { 
+    detail: { theme: effectiveTheme, mode: appearance.mode } 
+  }))
 
   if (persist) {
     persistAppearance(appearance)
@@ -234,7 +308,7 @@ export const useThemeStore = create((set, get) => ({
   setMode: (mode) => {
     if (!['light', 'dark', 'system'].includes(mode)) return
     set({ mode, theme: mode, effectiveTheme: getEffectiveTheme(mode) })
-    get().applyCurrent()
+    get().applyCurrent({ persist: true })
   },
 
   setTheme: (mode) => {
@@ -266,13 +340,32 @@ export const useThemeStore = create((set, get) => ({
 
   hydrateFromPreferences: (preferences) => {
     if (!preferences) return
-    const next = sanitizeAppearance({
-      ...get(),
-      mode: preferences.theme || preferences.mode || get().mode,
-      sidebarTheme: preferences.sidebarTheme || get().sidebarTheme,
-      customTheme: preferences.customTheme || get().customTheme,
+
+    // Local storage MUST take priority over backend preferences so that
+    // user's explicit browser choice is never overwritten by server defaults.
+    // Priority: localStorage > backend preferences > current state > defaults
+    const stored = readStoredAppearance()
+    
+    // Extract mode from preferences - handle both old (string) and new (object) schema
+    const prefMode = typeof preferences.theme === 'string' 
+      ? preferences.theme 
+      : preferences.theme?.mode ?? preferences.mode
+    
+    // Debug logging to trace theme priority
+    console.log('[Theme] hydrateFromPreferences called:', {
+      stored,
+      preferences,
+      prefMode,
+      currentMode: get().mode,
+      finalMode: stored.mode ?? prefMode ?? get().mode,
     })
-    get().applyAppearance(next)
+    
+    const next = sanitizeAppearance({
+      mode: stored.mode ?? prefMode ?? get().mode,
+      sidebarTheme: stored.sidebarTheme ?? preferences.sidebarTheme ?? get().sidebarTheme,
+      customTheme: stored.customTheme ?? preferences.customTheme ?? get().customTheme,
+    })
+    get().applyAppearance(next, { persist: true })
   },
 
   getAppearancePayload: () => ({

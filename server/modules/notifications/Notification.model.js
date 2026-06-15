@@ -160,8 +160,9 @@ const notificationSchema = new Schema({
 // ─── Indexes ─────────────────────────────────────────────────────────────────
 // Primary query: user's notifications sorted by newest first
 notificationSchema.index({ workspaceId: 1, recipientId: 1, createdAt: -1 });
-// Unread count query
+// Unread count query (field order optimized for countDocuments: recipientId first for selectivity)
 notificationSchema.index({ workspaceId: 1, recipientId: 1, isRead: 1 });
+notificationSchema.index({ recipientId: 1, workspaceId: 1, isRead: 1 });
 // TTL index for auto-expiry
 notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 

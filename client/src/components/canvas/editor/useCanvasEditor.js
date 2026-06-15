@@ -16,8 +16,15 @@ import {
 import CharacterCount from "@tiptap/extension-character-count";
 import Highlight from "@tiptap/extension-highlight";
 import TextAlign from "@tiptap/extension-text-align";
+import { TextStyle } from "@tiptap/extension-text-style";
+import { Color } from "@tiptap/extension-color";
 import TemplateVariable from "./extensions/TemplateVariable";
 import TemplateVariableView from "./TemplateVariableView";
+import CalloutNode from "../nodes/CalloutNode";
+import FileNode from "../nodes/FileNode";
+import AudioNode from "../nodes/AudioNode";
+import VideoNode from "../nodes/VideoNode";
+import ImageNode from "../nodes/ImageNode";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { createLowlight, common } from "lowlight";
 
@@ -78,7 +85,11 @@ function selectionToolbarPosition(editor) {
   const end = editor.view.coordsAtPos(to);
   const midpoint = (start.left + end.right) / 2;
   const x = clamp(midpoint, 12, window.innerWidth - 12);
-  const y = clamp(Math.min(start.top, end.top) - 56, 8, window.innerHeight - 64);
+  const y = clamp(
+    Math.min(start.top, end.top) - 56,
+    8,
+    window.innerHeight - 64,
+  );
   return { x, y };
 }
 
@@ -217,7 +228,11 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
         autolink: true,
         HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },
       }),
-      Image.configure({ inline: false, allowBase64: false }),
+      ImageNode.configure({ inline: false, allowBase64: false }),
+      VideoNode,
+      AudioNode,
+      FileNode,
+      CalloutNode,
       TaskList,
       TaskItem.configure({ nested: true }),
       Table.configure({ resizable: true }),
@@ -227,6 +242,8 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
       CharacterCount,
       Highlight,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
+      TextStyle,
+      Color,
       // Register template variable node to render placeholder chips
       TemplateVariable,
       // Lowlight-powered code block (rendering + highlighting)
@@ -235,13 +252,13 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
 
     if (withCollab) {
       // Determine fragment name upfront (default to 'prosemirror')
-      let chosenField = 'prosemirror';
+      let chosenField = "prosemirror";
       try {
-        if (ydoc && typeof ydoc.getXmlFragment === 'function') {
-          const p = ydoc.getXmlFragment('prosemirror');
-          const d = ydoc.getXmlFragment('document');
-          if (d && typeof d.length === 'number' && d.length > 0) {
-            chosenField = 'document';
+        if (ydoc && typeof ydoc.getXmlFragment === "function") {
+          const p = ydoc.getXmlFragment("prosemirror");
+          const d = ydoc.getXmlFragment("document");
+          if (d && typeof d.length === "number" && d.length > 0) {
+            chosenField = "document";
           }
         }
       } catch (e) {
@@ -253,7 +270,7 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
         Collaboration.configure({
           document: ydoc,
           field: chosenField,
-        })
+        }),
       );
 
       // Register CollaborationCursor extension IMMEDIATELY
@@ -261,10 +278,13 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
         CollaborationCursor.configure({
           provider,
           user: cursorUser(user),
-        })
+        }),
       );
 
-      logger.debug('[Canvas Collab] Collaboration extensions registered upfront', { chosenField });
+      logger.debug(
+        "[Canvas Collab] Collaboration extensions registered upfront",
+        { chosenField },
+      );
     }
 
     // Deduplicate by extension name (guards against HMR double-mount).
@@ -310,7 +330,9 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
     // Only defer setting initial content when a real collaboration session
     // is active (provider + ydoc). Use `withCollab` so offline mode always
     // gets its content immediately.
-    content: withCollab ? undefined : sanitizeDocJSON(canvas?.content || EMPTY_DOC),
+    content: withCollab
+      ? undefined
+      : sanitizeDocJSON(canvas?.content || EMPTY_DOC),
     editorProps: {
       attributes: {
         class: "canvas-prosemirror",
@@ -349,8 +371,6 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
     nodeViews: {
       paragraph: ReactNodeViewRenderer(BlockWrapper),
       heading: ReactNodeViewRenderer(BlockWrapper),
-      taskItem: ReactNodeViewRenderer(BlockWrapper),
-      // Inline template variable node view (editable chip)
       templateVariable: ReactNodeViewRenderer(TemplateVariableView),
     },
     onUpdate: ({ editor: e }) => {
@@ -363,6 +383,22 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
     },
   });
 
+  // ------------------------------------------------------------------
+  // Recalculate selection toolbar position when the canvas surface is
+  // scrolled.  Without this the floating toolbar becomes detached from
+  // the selection because coordsAtPos returns viewport-relative coords
+  // that change as the container scrolls.
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (!editor) return undefined;
+    const scrollEl = document.querySelector(".canvas-scroll-surface");
+    if (!scrollEl) return undefined;
+
+    const onScroll = () => syncContextualUi(editor);
+    scrollEl.addEventListener("scroll", onScroll, { passive: true });
+    return () => scrollEl.removeEventListener("scroll", onScroll);
+  }, [editor, syncContextualUi]);
+
   // Convert text tokens like {{name}} or [name] into templateVariable nodes
   const convertTokensToVariableNodes = (editorInstance) => {
     if (!editorInstance) return;
@@ -370,10 +406,7 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
     const varNodeType = schema.nodes.templateVariable;
     if (!varNodeType) return;
 
-    const tokenPatterns = [
-      /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
-      /\[([^\]]+)\]/g,
-    ];
+    const tokenPatterns = [/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, /\[([^\]]+)\]/g];
 
     const matches = [];
 
@@ -394,10 +427,12 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
     if (matches.length === 0) return;
 
     // Replace from end to start so positions remain valid
-    matches.sort((a, b) => b.start - a.start).forEach((m) => {
-      const node = varNodeType.create({ name: m.name, value: "" });
-      tr.replaceWith(m.start, m.end, node);
-    });
+    matches
+      .sort((a, b) => b.start - a.start)
+      .forEach((m) => {
+        const node = varNodeType.create({ name: m.name, value: "" });
+        tr.replaceWith(m.start, m.end, node);
+      });
 
     if (tr.docChanged) {
       editorInstance.view.dispatch(tr);
@@ -414,18 +449,26 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
 
     const onYUpdate = (update, origin) => {
       try {
-        const size = update && update.byteLength ? update.byteLength : (update && update.length ? update.length : null);
-        console.debug('[Canvas Collab][YJS] update', { size, origin: origin ? String(origin).slice(0, 64) : null });
+        const size =
+          update && update.byteLength
+            ? update.byteLength
+            : update && update.length
+              ? update.length
+              : null;
+        console.debug("[Canvas Collab][YJS] update", {
+          size,
+          origin: origin ? String(origin).slice(0, 64) : null,
+        });
       } catch (e) {}
     };
 
     try {
-      ydoc.on && ydoc.on('update', onYUpdate);
+      ydoc.on && ydoc.on("update", onYUpdate);
     } catch (e) {}
 
     return () => {
       try {
-        ydoc.off && ydoc.off('update', onYUpdate);
+        ydoc.off && ydoc.off("update", onYUpdate);
       } catch (e) {}
     };
   }, [ydoc]);
@@ -436,13 +479,18 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
       try {
         const json = editor.getJSON ? editor.getJSON() : null;
         const words = editor.storage?.characterCount?.words?.() || 0;
-        console.debug('[Canvas Collab][Editor] update', { words, jsonSize: json ? JSON.stringify(json).length : null });
+        console.debug("[Canvas Collab][Editor] update", {
+          words,
+          jsonSize: json ? JSON.stringify(json).length : null,
+        });
       } catch (e) {}
     };
 
-    editor.on('update', onEditorUpdate);
+    editor.on("update", onEditorUpdate);
     return () => {
-      try { editor.off('update', onEditorUpdate); } catch (e) {}
+      try {
+        editor.off("update", onEditorUpdate);
+      } catch (e) {}
     };
   }, [editor]);
 
@@ -477,14 +525,20 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
         const el = document.querySelector(`[data-block-id="${blockId}"]`);
         if (!el) return;
         const rect = el.getBoundingClientRect();
-        const container = document.querySelector('.canvas-document-surface');
-        const containerRect = container ? container.getBoundingClientRect() : { left: 0, top: 0 };
+        const container = document.querySelector(".canvas-document-surface");
+        const containerRect = container
+          ? container.getBoundingClientRect()
+          : { left: 0, top: 0 };
         const x = Math.round(rect.right - containerRect.left);
         const y = Math.round(rect.top - containerRect.top);
         useCanvasStore.getState().updateCursor(blockId, x, y);
         try {
-          const local = providerRef.current?.awareness?.getLocalState()?.user || {};
-          providerRef.current?.awareness?.setLocalStateField('user', { ...local, cursor: { blockId, x, y } });
+          const local =
+            providerRef.current?.awareness?.getLocalState()?.user || {};
+          providerRef.current?.awareness?.setLocalStateField("user", {
+            ...local,
+            cursor: { blockId, x, y },
+          });
         } catch (e) {
           // ignore awareness update errors
         }
@@ -517,9 +571,14 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
     const stopTypingDebounced = debounce((blockId) => {
       if (blockId) useCanvasStore.getState().setBlockTyping(blockId, false);
       try {
-        const local = providerRef.current?.awareness?.getLocalState()?.user || {};
+        const local =
+          providerRef.current?.awareness?.getLocalState()?.user || {};
         // Clear typing/activity state when typing stops
-        providerRef.current?.awareness?.setLocalStateField('user', { ...local, activity: 'viewing canvas', typing: false });
+        providerRef.current?.awareness?.setLocalStateField("user", {
+          ...local,
+          activity: "viewing canvas",
+          typing: false,
+        });
       } catch (e) {
         // ignore
       }
@@ -559,14 +618,22 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
         try {
           const pos = editor.state.selection.from;
           const coords = editor.view.coordsAtPos(pos);
-          const container = document.querySelector('.canvas-document-surface');
-          const containerRect = container ? container.getBoundingClientRect() : { left: 0, top: 0 };
+          const container = document.querySelector(".canvas-document-surface");
+          const containerRect = container
+            ? container.getBoundingClientRect()
+            : { left: 0, top: 0 };
           const x = Math.round(coords.left - containerRect.left);
           const y = Math.round(coords.top - containerRect.top);
           useCanvasStore.getState().updateCursor(blockId, x, y);
           try {
-            const local = providerRef.current?.awareness?.getLocalState()?.user || {};
-            providerRef.current?.awareness?.setLocalStateField('user', { ...local, cursor: { blockId, x, y }, activity: 'typing', typing: true });
+            const local =
+              providerRef.current?.awareness?.getLocalState()?.user || {};
+            providerRef.current?.awareness?.setLocalStateField("user", {
+              ...local,
+              cursor: { blockId, x, y },
+              activity: "typing",
+              typing: true,
+            });
           } catch (e) {
             // ignore awareness set errors
           }
@@ -592,7 +659,8 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
         dom.removeEventListener("input", handleKey);
         dom.removeEventListener("compositionstart", handleKey);
       }
-      if (lastBlockId) useCanvasStore.getState().setBlockTyping(lastBlockId, false);
+      if (lastBlockId)
+        useCanvasStore.getState().setBlockTyping(lastBlockId, false);
     };
   }, [editor]);
 
@@ -604,14 +672,14 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
 
     const doc = ydocRef.current;
     const prov = providerRef.current;
-    const meta = doc.getMap('canvasMeta');
+    const meta = doc.getMap("canvasMeta");
     let seeded = false;
 
     const seedIfNeeded = () => {
-      if (seeded || meta.get('seeded')) return;
+      if (seeded || meta.get("seeded")) return;
 
       // Check if the Yjs fragment is empty
-      const fragment = doc.getXmlFragment('prosemirror');
+      const fragment = doc.getXmlFragment("prosemirror");
       const isEmpty = !fragment || fragment.length === 0;
 
       if (isEmpty) {
@@ -619,14 +687,18 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
         try {
           editor.commands.setContent(newJSON, false);
           convertTokensToVariableNodes(editor);
-          meta.set('seeded', true);
+          meta.set("seeded", true);
           seeded = true;
-          logger.info('[Canvas Collab] Seeded initial content', { canvasId: canvas._id });
+          logger.info("[Canvas Collab] Seeded initial content", {
+            canvasId: canvas._id,
+          });
         } catch (err) {
-          logger.warn('[Canvas Collab] Seeding failed', { error: err.message });
+          logger.warn("[Canvas Collab] Seeding failed", { error: err.message });
         }
       } else {
-        logger.debug('[Canvas Collab] Yjs fragment not empty, skipping seed', { canvasId: canvas._id });
+        logger.debug("[Canvas Collab] Yjs fragment not empty, skipping seed", {
+          canvasId: canvas._id,
+        });
         seeded = true;
       }
     };
@@ -636,9 +708,11 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
       seedIfNeeded();
     } else {
       const handleSynced = () => seedIfNeeded();
-      prov.on('synced', handleSynced);
+      prov.on("synced", handleSynced);
       return () => {
-        try { prov.off('synced', handleSynced); } catch (e) {}
+        try {
+          prov.off("synced", handleSynced);
+        } catch (e) {}
       };
     }
   }, [canvas?.content, editor]);
@@ -652,8 +726,12 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
       // identical to prevent redundant updates that can trigger save
       // cycles.
       const newJSON = sanitizeDocJSON(canvas?.content || EMPTY_DOC);
-      const currentJSON = typeof editor.getJSON === "function" ? editor.getJSON() : null;
-      if (!currentJSON || JSON.stringify(currentJSON) !== JSON.stringify(newJSON)) {
+      const currentJSON =
+        typeof editor.getJSON === "function" ? editor.getJSON() : null;
+      if (
+        !currentJSON ||
+        JSON.stringify(currentJSON) !== JSON.stringify(newJSON)
+      ) {
         editor.commands.setContent(newJSON, false);
         try {
           convertTokensToVariableNodes(editor);

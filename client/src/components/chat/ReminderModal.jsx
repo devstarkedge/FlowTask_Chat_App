@@ -453,7 +453,7 @@ export default function ReminderModal({ saved, onClose, isStandalone = false }) 
             style={{
               padding: '8px 20px', borderRadius: 9, border: 'none',
               background: (!date || !time || saving) ? 'color-mix(in srgb, var(--accent-primary) 50%, transparent)' : 'var(--accent-primary)',
-              color: '#fff', fontSize: 13, fontWeight: 700,
+              color: 'var(--text-white)', fontSize: 13, fontWeight: 700,
               cursor: (!date || !time || saving) ? 'not-allowed' : 'pointer',
               fontFamily: 'var(--font-sans)',
               boxShadow: '0 2px 8px color-mix(in srgb, var(--accent-primary) 28%, transparent)',

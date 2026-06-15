@@ -1,10 +1,10 @@
-import { v2 as cloudinary } from 'cloudinary';
-import { createHash } from 'crypto';
-import fs from 'fs';
-import FileAsset from '../modules/files/FileAsset.model.js';
-import env from '../config/environment.js';
-import logger from '../utils/logger.js';
-import { logUploadFailure } from '../utils/performanceLogger.js';
+import { v2 as cloudinary } from "cloudinary";
+import { createHash } from "crypto";
+import fs from "fs";
+import FileAsset from "../modules/files/FileAsset.model.js";
+import env from "../config/environment.js";
+import logger from "../utils/logger.js";
+import { logUploadFailure } from "../utils/performanceLogger.js";
 
 cloudinary.config({
   cloud_name: env.CLOUDINARY_CLOUD_NAME,
@@ -12,9 +12,9 @@ cloudinary.config({
   api_secret: env.CLOUDINARY_API_SECRET,
 });
 
-logger.info('Cloudinary config status', {
-  cloud_name: env.CLOUDINARY_CLOUD_NAME ? 'SET' : 'MISSING',
-  api_key: env.CLOUDINARY_API_KEY ? 'SET' : 'MISSING',
+logger.info("Cloudinary config status", {
+  cloud_name: env.CLOUDINARY_CLOUD_NAME ? "SET" : "MISSING",
+  api_key: env.CLOUDINARY_API_KEY ? "SET" : "MISSING",
   has_secret: !!env.CLOUDINARY_API_SECRET,
 });
 
@@ -51,7 +51,7 @@ class FileUploadService {
    */
   async recoverStuckUploads() {
     try {
-      const stuckUploads = await FileAsset.find({ status: 'uploading' });
+      const stuckUploads = await FileAsset.find({ status: "uploading" });
       if (stuckUploads.length === 0) return;
 
       let recoveredCount = 0;
@@ -72,13 +72,13 @@ class FileUploadService {
           recoveredCount++;
         } else {
           // Can't recover without the file — mark as failed
-          asset.status = 'failed';
+          asset.status = "failed";
           await asset.save();
         }
       }
 
-      logger.info('Upload recovery complete', {
-        metric: 'upload_recovery',
+      logger.info("Upload recovery complete", {
+        metric: "upload_recovery",
         total: stuckUploads.length,
         requeued: recoveredCount,
         markedFailed: stuckUploads.length - recoveredCount,
@@ -89,7 +89,7 @@ class FileUploadService {
         this.processQueue();
       }
     } catch (error) {
-      logger.error('Upload recovery failed', { error: error.message });
+      logger.error("Upload recovery failed", { error: error.message });
     }
   }
 
@@ -98,11 +98,11 @@ class FileUploadService {
    */
   async generateChecksum(filePath) {
     return new Promise((resolve, reject) => {
-      const hash = createHash('sha256');
+      const hash = createHash("sha256");
       const stream = fs.createReadStream(filePath);
-      stream.on('data', (data) => hash.update(data));
-      stream.on('end', () => resolve(hash.digest('hex')));
-      stream.on('error', reject);
+      stream.on("data", (data) => hash.update(data));
+      stream.on("end", () => resolve(hash.digest("hex")));
+      stream.on("error", reject);
     });
   }
 
@@ -113,7 +113,11 @@ class FileUploadService {
     const checksumHash = await this.generateChecksum(file.path);
 
     // Duplicate detection: reuse existing file asset
-    const existingAsset = await FileAsset.findOne({ checksumHash, workspaceId, status: 'available' });
+    const existingAsset = await FileAsset.findOne({
+      checksumHash,
+      workspaceId,
+      status: "available",
+    });
     if (existingAsset) {
       // Clean up the temporary local file as it's a duplicate
       fs.unlink(file.path, () => {});
@@ -121,14 +125,16 @@ class FileUploadService {
     }
 
     // Determine resource type for Cloudinary
-    const resourceType = file.mimetype.startsWith('image/') ? 'image' 
-      : file.mimetype.startsWith('video/') ? 'video' 
-      : 'raw';
+    const resourceType = file.mimetype.startsWith("image/")
+      ? "image"
+      : file.mimetype.startsWith("video/")
+        ? "video"
+        : "raw";
 
     // Create a preliminary asset. Cloudinary details will be populated asynchronously.
     const asset = new FileAsset({
       publicId: `pending_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-      secureUrl: '/placeholder-loading', // Frontend can show a loading state
+      secureUrl: "/placeholder-loading", // Frontend can show a loading state
       resourceType,
       mimeType: file.mimetype,
       fileSize: file.size,
@@ -136,7 +142,7 @@ class FileUploadService {
       uploadedBy: userId,
       workspaceId,
       checksumHash,
-      status: 'uploading',
+      status: "uploading",
       metadata: { localPath: file.path }, // persisted for crash recovery
     });
 
@@ -161,8 +167,8 @@ class FileUploadService {
       try {
         await this.handleUpload(job.assetId, job.file);
       } catch (error) {
-        logger.error('Upload queue job failed', {
-          metric: 'upload_failure',
+        logger.error("Upload queue job failed", {
+          metric: "upload_failure",
           assetId: job.assetId?.toString(),
           error: error.message,
         });
@@ -178,7 +184,11 @@ class FileUploadService {
    */
   _isRetryableError(error) {
     // Network errors
-    if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
+    if (
+      error.code === "ECONNRESET" ||
+      error.code === "ETIMEDOUT" ||
+      error.code === "ENOTFOUND"
+    ) {
       return true;
     }
     // Cloudinary 5xx errors
@@ -203,7 +213,10 @@ class FileUploadService {
       try {
         let result;
         if (fileSize > 10 * 1024 * 1024) {
-          result = await cloudinary.uploader.upload_large(filePath, uploadOptions);
+          result = await cloudinary.uploader.upload_large(
+            filePath,
+            uploadOptions,
+          );
         } else {
           result = await cloudinary.uploader.upload(filePath, uploadOptions);
         }
@@ -211,10 +224,15 @@ class FileUploadService {
       } catch (error) {
         lastError = error;
 
-        if (attempt < UPLOAD_RETRY.MAX_ATTEMPTS && this._isRetryableError(error)) {
-          const delay = UPLOAD_RETRY.BASE_DELAY_MS * Math.pow(UPLOAD_RETRY.BACKOFF_FACTOR, attempt - 1);
-          logger.warn('Cloudinary upload retry', {
-            metric: 'upload_retry',
+        if (
+          attempt < UPLOAD_RETRY.MAX_ATTEMPTS &&
+          this._isRetryableError(error)
+        ) {
+          const delay =
+            UPLOAD_RETRY.BASE_DELAY_MS *
+            Math.pow(UPLOAD_RETRY.BACKOFF_FACTOR, attempt - 1);
+          logger.warn("Cloudinary upload retry", {
+            metric: "upload_retry",
             attempt,
             maxAttempts: UPLOAD_RETRY.MAX_ATTEMPTS,
             delayMs: delay,
@@ -250,40 +268,134 @@ class FileUploadService {
         use_filename: true,
       };
 
-      // Image optimization
-      if (asset.resourceType === 'image') {
-        uploadOptions.transformation = [
-          { quality: 'auto', fetch_format: 'auto' },
-        ];
+      // Image optimization - but preserve SVG format
+      if (asset.resourceType === "image") {
+        // SVG files should NOT be transformed - they're vector graphics
+        // f_auto converts SVG to PNG/WebP, breaking the format
+        const isSvgFile =
+          asset.mimeType === "image/svg+xml" ||
+          asset.originalName?.toLowerCase().endsWith(".svg");
+
+        if (isSvgFile) {
+          // SVG: preserve as vector, force SVG format, NO rasterization
+          uploadOptions.format = "svg";
+          uploadOptions.flags = "force_strip"; // Remove metadata but preserve vector
+          logger.info("SVG upload - preserving vector format", {
+            assetId: asset._id.toString(),
+            originalName: asset.originalName,
+          });
+        } else {
+          uploadOptions.transformation = [
+            { quality: "auto", fetch_format: "auto" },
+          ];
+        }
       }
+
+      logger.info("Uploading file to Cloudinary", {
+        assetId: asset._id.toString(),
+        originalName: asset.originalName,
+        declaredMimeType: asset.mimeType,
+        resourceType: asset.resourceType,
+        isSvgFile:
+          asset.mimeType === "image/svg+xml" ||
+          asset.originalName?.toLowerCase().endsWith(".svg"),
+        uploadOptions,
+      });
 
       // Upload with retry
-      const result = await this._uploadWithRetry(file.path, uploadOptions, file.size);
+      const result = await this._uploadWithRetry(
+        file.path,
+        uploadOptions,
+        file.size,
+      );
+
+      logger.info("Cloudinary upload response", {
+        assetId: asset._id.toString(),
+        public_id: result.public_id,
+        format: result.format,
+        resource_type: result.resource_type,
+        secure_url: result.secure_url,
+        declaredMimeType: asset.mimeType,
+      });
+
+      // Log full upload response for raw/PDF files to audit access config
+      if (asset.resourceType === "raw" || result.resource_type === "raw") {
+        console.log("[PDF Upload] Full Cloudinary response audit:", {
+          assetId: asset._id.toString(),
+          originalName: asset.originalName,
+          declaredMimeType: asset.mimeType,
+          public_id: result.public_id,
+          secure_url: result.secure_url,
+          resource_type: result.resource_type,
+          type: result.type,
+          access_mode: result.access_mode,
+          format: result.format,
+          urlContainsRaw: result.secure_url?.includes("/raw/"),
+          urlContainsImage: result.secure_url?.includes("/image/"),
+        });
+      }
+
+      // CRITICAL: Derive actual mimeType from Cloudinary response, not file extension
+      let actualMimeType = asset.mimeType;
+      if (result.format && result.resource_type === "image") {
+        const formatToMime = {
+          png: "image/png",
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          gif: "image/gif",
+          webp: "image/webp",
+          svg: "image/svg+xml",
+          bmp: "image/bmp",
+          tiff: "image/tiff",
+          ico: "image/x-icon",
+        };
+        actualMimeType =
+          formatToMime[result.format.toLowerCase()] || asset.mimeType;
+
+        if (actualMimeType !== asset.mimeType) {
+          logger.warn("Cloudinary format conversion detected", {
+            assetId: asset._id.toString(),
+            originalName: asset.originalName,
+            declaredMimeType: asset.mimeType,
+            actualMimeType,
+            cloudinaryFormat: result.format,
+          });
+        }
+      }
+
+      // Store publicId as returned by Cloudinary
+      const storedPublicId = result.public_id;
 
       // Update Asset state to available
-      asset.publicId = result.public_id;
+      // IMPORTANT: Always use the secureUrl exactly as returned by Cloudinary.
+      // Never rewrite /image/upload/ to /raw/upload/ — Cloudinary stores
+      // PDFs and other "raw" assets under /image/upload/ and that URL is correct.
+      asset.publicId = storedPublicId;
       asset.secureUrl = result.secure_url;
-      asset.status = 'available';
-      
+      asset.status = "available";
+      asset.mimeType = actualMimeType;
+      asset.resourceType = result.resource_type;
+
       // Setup Preview/Thumbnails
-      if (asset.resourceType === 'video') {
-        asset.thumbnailUrl = result.secure_url.replace(/\.[^/.]+$/, '.jpg');
-      } else if (asset.resourceType === 'image') {
+      if (asset.resourceType === "video") {
+        asset.thumbnailUrl = result.secure_url.replace(/\.[^/.]+$/, ".jpg");
+      } else if (asset.resourceType === "image") {
         asset.thumbnailUrl = result.secure_url;
       }
-      
+
       asset.metadata = {
         width: result.width,
         height: result.height,
         duration: result.duration,
         format: result.format,
+        resourceType: result.resource_type,
       };
 
       await asset.save();
 
       const durationMs = Math.round(performance.now() - startTime);
-      logger.info('File uploaded successfully', {
-        metric: 'upload_complete',
+      logger.info("File uploaded successfully", {
+        metric: "upload_complete",
         assetId: asset._id.toString(),
         resourceType: asset.resourceType,
         fileSize: asset.fileSize,
@@ -291,20 +403,19 @@ class FileUploadService {
       });
 
       // Emit global event indicating the file is ready
-      const { default: eventBus } = await import('./eventBus.js');
-      eventBus.emit('file:uploaded', { assetId: asset._id, asset });
-
+      const { default: eventBus } = await import("./eventBus.js");
+      eventBus.emit("file:uploaded", { assetId: asset._id, asset });
     } catch (error) {
       const durationMs = Math.round(performance.now() - startTime);
-      logger.error('Cloudinary upload failed permanently', {
-        metric: 'upload_failure',
+      logger.error("Cloudinary upload failed permanently", {
+        metric: "upload_failure",
         assetId: asset._id.toString(),
         error: error.message,
         durationMs,
         attempts: UPLOAD_RETRY.MAX_ATTEMPTS,
       });
 
-      asset.status = 'failed';
+      asset.status = "failed";
       await asset.save();
       throw error;
     } finally {

@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback } from "react";
-import { Image, Palette, Move, X, ChevronDown } from "lucide-react";
+import { Image, Palette, Move, X, ChevronDown, Upload, Loader2 } from "lucide-react";
+import toast from "react-hot-toast";
 import { useCanvasStore } from "../../stores/canvasStore";
+import { messageAPI } from "../../services/api";
 
 const GRADIENT_PRESETS = [
   { label: "Ocean Blue", value: "linear-gradient(135deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%)" },
@@ -18,14 +20,17 @@ const SOLID_COLORS = [
   "#db2777", "#dc2626", "#16a34a", "#b45309", "#0e7490",
 ];
 
-export default function CanvasCover({ cover, canvasId, canvasTitle, onClose }) {
+export default function CanvasCover({ cover, canvasId, canvasTitle, channelId, onClose }) {
   const updateCanvasMetadata = useCanvasStore((s) => s.updateCanvasMetadata);
-  const [activeTab, setActiveTab] = useState("gradient"); // gradient | color | image
+  const [activeTab, setActiveTab] = useState("gradient"); // gradient | color | image | upload
   const [customImageUrl, setCustomImageUrl] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartY, setDragStartY] = useState(null);
   const [yOffset, setYOffset] = useState(cover?.yOffset ?? 50);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadPreview, setUploadPreview] = useState(null);
   const coverRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const coverStyle = cover
     ? cover.type === "gradient"
@@ -52,6 +57,65 @@ export default function CanvasCover({ cover, canvasId, canvasTitle, onClose }) {
     await updateCanvasMetadata(canvasId, { cover: null });
     onClose?.();
   }, [canvasId, updateCanvasMetadata, onClose]);
+
+  // Prevent duplicate uploads
+  const isUploadingRef = useRef(false);
+
+  // Track the last uploaded file URL to prevent duplicate uploads
+  const lastUploadedUrlRef = useRef(null);
+
+  // File upload handler
+  const handleFileSelect = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !canvasId) return;
+
+    // Prevent duplicate upload of the same file
+    if (isUploadingRef.current) {
+      toast.error("Upload already in progress. Please wait.");
+      return;
+    }
+
+    // Validate file type
+    const validTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      toast.error("Please select a JPG, PNG, or WEBP image.");
+      return;
+    }
+
+    // Show local preview immediately
+    const previewUrl = URL.createObjectURL(file);
+    setUploadPreview(previewUrl);
+    setIsUploading(true);
+    isUploadingRef.current = true;
+
+    try {
+      const formData = new FormData();
+      formData.append("files", file);
+
+      const res = await messageAPI.uploadFiles(channelId, formData);
+      if (res.data && res.data.success) {
+        const uploadedUrl = res.data.data?.urls?.[0] || res.data.data?.files?.[0]?.url;
+        if (uploadedUrl) {
+          await updateCanvasMetadata(canvasId, {
+            cover: { type: "image", value: uploadedUrl, yOffset },
+          });
+          toast.success("Cover image uploaded!");
+        } else {
+          toast.error("Upload succeeded but no URL returned.");
+        }
+      } else {
+        toast.error("Failed to upload cover image.");
+      }
+    } catch (err) {
+      console.error("[CanvasCover] Upload error:", err);
+      toast.error("Failed to upload cover image.");
+    } finally {
+      setIsUploading(false);
+      setUploadPreview(null);
+      isUploadingRef.current = false;
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [canvasId, channelId, updateCanvasMetadata, yOffset]);
 
   // Drag-to-reposition cover image
   const handleMouseDown = (e) => {
@@ -152,6 +216,7 @@ export default function CanvasCover({ cover, canvasId, canvasTitle, onClose }) {
             { id: "gradient", label: "Gradients", icon: Palette },
             { id: "color", label: "Colors", icon: Palette },
             { id: "image", label: "Image URL", icon: Image },
+            { id: "upload", label: "Upload", icon: Upload },
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -226,7 +291,7 @@ export default function CanvasCover({ cover, canvasId, canvasTitle, onClose }) {
           <div style={{ display: "flex", gap: 8 }}>
             <input
               type="text"
-              placeholder="Paste an image URL…"
+              placeholder="Paste an image URL\u2026"
               value={customImageUrl}
               onChange={(e) => setCustomImageUrl(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && applyImageUrl()}
@@ -250,6 +315,58 @@ export default function CanvasCover({ cover, canvasId, canvasTitle, onClose }) {
             >
               Apply
             </button>
+          </div>
+        )}
+        
+        {/* Upload from Computer */}
+        {activeTab === "upload" && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "8px 0" }}>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".jpg,.jpeg,.png,.webp"
+              onChange={handleFileSelect}
+              style={{ display: "none" }}
+            />
+            {isUploading && uploadPreview && (
+              <div style={{
+                width: "100%", height: 80, borderRadius: "var(--radius-md)",
+                backgroundImage: `url(${uploadPreview})`, backgroundSize: "cover",
+                backgroundPosition: "center", position: "relative", overflow: "hidden",
+              }}>
+                <div style={{
+                  position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "#fff", fontSize: 12, fontWeight: 600, gap: 6,
+                }}>
+                  <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                  Uploading...
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "10px 20px", borderRadius: "var(--radius-md)",
+                border: "1px dashed var(--border-primary)",
+                background: "var(--bg-secondary)", color: "var(--text-primary)",
+                fontSize: 13, fontWeight: 600, cursor: isUploading ? "not-allowed" : "pointer",
+                transition: "all 150ms", width: "100%", justifyContent: "center",
+                opacity: isUploading ? 0.6 : 1,
+              }}
+              onMouseEnter={(e) => {
+                if (!isUploading) e.currentTarget.style.borderColor = "var(--accent-primary)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "var(--border-primary)";
+              }}
+            >
+              <Upload size={16} />
+              {isUploading ? "Uploading..." : "Upload from Computer"}
+            </button>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>JPG, PNG, or WEBP</span>
           </div>
         )}
 

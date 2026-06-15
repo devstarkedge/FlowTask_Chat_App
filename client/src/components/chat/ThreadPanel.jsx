@@ -28,6 +28,7 @@ import SlackFileCard from "./SlackFileCard";
 import { handleDownload } from "../../utils/handleDownload";
 import { openPreview } from "../../services/previewService";
 import EmojiPicker from "./EmojiPicker";
+import EmojiPickerPortal from "./EmojiPickerPortal";
 import toast from "react-hot-toast";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 
@@ -395,6 +396,7 @@ function ThreadMessage({ message, isRoot = false }) {
 
   const containerRef = useRef(null);
   const moreMenuRef = useRef(null);
+  const emojiButtonRef = useRef(null);
 
   const authorName =
     message.senderSnapshot?.name || message.authorId?.name || "FlowTask Bot";
@@ -718,11 +720,13 @@ function ThreadMessage({ message, isRoot = false }) {
             zIndex: 20,
           }}
         >
-          <ActionButton
-            icon={Smile}
-            title="Add reaction"
-            onClick={() => setShowReactionPicker(!showReactionPicker)}
-          />
+          <span ref={emojiButtonRef}>
+            <ActionButton
+              icon={Smile}
+              title="Add reaction"
+              onClick={() => setShowReactionPicker(!showReactionPicker)}
+            />
+          </span>
           <ActionButton
             icon={isSaved ? BookmarkCheck : Bookmark}
             title={isSaved ? "Unsave message" : "Save for later"}
@@ -806,22 +810,21 @@ function ThreadMessage({ message, isRoot = false }) {
         </div>
       )}
 
-      {/* ── Emoji Reaction Picker ────────────────────────────────────────────── */}
-      {showReactionPicker && (
-        <div style={{ position: "absolute", top: -2, right: 12, zIndex: 30 }}>
-          <EmojiPicker
-            onSelect={(emoji) => {
-              handleReaction(emoji);
-              setShowActions(false);
-            }}
-            onClose={() => {
-              setShowReactionPicker(false);
-              setShowActions(false);
-            }}
-            position="top"
-          />
-        </div>
-      )}
+      {/* ── Emoji Reaction Picker (Portal-based to prevent clipping) ───────── */}
+      <EmojiPickerPortal
+        anchorRef={emojiButtonRef}
+        isOpen={showReactionPicker}
+        onClose={() => {
+          setShowReactionPicker(false);
+          setShowActions(false);
+        }}
+        onSelect={(emoji) => {
+          handleReaction(emoji);
+          setShowActions(false);
+        }}
+        position="top-start"
+        zIndex={1050}
+      />
     </div>
   );
 }

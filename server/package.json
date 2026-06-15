@@ -11,6 +11,9 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "db:repair-thread-task-index": "node scripts/repairThreadTaskIndex.js",
+    "db:fix-raw-urls": "node scripts/fix-raw-urls.js",
+    "db:fix-raw-urls:apply": "node scripts/fix-raw-urls.js --fix",
+    "db:check-file": "node scripts/check-file.js",
     "debug:notify": "node scripts/send_debug_notification.js"
   },
   "dependencies": {

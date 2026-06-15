@@ -5,8 +5,12 @@ import { useAuthStore } from "./authStore";
 import { useCanvasUiStore } from "./canvasUiStore";
 import toast from "react-hot-toast";
 import React from "react";
-// Simple helpers
+
+// ── Constants ──────────────────────────────────────────────────────────────────────
 const USER_COLORS = ["#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899", "#06b6d4"];
+const STORAGE_KEY_TABS = "flowtask.canvas.openTabs.v1";
+const STORAGE_KEY_ACTIVE_IDS = "flowtask.canvas.activeIds.v1";
+
 function getUserColor(userId) {
   if (!userId) return USER_COLORS[0];
   let hash = 0;
@@ -15,11 +19,11 @@ function getUserColor(userId) {
   return USER_COLORS[idx];
 }
 
-// Load persisted open-tabs (lightweight UI state only)
+// ── Persistence helpers ────────────────────────────────────────────────────────────
 function loadPersistedOpenTabs() {
   try {
     if (typeof localStorage === "undefined") return {};
-    const raw = localStorage.getItem("flowtask.canvas.openTabs.v1") || localStorage.getItem("canvas_open_tabs");
+    const raw = localStorage.getItem(STORAGE_KEY_TABS) || localStorage.getItem("canvas_open_tabs");
     if (!raw) return {};
     const parsed = JSON.parse(raw) || {};
     return Object.fromEntries(
@@ -30,22 +34,40 @@ function loadPersistedOpenTabs() {
   }
 }
 
-// Persist only lightweight UI state for open tabs (id + title). Do NOT store
-// full canvas metadata, content, permissions, or collaborators in localStorage.
 function persistOpenTabs(tabs) {
   try {
     if (typeof localStorage === "undefined") return;
     const sanitized = Object.fromEntries(
       Object.entries(tabs || {}).map(([channelId, list]) => [channelId, (list || []).map((c) => ({ _id: c._id, title: c.title }))])
     );
-    // Versioned key for future migrations
-    localStorage.setItem("flowtask.canvas.openTabs.v1", JSON.stringify(sanitized));
-    // Keep legacy key for compatibility (reads prefer the new key first)
+    localStorage.setItem(STORAGE_KEY_TABS, JSON.stringify(sanitized));
     localStorage.setItem("canvas_open_tabs", JSON.stringify(sanitized));
   } catch (e) {
     // ignore
   }
 }
+
+function loadPersistedActiveIds() {
+  try {
+    if (typeof localStorage === "undefined") return {};
+    const raw = localStorage.getItem(STORAGE_KEY_ACTIVE_IDS);
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch (e) {
+    return {};
+  }
+}
+
+function persistActiveIds(ids) {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(STORAGE_KEY_ACTIVE_IDS, JSON.stringify(ids));
+  } catch (e) {
+    // ignore
+  }
+}
+
+// ── Store ──────────────────────────────────────────────────────────────────────────
 export const useCanvasStore = create((set, get) => ({
   // Store state
   isLoading: false,
@@ -58,14 +80,25 @@ export const useCanvasStore = create((set, get) => ({
   typing: {},
   history: [],
   currentJoinedRoom: null,
-  activeCanvasIdByChannel: {},
+  // Persisted active canvas ID per channel (survives refresh)
+  activeCanvasIdByChannel: loadPersistedActiveIds(),
   openTabsByChannel: loadPersistedOpenTabs(),
-  // Whether we've attached global socket listeners (idempotent)
   globalSocketAttached: false,
   lastDeletedCanvas: null,
 
-  // ── Load specific canvas details (REST)
+  // ── Set active canvas ID for a channel (persisted) ───────────────────────────────
+  setActiveCanvasId: (channelId, canvasId) => {
+    if (!channelId || !canvasId) return;
+    set((state) => {
+      const next = { ...state.activeCanvasIdByChannel, [channelId]: canvasId };
+      persistActiveIds(next);
+      return { activeCanvasIdByChannel: next };
+    });
+  },
+
+  // ── Load specific canvas details (REST) ──────────────────────────────────────────
   loadCanvas: async (canvasId) => {
+    if (!canvasId) return;
     set({ isLoading: true });
     try {
       // Clean up previous room if any
@@ -81,23 +114,53 @@ export const useCanvasStore = create((set, get) => ({
         // Sort blocks by order
         const sortedBlocks = [...blocks].sort((a, b) => a.order - b.order);
 
-        set((state) => ({
-          activeCanvas: canvas,
-          blocks: sortedBlocks,
-          comments: comments || [],
-          presence: [],
-          cursors: {},
-          typing: {},
-          activeCanvasIdByChannel: {
-            ...state.activeCanvasIdByChannel,
-            [canvas.channelId]: canvas._id,
-          },
-        }));
+        set((state) => {
+          // Sync loaded title into openTabsByChannel so tab label is always fresh
+          const nextOpenTabs = { ...state.openTabsByChannel };
+          const channelId = canvas.channelId;
+          if (channelId && nextOpenTabs[channelId]) {
+            nextOpenTabs[channelId] = (nextOpenTabs[channelId] || []).map((t) =>
+              t._id === canvas._id ? { ...t, title: canvas.title } : t
+            );
+          }
+
+          // Persist active canvas ID for this channel
+          const nextActiveIds = { ...state.activeCanvasIdByChannel, [channelId]: canvas._id };
+          persistActiveIds(nextActiveIds);
+
+          return {
+            activeCanvas: canvas,
+            blocks: sortedBlocks,
+            comments: comments || [],
+            presence: [],
+            cursors: {},
+            typing: {},
+            activeCanvasIdByChannel: nextActiveIds,
+            openTabsByChannel: nextOpenTabs,
+          };
+        });
+
+        // Persist the synced open tabs so localStorage matches server
+        try {
+          persistOpenTabs(get().openTabsByChannel);
+        } catch (e) {
+          // ignore
+        }
 
         // Join room for the newly loaded canvas
         get().joinCanvasRoom(canvasId);
         // Ensure global listeners are attached too
         get().ensureGlobalSocketListeners?.();
+      } else {
+        // Canvas not found or error — clear active state for this channel
+        set((state) => {
+          const nextActiveIds = { ...state.activeCanvasIdByChannel };
+          Object.keys(nextActiveIds).forEach((chId) => {
+            if (nextActiveIds[chId] === canvasId) delete nextActiveIds[chId];
+          });
+          persistActiveIds(nextActiveIds);
+          return { activeCanvasIdByChannel: nextActiveIds };
+        });
       }
     } catch (err) {
       console.error("[CanvasStore] loadCanvas error:", err);
@@ -106,18 +169,22 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
-  // ── Create Canvas
+  // ── Create Canvas ────────────────────────────────────────────────────────────────
   createCanvas: async (channelId, payload) => {
     set({ isLoading: true });
     try {
       const res = await canvasAPI.create(channelId, payload);
       if (res.data && res.data.success) {
         const newCanvas = res.data.data;
-        set((state) => ({
-          activeCanvas: newCanvas,
-          activeCanvasIdByChannel: { ...state.activeCanvasIdByChannel, [channelId]: newCanvas._id },
-          blocks: [],
-        }));
+        set((state) => {
+          const nextActiveIds = { ...state.activeCanvasIdByChannel, [channelId]: newCanvas._id };
+          persistActiveIds(nextActiveIds);
+          return {
+            activeCanvas: newCanvas,
+            activeCanvasIdByChannel: nextActiveIds,
+            blocks: [],
+          };
+        });
 
         // Load the created canvas to attach sockets/providers
         await get().loadCanvas(newCanvas._id);
@@ -130,21 +197,61 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
-  // ── Update canvas metadata (title, cover, content pointer, etc.)
+  // ── Update canvas metadata (title, cover, content pointer, etc.) ─────────────────
   updateCanvasMetadata: async (canvasId, updates) => {
     try {
       const res = await canvasAPI.update(canvasId, updates);
       if (res.data && res.data.success) {
         const updated = res.data.data;
         set((state) => {
-          const active = state.activeCanvas && state.activeCanvas._id === canvasId ? { ...state.activeCanvas, ...updated } : state.activeCanvas;
+          const active = state.activeCanvas && state.activeCanvas._id === canvasId
+            ? { ...state.activeCanvas, ...updated }
+            : state.activeCanvas;
           const channelId = updated.channelId || (state.activeCanvas && state.activeCanvas.channelId) || null;
           const nextCanvases = { ...state.canvasesByChannel };
           if (channelId) {
-            nextCanvases[channelId] = (nextCanvases[channelId] || []).map((c) => (c._id === canvasId ? updated : c));
+            nextCanvases[channelId] = (nextCanvases[channelId] || []).map((c) =>
+              c._id === canvasId ? { ...c, ...updated } : c
+            );
           }
-          return { activeCanvas: active, canvasesByChannel: nextCanvases };
+
+          // Sync tab title in openTabsByChannel when title changes — INSTANTLY
+          let nextOpenTabs = state.openTabsByChannel;
+          if (updates.title != null) {
+            nextOpenTabs = { ...state.openTabsByChannel };
+            Object.keys(nextOpenTabs).forEach((chId) => {
+              nextOpenTabs[chId] = (nextOpenTabs[chId] || []).map((t) =>
+                t._id === canvasId ? { ...t, title: updates.title } : t
+              );
+            });
+          }
+
+          return {
+            activeCanvas: active,
+            canvasesByChannel: nextCanvases,
+            openTabsByChannel: nextOpenTabs,
+          };
         });
+
+        // Persist updated tab titles
+        if (updates.title != null) {
+          try {
+            persistOpenTabs(get().openTabsByChannel);
+          } catch (e) {
+            // ignore
+          }
+
+          // Broadcast title update via socket so other users see it instantly
+          try {
+            const socket = getSocket();
+            if (socket) {
+              socket.emit("canvas:title:update", { canvasId, title: updates.title });
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+
         return updated;
       }
     } catch (err) {
@@ -152,7 +259,7 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
-  // ── Duplicate Canvas
+  // ── Duplicate Canvas ─────────────────────────────────────────────────────────────
   duplicateCanvas: async (canvasId) => {
     set({ isLoading: true });
     try {
@@ -182,138 +289,154 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
-  // ── Delete Canvas (optimistic + undo)
-  // deleteCanvas: async (canvasId) => {
-  //   // Optimistic deletion with Undo support.
-  //   try {
-  //     const state = get();
+  // ── Delete Canvas (optimistic + undo) ────────────────────────────────────────────
+  deleteCanvas: async (canvasId) => {
+    try {
+      const state = get();
 
-  //     // Find canvas metadata and channel
-  //     let found = null;
-  //     let foundChannel = null;
-  //     Object.keys(state.canvasesByChannel || {}).forEach((chId) => {
-  //       const list = state.canvasesByChannel[chId] || [];
-  //       const match = list.find((c) => c._id === canvasId);
-  //       if (match) {
-  //         found = match;
-  //         foundChannel = chId;
-  //       }
-  //     });
+      // Find canvas metadata and channel
+      let found = null;
+      let foundChannel = null;
+      Object.keys(state.canvasesByChannel || {}).forEach((chId) => {
+        const list = state.canvasesByChannel[chId] || [];
+        const match = list.find((c) => c._id === canvasId);
+        if (match) {
+          found = match;
+          foundChannel = chId;
+        }
+      });
 
-  //     // If not present locally, attempt to fetch details for snapshot
-  //     let snapshot = null;
-  //     if (found) {
-  //       snapshot = { canvas: found, blocks: null };
-  //     } else {
-  //       try {
-  //         const details = await canvasAPI.getById(canvasId);
-  //         if (details.data && details.data.success) {
-  //           snapshot = { canvas: details.data.data.canvas, blocks: details.data.data.blocks };
-  //           foundChannel = details.data.data.canvas.channelId;
-  //         }
-  //       } catch (err) {
-  //         // ignore; proceed without rich snapshot
-  //       }
-  //     }
+      // If not present locally, attempt to fetch details for snapshot
+      let snapshot = null;
+      if (found) {
+        snapshot = { canvas: found, blocks: null };
+      } else {
+        try {
+          const details = await canvasAPI.getById(canvasId);
+          if (details.data && details.data.success) {
+            snapshot = { canvas: details.data.data.canvas, blocks: details.data.data.blocks };
+            foundChannel = details.data.data.canvas.channelId;
+          }
+        } catch (err) {
+          // ignore; proceed without rich snapshot
+        }
+      }
 
-  //     // Persist snapshot in store for possible Undo
-  //     set({ lastDeletedCanvas: snapshot });
+      // Persist snapshot in store for possible Undo
+      set({ lastDeletedCanvas: snapshot });
 
-  //     // Optimistically remove the canvas from client state
-  //     set((state) => {
-  //       const nextCanvases = { ...state.canvasesByChannel };
-  //       Object.keys(nextCanvases).forEach((chId) => {
-  //         nextCanvases[chId] = (nextCanvases[chId] || []).filter((c) => c._id !== canvasId);
-  //       });
+      // Optimistically remove the canvas from ALL client state
+      set((state) => {
+        const nextCanvases = { ...state.canvasesByChannel };
+        Object.keys(nextCanvases).forEach((chId) => {
+          nextCanvases[chId] = (nextCanvases[chId] || []).filter((c) => c._id !== canvasId);
+        });
 
-  //       const activeIdMap = { ...state.activeCanvasIdByChannel };
-  //       Object.keys(activeIdMap).forEach((chId) => {
-  //         if (activeIdMap[chId] === canvasId) delete activeIdMap[chId];
-  //       });
+        const activeIdMap = { ...state.activeCanvasIdByChannel };
+        Object.keys(activeIdMap).forEach((chId) => {
+          if (activeIdMap[chId] === canvasId) delete activeIdMap[chId];
+        });
+        persistActiveIds(activeIdMap);
 
-  //       const active = state.activeCanvas && state.activeCanvas._id === canvasId ? null : state.activeCanvas;
+        const active = state.activeCanvas && state.activeCanvas._id === canvasId ? null : state.activeCanvas;
 
-  //       return {
-  //         canvasesByChannel: nextCanvases,
-  //         activeCanvas: active,
-  //         activeCanvasIdByChannel: activeIdMap,
-  //       };
-  //     });
+        // Remove from open tabs across ALL channels
+        const nextOpenTabs = { ...state.openTabsByChannel };
+        Object.keys(nextOpenTabs).forEach((chId) => {
+          nextOpenTabs[chId] = (nextOpenTabs[chId] || []).filter((t) => t._id !== canvasId);
+        });
 
-  //     // Show undo toast (use createElement to avoid JSX in .js file)
-  //     const undoId = toast((t) =>
-  //       React.createElement(
-  //         "div",
-  //         { style: { display: "flex", gap: 12, alignItems: "center" } },
-  //         React.createElement("div", null, "Canvas deleted"),
-  //         React.createElement(
-  //           "div",
-  //           { style: { marginLeft: 8 } },
-  //           React.createElement(
-  //             "button",
-  //             {
-  //               onClick: async () => {
-  //                 toast.dismiss(t.id);
-  //                 // Attempt to recreate the canvas using snapshot
-  //                 const snap = get().lastDeletedCanvas;
-  //                 if (!snap || !foundChannel) return;
-  //                 try {
-  //                   const createPayload = {
-  //                     title: snap.canvas.title,
-  //                     type: snap.canvas.type,
-  //                     content: snap.canvas.content || undefined,
-  //                     cover: snap.canvas.cover || undefined,
-  //                   };
-  //                   const res = await canvasAPI.create(foundChannel, createPayload);
-  //                   if (res.data && res.data.success) {
-  //                     const newCanvas = res.data.data;
-  //                     // Insert recreated canvas into list and load it
-  //                     set((s) => {
-  //                       const list = s.canvasesByChannel[foundChannel] || [];
-  //                       return { canvasesByChannel: { ...s.canvasesByChannel, [foundChannel]: [...list, newCanvas] } };
-  //                     });
-  //                     await get().loadCanvas(newCanvas._id);
-  //                     // clear snapshot
-  //                     set({ lastDeletedCanvas: null });
-  //                     toast.success("Canvas restored");
-  //                   }
-  //                 } catch (err) {
-  //                   console.error("Undo recreate failed", err);
-  //                   toast.error("Failed to restore canvas");
-  //                 }
-  //               },
-  //               style: { padding: "6px 10px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", cursor: "pointer" },
-  //             },
-  //             "Undo"
-  //           )
-  //         )
-  //       ),
-  //       { duration: 8000 }
-  //     );
+        return {
+          canvasesByChannel: nextCanvases,
+          activeCanvas: active,
+          activeCanvasIdByChannel: activeIdMap,
+          openTabsByChannel: nextOpenTabs,
+        };
+      });
 
-  //     // Fire server deletion (do not await restore)
-  //     (async () => {
-  //       try {
-  //         await canvasAPI.delete(canvasId);
-  //       } catch (err) {
-  //         console.error("[CanvasStore] deleteCanvas error:", err);
-  //         // Attempt to revert to snapshot if available
-  //         const snap = get().lastDeletedCanvas;
-  //         if (snap && foundChannel) {
-  //           set((s) => ({ canvasesByChannel: { ...s.canvasesByChannel, [foundChannel]: [...(s.canvasesByChannel[foundChannel] || []), snap.canvas] }, lastDeletedCanvas: null }));
-  //           toast.error("Failed to delete canvas. Restored locally.");
-  //         }
-  //       }
-  //     })();
+      // Persist the open tabs changes
+      try {
+        persistOpenTabs(get().openTabsByChannel);
+      } catch (e) {
+        // ignore
+      }
 
-  //     return true;
-  //   } catch (err) {
-  //     console.error("[CanvasStore] deleteCanvas error:", err);
-  //     return false;
-  //   }
-  // },
+      // Show undo toast (use createElement to avoid JSX in .js file)
+      const undoId = toast((t) =>
+        React.createElement(
+          "div",
+          { style: { display: "flex", gap: 12, alignItems: "center" } },
+          React.createElement("div", null, "Canvas deleted"),
+          React.createElement(
+            "div",
+            { style: { marginLeft: 8 } },
+            React.createElement(
+              "button",
+              {
+                onClick: async () => {
+                  toast.dismiss(t.id);
+                  const snap = get().lastDeletedCanvas;
+                  if (!snap || !foundChannel) return;
+                  try {
+                    const createPayload = {
+                      title: snap.canvas.title,
+                      type: snap.canvas.type,
+                      content: snap.canvas.content || undefined,
+                      cover: snap.canvas.cover || undefined,
+                    };
+                    const res = await canvasAPI.create(foundChannel, createPayload);
+                    if (res.data && res.data.success) {
+                      const newCanvas = res.data.data;
+                      set((s) => {
+                        const list = s.canvasesByChannel[foundChannel] || [];
+                        return { canvasesByChannel: { ...s.canvasesByChannel, [foundChannel]: [...list, newCanvas] } };
+                      });
+                      await get().loadCanvas(newCanvas._id);
+                      set({ lastDeletedCanvas: null });
+                      toast.success("Canvas restored");
+                    }
+                  } catch (err) {
+                    console.error("Undo recreate failed", err);
+                    toast.error("Failed to restore canvas");
+                  }
+                },
+                style: { padding: "6px 10px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", cursor: "pointer" },
+              },
+              "Undo"
+            )
+          )
+        ),
+        { duration: 8000 }
+      );
 
-  // ── Fetch snapshots (History)
+      // Fire server deletion (do not await restore)
+      (async () => {
+        try {
+          await canvasAPI.delete(canvasId);
+        } catch (err) {
+          console.error("[CanvasStore] deleteCanvas error:", err);
+          const snap = get().lastDeletedCanvas;
+          if (snap && foundChannel) {
+            set((s) => ({
+              canvasesByChannel: {
+                ...s.canvasesByChannel,
+                [foundChannel]: [...(s.canvasesByChannel[foundChannel] || []), snap.canvas],
+              },
+              lastDeletedCanvas: null,
+            }));
+            toast.error("Failed to delete canvas. Restored locally.");
+          }
+        }
+      })();
+
+      return true;
+    } catch (err) {
+      console.error("[CanvasStore] deleteCanvas error:", err);
+      return false;
+    }
+  },
+
+  // ── Fetch snapshots (History) ────────────────────────────────────────────────────
   fetchHistory: async (canvasId) => {
     try {
       const res = await canvasAPI.getHistory(canvasId);
@@ -325,7 +448,7 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
-  // ── Fetch canvases for a channel and cache locally
+  // ── Fetch canvases for a channel and cache locally ───────────────────────────────
   fetchChannelCanvases: async (channelId) => {
     if (!channelId) return [];
     set({ isLoading: true });
@@ -342,7 +465,7 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
-  // ── Load a default canvas for a channel (used on initial channel open)
+  // ── Load a default canvas for a channel (used on initial channel open) ───────────
   loadDefaultCanvas: async (channelId) => {
     if (!channelId) return;
     set({ isLoading: true });
@@ -358,7 +481,10 @@ export const useCanvasStore = create((set, get) => ({
       }
 
       if (list && list.length > 0) {
-        const preferred = get().activeCanvasIdByChannel[channelId] || list[0]._id;
+        // Use persisted activeCanvasIdByChannel to restore the correct canvas
+        const persistedId = get().activeCanvasIdByChannel[channelId];
+        const canvasExists = persistedId && list.some((c) => c._id === persistedId);
+        const preferred = canvasExists ? persistedId : list[0]._id;
         await get().loadCanvas(preferred);
       } else {
         // Nothing to load; clear any active canvas for this channel
@@ -371,7 +497,7 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
-  // ── Open tabs (shared across clients) ───────────────────────────────────
+  // ── Open tabs (shared across clients) ────────────────────────────────────────────
   addOpenTab: async (channelId, canvasMeta) => {
     if (!channelId || !canvasMeta || !canvasMeta._id) return;
     set((state) => {
@@ -386,7 +512,6 @@ export const useCanvasStore = create((set, get) => ({
       };
     });
 
-    // Persist local view and emit update to server with minimal metadata
     try {
       persistOpenTabs(get().openTabsByChannel);
     } catch (e) {
@@ -413,7 +538,6 @@ export const useCanvasStore = create((set, get) => ({
       },
     }));
 
-    // Persist and notify server
     try {
       persistOpenTabs(get().openTabsByChannel);
     } catch (e) {
@@ -444,7 +568,6 @@ export const useCanvasStore = create((set, get) => ({
 
   requestChannelTabs: (channelId) => {
     try {
-      // Ensure global listeners are attached so we can receive the response
       get().ensureGlobalSocketListeners?.();
       const socket = getSocket();
       if (socket && channelId) socket.emit("canvas:tabs:request", { channelId });
@@ -459,11 +582,9 @@ export const useCanvasStore = create((set, get) => ({
     if (!socket) return;
     if (get().globalSocketAttached) return;
 
-    // Server sends authoritative state for a channel
     socket.on('canvas:tabs:state', ({ channelId, tabs }) => {
       if (!channelId) return;
       try {
-        // Normalize incoming tab metadata
         const normalized = Array.isArray(tabs) ? tabs.map((t) => ({ _id: t._id || t.canvasId || t.id, title: t.title || '' })).filter(Boolean) : [];
         get().setOpenTabs(channelId, normalized);
       } catch (err) {
@@ -471,7 +592,6 @@ export const useCanvasStore = create((set, get) => ({
       }
     });
 
-    // Broadcast updates when another member changes the tabs
     socket.on('canvas:tabs:updated', ({ channelId, tabs }) => {
       if (!channelId) return;
       try {
@@ -482,16 +602,42 @@ export const useCanvasStore = create((set, get) => ({
       }
     });
 
+    socket.on('canvas:title:updated', ({ canvasId, title }) => {
+      if (!canvasId) return;
+      try {
+        set((state) => {
+          const nextOpenTabs = { ...state.openTabsByChannel };
+          Object.keys(nextOpenTabs).forEach((chId) => {
+            nextOpenTabs[chId] = (nextOpenTabs[chId] || []).map((t) =>
+              t._id === canvasId ? { ...t, title: title } : t
+            );
+          });
+          const nextCanvases = { ...state.canvasesByChannel };
+          Object.keys(nextCanvases).forEach((chId) => {
+            nextCanvases[chId] = (nextCanvases[chId] || []).map((c) =>
+              c._id === canvasId ? { ...c, title: title } : c
+            );
+          });
+          const active = state.activeCanvas && state.activeCanvas._id === canvasId
+            ? { ...state.activeCanvas, title }
+            : state.activeCanvas;
+          return { openTabsByChannel: nextOpenTabs, canvasesByChannel: nextCanvases, activeCanvas: active };
+        });
+        persistOpenTabs(get().openTabsByChannel);
+      } catch (err) {
+        // best-effort
+      }
+    });
+
     set({ globalSocketAttached: true });
   },
 
-  // ── Restore Snapshot Version
+  // ── Restore Snapshot Version ─────────────────────────────────────────────────────
   restoreVersion: async (canvasId, historyId) => {
     set({ isLoading: true });
     try {
       const res = await canvasAPI.restoreVersion(canvasId, historyId);
       if (res.data && res.data.success) {
-        // Re-load canvas to refresh blocks, comments, and structure
         await get().loadCanvas(canvasId);
       }
     } catch (err) {
@@ -501,7 +647,7 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
-  // ── Clear active canvas state entirely (e.g. on leave tab)
+  // ── Clear active canvas state entirely (e.g. on leave tab) ──────────────────────
   clearActiveCanvas: () => {
     const currentRoom = get().currentJoinedRoom;
     if (currentRoom) {
@@ -519,15 +665,13 @@ export const useCanvasStore = create((set, get) => ({
     });
   },
 
-  // ── Websocket Room Handlers
+  // ── Websocket Room Handlers ──────────────────────────────────────────────────────
   joinCanvasRoom: (canvasId) => {
     const socket = getSocket();
     if (!socket || !canvasId) return;
 
-    // Avoid re-joining same room
     if (get().currentJoinedRoom === canvasId) return;
 
-    // Leave prior room if present
     const prev = get().currentJoinedRoom;
     if (prev && prev !== canvasId) {
       try {
@@ -540,7 +684,6 @@ export const useCanvasStore = create((set, get) => ({
     socket.emit("canvas:join", { canvasId });
     set({ currentJoinedRoom: canvasId });
 
-    // Build handlers so we can remove them individually on leave
     socket._canvasHandlers = socket._canvasHandlers || {};
     const handlers = {};
 
@@ -588,20 +731,15 @@ export const useCanvasStore = create((set, get) => ({
     };
 
     handlers.blockCreated = (newBlock) => {
-      // If Yjs collaboration is active, the CRDT will drive document structure.
-      // Ignore socket-driven block creation to avoid conflicts and duplicates.
       const providerStatus = useCanvasUiStore.getState().providerStatus;
       if (providerStatus === 'connected' || providerStatus === 'synced') return;
-
       set((state) => ({ blocks: [...state.blocks, newBlock].sort((a, b) => a.order - b.order) }));
     };
 
     handlers.blockUpdated = ({ blockId, content, type, lastEditedBy }) => {
       const currentUserId = useAuthStore.getState().user?._id;
-      // If collaboration is active, do not let socket updates override CRDT-managed content.
       const providerStatus = useCanvasUiStore.getState().providerStatus;
       if (providerStatus === 'connected' || providerStatus === 'synced') {
-        // Still update metadata safely (type/lastEditedBy) but avoid replacing content.
         set((state) => ({
           blocks: state.blocks.map((b) => (b._id === blockId ? { ...b, type: type ?? b.type, lastEditedBy: lastEditedBy ?? b.lastEditedBy } : b)),
         }));
@@ -645,15 +783,20 @@ export const useCanvasStore = create((set, get) => ({
         Object.keys(nextCanvases).forEach((chId) => { nextCanvases[chId] = (nextCanvases[chId] || []).filter((c) => c._id !== cid); });
         const activeIdMap = { ...state.activeCanvasIdByChannel };
         Object.keys(activeIdMap).forEach((chId) => { if (activeIdMap[chId] === cid) delete activeIdMap[chId]; });
+        persistActiveIds(activeIdMap);
         const active = state.activeCanvas && state.activeCanvas._id === cid ? null : state.activeCanvas;
 
-        // Remove deleted canvas from any open tabs across channels
         const nextOpenTabs = { ...state.openTabsByChannel };
         Object.keys(nextOpenTabs).forEach((chId) => {
           nextOpenTabs[chId] = (nextOpenTabs[chId] || []).filter((t) => t._id !== cid);
         });
 
-        return { canvasesByChannel: nextCanvases, activeCanvasIdByChannel: activeIdMap, activeCanvas: active, openTabsByChannel: nextOpenTabs };
+        return {
+          canvasesByChannel: nextCanvases,
+          activeCanvasIdByChannel: activeIdMap,
+          activeCanvas: active,
+          openTabsByChannel: nextOpenTabs,
+        };
       });
       try {
         persistOpenTabs(get().openTabsByChannel);
@@ -689,8 +832,6 @@ export const useCanvasStore = create((set, get) => ({
     if (!socket) return;
     socket.emit("canvas:leave", { canvasId });
 
-    // If we stored per-room handlers, remove only those to avoid clearing
-    // global listeners that other parts of the app rely on.
     try {
       if (socket._canvasHandlers && socket._canvasHandlers[canvasId]) {
         const h = socket._canvasHandlers[canvasId];
@@ -712,7 +853,6 @@ export const useCanvasStore = create((set, get) => ({
         if (h.deleted) socket.off("canvas:deleted", h.deleted);
         delete socket._canvasHandlers[canvasId];
       } else {
-        // Fallback: remove commonly used handlers if no per-room tracking exists
         socket.off("canvas:presence:list");
         socket.off("canvas:presence:join");
         socket.off("canvas:presence:leave");
@@ -733,18 +873,16 @@ export const useCanvasStore = create((set, get) => ({
 
       set({ currentJoinedRoom: null });
     } catch (err) {
-      // best-effort cleanup — don't throw
       set({ currentJoinedRoom: null });
     }
   },
 
-  // ── Client Triggered Interactions
+  // ── Client Triggered Interactions ────────────────────────────────────────────────
   updateCursor: (blockId, x, y) => {
     const socket = getSocket();
     const canvasId = get().currentJoinedRoom;
     const currentUserId = useAuthStore.getState().user?._id;
 
-    // Optimistically update local cursor state for immediate UI feedback
     set((state) => ({
       cursors: {
         ...state.cursors,
@@ -752,7 +890,6 @@ export const useCanvasStore = create((set, get) => ({
       },
     }));
 
-    // If collaboration provider is active, use Yjs awareness instead of socket emission
     const providerStatus = useCanvasUiStore.getState().providerStatus;
     if (socket && canvasId && !(providerStatus === 'connected' || providerStatus === 'synced')) {
       socket.emit("canvas:cursor", { canvasId, blockId, x, y });
@@ -764,7 +901,6 @@ export const useCanvasStore = create((set, get) => ({
     const canvasId = get().currentJoinedRoom;
     const currentUserId = useAuthStore.getState().user?._id;
 
-    // Update local typing state immediately
     set((state) => {
       const blockTyping = { ...(state.typing[blockId] || {}) };
       if (isTyping) blockTyping[currentUserId] = useAuthStore.getState().user?.name || 'You';
@@ -772,7 +908,6 @@ export const useCanvasStore = create((set, get) => ({
       return { typing: { ...state.typing, [blockId]: blockTyping } };
     });
 
-    // If provider active, awareness is canonical — avoid socket emission
     const providerStatus = useCanvasUiStore.getState().providerStatus;
     if (socket && canvasId && !(providerStatus === 'connected' || providerStatus === 'synced')) {
       socket.emit("canvas:typing", { canvasId, blockId, isTyping });
@@ -783,7 +918,6 @@ export const useCanvasStore = create((set, get) => ({
     const socket = getSocket();
     const canvasId = get().currentJoinedRoom;
     if (socket && canvasId) {
-      // If collaboration (CRDT) is active, avoid socket emits for editor content
       const providerStatus = useCanvasUiStore.getState().providerStatus;
       if (!(providerStatus === 'connected' || providerStatus === 'synced')) {
         socket.emit("canvas:block:create", { canvasId, blockData });
@@ -794,8 +928,7 @@ export const useCanvasStore = create((set, get) => ({
   updateBlock: (blockId, content, type) => {
     const socket = getSocket();
     const canvasId = get().currentJoinedRoom;
-    
-    // Optimistic Local Update
+
     set((state) => {
       const updatedBlocks = state.blocks.map((b) => {
         if (b._id === blockId) {
@@ -806,7 +939,6 @@ export const useCanvasStore = create((set, get) => ({
       return { blocks: updatedBlocks };
     });
 
-    // If collaboration is active, let CRDT handle document updates; otherwise emit socket
     const providerStatus = useCanvasUiStore.getState().providerStatus;
     if (socket && canvasId && !(providerStatus === 'connected' || providerStatus === 'synced')) {
       socket.emit("canvas:block:update", { canvasId, blockId, content, type });
@@ -817,7 +949,6 @@ export const useCanvasStore = create((set, get) => ({
     const socket = getSocket();
     const canvasId = get().currentJoinedRoom;
 
-    // Optimistic Local Update
     set((state) => ({
       blocks: state.blocks.filter((b) => b._id !== blockId),
       comments: state.comments.filter((c) => c.blockId !== blockId),
@@ -835,7 +966,6 @@ export const useCanvasStore = create((set, get) => ({
     const socket = getSocket();
     const canvasId = get().currentJoinedRoom;
 
-    // Optimistic Local Update
     set((state) => {
       const blocksMap = new Map(state.blocks.map((b) => [b._id, b]));
       const reordered = blockIdsOrder
@@ -866,7 +996,7 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
-  // ── Comment interactions
+  // ── Comment interactions ────────────────────────────────────────────────────────
   createComment: (blockId, content) => {
     const socket = getSocket();
     const canvasId = get().currentJoinedRoom;
@@ -889,5 +1019,57 @@ export const useCanvasStore = create((set, get) => ({
     if (socket && canvasId) {
       socket.emit("canvas:comment:resolve", { canvasId, commentId });
     }
+  },
+
+  // ── Save for Later ───────────────────────────────────────────────────────────────
+  savedCanvasIds: new Set(),
+
+  toggleSaveForLater: async (canvasId) => {
+    if (!canvasId) return;
+    const wasSaved = get().savedCanvasIds.has(canvasId);
+    const prevIds = new Set(get().savedCanvasIds);
+
+    try {
+      const newIds = new Set(prevIds);
+      if (wasSaved) {
+        newIds.delete(canvasId);
+      } else {
+        newIds.add(canvasId);
+      }
+      set({ savedCanvasIds: newIds });
+
+      const { data } = await canvasAPI.toggleSaveForLater(canvasId);
+      const saved = data.data?.saved;
+      if (saved) {
+        toast.success("Saved for later");
+      } else {
+        toast.success("Removed from saved for later");
+      }
+    } catch {
+      set({ savedCanvasIds: prevIds });
+      toast.error("Failed to update saved status");
+    }
+  },
+
+  updateSavedCanvasStatus: async (canvasId, status) => {
+    try {
+      await canvasAPI.updateSavedStatus(canvasId, status);
+      toast.success(`Moved to ${status.replace('_', ' ')}`);
+    } catch {
+      toast.error("Failed to update status");
+    }
+  },
+
+  fetchSavedCanvases: async (channelId, status) => {
+    try {
+      const { data } = await canvasAPI.getSavedCanvases(channelId, status);
+      return data.data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  isCanvasSaved: (canvasId) => {
+    return get().savedCanvasIds.has(canvasId);
   },
 }));

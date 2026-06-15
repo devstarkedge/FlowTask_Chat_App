@@ -315,6 +315,7 @@ export const getChannelFiles = asyncHandler(async (req, res) => {
       referenceId: ref._id,
       messageId: ref.messageId?._id || null,
       channelId: ref.channelId,
+      workspaceId: ref.workspaceId,
       contextType: ref.contextType,
       fileName: ref.fileId.originalName,
       originalName: ref.fileId.originalName,
@@ -390,15 +391,13 @@ export const getWorkspaceFiles = asyncHandler(async (req, res) => {
     });
   }
 
-  const channels = await Channel.find({
-    workspaceId,
-    isArchived: false,
-    "members.userId": userId,
-  })
-    .select("_id")
-    .lean();
+  // Fetch user's channel IDs using lean projection (minimal overhead)
+  const channelIds = await Channel.find(
+    { workspaceId, isArchived: false, "members.userId": userId },
+    { _id: 1 },
+  ).lean().then((docs) => docs.map((c) => c._id));
 
-  if (channels.length === 0) {
+  if (channelIds.length === 0) {
     return res.json({
       success: true,
       data: {
@@ -408,8 +407,6 @@ export const getWorkspaceFiles = asyncHandler(async (req, res) => {
       },
     });
   }
-
-  const channelIds = channels.map((c) => c._id);
   const fileMatch = {
     status: { $ne: "deleted" },
   };
@@ -590,12 +587,20 @@ export const deleteChannelFile = asyncHandler(async (req, res) => {
 /**
  * POST /api/chat/messages/:id/save
  * Toggle save/unsave a message.
+ *
+ * Performance: reuses req.message and req.channel from requireMessageAccess
+ * middleware to avoid redundant DB round-trips (saves 2-6 queries).
+ *
+ * IMPORTANT: Does NOT emit socket events back to the requesting user.
+ * The HTTP response already carries the full payload, so a socket emit
+ * would cause a redundant double-update on the client. Socket events are
+ * only needed for OTHER devices/tabs of the same user.
  */
 export const toggleSaveMessage = asyncHandler(async (req, res) => {
-  const message = await messageService.getMessageById(
-    req.params.id,
-    req.workspaceId,
-  );
+  // req.message and req.channel are already loaded by requireMessageAccess middleware
+  const message = req.message;
+  const channel = req.channel;
+
   const result = await SavedMessage.toggle(
     req.user._id,
     message._id,
@@ -604,17 +609,40 @@ export const toggleSaveMessage = asyncHandler(async (req, res) => {
   );
 
   if (result.saved) {
-    const savedMsg = await SavedMessage.findOne({ userId: req.user._id, messageId: message._id })
-      .populate({
-        path: 'messageId',
-        populate: { path: 'authorId', select: 'name avatar' },
-      })
-      .populate('channelId', 'name type')
-      .lean();
-    emitToUser(req.user._id, SOCKET_EVENTS.SAVED_MESSAGE_ADDED, { savedMessage: savedMsg }, req.workspaceId);
-  } else {
-    emitToUser(req.user._id, SOCKET_EVENTS.SAVED_MESSAGE_REMOVED, { messageId: message._id }, req.workspaceId);
+    // Build lightweight saved-message payload from already-loaded data
+    // instead of running another findOne + 2 populate queries
+    const savedMsg = {
+      _id: result.savedMessageId || null,
+      userId: req.user._id,
+      messageId: {
+        _id: message._id,
+        content: message.content,
+        createdAt: message.createdAt,
+        authorId: message.authorId?._id
+          ? { _id: message.authorId._id, name: message.authorId.name, avatar: message.authorId.avatar }
+          : message.authorId,
+      },
+      channelId: channel
+        ? { _id: channel._id, name: channel.name, type: channel.type }
+        : message.channelId,
+      workspaceId: req.workspaceId,
+      status: 'in_progress',
+      type: 'saved_message',
+      createdAt: new Date(),
+    };
+
+    // Emit to OTHER devices/tabs only — the HTTP response handles this tab.
+    // socket.broadcast sends to all sockets EXCEPT the sender (if socket is set).
+    // Since emitToUser sends to ALL user sockets (including the current tab),
+    // we skip the socket emit entirely. The HTTP response is the single source
+    // of truth for the requesting tab. Other tabs will sync via their own
+    // periodic fetch or when the user navigates to /later.
+    // NOTE: If you need multi-tab sync, use a targeted broadcast that excludes
+    // the requesting socket ID.
+
+    result.savedMessage = savedMsg;
   }
+  // No socket emit for unsave either — HTTP response is sufficient.
 
   res.json({ success: true, data: result });
 });

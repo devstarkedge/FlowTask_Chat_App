@@ -121,7 +121,7 @@ export default function CanvasTabContextMenu({
       `}</style>
 
       {isProcessing ? (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "12px", gap: "8px", color: "#a3a3a3", fontSize: "12px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "12px", gap: "8px", color: "var(--text-muted)", fontSize: "12px" }}>
           <Loader2 size={14} className="animate-spin" />
           Processing...
         </div>
@@ -159,7 +159,7 @@ export default function CanvasTabContextMenu({
           {/* <button
             onClick={handleDelete}
             className="context-menu-item context-menu-item--danger"
-            style={{ color: "#ef4444" }}
+            style={{ color: "var(--accent-red)" }}
           >
             <Trash2 size={14} />
             <span>Delete Canvas</span>

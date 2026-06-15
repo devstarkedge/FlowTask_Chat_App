@@ -76,6 +76,7 @@ export default function ChatHeader({
   // Inline rename state
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
+  const [renamingCanvasId, setRenamingCanvasId] = useState(null); // which canvas tab is being renamed
   const renameInputRef = useRef(null);
 
   const moreMenuRef = useRef(null);
@@ -233,34 +234,43 @@ export default function ChatHeader({
     if (!cid) return;
     // If the canvas is already active, start rename immediately.
     if (cid === activeCanvas?._id) {
-      startRename();
+      startRename(cid);
     } else {
       // Switch to the canvas tab, then start rename after a short delay.
       onTabChange?.(`canvas:${cid}`);
-      setTimeout(() => startRename(), 160);
+      setTimeout(() => startRename(cid), 160);
     }
     setContextMenu(null);
   };
 
   const handleRenameSubmit = async () => {
     const trimmed = renameValue.trim();
-    if (trimmed && trimmed !== activeCanvas?.title && activeCanvas?._id) {
-      try {
-        await updateCanvasMetadata(activeCanvas._id, { title: trimmed });
-      } catch (err) {
-        console.error(err);
+    if (trimmed && renamingCanvasId) {
+      // Find the current title of the canvas being renamed
+      const targetTab = openCanvasTabs?.find((t) => t._id === renamingCanvasId);
+      const currentTitle = targetTab?.title || activeCanvas?.title || "";
+      if (trimmed !== currentTitle) {
+        try {
+          await updateCanvasMetadata(renamingCanvasId, { title: trimmed });
+        } catch (err) {
+          console.error(err);
+        }
       }
     }
     setIsRenaming(false);
+    setRenamingCanvasId(null);
   };
 
   const handleRenameKeyDown = (e) => {
     if (e.key === "Enter") handleRenameSubmit();
-    if (e.key === "Escape") setIsRenaming(false);
+    if (e.key === "Escape") { setIsRenaming(false); setRenamingCanvasId(null); }
   };
 
-  const startRename = () => {
-    setRenameValue(activeCanvas?.title || "");
+  const startRename = (canvasId) => {
+    // Find the tab being renamed to get its current title
+    const targetTab = openCanvasTabs?.find((t) => t._id === canvasId);
+    setRenameValue(targetTab?.title || activeCanvas?.title || "");
+    setRenamingCanvasId(canvasId || activeCanvas?._id || null);
     setIsRenaming(true);
   };
 
@@ -428,14 +438,14 @@ export default function ChatHeader({
                 tab={activeTabObj}
                 isActive={true}
                 onClick={() => {}}
-                onContextMenu={activeTabObj.isCanvas ? handleCanvasTabRightClick : undefined}
+                onContextMenu={activeTabObj.isCanvas && activeTabObj.isDynamic ? handleCanvasTabRightClick(activeTabObj.canvasMeta?._id || String(activeTabObj.id).split(":")[1]) : undefined}
                 isRenaming={isRenaming}
                 renameValue={renameValue}
                 renameInputRef={renameInputRef}
                 onRenameChange={(v) => setRenameValue(v)}
                 onRenameSubmit={handleRenameSubmit}
                 onRenameKeyDown={handleRenameKeyDown}
-                onRenameCancel={() => setIsRenaming(false)}
+                onRenameCancel={() => { setIsRenaming(false); setRenamingCanvasId(null); }}
               />
               <div ref={tabsMenuRef} style={{ position: "relative" }}>
                 <button
@@ -480,13 +490,22 @@ export default function ChatHeader({
             // ── Wide mode: show all tabs ─────────────────────────────────────
             HEADER_TABS.map((tab) => {
               if (tab.isCanvas && tab.isDynamic) {
+                const tabCanvasId = tab.canvasMeta?._id || (tab.id && String(tab.id).split(":")[1]);
+                const isThisTabRenaming = isRenaming && renamingCanvasId === tabCanvasId;
                 return (
                   <SlimTab
                     key={tab.id}
                     tab={tab}
                     isActive={activeTab === tab.id}
                     onClick={() => handleCanvasTabClick(tab)}
-                    onContextMenu={handleCanvasTabRightClick(tab.canvasMeta?._id || (tab.id && String(tab.id).split(":")[1]))}
+                    onContextMenu={handleCanvasTabRightClick(tabCanvasId)}
+                    isRenaming={isThisTabRenaming}
+                    renameValue={renameValue}
+                    renameInputRef={renameInputRef}
+                    onRenameChange={(v) => setRenameValue(v)}
+                    onRenameSubmit={handleRenameSubmit}
+                    onRenameKeyDown={handleRenameKeyDown}
+                    onRenameCancel={() => { setIsRenaming(false); setRenamingCanvasId(null); }}
                   />
                 );
               }

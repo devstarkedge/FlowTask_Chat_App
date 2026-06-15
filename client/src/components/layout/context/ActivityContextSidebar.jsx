@@ -406,13 +406,13 @@ const STYLES = `
 
 /* ── Icon map ── */
 const ICONS = {
-  mention:          { Icon: AtSign,            color: "#a5b4fc" },
-  dm:               { Icon: MessageCircle,     color: "#34d399" },
-  thread_reply:     { Icon: MessageSquareText, color: "#a5b4fc" },
-  channel_invite:   { Icon: UserPlus,          color: "#c084fc" },
-  task_update:      { Icon: Activity,          color: "#fbbf24" },
-  reminder_overdue: { Icon: AlarmClock,        color: "#f87171" },
-  system:           { Icon: Info,              color: "rgba(255,255,255,0.3)" },
+  mention:          { Icon: AtSign,            color: "var(--accent-primary)" },
+  dm:               { Icon: MessageCircle,     color: "var(--accent-green)" },
+  thread_reply:     { Icon: MessageSquareText, color: "var(--accent-primary)" },
+  channel_invite:   { Icon: UserPlus,          color: "var(--accent-purple)" },
+  task_update:      { Icon: Activity,          color: "var(--accent-yellow)" },
+  reminder_overdue: { Icon: AlarmClock,        color: "var(--accent-red)" },
+  system:           { Icon: Info,              color: "var(--text-muted)" },
 };
 
 /* ── Group by date ── */

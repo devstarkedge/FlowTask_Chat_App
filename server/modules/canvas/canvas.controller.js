@@ -18,8 +18,9 @@ const getCanvas = asyncHandler(async (req, res) => {
 const getCanvasById = asyncHandler(async (req, res) => {
   const { canvasId } = req.params;
   const workspaceId = req.workspaceId;
+  const userId = req.user._id;
 
-  const details = await canvasService.getCanvasById(canvasId, workspaceId);
+  const details = await canvasService.getCanvasById(canvasId, workspaceId, userId);
 
   return res.status(200).json({
     success: true,
@@ -68,22 +69,22 @@ const updateCanvas = asyncHandler(async (req, res) => {
 });
 
 // ── Delete Canvas
-// const deleteCanvas = asyncHandler(async (req, res) => {
-//   const { canvasId } = req.params;
-//   const workspaceId = req.workspaceId;
-//   const userId = req.user._id;
+const deleteCanvas = asyncHandler(async (req, res) => {
+  const { canvasId } = req.params;
+  const workspaceId = req.workspaceId;
+  const userId = req.user._id;
 
-//   const result = await canvasService.deleteCanvas(
-//     canvasId,
-//     userId,
-//     workspaceId
-//   );
+  const result = await canvasService.deleteCanvas(
+    canvasId,
+    userId,
+    workspaceId
+  );
 
-//   return res.status(200).json({
-//     success: true,
-//     data: result,
-//   });
-// });
+  return res.status(200).json({
+    success: true,
+    data: result,
+  });
+});
 
 // ── Get All Channel Canvases
 const getChannelCanvases = asyncHandler(async (req, res) => {
@@ -151,14 +152,59 @@ const restoreCanvasVersion = asyncHandler(async (req, res) => {
   });
 });
 
+// ── Toggle Save for Later
+const toggleCanvasSaveForLater = asyncHandler(async (req, res) => {
+  const { canvasId } = req.params;
+  const userId = req.user._id;
+
+  const result = await canvasService.toggleSaveForLater(canvasId, userId);
+
+  return res.status(200).json({
+    success: true,
+    data: result,
+  });
+});
+
+// ── Update Saved Status
+const updateCanvasSavedStatus = asyncHandler(async (req, res) => {
+  const { canvasId } = req.params;
+  const userId = req.user._id;
+  const { status } = req.body;
+
+  const canvas = await canvasService.updateSavedStatus(canvasId, userId, status);
+
+  return res.status(200).json({
+    success: true,
+    data: canvas,
+  });
+});
+
+// ── Get Saved Canvases
+const getSavedCanvases = asyncHandler(async (req, res) => {
+  const { channelId } = req.params;
+  const workspaceId = req.workspaceId;
+  const userId = req.user._id;
+  const { status } = req.query;
+
+  const canvases = await canvasService.getSavedCanvases(userId, workspaceId, status);
+
+  return res.status(200).json({
+    success: true,
+    data: canvases,
+  });
+});
+
 export default {
   getCanvas,
   getCanvasById,
   createCanvas,
   updateCanvas,
-  // deleteCanvas,
+  deleteCanvas,
   getChannelCanvases,
   duplicateCanvas,
   getCanvasHistory,
   restoreCanvasVersion,
+  toggleCanvasSaveForLater,
+  updateCanvasSavedStatus,
+  getSavedCanvases,
 };

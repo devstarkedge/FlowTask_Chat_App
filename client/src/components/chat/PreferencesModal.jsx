@@ -91,6 +91,8 @@ export default function PreferencesModal({ onClose }) {
   }, [onClose])
 
   useEffect(() => {
+    console.log('[Preferences] useEffect triggered - resetting draftAppearance')
+    console.log('[Preferences] Store values - mode:', mode, 'sidebarTheme:', sidebarTheme, 'customTheme:', customTheme)
     setDraftAppearance({
       mode,
       sidebarTheme,
@@ -160,12 +162,21 @@ export default function PreferencesModal({ onClose }) {
         ...prefs,
         ...appearancePayload,
       }
+      console.log('[Preferences] Saving payload:', payload)
       const { data } = await authAPI.updatePreferences(payload)
+      console.log('[Preferences] Backend response:', data)
+      console.log('[Preferences] Calling applyAppearance with:', {
+        mode: draftAppearance.mode,
+        sidebarTheme: draftAppearance.sidebarTheme,
+        customTheme: draftAppearance.customTheme,
+      })
       applyAppearance({
         mode: draftAppearance.mode,
         sidebarTheme: draftAppearance.sidebarTheme,
         customTheme: draftAppearance.customTheme,
       })
+      // Verify localStorage was updated
+      console.log('[Preferences] localStorage after save:', localStorage.getItem('chat_appearance'))
       if (data?.data?.user) {
         useAuthStore.setState({ user: data.data.user })
       }
@@ -183,6 +194,35 @@ export default function PreferencesModal({ onClose }) {
       onClose()
     }
   }
+
+  const handleModeChange = useCallback((newMode) => {
+    console.log('[Preferences] handleModeChange called with:', newMode)
+
+    // Read current store values to build the full appearance payload.
+    const storeState = useThemeStore.getState ? useThemeStore.getState() : { sidebarTheme, customTheme }
+    const updated = {
+      mode: newMode,
+      sidebarTheme: storeState.sidebarTheme,
+      customTheme: storeState.customTheme,
+    }
+
+    // Update local draft and apply immediately (persist to localStorage)
+    setDraftAppearance(updated)
+    applyAppearance(updated, { persist: true })
+  }, [applyAppearance, sidebarTheme, customTheme])
+
+  const handleSidebarThemeChange = useCallback((newSidebarTheme) => {
+    const storeState = useThemeStore.getState ? useThemeStore.getState() : { mode, customTheme }
+    const updated = {
+      mode: storeState.mode,
+      sidebarTheme: newSidebarTheme,
+      customTheme: storeState.customTheme,
+    }
+
+    setDraftAppearance(updated)
+    // Apply and persist sidebar theme selection immediately to localStorage
+    applyAppearance(updated, { persist: true })
+  }, [applyAppearance, mode, customTheme])
 
   const handleColorChange = useCallback((key, value) => {
     setDraftAppearance((current) => ({
@@ -244,7 +284,7 @@ export default function PreferencesModal({ onClose }) {
                     <button
                       key={option.id}
                       className={`appearance-mode-card ${selected ? 'is-selected' : ''}`}
-                      onClick={() => setDraftAppearance((current) => ({ ...current, mode: option.id }))}
+                      onClick={() => handleModeChange(option.id)}
                       aria-pressed={selected}
                     >
                       <span className="appearance-mode-card__icon">
@@ -279,7 +319,7 @@ export default function PreferencesModal({ onClose }) {
                         // '--theme-card-active': colors.sidebarActive,
                         // '--theme-card-accent': colors.accentColor,
                       }}
-                      onClick={() => setDraftAppearance((current) => ({ ...current, sidebarTheme: preset.id }))}
+                      onClick={() => handleSidebarThemeChange(preset.id)}
                       aria-pressed={selected}
                     >
                       <span className="appearance-theme-card__mock">
@@ -432,13 +472,20 @@ function ColorField({ label, value, onChange }) {
     <label className="group block">
       {/* Header */}
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm font-semibold text-zinc-800">
+        <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
           {label}
         </span>
       </div>
 
       {/* Input Area */}
-      <div className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-2 transition-all hover:border-zinc-300 hover:bg-white focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
+      <div className="flex items-center gap-3 rounded-2xl border p-2 transition-all focus-within:ring-4"
+        style={{
+          borderColor: 'var(--border-primary)',
+          backgroundColor: 'var(--bg-secondary)',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--border-focus)'}
+        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-primary)'}
+      >
         
         {/* Hidden Native Color Picker */}
         <div className="relative">
@@ -475,7 +522,10 @@ function ColorField({ label, value, onChange }) {
           }}
           maxLength={7}
           aria-label={`${label} hex value`}
-          className="h-10 flex-1 bg-transparent text-sm font-medium text-zinc-800 outline-none placeholder:text-zinc-400"
+          className="h-10 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-zinc-400"
+          style={{
+            color: 'var(--text-primary)',
+          }}
           placeholder="#5b8f80"
         />
       </div>

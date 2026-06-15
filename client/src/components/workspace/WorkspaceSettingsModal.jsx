@@ -382,14 +382,14 @@ function GeneralTab({
           }}
         >
           <AlertTriangle size={14} color="#f87171" />
-          <p className="wsm-label" style={{ color: "#f87171", margin: 0 }}>
+          <p className="wsm-label" style={{ color: "var(--danger-primary, #f87171)", margin: 0 }}>
             Danger Zone
           </p>
         </div>
         <p
           style={{
             fontSize: 12.5,
-            color: "#94a3b8",
+            color: "var(--text-secondary)",
             marginBottom: 14,
             lineHeight: 1.6,
           }}
@@ -437,11 +437,11 @@ function MembersTab({
           style={{
             fontSize: 11.5,
             fontWeight: 700,
-            color: "#4f46e5",
-            background: "#eef2ff",
+            color: "var(--accent-primary, #4f46e5)",
+            background: "var(--bg-active, #eef2ff)",
             padding: "4px 12px",
             borderRadius: 20,
-            border: "1.5px solid #c7d2fe",
+            border: "1.5px solid var(--border-focus, #c7d2fe)",
             letterSpacing: ".01em",
           }}
         >
@@ -464,7 +464,7 @@ function MembersTab({
             <div key={m._id || memberId}>
               {idx > 0 && (
                 <div
-                  style={{ height: 1, background: "#f8fafc", margin: "3px 0" }}
+                  style={{ height: 1, background: "var(--border-secondary, #f8fafc)", margin: "3px 0" }}
                 />
               )}
               <div className="wsm-row-item wsm-member-row">
@@ -477,7 +477,7 @@ function MembersTab({
                     style={{
                       fontSize: 13.5,
                       fontWeight: 700,
-                      color: "#0f172a",
+                      color: "var(--text-primary)",
                       display: "flex",
                       alignItems: "center",
                       overflow: "hidden",
@@ -499,7 +499,7 @@ function MembersTab({
                   <p
                     style={{
                       fontSize: 11.5,
-                      color: "#94a3b8",
+                      color: "var(--text-secondary)",
                       marginTop: 2,
                       whiteSpace: "nowrap",
                       overflow: "hidden",
@@ -694,7 +694,7 @@ function InviteTab({
         <p
           style={{
             fontSize: 12.5,
-            color: "#94a3b8",
+            color: "var(--text-secondary)",
             marginBottom: 16,
             lineHeight: 1.6,
           }}
@@ -711,9 +711,9 @@ function InviteTab({
               onClick={handleCopy}
               title={copied ? "Copied!" : "Copy code"}
               style={{
-                border: `1.5px solid ${copied ? "#c7d2fe" : "#e2e8f0"}`,
-                background: copied ? "#eef2ff" : "#fff",
-                color: copied ? "#6366f1" : "#94a3b8",
+                border: `1.5px solid ${copied ? "var(--border-focus, #c7d2fe)" : "var(--border-primary, #e2e8f0)"}`,
+                background: copied ? "var(--bg-active, #eef2ff)" : "var(--bg-primary, #fff)",
+                color: copied ? "var(--accent-primary, #6366f1)" : "var(--text-secondary)",
               }}
             >
               {copied ? (
@@ -726,7 +726,7 @@ function InviteTab({
             </button>
           </div>
         ) : (
-          <p style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", fontStyle: "italic" }}>
             No invite code generated yet.
           </p>
         )}
@@ -777,20 +777,20 @@ function IntegrationsTab({ canManage }) {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                background: connected ? "#f0fdf4" : "#fef2f2",
-                border: `1.5px solid ${connected ? "#bbf7d0" : "#fecaca"}`,
+                background: connected ? "var(--bg-success, #f0fdf4)" : "var(--bg-danger, #fef2f2)",
+                border: `1.5px solid ${connected ? "var(--border-success, #bbf7d0)" : "var(--border-danger, #fecaca)"}`,
               }}
             >
-              <Zap size={18} color={connected ? "#16a34a" : "#dc2626"} />
+              <Zap size={18} color={connected ? "var(--success-primary, #16a34a)" : "var(--danger-primary, #dc2626)"} />
             </div>
             <div>
-              <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>
                 FlowTask
               </p>
               <p
                 style={{
                   fontSize: 12,
-                  color: connected ? "#16a34a" : "#dc2626",
+                  color: connected ? "var(--success-primary, #16a34a)" : "var(--danger-primary, #dc2626)",
                   marginTop: 3,
                   fontWeight: 500,
                 }}
@@ -877,20 +877,20 @@ function SecurityTab({ canManage }) {
         <SectionLabel>Two-Factor Authentication</SectionLabel>
         <div className="wsm-banner">
           <div className="wsm-banner-icon">
-            <Shield size={16} color="#fff" />
+            <Shield size={16} color="var(--text-inverse, #fff)" />
           </div>
           <div>
             <p
               style={{
                 fontSize: 13.5,
                 fontWeight: 700,
-                color: "#3730a3",
+                color: "var(--text-on-accent, #3730a3)",
                 marginBottom: 4,
               }}
             >
               2FA Enforcement
             </p>
-            <p style={{ fontSize: 12.5, color: "#6366f1", lineHeight: 1.6 }}>
+            <p style={{ fontSize: 12.5, color: "var(--accent-primary, #6366f1)", lineHeight: 1.6 }}>
               Coming soon — enforce two-factor authentication for all workspace
               members to improve account security.
             </p>

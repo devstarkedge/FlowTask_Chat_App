@@ -3,6 +3,7 @@ import userRepository from '../../users/user.repository.js';
 import channelService from '../../channels/channel.service.js';
 import channelRepository from '../../channels/channel.repository.js';
 import messageService from '../../messages/message.service.js';
+import roleSyncService from '../../../services/roleSync.service.js';
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SYSTEM_CHANNELS } from '../../../config/constants.js';
 
@@ -80,10 +81,33 @@ export function registerUserEventHandlers() {
 
     const { user, changes } = payload;
 
-    if (!user?._id) return;
+    logger.info('[UserEventHandler] USER_UPDATED received', {
+      userId: user?._id,
+      userRole: user?.role,
+      hasChanges: !!changes,
+      changesKeys: changes ? Object.keys(changes) : [],
+      changesRole: changes?.role,
+      workspaceId: wsId,
+    });
+
+    if (!user?._id) {
+      logger.warn('[UserEventHandler] USER_UPDATED: missing user._id', { payload });
+      return;
+    }
+
+    // Get existing ChatUser BEFORE updating to detect role changes
+    const existingChatUser = await userRepository.findByFlowTaskId(user._id);
+    const oldRole = existingChatUser?.role;
 
     // Upsert with latest data
     const chatUser = await userRepository.upsertFromFlowTask(user, wsId);
+    
+    logger.info('[UserEventHandler] ChatUser upserted', {
+      chatUserId: chatUser._id,
+      chatUserRole: chatUser.role,
+      oldRole,
+      newRole: chatUser.role,
+    });
 
     // Handle department change
     if (changes?.department) {
@@ -117,14 +141,25 @@ export function registerUserEventHandlers() {
       }
     }
 
-    // Handle role change — update role-specific channel membership
-    if (changes?.role) {
+    // Handle role change — detect from changes object OR by comparing old vs new
+    const hasRoleChange = changes?.role || (oldRole && oldRole !== chatUser.role);
+    const effectiveOldRole = changes?.role?.old || oldRole;
+    const effectiveNewRole = changes?.role?.new || chatUser.role;
+
+    if (hasRoleChange && effectiveOldRole !== effectiveNewRole) {
+      logger.info('[UserEventHandler] Processing role change', {
+        oldRole: effectiveOldRole,
+        newRole: effectiveNewRole,
+        chatUserId: chatUser._id,
+        source: changes?.role ? 'changes.role' : 'direct comparison',
+      });
+      
       // Admin channel
       const adminChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ADMIN.slug, wsId);
       if (adminChannel) {
-        if (changes.role.new === 'admin') {
+        if (effectiveNewRole === 'admin' || effectiveNewRole === 'manager') {
           await channelService.addMember(adminChannel._id, chatUser._id, undefined, wsId);
-        } else if (changes.role.old === 'admin') {
+        } else if (effectiveOldRole === 'admin' || effectiveOldRole === 'manager') {
           await channelService.removeMember(adminChannel._id, chatUser._id, 'system', wsId);
         }
       }
@@ -132,17 +167,27 @@ export function registerUserEventHandlers() {
       // Managers channel
       const managersChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.MANAGERS.slug, wsId);
       if (managersChannel) {
-        if (changes.role.new === 'manager') {
+        if (effectiveNewRole === 'manager') {
           await channelService.addMember(managersChannel._id, chatUser._id, undefined, wsId);
-        } else if (changes.role.old === 'manager') {
+        } else if (effectiveOldRole === 'manager') {
           await channelService.removeMember(managersChannel._id, chatUser._id, 'system', wsId);
         }
       }
+
+      // Update WorkspaceMembership role and emit socket event to notify clients
+      logger.info('[UserEventHandler] Calling roleSyncService.syncUserRole', {
+        flowTaskUserId: user._id,
+        newRole: effectiveNewRole,
+        workspaceId: wsId,
+      });
+      
+      await roleSyncService.syncUserRole(user._id, effectiveNewRole, wsId);
     }
 
     logger.info('user.updated handled', {
       chatUserId: chatUser._id,
       changes: Object.keys(changes || {}),
+      roleChanged: hasRoleChange,
     });
   });
 

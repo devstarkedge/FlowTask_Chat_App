@@ -8,9 +8,11 @@ import {
   ListFilter,
   Inbox,
   Trash2,
-  CircleDot 
+  CircleDot,
+  FileText,
 } from "lucide-react";
 import { useLaterStore } from "../../stores/laterStore";
+import { useCanvasStore } from "../../stores/canvasStore";
 import { Avatar } from "../chat/MemberAvatarGroup";
 import {
   format,
@@ -180,9 +182,68 @@ function SavedMessageCard({
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   SAVED CANVAS CARD
+───────────────────────────────────────────────────────────────── */
+function SavedCanvasCard({ canvas, onStatusChange, onJump }) {
+  const statusActions = [
+    canvas.savedForLaterStatus !== "completed" && {
+      icon: Check,
+      label: "Mark complete",
+      status: "completed",
+    },
+    canvas.savedForLaterStatus !== "archived" && {
+      icon: Archive,
+      label: "Archive",
+      status: "archived",
+    },
+    canvas.savedForLaterStatus !== "in_progress" && {
+      icon: CircleDot,
+      label: "Move to in progress",
+      status: "in_progress",
+    },
+  ].filter(Boolean);
+
+  return (
+    <div
+      className="lp-item"
+      onClick={() => onJump?.(canvas)}
+      style={{ cursor: "pointer" }}
+    >
+      <div className="lp-item__content">
+        <div className="lp-item__channel-row">
+          <span className="lp-item__channel">
+            <FileText size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+            {canvas.title || "Untitled canvas"}
+          </span>
+        </div>
+        <div className="lp-item__body">
+          <div className="lp-item__details">
+            <div className="lp-item__preview">
+              Canvas • {formatTime(canvas.updatedAt)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Hover actions */}
+      <div className="lp-item__actions" onClick={(e) => e.stopPropagation()}>
+        {statusActions.map((a) => (
+          <ActionBtn
+            key={a.status}
+            icon={a.icon}
+            label={a.label}
+            onClick={() => onStatusChange(canvas._id, a.status)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
    LATER PANEL — main export
 ───────────────────────────────────────────────────────────────── */
-export default function LaterPanel({ onJumpToMessage }) {
+export default function LaterPanel({ onJumpToMessage, onJumpToCanvas }) {
   const {
     savedMessages,
     loading,
@@ -194,6 +255,11 @@ export default function LaterPanel({ onJumpToMessage }) {
     setActiveTab,
     setActiveSavedMessageId,
   } = useLaterStore();
+
+  const fetchSavedCanvases = useCanvasStore((s) => s.fetchSavedCanvases);
+  const updateSavedCanvasStatus = useCanvasStore((s) => s.updateSavedCanvasStatus);
+  const [savedCanvases, setSavedCanvases] = useState([]);
+  const [canvasesLoading, setCanvasesLoading] = useState(false);
 
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedSaved, setSelectedSaved] = useState(null);
@@ -212,6 +278,14 @@ export default function LaterPanel({ onJumpToMessage }) {
   useEffect(() => {
     fetchSavedMessages();
   }, [fetchSavedMessages]);
+
+  /* ── Fetch saved canvases on mount and activeTab ── */
+  useEffect(() => {
+    setCanvasesLoading(true);
+    fetchSavedCanvases(null, activeTab === "in_progress" ? undefined : activeTab)
+      .then((canvases) => setSavedCanvases(canvases || []))
+      .finally(() => setCanvasesLoading(false));
+  }, [activeTab, fetchSavedCanvases]);
 
   /* Auto-highlight first card and automatically open it in Chat Panel */
   useEffect(() => {
@@ -249,7 +323,22 @@ export default function LaterPanel({ onJumpToMessage }) {
     setShowReminderModal(true);
   };
 
+  const handleCanvasStatusChange = async (canvasId, status) => {
+    await updateSavedCanvasStatus(canvasId, status);
+    setSavedCanvases((prev) =>
+      prev.map((c) => (c._id === canvasId ? { ...c, savedForLaterStatus: status } : c))
+    );
+  };
+
+  const handleCanvasJump = (canvas) => {
+    onJumpToCanvas?.(canvas);
+  };
+
   const filteredMessages = savedMessages.filter((m) => m.status === activeTab);
+  const filteredCanvases = savedCanvases.filter(
+    (c) => c.savedForLaterStatus === activeTab
+  );
+  const isEmpty = filteredMessages.length === 0 && filteredCanvases.length === 0;
 
   const emptyStates = {
     completed: {
@@ -311,12 +400,12 @@ export default function LaterPanel({ onJumpToMessage }) {
 
       {/* ── Content ── */}
       <div className="lp-content">
-        {loading ? (
+        {loading || canvasesLoading ? (
           <div className="lp-loading">
             <Loader2 size={28} className="lp-spinner" />
             <p className="lp-loading__text">Loading…</p>
           </div>
-        ) : filteredMessages.length === 0 ? (
+        ) : isEmpty ? (
           <div className="lp-empty">
             <div className="lp-empty__icon-wrap">
               <empty.Icon size={26} />
@@ -334,11 +423,26 @@ export default function LaterPanel({ onJumpToMessage }) {
           </div>
         ) : (
           <div className="lp-list">
+            {/* Canvas cards */}
+            {filteredCanvases.map((canvas, i) => (
+              <div
+                key={`canvas-${canvas._id}`}
+                className="lp-list__item"
+                style={{ animationDelay: `${i * 45}ms` }}
+              >
+                <SavedCanvasCard
+                  canvas={canvas}
+                  onStatusChange={handleCanvasStatusChange}
+                  onJump={handleCanvasJump}
+                />
+              </div>
+            ))}
+            {/* Message cards */}
             {filteredMessages.map((saved, i) => (
               <div
                 key={saved._id}
                 className="lp-list__item"
-                style={{ animationDelay: `${i * 45}ms` }}
+                style={{ animationDelay: `${(filteredCanvases.length + i) * 45}ms` }}
               >
                 <SavedMessageCard
                   saved={saved}

@@ -768,16 +768,20 @@ class MessageService {
 
   /**
    * Increment unread counts for all channel members except the sender.
+   * Enhanced with active conversation awareness — users viewing the channel
+   * will have messages auto-marked as read instead of incrementing unread.
    * @private
    */
   async _incrementUnreadForChannel(channelId, senderUserId, workspaceId) {
     try {
       const { default: ReadReceipt } = await import('../readReceipts/ReadReceipt.model.js');
+      const { getIO } = await import('../../sockets/socketManager.js');
+      const { buildRoomName } = await import('../../config/constants.js');
 
-      // ReadReceipt.incrementUnread increments for everyone EXCEPT excludeUserId
+      // Increment for all except sender (existing logic)
       await ReadReceipt.incrementUnread(channelId, senderUserId, false, workspaceId);
 
-      // Emit per-user unread:updated so badge counts update in real-time without refresh
+      // Get all members with unread > 0
       const updatedReceipts = await ReadReceipt.find({
         channelId,
         ...(workspaceId ? { workspaceId } : {}),
@@ -785,8 +789,46 @@ class MessageService {
         unreadCount: { $gt: 0 },
       }).select('userId unreadCount').lean();
 
+      const io = getIO();
+      
       for (const receipt of updatedReceipts) {
-        emitToUser(receipt.userId.toString(), SOCKET_EVENTS.UNREAD_UPDATED, {
+        const userId = receipt.userId.toString();
+        
+        // Check if this user has this channel as active conversation
+        let isActiveConversation = false;
+        if (io && workspaceId) {
+          try {
+            const userRoom = buildRoomName(workspaceId, 'user', userId);
+            const sockets = await io.in(userRoom).fetchSockets();
+            isActiveConversation = sockets.some(s => s.activeChannelId === channelId.toString());
+          } catch (err) {
+            logger.debug('Failed to check active conversation status', { 
+              userId, 
+              channelId, 
+              error: err.message 
+            });
+          }
+        }
+        
+        if (isActiveConversation) {
+          // User is viewing this channel — don't send unread update
+          // Auto-mark as read instead
+          logger.debug('Auto-marking as read for active viewer', { 
+            userId, 
+            channelId 
+          });
+          await ReadReceipt.markChannelAsRead(userId, channelId, null, workspaceId);
+          
+          // Emit zero unread count to client
+          emitToUser(userId, SOCKET_EVENTS.UNREAD_UPDATED, {
+            channelId: channelId.toString(),
+            unreadCount: 0,
+          }, workspaceId);
+          continue;
+        }
+        
+        // Send unread update only if not actively viewing
+        emitToUser(userId, SOCKET_EVENTS.UNREAD_UPDATED, {
           channelId: channelId.toString(),
           unreadCount: receipt.unreadCount,
         }, workspaceId);

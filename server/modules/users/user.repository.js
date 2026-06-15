@@ -209,7 +209,7 @@ class UserRepository {
 
     const filter = { flowTaskUserId: _id.toString() };
 
-    return ChatUser.findOneAndUpdate(
+    const updated = await ChatUser.findOneAndUpdate(
       filter,
       {
         $set: {
@@ -229,8 +229,10 @@ class UserRepository {
           chatPreferences: {},
         },
       },
-      { upsert: true, returnDocument: 'after' },
+      { upsert: true, returnDocument: 'after', new: true },
     );
+    
+    return updated;
   }
 
   async setOnlineStatus(userId, status) {
@@ -565,6 +567,20 @@ class UserRepository {
       userId,
       { $set: { customStatus: { emoji: null, text: null, expiresAt: null } } },
       { returnDocument: 'after' },
+    ).exec();
+  }
+
+  /**
+   * Generic update method for ChatUser.
+   * @param {string} userId
+   * @param {object} updates
+   * @returns {Promise<ChatUser|null>}
+   */
+  async update(userId, updates) {
+    return ChatUser.findByIdAndUpdate(
+      userId,
+      { $set: updates },
+      { returnDocument: 'after', new: true },
     ).exec();
   }
 }

@@ -149,10 +149,10 @@ export const useChannelStore = create(
 
   /**
    * Called when a new message:create socket event arrives.
-   * Updates sidebar lastMessageAt + lastMessagePreview and increments
-   * unread count for channels that are not currently active.
-   * This is the client-side optimistic counterpart to the server's
-   * channel:updated + unread:updated socket emissions.
+   * Updates sidebar lastMessageAt + lastMessagePreview only.
+   * Unread count management is now handled by UnreadManager with
+   * presence-based filtering (prevents unread increment when user
+   * is actively viewing the conversation).
    */
   handleNewMessage: (message) => {
     const { channelId, content, createdAt } = message
@@ -164,8 +164,6 @@ export const useChannelStore = create(
     const timestamp = createdAt || new Date().toISOString()
 
     set((state) => {
-      const isActive = channelId === state.activeChannelId
-
       // Update the channel's lastMessageAt + lastMessagePreview in the channels array
       const channels = state.channels.map((c) =>
         c._id === channelId
@@ -173,13 +171,8 @@ export const useChannelStore = create(
           : c
       )
 
-      // Only bump unread count when the channel is NOT the one currently open.
-      // If it IS active, setActiveChannel already cleared the count.
-      const unreads = isActive
-        ? state.unreads
-        : { ...state.unreads, [channelId]: (state.unreads[channelId] || 0) + 1 }
-
-      return { channels, unreads }
+      // Unread logic removed — now handled by UnreadManager with presence tracking
+      return { channels }
     })
   },
 

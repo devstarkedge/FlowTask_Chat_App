@@ -73,7 +73,7 @@ export default function SlashCommandMenu({ editor, menu, onClose }) {
   return (
     <div
       className="canvas-slash-menu"
-      style={{ left: menu.x, top: menu.y }}
+      style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
       role="menu"
       aria-label="Canvas commands"
       onMouseDown={(event) => event.preventDefault()}

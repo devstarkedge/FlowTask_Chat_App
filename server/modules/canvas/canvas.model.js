@@ -110,6 +110,24 @@ const canvasSchema = new Schema(
         default: 0,
       },
     },
+
+    savedForLaterBy: [{
+      type: Schema.Types.ObjectId,
+      ref: "ChatUser",
+    }],
+    savedForLaterStatus: {
+      type: String,
+      enum: ["in_progress", "archived", "completed"],
+      default: "in_progress",
+    },
+    viewCount: {
+      type: Number,
+      default: 0,
+    },
+    viewedBy: [{
+      type: Schema.Types.ObjectId,
+      ref: "ChatUser",
+    }],
   },
   {
     timestamps: true,

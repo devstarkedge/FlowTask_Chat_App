@@ -125,14 +125,16 @@ savedMessageSchema.index({ userId: 1, workspaceId: 1, createdAt: -1 });
 savedMessageSchema.statics.toggle = async function (userId, messageId, channelId, workspaceId) {
   const deleted = await this.findOneAndDelete({ userId, messageId });
   if (deleted) {
-    return { saved: false };
+    return { saved: false, savedMessageId: deleted._id };
   }
   try {
-    await this.create({ userId, messageId, channelId, workspaceId, type: 'saved_message' });
-    return { saved: true };
+    const created = await this.create({ userId, messageId, channelId, workspaceId, type: 'saved_message' });
+    return { saved: true, savedMessageId: created._id };
   } catch (err) {
     if (err.code === 11000) {
-      return { saved: true };
+      // Race condition: another request already saved — treat as saved
+      const existing = await this.findOne({ userId, messageId }).select('_id').lean();
+      return { saved: true, savedMessageId: existing?._id || null };
     }
     throw err;
   }

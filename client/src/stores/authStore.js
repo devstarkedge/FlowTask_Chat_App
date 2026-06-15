@@ -178,5 +178,23 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // ─── Role Update ───────────────────────────────────────────────────
+  updateUserRole: (newRole, workspaceId) => {
+    set((state) => {
+      if (!state.user) return state
+      
+      // Update user object with new role
+      const updatedUser = { ...state.user, role: newRole }
+      
+      logger.info('[AuthStore] User role updated', { 
+        userId: state.user._id, 
+        newRole, 
+        workspaceId 
+      })
+      
+      return { user: updatedUser }
+    })
+  },
+
   clearError: () => set({ error: null }),
 }))

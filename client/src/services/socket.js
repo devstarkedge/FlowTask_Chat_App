@@ -5,10 +5,16 @@ import { useChannelStore } from '../stores/channelStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useNotificationStore } from '../stores/notificationStore'
 import { useDraftStore } from '../stores/draftStore'
+import { useLaterStore } from '../stores/laterStore'
+import { useScheduledStore } from '../stores/scheduledStore'
 import { throttle } from '../utils/throttle'
+import { conversationPresence } from './conversationPresence'
+import { unreadManager } from './unreadManager'
 import logger from '../utils/logger'
 
 let socket = null
+let _disconnectTime = 0   // timestamp when socket last disconnected
+const BRIEF_DISCONNECT_THRESHOLD_MS = 5000  // under 5s = brief blip, skip full cascade
 
 function getSocketUrl() {
   const explicit = import.meta.env.VITE_SOCKET_URL
@@ -92,6 +98,12 @@ const SOCKET_EVENTS = {
   SAVED_MESSAGE_ADDED: 'savedMessage:added',
   SAVED_MESSAGE_REMOVED: 'savedMessage:removed',
   SAVED_MESSAGE_STATUS_UPDATED: 'savedMessage:statusUpdated',
+
+  // User & Role Sync
+  USER_ROLE_UPDATED: 'user:role_updated',
+  USER_PROFILE_UPDATED: 'user:profile_updated',
+  WORKSPACE_MEMBER_UPDATED: 'workspace:member_updated',
+  PERMISSIONS_UPDATED: 'permissions:updated',
 }
 
 export function connectSocket() {
@@ -146,6 +158,7 @@ export function connectSocket() {
 
   socket.on('disconnect', (reason) => {
     logger.log('[Socket] Disconnected:', reason)
+    _disconnectTime = Date.now()
     useChatStore.getState().setConnectionStatus('disconnected')
   })
 
@@ -158,23 +171,47 @@ export function connectSocket() {
   socket.on('reconnect', (attempt) => {
     logger.log('[Socket] Reconnected after', attempt, 'attempts')
     useChatStore.getState().setConnectionStatus('connected')
-    // Re-sync channels, unreads, rejoin rooms, and fill message gaps
+
+    const disconnectDuration = _disconnectTime > 0
+      ? Date.now() - _disconnectTime
+      : Infinity
+
+    // ── Always rejoin channel rooms (lightweight, no server queries) ──
+    try {
+      const channels = useChannelStore.getState().channels
+      for (const ch of channels) {
+        socket.emit('channel:join', ch._id)
+      }
+      const activeChannelId = useChannelStore.getState().activeChannelId
+      if (activeChannelId) {
+        socket.emit('channel:join', activeChannelId)
+      }
+    } catch (err) {
+      logger.error('[Socket] Failed to rejoin rooms after reconnect:', err.message)
+    }
+
+    // ── Brief disconnect (< 5s): skip full cascade ──
+    // The socket already re-joined rooms. Real-time events will fill any
+    // tiny gaps. No need to refetch channels, messages, unreads, pins, etc.
+    if (disconnectDuration < BRIEF_DISCONNECT_THRESHOLD_MS) {
+      logger.log('[Socket] Brief disconnect — skipping full re-sync', { disconnectDuration })
+      return
+    }
+
+    // ── Long disconnect: full re-sync to catch missed data ──
+    logger.log('[Socket] Long disconnect — running full re-sync', { disconnectDuration })
     try {
       const channelStore = useChannelStore.getState()
       channelStore.fetchChannels().then(() => {
-        // Rejoin all channel rooms
         const channels = useChannelStore.getState().channels
         for (const ch of channels) {
           socket.emit('channel:join', ch._id)
         }
-        // Rejoin active channel and sync missed messages
         const activeChannelId = channelStore.activeChannelId
         if (activeChannelId) {
           socket.emit('channel:join', activeChannelId)
-          // Fetch fresh messages to fill any gap
           useChatStore.getState().fetchMessages(activeChannelId)
         }
-        // Refresh unreads
         channelStore.fetchUnreads()
       })
     } catch (err) {
@@ -219,9 +256,9 @@ export function connectSocket() {
     useChatStore.getState().addMessage(message)
 
     // Update sidebar: lastMessageAt, lastMessagePreview, and unread count.
-    // This is immediate (optimistic) — the server will also emit channel:updated
-    // and unread:updated which serve as the authoritative confirmation.
-    useChannelStore.getState().handleNewMessage(message)
+    // UnreadManager handles presence-based filtering to prevent unread increment
+    // when user is actively viewing the conversation.
+    unreadManager.handleMessageReceived(message)
   })
 
   // ─── Thread Reply Events ──────────────────────────────────────────────
@@ -379,9 +416,63 @@ export function connectSocket() {
     useChatStore.getState().setUserAway(userId)
   })
 
+  // ─── User Role Update Events ────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.USER_ROLE_UPDATED, ({ userId, oldRole, newRole, workspaceId }) => {
+    const currentUserId = useAuthStore.getState().user?._id
+    
+    console.log('[Socket] USER_ROLE_UPDATED received', { userId, oldRole, newRole, workspaceId, currentUserId })
+    
+    // Only update if this is the current user
+    if (userId === currentUserId) {
+      console.log('[Socket] Updating role for current user', { newRole })
+      
+      // Update auth store user object
+      useAuthStore.getState().updateUserRole(newRole, workspaceId)
+      
+      // Refresh workspace memberships to get updated role
+      useWorkspaceStore.getState().fetchWorkspaces()
+      
+      logger.info('[Socket] User role updated', { userId, oldRole, newRole, workspaceId })
+    } else {
+      console.log('[Socket] Role update for different user, skipping', { userId, currentUserId })
+    }
+  })
+
+  // ─── Workspace Member Updated (for other members seeing role changes) ─
+  socket.on(SOCKET_EVENTS.WORKSPACE_MEMBER_UPDATED, ({ userId, newRole, workspaceId, updatedBy }) => {
+    // Update workspaceStore members array if viewing this workspace
+    const store = useWorkspaceStore.getState()
+    if (store.activeWorkspaceId === workspaceId) {
+      store.updateMemberRoleInStore(userId, newRole)
+    }
+    
+    logger.info('[Socket] Workspace member role updated', { userId, newRole, workspaceId })
+  })
+
+  // ─── User Profile Updated Events ────────────────────────────────────
+  socket.on(SOCKET_EVENTS.USER_PROFILE_UPDATED, ({ userId, updates, workspaceId }) => {
+    const currentUserId = useAuthStore.getState().user?._id
+    
+    if (userId === currentUserId) {
+      // Update authStore user object
+      const currentUser = useAuthStore.getState().user
+      if (currentUser) {
+        useAuthStore.setState({
+          user: { ...currentUser, ...updates }
+        })
+      }
+    }
+    
+    // Update workspaceStore members (other users may see this user in member list)
+    useWorkspaceStore.getState().updateMemberProfile(userId, updates)
+    
+    logger.info('[Socket] User profile updated', { userId, fields: Object.keys(updates || {}) })
+  })
+
   // ─── Unread Events ──────────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.UNREAD_UPDATED, ({ channelId, unreadCount }) => {
-    useChannelStore.getState().updateUnread(channelId, unreadCount)
+    // UnreadManager validates against active conversation before applying update
+    unreadManager.handleUnreadUpdate({ channelId, unreadCount })
   })
 
   // ─── Notification Events ────────────────────────────────────────────
@@ -422,7 +513,6 @@ export function connectSocket() {
   // ─── Scheduled Message Events ────────────────────────────────────────
   socket.on('scheduledMessage:sent', (payload) => {
     const { scheduledMessageId, message } = payload
-    const { useScheduledStore } = require('../stores/scheduledStore')
     useScheduledStore.getState().handleScheduledSent(payload)
     
     // The scheduled message was sent successfully — add to chat if in the channel
@@ -434,21 +524,18 @@ export function connectSocket() {
 
   socket.on('scheduledMessage:failed', (payload) => {
     const { scheduledMessageId, error } = payload
-    const { useScheduledStore } = require('../stores/scheduledStore')
     useScheduledStore.getState().handleScheduledFailed(payload)
     logger.error('[Socket] Scheduled message failed:', scheduledMessageId, error)
   })
 
   socket.on('scheduledMessage:cancelled', (payload) => {
     const { scheduledMessageId } = payload
-    const { useScheduledStore } = require('../stores/scheduledStore')
     useScheduledStore.getState().handleScheduledCancelled(payload)
     logger.log('[Socket] Scheduled message cancelled:', scheduledMessageId)
   })
 
   socket.on('scheduledMessage:deleted', (payload) => {
     const { scheduledMessageId } = payload
-    const { useScheduledStore } = require('../stores/scheduledStore')
     useScheduledStore.getState().handleScheduledCancelled(payload) // same logic
     logger.log('[Socket] Scheduled message deleted:', scheduledMessageId)
   })
@@ -456,21 +543,18 @@ export function connectSocket() {
   // ─── Saved Message Events ────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.SAVED_MESSAGE_ADDED, ({ savedMessage }) => {
     if (savedMessage) {
-      const { useLaterStore } = require('../stores/laterStore')
       useLaterStore.getState().addSavedMessage(savedMessage)
     }
   })
 
   socket.on(SOCKET_EVENTS.SAVED_MESSAGE_REMOVED, ({ messageId }) => {
     if (messageId) {
-      const { useLaterStore } = require('../stores/laterStore')
       useLaterStore.getState().removeSavedMessage(messageId)
     }
   })
 
   socket.on(SOCKET_EVENTS.SAVED_MESSAGE_STATUS_UPDATED, ({ messageId, status }) => {
     if (messageId && status) {
-      const { useLaterStore } = require('../stores/laterStore')
       useLaterStore.getState().updateSavedMessageStatus(messageId, status)
     }
   })

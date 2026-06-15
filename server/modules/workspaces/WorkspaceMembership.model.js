@@ -67,6 +67,8 @@ workspaceMembershipSchema.index({ userId: 1, workspaceId: 1 }, { unique: true })
 workspaceMembershipSchema.index({ workspaceId: 1, role: 1, isActive: 1 });
 // User's workspaces (for "workspace switcher" query)
 workspaceMembershipSchema.index({ userId: 1, isActive: 1 });
+// Membership lookup by userId + workspaceId + isActive (auth middleware hot path)
+workspaceMembershipSchema.index({ userId: 1, workspaceId: 1, isActive: 1 });
 
 // ─── Static Methods ──────────────────────────────────────────────────────────
 

@@ -15,6 +15,7 @@ import {
   Mic,
 } from "lucide-react";
 import { useCanvasStore } from "../../../stores/canvasStore";
+import { messageAPI } from "../../../services/api";
 import { useCanvasUiStore } from "../../../stores/canvasUiStore";
 import CommentThreadSidebar from "../comments/CommentThreadSidebar";
 import CanvasHistoryPanel from "../history/CanvasHistoryPanel";
@@ -164,13 +165,64 @@ export default function CanvasEditorUI({
     await insertMedia(file, type);
   };
 
+  // Check if a file is an image type
+  const isImageFile = (file) => {
+    return file && file.type && file.type.startsWith("image/");
+  };
+
+  // Upload file to backend server
+  const uploadFileToServer = async (file, channelId) => {
+    const formData = new FormData();
+    formData.append("files", file);
+    
+    // Use the channel upload endpoint if we have a channel context
+    try {
+      const channelIdToUse = channelId || canvas?.channelId;
+      if (channelIdToUse) {
+        const response = await messageAPI.uploadFiles(channelIdToUse, formData);
+        const uploadedFile = response?.data?.data?.files?.[0] || response?.data?.data?.file || response?.data;
+        const fileUrl = uploadedFile?.url || uploadedFile?.secure_url || uploadedFile?.path;
+        if (fileUrl) return { url: fileUrl, data: uploadedFile };
+      }
+      
+      // Fallback: try canvas-specific upload or return null
+      console.warn("[Canvas Upload] No channel context for upload, using blob URL");
+      return null;
+    } catch (err) {
+      console.error("[Canvas Upload] Upload failed:", err);
+      return null;
+    }
+  };
+
+  // Helper to update a loading node's attributes after upload
+  const updateNodeAfterUpload = (editorInstance, nodeType, newAttrs) => {
+    if (!editorInstance) return;
+    editorInstance.state.doc.descendants((node, pos) => {
+      if (node.type.name === nodeType && node.attrs.loading === true) {
+        editorInstance.view.dispatch(
+          editorInstance.state.tr.setNodeMarkup(pos, undefined, {
+            ...node.attrs,
+            ...newAttrs,
+            loading: false,
+          }),
+        );
+      }
+    });
+  };
+
   const insertMedia = async (file, nodeType) => {
     if (!editor) return;
     const localUrl = URL.createObjectURL(file);
     const name = file.name;
     const size = `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
+    const isImage = isImageFile(file);
 
-    // 1. Insert Node with loading: true
+    // Auto-detect image type from file
+    if (isImage && nodeType === "fileAttachment") {
+      nodeType = "image";
+    }
+
+    // 1. Insert Node with loading: true (shows loading placeholder)
     let nodeAttrs = { loading: true };
     if (nodeType === "image") {
       nodeAttrs = { src: localUrl, loading: true };
@@ -188,20 +240,30 @@ export default function CanvasEditorUI({
       .insertContent({ type: nodeType, attrs: nodeAttrs })
       .run();
 
-    // 2. Simulate Cloudinary / Backend upload delay
-    setTimeout(() => {
-      if (!editor) return;
-      editor.state.doc.descendants((node, pos) => {
-        if (node.type.name === nodeType && node.attrs.loading === true) {
-          editor.view.dispatch(
-            editor.state.tr.setNodeMarkup(pos, undefined, {
-              ...node.attrs,
-              loading: false,
-            }),
-          );
-        }
-      });
-    }, 1500);
+    // 2. Upload file to server
+    const uploadResult = await uploadFileToServer(file);
+    
+    // 3. Update the loading node with the uploaded URL
+    if (uploadResult?.url) {
+      const finalUrl = uploadResult.url;
+      if (nodeType === "image") {
+        updateNodeAfterUpload(editor, nodeType, { src: finalUrl });
+      } else if (nodeType === "videoBlock" || nodeType === "audioBlock") {
+        updateNodeAfterUpload(editor, nodeType, { src: finalUrl });
+      } else if (nodeType === "fileAttachment") {
+        updateNodeAfterUpload(editor, nodeType, { url: finalUrl, name, size });
+      }
+    } else {
+      // Upload failed or no server available - fall back to blob URL
+      // The image will show via blob URL but won't persist after refresh
+      console.warn("[Canvas Upload] No upload result, using local blob URL as fallback");
+      setTimeout(() => {
+        updateNodeAfterUpload(editor, nodeType, {
+          ...(nodeType === "image" ? { src: localUrl } : {}),
+          ...(nodeType === "fileAttachment" ? { url: localUrl, name, size } : {}),
+        });
+      }, 500);
+    }
   };
 
   // Media Recording Triggers

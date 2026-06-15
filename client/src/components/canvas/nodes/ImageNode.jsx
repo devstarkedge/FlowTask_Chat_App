@@ -15,10 +15,12 @@ export default Image.extend({
       },
       loading: {
         default: false,
+        parseHTML: element => element.getAttribute('data-loading') === 'true',
         renderHTML: attributes => {
           if (!attributes.loading) return {};
           return {
-            class: 'image-loading-placeholder',
+            'data-loading': 'true',
+            style: 'opacity: 0.4; filter: blur(2px); min-height: 120px; background: var(--bg-secondary);',
           };
         },
       },

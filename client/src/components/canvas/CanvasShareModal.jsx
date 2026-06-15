@@ -16,7 +16,7 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [showPermDropdown, setShowPermDropdown] = useState(false);
-  const [currentPerm, setCurrentPerm] = useState(canvas?.permissions?.visibility || "channel");
+  const [currentPerm, setCurrentPerm] = useState("channel");
   const [isSaving, setIsSaving] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const searchRef = useRef(null);
@@ -34,13 +34,15 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
     }
   }, [isOpen, channelId, fetchMembers]);
 
+  // Sync modal state ONLY when opening – this must NOT depend on `canvas` object reference
+  // to avoid infinite re-renders when the parent re-renders with a new canvas object.
   useEffect(() => {
     if (isOpen) {
       setCurrentPerm(canvas?.permissions?.visibility || "channel");
-      const existing = new Set(canvas?.permissions?.allowedUserIds?.map(String) || []);
-      setSelectedIds(existing);
+      setSelectedIds(new Set(canvas?.permissions?.allowedUserIds?.map(String) || []));
     }
-  }, [isOpen, canvas]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   // Close on Escape
   useEffect(() => {
@@ -86,31 +88,33 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
     });
   }, []);
 
+  // Stable canvas ID extracted once per render to keep callbacks stable
+  const canvasId = canvas?._id;
+
   const handlePermissionChange = useCallback(async (newPerm) => {
     setCurrentPerm(newPerm);
     setShowPermDropdown(false);
-    if (canvas?._id) {
+    if (canvasId) {
       try {
-        await updateCanvasMetadata(canvas._id, {
-          permissions: { ...canvas.permissions, visibility: newPerm },
+        await updateCanvasMetadata(canvasId, {
+          permissions: { visibility: newPerm },
         });
         toast.success(`Permission updated to ${PERMISSIONS.find(p => p.value === newPerm)?.label}`);
       } catch {
         toast.error("Failed to update permissions");
       }
     }
-  }, [canvas, updateCanvasMetadata]);
+  }, [canvasId, updateCanvasMetadata]);
 
   const handleDone = useCallback(async () => {
-    if (!canvas?._id) {
+    if (!canvasId) {
       onClose();
       return;
     }
     setIsSaving(true);
     try {
-      await updateCanvasMetadata(canvas._id, {
+      await updateCanvasMetadata(canvasId, {
         permissions: {
-          ...canvas.permissions,
           visibility: currentPerm,
           allowedUserIds: [...selectedIds],
         },
@@ -122,7 +126,7 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
     } finally {
       setIsSaving(false);
     }
-  }, [canvas, currentPerm, selectedIds, updateCanvasMetadata, onClose]);
+  }, [canvasId, currentPerm, selectedIds, updateCanvasMetadata, onClose]);
 
   if (!isOpen) return null;
 

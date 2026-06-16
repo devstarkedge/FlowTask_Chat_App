@@ -78,11 +78,18 @@ function ColorDropdown({ icon: Icon, label, colors, activeColor, onSelect }) {
 
   return (
     <div ref={ref} style={{ position: "relative", display: "inline-flex" }}>
-      <ToolbarButton label={label} active={open || !!activeColor} onClick={() => setOpen((v) => !v)}>
+      <ToolbarButton
+        label={label}
+        active={open || !!activeColor}
+        onClick={() => setOpen((v) => !v)}
+      >
         <Icon size={15} />
       </ToolbarButton>
       {open && (
-        <div className="canvas-color-dropdown" onMouseDown={(e) => e.preventDefault()}>
+        <div
+          className="canvas-color-dropdown"
+          onMouseDown={(e) => e.preventDefault()}
+        >
           {colors.map((c) => (
             <button
               key={c.label}
@@ -99,7 +106,11 @@ function ColorDropdown({ icon: Icon, label, colors, activeColor, onSelect }) {
                 setOpen(false);
               }}
             >
-              {!c.value && <span style={{ fontSize: 10, color: "var(--text-muted)" }}>∅</span>}
+              {!c.value && (
+                <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
+                  ∅
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -243,7 +254,8 @@ export default function SelectionToolbar({ editor, toolbar, onComment }) {
         activeColor={activeTextColor}
         onSelect={(color) => {
           if (color) {
-            editor.chain().focus().setColor(color).run();
+            editor.chain().focus().setHighlight({ color }).run();
+            console.log("set text color", color);
           } else {
             editor.chain().focus().unsetColor().run();
           }
@@ -257,6 +269,7 @@ export default function SelectionToolbar({ editor, toolbar, onComment }) {
         onSelect={(color) => {
           if (color) {
             editor.chain().focus().setHighlight({ color }).run();
+            console.log("set highlight", color);
           } else {
             editor.chain().focus().unsetHighlight().run();
           }
@@ -266,7 +279,9 @@ export default function SelectionToolbar({ editor, toolbar, onComment }) {
       {/* Clear formatting */}
       <ToolbarButton
         label="Clear formatting"
-        onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}
+        onClick={() =>
+          editor.chain().focus().clearNodes().unsetAllMarks().run()
+        }
       >
         <RemoveFormatting size={15} />
       </ToolbarButton>

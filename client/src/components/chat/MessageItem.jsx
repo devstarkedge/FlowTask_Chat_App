@@ -18,12 +18,15 @@ import {
   Music,
   Check,
   CheckCheck,
+  CheckSquare,
+  Square,
   Copy,
   Bookmark,
   BookmarkCheck,
   Forward,
   Link2,
   MoreVertical,
+  Info,
   ChevronDown,
   X,
   Save,
@@ -37,6 +40,7 @@ import { sanitizeHtml } from "../../utils/sanitize";
 import toast from "react-hot-toast";
 import { handleDownload } from "../../utils/handleDownload";
 import { getFileUrl, getFileAssetId } from "../../utils/fileProxy";
+import MessageDetailsPanel from "./MessageDetailsPanel";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import RichTextEditor from "./RichTextEditor";
 import FormattingToolbar from "./FormattingToolbar";
@@ -385,6 +389,10 @@ const MessageItem = memo(
     isDMChannel,
     onSaveMessage,
     isPinnedHighlight,
+    onForwardMessage,
+    isSelecting,
+    isSelected,
+    onSelectMessage,
   }) {
     const { user } = useAuthStore();
     const {
@@ -405,6 +413,7 @@ const MessageItem = memo(
     const [isEditing, setIsEditing] = useState(false);
     const [showReactionPicker, setShowReactionPicker] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
+    const [showMessageDetails, setShowMessageDetails] = useState(false);
 
     const messageRef = useRef(null);
     const moreMenuRef = useRef(null);
@@ -470,6 +479,11 @@ const MessageItem = memo(
         document.removeEventListener("keydown", onKey);
       };
     }, [showMoreMenu]);
+
+    // ── Handle forward attachment (opens forward modal with the parent message) ──
+    const handleForwardAttachment = useCallback(() => {
+      onForwardMessage?.(message);
+    }, [onForwardMessage, message]);
 
     const isOwn =
       message.authorId?._id === user?._id || message.authorId === user?._id;
@@ -708,7 +722,11 @@ const MessageItem = memo(
         ref={messageRef}
         className={`relative group ${highlightMessageId === message._id ? "message-highlight" : ""}`}
         style={{
-          background: showActions ? "var(--bg-hover)" : "transparent",
+          background: isSelected
+            ? "color-mix(in srgb, var(--accent-primary, #5865f2) 12%, transparent)"
+            : showActions
+              ? "var(--bg-hover)"
+              : "transparent",
           transition: "background 150ms ease",
           opacity: isPending ? 0.6 : isFailed ? 0.5 : 1,
           marginTop: compact ? 2 : 12,
@@ -723,6 +741,25 @@ const MessageItem = memo(
         <div
           className={`flex items-start gap-2 px-4 pb-0 ${isOwn ? "flex-row-reverse" : ""}`}
         >
+          {/* Selection checkbox (visible in selection mode or on hover when selecting) */}
+          {isSelecting && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectMessage?.(message._id, e.shiftKey);
+              }}
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                padding: 0, marginTop: compact ? 2 : 6, flexShrink: 0,
+                color: isSelected ? "var(--accent-primary, #5865f2)" : "var(--text-muted)",
+                transition: "color 150ms ease",
+              }}
+              aria-label={isSelected ? "Deselect" : "Select"}
+            >
+              {isSelected ? <CheckSquare size={18} /> : <Square size={18} />}
+            </button>
+          )}
+
           {/* Gutter */}
           <div className="shrink-0" style={{ width: 36 }}>
             {!compact ? (
@@ -811,6 +848,34 @@ const MessageItem = memo(
                 transition: "opacity 200ms ease",
               }}
             >
+              {/* ── Forwarded indicator ── */}
+              {message.forwardMeta?.isForwarded && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    marginBottom: 6,
+                    paddingBottom: 6,
+                    borderBottom: "1px solid rgba(255,255,255,0.08)",
+                    fontSize: 12,
+                    fontStyle: "italic",
+                    color: "var(--text-muted)",
+                    opacity: 0.8,
+                  }}
+                >
+                  <Forward size={12} />
+                  <span>
+                    Forwarded from{" "}
+                    <strong style={{ color: "var(--text-secondary)", fontWeight: 600 }}>
+                      {message.forwardMeta.originalChannelName
+                        ? `#${message.forwardMeta.originalChannelName}`
+                        : message.forwardMeta.originalSenderName || "Unknown"}
+                    </strong>
+                  </span>
+                </div>
+              )}
+
               {/* ── Message content (rich HTML or plain text) ── */}
               {renderMessageContent()}
 
@@ -890,6 +955,7 @@ const MessageItem = memo(
                           onOpenFilePreview?.(f, derivedAttachments)
                         }
                         onDownload={handleDownload}
+                        onForward={handleForwardAttachment}
                         isSingle={derivedAttachments.length === 1}
                       />
                     ))}
@@ -1084,12 +1150,30 @@ const MessageItem = memo(
                 icon={Forward}
                 label="Forward message"
                 onClick={() => {
-                  toast.success("Forwarding not yet implemented!");
                   setShowMoreMenu(false);
                   setShowActions(false);
+                  onForwardMessage?.(message);
+                }}
+              />
+              <MoreMenuItem
+                icon={Info}
+                label="Message Details"
+                onClick={() => {
+                  setShowMoreMenu(false);
+                  setShowActions(false);
+                  setShowMessageDetails(true);
                 }}
               />
             </div>
+          )}
+
+          {/* Message Details Panel (Portal-based) */}
+          {showMessageDetails && (
+            <MessageDetailsPanel
+              message={message}
+              onClose={() => setShowMessageDetails(false)}
+              onForward={onForwardMessage}
+            />
           )}
 
           {/* Reaction picker (Portal-based to prevent clipping) */}
@@ -1130,7 +1214,10 @@ const MessageItem = memo(
       prev.compact === next.compact &&
       prev.isLastInGroup === next.isLastInGroup &&
       prev.isDMChannel === next.isDMChannel &&
-      prev.isPinnedHighlight === next.isPinnedHighlight
+      prev.isPinnedHighlight === next.isPinnedHighlight &&
+      prev.message.forwardMeta === next.message.forwardMeta &&
+      prev.isSelecting === next.isSelecting &&
+      prev.isSelected === next.isSelected
     );
   },
 );

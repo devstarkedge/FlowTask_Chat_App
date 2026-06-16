@@ -5,28 +5,12 @@ import { useChannelStore } from "../../stores/channelStore";
 import { useAuthStore } from "../../stores/authStore";
 import MessageItem from "./MessageItem";
 import AutoActivityMessage from "./AutoActivityMessage";
-import { MessageCircle, ChevronDown } from "lucide-react";
+import ForwardMessageModal from "./ForwardMessageModal";
+import { MessageCircle, ChevronDown, Forward } from "lucide-react";
 import { Virtuoso } from "react-virtuoso";
 import { useLocation, useNavigate } from "react-router-dom";
+import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
 
-// ─── Highlight pulse CSS (injected once) ─────────────────────────────────────
-const HIGHLIGHT_STYLE_ID = "pm-highlight-pulse";
-if (typeof document !== "undefined" && !document.getElementById(HIGHLIGHT_STYLE_ID)) {
-  const style = document.createElement("style");
-  style.id = HIGHLIGHT_STYLE_ID;
-  style.textContent = `
-    @keyframes msgHighlightPulse {
-      0%   { background: color-mix(in srgb, var(--accent-color, var(--accent-primary)) 22%, transparent); }
-      60%  { background: color-mix(in srgb, var(--accent-color, var(--accent-primary)) 10%, transparent); }
-      100% { background: transparent; }
-    }
-    .msg-highlight-active {
-      animation: msgHighlightPulse 1.8s ease forwards !important;
-      border-radius: 8px;
-    }
-  `;
-  document.head.appendChild(style);
-}
 
 export default function MessageList({
   messages,
@@ -55,10 +39,24 @@ export default function MessageList({
   const virtuosoRef = useRef(null);
   const lastScrolledHighlightId = useRef(null);
 
+  // Forward message modal state
+  const [forwardTarget, setForwardTarget] = useState(null);
+  // Multi-message selection state (shift-select / bulk forward)
+  const [selectedMessageIds, setSelectedMessageIds] = useState(new Set());
+  const [isSelecting, setIsSelecting] = useState(false);
+  const lastSelectedIdRef = useRef(null);
+
   // Deep-link navigation from DownloadsModal folder icon
   const location = useLocation();
   const navigate = useNavigate();
   const [pendingMessageScroll, setPendingMessageScroll] = useState(null);
+
+  // Extract workspaceId from URL path (e.g., /workspace/:wsId/channel/...)
+  const workspaceId = useMemo(() => {
+    const parts = location.pathname.split('/');
+    const wsIdx = parts.indexOf('workspace');
+    return wsIdx !== -1 && wsIdx + 1 < parts.length ? parts[wsIdx + 1] : null;
+  }, [location.pathname]);
 
   // Extract messageId from URL path (e.g., /workspace/:wsId/channel/:channelId/message/:messageId)
   useEffect(() => {
@@ -80,6 +78,59 @@ export default function MessageList({
 
   // Snapshot of previous render to detect truly new messages
   const prevRef = useRef({ count: 0, lastId: null, channelId: null });
+
+  // ─── Multi-message selection helpers ───────────────────────────────────
+  const toggleSelectMessage = useCallback((msgId, shiftKey = false) => {
+    setSelectedMessageIds((prev) => {
+      const next = new Set(prev);
+      if (shiftKey && lastSelectedIdRef.current) {
+        // Range select: find indices in the messages array
+        const allIds = messages.map(m => m._id);
+        const lastIdx = allIds.indexOf(lastSelectedIdRef.current);
+        const currentIdx = allIds.indexOf(msgId);
+        if (lastIdx !== -1 && currentIdx !== -1) {
+          const start = Math.min(lastIdx, currentIdx);
+          const end = Math.max(lastIdx, currentIdx);
+          for (let i = start; i <= end; i++) {
+            next.add(allIds[i]);
+          }
+        } else {
+          if (next.has(msgId)) next.delete(msgId);
+          else next.add(msgId);
+        }
+      } else {
+        if (next.has(msgId)) next.delete(msgId);
+        else next.add(msgId);
+      }
+      lastSelectedIdRef.current = msgId;
+      return next;
+    });
+    setIsSelecting(true);
+  }, [messages]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedMessageIds(new Set());
+    setIsSelecting(false);
+    lastSelectedIdRef.current = null;
+  }, []);
+
+  // Build forward target: if messages are selected, forward all of them
+  const handleForwardSelected = useCallback((singleMessage) => {
+    if (selectedMessageIds.size > 1) {
+      // Bulk forward: collect selected messages in chronological order
+      const selectedMessages = messages
+        .filter(m => selectedMessageIds.has(m._id))
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      setForwardTarget({ messages: selectedMessages });
+    } else {
+      setForwardTarget({ message: singleMessage });
+    }
+  }, [selectedMessageIds, messages]);
+
+  // Reset selection when channel changes
+  useEffect(() => {
+    clearSelection();
+  }, [channelId, clearSelection]);
 
   // ─── Load older messages when user scrolls to top ─────────────────────
   const loadMore = useCallback(() => {
@@ -278,6 +329,9 @@ export default function MessageList({
   }, [pendingMessageScroll, flattenedItems, setHighlightMessageId, location.pathname, navigate]);
 
   // ─── Scroll to highlighted / linked message ────────────────────────────
+  // NOTE: Do NOT clear highlightMessageId here — the store's
+  // setScrollAndHighlightMessage already handles clearing after 3000ms.
+  // This effect only handles scrolling to the message.
   useEffect(() => {
     if (
       highlightMessageId &&
@@ -297,9 +351,6 @@ export default function MessageList({
           });
         }, 100);
       }
-      setTimeout(() => {
-        setHighlightMessageId(null);
-      }, 300);
     } else if (!highlightMessageId) {
       lastScrolledHighlightId.current = null;
     }
@@ -328,13 +379,13 @@ export default function MessageList({
         setTimeout(() => {
           const el = document.getElementById(`msg-${scrollToMessageId}`);
           if (el) {
-            el.classList.remove("msg-highlight-active");
+            el.classList.remove("message-highlight");
             // Force reflow so the animation re-triggers
             void el.offsetWidth;
-            el.classList.add("msg-highlight-active");
+            el.classList.add("message-highlight");
             setTimeout(
-              () => el.classList.remove("msg-highlight-active"),
-              1900
+              () => el.classList.remove("message-highlight"),
+              2600
             );
           }
         }, 350);
@@ -385,6 +436,7 @@ export default function MessageList({
 
   // ─── Main render ───────────────────────────────────────────────────────
   return (
+    <>
     <div
       className="flex-1 overflow-hidden relative"
       role="log"
@@ -535,10 +587,54 @@ export default function MessageList({
               onOpenFilePreview={onOpenFilePreview}
               isDMChannel={isDMChannel}
               onSaveMessage={onSaveMessage}
+              onForwardMessage={(msg) => handleForwardSelected(msg)}
+              isSelecting={isSelecting}
+              isSelected={selectedMessageIds.has(item._id)}
+              onSelectMessage={toggleSelectMessage}
             />
           );
         }}
       />
+
+      {/* Multi-selection toolbar */}
+      {isSelecting && selectedMessageIds.size > 0 && (
+        <div
+          style={{
+            position: "absolute", bottom: 56, left: "50%", transform: "translateX(-50%)",
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "8px 16px", borderRadius: 12,
+            background: "var(--bg-secondary, #1e1f24)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+            zIndex: 20, whiteSpace: "nowrap",
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-white)" }}>
+            {selectedMessageIds.size} selected
+          </span>
+          <button
+            onClick={() => handleForwardSelected(null)}
+            style={{
+              display: "flex", alignItems: "center", gap: 5,
+              padding: "5px 12px", borderRadius: 8, border: "none",
+              background: "var(--accent-primary, #5865f2)", color: "#fff",
+              fontSize: 12, fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            <Forward size={13} /> Forward
+          </button>
+          <button
+            onClick={clearSelection}
+            style={{
+              padding: "5px 12px", borderRadius: 8, border: "none",
+              background: "rgba(255,255,255,0.08)", color: "var(--text-primary)",
+              fontSize: 12, fontWeight: 500, cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       {/* ── Scroll-to-bottom FAB ─────────────────────────────────────── */}
       {showScrollBtn && (
@@ -573,6 +669,28 @@ export default function MessageList({
         </button>
       )}
     </div>
+
+      {/* Forward Message Modal */}
+      {forwardTarget && (
+        <ForwardMessageModal
+          message={forwardTarget.message || null}
+          messages={forwardTarget.messages || null}
+          onClose={() => { setForwardTarget(null); clearSelection(); }}
+          onForwardComplete={(destinationId) => {
+            // Single destination: navigate to that conversation
+            const channels = useChannelStore.getState().channels;
+            const destChannel = channels.find(c => c._id === destinationId);
+            const path = destChannel?.type === 'dm'
+              ? getDMPath(workspaceId, destinationId)
+              : getChannelPath(workspaceId, destinationId);
+            useChannelStore.getState().setActiveChannel(destinationId);
+            navigate(path);
+            setForwardTarget(null);
+            clearSelection();
+          }}
+        />
+      )}
+    </>
   );
 }
 

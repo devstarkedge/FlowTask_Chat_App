@@ -972,6 +972,157 @@ class MessageService {
     }
   }
 
+  // ──────────────────── Forward Message ──────────────────────────────────────
+
+  /**
+   * Forward one or more messages to one or more destination channels.
+   * Clones content, htmlContent, attachments, fileReferences, and forwardMeta.
+   * Accepts either `messageId` (single) or `messageIds` (bulk) from the controller.
+   */
+  async forwardMessage({ messageId, messageIds, destinationIds, userId, workspaceId }) {
+    if (!destinationIds || !Array.isArray(destinationIds) || destinationIds.length === 0) {
+      throw new ValidationError('At least one destination is required');
+    }
+
+    // Normalise to an array — support both single and bulk forwarding
+    const idsToForward = messageIds && Array.isArray(messageIds) && messageIds.length > 0
+      ? messageIds
+      : messageId
+        ? [messageId]
+        : [];
+
+    if (idsToForward.length === 0) {
+      throw new ValidationError('At least one message ID is required');
+    }
+
+    // Pre-fetch all original messages in one query for efficiency
+    const originals = [];
+    for (const id of idsToForward) {
+      const orig = await messageRepository.findById(id, { workspaceId });
+      if (!orig) throw new NotFoundError(`Message ${id} not found`);
+      this._assertWorkspaceMatch(orig.workspaceId, workspaceId, 'Message');
+      originals.push(orig);
+    }
+
+    const sender = await userRepository.findById(userId);
+    const senderSnapshot = sender
+      ? { name: sender.name, avatar: sender.avatar || null }
+      : { name: 'Unknown User', avatar: null };
+
+    const allForwardedMessages = [];
+
+    for (const original of originals) {
+      const sourceChannel = await channelRepository.findById(original.channelId, { workspaceId });
+      if (!sourceChannel) throw new NotFoundError('Source channel not found');
+
+      const originalAuthorId = original.authorId?._id || original.authorId;
+      const originalAuthorName = original.senderSnapshot?.name || 'Unknown';
+      const sourceChannelName = sourceChannel.name || 'unknown';
+
+      // Pre-fetch original FileReferences so we can clone them
+      const origFileRefs = original.fileReferences && original.fileReferences.length > 0
+        ? original.fileReferences
+        : await FileReference.find({ messageId: original._id, workspaceId }).lean();
+
+      for (const destChannelId of destinationIds) {
+        const destChannel = await channelRepository.findById(destChannelId, { workspaceId });
+        if (!destChannel) {
+          logger.warn('Forward: destination channel not found', { destChannelId });
+          continue;
+        }
+        if (destChannel.isArchived) {
+          logger.warn('Forward: destination channel is archived', { destChannelId });
+          continue;
+        }
+
+        // Clone message data — content, htmlContent, attachments all copied verbatim
+        const messageData = {
+          channelId: destChannelId,
+          authorId: userId,
+          content: original.content || '',
+          htmlContent: original.htmlContent || original.content || '',
+          contentType: original.contentType || MESSAGE_CONTENT_TYPES.TEXT,
+          attachments: (original.attachments || []).map(att => ({
+            fileName: att.fileName,
+            originalName: att.originalName,
+            mimeType: att.mimeType,
+            fileSize: att.fileSize,
+            url: att.url,
+            thumbnailUrl: att.thumbnailUrl || null,
+            source: att.source,
+            flowTaskAttachmentId: att.flowTaskAttachmentId || null,
+          })),
+          mentions: [],  // Don't carry over mentions to avoid re-triggering notifications
+          senderSnapshot,
+          workspaceId,
+          forwardMeta: {
+            isForwarded: true,
+            originalMessageId: original._id,
+            forwardedBy: userId,
+            forwardedAt: new Date(),
+            originalSenderId: originalAuthorId,
+            originalSenderName: originalAuthorName,
+            originalChannelId: original.channelId,
+            originalChannelName: sourceChannelName,
+          },
+        };
+
+        // Persist forwarded message
+        const forwarded = await messageRepository.create(messageData);
+
+        // ── Clone FileReferences (shared file storage, new reference records) ──
+        if (origFileRefs.length > 0) {
+          const newRefs = origFileRefs.map(ref => ({
+            workspaceId,
+            fileId: ref.fileId?._id || ref.fileId,
+            channelId: destChannelId,
+            messageId: forwarded._id,
+            threadId: null,
+            referencedBy: userId,
+            contextType: destChannel.type === CHANNEL_TYPES.DM ? 'dm' : 'channel',
+          }));
+          await FileReference.insertMany(newRefs, { ordered: false }).catch(err => {
+            logger.warn('Forward: FileReference clone warning (non-fatal)', { error: err.message });
+          });
+        }
+
+        // Populate for socket emission (includes fileReferences virtual + authorId)
+        const populated = await messageRepository.findById(forwarded._id, { workspaceId });
+
+        // Update destination channel's lastMessage
+        const preview = truncate(stripHtml(messageData.content || messageData.htmlContent), 100);
+        const lastMessageAt = new Date();
+        const wsId = workspaceId?.toString();
+        channelRepository.updateLastMessage(destChannelId, preview, lastMessageAt, wsId)
+          .then(() => {
+            emitToChannel(destChannelId.toString(), SOCKET_EVENTS.CHANNEL_UPDATED, {
+              channelId: destChannelId.toString(),
+              updates: {
+                lastMessageAt: lastMessageAt.toISOString(),
+                lastMessagePreview: preview,
+              },
+            }, wsId);
+          })
+          .catch((err) => {
+            logger.error('Forward: failed to update last message', { destChannelId, error: err.message });
+          });
+
+        // Emit socket event to destination channel
+        const socketPayload = messageSocketPayload(populated);
+        emitToChannel(destChannelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, {
+          message: socketPayload,
+        }, wsId);
+
+        // Increment unread counts for destination
+        this._incrementUnreadForChannel(destChannelId, userId, wsId).catch(() => {});
+
+        allForwardedMessages.push(populated);
+      }
+    }
+
+    return allForwardedMessages;
+  }
+
     /**
  * Delete messages linked to FlowTask entity (announcement, task, etc.)
  */

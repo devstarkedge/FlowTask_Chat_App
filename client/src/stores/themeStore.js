@@ -179,7 +179,6 @@ function persistAppearance(appearance) {
     console.log('[Theme] persistAppearance called with:', appearance)
     localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(appearance))
     localStorage.setItem(LEGACY_THEME_KEY, appearance.mode)
-    console.log('[Theme] localStorage updated successfully')
     console.log('[Theme] chat_appearance:', localStorage.getItem(APPEARANCE_STORAGE_KEY))
     console.log('[Theme] chat_theme:', localStorage.getItem(LEGACY_THEME_KEY))
   } catch (err) {
@@ -213,26 +212,15 @@ function applyAppearance(appearance, options = {}) {
   const { persist = true } = options
   const effectiveTheme = getEffectiveTheme(appearance.mode)
   const root = document.documentElement
-  const sidebar = getSidebarThemeColors(appearance.sidebarTheme, appearance.customTheme)
-
-  // Debug: log previous and upcoming theme state for troubleshooting
-  try {
-    console.log('[Theme] applyAppearance called with:', { appearance, options })
-    console.log('[Theme] applyAppearance before:', {
-      dataTheme: root.getAttribute('data-theme'),
-      dataThemeMode: root.getAttribute('data-theme-mode'),
-      dataSidebarTheme: root.getAttribute('data-sidebar-theme'),
-      colorScheme: root.style.colorScheme,
-      sidebarBgVar: root.style.getPropertyValue('--sidebar-bg'),
-    })
-  } catch (e) {
-    // ignore logging failures
-  }
+  const sidebar = getSidebarThemeColors(
+    appearance.sidebarTheme,
+    appearance.customTheme
+  )
 
   root.setAttribute('data-theme', effectiveTheme)
   root.setAttribute('data-theme-mode', appearance.mode)
   root.setAttribute('data-sidebar-theme', appearance.sidebarTheme)
-  // Also set attributes on <body> to support places that read theme from body
+
   try {
     if (document.body) {
       document.body.setAttribute('data-theme', effectiveTheme)
@@ -245,20 +233,6 @@ function applyAppearance(appearance, options = {}) {
 
   root.style.colorScheme = effectiveTheme
 
-  try {
-    console.log('[Theme] applyAppearance after:', {
-      dataTheme: root.getAttribute('data-theme'),
-      dataThemeMode: root.getAttribute('data-theme-mode'),
-      dataSidebarTheme: root.getAttribute('data-sidebar-theme'),
-      colorScheme: root.style.colorScheme,
-      sidebarBgVar: root.style.getPropertyValue('--sidebar-bg'),
-      effectiveTheme,
-      persisted: persist,
-    })
-  } catch (e) {
-    // ignore
-  }
-
   root.style.setProperty('--sidebar-bg', sidebar.sidebarBg)
   root.style.setProperty('--sidebar-text', sidebar.sidebarText)
   root.style.setProperty('--sidebar-hover', sidebar.sidebarHover)
@@ -268,10 +242,14 @@ function applyAppearance(appearance, options = {}) {
   root.style.setProperty('--accent-primary', sidebar.accentColor)
   root.style.setProperty('--border-focus', sidebar.accentColor)
 
-  // Dispatch custom event to notify all components of theme change
-  window.dispatchEvent(new CustomEvent('themeChanged', { 
-    detail: { theme: effectiveTheme, mode: appearance.mode } 
-  }))
+  window.dispatchEvent(
+    new CustomEvent('themeChanged', {
+      detail: {
+        theme: effectiveTheme,
+        mode: appearance.mode,
+      },
+    })
+  )
 
   if (persist) {
     persistAppearance(appearance)

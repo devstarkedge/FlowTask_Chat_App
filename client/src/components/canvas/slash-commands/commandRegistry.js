@@ -118,53 +118,6 @@ export const COMMAND_GROUPS = [
     ],
   },
   {
-    id: "media",
-    label: "Media",
-    commands: [
-      {
-        id: "video-clip",
-        label: "Video Clip",
-        description: "Embed a video URL",
-        icon: Video,
-        keywords: ["video", "clip"],
-        run: (editor) => {
-          const src = window.prompt("Video URL");
-          if (src) editor.chain().focus().setVideo({ src }).run();
-        },
-      },
-      {
-        id: "audio-clip",
-        label: "Audio Clip",
-        description: "Embed an audio URL",
-        icon: AudioLines,
-        keywords: ["audio", "sound"],
-        run: (editor) => {
-          const src = window.prompt("Audio URL");
-          if (src) editor.chain().focus().setAudio({ src }).run();
-        },
-      },
-      {
-        id: "image",
-        label: "Image",
-        description: "Embed an image URL",
-        icon: Image,
-        keywords: ["photo", "picture"],
-        run: (editor) => {
-          const src = window.prompt("Image URL");
-          if (src) editor.chain().focus().setImage({ src }).run();
-        },
-      },
-      {
-        id: "file",
-        label: "File",
-        description: "Add a file placeholder",
-        icon: File,
-        keywords: ["attachment", "upload"],
-        run: (editor) => insertParagraph(editor, "Attach a file"),
-      },
-    ],
-  },
-  {
     id: "advanced",
     label: "Advanced",
     commands: [
@@ -211,14 +164,14 @@ export const COMMAND_GROUPS = [
         keywords: ["person", "user"],
         run: (editor) => editor.chain().focus().insertContent("@").run(),
       },
-      {
-        id: "reminder",
-        label: "Reminder",
-        description: "Add a reminder line",
-        icon: CalendarClock,
-        keywords: ["date", "follow up"],
-        run: (editor) => insertParagraph(editor, "Reminder: "),
-      },
+      // {
+      //   id: "reminder",
+      //   label: "Reminder",
+      //   description: "Add a reminder line",
+      //   icon: CalendarClock,
+      //   keywords: ["date", "follow up"],
+      //   run: (editor) => insertParagraph(editor, "Reminder: "),
+      // },
       {
         id: "ai-draft",
         label: "AI Draft",

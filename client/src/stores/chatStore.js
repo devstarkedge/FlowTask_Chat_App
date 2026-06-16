@@ -152,6 +152,7 @@ export const useChatStore = create((set, get) => ({
   threadRepliesById: {},
   threadReplyIdsByRoot: {},
   threadRootByReplyId: {},
+  threadParentMessages: {}, // rootMessageId -> parent message object
   threadHasMore: {},
   isLoadingThread: false,
 
@@ -187,6 +188,20 @@ export const useChatStore = create((set, get) => ({
   closeThread: () => {
     set({ activeThread: null });
     sessionStorage.removeItem("chat_activeThread");
+  },
+
+  /**
+   * Set both scrollToMessageId (for scrolling Virtuoso) and highlightMessageId
+   * (for yellow pulse effect). Clears highlight after 3 seconds.
+   */
+  setScrollAndHighlightMessage: (messageId) => {
+    set({ scrollToMessageId: messageId, highlightMessageId: messageId });
+    setTimeout(() => {
+      const current = get().highlightMessageId;
+      if (current === messageId) {
+        set({ highlightMessageId: null });
+      }
+    }, 3000);
   },
 
   selectMessagesForChannel: (channelId) => {
@@ -925,6 +940,7 @@ export const useChatStore = create((set, get) => ({
       const { data } = await threadAPI.replies(rootMessageId, options);
       const items = data.data.items || data.data.messages || [];
       const hasMore = data.data.hasMore ?? false;
+      const parentMessage = data.data.parentMessage || null;
 
       set((state) => {
         const startedAt = nowMs();
@@ -968,6 +984,12 @@ export const useChatStore = create((set, get) => ({
           cursorMode: Boolean(options.cursor),
         });
 
+        // Update parent message in store if received from API
+        const nextParentMessages = { ...state.threadParentMessages };
+        if (parentMessage) {
+          nextParentMessages[rootMessageId] = parentMessage;
+        }
+
         return {
           threadRepliesByRoot: {
             ...state.threadRepliesByRoot,
@@ -979,6 +1001,7 @@ export const useChatStore = create((set, get) => ({
             [rootMessageId]: ids,
           },
           threadRootByReplyId: nextRootByReplyId,
+          threadParentMessages: nextParentMessages,
           threadHasMore: { ...state.threadHasMore, [rootMessageId]: hasMore },
           isLoadingThread: false,
         };
@@ -1808,6 +1831,7 @@ export const useChatStore = create((set, get) => ({
       threadRepliesById: {},
       threadReplyIdsByRoot: {},
       threadRootByReplyId: {},
+      threadParentMessages: {},
       threadHasMore: {},
       typingByChannel: {},
       onlineUsers: new Map(),

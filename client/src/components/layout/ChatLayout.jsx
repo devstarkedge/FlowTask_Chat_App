@@ -1185,28 +1185,58 @@ export default function ChatLayout() {
     };
   }, [activeChannelId, channels]);
 
-  const openThread = (thread) => {
+  /**
+   * Open a thread panel.
+   *
+   * When `withHighlight` is true (called from AllThreadsPanel / mentions / search):
+   *   - Navigate to the correct channel.
+   *   - Scroll the parent message into view.
+   *   - Apply a temporary highlight (3–5 second fade).
+   *   - Open the thread panel.
+   *
+   * When `withHighlight` is false / undefined (called from MessageItem "View Thread"):
+   *   - Just open the thread panel.
+   *   - Do NOT highlight or auto-scroll in the main chat.
+   */
+  const openThread = (thread, withHighlight = false) => {
     const channelId =
       typeof thread.channelId === "object"
         ? thread.channelId._id
         : thread.channelId;
     if (channelId && channelId !== activeChannelId)
       useChannelStore.getState().setActiveChannel(channelId);
+
     const rootMessageId =
       typeof thread.rootMessageId === "object"
         ? thread.rootMessageId._id
         : thread.rootMessageId;
-    if (rootMessageId) {
-      useChatStore.getState().setHighlightMessageId(rootMessageId);
-      setTimeout(
-        () => useChatStore.getState().setHighlightMessageId(null),
-        3000,
-      );
+
+    // Highlight & scroll parent message when opening from AllThreads / search / mentions.
+    // Use requestAnimationFrame + timeout to ensure the channel switch has completed
+    // and messages have loaded before setting the highlight/scroll.
+    if (withHighlight && rootMessageId) {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          useChatStore.getState().setScrollAndHighlightMessage(rootMessageId);
+        }, 600);
+      });
     }
+
     openThreadAction(thread);
     useProfileStore.getState().closeProfile();
     setShowAllThreads(false);
   };
+
+  /**
+   * Jump to a message in the main chat from a thread reply context.
+   * This triggers scroll + yellow highlight + auto-dismiss after 3s.
+   */
+  const jumpToMessage = useCallback((messageId, channelId) => {
+    if (channelId && channelId !== activeChannelId) {
+      useChannelStore.getState().setActiveChannel(channelId);
+    }
+    useChatStore.getState().setScrollAndHighlightMessage(messageId);
+  }, [activeChannelId]);
 
   const openProfile = (u) => {
     useProfileStore.getState().openProfile(u);

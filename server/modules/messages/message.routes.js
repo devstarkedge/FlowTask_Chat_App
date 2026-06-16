@@ -32,6 +32,7 @@ import {
   rescheduleMessage,
   updateScheduledMessage,
   sendScheduledNow,
+  forwardMessage,
 } from './message.controller.js';
 import { protect, requireChannelAccess, requireMessageAccess } from '../auth/auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
@@ -44,7 +45,7 @@ import {
   searchMessagesSchema,
   scheduleMessageSchema,
 } from '../../middleware/schemas.js';
-import { proxyFileAsset } from '../files/cloudinarySign.controller.js';
+import { proxyFileAsset, getFileDetails, incrementDownloadCount } from '../files/cloudinarySign.controller.js';
 
 const router = Router();
 
@@ -80,6 +81,10 @@ router.get('/search', validate({ query: searchMessagesSchema }), searchMessages)
 router.get('/files', getWorkspaceFiles);
 // Proxy endpoint: streams a FileAsset from Cloudinary server-side to avoid CDN 401
 router.get('/files/:assetId/proxy', proxyFileAsset);
+// File details endpoint: returns metadata + counts for File Details modal
+router.get('/files/:assetId/details', getFileDetails);
+// Increment download count (fire-and-forget)
+router.post('/files/:assetId/download', incrementDownloadCount);
 router.get('/saved', getSavedMessages);
 router.get('/scheduled', getScheduledMessages);
 router.delete('/scheduled/:id', cancelScheduledMessage);
@@ -100,6 +105,7 @@ router.patch('/:id/save/reminder/snooze', requireMessageAccess(), snoozeSavedRem
 router.post('/reminders/standalone', createStandaloneReminder);
 router.post('/reminders/parse', parseReminderText);
 router.delete('/reminders/:id', deleteReminder);
+router.post('/:id/forward', requireMessageAccess(), forwardMessage);
 router.post('/:id/reminder-suggestions', requireMessageAccess(), suggestRemindersFromMessage);
 export default router;
 

@@ -62,6 +62,37 @@ export const getUploadSignature = asyncHandler(async (req, res) => {
  *  - Validates the stored URL is a Cloudinary CDN domain (prevents SSRF)
  *  - Sets Cache-Control: private so the blob is not shared across users
  */
+/**
+ * GET /api/chat/files/:assetId/details
+ * Returns file metadata including download/forward counts for the File Details modal.
+ */
+export const getFileDetails = asyncHandler(async (req, res) => {
+  const { assetId } = req.params;
+  const asset = await FileAsset.findById(assetId)
+    .select('publicId secureUrl resourceType mimeType fileSize originalName uploadedBy thumbnailUrl metadata status downloadCount forwardCount createdAt updatedAt')
+    .populate('uploadedBy', 'name avatar email')
+    .lean();
+
+  if (!asset) throw new NotFoundError('File');
+
+  // Workspace isolation
+  if (!req.workspaceId || asset.workspaceId.toString() !== req.workspaceId.toString()) {
+    throw new ForbiddenError('Access denied');
+  }
+
+  res.json({ success: true, data: asset });
+});
+
+/**
+ * POST /api/chat/files/:assetId/download
+ * Increments the download counter for a file asset (fire-and-forget from client).
+ */
+export const incrementDownloadCount = asyncHandler(async (req, res) => {
+  const { assetId } = req.params;
+  await FileAsset.findByIdAndUpdate(assetId, { $inc: { downloadCount: 1 } });
+  res.json({ success: true });
+});
+
 export const proxyFileAsset = asyncHandler(async (req, res) => {
   const { assetId } = req.params;
 

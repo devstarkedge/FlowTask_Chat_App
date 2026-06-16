@@ -57,7 +57,7 @@ export default function CanvasInsertMenu({
       label: "Media",
       items: [
         { id: "image", label: "Image", icon: ImageIcon, description: "Upload an image" },
-        { id: "file", label: "File", icon: Paperclip, description: "Upload a file", shortcut: "Ctrl+U" },
+        { id: "file", label: "File", icon: Paperclip, description: "Upload a file" },
         { id: "record-video", label: "Record video clip", icon: Video, description: "Capture a video" },
         { id: "record-audio", label: "Record audio clip", icon: Mic, description: "Record your voice" },
       ],
@@ -67,7 +67,7 @@ export default function CanvasInsertMenu({
       items: [
         { id: "table", label: "Table", icon: Table2, description: "Insert a data table" },
         { id: "columns-3", label: "Columns", icon: Columns3, description: "Multi-column layout" },
-        { id: "code-block", label: "Code block", icon: Code2, description: "Code with syntax highlighting", shortcut: "Ctrl+Alt+C" },
+        { id: "code-block", label: "Code block", icon: Code2, description: "Code with syntax highlighting"},
         { id: "callout", label: "Callout", icon: MessageSquare, description: "Highlighted note" },
         { id: "placeholder", label: "Placeholder", icon: LayoutGrid, hasSubmenu: true, description: "Dynamic template variable" },
       ],

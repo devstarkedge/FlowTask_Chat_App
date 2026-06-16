@@ -182,6 +182,11 @@ export const messageAPI = {
     api.delete(`/messages/${id}/reactions/${emoji}`),
   pin: (id) => api.post(`/messages/${id}/pin`),
   unpin: (id) => api.delete(`/messages/${id}/pin`),
+  forward: (id, destinationIds) =>
+    api.post(`/messages/${id}/forward`, { destinationIds }),
+  // Bulk forward multiple messages at once
+  forwardBulk: (messageIds, destinationIds) =>
+    api.post(`/messages/${messageIds[0]}/forward`, { messageIds, destinationIds }),
   getPinned: (channelId) => api.get(`/channels/${channelId}/pins`),
   search: (q, channelId) =>
     api.get("/messages/search", { params: { q, channelId } }),
@@ -200,6 +205,12 @@ export const messageAPI = {
   // The server fetches from Cloudinary server-side, avoiding CDN 401 errors.
   getFileProxyUrl: (assetId) =>
     `${api.defaults.baseURL}/messages/files/${encodeURIComponent(assetId)}/proxy`,
+  // Get file details (metadata, counts) for the File Details modal
+  getFileDetails: (assetId) =>
+    api.get(`/messages/files/${encodeURIComponent(assetId)}/details`),
+  // Increment download counter (fire-and-forget)
+  incrementDownload: (assetId) =>
+    api.post(`/messages/files/${encodeURIComponent(assetId)}/download`).catch(() => {}),
 };
 
 // ─── Files (channel/DM scoped) ─────────────────────────────────────────

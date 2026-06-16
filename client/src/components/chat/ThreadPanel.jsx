@@ -1,5 +1,7 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useChatStore } from "../../stores/chatStore";
+import { useChannelStore } from "../../stores/channelStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useLaterStore } from "../../stores/laterStore";
 import MessageInput from "./MessageInput";
@@ -29,8 +31,10 @@ import { handleDownload } from "../../utils/handleDownload";
 import { openPreview } from "../../services/previewService";
 import EmojiPicker from "./EmojiPicker";
 import EmojiPickerPortal from "./EmojiPickerPortal";
+import ForwardMessageModal from "./ForwardMessageModal";
 import toast from "react-hot-toast";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
+import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
 
 const EMPTY_LIST = [];
 const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
@@ -377,7 +381,7 @@ function MoreMenuItem({ icon: Icon, label, onClick, danger }) {
 }
 
 /* ─── Thread Message Item ─────────────────────────────────────────────────── */
-function ThreadMessage({ message, isRoot = false }) {
+function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
   const { user } = useAuthStore();
   const {
     addReaction,
@@ -802,9 +806,9 @@ function ThreadMessage({ message, isRoot = false }) {
             icon={Forward}
             label="Forward message"
             onClick={() => {
-              toast.success("Forwarding not yet implemented!");
               setShowMoreMenu(false);
               setShowActions(false);
+              onForwardMessage?.(message);
             }}
           />
         </div>
@@ -863,6 +867,9 @@ function ThreadSkeleton() {
 
 /* ─── Main Panel ──────────────────────────────────────────────────────────── */
 export default function ThreadPanel({ thread, onClose }) {
+  const [forwardTarget, setForwardTarget] = useState(null);
+  const navigate = useNavigate();
+  const location = useLocation();
   const fetchThreadReplies = useChatStore((s) => s.fetchThreadReplies);
   const isLoadingThread = useChatStore((s) => s.isLoadingThread);
   const legacyReplies = useChatStore(
@@ -879,6 +886,8 @@ export default function ThreadPanel({ thread, onClose }) {
     (s) => s.messagesByChannel[thread.channelId] || EMPTY_LIST,
   );
   const messagesById = useChatStore((s) => s.messagesById);
+  const threadParentMessages = useChatStore((s) => s.threadParentMessages);
+  const setScrollAndHighlightMessage = useChatStore((s) => s.setScrollAndHighlightMessage);
 
   const replies = useMemo(() => {
     if (!CHAT_FEATURE_FLAGS.normalizedMessageStore) return legacyReplies;
@@ -890,10 +899,10 @@ export default function ThreadPanel({ thread, onClose }) {
 
   const rootMessage = useMemo(() => {
     if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-      return messagesById[thread.rootMessageId] || null;
+      return messagesById[thread.rootMessageId] || threadParentMessages[thread.rootMessageId] || null;
     }
-    return channelMessages.find((m) => m._id === thread.rootMessageId) || null;
-  }, [messagesById, thread.rootMessageId, channelMessages]);
+    return channelMessages.find((m) => m._id === thread.rootMessageId) || threadParentMessages[thread.rootMessageId] || null;
+  }, [messagesById, thread.rootMessageId, channelMessages, threadParentMessages]);
 
   const bottomRef = useRef(null);
   const prevReplyCountRef = useRef(replies.length);
@@ -923,6 +932,14 @@ export default function ThreadPanel({ thread, onClose }) {
 
   const replyCount = replies.filter((r) => !r.pending).length;
 
+  // Scroll to top when thread opens to show the parent message
+  const contentRef = useRef(null);
+  useEffect(() => {
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
+  }, [thread.rootMessageId]);
+
   return (
     <div className="thread-panel">
       {/* ── Header ─────────────────────────────────────────────────────── */}
@@ -930,9 +947,6 @@ export default function ThreadPanel({ thread, onClose }) {
         <div className="thread-panel__header-left">
           <MessageSquare size={15} style={{ color: "var(--text-secondary)" }} />
           <span className="thread-panel__title">Thread</span>
-          {replyCount > 0 && (
-            <span className="thread-panel__badge">{replyCount}</span>
-          )}
         </div>
         <div className="thread-panel__header-actions">
           <button
@@ -946,19 +960,19 @@ export default function ThreadPanel({ thread, onClose }) {
       </div>
 
       {/* ── Scrollable Content ─────────────────────────────────────────── */}
-      <div className="thread-panel__content">
+      <div className="thread-panel__content" ref={contentRef}>
         {isLoadingThread && replies.length === 0 ? (
           <ThreadSkeleton />
         ) : (
           <>
-            {/* Root message */}
+            {/* Root message — parent message always shown at top */}
             {rootMessage && (
               <div className="thread-panel__root">
-                <ThreadMessage message={rootMessage} isRoot />
+                <ThreadMessage message={rootMessage} isRoot onForwardMessage={setForwardTarget} />
               </div>
             )}
 
-            {/* Reply count divider */}
+            {/* Reply count divider — uses "replies" label not badge style */}
             {replyCount > 0 && (
               <div className="thread-panel__divider">
                 <div className="thread-panel__divider-line" />
@@ -972,7 +986,7 @@ export default function ThreadPanel({ thread, onClose }) {
             {/* Replies */}
             <div className="thread-panel__replies">
               {replies.map((reply) => (
-                <ThreadMessage key={reply._id} message={reply} />
+                <ThreadMessage key={reply._id} message={reply} onForwardMessage={setForwardTarget} />
               ))}
             </div>
 
@@ -1030,6 +1044,28 @@ export default function ThreadPanel({ thread, onClose }) {
           placeholder="Reply in thread…"
         />
       </div>
+
+      {/* Forward Message Modal */}
+      {forwardTarget && (
+        <ForwardMessageModal
+          message={forwardTarget}
+          onClose={() => setForwardTarget(null)}
+          onForwardComplete={(destinationId) => {
+            // Single destination: navigate to that conversation
+            const parts = location.pathname.split('/');
+            const wsIdx = parts.indexOf('workspace');
+            const wsId = wsIdx !== -1 && wsIdx + 1 < parts.length ? parts[wsIdx + 1] : null;
+            const channels = useChannelStore.getState().channels;
+            const destChannel = channels.find(c => c._id === destinationId);
+            const path = destChannel?.type === 'dm'
+              ? getDMPath(wsId, destinationId)
+              : getChannelPath(wsId, destinationId);
+            useChannelStore.getState().setActiveChannel(destinationId);
+            navigate(path);
+            setForwardTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }

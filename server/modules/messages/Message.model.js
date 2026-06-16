@@ -277,6 +277,18 @@ const messageSchema = new Schema({
     ref: 'ChatUser',
     index: true
   }],
+
+  // ─── Forward Metadata ───
+  forwardMeta: {
+    isForwarded: { type: Boolean, default: false },
+    originalMessageId: { type: Schema.Types.ObjectId, ref: 'Message', default: null },
+    forwardedBy: { type: Schema.Types.ObjectId, ref: 'ChatUser', default: null },
+    forwardedAt: { type: Date, default: null },
+    originalSenderId: { type: Schema.Types.ObjectId, ref: 'ChatUser', default: null },
+    originalSenderName: { type: String, default: null },
+    originalChannelId: { type: Schema.Types.ObjectId, ref: 'Channel', default: null },
+    originalChannelName: { type: String, default: null },
+  },
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -309,6 +321,8 @@ messageSchema.index(
   { partialFilterExpression: { isDeleted: false } },
 );
 messageSchema.index({ workspaceId: 1, channelId: 1, visibleTo: 1 });
+// Forward metadata lookup
+messageSchema.index({ 'forwardMeta.isForwarded': 1 }, { sparse: true });
 
 // ─── Virtuals ────────────────────────────────────────────────────────────────
 messageSchema.virtual('author', {

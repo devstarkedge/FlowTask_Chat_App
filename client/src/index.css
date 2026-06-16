@@ -472,24 +472,6 @@ body {
   animation: slideDown var(--transition-slow) forwards;
 }
 
-@keyframes highlightBlink {
-  0% {
-    background: rgba(255, 230, 120, 0.6) !important;
-  }
-
-  50% {
-    background: transparent !important;
-  }
-
-  100% {
-    background: rgba(255, 230, 120, 0.6) !important;
-  }
-}
-
-.message-highlight {
-  animation: highlightBlink 1s ease-in-out 2 !important;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════ */
 /*  SKELETON LOADER                                                          */
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -2316,7 +2298,21 @@ body {
 .sfc-video-info:hover .sfc-mini-download,
 .sfc-audio-header:hover .sfc-mini-download,
 .sfc-generic-card:hover .sfc-mini-download {
-  opacity: 1;
+  opacity: 0; /* Hidden when hover-actions are visible */
+}
+
+/* Show hover action bar on card hover */
+.sfc-generic-card:hover .sfc-hover-actions,
+.sfc-video-card:hover .sfc-hover-actions,
+.sfc-audio-card:hover .sfc-hover-actions,
+.sfc-code-card:hover .sfc-hover-actions,
+.sfc-csv-card:hover .sfc-hover-actions {
+  opacity: 1 !important;
+}
+
+.sfc-mini-action:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
 }
 
 .sfc-mini-download:hover {
@@ -9292,20 +9288,6 @@ textarea:focus-visible,
   background: var(--bg-hover);
 }
 
-.highlight-msg {
-  animation: highlightFade 2s ease;
-  background: rgba(255, 255, 0, 0.4);
-}
-
-@keyframes highlightFade {
-  from {
-    background: yellow;
-  }
-
-  to {
-    background: transparent;
-  }
-}
 
 .pin-icon {
   display: flex;
@@ -9339,28 +9321,19 @@ textarea:focus-visible,
   opacity: 0.5;
 }
 
-/* ✨ Highlight animation (FIXED) */
-.message-highlight::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(255, 215, 0, 0.35);
+/* ── Unified message highlight animation ───────────────────────────────── */
+.message-highlight {
+  animation: messageHighlightFade 2.5s ease-out !important;
   border-radius: 8px;
-  animation: fadeOut 1.5s ease forwards;
-  pointer-events: none;
 }
 
-@keyframes fadeOut {
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes highlightFlash {
+@keyframes messageHighlightFade {
   0% {
-    background: rgba(255, 215, 0, 0.4);
+    background: color-mix(in srgb, var(--accent-primary) 28%, transparent);
   }
-
+  50% {
+    background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  }
   100% {
     background: transparent;
   }
@@ -9368,22 +9341,6 @@ textarea:focus-visible,
 
 .pinned-msg-card:active {
   transform: scale(0.98);
-}
-
-
-/* highlight animation */
-.message-highlight {
-  animation: highlightFlash 1.2s ease;
-}
-
-@keyframes highlightFlash {
-  0% {
-    background: rgba(255, 200, 0, 0.35);
-  }
-
-  100% {
-    background: transparent;
-  }
 }
 
 /* Chat layout ui */
@@ -13789,6 +13746,45 @@ textarea:focus-visible,
   font-style: italic;
 }
 
+/* Attachment chips */
+.atp-card-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 0 2px;
+}
+
+.atp-card-attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent-primary, #4e7cff) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-primary, #4e7cff) 20%, transparent);
+  font-size: 10.5px;
+  color: var(--text-secondary, var(--text-muted));
+  cursor: pointer;
+  transition: background 120ms ease;
+  max-width: 160px;
+}
+
+.atp-card-attachment-chip:hover {
+  background: color-mix(in srgb, var(--accent-primary, #4e7cff) 18%, transparent);
+}
+
+.atp-card-attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atp-card-attachment-more {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 2px 4px;
+}
+
 /* Footer */
 .atp-card-footer {
   display: flex;
@@ -14237,7 +14233,7 @@ textarea:focus-visible,
 .canvas-document-surface {
   max-width: 900px;
   margin: 0 auto;
-  padding: 32px 36px;
+  padding: 32px 36px 180px;
   min-height: 100%;
 }
 

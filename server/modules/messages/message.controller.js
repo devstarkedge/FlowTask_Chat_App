@@ -1199,4 +1199,41 @@ export const sendScheduledNow = asyncHandler(async (req, res) => {
   }
 });
 
+/**
+ * POST /api/chat/messages/:id/forward
+ * Forward a message to one or more destination channels.
+ */
+export const forwardMessage = asyncHandler(async (req, res) => {
+  const { destinationIds, messageIds } = req.body;
+  const messageId = req.params.id; // single-message route param (optional when using body.messageIds)
+
+  if (!destinationIds || !Array.isArray(destinationIds) || destinationIds.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'At least one destination channel is required' },
+    });
+  }
+
+  // Support both single (URL param) and bulk (body.messageIds) forwarding
+  const hasSingle = !!messageId;
+  const hasBulk = Array.isArray(messageIds) && messageIds.length > 0;
+
+  if (!hasSingle && !hasBulk) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'At least one message ID is required (param :id or body.messageIds)' },
+    });
+  }
+
+  const messages = await messageService.forwardMessage({
+    messageId: hasSingle ? messageId : undefined,
+    messageIds: hasBulk ? messageIds : undefined,
+    destinationIds,
+    userId: req.user._id,
+    workspaceId: req.workspaceId,
+  });
+
+  res.json({ success: true, data: { messages } });
+});
+
 

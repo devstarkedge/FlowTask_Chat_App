@@ -2,9 +2,10 @@ import { useEffect, useMemo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useAuthStore } from '../../stores/authStore'
-import { X, MessageSquareText, Hash, Lock, Loader2, MessagesSquare } from 'lucide-react'
+import { X, MessageSquareText, Hash, Lock, Loader2, MessagesSquare, Paperclip, File } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
 import { sanitizeHtml } from '../../utils/sanitize'
+import { handleDownload } from '../../utils/handleDownload'
 import { formatDistanceToNowStrict } from 'date-fns'
 
 export default function AllThreadsPanel({ onClose, onOpenThread }) {
@@ -88,6 +89,7 @@ export default function AllThreadsPanel({ onClose, onOpenThread }) {
                 ]}
                 currentUser={user}
                 onClick={() => {
+                  // Pass true for withHighlight to scroll & highlight parent message
                   onOpenThread({
                     rootMessageId: (
                       thread.rootMessageId?._id ??
@@ -100,7 +102,7 @@ export default function AllThreadsPanel({ onClose, onOpenThread }) {
                         ? thread.channelId._id
                         : thread.channelId
                     )?.toString(),
-                  })
+                  }, true)
                 }}
               />
             ))}
@@ -129,6 +131,18 @@ function ThreadCard({ thread, channel, currentUser, onClick, index }) {
   const isPrivate       = resolvedChannel?.visibility === 'private' || resolvedChannel?.type === 'dm'
 
   const displayContent = rootHtml ? sanitizeHtml(rootHtml) : rootContent
+
+  // Derive attachments (same logic as ThreadPanel)
+  const derivedAttachments =
+    rootMsg.fileReferences?.length > 0
+      ? rootMsg.fileReferences
+          .map((ref) =>
+            ref.fileId
+              ? { ...ref.fileId, url: ref.fileId.secureUrl || ref.fileId.url }
+              : null,
+          )
+          .filter(Boolean)
+      : rootMsg.attachments || []
 
   return (
     <button
@@ -166,6 +180,21 @@ function ThreadCard({ thread, channel, currentUser, onClick, index }) {
           )}
         </div>
       </div>
+
+      {/* Attachment thumbnails */}
+      {derivedAttachments.length > 0 && (
+        <div className="atp-card-attachments">
+          {derivedAttachments.slice(0, 3).map((att, i) => (
+            <div key={att._id || att.referenceId || i} className="atp-card-attachment-chip" onClick={(e) => { e.stopPropagation(); handleDownload(att); }}>
+              <File size={11} />
+              <span className="atp-card-attachment-name">{att.originalName || att.name || 'file'}</span>
+            </div>
+          ))}
+          {derivedAttachments.length > 3 && (
+            <span className="atp-card-attachment-more">+{derivedAttachments.length - 3}</span>
+          )}
+        </div>
+      )}
 
       {/* Footer */}
       <div className="atp-card-footer">

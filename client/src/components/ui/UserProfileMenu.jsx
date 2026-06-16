@@ -424,12 +424,12 @@ export default function UserProfileMenu({
       >
         <Download size={16} style={{ color: "var(--text-muted)" }} />
         <span>Downloads</span>
-        <span
+        {/* <span
           className="text-[11px] ml-auto"
           style={{ color: "var(--text-muted)" }}
         >
           Ctrl+Shift+J
-        </span>
+        </span> */}
       </button>
 
       <div className="user-menu-divider" />

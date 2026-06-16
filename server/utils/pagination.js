@@ -44,15 +44,24 @@ export function buildCursorFilter(cursor, direction = 'before') {
  * Format a paginated response with cursor metadata.
  * @param {Array} items - Query results
  * @param {number} limit - Page size
- * @returns {{ items: Array, hasMore: boolean, nextCursor: string|null }}
+ * @param {string} [sortField='_id'] - Field used for cursor sorting
+ * @param {object|null} [parentMessage=null] - Optional parent/root message to include
+ * @returns {{ items: Array, hasMore: boolean, nextCursor: string|null, parentMessage?: object|null }}
  */
-export function cursorPaginationResponse(items, limit) {
+export function cursorPaginationResponse(items, limit, sortField = '_id', parentMessage = null) {
   const hasMore = items.length === limit;
   const nextCursor = hasMore && items.length > 0
     ? items[items.length - 1]._id.toString()
     : null;
 
-  return { items, hasMore, nextCursor };
+  const result = { items, hasMore, nextCursor };
+
+  // Include parentMessage if provided (used by thread replies API)
+  if (parentMessage !== null) {
+    result.parentMessage = parentMessage;
+  }
+
+  return result;
 }
 
 /**

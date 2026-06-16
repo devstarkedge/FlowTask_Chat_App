@@ -72,7 +72,9 @@ const fileAssetSchema = new Schema({
     type: String,
     enum: ['uploading', 'available', 'failed', 'archived', 'deleted'],
     default: 'available',
-  }
+  },
+  downloadCount: { type: Number, default: 0 },
+  forwardCount: { type: Number, default: 0 },
 }, {
   timestamps: true,
 });

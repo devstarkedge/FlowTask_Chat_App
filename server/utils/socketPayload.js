@@ -31,6 +31,7 @@ export function messageSocketPayload(message, extras = {}) {
     isDeleted: message.isDeleted || false,
     flowTaskRef: message.flowTaskRef || null,
     activityMeta: message.activityMeta || null,
+    forwardMeta: message.forwardMeta || null,
     createdAt: message.createdAt,
     updatedAt: message.updatedAt,
     ...extras,

@@ -85,6 +85,9 @@
   min-width: 0;
   overflow: auto;
   background: var(--bg-primary);
+  /* Add bottom padding so content is never hidden behind the fixed
+     bottom toolbar (~72 px: 20 px container padding + 52 px pill) */
+  padding-bottom: 80px;
 }
 
 /* ─── Document Surface (Notion-style centered card) ───────────────────── */

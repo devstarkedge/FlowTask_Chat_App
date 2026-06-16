@@ -126,17 +126,31 @@ class ThreadService {
   }
 
   /**
-   * Get replies in a thread (delegates to message service).
+   * Get replies in a thread — now also includes the parent message.
+   * Returns { parentMessage, items (replies), hasMore }
    */
   async getThreadReplies(threadIdOrRootId, query = {}, workspaceId) {
     // First resolve the actual thread to ensure we have the correct identifiers
     const thread = await threadRepository.findById(threadIdOrRootId, { workspaceId });
     const { limit, cursor } = parsePagination(query);
 
-    // If no Thread document exists, it means no one has replied yet. 
-    // Return an empty list instead of throwing an error.
+    // If no Thread document exists, it means no one has replied yet.
+    // We still try to return the parent message.
+    let rootMessageId = threadIdOrRootId;
+    if (thread) {
+      rootMessageId = thread.rootMessageId || thread._id;
+    }
+
+    // Fetch the parent/root message
+    const parentMessage = await messageRepository.findById(rootMessageId, { workspaceId });
+
+    // If no thread and no parent message, return empty
     if (!thread) {
-      return cursorPaginationResponse([], limit, '_id');
+      return {
+        parentMessage: parentMessage || null,
+        items: [],
+        hasMore: false,
+      };
     }
 
     const cursorFilter = cursor ? buildCursorFilter(cursor, 'after') : {};
@@ -149,7 +163,7 @@ class ThreadService {
       workspaceId,
     });
 
-    return cursorPaginationResponse(messages, limit, '_id');
+    return cursorPaginationResponse(messages, limit, '_id', parentMessage);
   }
 
   /**

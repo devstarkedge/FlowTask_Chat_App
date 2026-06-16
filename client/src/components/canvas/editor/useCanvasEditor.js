@@ -25,8 +25,10 @@ import FileNode from "../nodes/FileNode";
 import AudioNode from "../nodes/AudioNode";
 import VideoNode from "../nodes/VideoNode";
 import ImageNode from "../nodes/ImageNode";
+import { Columns, Column } from "../nodes/ColumnsExtension";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { createLowlight, common } from "lowlight";
+import { FontFamily } from "./extensions/FontFamily";
 
 // Create a lowlight instance preloaded with common grammars.
 const lowlight = createLowlight(common);
@@ -134,7 +136,7 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
   const hideSelectionToolbar = useCanvasUiStore((s) => s.hideSelectionToolbar);
 
   const [saveStatus, setSaveStatus] = useState("saved");
-  const [wordCount, setWordCount] = useState(0);
+  const wordCountRef = useRef(0);
   const cursorPluginRegistered = useRef(false);
   const providerRef = useRef(provider);
   const ydocRef = useRef(ydoc);
@@ -149,6 +151,9 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
   // defined before any reference to it — previously this was missing from
   // the compiled bundle, causing the "withCollab is not defined" crash.
   const withCollab = Boolean(provider && ydoc);
+  // Stable withCollab ref for use in callbacks
+  const withCollabRef = useRef(withCollab);
+  withCollabRef.current = withCollab;
 
   const debouncedSave = useMemo(
     () =>
@@ -164,6 +169,23 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
       }, 900),
     [onSave],
   );
+
+  // Memoize nodeViews to prevent editor recreation on every render
+  const nodeViews = useMemo(() => ({
+    paragraph: ReactNodeViewRenderer(BlockWrapper),
+    heading: ReactNodeViewRenderer(BlockWrapper),
+    templateVariable: ReactNodeViewRenderer(TemplateVariableView),
+  }), []);
+
+  // Memoize content to prevent editor recreation on every render.
+  // In collab mode content is always undefined; in offline mode we
+  // deep-compare the serialised JSON so the reference only changes when
+  // the actual document content changes.
+  const stableContent = useMemo(() => {
+    if (withCollab) return undefined;
+    return sanitizeDocJSON(canvas?.content || EMPTY_DOC);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [withCollab, canvas?.content]);
 
   const extensions = useMemo(() => {
     // Lightweight mention node (used for @user and #channel tags)
@@ -240,13 +262,16 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
       TableHeader,
       TableCell,
       CharacterCount,
-      Highlight,
+      Highlight.configure({ multicolor: true }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       TextStyle,
+      FontFamily,
       Color,
       // Register template variable node to render placeholder chips
       TemplateVariable,
       // Lowlight-powered code block (rendering + highlighting)
+      Columns,
+      Column,
       CodeBlockLowlight.configure({ lowlight }),
     ];
 
@@ -280,11 +305,6 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
           user: cursorUser(user),
         }),
       );
-
-      logger.debug(
-        "[Canvas Collab] Collaboration extensions registered upfront",
-        { chosenField },
-      );
     }
 
     // Deduplicate by extension name (guards against HMR double-mount).
@@ -297,42 +317,47 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
       return false;
     });
   }, [withCollab, ydoc]);
+  // Note: `user` is intentionally NOT a dependency here — the cursor
+  // extension reads the user from a closure that we keep up-to-date via
+  // the CollaborationCursor provider.  Adding `user` would recreate all
+  // extensions (and thus the editor) on every profile change.
 
-  const syncContextualUi = useCallback(
-    (editorInstance) => {
-      const slashState = slashMenuState(editorInstance);
-      if (slashState) {
-        const currentSlashMenu = useCanvasUiStore.getState().slashMenu;
-        if (currentSlashMenu.open) updateSlashMenu(slashState);
-        else openSlashMenu(slashState);
-      } else {
-        closeSlashMenu();
-      }
+  // Store syncContextualUi in a ref so the useEditor callbacks never
+  // change identity (preventing TipTap from recreating the editor).
+  const syncContextualUiRef = useRef(() => {});
+  const updateSlashMenuRef = useRef(updateSlashMenu);
+  updateSlashMenuRef.current = updateSlashMenu;
+  const openSlashMenuRef = useRef(openSlashMenu);
+  openSlashMenuRef.current = openSlashMenu;
+  const closeSlashMenuRef = useRef(closeSlashMenu);
+  closeSlashMenuRef.current = closeSlashMenu;
+  const showSelectionToolbarRef = useRef(showSelectionToolbar);
+  showSelectionToolbarRef.current = showSelectionToolbar;
+  const hideSelectionToolbarRef = useRef(hideSelectionToolbar);
+  hideSelectionToolbarRef.current = hideSelectionToolbar;
 
-      const { selection } = editorInstance.state;
-      if (!selection.empty) {
-        showSelectionToolbar(selectionToolbarPosition(editorInstance));
-      } else {
-        hideSelectionToolbar();
-      }
-    },
-    [
-      closeSlashMenu,
-      hideSelectionToolbar,
-      openSlashMenu,
-      showSelectionToolbar,
-      updateSlashMenu,
-    ],
-  );
+  // Keep the ref up-to-date without causing useEditor to recreate
+  syncContextualUiRef.current = (editorInstance) => {
+    const slashState = slashMenuState(editorInstance);
+    if (slashState) {
+      const currentSlashMenu = useCanvasUiStore.getState().slashMenu;
+      if (currentSlashMenu.open) updateSlashMenuRef.current(slashState);
+      else openSlashMenuRef.current(slashState);
+    } else {
+      closeSlashMenuRef.current();
+    }
+
+    const { selection } = editorInstance.state;
+    if (!selection.empty) {
+      showSelectionToolbarRef.current(slashMenuState ? selectionToolbarPosition(editorInstance) : { x: 0, y: 0 });
+    } else {
+      hideSelectionToolbarRef.current();
+    }
+  };
 
   const editor = useEditor({
     extensions,
-    // Only defer setting initial content when a real collaboration session
-    // is active (provider + ydoc). Use `withCollab` so offline mode always
-    // gets its content immediately.
-    content: withCollab
-      ? undefined
-      : sanitizeDocJSON(canvas?.content || EMPTY_DOC),
+    content: stableContent,
     editorProps: {
       attributes: {
         class: "canvas-prosemirror",
@@ -367,37 +392,32 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
         },
       },
     },
-    // NodeViews: attach our React-based BlockWrapper to top-level block nodes
-    nodeViews: {
-      paragraph: ReactNodeViewRenderer(BlockWrapper),
-      heading: ReactNodeViewRenderer(BlockWrapper),
-      templateVariable: ReactNodeViewRenderer(TemplateVariableView),
-    },
+    // NodeViews: memoized to prevent editor recreation
+    nodeViews,
+    // Use stable callback refs so useEditor never sees changing deps
     onUpdate: ({ editor: e }) => {
-      setWordCount(e.storage.characterCount.words());
-      syncContextualUi(e);
+      wordCountRef.current = e.storage.characterCount.words();
+      syncContextualUiRef.current(e);
       debouncedSave(e.getJSON());
     },
     onSelectionUpdate: ({ editor: e }) => {
-      syncContextualUi(e);
+      syncContextualUiRef.current(e);
     },
   });
 
   // ------------------------------------------------------------------
   // Recalculate selection toolbar position when the canvas surface is
-  // scrolled.  Without this the floating toolbar becomes detached from
-  // the selection because coordsAtPos returns viewport-relative coords
-  // that change as the container scrolls.
+  // scrolled.  Uses ref to avoid re-attaching on every render.
   // ------------------------------------------------------------------
   useEffect(() => {
     if (!editor) return undefined;
     const scrollEl = document.querySelector(".canvas-scroll-surface");
     if (!scrollEl) return undefined;
 
-    const onScroll = () => syncContextualUi(editor);
+    const onScroll = () => syncContextualUiRef.current(editor);
     scrollEl.addEventListener("scroll", onScroll, { passive: true });
     return () => scrollEl.removeEventListener("scroll", onScroll);
-  }, [editor, syncContextualUi]);
+  }, [editor]);
 
   // Convert text tokens like {{name}} or [name] into templateVariable nodes
   const convertTokensToVariableNodes = (editorInstance) => {
@@ -444,55 +464,9 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
   // trace whether local edits are converted to Yjs updates and whether
   // remote Yjs updates arrive and are applied to the editor.
   // ------------------------------------------------------------------
-  useEffect(() => {
-    if (!ydoc) return undefined;
+  // YJS update logging removed to reduce per-keystroke overhead.
 
-    const onYUpdate = (update, origin) => {
-      try {
-        const size =
-          update && update.byteLength
-            ? update.byteLength
-            : update && update.length
-              ? update.length
-              : null;
-        console.debug("[Canvas Collab][YJS] update", {
-          size,
-          origin: origin ? String(origin).slice(0, 64) : null,
-        });
-      } catch (e) {}
-    };
-
-    try {
-      ydoc.on && ydoc.on("update", onYUpdate);
-    } catch (e) {}
-
-    return () => {
-      try {
-        ydoc.off && ydoc.off("update", onYUpdate);
-      } catch (e) {}
-    };
-  }, [ydoc]);
-
-  useEffect(() => {
-    if (!editor) return undefined;
-    const onEditorUpdate = () => {
-      try {
-        const json = editor.getJSON ? editor.getJSON() : null;
-        const words = editor.storage?.characterCount?.words?.() || 0;
-        console.debug("[Canvas Collab][Editor] update", {
-          words,
-          jsonSize: json ? JSON.stringify(json).length : null,
-        });
-      } catch (e) {}
-    };
-
-    editor.on("update", onEditorUpdate);
-    return () => {
-      try {
-        editor.off("update", onEditorUpdate);
-      } catch (e) {}
-    };
-  }, [editor]);
+  // Editor update logging removed to reduce per-keystroke overhead.
 
   // ------------------------------------------------------------------
   // Emit cursor position when selection changes so other peers can show
@@ -747,9 +721,7 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
     // run on editor/content changes
   }, [editor, canvas?.content]);
 
-  // ------------------------------------------------------------------
   // Ctrl/Cmd+S shortcut.
-  // ------------------------------------------------------------------
   useEffect(() => {
     const handler = (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
@@ -763,5 +735,5 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
 
   useEffect(() => () => debouncedSave.cancel(), [debouncedSave]);
 
-  return { editor, saveStatus, wordCount, flushSave: debouncedSave.flush };
+  return { editor, saveStatus, wordCount: wordCountRef.current, flushSave: debouncedSave.flush };
 }

@@ -52,6 +52,11 @@ export const handleDownload = async (file) => {
 
   const downloadItem = addDownload(mappedFile);
 
+  // Fire-and-forget: increment server-side download counter
+  if (assetId) {
+    messageAPI.incrementDownload(assetId);
+  }
+
   // duplicate case
   if (downloadItem?.alreadyExists) {
     toast("You already downloaded this file", {

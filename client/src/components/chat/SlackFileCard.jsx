@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   Download,
   FileText,
@@ -8,14 +9,20 @@ import {
   FileArchive,
   FileCode,
   File,
-  Play,
-  Copy,
-  Check,
   Table2,
-  ExternalLink,
+  Forward,
+  Info,
+  X,
+  Calendar,
+  User,
+  HardDrive,
+  FileType,
+  ArrowDownToLine,
+  Send,
 } from "lucide-react";
 import { handleDownload } from "../../utils/handleDownload";
-import { getFileUrl } from "../../utils/fileProxy";
+import { messageAPI } from "../../services/api";
+import logger from "../../utils/logger";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -98,277 +105,409 @@ function getKindColor(kind) {
   return colors[kind] || "var(--text-muted)";
 }
 
-// ─── Inline Code Preview (fetches first N lines) ─────────────────────────────
+// ─── Hover Actions Bar (shared across all card types) ─────────────────────────
 
-function CodePreviewBlock({ file, onOpen }) {
-  const [lines, setLines] = useState(null);
-  const [copied, setCopied] = useState(false);
-  const url = file.secureUrl || file.url;
-  const name = file.originalName || file.fileName || file.name || "File";
-  const ext = getFileExtension(name);
-  const fullTextRef = useRef(null);
-  useEffect(() => {
-    if (!url) return;
-    let cancelled = false;
-    fetch(url)
-      .then((r) => r.text())
-      .then((text) => {
-        if (!cancelled) {
-          fullTextRef.current = text;
-          const allLines = text.split("\n");
-          setLines(allLines.slice(0, 8));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setLines(null);
-      });
-    return () => { cancelled = true; };
-  }, [url]);
-
-  const handleCopy = async (e) => {
-    e.stopPropagation();
-    try {
-      const r = await fetch(url);
-      const text = await r.text();
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch { /* noop */ }
-  };
-
-  return (
-    <div className="sfc-code-card" onClick={() => onOpen?.(file)}>
-      <div className="sfc-code-header">
-        <div className="sfc-code-lang-badge" style={{ background: `color-mix(in srgb, #059669 15%, transparent)`, color: "#059669" }}>
-          {getLanguageLabel(ext)}
-        </div>
-        <button
-          className="sfc-code-copy-btn"
-          onClick={handleCopy}
-          title="Copy file content"
-          aria-label="Copy file content"
-        >
-          {copied ? <Check size={13} /> : <Copy size={13} />}
-        </button>
-      </div>
-      <pre className="sfc-code-body">
-        <code>
-          {lines ? lines.join("\n") : "Loading..."}
-          {lines && lines.length >= 8 && "\n…"}
-        </code>
-      </pre>
-      <div className="sfc-code-footer">
-        <span className="sfc-code-filename" title={name}>{name}</span>
-        <span className="sfc-code-meta">{formatFileSize(file.fileSize || file.size)}</span>
-      </div>
-    </div>
-  );
-}
-
-// ─── Inline CSV Preview ──────────────────────────────────────────────────────
-
-function CsvPreviewBlock({ file, onOpen }) {
-  const [rows, setRows] = useState(null);
-  const url = file.secureUrl || file.url;
-  const name = file.originalName || file.fileName || file.name || "File";
-
-  useEffect(() => {
-    if (!url) return;
-    let cancelled = false;
-    fetch(url)
-      .then((r) => r.text())
-      .then((text) => {
-        if (!cancelled) {
-          const parsed = text.split("\n").filter(Boolean).slice(0, 6).map((line) => {
-            // Basic CSV parse (handles quoted commas)
-            const result = [];
-            let current = "";
-            let inQuotes = false;
-            for (const ch of line) {
-              if (ch === '"') { inQuotes = !inQuotes; continue; }
-              if (ch === "," && !inQuotes) { result.push(current.trim()); current = ""; continue; }
-              current += ch;
-            }
-            result.push(current.trim());
-            return result;
-          });
-          setRows(parsed);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setRows(null);
-      });
-    return () => { cancelled = true; };
-  }, [url]);
-
-  if (!rows || rows.length < 2) {
-    return <FileCardGeneric file={file} onOpen={onOpen} kind="csv" />;
-  }
-
-  const header = rows[0];
-  const dataRows = rows.slice(1);
-
-  return (
-    <div className="sfc-csv-card" onClick={() => onOpen?.(file)}>
-      <div className="sfc-csv-header">
-        <Table2 size={14} style={{ color: "#22c55e" }} />
-        <span className="sfc-csv-title" title={name}>{name}</span>
-        <span className="sfc-csv-meta">{formatFileSize(file.fileSize || file.size)}</span>
-      </div>
-      <div className="sfc-csv-table-wrap">
-        <table className="sfc-csv-table">
-          <thead>
-            <tr>{header.map((h, i) => <th key={i}>{h}</th>)}</tr>
-          </thead>
-          <tbody>
-            {dataRows.map((row, ri) => (
-              <tr key={ri}>
-                {row.map((cell, ci) => <td key={ci}>{cell}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="sfc-csv-footer">
-        Click to view full file
-      </div>
-    </div>
-  );
-}
-
-// ─── Inline Video Player ─────────────────────────────────────────────────────
-
-function VideoCard({ file, onOpen }) {
-  const url = file.secureUrl || file.url;
-  const thumb = file.thumbnailUrl || null;
-  const name = file.originalName || file.fileName || file.name || "Video";
-
-  return (
-    <div className="sfc-video-card">
-      <video
-        src={url}
-        controls
-        preload="metadata"
-        poster={thumb || undefined}
-        className="sfc-video-player"
-        onClick={(e) => e.stopPropagation()}
-      >
-        Your browser does not support the video tag.
-      </video>
-      <div className="sfc-video-info">
-        <Film size={14} style={{ color: "#a855f7", flexShrink: 0 }} />
-        <span className="sfc-video-name" title={name}>{name}</span>
-        <span className="sfc-video-size">{formatFileSize(file.fileSize || file.size)}</span>
-        <button
-          className="sfc-mini-open"
-          onClick={(e) => { e.stopPropagation(); onOpen?.(file); }}
-          title="Open"
-          aria-label="Open"
-        >
-          <ExternalLink size={13} />
-        </button>
-        <button
-          className="sfc-mini-download"
-          onClick={(e) => { e.stopPropagation(); handleDownload(file); }}
-          title="Download"
-          aria-label="Download"
-        >
-          <Download size={13} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Inline Audio Player ─────────────────────────────────────────────────────
-
-function AudioCard({ file }) {
-  const url = file.secureUrl || file.url;
-  const name = file.originalName || file.fileName || file.name || "Audio";
-
-  return (
-    <div className="sfc-audio-card">
-      <div className="sfc-audio-header">
-        <div className="sfc-audio-icon-wrap">
-          <Music size={18} style={{ color: "#22c55e" }} />
-        </div>
-        <div className="sfc-audio-meta">
-          <span className="sfc-audio-name" title={name}>{name}</span>
-          <span className="sfc-audio-size">{formatFileSize(file.fileSize || file.size)}</span>
-        </div>
-        <button
-          className="sfc-mini-download"
-          onClick={(e) => { e.stopPropagation(); handleDownload(file); }}
-          title="Download"
-          aria-label="Download"
-        >
-          <Download size={13} />
-        </button>
-      </div>
-      <audio
-        src={url}
-        controls
-        preload="metadata"
-        className="sfc-audio-player"
-        onClick={(e) => e.stopPropagation()}
-      />
-    </div>
-  );
-}
-
-// ─── Generic File Card (for docs, archives, spreadsheets, etc.) ──────────────
-
-function FileCardGeneric({ file, onOpen, kind }) {
-  const name = file.originalName || file.fileName || file.name || "File";
-  const size = file.fileSize || file.size || file.fileSizeBytes;
-  const ext = getFileExtension(name);
-  const color = getKindColor(kind);
-
+function HoverActionsBar({ file, onOpen, onForward, onShowDetails }) {
   return (
     <div
-      className="sfc-generic-card"
-      onClick={() => onOpen?.(file)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter") onOpen?.(file); }}
+      className="sfc-hover-actions"
+      style={{
+        display: "flex", alignItems: "center", gap: 2,
+        position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+        opacity: 0, transition: "opacity 150ms ease",
+        background: "var(--bg-secondary, #222529)",
+        border: "1px solid var(--border-primary, rgba(255,255,255,0.1))",
+        borderRadius: 8, padding: "3px 4px", zIndex: 2,
+      }}
     >
-      <div className="sfc-generic-icon" style={{ background: `color-mix(in srgb, ${color} 12%, transparent)` }}>
-        <KindIcon kind={kind} size={22} />
-      </div>
-      <div className="sfc-generic-info">
-        <p className="sfc-generic-name" title={name}>{name}</p>
-        <div className="sfc-generic-meta-row">
-          {ext && (
-            <span className="sfc-generic-ext-badge" style={{ color, background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
-              {ext.toUpperCase()}
-            </span>
-          )}
-          {size > 0 && <span className="sfc-generic-size">{formatFileSize(size)}</span>}
-        </div>
-      </div>
       <button
-        className="sfc-mini-download"
+        className="sfc-mini-action"
         onClick={(e) => { e.stopPropagation(); handleDownload(file); }}
-        title="Download"
-        aria-label="Download"
+        title="Download" aria-label="Download"
+        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "4px", borderRadius: 4, display: "flex", alignItems: "center" }}
       >
         <Download size={14} />
+      </button>
+      {onForward && (
+        <button
+          className="sfc-mini-action"
+          onClick={(e) => { e.stopPropagation(); onForward(file); }}
+          title="Forward" aria-label="Forward"
+          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "4px", borderRadius: 4, display: "flex", alignItems: "center" }}
+        >
+          <Forward size={14} />
+        </button>
+      )}
+      <button
+        className="sfc-mini-action"
+        onClick={(e) => { e.stopPropagation(); onShowDetails?.(); }}
+        title="File Details" aria-label="File Details"
+        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "4px", borderRadius: 4, display: "flex", alignItems: "center" }}
+      >
+        <Info size={14} />
       </button>
     </div>
   );
 }
 
-// ─── Main Export ──────────────────────────────────────────────────────────────
+// ─── File Details Modal (Portal-based, fetches full metadata from API) ────────
+// Previews and content are ONLY shown inside this modal, never in the message
+// list itself.
 
-export default function SlackFileCard({ file, onOpen, onDownload, compact = false, isSingle = false }) {
+function FileDetailsModal({ file, onClose, onForward }) {
+  const [details, setDetails] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const assetId = file?._id || file?.fileId || file?.assetId || null;
+  const name = file.originalName || file.fileName || file.name || "File";
+  const ext = getFileExtension(name);
+  const mime = file.mimeType || file.type || "";
+  const kind = getFileKind(mime, name);
+  const size = formatFileSize(file.fileSize || file.size || file.fileSizeBytes || 0);
+  const url = file.secureUrl || file.url || "";
+
+  // Fetch full file details from API
+  useEffect(() => {
+    if (!assetId) {
+      setIsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    messageAPI.getFileDetails(assetId)
+      .then(({ data }) => {
+        if (!cancelled) setDetails(data.data || data);
+      })
+      .catch((err) => {
+        logger.error("Failed to fetch file details:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [assetId]);
+
+  const uploadedBy = details?.uploadedBy?.name || file.uploadedBy?.name || file.referencedBy?.name || "Unknown";
+  const uploadedAvatar = details?.uploadedBy?.avatar || file.uploadedBy?.avatar || null;
+  const createdAt = details?.createdAt || file.createdAt
+    ? new Date(details?.createdAt || file.createdAt).toLocaleString(undefined, {
+        year: "numeric", month: "short", day: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      })
+    : "N/A";
+  const updatedAt = details?.updatedAt
+    ? new Date(details.updatedAt).toLocaleString(undefined, {
+        year: "numeric", month: "short", day: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      })
+    : null;
+  const downloadCount = details?.downloadCount ?? 0;
+  const forwardCount = details?.forwardCount ?? 0;
+  const proxyUrl = assetId ? messageAPI.getFileProxyUrl(assetId) : null;
+
+  return createPortal(
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 10001,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        animation: "fm-overlay-in 0.18s ease",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
+    >
+      <div
+        style={{
+          width: "100%", maxWidth: 440, margin: "0 1rem",
+          maxHeight: "85vh", display: "flex", flexDirection: "column",
+          background: "var(--bg-secondary, #1e1f24)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 16, overflow: "hidden",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(255,255,255,0.05) inset",
+          animation: "fm-modal-in 0.22s cubic-bezier(0.16,1,0.3,1)",
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)",
+          flexShrink: 0,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <KindIcon kind={kind} size={18} />
+            <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-white, #f1f1f1)" }}>
+              File Details
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: "transparent", border: "none", cursor: "pointer",
+              color: "var(--text-muted)", padding: 4, borderRadius: 8,
+              display: "flex", alignItems: "center", transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.08)"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Scrollable content */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "0" }}>
+          {/* Preview for images — ONLY inside File Details modal */}
+          {kind === "image" && url && (
+            <div style={{ padding: "12px 20px" }}>
+              <img
+                src={proxyUrl || url}
+                alt={name}
+                style={{
+                  width: "100%", maxHeight: 220, objectFit: "contain",
+                  borderRadius: 10, background: "rgba(0,0,0,0.2)",
+                  display: "block",
+                }}
+              />
+            </div>
+          )}
+
+          {/* Preview for video — ONLY inside File Details modal */}
+          {kind === "video" && url && (
+            <div style={{ padding: "12px 20px" }}>
+              <video
+                src={proxyUrl || url}
+                controls
+                preload="metadata"
+                poster={file.thumbnailUrl || undefined}
+                style={{
+                  width: "100%", maxHeight: 220, borderRadius: 10,
+                  background: "#000", display: "block",
+                }}
+              />
+            </div>
+          )}
+
+          {/* Preview for audio — ONLY inside File Details modal */}
+          {kind === "audio" && url && (
+            <div style={{ padding: "12px 20px" }}>
+              <audio
+                src={proxyUrl || url}
+                controls
+                preload="metadata"
+                style={{ width: "100%", display: "block" }}
+              />
+            </div>
+          )}
+
+          {/* Preview for PDF (inline via proxy) */}
+          {kind === "pdf" && proxyUrl && (
+            <div style={{ padding: "12px 20px" }}>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "14px 16px", borderRadius: 10,
+                background: "rgba(239,68,68,0.08)",
+                border: "1px solid rgba(239,68,68,0.15)",
+              }}>
+                <FileText size={22} style={{ color: "#ef4444", flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-white)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>PDF Document • {size}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Details rows */}
+          <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+            <DetailRow icon={<File size={14} />} label="File Name" value={name} />
+            {ext && <DetailRow icon={<FileType size={14} />} label="Type" value={`${ext.toUpperCase()}${mime ? ` (${mime})` : ""}`} />}
+            <DetailRow icon={<HardDrive size={14} />} label="Size" value={size || "Unknown"} />
+
+            {/* Uploader */}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <span style={{ color: "var(--text-muted)", flexShrink: 0, marginTop: 2 }}><User size={14} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Uploaded By</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {uploadedAvatar && (
+                    <img src={uploadedAvatar} alt="" style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover" }} />
+                  )}
+                  <span style={{ fontSize: 13, color: "var(--text-primary, #ddd)" }}>{uploadedBy}</span>
+                </div>
+              </div>
+            </div>
+
+            <DetailRow icon={<Calendar size={14} />} label="Uploaded" value={createdAt} />
+            {updatedAt && updatedAt !== createdAt && (
+              <DetailRow icon={<Calendar size={14} />} label="Last Modified" value={updatedAt} />
+            )}
+
+            {/* Counts */}
+            <div style={{
+              display: "flex", gap: 12, marginTop: 4,
+              padding: "10px 14px", borderRadius: 10,
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.06)",
+            }}>
+              <CountBadge icon={<ArrowDownToLine size={13} />} label="Downloads" count={downloadCount} />
+              <CountBadge icon={<Send size={13} />} label="Forwards" count={forwardCount} />
+            </div>
+
+            {isLoading && (
+              <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", padding: "4px 0" }}>
+                Loading details...
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer actions */}
+        <div style={{
+          padding: "12px 20px", borderTop: "1px solid rgba(255,255,255,0.06)",
+          display: "flex", justifyContent: "flex-end", gap: 8,
+          flexShrink: 0,
+        }}>
+          {onForward && (
+            <button
+              onClick={() => { onForward(file); onClose(); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)",
+                background: "rgba(255,255,255,0.06)", color: "var(--text-primary, #ddd)",
+                fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
+            >
+              <Forward size={14} /> Forward
+            </button>
+          )}
+          <button
+            onClick={() => handleDownload(file)}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "7px 14px", borderRadius: 8, border: "none",
+              background: "var(--accent-primary, #5865f2)", color: "#fff",
+              fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "var(--accent-primary-hover, #4752c4)"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "var(--accent-primary, #5865f2)"}
+          >
+            <Download size={14} /> Download
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function CountBadge({ icon, label, count }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+      <span style={{ color: "var(--text-muted)" }}>{icon}</span>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-white, #f1f1f1)", lineHeight: 1 }}>{count}</div>
+        <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({ icon, label, value }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+      <span style={{ color: "var(--text-muted)", flexShrink: 0, marginTop: 2 }}>{icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>{label}</div>
+        <div style={{
+          fontSize: 13, color: "var(--text-primary, #ddd)",
+          wordBreak: "break-all", lineHeight: 1.4,
+        }}>{value}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Generic File Card (for ALL file types in the message list) ──────────────
+// No previews, no thumbnails, no content rendering.
+// Only filename, type badge, size, download, forward, and info buttons.
+//
+// Click behavior:
+//   - Card click  → onOpen (opens FilePreviewModal for actual preview)
+//   - Info button → opens FileDetailsModal (metadata panel with previews)
+
+function FileCardGeneric({ file, onOpen, onForward, kind }) {
+  const name = file.originalName || file.fileName || file.name || "File";
+  const size = file.fileSize || file.size || file.fileSizeBytes;
+  const ext = getFileExtension(name);
+  const color = getKindColor(kind);
+  const [showDetails, setShowDetails] = useState(false);
+
+  const handleCardClick = useCallback(() => {
+    // Open File Preview Modal (actual file preview: image viewer, video player, etc.)
+    onOpen?.(file);
+  }, [onOpen, file]);
+
+  const handleInfoClick = useCallback(() => {
+    // Open File Details panel (metadata: filename, size, owner, etc.)
+    setShowDetails(true);
+  }, []);
+
+  return (
+    <>
+      <div
+        className="sfc-generic-card"
+        onClick={handleCardClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter") handleCardClick(); }}
+        style={{ position: "relative", cursor: "pointer" }}
+      >
+        <div className="sfc-generic-icon" style={{ background: `color-mix(in srgb, ${color} 12%, transparent)` }}>
+          <KindIcon kind={kind} size={22} />
+        </div>
+        <div className="sfc-generic-info">
+          <p className="sfc-generic-name" title={name}>{name}</p>
+          <div className="sfc-generic-meta-row">
+            {ext && (
+              <span className="sfc-generic-ext-badge" style={{ color, background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
+                {ext.toUpperCase()}
+              </span>
+            )}
+            {size > 0 && <span className="sfc-generic-size">{formatFileSize(size)}</span>}
+          </div>
+        </div>
+        <HoverActionsBar file={file} onForward={onForward} onShowDetails={handleInfoClick} />
+        {/* Fallback download button for non-hover contexts */}
+        <button
+          className="sfc-mini-download"
+          onClick={(e) => { e.stopPropagation(); handleDownload(file); }}
+          title="Download" aria-label="Download"
+        >
+          <Download size={14} />
+        </button>
+      </div>
+      {showDetails && <FileDetailsModal file={file} onClose={() => setShowDetails(false)} onForward={onForward} />}
+    </>
+  );
+}
+
+// ─── Main Export ──────────────────────────────────────────────────────────────
+// ALL file types render as attachment cards only in the message list.
+// No previews, no inline content, no auto-loading media.
+// Card click → opens FilePreviewModal (actual preview).
+// Info button → opens FileDetailsModal (metadata panel with previews).
+
+export default function SlackFileCard({ file, onOpen, onDownload, onForward, compact = false, isSingle = false }) {
   if (!file) return null;
   const name = file.originalName || file.fileName || file.name || "File";
   const mime = file.mimeType || file.type || "";
   const kind = getFileKind(mime, name);
 
-  // Render a compact, consistent file row inside message list. Actual
-  // content preview is moved to the FilePreviewModal (opened via onOpen).
-  return <FileCardGeneric file={file} onOpen={onOpen} kind={kind} />;
+  // All file types render as attachment cards only.
+  // Card click → onOpen (FilePreviewModal)
+  // Info button → FileDetailsModal (metadata + previews)
+  return <FileCardGeneric file={file} onOpen={onOpen} onForward={onForward} kind={kind} />;
 }
 
 // Re-export helpers for reuse

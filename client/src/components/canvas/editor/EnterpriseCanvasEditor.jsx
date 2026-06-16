@@ -111,31 +111,35 @@ export default function CanvasEditorUI({
     ydoc,
   });
 
-  const [isEditorActive, setIsEditorActive] = useState(false);
+  // Toolbar visibility: only re-render on focus/blur, NOT on every
+  // editor update or selection change.  Use a counter state that
+  // forces a re-render only when the boolean value actually flips.
+  const [toolbarVisible, setToolbarVisible] = useState(false);
 
   useEffect(() => {
     if (!editor) return;
-    const updateVisibility = () => {
-      setIsEditorActive(editor.isFocused || editor.state.doc.content.size > 2);
+    const check = () => {
+      const next = editor.isFocused || editor.state.doc.content.size > 2;
+      setToolbarVisible((prev) => {
+        if (prev === next) return prev; // no change - no re-render
+        return next;
+      });
     };
-    updateVisibility();
-    editor.on("focus", updateVisibility);
-    editor.on("blur", updateVisibility);
-    editor.on("update", updateVisibility);
-    editor.on("selectionUpdate", updateVisibility);
-
+    check();
+    editor.on("focus", check);
+    editor.on("blur", check);
+    // Also re-check after collaborative updates that change doc size
+    editor.on("update", check);
     return () => {
       try {
-        editor.off("focus", updateVisibility);
-        editor.off("blur", updateVisibility);
-        editor.off("update", updateVisibility);
-        editor.off("selectionUpdate", updateVisibility);
+        editor.off("focus", check);
+        editor.off("blur", check);
+        editor.off("update", check);
       } catch (e) {}
     };
   }, [editor]);
 
-  // Bottom toolbar visible: editor is focused OR has content
-  const showBottomToolbar = editor && (editor.isFocused || editor.state.doc.content.size > 2);
+  const showBottomToolbar = toolbarVisible;
 
   const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
   const [recordingType, setRecordingType] = useState(null); // 'video' | 'audio'

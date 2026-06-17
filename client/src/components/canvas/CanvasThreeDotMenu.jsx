@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState, createElement } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import {
   Link2,
   Share2,
@@ -12,10 +12,46 @@ import {
   Type,
   Trash2,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { useCanvasUiStore } from "../../stores/canvasUiStore";
+
+const FONT_FAMILIES = [
+  { label: "System UI", value: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" },
+  { label: "Serif", value: "'Georgia', 'Times New Roman', serif" },
+  { label: "Mono", value: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace" },
+  { label: "Sans", value: "'Inter', 'Helvetica Neue', Arial, sans-serif" },
+];
+
+const STORAGE_KEY_FONT = "flowtask.canvas.editorFont";
+
+function loadPersistedFont() {
+  try {
+    if (typeof localStorage === "undefined") return null;
+    return localStorage.getItem(STORAGE_KEY_FONT);
+  } catch {
+    return null;
+  }
+}
+
+function persistFont(fontFamily) {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(STORAGE_KEY_FONT, fontFamily);
+  } catch {
+    // ignore
+  }
+}
+
+function applyFontToEditor(fontFamily) {
+  document.documentElement.style.setProperty("--canvas-editor-font", fontFamily);
+  const editorEl = document.querySelector(".ProseMirror");
+  if (editorEl) {
+    editorEl.style.fontFamily = fontFamily;
+  }
+}
 
 export default function CanvasThreeDotMenu({
   canvas,
@@ -29,9 +65,12 @@ export default function CanvasThreeDotMenu({
   onCoverReposition,
   onCoverRemove,
   hasCover,
+  isViewOnly = false,
+  canvasRole = null,
 }) {
   const menuRef = useRef(null);
   const [showCoverSubmenu, setShowCoverSubmenu] = useState(false);
+  const [showFontSubmenu, setShowFontSubmenu] = useState(false);
   const deleteCanvas = useCanvasStore((s) => s.deleteCanvas);
   const fetchHistory = useCanvasStore((s) => s.fetchHistory);
   const toggleSaveForLater = useCanvasStore((s) => s.toggleSaveForLater);
@@ -40,6 +79,23 @@ export default function CanvasThreeDotMenu({
 
   const canvasId = canvas?._id;
   const savedForLater = canvasId ? isCanvasSaved(canvasId) : false;
+
+  const [currentFontLabel, setCurrentFontLabel] = useState(() => {
+    const persisted = loadPersistedFont();
+    if (persisted) {
+      const match = FONT_FAMILIES.find((f) => f.value === persisted);
+      return match ? match.label : "System UI";
+    }
+    return "System UI";
+  });
+
+  // Apply persisted font on mount
+  useEffect(() => {
+    const persisted = loadPersistedFont();
+    if (persisted) {
+      applyFontToEditor(persisted);
+    }
+  }, []);
 
   // Click-outside to close
   useEffect(() => {
@@ -81,11 +137,14 @@ export default function CanvasThreeDotMenu({
   }, [isOpen, onClose]);
 
   const handleCopyLink = useCallback(() => {
-    navigator.clipboard.writeText(window.location.href).then(() => {
+    const url = canvasId
+      ? `${window.location.origin}/canvas/${canvasId}`
+      : window.location.href;
+    navigator.clipboard.writeText(url).then(() => {
       toast.success("Link copied to clipboard");
     });
     onClose();
-  }, [onClose]);
+  }, [canvasId, onClose]);
 
   const handleShare = useCallback(() => {
     if (onOpenShareModal) {
@@ -114,27 +173,43 @@ export default function CanvasThreeDotMenu({
   }, [canvasId, toggleSaveForLater, onClose]);
 
   const handleAddCover = useCallback(() => {
+    if (isViewOnly) {
+      toast.error("You do not have permission to change the cover.");
+      return;
+    }
     onOpenCoverPicker?.();
     onClose();
-  }, [onOpenCoverPicker, onClose]);
+  }, [onOpenCoverPicker, onClose, isViewOnly]);
 
   const handleCoverReplace = useCallback(() => {
+    if (isViewOnly) {
+      toast.error("You do not have permission to change the cover.");
+      return;
+    }
     onCoverReplace?.();
     setShowCoverSubmenu(false);
     onClose();
-  }, [onCoverReplace, onClose]);
+  }, [onCoverReplace, onClose, isViewOnly]);
 
   const handleCoverReposition = useCallback(() => {
+    if (isViewOnly) {
+      toast.error("You do not have permission to change the cover.");
+      return;
+    }
     onCoverReposition?.();
     setShowCoverSubmenu(false);
     onClose();
-  }, [onCoverReposition, onClose]);
+  }, [onCoverReposition, onClose, isViewOnly]);
 
   const handleCoverRemove = useCallback(() => {
+    if (isViewOnly) {
+      toast.error("You do not have permission to change the cover.");
+      return;
+    }
     onCoverRemove?.();
     setShowCoverSubmenu(false);
     onClose();
-  }, [onCoverRemove, onClose]);
+  }, [onCoverRemove, onClose, isViewOnly]);
 
   const handleShowThreads = useCallback(() => {
     openSidebar("comments");
@@ -154,21 +229,24 @@ export default function CanvasThreeDotMenu({
     onClose();
   }, [onClose]);
 
-  const handleChangeFont = useCallback(() => {
-    const sizes = [14, 16, 18];
-    const root = document.documentElement;
-    const current = parseInt(
-      getComputedStyle(root).getPropertyValue("--canvas-font-size") || "16"
-    );
-    const nextIdx = (sizes.indexOf(current) + 1) % sizes.length;
-    const nextSize = sizes[nextIdx];
-    root.style.setProperty("--canvas-font-size", `${nextSize}px`);
-    toast(`Font size: ${nextSize}px`);
-    onClose();
-  }, [onClose]);
+  const handleFontSelect = useCallback(
+    (font) => {
+      applyFontToEditor(font.value);
+      persistFont(font.value);
+      setCurrentFontLabel(font.label);
+      setShowFontSubmenu(false);
+      toast(`Font changed to ${font.label}`);
+      onClose();
+    },
+    [onClose]
+  );
 
   const handleDelete = useCallback(() => {
     if (!canvasId) return;
+    if (canvasRole !== "owner") {
+      toast.error("Only canvas owner can delete this canvas.");
+      return;
+    }
     const confirmed = window.confirm(
       "Are you sure you want to delete this canvas? This action cannot be undone."
     );
@@ -177,7 +255,12 @@ export default function CanvasThreeDotMenu({
     deleteCanvas(canvasId).then((result) => {
       if (result) onBack?.();
     });
-  }, [canvasId, deleteCanvas, onClose, onBack]);
+  }, [canvasId, deleteCanvas, onClose, onBack, canvasRole]);
+
+  // ── Determine if delete should be shown ─────────────────────────────────
+  const canDelete = canvasRole === "owner";
+  const isEditor = canvasRole === "editor";
+  const isViewer = canvasRole === "viewer" || canvasRole === null;
 
   if (!isOpen) return null;
 
@@ -187,7 +270,11 @@ export default function CanvasThreeDotMenu({
       <MenuItem icon={Link2} label="Copy link" onClick={handleCopyLink} />
       <MenuItem icon={Share2} label="Share this canvas" onClick={handleShare} />
       <MenuItem icon={Info} label="View file details" onClick={handleViewDetails} />
-      <MenuItem icon={Bookmark} label={savedForLater ? "Remove from Later" : "Save for later"} onClick={handleSaveForLater} />
+      <MenuItem
+        icon={Bookmark}
+        label={savedForLater ? "Remove from Later" : "Save for later"}
+        onClick={handleSaveForLater}
+      />
 
       <div className="canvas-three-dot-divider" />
 
@@ -197,10 +284,11 @@ export default function CanvasThreeDotMenu({
           icon={ImageIcon}
           label="Cover image"
           hasSubmenu
-          onMouseEnter={() => setShowCoverSubmenu(true)}
+          disabled={isViewOnly}
+          onMouseEnter={() => !isViewOnly && setShowCoverSubmenu(true)}
           onMouseLeave={() => setShowCoverSubmenu(false)}
         >
-          {showCoverSubmenu && (
+          {showCoverSubmenu && !isViewOnly && (
             <div className="canvas-three-dot-submenu">
               <button className="canvas-three-dot-submenu-item" onClick={handleCoverReplace}>
                 Replace
@@ -215,7 +303,12 @@ export default function CanvasThreeDotMenu({
           )}
         </MenuItem>
       ) : (
-        <MenuItem icon={ImageIcon} label="Add cover image" onClick={handleAddCover} />
+        <MenuItem
+          icon={ImageIcon}
+          label="Add cover image"
+          onClick={handleAddCover}
+          disabled={isViewOnly}
+        />
       )}
 
       <div className="canvas-three-dot-divider" />
@@ -232,33 +325,92 @@ export default function CanvasThreeDotMenu({
       <div className="canvas-three-dot-divider" />
 
       {/* Group 5: Settings */}
-      <MenuItem icon={Accessibility} label="Accessibility" hasSubmenu />
-      <MenuItem icon={Type} label="Change system font" onClick={handleChangeFont} />
+      {/* <MenuItem
+        icon={Type}
+        label={`Change system font: ${currentFontLabel}`}
+        hasSubmenu
+        onMouseEnter={() => setShowFontSubmenu(true)}
+        onMouseLeave={() => setShowFontSubmenu(false)}
+      >
+        {showFontSubmenu && (
+          <div className="canvas-three-dot-submenu">
+            {FONT_FAMILIES.map((font) => (
+              <button
+                key={font.value}
+                className="canvas-three-dot-submenu-item"
+                onClick={() => handleFontSelect(font)}
+                style={{
+                  fontFamily: font.value,
+                  fontWeight: currentFontLabel === font.label ? 700 : 400,
+                }}
+              >
+                {font.label}
+                {currentFontLabel === font.label && " ✓"}
+              </button>
+            ))}
+          </div>
+        )}
+      </MenuItem> */}
 
-      <div className="canvas-three-dot-divider" />
+      {/* <div className="canvas-three-dot-divider" /> */}
 
-      {/* Group 6: Destructive */}
-      <MenuItem
-        icon={Trash2}
-        label="Delete canvas"
-        onClick={handleDelete}
-        destructive
-      />
+      {/* Group 6: Destructive — Delete canvas */}
+      {canDelete ? (
+        <MenuItem
+          icon={Trash2}
+          label="Delete canvas"
+          onClick={handleDelete}
+          destructive
+        />
+      ) : isEditor ? (
+        <div
+          className="canvas-three-dot-item-wrapper"
+          title="Only canvas owner can delete this canvas."
+        >
+          <button
+            className="canvas-three-dot-item is-disabled"
+            disabled
+            onClick={(e) => {
+              e.preventDefault();
+              toast.error("Only canvas owner can delete this canvas.");
+            }}
+          >
+            <span className="item-icon">
+              <Trash2 size={16} />
+            </span>
+            <span className="item-label">Delete canvas (Disabled)</span>
+            <span className="item-chevron" style={{ marginLeft: "auto" }}>
+              <AlertTriangle size={12} />
+            </span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function MenuItem({ icon: Icon, label, onClick, hasSubmenu, destructive, onMouseEnter, onMouseLeave, children }) {
+function MenuItem({
+  icon: Icon,
+  label,
+  onClick,
+  hasSubmenu,
+  destructive,
+  disabled,
+  onMouseEnter,
+  onMouseLeave,
+  children,
+}) {
   return (
     <div
       className="canvas-three-dot-item-wrapper"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      style={{ position: hasSubmenu ? 'relative' : 'static' }}
+      style={{ position: hasSubmenu ? "relative" : "static" }}
     >
       <button
-        className={`canvas-three-dot-item${destructive ? " is-destructive" : ""}`}
-        onClick={onClick}
+        className={`canvas-three-dot-item${destructive ? " is-destructive" : ""}${disabled ? " is-disabled" : ""}`}
+        onClick={disabled ? undefined : onClick}
+        disabled={disabled}
       >
         <span className="item-icon">
           <Icon size={16} />

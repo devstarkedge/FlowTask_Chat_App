@@ -1,13 +1,53 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { NodeViewWrapper, NodeViewContent } from "@tiptap/react";
 import { useCanvasStore } from "../../../stores/canvasStore";
 import { useCanvasUiStore } from "../../../stores/canvasUiStore";
 import ParagraphBlock from "./components/ParagraphBlock";
 import HeadingBlock from "./components/HeadingBlock";
 import TaskBlock from "./components/TaskBlock";
+import { MessageSquare } from "lucide-react";
+
+/**
+ * CommentBadge — inline marker for anchored comments on a block.
+ * Shows count and hover preview of the comment.
+ */
+function CommentBadge({ comment, index }) {
+  const authorName = comment?.authorId?.name || "Teammate";
+  const preview = comment?.content?.slice(0, 80) || "";
+  const time = comment?.createdAt
+    ? new Date(comment.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : "";
+
+  return (
+    <span
+      className="canvas-comment-badge"
+      title={`${authorName}: ${preview}`}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 2,
+        marginLeft: 2,
+        padding: "1px 5px",
+        borderRadius: 10,
+        background: "rgba(78, 124, 255, 0.12)",
+        color: "var(--accent-primary, #4e7cff)",
+        fontSize: 11,
+        fontWeight: 600,
+        cursor: "pointer",
+        verticalAlign: "super",
+        lineHeight: 1,
+        border: "1px solid rgba(78, 124, 255, 0.2)",
+      }}
+    >
+      <MessageSquare size={10} />
+      {index + 1}
+    </span>
+  );
+}
 
 export default function BlockWrapper({ node, editor, getPos }) {
   const blocks = useCanvasStore((s) => s.blocks);
+  const comments = useCanvasStore((s) => s.comments);
   const openSidebar = useCanvasUiStore((s) => s.openSidebar);
   const setHoveredBlockId = useCanvasUiStore((s) => s.setHoveredBlockId);
   const presence = useCanvasStore((s) => s.presence);
@@ -70,6 +110,15 @@ export default function BlockWrapper({ node, editor, getPos }) {
     if (block) setHoveredBlockId(block._id);
     openSidebar("comments");
   };
+
+  // Compute comments anchored to this block (via textRange or blockId match)
+  const blockComments = useMemo(() => {
+    if (!block?._id || !comments?.length) return [];
+    return comments.filter((c) => {
+      const cBlockId = c.blockId?._id || c.blockId;
+      return String(cBlockId) === String(block._id) && !c.resolved;
+    });
+  }, [block?._id, comments]);
 
   return (
     <NodeViewWrapper className="block-node-wrapper" data-block-id={block?._id}>
@@ -143,6 +192,15 @@ export default function BlockWrapper({ node, editor, getPos }) {
             </ParagraphBlock>
           );
         })()}
+
+        {/* Inline comment badges for anchored comments on this block */}
+        {blockComments.length > 0 && (
+          <span className="canvas-comment-badges-row" style={{ display: "inline", marginLeft: 4 }}>
+            {blockComments.map((c, i) => (
+              <CommentBadge key={c._id} comment={c} index={i} />
+            ))}
+          </span>
+        )}
       </div>
 
       <div className="block-node-right">

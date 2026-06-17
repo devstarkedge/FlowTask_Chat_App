@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { ArrowLeft, Search, FileText } from "lucide-react";
 import { TEMPLATES, CATEGORIES, buildTemplateContent } from "./templates";
 import TemplateGallery from "./templates/TemplateGallery";
@@ -50,23 +50,36 @@ export default function TemplateSelector({ onSelect, onBack }) {
     setFocusIndex(idx >= 0 ? idx : -1);
   };
 
-  const cancelCreate = () => {
+  // Use refs to avoid stale closures in callbacks and keyboard handler
+  const selectedTemplateRef = useRef(selectedTemplate);
+  useEffect(() => {
+    selectedTemplateRef.current = selectedTemplate;
+  }, [selectedTemplate]);
+  const customTitleRef = useRef(customTitle);
+  useEffect(() => { customTitleRef.current = customTitle; }, [customTitle]);
+  const selectedCoverRef = useRef(selectedCoverVariation);
+  useEffect(() => { selectedCoverRef.current = selectedCoverVariation; }, [selectedCoverVariation]);
+  const variableValuesRef = useRef(variableValues);
+  useEffect(() => { variableValuesRef.current = variableValues; }, [variableValues]);
+  const prefillVarsRef = useRef(prefillVars);
+  useEffect(() => { prefillVarsRef.current = prefillVars; }, [prefillVars]);
+
+  const cancelCreate = useCallback(() => {
     setSelectedTemplate(null);
     setCustomTitle("");
-  };
+  }, []);
 
-  const confirmCreate = async () => {
-    if (!selectedTemplate) return;
+  const confirmCreate = useCallback(async () => {
+    const tpl = selectedTemplateRef.current;
+    if (!tpl) return;
     setIsCreating(true);
     try {
       await onSelect({
-        id: selectedTemplate.id,
-        title: customTitle,
-        coverVariation: selectedCoverVariation,
-        variables: prefillVars ? variableValues : undefined,
-        // Pass the full template object so the caller can build
-        // the same document structure that the preview shows.
-        template: selectedTemplate,
+        id: tpl.id,
+        title: customTitleRef.current,
+        coverVariation: selectedCoverRef.current,
+        variables: prefillVarsRef.current ? variableValuesRef.current : undefined,
+        template: tpl,
       });
     } catch (err) {
       console.error(err);
@@ -74,14 +87,22 @@ export default function TemplateSelector({ onSelect, onBack }) {
       setIsCreating(false);
       cancelCreate();
     }
-  };
+  }, [onSelect, cancelCreate]);
 
   useEffect(() => {
     if (selectedTemplate && titleInputRef.current) {
-      titleInputRef.current.focus();
-      titleInputRef.current.select();
+      // Use setTimeout to avoid causing React state updates during render
+      setTimeout(() => {
+        if (titleInputRef.current) {
+          titleInputRef.current.focus();
+          titleInputRef.current.select();
+        }
+      }, 0);
     }
+  }, [selectedTemplate]);
 
+  // Separate effect for keyboard navigation - stable handler to prevent cursor jumping
+  useEffect(() => {
     const scrollToTemplate = (id) => {
       try {
         const el = document.querySelector(`[data-template-id="${id}"]`);
@@ -91,7 +112,7 @@ export default function TemplateSelector({ onSelect, onBack }) {
 
     const handler = (e) => {
       if (e.key === "Escape") {
-        if (selectedTemplate) cancelCreate();
+        if (selectedTemplateRef.current) cancelCreate();
         return;
       }
       const active = document.activeElement;
@@ -123,7 +144,7 @@ export default function TemplateSelector({ onSelect, onBack }) {
           confirmCreate();
           return;
         }
-        if (selectedTemplate) {
+        if (selectedTemplateRef.current) {
           e.preventDefault();
           confirmCreate();
         }
@@ -132,7 +153,7 @@ export default function TemplateSelector({ onSelect, onBack }) {
 
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [selectedTemplate, filtered, confirmCreate]);
+  }, [filtered, confirmCreate, cancelCreate]);
 
   // Build cover style for the banner
   const getCoverBannerStyle = (tpl) => {

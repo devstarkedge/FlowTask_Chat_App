@@ -114,16 +114,29 @@ export default function MessageList({
     lastSelectedIdRef.current = null;
   }, []);
 
-  // Build forward target: if messages are selected, forward all of them
-  const handleForwardSelected = useCallback((singleMessage) => {
-    if (selectedMessageIds.size > 1) {
-      // Bulk forward: collect selected messages in chronological order
+  // Build forward target: if a specific message is passed (single-message click),
+  // ALWAYS forward exactly that message — never the multi-selection batch.
+  // Bulk forwarding (selectedMessageIds) applies ONLY when the multi-select
+  // toolbar's Forward button is clicked, which passes null as singleMessage.
+  // options.attachmentFileIds — when set, only these files are cloned by the backend.
+  const handleForwardSelected = useCallback((singleMessage, options = {}) => {
+    if (singleMessage) {
+      // Single-message forward: target ONLY this message by its _id.
+      // Ignores any stale selectedMessageIds to prevent accidental bulk forward.
+      setForwardTarget({ message: singleMessage, attachmentFileIds: options.attachmentFileIds });
+    } else if (selectedMessageIds.size > 1) {
+      // Bulk forward: only triggered from the multi-select toolbar (null arg).
+      // Collect selected messages in chronological order.
       const selectedMessages = messages
         .filter(m => selectedMessageIds.has(m._id))
         .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
       setForwardTarget({ messages: selectedMessages });
     } else {
-      setForwardTarget({ message: singleMessage });
+      // Fallback: single selected message from toolbar (size === 1)
+      const selectedMessages = messages.filter(m => selectedMessageIds.has(m._id));
+      if (selectedMessages.length === 1) {
+        setForwardTarget({ message: selectedMessages[0] });
+      }
     }
   }, [selectedMessageIds, messages]);
 
@@ -587,7 +600,7 @@ export default function MessageList({
               onOpenFilePreview={onOpenFilePreview}
               isDMChannel={isDMChannel}
               onSaveMessage={onSaveMessage}
-              onForwardMessage={(msg) => handleForwardSelected(msg)}
+              onForwardMessage={(msg, opts) => handleForwardSelected(msg, opts)}
               isSelecting={isSelecting}
               isSelected={selectedMessageIds.has(item._id)}
               onSelectMessage={toggleSelectMessage}
@@ -675,6 +688,7 @@ export default function MessageList({
         <ForwardMessageModal
           message={forwardTarget.message || null}
           messages={forwardTarget.messages || null}
+          attachmentFileIds={forwardTarget.attachmentFileIds || null}
           onClose={() => { setForwardTarget(null); clearSelection(); }}
           onForwardComplete={(destinationId) => {
             // Single destination: navigate to that conversation

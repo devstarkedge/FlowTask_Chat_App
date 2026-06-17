@@ -525,7 +525,7 @@ export default function ProfileSidePanel({ user, onClose }) {
             value={
               <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 {role.charAt(0).toUpperCase() + role.slice(1)}
-                <span
+                {/* <span
                   style={{
                     fontSize: 10,
                     fontWeight: 700,
@@ -534,9 +534,9 @@ export default function ProfileSidePanel({ user, onClose }) {
                     background: "rgba(124,58,237,0.18)",
                     color: "var(--accent-purple)",
                   }}
-                >
-                  {role}
-                </span>
+                > */}
+                  {/* {role} */}
+                {/* </span> */}
               </span>
             }
           />

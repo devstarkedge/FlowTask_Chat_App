@@ -5,6 +5,7 @@ import canvasService from "./canvas.service.js";
 import redisClient from "../../utils/redisClient.js";
 import logger from "../../utils/logger.js";
 import channelRepository from "../channels/channel.repository.js";
+import { emitToUser } from "../../sockets/socketManager.js";
 
 // Helper to construct Redis presence keys
 const getPresenceKey = (canvasId) => `canvas:presence:${canvasId}`;
@@ -351,20 +352,32 @@ export default function registerCanvasSocket(io, socket) {
   });
 
   // ── Create Comment on Block
-  socket.on("canvas:comment:create", async ({ canvasId, blockId, content }) => {
+  socket.on("canvas:comment:create", async ({ canvasId, blockId, content, textRange }) => {
     try {
       if (!canvasId || !blockId || !content) return;
       const canvas = await getSocketCanvas(canvasId);
       if (!canvas) return;
 
-      const newComment = await CanvasComment.create({
+      const commentData = {
         canvasId,
         workspaceId,
         channelId: canvas.channelId,
         blockId,
         authorId: userId,
         content,
-      });
+      };
+
+      // Store text-range anchoring data if provided
+      if (textRange) {
+        commentData.textRange = {
+          startOffset: textRange.startOffset ?? null,
+          endOffset: textRange.endOffset ?? null,
+          selectedText: textRange.selectedText ?? null,
+          blockType: textRange.blockType ?? null,
+        };
+      }
+
+      const newComment = await CanvasComment.create(commentData);
 
       const populated = await CanvasComment.findById(newComment._id).populate({
         path: "authorId",
@@ -446,6 +459,110 @@ export default function registerCanvasSocket(io, socket) {
     } catch (error) {
       logger.error("[CANVAS SOCKET] Error in canvas:comment:resolve", { error: error.message });
       socket.emit("error", { message: "Failed to resolve comment" });
+    }
+  });
+
+  // ── Share Canvas with User (notify recipient in real-time)
+  socket.on("canvas:share:request", async ({ canvasId, targetUserIds, roles }) => {
+    try {
+      if (!canvasId || !Array.isArray(targetUserIds) || targetUserIds.length === 0) return;
+      const canvas = await getSocketCanvas(canvasId);
+      if (!canvas) return;
+
+      // Update canvas permissions to include target users
+      try {
+        await Canvas.findByIdAndUpdate(canvasId, {
+          $addToSet: {
+            "permissions.users": {
+              $each: targetUserIds.map((uid) => ({
+                userId: uid,
+                role: roles?.[uid] || "viewer",
+                grantedAt: new Date(),
+                grantedBy: user._id,
+              })),
+            },
+          },
+          $addToSet: {
+            "permissions.allowedUserIds": { $each: targetUserIds },
+          },
+        });
+      } catch (err) {
+        logger.warn("[CANVAS SOCKET] Failed to persist share permissions", { error: err.message });
+      }
+
+      // Notify each target user that a canvas was shared with them
+      targetUserIds.forEach((targetUserId) => {
+        emitToUser(
+          targetUserId,
+          "canvas:shared",
+          {
+            canvasId,
+            channelId: canvas.channelId,
+            channelName: canvas.channelId,
+            title: canvas.title,
+            sharedBy: { userId, name: userName, avatar: userAvatar },
+            role: roles?.[targetUserId] || "viewer",
+            workspaceId,
+          },
+          workspaceId
+        );
+
+        // Also broadcast to the channel room so the shared user sees it in the canvas list
+        const channelRoom = `ws:${workspaceId}:channel:${canvas.channelId}`;
+        io.to(channelRoom).emit("canvas:tabs:updated", {
+          channelId: canvas.channelId,
+          tabs: [], // Signal to refresh
+        });
+      });
+
+      logger.info("[CANVAS SOCKET] Canvas shared notification sent", {
+        canvasId,
+        targetUserIds,
+        sharedBy: userId,
+      });
+    } catch (error) {
+      logger.error("[CANVAS SOCKET] Error in canvas:share:request", { error: error.message });
+    }
+  });
+
+  // ── Title Update (real-time sync to all canvas room members)
+  socket.on("canvas:title:update", async ({ canvasId, title }) => {
+    try {
+      if (!canvasId || !title) return;
+      const canvas = await getSocketCanvas(canvasId);
+      if (!canvas) return;
+
+      // Persist the title change
+      await Canvas.findByIdAndUpdate(canvasId, {
+        title,
+        updatedBy: user._id,
+        lastEditedBy: user._id,
+      });
+
+      // Broadcast to all sockets in the canvas room (including sender)
+      io.to(`canvas:${canvasId}`).emit("canvas:title:updated", {
+        canvasId,
+        title,
+        updatedBy: userId,
+      });
+
+      logger.debug("[CANVAS SOCKET] Canvas title updated", { canvasId, title, userId });
+    } catch (error) {
+      logger.error("[CANVAS SOCKET] Error in canvas:title:update", { error: error.message });
+    }
+  });
+
+  // ── Save For Later — notify user's other devices
+  socket.on("canvas:save-later:sync", async ({ canvasId, saved }) => {
+    try {
+      if (!canvasId) return;
+      // Emit to the user's other socket connections
+      socket.broadcast.emit(saved ? "canvas:saved:later" : "canvas:unsaved:later", {
+        canvasId,
+        userId,
+      });
+    } catch (error) {
+      logger.error("[CANVAS SOCKET] Error in canvas:save-later:sync", { error: error.message });
     }
   });
 

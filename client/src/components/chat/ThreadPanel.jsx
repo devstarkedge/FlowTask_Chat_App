@@ -867,7 +867,11 @@ function ThreadSkeleton() {
 
 /* ─── Main Panel ──────────────────────────────────────────────────────────── */
 export default function ThreadPanel({ thread, onClose }) {
+  // forwardTarget is { message, attachmentFileIds } (single) or { messages } (multi)
   const [forwardTarget, setForwardTarget] = useState(null);
+  const handleForwardMessage = useCallback((msg, options = {}) => {
+    setForwardTarget({ message: msg, attachmentFileIds: options.attachmentFileIds });
+  }, []);
   const navigate = useNavigate();
   const location = useLocation();
   const fetchThreadReplies = useChatStore((s) => s.fetchThreadReplies);
@@ -968,7 +972,7 @@ export default function ThreadPanel({ thread, onClose }) {
             {/* Root message — parent message always shown at top */}
             {rootMessage && (
               <div className="thread-panel__root">
-                <ThreadMessage message={rootMessage} isRoot onForwardMessage={setForwardTarget} />
+                <ThreadMessage message={rootMessage} isRoot onForwardMessage={handleForwardMessage} />
               </div>
             )}
 
@@ -986,7 +990,7 @@ export default function ThreadPanel({ thread, onClose }) {
             {/* Replies */}
             <div className="thread-panel__replies">
               {replies.map((reply) => (
-                <ThreadMessage key={reply._id} message={reply} onForwardMessage={setForwardTarget} />
+                <ThreadMessage key={reply._id} message={reply} onForwardMessage={handleForwardMessage} />
               ))}
             </div>
 
@@ -1048,7 +1052,9 @@ export default function ThreadPanel({ thread, onClose }) {
       {/* Forward Message Modal */}
       {forwardTarget && (
         <ForwardMessageModal
-          message={forwardTarget}
+          message={forwardTarget.message || null}
+          messages={forwardTarget.messages || null}
+          attachmentFileIds={forwardTarget.attachmentFileIds || null}
           onClose={() => setForwardTarget(null)}
           onForwardComplete={(destinationId) => {
             // Single destination: navigate to that conversation

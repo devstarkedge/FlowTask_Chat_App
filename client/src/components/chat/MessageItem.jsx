@@ -480,8 +480,63 @@ const MessageItem = memo(
       };
     }, [showMoreMenu]);
 
-    // ── Handle forward attachment (opens forward modal with the parent message) ──
-    const handleForwardAttachment = useCallback(() => {
+    // ── Handle forward attachment ─────────────────────────────────────────────
+    // When a specific file is passed (from SlackFileCard's per-file Forward button),
+    // build a synthetic message containing ONLY that file — not all attachments.
+    // Also pass attachmentFileIds so the backend clones only the targeted file.
+    // When no file is passed (message-level forward), forward the full message.
+    const handleForwardAttachment = useCallback((file) => {
+      if (file) {
+        // Re-derive attachments (same logic as the render path below)
+        const atts = message.fileReferences?.length > 0
+          ? message.fileReferences
+              .map((ref) =>
+                ref.fileId
+                  ? {
+                      ...ref.fileId,
+                      url: getFileUrl(ref.fileId) || ref.fileId.url,
+                      messageId: ref.messageId || message._id,
+                      channelId: ref.channelId || message.channelId,
+                      workspaceId: ref.workspaceId || message.workspaceId,
+                      contextType: ref.contextType || (message.threadId ? "thread" : "channel"),
+                    }
+                  : null,
+              )
+              .filter(Boolean)
+          : message.attachments || [];
+
+        // Only filter when the message actually has multiple attachments
+        if (atts.length > 1) {
+          const fileId = file._id || file.fileId || file.assetId;
+          const fileName = file.originalName || file.fileName || file.name;
+
+          // Find the specific attachment by _id first, then fall back to name match
+          const matchedAtt = atts.find(
+            (a) =>
+              (fileId && (a._id === fileId || String(a._id) === String(fileId))) ||
+              (fileName && (a.originalName || a.fileName || a.name) === fileName),
+          ) || file;
+
+          // Find matching fileReference so the backend clones only this one
+          const matchedRef = message.fileReferences?.find((ref) => {
+            const refFileId = ref.fileId?._id || ref.fileId;
+            return (
+              (fileId && String(refFileId) === String(fileId)) ||
+              (fileName && (ref.fileId?.originalName || ref.fileId?.fileName) === fileName)
+            );
+          });
+
+          const forwardMsg = {
+            ...message,
+            attachments: [matchedAtt],
+            fileReferences: matchedRef ? [matchedRef] : [],
+          };
+          // Pass attachmentFileIds so the backend filters the cloned file references
+          onForwardMessage?.(forwardMsg, { attachmentFileIds: fileId ? [fileId] : undefined });
+          return;
+        }
+      }
+      // Single-attachment message or no specific file → forward full message
       onForwardMessage?.(message);
     }, [onForwardMessage, message]);
 

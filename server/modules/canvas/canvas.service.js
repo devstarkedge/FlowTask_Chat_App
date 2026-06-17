@@ -5,12 +5,13 @@ import CanvasComment from "./canvasComment.model.js";
 import CanvasHistory from "./canvasHistory.model.js";
 import ChatUser from "../users/ChatUser.model.js";
 import Message from "../messages/Message.model.js";
-import { emitToChannel } from "../../sockets/socketManager.js";
+import { emitToChannel, emitToUser } from "../../sockets/socketManager.js";
 import logger from "../../utils/logger.js";
 import { MESSAGE_CONTENT_TYPES } from "../../config/constants.js";
 import {
   ValidationError,
   NotFoundError,
+  ForbiddenError,
 } from "../../middleware/errorHandler.js";
 import { MENTION_TYPES } from "../../config/constants.js";
 
@@ -296,49 +297,6 @@ class CanvasService {
       : this.buildTemplateBlocks(canvas._id, type, blockContext);
     await CanvasBlock.insertMany(templateBlocks);
 
-    // Atomically register the canvas as an open tab in the channel
-    try {
-      await channelRepository.update(
-        data.channelId,
-        {
-          $push: {
-            canvasTabs: {
-              canvasId: canvas._id,
-              title: canvas.title,
-              createdBy: userId,
-              createdAt: new Date(),
-            },
-          },
-        },
-        workspaceId
-      );
-    } catch (err) {
-      logger.warn('[CANVAS] Failed to add canvas to channel tabs', {
-        canvasId: canvas._id,
-        channelId: data.channelId,
-        error: err.message,
-      });
-    }
-
-    // Broadcast the updated tab list to all channel members
-    try {
-      const updatedChannel = await channelRepository.findById(data.channelId, { workspaceId });
-      if (updatedChannel?.canvasTabs) {
-        const tabs = updatedChannel.canvasTabs.map((t) => ({
-          _id: String(t.canvasId),
-          title: t.title || '',
-        }));
-        emitToChannel(
-          data.channelId.toString(),
-          'canvas:tabs:updated',
-          { channelId: data.channelId, tabs },
-          workspaceId
-        );
-      }
-    } catch (err) {
-      logger.debug('[CANVAS] Failed to broadcast tab update', { error: err.message });
-    }
-
     // Write activity message
     await this.logActivity(
       workspaceId,
@@ -406,6 +364,16 @@ class CanvasService {
       workspaceId
     );
 
+    // Also update tab title via broadcast if title changed
+    if (updates.title && updates.title !== canvas.title) {
+      emitToChannel(
+        canvas.channelId.toString(),
+        "canvas:title:updated",
+        { canvasId, title: updates.title },
+        workspaceId
+      );
+    }
+
     // Write update activity message
     if (updates.title && updates.title !== canvas.title) {
       await this.logActivity(
@@ -464,6 +432,7 @@ class CanvasService {
   }
 
   // ── Delete Canvas and all dependencies
+  // ── Backend Protection: Verify ownership before deletion
   async deleteCanvas(canvasId, userId, workspaceId) {
     if (!workspaceId) {
       throw new ValidationError("workspaceId is required");
@@ -474,18 +443,44 @@ class CanvasService {
       throw new NotFoundError("Canvas not found");
     }
 
+    // Backend Protection: Only canvas owner can delete this canvas
+    const userIdStr = (userId && userId._id ? userId._id : userId).toString();
+    const createdByIdStr = (canvas.createdBy && canvas.createdBy._id ? canvas.createdBy._id : canvas.createdBy).toString();
+    if (createdByIdStr !== userIdStr) {
+      throw new ForbiddenError("Only canvas owner can delete this canvas.");
+    }
+
+    const channelId = canvas.channelId.toString();
+
     await canvasRepository.delete(canvasId);
     await CanvasBlock.deleteMany({ canvasId });
     await CanvasComment.deleteMany({ canvasId });
     await CanvasHistory.deleteMany({ canvasId });
 
-    // Broadcast deletion
+    // Remove this canvas from the channel's canvasTabs
+    try {
+      await channelRepository.update(
+        channelId,
+        {
+          $pull: { canvasTabs: { canvasId: canvas._id } },
+        },
+        workspaceId
+      );
+    } catch (err) {
+      logger.warn('[CANVAS] Failed to remove canvas from channel tabs', {
+        canvasId,
+        channelId,
+        error: err.message,
+      });
+    }
+
+    // Broadcast deletion to ALL channel members (not just canvas room)
     emitToChannel(
-      canvas.channelId.toString(),
+      channelId,
       "canvas:deleted",
       {
         canvasId,
-        channelId: canvas.channelId,
+        channelId,
       },
       workspaceId
     );
@@ -493,7 +488,7 @@ class CanvasService {
     // Log deletion activity
     await this.logActivity(
       workspaceId,
-      canvas.channelId,
+      channelId,
       userId,
       `deleted the Canvas "${canvas.title}"`,
       "CANVAS_DELETED",
@@ -672,9 +667,37 @@ class CanvasService {
     return canvasRepository.findAllByChannel(channelId, workspaceId);
   }
 
+  // ── Get all canvases accessible to the user across the workspace
+  async getMyCanvases(userId, workspaceId) {
+    if (!workspaceId) {
+      throw new ValidationError("workspaceId is required");
+    }
+
+    const userIdStr = userId.toString();
+    const Canvas = (await import("./canvas.model.js")).default;
+
+    // Find canvases where user is:
+    // 1. Owner (createdBy)
+    // 2. Explicitly shared (permissions.users[], permissions.allowedUserIds[])
+    // 3. Channel member with view/edit access
+    const canvases = await Canvas.find({
+      workspaceId,
+      $or: [
+        { createdBy: userId },
+        { "permissions.users.userId": userId },
+        { "permissions.allowedUserIds": userId },
+      ],
+    })
+      .populate("createdBy updatedBy lastEditedBy", "name avatar")
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    return canvases;
+  }
+
   // ── Toggle Save for Later
-  async toggleSaveForLater(canvasId, userId) {
-    const canvas = await canvasRepository.findById(canvasId);
+  async toggleSaveForLater(canvasId, userId, workspaceId) {
+    const canvas = await canvasRepository.findById(canvasId, workspaceId);
     if (!canvas) {
       throw new NotFoundError("Canvas not found");
     }
@@ -690,12 +713,22 @@ class CanvasService {
       canvas.savedForLaterStatus = "in_progress";
     }
     await canvas.save();
-    return { saved: !alreadySaved };
+
+    // Broadcast save-later event to the user's other devices
+    const saved = !alreadySaved;
+    emitToUser(
+      userId,
+      saved ? "canvas:saved:later" : "canvas:unsaved:later",
+      { canvasId, userId, saved },
+      workspaceId
+    );
+
+    return { saved, canvas };
   }
 
   // ── Update Saved Status
-  async updateSavedStatus(canvasId, userId, status) {
-    const canvas = await canvasRepository.findById(canvasId);
+  async updateSavedStatus(canvasId, userId, status, workspaceId) {
+    const canvas = await canvasRepository.findById(canvasId, workspaceId);
     if (!canvas) {
       throw new NotFoundError("Canvas not found");
     }
@@ -721,7 +754,10 @@ class CanvasService {
       query.savedForLaterStatus = status;
     }
     const Canvas = (await import("./canvas.model.js")).default;
-    return Canvas.find(query).sort({ updatedAt: -1 }).lean();
+    return Canvas.find(query)
+      .populate("createdBy", "name avatar")
+      .sort({ updatedAt: -1 })
+      .lean();
   }
 
   // ── Increment View Count

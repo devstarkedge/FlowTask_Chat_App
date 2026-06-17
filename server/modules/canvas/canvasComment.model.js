@@ -57,6 +57,14 @@ const canvasCommentSchema = new Schema(
       required: true,
     },
 
+    // Text-range anchoring for inline comments (Google Docs / Slack style)
+    textRange: {
+      startOffset: { type: Number, default: null },
+      endOffset: { type: Number, default: null },
+      selectedText: { type: String, default: null },
+      blockType: { type: String, default: null },
+    },
+
     replies: {
       type: [replySchema],
       default: [],

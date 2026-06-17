@@ -90,16 +90,16 @@ function KindIcon({ kind, size = 18 }) {
 function getKindColor(kind) {
   const colors = {
     image: "var(--accent-primary)",
-    video: "#a855f7",
-    audio: "#22c55e",
-    archive: "#ea580c",
-    code: "#059669",
-    text: "#059669",
-    csv: "#22c55e",
-    spreadsheet: "#22c55e",
-    pdf: "#ef4444",
-    word: "#3b82f6",
-    presentation: "#f59e0b",
+    video: "var(--accent-purple)",
+    audio: "var(--accent-green)",
+    archive: "var(--accent-orange)",
+    code: "var(--accent-green)",
+    text: "var(--accent-green)",
+    csv: "var(--accent-green)",
+    spreadsheet: "var(--accent-green)",
+    pdf: "var(--accent-red)",
+    word: "var(--accent-primary)",
+    presentation: "var(--accent-yellow)",
     file: "var(--text-muted)",
   };
   return colors[kind] || "var(--text-muted)";
@@ -307,11 +307,11 @@ function FileDetailsModal({ file, onClose, onForward }) {
                 background: "rgba(239,68,68,0.08)",
                 border: "1px solid rgba(239,68,68,0.15)",
               }}>
-                <FileText size={22} style={{ color: "#ef4444", flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-white)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>PDF Document • {size}</div>
-                </div>
+                <FileText size={22} style={{ color: "var(--accent-red)", flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>PDF Document • {size}</div>
+              </div>
               </div>
             </div>
           )}
@@ -331,7 +331,7 @@ function FileDetailsModal({ file, onClose, onForward }) {
                   {uploadedAvatar && (
                     <img src={uploadedAvatar} alt="" style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover" }} />
                   )}
-                  <span style={{ fontSize: 13, color: "var(--text-primary, #ddd)" }}>{uploadedBy}</span>
+                  <span style={{ fontSize: 13, color: "var(--text-primary)" }}>{uploadedBy}</span>
                 </div>
               </div>
             </div>
@@ -386,11 +386,11 @@ function FileDetailsModal({ file, onClose, onForward }) {
             style={{
               display: "flex", alignItems: "center", gap: 6,
               padding: "7px 14px", borderRadius: 8, border: "none",
-              background: "var(--accent-primary, #5865f2)", color: "#fff",
+              background: "var(--accent-primary)", color: "var(--text-white)",
               fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "background 0.15s",
             }}
-            onMouseEnter={(e) => e.currentTarget.style.background = "var(--accent-primary-hover, #4752c4)"}
-            onMouseLeave={(e) => e.currentTarget.style.background = "var(--accent-primary, #5865f2)"}
+            onMouseEnter={(e) => e.currentTarget.style.background = "var(--accent-primary-hover, var(--accent-primary))"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "var(--accent-primary)"}
           >
             <Download size={14} /> Download
           </button>

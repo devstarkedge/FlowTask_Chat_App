@@ -19,6 +19,10 @@ import {
   Type,
   RemoveFormatting,
   Pilcrow,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
 } from "lucide-react";
 
 const TEXT_COLORS = [
@@ -234,6 +238,37 @@ export default function SelectionToolbar({ editor, toolbar, onComment }) {
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
       >
         <ListOrdered size={15} />
+      </ToolbarButton>
+      <ToolbarDivider />
+
+      {/* Text Alignment */}
+      <ToolbarButton
+        label="Align left"
+        active={editor.isActive({ textAlign: "left" })}
+        onClick={() => editor.chain().focus().setTextAlign("left").run()}
+      >
+        <AlignLeft size={15} />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Align center"
+        active={editor.isActive({ textAlign: "center" })}
+        onClick={() => editor.chain().focus().setTextAlign("center").run()}
+      >
+        <AlignCenter size={15} />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Align right"
+        active={editor.isActive({ textAlign: "right" })}
+        onClick={() => editor.chain().focus().setTextAlign("right").run()}
+      >
+        <AlignRight size={15} />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Justify"
+        active={editor.isActive({ textAlign: "justify" })}
+        onClick={() => editor.chain().focus().setTextAlign("justify").run()}
+      >
+        <AlignJustify size={15} />
       </ToolbarButton>
       <ToolbarDivider />
 

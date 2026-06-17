@@ -10,6 +10,7 @@ import React from "react";
 const USER_COLORS = ["#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899", "#06b6d4"];
 const STORAGE_KEY_TABS = "flowtask.canvas.openTabs.v1";
 const STORAGE_KEY_ACTIVE_IDS = "flowtask.canvas.activeIds.v1";
+const STORAGE_KEY_SAVED_IDS = "flowtask.canvas.savedIds.v1";
 
 function getUserColor(userId) {
   if (!userId) return USER_COLORS[0];
@@ -65,6 +66,57 @@ function persistActiveIds(ids) {
   } catch (e) {
     // ignore
   }
+}
+
+function loadPersistedSavedIds() {
+  try {
+    if (typeof localStorage === "undefined") return new Set();
+    const raw = localStorage.getItem(STORAGE_KEY_SAVED_IDS);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch (e) {
+    return new Set();
+  }
+}
+
+function persistSavedIds(ids) {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(STORAGE_KEY_SAVED_IDS, JSON.stringify([...ids]));
+  } catch (e) {
+    // ignore
+  }
+}
+
+// ── Deep cleanup helper: removes a canvas from ALL state slices ────────────────────
+function removeCanvasFromAllState(state, canvasId) {
+  // Remove from canvasesByChannel for every channel
+  const nextCanvases = { ...state.canvasesByChannel };
+  Object.keys(nextCanvases).forEach((chId) => {
+    nextCanvases[chId] = (nextCanvases[chId] || []).filter((c) => c._id !== canvasId);
+  });
+
+  // Remove from activeCanvasIdByChannel for every channel
+  const activeIdMap = { ...state.activeCanvasIdByChannel };
+  Object.keys(activeIdMap).forEach((chId) => {
+    if (activeIdMap[chId] === canvasId) delete activeIdMap[chId];
+  });
+
+  // Remove from openTabsByChannel for every channel
+  const nextOpenTabs = { ...state.openTabsByChannel };
+  Object.keys(nextOpenTabs).forEach((chId) => {
+    nextOpenTabs[chId] = (nextOpenTabs[chId] || []).filter((t) => t._id !== canvasId);
+  });
+
+  // Remove from savedCanvasIds
+  const nextSaved = new Set(state.savedCanvasIds);
+  nextSaved.delete(canvasId);
+
+  // Clear activeCanvas if it matches
+  const active = state.activeCanvas && state.activeCanvas._id === canvasId ? null : state.activeCanvas;
+
+  return { canvasesByChannel: nextCanvases, activeCanvasIdByChannel: activeIdMap, openTabsByChannel: nextOpenTabs, activeCanvas: active, savedCanvasIds: nextSaved };
 }
 
 // ── Store ──────────────────────────────────────────────────────────────────────────
@@ -169,9 +221,17 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
-  // ── Create Canvas ────────────────────────────────────────────────────────────────
+  // ── Create Canvas (with deduplication guard) ─────────────────────────────────────
+  _createInFlight: {},
+
   createCanvas: async (channelId, payload) => {
+    // Deduplication guard: prevent double-click from creating two canvases
+    const dedupKey = `${channelId}:${payload?.title || 'blank'}`;
+    if (get()._createInFlight[dedupKey]) return null;
+    set((state) => ({ _createInFlight: { ...state._createInFlight, [dedupKey]: true } }));
+
     set({ isLoading: true });
+    let result = null;
     try {
       const res = await canvasAPI.create(channelId, payload);
       if (res.data && res.data.success) {
@@ -179,22 +239,27 @@ export const useCanvasStore = create((set, get) => ({
         set((state) => {
           const nextActiveIds = { ...state.activeCanvasIdByChannel, [channelId]: newCanvas._id };
           persistActiveIds(nextActiveIds);
+
+          // Add to canvasesByChannel list
+          const list = state.canvasesByChannel[channelId] || [];
           return {
             activeCanvas: newCanvas,
             activeCanvasIdByChannel: nextActiveIds,
             blocks: [],
+            canvasesByChannel: { ...state.canvasesByChannel, [channelId]: [...list, newCanvas] },
           };
         });
 
         // Load the created canvas to attach sockets/providers
         await get().loadCanvas(newCanvas._id);
-        return newCanvas;
+        result = newCanvas;
       }
     } catch (err) {
       console.error("[CanvasStore] createCanvas error:", err);
     } finally {
-      set({ isLoading: false });
+      set({ isLoading: false, _createInFlight: { ...get()._createInFlight, [dedupKey]: false } });
     }
+    return result;
   },
 
   // ── Update canvas metadata (title, cover, content pointer, etc.) ─────────────────
@@ -237,16 +302,6 @@ export const useCanvasStore = create((set, get) => ({
         if (updates.title != null) {
           try {
             persistOpenTabs(get().openTabsByChannel);
-          } catch (e) {
-            // ignore
-          }
-
-          // Broadcast title update via socket so other users see it instantly
-          try {
-            const socket = getSocket();
-            if (socket) {
-              socket.emit("canvas:title:update", { canvasId, title: updates.title });
-            }
           } catch (e) {
             // ignore
           }
@@ -327,36 +382,19 @@ export const useCanvasStore = create((set, get) => ({
 
       // Optimistically remove the canvas from ALL client state
       set((state) => {
-        const nextCanvases = { ...state.canvasesByChannel };
-        Object.keys(nextCanvases).forEach((chId) => {
-          nextCanvases[chId] = (nextCanvases[chId] || []).filter((c) => c._id !== canvasId);
-        });
-
-        const activeIdMap = { ...state.activeCanvasIdByChannel };
-        Object.keys(activeIdMap).forEach((chId) => {
-          if (activeIdMap[chId] === canvasId) delete activeIdMap[chId];
-        });
-        persistActiveIds(activeIdMap);
-
-        const active = state.activeCanvas && state.activeCanvas._id === canvasId ? null : state.activeCanvas;
-
-        // Remove from open tabs across ALL channels
-        const nextOpenTabs = { ...state.openTabsByChannel };
-        Object.keys(nextOpenTabs).forEach((chId) => {
-          nextOpenTabs[chId] = (nextOpenTabs[chId] || []).filter((t) => t._id !== canvasId);
-        });
-
-        return {
-          canvasesByChannel: nextCanvases,
-          activeCanvas: active,
-          activeCanvasIdByChannel: activeIdMap,
-          openTabsByChannel: nextOpenTabs,
-        };
+        const cleaned = removeCanvasFromAllState(state, canvasId);
+        persistActiveIds(cleaned.activeCanvasIdByChannel);
+        return cleaned;
       });
 
       // Persist the open tabs changes
       try {
         persistOpenTabs(get().openTabsByChannel);
+      } catch (e) {
+        // ignore
+      }
+      try {
+        persistSavedIds(get().savedCanvasIds);
       } catch (e) {
         // ignore
       }
@@ -629,6 +667,60 @@ export const useCanvasStore = create((set, get) => ({
       }
     });
 
+    // ── Real-time share notification: refresh canvas list for the channel
+    socket.on('canvas:shared', ({ canvasId, channelId, title, sharedBy, role }) => {
+      if (!channelId) return;
+      try {
+        toast.success(`${sharedBy?.name || 'Someone'} shared "${title || 'a canvas'}" with you`);
+        // Refresh channel canvases to include the newly shared one
+        get().fetchChannelCanvases(channelId);
+      } catch (err) {
+        // best-effort
+      }
+    });
+
+    // ── Canvas deleted globally — clean up ALL state for deleted canvas
+    socket.on('canvas:deleted', ({ canvasId, channelId }) => {
+      if (!canvasId) return;
+      set((state) => {
+        const cleaned = removeCanvasFromAllState(state, canvasId);
+        persistActiveIds(cleaned.activeCanvasIdByChannel);
+        return { ...cleaned, _persistTabs: true };
+      });
+      // Persist the cleaned state
+      try {
+        persistOpenTabs(get().openTabsByChannel);
+        persistSavedIds(get().savedCanvasIds);
+      } catch (e) {
+        // ignore
+      }
+      // If the deleted canvas was the active one, clear its room
+      if (canvasId === get().currentJoinedRoom) {
+        get().clearActiveCanvas();
+      }
+    });
+
+    // ── Save-for-later sync from other devices
+    socket.on('canvas:saved:later', ({ canvasId }) => {
+      if (!canvasId) return;
+      set((state) => {
+        const next = new Set(state.savedCanvasIds);
+        next.add(canvasId);
+        persistSavedIds(next);
+        return { savedCanvasIds: next };
+      });
+    });
+
+    socket.on('canvas:unsaved:later', ({ canvasId }) => {
+      if (!canvasId) return;
+      set((state) => {
+        const next = new Set(state.savedCanvasIds);
+        next.delete(canvasId);
+        persistSavedIds(next);
+        return { savedCanvasIds: next };
+      });
+    });
+
     set({ globalSocketAttached: true });
   },
 
@@ -778,28 +870,15 @@ export const useCanvasStore = create((set, get) => ({
     handlers.restored = ({ canvasId: cid }) => { if (cid !== get().currentJoinedRoom) return; get().loadCanvas(cid); };
     handlers.updated = ({ canvasId: cid, updates }) => { if (cid !== get().currentJoinedRoom) return; set((state) => ({ activeCanvas: state.activeCanvas && state.activeCanvas._id === cid ? { ...state.activeCanvas, ...updates } : state.activeCanvas })); };
     handlers.deleted = ({ canvasId: cid }) => {
+      // Canvas was deleted by another user in the same room — clean up all state
       set((state) => {
-        const nextCanvases = { ...state.canvasesByChannel };
-        Object.keys(nextCanvases).forEach((chId) => { nextCanvases[chId] = (nextCanvases[chId] || []).filter((c) => c._id !== cid); });
-        const activeIdMap = { ...state.activeCanvasIdByChannel };
-        Object.keys(activeIdMap).forEach((chId) => { if (activeIdMap[chId] === cid) delete activeIdMap[chId]; });
-        persistActiveIds(activeIdMap);
-        const active = state.activeCanvas && state.activeCanvas._id === cid ? null : state.activeCanvas;
-
-        const nextOpenTabs = { ...state.openTabsByChannel };
-        Object.keys(nextOpenTabs).forEach((chId) => {
-          nextOpenTabs[chId] = (nextOpenTabs[chId] || []).filter((t) => t._id !== cid);
-        });
-
-        return {
-          canvasesByChannel: nextCanvases,
-          activeCanvasIdByChannel: activeIdMap,
-          activeCanvas: active,
-          openTabsByChannel: nextOpenTabs,
-        };
+        const cleaned = removeCanvasFromAllState(state, cid);
+        persistActiveIds(cleaned.activeCanvasIdByChannel);
+        return cleaned;
       });
       try {
         persistOpenTabs(get().openTabsByChannel);
+        persistSavedIds(get().savedCanvasIds);
       } catch (e) {
         // ignore
       }
@@ -997,11 +1076,11 @@ export const useCanvasStore = create((set, get) => ({
   },
 
   // ── Comment interactions ────────────────────────────────────────────────────────
-  createComment: (blockId, content) => {
+  createComment: (blockId, content, textRange) => {
     const socket = getSocket();
     const canvasId = get().currentJoinedRoom;
     if (socket && canvasId) {
-      socket.emit("canvas:comment:create", { canvasId, blockId, content });
+      socket.emit("canvas:comment:create", { canvasId, blockId, content, textRange });
     }
   },
 
@@ -1022,7 +1101,7 @@ export const useCanvasStore = create((set, get) => ({
   },
 
   // ── Save for Later ───────────────────────────────────────────────────────────────
-  savedCanvasIds: new Set(),
+  savedCanvasIds: loadPersistedSavedIds(),
 
   toggleSaveForLater: async (canvasId) => {
     if (!canvasId) return;
@@ -1037,6 +1116,7 @@ export const useCanvasStore = create((set, get) => ({
         newIds.add(canvasId);
       }
       set({ savedCanvasIds: newIds });
+      persistSavedIds(newIds);
 
       const { data } = await canvasAPI.toggleSaveForLater(canvasId);
       const saved = data.data?.saved;
@@ -1047,6 +1127,7 @@ export const useCanvasStore = create((set, get) => ({
       }
     } catch {
       set({ savedCanvasIds: prevIds });
+      persistSavedIds(prevIds);
       toast.error("Failed to update saved status");
     }
   },

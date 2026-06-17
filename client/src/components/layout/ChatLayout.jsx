@@ -1855,7 +1855,7 @@ function ActivityMainPane({
       )}
       {selectedNotification && selectedChannelId && (
         <>
-          <div className="cl-activity-context-bar">
+          {/* <div className="cl-activity-context-bar">
             <span className="cl-activity-context-bar__tag">
               <Zap size={10} />
               Activity
@@ -1864,7 +1864,7 @@ function ActivityMainPane({
             <span className="cl-activity-context-bar__name">
               {getNotificationText(selectedNotification)}
             </span>
-          </div>
+          </div> */}
           <ChatPanel
             channelId={selectedChannelId}
             workspaceId={workspaceId}

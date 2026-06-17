@@ -342,10 +342,10 @@ export default function ChatHeader({
           >
             {displayChannelName}
           </h2>
-
+{/* 
           {isPrivate && (
             <Lock size={10} className="shrink-0" style={{ color: "var(--text-muted)" }} />
-          )}
+          )} */}
         </button>
 
         {/* Right actions */}

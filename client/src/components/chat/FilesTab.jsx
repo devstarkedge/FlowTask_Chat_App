@@ -295,7 +295,7 @@ function MediaCard({ file, onPreview, onShare, onDownload, onDelete, index }) {
             style={{
               position: "absolute",
               inset: 0,
-              background: "rgb(242, 247, 246)",
+              background: "var(--bg-hover)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -323,11 +323,11 @@ function MediaCard({ file, onPreview, onShare, onDownload, onDelete, index }) {
           opacity: hover ? 1 : 0,
           transform: hover ? "translateY(0)" : "translateY(-4px)",
           transition: "all 180ms ease",
-          background: "rgba(255,255,255,0.1)",
+          background: "var(--bg-hover)",
           backdropFilter: "blur(6px)",
           borderRadius: 10,
           padding: "4px 5px",
-          border: "1px solid rgba(255,255,255,0.1)",
+          border: "1px solid var(--border-secondary)",
         }}
       >
         <ActionBtn
@@ -660,7 +660,7 @@ function StatBar({ total, images, videos, docs, filter, onFilter }) {
       </Pill>
       <Pill active={filter === "file"} onClick={() => onFilter("file")}>
         <FileText size={11} /> Docs <span style={{ opacity: 0.7 }}>{docs}</span>
-      </Pill>
+      </Pill> 
     </div>
   );
 }
@@ -1029,7 +1029,7 @@ export default function FilesTab({ channelId, onOpenFilePreview }) {
                       viewMode === mode
                         ? "var(--accent-primary)"
                         : "transparent",
-                    color: viewMode === mode ? "#fff" : "var(--text-muted)",
+                    color: viewMode === mode ? "var(--text-white)" : "var(--text-muted)",
                     transition: "all 150ms ease",
                     filter:
                       viewMode === mode ? "brightness(1.1)" : "brightness(1)",

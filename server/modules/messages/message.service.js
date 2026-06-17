@@ -978,8 +978,12 @@ class MessageService {
    * Forward one or more messages to one or more destination channels.
    * Clones content, htmlContent, attachments, fileReferences, and forwardMeta.
    * Accepts either `messageId` (single) or `messageIds` (bulk) from the controller.
+   *
+   * `attachmentFileIds` — optional array of Cloudinary file IDs. When provided,
+   * only the file references and attachments matching those IDs are cloned.
+   * Used when forwarding a single file from a multi-file message.
    */
-  async forwardMessage({ messageId, messageIds, destinationIds, userId, workspaceId }) {
+  async forwardMessage({ messageId, messageIds, destinationIds, attachmentFileIds, userId, workspaceId }) {
     if (!destinationIds || !Array.isArray(destinationIds) || destinationIds.length === 0) {
       throw new ValidationError('At least one destination is required');
     }
@@ -994,6 +998,11 @@ class MessageService {
     if (idsToForward.length === 0) {
       throw new ValidationError('At least one message ID is required');
     }
+
+    // Build a Set of file IDs for targeted single-file forwarding
+    const fileFilterSet = Array.isArray(attachmentFileIds) && attachmentFileIds.length > 0
+      ? new Set(attachmentFileIds.map(String))
+      : null;
 
     // Pre-fetch all original messages in one query for efficiency
     const originals = [];
@@ -1020,9 +1029,32 @@ class MessageService {
       const sourceChannelName = sourceChannel.name || 'unknown';
 
       // Pre-fetch original FileReferences so we can clone them
-      const origFileRefs = original.fileReferences && original.fileReferences.length > 0
+      let origFileRefs = original.fileReferences && original.fileReferences.length > 0
         ? original.fileReferences
         : await FileReference.find({ messageId: original._id, workspaceId }).lean();
+
+      // Apply file filter: when forwarding a single file from a multi-file message,
+      // restrict cloned file references and attachments to only the targeted file(s).
+      if (fileFilterSet && origFileRefs.length > 0) {
+        origFileRefs = origFileRefs.filter(ref => {
+          const refFileId = String(ref.fileId?._id || ref.fileId);
+          return fileFilterSet.has(refFileId);
+        });
+      }
+
+      // Determine attachments to clone (filtered or all)
+      let attachmentsToClone = original.attachments || [];
+      if (fileFilterSet && attachmentsToClone.length > 0) {
+        const filtered = attachmentsToClone.filter(att => {
+          // Match by Cloudinary asset ID embedded in the URL path
+          if (att.url && [...fileFilterSet].some(id => att.url.includes(id))) return true;
+          if (att.cloudinaryId && fileFilterSet.has(String(att.cloudinaryId))) return true;
+          if (att._id && fileFilterSet.has(String(att._id))) return true;
+          return false;
+        });
+        // Only use filtered result if we found at least one match (safety fallback to all)
+        if (filtered.length > 0) attachmentsToClone = filtered;
+      }
 
       for (const destChannelId of destinationIds) {
         const destChannel = await channelRepository.findById(destChannelId, { workspaceId });
@@ -1042,7 +1074,7 @@ class MessageService {
           content: original.content || '',
           htmlContent: original.htmlContent || original.content || '',
           contentType: original.contentType || MESSAGE_CONTENT_TYPES.TEXT,
-          attachments: (original.attachments || []).map(att => ({
+          attachments: attachmentsToClone.map(att => ({
             fileName: att.fileName,
             originalName: att.originalName,
             mimeType: att.mimeType,

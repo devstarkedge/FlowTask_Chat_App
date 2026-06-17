@@ -412,6 +412,14 @@
   line-height: 1.6;
 }
 
+/* When taskItem uses BlockWrapper NodeView, the <li> flex layout must
+   defer to the BlockWrapper's own 3-column layout.  The li should act
+   as a simple block container so the NodeView fills it correctly. */
+.canvas-prosemirror ul[data-type="taskList"] li:has(.block-node-wrapper) {
+  display: block;
+  gap: 0;
+}
+
 .canvas-prosemirror ul[data-type="taskList"] li > label {
   flex: 0 0 auto;
   margin-top: 2px;
@@ -463,6 +471,44 @@
 .canvas-prosemirror ul[data-type="taskList"] li[data-checked="true"] > div p {
   text-decoration: line-through;
   color: var(--text-muted);
+}
+
+/* TaskBlock NodeView: checked state via data-checked on the li ancestor */
+.canvas-prosemirror ul[data-type="taskList"] li[data-checked="true"] .task-content p {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+/* TaskBlock NodeView: ensure the content area is editable and cursor is visible */
+.task-block .task-content p {
+  margin: 0;
+  min-height: 1.6em;
+}
+
+.task-block .task-content .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--text-muted);
+  pointer-events: none;
+  height: 0;
+}
+
+/* ─── Image Node & Resize ─────────────────────────────────────────────── */
+.canvas-image-node-container {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin: 12px 0;
+}
+
+.canvas-image-node-container .canvas-image-resize-handle {
+  user-select: none;
+  touch-action: none;
+}
+
+.canvas-image-node-container img {
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 /* ─── Blockquote ──────────────────────────────────────────────────────── */
@@ -3081,4 +3127,11 @@
 
 .canvas-history-exit-btn:hover {
   background: var(--border-primary);
+}
+
+/* ─── Three-dot menu disabled state ─── */
+.canvas-three-dot-item.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: auto;
 }

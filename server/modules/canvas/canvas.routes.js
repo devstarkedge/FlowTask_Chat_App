@@ -1,37 +1,36 @@
 import express from "express";
 import canvasController from "./canvas.controller.js";
+import { protect } from "../auth/auth.middleware.js";
+import { resolveWorkspace } from "../../middleware/workspaceContext.js";
+import { checkCanvasAccess, requireCanvasRole } from "./canvasPermission.middleware.js";
 
 const router = express.Router();
 
-// ── Specific Canvas routes (must be defined before /:channelId or /:canvasId params)
+// All canvas routes require authentication + workspace context
+router.use(protect, resolveWorkspace);
+
+// ── Read routes — viewer access allowed ─────────────────────────────────────
 router.get(
   "/by-id/:canvasId",
+  checkCanvasAccess,
   canvasController.getCanvasById
-);
-
-router.post(
-  "/duplicate/:canvasId",
-  canvasController.duplicateCanvas
 );
 
 router.get(
   "/history/:canvasId",
+  checkCanvasAccess,
   canvasController.getCanvasHistory
 );
 
-router.post(
-  "/history/restore/:canvasId/:historyId",
-  canvasController.restoreCanvasVersion
+router.get(
+  "/channel/all/:channelId",
+  canvasController.getChannelCanvases
 );
 
-router.post(
-  "/save-later/:canvasId",
-  canvasController.toggleCanvasSaveForLater
-);
-
-router.patch(
-  "/save-later/:canvasId/status",
-  canvasController.updateCanvasSavedStatus
+// ── Get all canvases accessible to the user across the workspace ─────
+router.get(
+  "/my/all",
+  canvasController.getMyCanvases
 );
 
 router.get(
@@ -40,29 +39,55 @@ router.get(
 );
 
 router.get(
-  "/channel/all/:channelId",
-  canvasController.getChannelCanvases
+  "/:channelId",
+  canvasController.getCanvas
+);
+
+// ── Write routes — editor or owner required ─────────────────────────────────
+router.post(
+  "/duplicate/:canvasId",
+  checkCanvasAccess,
+  requireCanvasRole("editor", "owner"),
+  canvasController.duplicateCanvas
+);
+
+router.post(
+  "/history/restore/:canvasId/:historyId",
+  checkCanvasAccess,
+  requireCanvasRole("editor", "owner"),
+  canvasController.restoreCanvasVersion
 );
 
 router.put(
   "/update/:canvasId",
+  checkCanvasAccess,
+  requireCanvasRole("editor", "owner"),
   canvasController.updateCanvas
 );
 
-router.delete(
-  "/:canvasId",
-  canvasController.deleteCanvas
+router.post(
+  "/save-later/:canvasId",
+  checkCanvasAccess,
+  canvasController.toggleCanvasSaveForLater
 );
 
-// ── Dynamic parameter fallback routes
-router.get(
-  "/:channelId",
-  canvasController.getCanvas
+router.patch(
+  "/save-later/:canvasId/status",
+  checkCanvasAccess,
+  canvasController.updateCanvasSavedStatus
 );
 
 router.post(
   "/:channelId",
   canvasController.createCanvas
+);
+
+// ── Owner-only routes ───────────────────────────────────────────────────────
+router.delete(
+  "/:canvasId",
+  checkCanvasAccess,
+  requireCanvasRole("owner"),
+  canvasController.deleteCanvas
 );
 
 export default router;

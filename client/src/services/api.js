@@ -182,8 +182,8 @@ export const messageAPI = {
     api.delete(`/messages/${id}/reactions/${emoji}`),
   pin: (id) => api.post(`/messages/${id}/pin`),
   unpin: (id) => api.delete(`/messages/${id}/pin`),
-  forward: (id, destinationIds) =>
-    api.post(`/messages/${id}/forward`, { destinationIds }),
+  forward: (id, destinationIds, attachmentFileIds) =>
+    api.post(`/messages/${id}/forward`, { destinationIds, attachmentFileIds }),
   // Bulk forward multiple messages at once
   forwardBulk: (messageIds, destinationIds) =>
     api.post(`/messages/${messageIds[0]}/forward`, { messageIds, destinationIds }),

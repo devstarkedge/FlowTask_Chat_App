@@ -13,9 +13,11 @@ import logger from '../../utils/logger'
 /**
  * ForwardMessageModal — select one or more channels/DMs to forward message(s) to.
  * Accepts `messages` (array) for multi-message or `message` (single) for single-message forwarding.
+ * `attachmentFileIds` — optional array of file IDs to forward (when forwarding a single file
+ *   from a multi-file message, the backend filters file references to only these IDs).
  * DM names are derived from `channel.name` which is already decorated by the backend.
  */
-export default function ForwardMessageModal({ message, messages, onClose, onForwardComplete }) {
+export default function ForwardMessageModal({ message, messages, attachmentFileIds, onClose, onForwardComplete }) {
   const { user } = useAuthStore()
   const channels = useChannelStore((s) => s.channels)
   const [searchQuery, setSearchQuery] = useState('')
@@ -77,7 +79,9 @@ export default function ForwardMessageModal({ message, messages, onClose, onForw
         const messageIds = messagesToForward.map(m => m._id)
         await messageAPI.forwardBulk(messageIds, destinationIds)
       } else {
-        await messageAPI.forward(messagesToForward[0]._id, destinationIds)
+        // attachmentFileIds is passed through when forwarding a single file from
+        // a multi-file message — the backend filters file references to only these IDs.
+        await messageAPI.forward(messagesToForward[0]._id, destinationIds, attachmentFileIds)
       }
       const msgLabel = isMulti ? `${messagesToForward.length} messages` : 'Message'
 
@@ -98,7 +102,7 @@ export default function ForwardMessageModal({ message, messages, onClose, onForw
       toast.error(err.response?.data?.error?.message || 'Failed to forward message')
       setIsForwarding(false)
     }
-  }, [selectedIds, messagesToForward, isMulti, onClose])
+  }, [selectedIds, messagesToForward, isMulti, attachmentFileIds, onClose])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') onClose()

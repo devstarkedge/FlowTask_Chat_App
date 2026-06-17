@@ -74,6 +74,12 @@ const canvasSchema = new Schema(
     },
 
     permissions: {
+      // Primary access level controls the default access for this canvas
+      accessLevel: {
+        type: String,
+        enum: ["invite_only", "view", "edit"],
+        default: "view",
+      },
       visibility: {
         type: String,
         enum: ["channel", "workspace", "private"],
@@ -83,12 +89,44 @@ const canvasSchema = new Schema(
         type: Boolean,
         default: true,
       },
+      // Per-user access with role
+      users: [{
+        userId: {
+          type: Schema.Types.ObjectId,
+          ref: "ChatUser",
+        },
+        role: {
+          type: String,
+          enum: ["viewer", "editor"],
+          default: "viewer",
+        },
+        grantedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        grantedBy: {
+          type: Schema.Types.ObjectId,
+          ref: "ChatUser",
+        },
+      }],
+      // Backward-compatible: raw user IDs (deprecated, use users[] instead)
       allowedUserIds: [{
         type: Schema.Types.ObjectId,
         ref: "ChatUser",
       }],
       allowedRoleIds: [{
         type: String,
+      }],
+      channels: [{
+        channelId: {
+          type: Schema.Types.ObjectId,
+          ref: "Channel",
+        },
+        role: {
+          type: String,
+          enum: ["viewer", "editor"],
+          default: "viewer",
+        },
       }],
     },
 

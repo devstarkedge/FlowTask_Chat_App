@@ -17,6 +17,7 @@ import {
 import { useCanvasStore } from "../../../stores/canvasStore";
 import { messageAPI } from "../../../services/api";
 import { useCanvasUiStore } from "../../../stores/canvasUiStore";
+import { useAuthStore } from "../../../stores/authStore";
 import CommentThreadSidebar from "../comments/CommentThreadSidebar";
 import CanvasHistoryPanel from "../history/CanvasHistoryPanel";
 import CanvasDetailsSidebar from "../details/CanvasDetailsSidebar";
@@ -33,9 +34,11 @@ import CanvasThreeDotMenu from "../CanvasThreeDotMenu";
 import EmojiPickerPortal from "../../chat/EmojiPickerPortal";
 import CanvasBottomToolbar from "../CanvasBottomToolbar";
 import CanvasInsertMenu from "../CanvasInsertMenu";
+import toast from "react-hot-toast";
 import "../canvas-enterprise.css";
 
 const COLLAB_TIMEOUT_MS = 4_000;
+const PERMISSION_TOAST_MESSAGE = "You do not have permission to edit this canvas.";
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -53,6 +56,63 @@ function coverStyle(cover) {
   return { background: cover.value };
 }
 
+// ── Permission Role Helpers ──────────────────────────────────────────────────────
+// Helper to extract ID from populated or non-populated user fields.
+// (canvas.createdBy can be a populated object { _id, name, avatar } or a plain ObjectId)
+function extractUserId(field) {
+  if (!field) return null;
+  if (typeof field === 'object' && field._id) return field._id.toString();
+  return field.toString();
+}
+
+// Priority: Owner > Editor > Viewer
+function getCanvasRole(canvas) {
+  if (!canvas) return null;
+  const currentUser = useAuthStore.getState().user;
+  if (!currentUser) return null;
+  const userId = currentUser._id?.toString();
+  if (!userId) return null;
+
+  // 1. Owner — full access, overrides ALL share settings
+  const createdById = extractUserId(canvas.createdBy);
+  if (createdById === userId) return "owner";
+
+  // 2. Editor — explicit editor permission via share settings
+  const users = canvas.permissions?.users || [];
+  const userPerm = users.find((u) => u.userId?.toString() === userId);
+  if (userPerm && userPerm.role === "editor") return "editor";
+
+  // 3. Editor — via accessLevel "edit" (channel members can edit)
+  if (canvas.permissions?.accessLevel === "edit") return "editor";
+
+  // 4. Viewer — explicit viewer permission via share settings
+  if (userPerm && userPerm.role === "viewer") return "viewer";
+
+  // 5. Viewer — legacy allowedUserIds
+  const legacyIds = canvas.permissions?.allowedUserIds || [];
+  if (legacyIds.some((id) => id.toString() === userId)) return "viewer";
+
+  // 6. Viewer — via accessLevel "view" (channel members can view)
+  if (canvas.permissions?.accessLevel === "view") return "viewer";
+
+  // 7. Viewer — via visibility "channel" or "workspace"
+  const visibility = canvas.permissions?.visibility || "channel";
+  if (visibility === "channel" || visibility === "workspace") return "viewer";
+
+  // 8. No access — "invite_only" with no explicit permission
+  return null;
+}
+
+function canEditCanvas(canvas) {
+  const role = getCanvasRole(canvas);
+  return role === "owner" || role === "editor";
+}
+
+function canDeleteCanvas(canvas) {
+  const role = getCanvasRole(canvas);
+  return role === "owner";
+}
+
 export default function CanvasEditorUI({
   canvas,
   onSave,
@@ -64,6 +124,9 @@ export default function CanvasEditorUI({
   const [collabTimedOut, setCollabTimedOut] = useState(false);
   const [mentionType, setMentionType] = useState(null);
   const [mentionQuery, setMentionQuery] = useState("");
+  // Position for the mention dropdown, computed from the cursor coordinates
+  // so it opens beside the caret rather than at a fixed location.
+  const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
   const [coverHovered, setCoverHovered] = useState(false);
   const [titleHovered, setTitleHovered] = useState(false);
   const [showCoverPicker, setShowCoverPicker] = useState(false);
@@ -76,6 +139,9 @@ export default function CanvasEditorUI({
   const emojiBtnRef = useRef(null);
   const toggleBtnRef = useRef(null);
   const threeDotBtnRef = useRef(null);
+  // Ref for the editor wrapper so we can compute cursor-relative positions
+  // for floating UI like the mention dropdown.
+  const editorWrapperRef = useRef(null);
 
   const {
     comments,
@@ -101,6 +167,10 @@ export default function CanvasEditorUI({
   const closeSlashMenu = useCanvasUiStore((s) => s.closeSlashMenu);
   const openSlashMenu = useCanvasUiStore((s) => s.openSlashMenu);
 
+  // ── Permission enforcement ───────────────────────────────────────────────────────
+  const isViewOnly = !canEditCanvas(canvas);
+  const permissionToastShownRef = useRef(false);
+
   const { ydoc, provider, status, awarenessUsers } = useCanvasCollaboration(
     canvas?._id,
   );
@@ -110,6 +180,57 @@ export default function CanvasEditorUI({
     provider,
     ydoc,
   });
+
+  // Enforce read-only for viewers: set editor to non-editable and show toast
+  useEffect(() => {
+    if (!editor) return;
+    if (isViewOnly) {
+      editor.setEditable(false);
+      if (!permissionToastShownRef.current) {
+        permissionToastShownRef.current = true;
+        toast.error(PERMISSION_TOAST_MESSAGE, { duration: 4000 });
+      }
+    } else {
+      // Only re-enable if not viewing a historical version
+      if (!viewingVersion) {
+        editor.setEditable(true);
+      }
+    }
+  }, [editor, isViewOnly, viewingVersion]);
+
+  // Reset toast flag when canvas changes
+  useEffect(() => {
+    permissionToastShownRef.current = false;
+  }, [canvas?._id]);
+
+  // Block typing/paste events for view-only users at the DOM level
+  useEffect(() => {
+    if (!editor || !isViewOnly) return;
+    const dom = editor.view?.dom;
+    if (!dom) return;
+
+    const blockEdit = (e) => {
+      // Allow Tab key for accessibility
+      if (e.key === "Tab") return;
+      // Allow Ctrl+C / Cmd+C for copy
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!permissionToastShownRef.current) {
+        permissionToastShownRef.current = true;
+        toast.error(PERMISSION_TOAST_MESSAGE, { duration: 3000 });
+      }
+    };
+
+    dom.addEventListener("keydown", blockEdit, true);
+    dom.addEventListener("paste", (e) => { e.preventDefault(); }, true);
+    dom.addEventListener("drop", (e) => { e.preventDefault(); }, true);
+    dom.addEventListener("input", (e) => { e.preventDefault(); }, true);
+
+    return () => {
+      dom.removeEventListener("keydown", blockEdit, true);
+    };
+  }, [editor, isViewOnly]);
 
   // Toolbar visibility: only re-render on focus/blur, NOT on every
   // editor update or selection change.  Use a counter state that
@@ -155,6 +276,10 @@ export default function CanvasEditorUI({
 
   // File Upload Helper
   const triggerFileSelect = (nodeType) => {
+    if (isViewOnly) {
+      toast.error(PERMISSION_TOAST_MESSAGE);
+      return;
+    }
     fileTypeRef.current = nodeType;
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -215,6 +340,10 @@ export default function CanvasEditorUI({
   };
 
   const insertMedia = async (file, nodeType) => {
+    if (isViewOnly) {
+      toast.error(PERMISSION_TOAST_MESSAGE);
+      return;
+    }
     if (!editor) return;
     const localUrl = URL.createObjectURL(file);
     const name = file.name;
@@ -272,6 +401,10 @@ export default function CanvasEditorUI({
 
   // Media Recording Triggers
   const startRecording = async (type) => {
+    if (isViewOnly) {
+      toast.error(PERMISSION_TOAST_MESSAGE);
+      return;
+    }
     setIsInsertMenuOpen(false);
     setRecordingType(type);
     setRecordingState("recording");
@@ -346,6 +479,10 @@ export default function CanvasEditorUI({
 
   // Insert Menu Handlers - handles all item IDs from the new grouped menu
   const handleInsertMenuSelect = (id) => {
+    if (isViewOnly) {
+      toast.error(PERMISSION_TOAST_MESSAGE);
+      return;
+    }
     if (!editor) return;
 
     switch (id) {
@@ -440,7 +577,8 @@ export default function CanvasEditorUI({
     }
   };
 
-  // Mention detection
+  // Mention detection — also computes cursor-relative position for the
+  // dropdown so it opens beside the caret (not at a fixed location).
   useEffect(() => {
     if (!editor) return undefined;
     const detect = () => {
@@ -463,6 +601,17 @@ export default function CanvasEditorUI({
           const query = match[2];
           setMentionType(triggerChar === "@" ? "user" : "channel");
           setMentionQuery(query);
+          // Compute caret position in viewport coordinates so the
+          // mention dropdown renders directly beside the cursor.
+          try {
+            const coords = editor.view.coordsAtPos(from);
+            setMentionPosition({
+              top: coords.bottom + 4,  // 4px below the caret baseline
+              left: coords.left,
+            });
+          } catch (_) {
+            // fall back to last known position on positioning errors
+          }
         } else {
           setMentionType(null);
           setMentionQuery("");
@@ -482,6 +631,10 @@ export default function CanvasEditorUI({
 
   const handleMentionSelect = useCallback(
     (item) => {
+      if (isViewOnly) {
+        toast.error(PERMISSION_TOAST_MESSAGE);
+        return;
+      }
       if (!editor) return;
       try {
         const { state } = editor;
@@ -519,23 +672,31 @@ export default function CanvasEditorUI({
         setMentionQuery("");
       } catch (err) {}
     },
-    [editor, mentionType],
+    [editor, mentionType, isViewOnly],
   );
 
   // Mention from toolbar button
   const handleMentionFromToolbar = useCallback(() => {
+    if (isViewOnly) {
+      toast.error(PERMISSION_TOAST_MESSAGE);
+      return;
+    }
     if (!editor) return;
     editor.chain().focus().insertContent("@").run();
-  }, [editor]);
+  }, [editor, isViewOnly]);
 
   // Emoji insert at cursor
   const handleEmojiSelect = useCallback(
     (emoji) => {
+      if (isViewOnly) {
+        toast.error(PERMISSION_TOAST_MESSAGE);
+        return;
+      }
       if (!editor) return;
       editor.chain().focus().insertContent(emoji).run();
       setShowEmojiPicker(false);
     },
-    [editor],
+    [editor, isViewOnly],
   );
 
   // Collaboration timeout
@@ -565,11 +726,17 @@ export default function CanvasEditorUI({
     () =>
       debounce(async (nextTitle) => {
         if (!canvas?._id) return;
+        // Block title rename for view-only users
+        if (isViewOnly) {
+          toast.error(PERMISSION_TOAST_MESSAGE);
+          setTitle(canvas.title || "Untitled");
+          return;
+        }
         await updateCanvasMetadata(canvas._id, {
           title: nextTitle.trim() || "Untitled canvas",
         });
       }, 600),
-    [canvas?._id, updateCanvasMetadata],
+    [canvas?._id, updateCanvasMetadata, isViewOnly],
   );
 
   useEffect(() => () => debouncedTitleSave.cancel(), [debouncedTitleSave]);
@@ -581,19 +748,31 @@ export default function CanvasEditorUI({
 
   // Cover actions
   const handleCoverReplace = useCallback(() => {
+    if (isViewOnly) {
+      toast.error(PERMISSION_TOAST_MESSAGE);
+      return;
+    }
     setShowCoverPicker(true);
-  }, []);
+  }, [isViewOnly]);
 
   const handleCoverReposition = useCallback(() => {
+    if (isViewOnly) {
+      toast.error(PERMISSION_TOAST_MESSAGE);
+      return;
+    }
     setIsRepositioning(true);
-  }, []);
+  }, [isViewOnly]);
 
   const handleCoverRemove = useCallback(async () => {
+    if (isViewOnly) {
+      toast.error(PERMISSION_TOAST_MESSAGE);
+      return;
+    }
     if (canvas?._id) {
       await updateCanvasMetadata(canvas._id, { cover: null });
     }
     setIsRepositioning(false);
-  }, [canvas?._id, updateCanvasMetadata]);
+  }, [canvas?._id, updateCanvasMetadata, isViewOnly]);
 
   const handleOpenShareModal = useCallback(() => {
     setShowShareModal(true);
@@ -622,10 +801,10 @@ export default function CanvasEditorUI({
 
   // Exit read-only mode when clearing viewingVersion
   useEffect(() => {
-    if (!viewingVersion && editor) {
+    if (!viewingVersion && editor && !isViewOnly) {
       editor.setEditable(true);
     }
-  }, [viewingVersion, editor]);
+  }, [viewingVersion, editor, isViewOnly]);
 
   const handleDocumentComment = (content) => {
     const firstBlockId = blocks[0]?._id;
@@ -654,54 +833,78 @@ export default function CanvasEditorUI({
 
   return (
     <div className="canvas-editor-ui-shell">
-      {/* Secondary Tab Navigation */}
-      {tabs.length > 0 && (
-        <div className="canvas-tab-nav">
-          <div className="canvas-tabs-container">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                className={`canvas-tab ${activeTab === tab.id ? "active" : ""}`}
-                onClick={tab.onClick}
-              >
-                {tab.icon && (
-                  <span className="canvas-tab-icon">{tab.icon}</span>
-                )}
-                <span className="canvas-tab-label">{tab.label}</span>
-              </button>
-            ))}
-          </div>
-          <div style={{ position: "relative" }}>
+      {/* Secondary Tab Navigation — always render to keep three-dot button available */}
+      <div className="canvas-tab-nav">
+        <div className="canvas-tabs-container">
+          {tabs.length > 0 && tabs.map((tab) => (
             <button
-              className="canvas-topbar-menu"
-              aria-label="More options"
-              onClick={() => setShowThreeDotMenu((v) => !v)}
+              key={tab.id}
+              className={`canvas-tab ${activeTab === tab.id ? "active" : ""}`}
+              onClick={tab.onClick}
             >
-              <MoreHorizontal size={18} />
+              {tab.icon && (
+                <span className="canvas-tab-icon">{tab.icon}</span>
+              )}
+              <span className="canvas-tab-label">{tab.label}</span>
             </button>
-            <CanvasThreeDotMenu
-              canvas={canvas}
-              isOpen={showThreeDotMenu}
-              onClose={() => setShowThreeDotMenu(false)}
-              onOpenCoverPicker={() => {
-                setShowCoverPicker(true);
-                setShowThreeDotMenu(false);
-              }}
-              onBack={onBack}
-              onOpenShareModal={handleOpenShareModal}
-              onCoverReplace={handleCoverReplace}
-              onCoverReposition={handleCoverReposition}
-              onCoverRemove={handleCoverRemove}
-              hasCover={!!canvas?.cover}
-            />
-          </div>
+          ))}
         </div>
-      )}
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <button
+            className="canvas-topbar-menu"
+            aria-label="More options"
+            onClick={() => setShowThreeDotMenu((v) => !v)}
+          >
+            {/* <MoreHorizontal size={18} /> */}
+          </button>
+          <CanvasThreeDotMenu
+            canvas={canvas}
+            isOpen={showThreeDotMenu}
+            onClose={() => setShowThreeDotMenu(false)}
+            onOpenCoverPicker={() => {
+              setShowCoverPicker(true);
+              setShowThreeDotMenu(false);
+            }}
+            onBack={onBack}
+            onOpenShareModal={handleOpenShareModal}
+            onCoverReplace={handleCoverReplace}
+            onCoverReposition={handleCoverReposition}
+            onCoverRemove={handleCoverRemove}
+            hasCover={!!canvas?.cover}
+            isViewOnly={isViewOnly}
+            canvasRole={getCanvasRole(canvas)}
+          />
+        </div>
+      </div>
 
       {/* Main Content */}
       <div className="canvas-editor-container">
         <main className="canvas-scroll-surface">
           <article className="canvas-document-surface">
+            {/* View-only banner */}
+            {isViewOnly && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  padding: "6px 12px",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "var(--warning-color, #f59e0b)",
+                  background: "var(--bg-secondary)",
+                  borderBottom: "1px solid var(--border-primary)",
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                View-only — You do not have permission to edit this canvas.
+              </div>
+            )}
+
             {/* Unified hover zone for cover + title */}
             <div
               className="canvas-cover-title-zone"
@@ -720,7 +923,13 @@ export default function CanvasEditorUI({
                   <div className="canvas-cover-actions">
                     <button
                       className="canvas-cover-change-btn"
-                      onClick={() => setShowCoverPicker(true)}
+                      onClick={() => {
+                        if (isViewOnly) {
+                          toast.error(PERMISSION_TOAST_MESSAGE);
+                          return;
+                        }
+                        setShowCoverPicker(true);
+                      }}
                     >
                       <ImageIcon size={14} />
                       Change cover
@@ -728,6 +937,10 @@ export default function CanvasEditorUI({
                     <button
                       className="canvas-cover-remove-btn"
                       onClick={async () => {
+                        if (isViewOnly) {
+                          toast.error(PERMISSION_TOAST_MESSAGE);
+                          return;
+                        }
                         if (canvas?._id) {
                           await updateCanvasMetadata(canvas._id, {
                             cover: null,
@@ -746,7 +959,13 @@ export default function CanvasEditorUI({
               {!canvas?.cover && (
                 <button
                   className={`canvas-add-cover-btn${showCoverActions ? " is-visible" : ""}`}
-                  onClick={() => setShowCoverPicker(true)}
+                  onClick={() => {
+                    if (isViewOnly) {
+                      toast.error(PERMISSION_TOAST_MESSAGE);
+                      return;
+                    }
+                    setShowCoverPicker(true);
+                  }}
                 >
                   <ImageIcon size={14} />
                   Add cover
@@ -770,11 +989,14 @@ export default function CanvasEditorUI({
                 value={title}
                 placeholder="Your canvas title"
                 spellCheck={false}
+                readOnly={isViewOnly}
+                style={isViewOnly ? { cursor: "default", opacity: 0.8 } : {}}
                 onChange={(event) => {
+                  if (isViewOnly) return;
                   setTitle(event.target.value);
                   debouncedTitleSave(event.target.value);
                 }}
-                onBlur={() => debouncedTitleSave.flush()}
+                onBlur={() => !isViewOnly && debouncedTitleSave.flush()}
               />
             </div>
 
@@ -793,24 +1015,56 @@ export default function CanvasEditorUI({
                     canvasTitle={title}
                     channelId={canvas?.channelId}
                     onClose={() => setShowCoverPicker(false)}
+                    isViewOnly={isViewOnly}
                   />
                 </div>
               </div>
             )}
 
+            {/* Share Modal */}
+            {showShareModal && (
+              <CanvasShareModal
+                canvas={canvas}
+                isOpen={showShareModal}
+                onClose={() => setShowShareModal(false)}
+                channelId={canvas?.channelId}
+              />
+            )}
+
             {/* Editor */}
-            <div style={{ position: "relative" }}>
-              <EditorContent editor={editor} spellCheck={false} />
-              {mentionType && (
-                <MentionDropdown
-                  type={mentionType}
-                  query={mentionQuery}
-                  channelId={canvas?.channelId}
-                  position={{ bottom: "100%", left: 0 }}
-                  onSelect={handleMentionSelect}
-                  onClose={() => setMentionType(null)}
+            <div ref={editorWrapperRef} style={{ position: "relative" }}>
+              {isViewOnly && (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    zIndex: 5,
+                    cursor: "default",
+                  }}
+                  onClick={() => {
+                    if (!permissionToastShownRef.current) {
+                      permissionToastShownRef.current = true;
+                      toast.error(PERMISSION_TOAST_MESSAGE, { duration: 3000 });
+                    }
+                  }}
                 />
               )}
+              <EditorContent editor={editor} spellCheck={false} />
+              {/* Mention dropdown rendered via portal so it is not clipped
+                  by overflow containers.  Position is computed from the caret
+                  coordinates using editor.view.coordsAtPos(). */}
+              {mentionType &&
+                createPortal(
+                  <MentionDropdown
+                    type={mentionType}
+                    query={mentionQuery}
+                    channelId={canvas?.channelId}
+                    position={mentionPosition}
+                    onSelect={handleMentionSelect}
+                    onClose={() => setMentionType(null)}
+                  />,
+                  document.body,
+                )}
             </div>
             <CursorOverlay awarenessUsers={awarenessUsers} />
           </article>
@@ -934,27 +1188,29 @@ export default function CanvasEditorUI({
       )}
 
       {/* Floating Bottom Toolbar with Insert Menu */}
-      <CanvasBottomToolbar
-        editor={editor}
-        showBottomToolbar={showBottomToolbar}
-        isInsertMenuOpen={isInsertMenuOpen}
-        onToggleInsertMenu={() => setIsInsertMenuOpen((v) => !v)}
-        onEmojiClick={() => setShowEmojiPicker((v) => !v)}
-        onFileClick={() => triggerFileSelect("fileAttachment")}
-        onMentionClick={handleMentionFromToolbar}
-        emojiBtnRef={emojiBtnRef}
-        toggleBtnRef={toggleBtnRef}
-      >
-        {/* Insert Menu - rendered inside toolbar container for proper positioning */}
-        {isInsertMenuOpen && (
-          <CanvasInsertMenu
-            editor={editor}
-            onSelect={handleInsertMenuSelect}
-            onClose={() => setIsInsertMenuOpen(false)}
-            triggerRef={toggleBtnRef}
-          />
-        )}
-      </CanvasBottomToolbar>
+      {!isViewOnly && (
+        <CanvasBottomToolbar
+          editor={editor}
+          showBottomToolbar={showBottomToolbar}
+          isInsertMenuOpen={isInsertMenuOpen}
+          onToggleInsertMenu={() => setIsInsertMenuOpen((v) => !v)}
+          onEmojiClick={() => setShowEmojiPicker((v) => !v)}
+          onFileClick={() => triggerFileSelect("fileAttachment")}
+          onMentionClick={handleMentionFromToolbar}
+          emojiBtnRef={emojiBtnRef}
+          toggleBtnRef={toggleBtnRef}
+        >
+          {/* Insert Menu - rendered inside toolbar container for proper positioning */}
+          {isInsertMenuOpen && (
+            <CanvasInsertMenu
+              editor={editor}
+              onSelect={handleInsertMenuSelect}
+              onClose={() => setIsInsertMenuOpen(false)}
+              triggerRef={toggleBtnRef}
+            />
+          )}
+        </CanvasBottomToolbar>
+      )}
 
       {/* Emoji Picker Portal */}
       <EmojiPickerPortal
@@ -975,51 +1231,6 @@ export default function CanvasEditorUI({
         editor={editor}
         menu={slashMenu}
         onClose={closeSlashMenu}
-      />
-
-      {/* Three-dot menu rendered via portal to avoid scroll-surface clipping */}
-      {showThreeDotMenu &&
-        createPortal(
-          <CanvasThreeDotMenu
-            canvas={canvas}
-            isOpen={true}
-            onClose={() => setShowThreeDotMenu(false)}
-            onOpenCoverPicker={() => {
-              setShowCoverPicker(true);
-              setShowThreeDotMenu(false);
-            }}
-            onBack={onBack}
-            onOpenShareModal={handleOpenShareModal}
-            onCoverReplace={handleCoverReplace}
-            onCoverReposition={handleCoverReposition}
-            onCoverRemove={handleCoverRemove}
-            hasCover={!!canvas?.cover}
-            styleOverride={(() => {
-              const btn = threeDotBtnRef.current;
-              if (!btn) return { position: "fixed", top: 60, right: 20, margin: 0 };
-              const rect = btn.getBoundingClientRect();
-              const menuMaxH = 480;
-              const spaceBelow = window.innerHeight - rect.bottom - 20;
-              const flipUp = spaceBelow < menuMaxH && rect.top > spaceBelow;
-              return {
-                position: "fixed",
-                ...(flipUp
-                  ? { bottom: window.innerHeight - rect.top + 6 }
-                  : { top: rect.bottom + 6 }),
-                right: window.innerWidth - rect.right,
-                margin: 0,
-              };
-            })()}
-          />,
-          document.body
-        )}
-
-      {/* Share Canvas Modal */}
-      <CanvasShareModal
-        canvas={canvas}
-        isOpen={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        channelId={canvas?.channelId}
       />
     </div>
   );

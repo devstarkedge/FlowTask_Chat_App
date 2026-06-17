@@ -490,9 +490,9 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
           {/* ══ HEADER ══ */}
           <div className="dl-header">
             <div className="dl-header-left">
-              <div className="dl-header-icon">
-                <Download size={17} color="#fff" />
-              </div>
+          <div className="dl-header-icon">
+            <Download size={17} color="var(--text-white)" />
+          </div>
               <div>
                 <p className="dl-title">Downloads</p>
                 <p className="dl-subtitle">
@@ -565,7 +565,7 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
                           {file.status === "completed" ? (
                             <div
                               className="dl-file-meta"
-                              style={{ cursor: "pointer", color: "#3b82f6" }}
+                          style={{ cursor: "pointer", color: "var(--accent-primary)" }}
                               onClick={() => handlePreview(file)}
                             ></div>
                           ) : file.status === "downloading" ? (

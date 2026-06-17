@@ -9,7 +9,7 @@ const MentionDropdown = memo(function MentionDropdown({
   type,        // 'user' or 'channel'
   query,       // search string after @ or #
   channelId,   // current channel for member lookup
-  position,    // { top, left } absolute position
+  position,    // { top, left } viewport coordinates (fixed positioning)
   onSelect,    // (item) => void
   onClose,     // () => void
 }) {
@@ -103,26 +103,36 @@ const MentionDropdown = memo(function MentionDropdown({
 
   if (items.length === 0) return null
 
+  // Compute fixed position with flip logic so the dropdown stays in viewport
+  const dropdownWidth = 260
+  const dropdownMaxHeight = 240
+  const top = position?.top ?? 0
+  const left = position?.left ?? 0
+  // Flip horizontally if the dropdown would overflow the right edge
+  const flipRight = left + dropdownWidth > window.innerWidth - 12
+  // Flip vertically if the dropdown would overflow the bottom edge
+  const flipDown = top + dropdownMaxHeight > window.innerHeight - 12
+
   return (
     <div
       ref={listRef}
       className="mention-dropdown animate-fade-in-scale"
       style={{
-        position: 'absolute',
-        bottom: position?.bottom ?? '100%',
-        left: position?.left ?? 0,
+        position: 'fixed',
+        top: flipDown ? top - dropdownMaxHeight - 8 : top,
+        left: flipRight ? left - dropdownWidth + 60 : left,
         // Raise above canvas selection toolbar (z-index:1000)
         zIndex: 1200,
         minWidth: 220,
         maxWidth: 320,
-        maxHeight: 240,
+        maxHeight: dropdownMaxHeight,
         overflowY: 'auto',
         background: 'var(--bg-modal)',
         border: '1px solid var(--border-primary)',
         borderRadius: 'var(--radius-lg)',
         boxShadow: 'var(--shadow-lg)',
         padding: '4px',
-        marginBottom: 4,
+        marginTop: 4,
         pointerEvents: 'auto',
       }}
     >

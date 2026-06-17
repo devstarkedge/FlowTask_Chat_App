@@ -140,6 +140,14 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
   const cursorPluginRegistered = useRef(false);
   const providerRef = useRef(provider);
   const ydocRef = useRef(ydoc);
+  // Track whether the editor has been locally edited since the last
+  // non-collab sync.  When true, the sync effect skips setContent()
+  // to prevent cursor resets / editor flicker after file uploads or
+  // debounced saves that bounce content through the store.
+  const localEditRef = useRef(false);
+  // Track whether the initial content has been set so we only run
+  // token conversion once (not on every canvas.content change).
+  const initialContentSetRef = useRef(false);
 
   // Update refs when provider/ydoc change
   useEffect(() => {
@@ -170,10 +178,14 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
     [onSave],
   );
 
-  // Memoize nodeViews to prevent editor recreation on every render
+  // Memoize nodeViews to prevent editor recreation on every render.
+  // taskItem is registered here so BlockWrapper handles checklist items,
+  // ensuring cursor lands correctly beside the checkbox and Enter key
+  // creates new items via TipTap's built-in TaskItem behavior.
   const nodeViews = useMemo(() => ({
     paragraph: ReactNodeViewRenderer(BlockWrapper),
     heading: ReactNodeViewRenderer(BlockWrapper),
+    taskItem: ReactNodeViewRenderer(BlockWrapper),
     templateVariable: ReactNodeViewRenderer(TemplateVariableView),
   }), []);
 
@@ -396,6 +408,11 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
     nodeViews,
     // Use stable callback refs so useEditor never sees changing deps
     onUpdate: ({ editor: e }) => {
+      // Mark that a local edit occurred so the non-collab sync effect
+      // skips setContent() on the next canvas.content store update.
+      // This prevents cursor resets and editor flicker after file uploads
+      // and debounced saves.
+      localEditRef.current = true;
       wordCountRef.current = e.storage.characterCount.words();
       syncContextualUiRef.current(e);
       debouncedSave(e.getJSON());
@@ -691,17 +708,30 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
     }
   }, [canvas?.content, editor]);
 
-  // For non-collab mode, convert tokens after initial content is set
+  // For non-collab mode: set initial content and convert tokens.
+  // CRITICAL: This effect must NOT call setContent() after local edits
+  // (file uploads, typing, etc.) because the save cycle bounces content
+  // through the store, which would trigger setContent() and reset the
+  // cursor / cause editor flicker.  The localEditRef guard prevents this.
   useEffect(() => {
     if (!editor || providerRef.current) return undefined;
+
+    // If the content change was triggered by a local edit (typing, file
+    // upload, node insert, etc.), skip setContent() entirely — the editor
+    // already has the correct content.
+    if (localEditRef.current) {
+      localEditRef.current = false;
+      return undefined;
+    }
+
     try {
-      // Ensure editor mirrors the latest canvas content when not in
-      // collaboration mode, but avoid setting content when it's already
-      // identical to prevent redundant updates that can trigger save
-      // cycles.
       const newJSON = sanitizeDocJSON(canvas?.content || EMPTY_DOC);
       const currentJSON =
         typeof editor.getJSON === "function" ? editor.getJSON() : null;
+
+      // Only call setContent() when:
+      // 1. Initial load (no current content), OR
+      // 2. External change (content differs and we haven't just edited locally)
       if (
         !currentJSON ||
         JSON.stringify(currentJSON) !== JSON.stringify(newJSON)
@@ -713,12 +743,12 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
           // eslint-disable-next-line no-console
           console.warn("convertTokensToVariableNodes failed", e);
         }
+        initialContentSetRef.current = true;
       }
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.warn("convertTokensToVariableNodes failed", e);
+      console.warn("non-collab content sync failed", e);
     }
-    // run on editor/content changes
   }, [editor, canvas?.content]);
 
   // Ctrl/Cmd+S shortcut.

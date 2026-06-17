@@ -1202,9 +1202,11 @@ export const sendScheduledNow = asyncHandler(async (req, res) => {
 /**
  * POST /api/chat/messages/:id/forward
  * Forward a message to one or more destination channels.
+ * Optional `attachmentFileIds` in body — when present, only those specific file
+ * references are cloned (used when forwarding a single file from a multi-file message).
  */
 export const forwardMessage = asyncHandler(async (req, res) => {
-  const { destinationIds, messageIds } = req.body;
+  const { destinationIds, messageIds, attachmentFileIds } = req.body;
   const messageId = req.params.id; // single-message route param (optional when using body.messageIds)
 
   if (!destinationIds || !Array.isArray(destinationIds) || destinationIds.length === 0) {
@@ -1229,6 +1231,7 @@ export const forwardMessage = asyncHandler(async (req, res) => {
     messageId: hasSingle ? messageId : undefined,
     messageIds: hasBulk ? messageIds : undefined,
     destinationIds,
+    attachmentFileIds: Array.isArray(attachmentFileIds) ? attachmentFileIds : undefined,
     userId: req.user._id,
     workspaceId: req.workspaceId,
   });

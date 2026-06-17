@@ -6,6 +6,7 @@ import { useThemeStore } from './stores/themeStore'
 // Eager load workspace layout (most common route)
 import WorkspaceLayout from './components/layout/WorkspaceLayout'
 import DevTemplateSelector from './pages/DevTemplateSelector'
+import CanvasDeepLink from './components/canvas/CanvasDeepLink'
 
 // Lazy load auth & setup pages (rarely revisited after login)
 const LoginPage = lazy(() => import('./pages/LoginPage'))
@@ -77,6 +78,9 @@ function App() {
 
         {/* Legacy /chat redirect → workspace selector */}
         <Route path="/chat/*" element={user ? <Navigate to="/select-workspace" /> : <Navigate to="/login" />} />
+
+        {/* Canvas deep-link — loads canvas and redirects to workspace layout */}
+        <Route path="/canvas/:canvasId" element={user ? <CanvasDeepLink /> : <Navigate to="/login" />} />
 
         {/* Catch-all */}
         {import.meta.env.DEV && (

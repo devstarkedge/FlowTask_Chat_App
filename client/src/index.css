@@ -191,6 +191,10 @@
   --preview-nav-bg-hover: rgba(0, 0, 0, 0.8);
   --preview-audio-bg: rgba(0, 0, 0, 0.3);
   --preview-unsupported-bg: rgba(0, 0, 0, 0.3);
+  /* Preview controls always float on a dark backdrop — icons must always be white */
+  --preview-icon-color: #ffffff;
+  --preview-topbar-title-color: #ffffff;
+  --preview-meta-color: rgba(255, 255, 255, 0.65);
   --text-on-accent: #ffffff;
 }
 
@@ -219,7 +223,7 @@
 
   --text-primary: #000000;
   --text-secondary: #4b5563;
-  --text-muted: #9ca3af;
+  --text-muted: #6b7280;
   --text-white: #000000;
   --text-link: #151259;
   --text-tooltip: #f9fafb;
@@ -255,23 +259,32 @@
   --text-on-accent: #ffffff;
 
   /* Preview modal — light theme */
-  --preview-overlay: rgba(0, 0, 0, 0.5);
-  --preview-topbar-bg: linear-gradient(to bottom, rgba(0,0,0,0.65), transparent);
-  --preview-divider: rgba(0, 0, 0, 0.15);
-  --preview-btn-bg: rgba(0, 0, 0, 0.06);
-  --preview-btn-bg-hover: rgba(0, 0, 0, 0.12);
-  --preview-spinner-border: rgba(0, 0, 0, 0.12);
-  --preview-spinner-top: rgba(0, 0, 0, 0.5);
-  --preview-error-bg: rgba(0, 0, 0, 0.04);
-  --preview-error-btn-bg: rgba(0, 0, 0, 0.08);
-  --preview-card-bg: rgba(0, 0, 0, 0.03);
-  --preview-code-header-border: rgba(0, 0, 0, 0.08);
-  --preview-badge-bg: rgba(5, 150, 105, 0.1);
-  --preview-counter-bg: rgba(0, 0, 0, 0.55);
-  --preview-nav-bg: rgba(0, 0, 0, 0.4);
-  --preview-nav-bg-hover: rgba(0, 0, 0, 0.6);
-  --preview-audio-bg: rgba(0, 0, 0, 0.03);
-  --preview-unsupported-bg: rgba(0, 0, 0, 0.03);
+  /* Overlay is still dark so the file content stands out */
+  --preview-overlay: rgba(0, 0, 0, 0.55);
+  /* Topbar: solid dark band so white icons are always readable */
+  --preview-topbar-bg: linear-gradient(to bottom, rgba(15,15,30,0.88) 60%, transparent);
+  /* Divider & button surfaces use white-tint since they sit on the dark topbar */
+  --preview-divider: rgba(255, 255, 255, 0.25);
+  --preview-btn-bg: rgba(255, 255, 255, 0.12);
+  --preview-btn-bg-hover: rgba(255, 255, 255, 0.22);
+  /* Spinner — on dark overlay, white still works */
+  --preview-spinner-border: rgba(255, 255, 255, 0.2);
+  --preview-spinner-top: rgba(255, 255, 255, 0.85);
+  /* Error / card containers sit in the middle of the dark overlay — keep dark bg */
+  --preview-error-bg: rgba(20, 20, 40, 0.75);
+  --preview-error-btn-bg: rgba(255, 255, 255, 0.18);
+  --preview-card-bg: rgba(20, 20, 45, 0.82);
+  --preview-code-header-border: rgba(255, 255, 255, 0.12);
+  --preview-badge-bg: rgba(5, 150, 105, 0.2);
+  --preview-counter-bg: rgba(10, 10, 25, 0.72);
+  --preview-nav-bg: rgba(10, 10, 25, 0.6);
+  --preview-nav-bg-hover: rgba(10, 10, 25, 0.85);
+  --preview-audio-bg: rgba(20, 20, 45, 0.75);
+  --preview-unsupported-bg: rgba(20, 20, 45, 0.75);
+  /* Icons / text on preview controls — always white since backdrop is always dark */
+  --preview-icon-color: #ffffff;
+  --preview-topbar-title-color: #ffffff;
+  --preview-meta-color: rgba(255, 255, 255, 0.65);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -705,21 +718,6 @@ body {
   opacity: 0.9;
 }
 
-.message-content code {
-  background: rgba(255, 255, 255, 0.08);
-  padding: 2px 5px;
-  border-radius: 4px;
-  font-size: 13px;
-}
-
-.message-content pre {
-  background: rgba(0, 0, 0, 0.3);
-  padding: 12px;
-  border-radius: 8px;
-  overflow-x: auto;
-  margin-top: 8px;
-}
-
 .message-content strong {
   color: var(--text-white);
   font-weight: 700;
@@ -1147,13 +1145,13 @@ body {
 }
 
 .file-preview-topbar-title {
-  color: var(--text-white);
+  color: var(--preview-topbar-title-color);
   font-weight: 600;
   font-size: 14px;
 }
 
 .file-preview-topbar-meta {
-  color: var(--text-secondary);
+  color: var(--preview-meta-color);
   font-size: 12px;
 }
 
@@ -1167,7 +1165,7 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--text-white);
+  color: var(--preview-icon-color);
   transition: background var(--transition-fast);
 }
 
@@ -1188,7 +1186,7 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--text-white);
+  color: var(--preview-icon-color);
   z-index: 10;
   transition: background var(--transition-fast);
 }
@@ -1226,14 +1224,14 @@ body {
 }
 
 .file-preview-code-lines {
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.55);
   font-size: 12px;
 }
 
 .file-preview-code-content {
   margin: 0;
   padding: 16px;
-  color: var(--text-primary);
+  color: #e2e8f0;
   font-size: 13px;
   font-family: var(--font-mono);
   line-height: 1.6;
@@ -1256,7 +1254,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-white);
+  color: var(--preview-icon-color);
   flex-shrink: 0;
 }
 
@@ -1281,15 +1279,15 @@ body {
   padding: 8px 12px;
   text-align: left;
   font-weight: 700;
-  color: var(--text-primary);
-  border-bottom: 2px solid var(--border-secondary);
+  color: var(--preview-icon-color);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.12);
   white-space: nowrap;
 }
 
 .file-preview-csv-td {
   padding: 6px 12px;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-secondary);
+  color: var(--preview-meta-color);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   white-space: nowrap;
   max-width: 300px;
   overflow: hidden;
@@ -1304,7 +1302,7 @@ body {
   padding: 4px 12px;
   background: var(--preview-counter-bg);
   border-radius: var(--radius-full);
-  color: var(--text-white);
+  color: var(--preview-icon-color);
   font-size: 12px;
   font-weight: 500;
 }
@@ -1334,7 +1332,7 @@ body {
   gap: 6px;
   background: var(--preview-error-btn-bg);
   border: none;
-  color: var(--text-white);
+  color: var(--preview-icon-color);
   padding: 8px 20px;
   border-radius: 8px;
   cursor: pointer;
@@ -14411,6 +14409,7 @@ textarea:focus-visible,
   border-bottom: 1px solid var(--border-primary);
   background-color: var(--bg-secondary);
   min-height: 44px;
+  margin-bottom: 0;
 }
 
 .canvas-tabs-container {

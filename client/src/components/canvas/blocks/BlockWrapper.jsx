@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from "react";
 import { NodeViewWrapper, NodeViewContent } from "@tiptap/react";
 import { useCanvasStore } from "../../../stores/canvasStore";
+import { useCanvasCollabStore } from "../../../stores/canvasCollabStore";
 import { useCanvasUiStore } from "../../../stores/canvasUiStore";
 import ParagraphBlock from "./components/ParagraphBlock";
 import HeadingBlock from "./components/HeadingBlock";
@@ -50,9 +51,9 @@ export default function BlockWrapper({ node, editor, getPos }) {
   const comments = useCanvasStore((s) => s.comments);
   const openSidebar = useCanvasUiStore((s) => s.openSidebar);
   const setHoveredBlockId = useCanvasUiStore((s) => s.setHoveredBlockId);
-  const presence = useCanvasStore((s) => s.presence);
-  const cursors = useCanvasStore((s) => s.cursors);
-  const typing = useCanvasStore((s) => s.typing);
+  const presence = useCanvasCollabStore((s) => s.presence);
+  const cursors = useCanvasCollabStore((s) => s.cursors);
+  const typing = useCanvasCollabStore((s) => s.typing);
 
   const attrBlockId = node?.attrs?.blockId;
 

@@ -520,6 +520,71 @@ const LAYOUT_STYLES = `
   margin: 0;
 }
 
+/* Inline text/code preview for Files pane */
+.cl-file-code-preview {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+}
+.cl-file-code-preview__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-secondary);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+.cl-file-code-preview__badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent-green, #10b981);
+  background: rgba(16, 185, 129, 0.12);
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.cl-file-code-preview__lines {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.cl-file-code-preview__body {
+  flex: 1;
+  overflow: auto;
+  margin: 0;
+  padding: 14px 16px;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+}
+.cl-file-code-preview__loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.cl-file-code-preview__error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+
 .cl-activity-context-bar {
   display: flex;
   align-items: center;
@@ -1883,13 +1948,161 @@ function ActivityMainPane({
 
 /* ─── FilesMainPane ───────────────────────────────────────────────────────── */
 
+const TEXT_CODE_TYPES = [
+  'text/plain', 'text/csv', 'text/markdown', 'text/html', 'text/css',
+  'text/javascript', 'application/javascript', 'text/typescript',
+  'text/x-python', 'text/x-java-source', 'text/x-c', 'text/x-scss',
+  'text/x-sql', 'text/yaml', 'application/x-yaml', 'text/x-env',
+  'application/json', 'application/xml',
+];
+const TEXT_EXTS = ['txt', 'md', 'json', 'xml', 'js', 'ts', 'py', 'java', 'c', 'cpp', 'css', 'scss', 'html', 'sql', 'yaml', 'env', 'csv', 'log', 'jsx', 'tsx'];
+
+const LANG_LABEL_MAP = {
+  js: 'JavaScript', ts: 'TypeScript', py: 'Python', java: 'Java',
+  c: 'C', cpp: 'C++', json: 'JSON', xml: 'XML', html: 'HTML',
+  css: 'CSS', scss: 'SCSS', sql: 'SQL', yaml: 'YAML', md: 'Markdown',
+  txt: 'Plain Text', csv: 'CSV', env: 'Environment', log: 'Log',
+  jsx: 'JSX', tsx: 'TSX',
+};
+
+function getFileExt(name = '') {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  return ext !== name.toLowerCase() ? ext : '';
+}
+
+function isTextFile(file) {
+  if (!file) return false;
+  const mime = (file.mimeType || '').toLowerCase();
+  if (TEXT_CODE_TYPES.includes(mime)) return true;
+  const ext = getFileExt(file.fileName || file.originalName || '');
+  return TEXT_EXTS.includes(ext);
+}
+
+function isPdfFile(file) {
+  if (!file) return false;
+  return (file.mimeType || '').toLowerCase() === 'application/pdf';
+}
+
 function FilesMainPane({ selectedFile, files, onPreview, onDownload, onOpenInChat, onOpenMobileSidebar }) {
   const isImage = selectedFile?.mimeType?.startsWith("image/");
   const isVideo = selectedFile?.mimeType?.startsWith("video/");
   const isAudio = selectedFile?.mimeType?.startsWith("audio/");
+  const isText = isTextFile(selectedFile);
+  const isPdf = isPdfFile(selectedFile);
   const fileName = selectedFile?.fileName || selectedFile?.originalName || "Untitled file";
-  const fileIconColor = isImage ? "#3b82f6" : isVideo ? "#8b5cf6" : isAudio ? "#10b981" : "var(--text-muted)";
-  const FileTypeIcon = isImage ? ImageIcon : isVideo ? Film : isAudio ? Volume2 : File;
+  const fileIconColor = isImage ? "#3b82f6" : isVideo ? "#8b5cf6" : isAudio ? "#10b981" : isText ? "#f59e0b" : "var(--text-muted)";
+  const FileTypeIcon = isImage ? ImageIcon : isVideo ? Film : isAudio ? Volume2 : isText ? FileText : File;
+
+  // Text file content fetching
+  const [textContent, setTextContent] = useState(null);
+  const [textLoading, setTextLoading] = useState(false);
+  const [textError, setTextError] = useState(null);
+  // PDF blob URL
+  const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  useEffect(() => {
+    setTextContent(null);
+    setTextError(null);
+    setTextLoading(false);
+    setPdfBlobUrl(null);
+    setPdfLoading(false);
+    if (!selectedFile) return;
+
+    if (isText) {
+      let cancelled = false;
+      setTextLoading(true);
+      (async () => {
+        try {
+          const rawUrl = selectedFile.secureUrl || selectedFile.url;
+          if (!rawUrl || rawUrl === '/placeholder-loading') {
+            throw new Error('File is still processing');
+          }
+          const token = useAuthStore.getState().accessToken;
+          const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+          const assetId = selectedFile._id?.toString?.() || selectedFile.fileId?.toString?.();
+          const isServerUrl = rawUrl.startsWith('/');
+          let fetchUrl = rawUrl;
+          let fetchHeaders = {};
+          if (assetId && !isServerUrl) {
+            fetchUrl = messageAPI.getFileProxyUrl(assetId);
+            fetchHeaders = {
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+            };
+          } else if (isServerUrl && token) {
+            fetchHeaders = {
+              Authorization: `Bearer ${token}`,
+              ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+            };
+          }
+          const res = await fetch(fetchUrl, { headers: fetchHeaders });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const buf = await res.arrayBuffer();
+          if (!cancelled) {
+            const text = new TextDecoder().decode(buf);
+            // For JSON files, pretty-print
+            const ext = getFileExt(selectedFile.fileName || selectedFile.originalName || '');
+            if (ext === 'json') {
+              try { setTextContent(JSON.stringify(JSON.parse(text), null, 2)); }
+              catch { setTextContent(text); }
+            } else {
+              setTextContent(text);
+            }
+          }
+        } catch (err) {
+          if (!cancelled) setTextError(err.message || 'Failed to load file');
+        } finally {
+          if (!cancelled) setTextLoading(false);
+        }
+      })();
+      return () => { cancelled = true; };
+    }
+
+    if (isPdf) {
+      let cancelled = false;
+      setPdfLoading(true);
+      (async () => {
+        try {
+          const rawUrl = selectedFile.secureUrl || selectedFile.url;
+          if (!rawUrl || rawUrl === '/placeholder-loading') {
+            throw new Error('File is still processing');
+          }
+          const token = useAuthStore.getState().accessToken;
+          const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+          const assetId = selectedFile._id?.toString?.() || selectedFile.fileId?.toString?.();
+          const isServerUrl = rawUrl.startsWith('/');
+          let fetchUrl = rawUrl;
+          let fetchHeaders = {};
+          if (assetId && !isServerUrl) {
+            fetchUrl = messageAPI.getFileProxyUrl(assetId);
+            fetchHeaders = {
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+            };
+          } else if (isServerUrl && token) {
+            fetchHeaders = {
+              Authorization: `Bearer ${token}`,
+              ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+            };
+          }
+          const res = await fetch(fetchUrl, { headers: fetchHeaders });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          if (!cancelled) setPdfBlobUrl(URL.createObjectURL(blob));
+        } catch (err) {
+          if (!cancelled) setPdfBlobUrl(null);
+        } finally {
+          if (!cancelled) setPdfLoading(false);
+        }
+      })();
+      return () => { cancelled = true; };
+    }
+  }, [selectedFile, isText, isPdf]);
+
+  const ext = getFileExt(selectedFile?.fileName || selectedFile?.originalName || '');
+  const langLabel = LANG_LABEL_MAP[ext] || ext.toUpperCase();
+  const lineCount = textContent ? textContent.split('\n').length : 0;
 
   return (
     <section className="flex-1 min-w-0 flex flex-col" style={{ background: "var(--bg-primary)" }}>
@@ -1953,7 +2166,7 @@ function FilesMainPane({ selectedFile, files, onPreview, onDownload, onOpenInCha
                   </div>
                 </div>
               </div>
-              <div className="cl-file-preview-card__body">
+              <div className="cl-file-preview-card__body" style={isText || isPdf ? { padding: 0, alignItems: 'stretch' } : {}}>
                 {isImage && selectedFile.url && <img src={selectedFile.url} alt={fileName} />}
                 {isVideo && selectedFile.url && (
                   <video src={selectedFile.url} controls style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 10 }} />
@@ -1967,7 +2180,55 @@ function FilesMainPane({ selectedFile, files, onPreview, onDownload, onOpenInCha
                     <audio src={selectedFile.url} controls style={{ width: "100%", maxWidth: 400 }} />
                   </div>
                 )}
-                {!isImage && !isVideo && !isAudio && (
+                {isText && (
+                  <div className="cl-file-code-preview">
+                    {textLoading && (
+                      <div className="cl-file-code-preview__loading">Loading file content…</div>
+                    )}
+                    {textError && (
+                      <div className="cl-file-code-preview__error">
+                        <FileText size={28} style={{ color: "var(--text-muted)", opacity: 0.6 }} />
+                        <p style={{ margin: 0 }}>{textError}</p>
+                        <button
+                          className="cl-file-btn cl-file-btn--ghost"
+                          onClick={() => onDownload(selectedFile)}
+                          style={{ marginTop: 4 }}
+                        >
+                          <Download size={13} /><span>Download Instead</span>
+                        </button>
+                      </div>
+                    )}
+                    {textContent !== null && (
+                      <>
+                        <div className="cl-file-code-preview__header">
+                          <span className="cl-file-code-preview__badge">{langLabel}</span>
+                          <span className="cl-file-code-preview__lines">{lineCount} lines</span>
+                        </div>
+                        <pre className="cl-file-code-preview__body">
+                          <code>{textContent}</code>
+                        </pre>
+                      </>
+                    )}
+                  </div>
+                )}
+                {isPdf && !isText && (
+                  pdfLoading ? (
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading PDF…</div>
+                  ) : pdfBlobUrl ? (
+                    <iframe src={pdfBlobUrl} title={fileName} style={{ width: '100%', height: '100%', border: 'none', borderRadius: 8 }} />
+                  ) : (
+                    <div className="cl-file-no-preview">
+                      <div className="cl-file-no-preview__icon">
+                        <FileText size={28} style={{ color: "var(--text-muted)", opacity: 0.6 }} />
+                      </div>
+                      <p className="cl-file-no-preview__title">PDF preview unavailable</p>
+                      <button className="cl-file-btn cl-file-btn--ghost" onClick={() => onDownload(selectedFile)} style={{ marginTop: 4 }}>
+                        <Download size={13} /><span>Download</span>
+                      </button>
+                    </div>
+                  )
+                )}
+                {!isImage && !isVideo && !isAudio && !isText && !isPdf && (
                   <div className="cl-file-no-preview">
                     <div className="cl-file-no-preview__icon">
                       <File size={28} style={{ color: "var(--text-muted)", opacity: 0.6 }} />

@@ -760,13 +760,28 @@ const MessageItem = memo(
         );
       }
 
+      // Fallback: if content contains HTML tags (e.g. forwarded messages),
+      // render as sanitized HTML instead of raw text
+      const rawContent = message.content || "";
+      if (typeof rawContent === "string" && /<[a-z][\s\S]*>/i.test(rawContent)) {
+        return (
+          <div
+            className="message-content rich-message-content text-[15px] leading-relaxed break-words"
+            style={{ color: "inherit" }}
+            dangerouslySetInnerHTML={{
+              __html: sanitizeHtml(rawContent),
+            }}
+          />
+        );
+      }
+
       // Plain Text Fallback
       return (
         <div
           className="message-content text-[15px] leading-relaxed break-words whitespace-pre-wrap"
           style={{ color: "inherit" }}
         >
-          {message.content}
+          {rawContent}
         </div>
       );
     };
@@ -912,7 +927,7 @@ const MessageItem = memo(
                     gap: 5,
                     marginBottom: 6,
                     paddingBottom: 6,
-                    borderBottom: "1px solid rgba(255,255,255,0.08)",
+                    borderBottom: "1px solid var(--border-secondary)",
                     fontSize: 12,
                     fontStyle: "italic",
                     color: "var(--text-muted)",
@@ -982,7 +997,7 @@ const MessageItem = memo(
                             handleDownload(file),
                           )
                         }
-                      >
+                      > 
                         <Download size={14} style={{ opacity: 0.7 }} /> Download
                         all
                       </span>

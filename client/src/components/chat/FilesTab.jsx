@@ -109,17 +109,17 @@ function useLocalStorage(key, defaultValue) {
 
 function KindIcon({ kind, size = 16 }) {
   if (kind === "image")
-    return <ImageIcon size={size} style={{ color: "var(--accent-primary)" }} />;
+    return <ImageIcon size={size} style={{ color: "var(--accent-primary)", filter: "brightness(1.1)" }} />;
   if (kind === "video")
-    return <Video size={size} style={{ color: "var(--accent-purple)" }} />;
-  return <FileText size={size} style={{ color: "var(--text-muted)" }} />;
+    return <Video size={size} style={{ color: "var(--accent-purple)", filter: "brightness(1.1)" }} />;
+  return <FileText size={size} style={{ color: "var(--text-primary)", filter: "brightness(1.1)" }} />;
 }
 
 function ExtBadge({ fileName, kind }) {
   const colors = {
-    image: { bg: "rgba(78,124,255,0.14)", color: "var(--accent-primary)" },
-    video: { bg: "rgba(124,58,237,0.14)", color: "var(--accent-purple)" },
-    file: { bg: "rgba(156,163,175,0.14)", color: "var(--text-muted)" },
+    image: { bg: "rgba(78,124,255,0.18)", color: "var(--accent-primary)" },
+    video: { bg: "rgba(124,58,237,0.18)", color: "var(--accent-purple)" },
+    file: { bg: "rgba(100,116,139,0.14)", color: "var(--text-secondary)" },
   };
   const { bg, color } = colors[kind];
   return (
@@ -167,8 +167,8 @@ function ActionBtn({ title, tone = "neutral", onClick, children, size = 28 }) {
       background: hover ? "rgba(78,124,255,0.85)" : "var(--accent-primary)",
     },
     neutral: {
-      color: "var(--text-secondary)",
-      background: hover ? "var(--bg-hover)" : "rgba(255,255,255,0.06)",
+      color: "var(--text-primary)",
+      background: hover ? "var(--bg-hover)" : "rgba(255,255,255,0.08)",
     },
   };
   return (
@@ -200,7 +200,7 @@ function Pill({ children, active, onClick }) {
         fontWeight: 600,
         transition: "all 140ms ease",
         background: active ? "var(--accent-primary)" : "var(--bg-hover)",
-        color: active ? "var(--text-white)" : "var(--text-muted)",
+        color: active ? "var(--text-white)" : "var(--text-primary)",
         boxShadow: active ? "0 2px 8px rgba(78,124,255,0.25)" : "none",
       }}
     >
@@ -359,12 +359,13 @@ function MediaCard({ file, onPreview, onShare, onDownload, onDelete, index }) {
         <p
           style={{
             margin: 0,
-            fontSize: 12.5,
+            fontSize: 13,
             fontWeight: 700,
             color: "var(--text-primary)",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
+            letterSpacing: "-0.01em",
           }}
           title={file.fileName}
         >
@@ -376,13 +377,14 @@ function MediaCard({ file, onPreview, onShare, onDownload, onDelete, index }) {
             alignItems: "center",
             gap: 5,
             marginTop: 5,
-            color: "var(--text-muted)",
+            color: "var(--text-secondary)",
           }}
         >
           <UserRound size={11} />
           <span
             style={{
-              fontSize: 11,
+              fontSize: 11.5,
+              fontWeight: 500,
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -390,7 +392,7 @@ function MediaCard({ file, onPreview, onShare, onDownload, onDelete, index }) {
           >
             {file.uploadedBy?.name || "Unknown"}
           </span>
-          <span style={{ marginLeft: "auto", fontSize: 11, flexShrink: 0 }}>
+          <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 500, flexShrink: 0 }}>
             {formatDate(file.uploadedAt)}
           </span>
         </div>
@@ -452,8 +454,8 @@ function DocRow({ file, onPreview, onShare, onDownload, onDelete, index }) {
             display: "block",
             width: "100%",
             textAlign: "left",
-            fontSize: 13.5,
-            fontWeight: 600,
+            fontSize: 14,
+            fontWeight: 700,
             color: "var(--text-primary)",
             background: "none",
             border: "none",
@@ -462,6 +464,7 @@ function DocRow({ file, onPreview, onShare, onDownload, onDelete, index }) {
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
+            letterSpacing: "-0.01em",
           }}
         >
           {file.fileName}
@@ -471,17 +474,18 @@ function DocRow({ file, onPreview, onShare, onDownload, onDelete, index }) {
             display: "flex",
             alignItems: "center",
             gap: 8,
-            marginTop: 3,
+            marginTop: 4,
           }}
         >
           <ExtBadge fileName={file.fileName} kind={kind} />
-          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+          <span style={{ fontSize: 11.5, color: "var(--text-secondary)", fontWeight: 500 }}>
             {formatSize(file.fileSize)}
           </span>
           <span
             style={{
-              fontSize: 11,
-              color: "var(--text-muted)",
+              fontSize: 11.5,
+              color: "var(--text-secondary)",
+              fontWeight: 500,
               display: "flex",
               alignItems: "center",
               gap: 3,
@@ -493,8 +497,9 @@ function DocRow({ file, onPreview, onShare, onDownload, onDelete, index }) {
           <span
             style={{
               marginLeft: "auto",
-              fontSize: 11,
-              color: "var(--text-muted)",
+              fontSize: 11.5,
+              color: "var(--text-secondary)",
+              fontWeight: 500,
               display: "flex",
               alignItems: "center",
               gap: 3,
@@ -557,15 +562,15 @@ function Empty({ query }) {
         }}
       >
         <FileIcon
-          size={26}
-          style={{ color: "var(--text-muted)", opacity: 0.6 }}
+          size={28}
+          style={{ color: "var(--text-primary)", filter: "brightness(1.2)" }}
         />
       </div>
       <p
         style={{
-          fontSize: 14,
-          fontWeight: 600,
-          color: "var(--text-secondary)",
+          fontSize: 15,
+          fontWeight: 700,
+          color: "var(--text-primary)",
           margin: 0,
         }}
       >
@@ -573,8 +578,8 @@ function Empty({ query }) {
       </p>
       <p
         style={{
-          fontSize: 12,
-          color: "var(--text-muted)",
+          fontSize: 13,
+          color: "var(--text-secondary)",
           margin: 0,
           textAlign: "center",
         }}
@@ -606,7 +611,7 @@ function SectionHeader({ title, count, action }) {
             fontWeight: 700,
             letterSpacing: "0.06em",
             textTransform: "uppercase",
-            color: "var(--text-muted)",
+            color: "var(--text-secondary)",
           }}
         >
           {title}
@@ -624,7 +629,7 @@ function SectionHeader({ title, count, action }) {
               alignItems: "center",
               justifyContent: "center",
               background: "var(--bg-hover)",
-              color: "var(--text-muted)",
+              color: "var(--text-secondary)",
             }}
           >
             {count}
@@ -1073,7 +1078,7 @@ export default function FilesTab({ channelId, onOpenFilePreview }) {
               <SectionHeader title="All files" count={sorted.length} />
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {sorted.map((file, i) => (
-                  <EnhancedDocRow
+                  <DocRow
                     key={file.referenceId}
                     file={file}
                     index={i}
@@ -1144,7 +1149,7 @@ export default function FilesTab({ channelId, onOpenFilePreview }) {
                       }}
                     >
                       {docFiles.map((file, i) => (
-                        <EnhancedDocRow
+                        <DocRow
                           key={file.referenceId}
                           file={file}
                           index={i}
@@ -1176,7 +1181,7 @@ export default function FilesTab({ channelId, onOpenFilePreview }) {
             }}
           >
             <HardDrive size={14} style={{ color: "var(--accent-primary)" }} />
-            <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+            <span style={{ fontSize: 11.5, color: "var(--text-secondary)", fontWeight: 500 }}>
               {sorted.length} of {files.length} file
               {files.length !== 1 ? "s" : ""}
               {" · "}
@@ -1189,106 +1194,5 @@ export default function FilesTab({ channelId, onOpenFilePreview }) {
         )}
       </div>
     </>
-  );
-}
-
-// Enhanced Doc Row Component
-function EnhancedDocRow({ file, onPreview, onShare, onDownload, onDelete }) {
-  const kind = getFileKind(file.mimeType);
-  const [hover, setHover] = useState(false);
-
-  return (
-    <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "12px 14px",
-        borderRadius: 12,
-        border: hover
-          ? "1px solid var(--border-primary)"
-          : "1px solid var(--border-secondary)",
-        background: hover ? "var(--bg-hover)" : "var(--bg-secondary)",
-        transition: "all 160ms ease",
-        cursor: "pointer",
-      }}
-    >
-      {/* Icon Container */}
-      <div className="file-icon-container">
-        {kind === "image" && (
-          <ImageIcon size={24} color="var(--accent-primary)" />
-        )}
-        {kind === "video" && <Video size={24} color="var(--accent-purple)" />}
-        {kind === "file" && <FileText size={24} color="var(--text-muted)" />}
-      </div>
-
-      {/* Info */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <button
-          onClick={() => onPreview?.(file)}
-          style={{
-            display: "block",
-            width: "100%",
-            textAlign: "left",
-            fontSize: 13.5,
-            fontWeight: 600,
-            color: "var(--text-primary)",
-            background: "none",
-            border: "none",
-            padding: 0,
-            cursor: "pointer",
-          }}
-        >
-          {file.fileName}
-        </button>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            marginTop: 4,
-          }}
-        >
-          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-            {formatSize(file.fileSize)}
-          </span>
-          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-            {file.uploadedBy?.name || "Unknown"}
-          </span>
-          <span
-            style={{
-              marginLeft: "auto",
-              fontSize: 11,
-              color: "var(--text-muted)",
-            }}
-          >
-            {formatDate(file.uploadedAt)}
-          </span>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          opacity: hover ? 1 : 0,
-          transition: "opacity 160ms ease",
-        }}
-      >
-        <ActionBtn title="Share" onClick={() => onShare(file)}>
-          <Share2 size={16} />
-        </ActionBtn>
-        <ActionBtn title="Download" onClick={() => onDownload(file)}>
-          <Download size={16} />
-        </ActionBtn>
-        <ActionBtn title="Delete" tone="danger" onClick={() => onDelete(file)}>
-          <Trash2 size={16} />
-        </ActionBtn>
-      </div>
-    </div>
   );
 }

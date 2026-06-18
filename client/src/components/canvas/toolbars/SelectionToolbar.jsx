@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Bold,
   Code,
@@ -123,7 +123,7 @@ function ColorDropdown({ icon: Icon, label, colors, activeColor, onSelect }) {
   );
 }
 
-export default function SelectionToolbar({ editor, toolbar, onComment }) {
+const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar, onComment }) {
   if (!editor || !toolbar.visible) return null;
 
   const setLink = () => {
@@ -328,4 +328,6 @@ export default function SelectionToolbar({ editor, toolbar, onComment }) {
       </ToolbarButton>
     </div>
   );
-}
+});
+
+export default SelectionToolbar;

@@ -16,7 +16,7 @@ import {
   LayoutGrid,
 } from "lucide-react";
 
-export default function CanvasBottomToolbar({
+const CanvasBottomToolbar = React.memo(function CanvasBottomToolbar({
   editor,
   showBottomToolbar,
   isInsertMenuOpen,
@@ -217,4 +217,6 @@ export default function CanvasBottomToolbar({
       </div>
     </div>
   );
-}
+});
+
+export default CanvasBottomToolbar;

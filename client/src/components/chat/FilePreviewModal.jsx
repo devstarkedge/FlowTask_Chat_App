@@ -488,6 +488,8 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   }, [isImage])
 
   // Theme-aware style helpers
+  // NOTE: textWhite uses --preview-icon-color (always #fff) because these elements
+  // sit on a dark backdrop/overlay in both light and dark mode.
   const theme = {
     errorBg: 'var(--preview-error-bg)',
     spinnerBorder: 'var(--preview-spinner-border)',
@@ -496,7 +498,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
     counterBg: 'var(--preview-counter-bg)',
     textPrimary: 'var(--text-primary)',
     textSecondary: 'var(--text-secondary)',
-    textWhite: 'var(--text-white)',
+    textWhite: 'var(--preview-icon-color)',
     csvBg: 'var(--preview-card-bg)',
     audioBg: 'var(--preview-audio-bg)',
     unsupportedBg: 'var(--preview-unsupported-bg)',
@@ -576,7 +578,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
           {isImage && (
             <>
               <ToolbarBtn icon={ZoomOut} onClick={() => setZoom((z) => Math.max(z - 0.25, 0.5))} />
-              <span style={{ color: 'var(--text-white)', fontSize: 12, minWidth: 40, textAlign: 'center' }}>
+              <span style={{ color: 'var(--preview-icon-color)', fontSize: 12, minWidth: 40, textAlign: 'center' }}>
                 {Math.round(zoom * 100)}%
               </span>
               <ToolbarBtn icon={ZoomIn} onClick={() => setZoom((z) => Math.min(z + 0.25, 3))} />
@@ -836,7 +838,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             padding: 40, background: theme.audioBg, borderRadius: 16,
           }}>
             <Music size={48} style={{ color: 'var(--accent-primary)' }} />
-            <p style={{ color: 'var(--text-white)', fontWeight: 600 }}>
+            <p style={{ color: 'var(--preview-icon-color)', fontWeight: 600 }}>
               {currentFile.originalName || 'Audio File'}
             </p>
             <audio src={currentFile.url} controls autoPlay style={{ width: 320 }} />
@@ -850,7 +852,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             background: theme.csvBg, borderRadius: 12, padding: 16,
           }}>
             {textLoading && (
-              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 40 }}>Loading…</p>
+              <p style={{ color: 'var(--preview-meta-color)', textAlign: 'center', padding: 40 }}>Loading…</p>
             )}
             {csvRows && csvRows.length > 0 && (
               <>
@@ -863,7 +865,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
                       {csvRows[0].map((h, i) => (
                         <th key={i} style={{
                           padding: '8px 12px', textAlign: 'left', fontWeight: 700,
-                          color: 'var(--text-white)', borderBottom: '2px solid var(--border-secondary)',
+                          color: 'var(--preview-icon-color)', borderBottom: '2px solid rgba(255, 255, 255, 0.12)',
                           whiteSpace: 'nowrap',
                         }}>{h}</th>
                       ))}
@@ -874,8 +876,8 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
                       <tr key={ri}>
                         {row.map((cell, ci) => (
                           <td key={ci} style={{
-                            padding: '6px 12px', color: 'var(--text-secondary)',
-                            borderBottom: '1px solid var(--border-secondary)',
+                            padding: '6px 12px', color: 'var(--preview-meta-color)',
+                            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
                             whiteSpace: 'nowrap', maxWidth: 300, overflow: 'hidden',
                             textOverflow: 'ellipsis',
                           }}>{cell}</td>
@@ -890,7 +892,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
                       onClick={() => setCsvShowAll(true)}
                       style={{
                         background: 'var(--preview-btn-bg)', border: 'none',
-                        color: 'var(--text-secondary)', padding: '6px 16px',
+                        color: 'var(--preview-meta-color)', padding: '6px 16px',
                         borderRadius: 6, cursor: 'pointer', fontSize: 12,
                       }}
                     >
@@ -907,12 +909,12 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
         {isText && !isCsv && !isAudio && !isVideo && !isImage && !isPdf && (
           <div className="file-preview-code-container">
             {textLoading && (
-              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 40 }}>Loading…</p>
+              <p style={{ color: 'var(--preview-meta-color)', textAlign: 'center', padding: 40 }}>Loading…</p>
             )}
             {textError && (
               <div className="file-preview-error-container">
                 <FileText size={36} style={{ color: 'var(--accent-red)' }} />
-                <p style={{ color: 'var(--text-secondary)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{textError}</p>
+                <p style={{ color: 'var(--preview-meta-color)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{textError}</p>
                 <button
                   type="button"
                   onClick={() => handleDownload(currentFile)}
@@ -965,7 +967,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: 40, background: theme.errorBg, borderRadius: 16 }}>
               <FileText size={48} style={{ color: 'var(--accent-red)' }} />
               <p style={{ color: theme.textWhite, fontWeight: 600, fontSize: 15 }}>Failed to load spreadsheet</p>
-              <p style={{ color: 'var(--text-secondary)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{xlsxError}</p>
+              <p style={{ color: 'var(--preview-meta-color)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{xlsxError}</p>
               <button type="button" onClick={() => handleDownload(currentFile)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--preview-error-btn-bg)', border: 'none', color: theme.textWhite, padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 14, marginTop: 4 }}>
                 <Download size={14} /> Download Instead
               </button>
@@ -998,7 +1000,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: 40, background: theme.errorBg, borderRadius: 16 }}>
               <FileText size={48} style={{ color: 'var(--accent-red)' }} />
               <p style={{ color: theme.textWhite, fontWeight: 600, fontSize: 15 }}>Failed to load document</p>
-              <p style={{ color: 'var(--text-secondary)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{docxError}</p>
+              <p style={{ color: 'var(--preview-meta-color)', fontSize: 13, textAlign: 'center', maxWidth: 360 }}>{docxError}</p>
               <button type="button" onClick={() => handleDownload(currentFile)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--preview-error-btn-bg)', border: 'none', color: theme.textWhite, padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 14, marginTop: 4 }}>
                 <Download size={14} /> Download Instead
               </button>
@@ -1013,11 +1015,11 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
             padding: 40, background: theme.unsupportedBg, borderRadius: 16,
           }}>
-            <File size={48} style={{ color: 'var(--text-muted)' }} />
-            <p style={{ color: 'var(--text-white)', fontWeight: 600 }}>
+            <File size={48} style={{ color: 'var(--preview-meta-color)' }} />
+            <p style={{ color: 'var(--preview-icon-color)', fontWeight: 600 }}>
               {currentFile.originalName || 'File'}
             </p>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+            <p style={{ color: 'var(--preview-meta-color)', fontSize: 13 }}>
               Preview not available for this file type
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -1070,7 +1072,7 @@ function ToolbarBtn({ icon: Icon, onClick }) {
       onClick={onClick}
       className="file-preview-toolbar-btn"
       style={{ 
-        color: 'var(--text-white)',
+        color: 'var(--preview-icon-color)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

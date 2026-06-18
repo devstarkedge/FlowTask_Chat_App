@@ -1,0 +1,154 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CANVAS MEDIA — Image, video, audio, file node styles, resize handles, captions
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Image Node Container ─────────────────────────────────────────────── */
+.canvas-image-node-container {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin: 12px 0;
+}
+
+.canvas-image-node-container .canvas-image-resize-handle {
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.canvas-image-node-container img {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* ─── Image Loading Placeholder ────────────────────────────────────────── */
+.image-loading-placeholder {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  border: 1px solid var(--border-primary);
+  margin: 12px 0;
+  overflow: hidden;
+}
+
+.image-loading-placeholder::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--bg-hover) 50%, transparent);
+  animation: imageShimmer 1.5s ease-in-out infinite;
+}
+
+.image-loading-placeholder::after {
+  content: "Uploading image...";
+  position: relative;
+  color: var(--text-muted);
+  font-size: 13px;
+  z-index: 1;
+}
+
+@keyframes imageShimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* ─── Inline Images ────────────────────────────────────────────────────── */
+.canvas-prosemirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border-primary);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  display: block;
+  margin: 12px 0;
+}
+
+.canvas-prosemirror img[alt*="Architecture"] {
+  width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(2,6,23,0.08);
+  border: 1px solid var(--border-secondary);
+  margin: 10px 0 20px;
+}
+
+/* ─── File Attachment Block ────────────────────────────────────────────── */
+.file-attachment-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  margin: 8px 0;
+  cursor: pointer;
+  transition: background 150ms ease, box-shadow 150ms ease;
+  max-width: 100%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.file-attachment-block:hover {
+  background: var(--bg-hover);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+
+.file-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.file-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.file-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-link);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-size {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.file-loader {
+  font-size: 11px;
+  color: var(--accent-primary);
+}
+
+/* ─── Video & Audio Nodes ──────────────────────────────────────────────── */
+/* Video/audio nodes are rendered via their respective NodeViews,
+   typically using the .file-attachment-block base styles. */
+
+/* ─── Captions ─────────────────────────────────────────────────────────── */
+/* Caption support for media nodes */
+.media-caption {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 4px 8px;
+  border: none;
+  outline: none;
+  width: 100%;
+  background: transparent;
+  font-family: inherit;
+}
+
+.media-caption:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+}

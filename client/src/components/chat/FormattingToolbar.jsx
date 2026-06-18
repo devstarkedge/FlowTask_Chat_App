@@ -101,7 +101,7 @@ if (typeof document !== "undefined" && !document.getElementById(FT_STYLE_ID)) {
       transform: scale(0.92);
     }
     .ft-btn--active {
-      background: color-mix(in srgb, var(--accent-primary, #1264a3) 22%, transparent);
+      background: color-mix(in srgb, var(--accent-prun devry, #1264a3) 22%, transparent);
       color: var(--accent-primary, #4da8ff);
     }
     .ft-btn--active:hover {
@@ -165,16 +165,16 @@ if (typeof document !== "undefined" && !document.getElementById(FT_STYLE_ID)) {
     .rich-message-content code {
       font-family: 'Menlo', 'Monaco', 'Consolas', 'Courier New', monospace;
       font-size: 0.875em;
-      background: var(--bg-code, rgba(255,255,255,0.08));
+      background: var(--bg-hover);
       padding: 1px 5px;
       border-radius: 4px;
-      color: var(--accent-yellow, #e8c46a);
+      color: var(--accent-red);
     }
 
     /* Code block */
     .rich-message-content pre {
-      background: var(--bg-code-block, rgba(0,0,0,0.25));
-      border: 1px solid var(--border-secondary, rgba(255,255,255,0.1));
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-secondary);
       border-radius: 6px;
       padding: 10px 14px;
       margin: 6px 0;
@@ -183,16 +183,16 @@ if (typeof document !== "undefined" && !document.getElementById(FT_STYLE_ID)) {
     .rich-message-content pre code {
       background: transparent;
       padding: 0;
-      color: var(--text-primary, #d1d2d3);
+      color: var(--text-primary);
       font-size: 13px;
     }
 
     /* Blockquote */
     .rich-message-content blockquote {
-      border-left: 3px solid var(--accent-primary, #1264a3);
+      border-left: 3px solid var(--accent-primary);
       margin: 4px 0;
       padding: 2px 10px;
-      color: var(--text-secondary, #9b9b9b);
+      color: var(--text-secondary);
       font-style: italic;
     }
 

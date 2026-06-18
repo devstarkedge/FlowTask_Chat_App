@@ -1,20 +1,17 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, lazy, Suspense, useMemo } from "react";
 import { EditorContent } from "@tiptap/react";
 import { useCanvasStore } from "../../../stores/canvasStore";
 import { useCanvasUiStore } from "../../../stores/canvasUiStore";
-import CommentThreadSidebar from "../comments/CommentThreadSidebar";
-import CanvasHistoryPanel from "../history/CanvasHistoryPanel";
-import CanvasDetailsSidebar from "../details/CanvasDetailsSidebar";
-import CanvasShareModal from "../CanvasShareModal";
-import PresenceBar from "../realtime/PresenceBar";
 import { useCanvasCollaboration } from "../realtime/useCanvasCollaboration";
 import CursorOverlay from "../realtime/CursorOverlay";
+import PresenceBar from "../realtime/PresenceBar";
 import SlashCommandMenu from "../slash-commands/SlashCommandMenu";
 import SelectionToolbar from "../toolbars/SelectionToolbar";
 import { useCanvasEditor } from "./useCanvasEditor";
 import CanvasBottomToolbar from "../CanvasBottomToolbar";
 import CanvasInsertMenu from "../CanvasInsertMenu";
 import CanvasHeader from "../header/CanvasHeader";
+import CanvasShareModal from "../CanvasShareModal";
 import toast from "react-hot-toast";
 import { useCanvasPermissions, PERMISSION_TOAST_MESSAGE } from "../permissions/useCanvasPermissions";
 import { useCanvasFileUpload } from "../overlays/CanvasFileUpload";
@@ -29,25 +26,23 @@ import "../styles/canvas-sidebars.css";
 import "../styles/canvas-overlays.css";
 import "../styles/canvas-media.css";
 
+// ── Lazy-loaded sidebars (reduced initial bundle) ──────────────────────────
+const CommentThreadSidebar = lazy(() => import("../comments/CommentThreadSidebar"));
+const CanvasHistoryPanel = lazy(() => import("../history/CanvasHistoryPanel"));
+const CanvasDetailsSidebar = lazy(() => import("../details/CanvasDetailsSidebar"));
+
+const SIDEBAR_FALLBACK = <div className="canvas-loading"><span />Loading...</div>;
+
 const COLLAB_TIMEOUT_MS = 4_000;
 
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-// ── coverStyle helper is now in header/CanvasHeader.jsx ──
-
-// ── Permission helpers are now in permissions/useCanvasPermissions.js ──
-
-export default function CanvasEditorUI({
-  canvas,
-  onSave,
-  onBack,
-  tabs = [],
-  activeTab = "untitled",
-}) {
+/**
+ * CanvasPage — Slim root orchestrator that composes all extracted modules.
+ * Replaces both CanvasPanel and EnterpriseCanvasEditor as the main entry point.
+ */
+export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTab = "untitled" }) {
   const [collabTimedOut, setCollabTimedOut] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
   const handleOpenShareModal = useCallback(() => setShowShareModal(true), []);
   const emojiBtnRef = useRef(null);
   const toggleBtnRef = useRef(null);
@@ -72,13 +67,11 @@ export default function CanvasEditorUI({
   const openSidebar = useCanvasUiStore((s) => s.openSidebar);
   const closeSidebar = useCanvasUiStore((s) => s.closeSidebar);
   const closeSlashMenu = useCanvasUiStore((s) => s.closeSlashMenu);
-  const openSlashMenu = useCanvasUiStore((s) => s.openSlashMenu);
 
-  // ── Permission enforcement is now handled by useCanvasPermissions hook ──
+  // ── Collaboration ──────────────────────────────────────────────────────
+  const { ydoc, provider, status, awarenessUsers } = useCanvasCollaboration(canvas?._id);
 
-  const { ydoc, provider, status, awarenessUsers } = useCanvasCollaboration(
-    canvas?._id,
-  );
+  // ── Editor ─────────────────────────────────────────────────────────────
   const { editor, saveStatus, wordCount } = useCanvasEditor({
     canvas,
     onSave,
@@ -86,46 +79,20 @@ export default function CanvasEditorUI({
     ydoc,
   });
 
-  // ── Permission enforcement via hook ──────────────────────────────────────────────
+  // ── Permissions ────────────────────────────────────────────────────────
   const { isViewOnly, canvasRole, permissionToastShownRef } = useCanvasPermissions(
     canvas,
     editor,
     viewingVersion,
   );
 
-  // Toolbar visibility: only re-render on focus/blur, NOT on every
-  // editor update or selection change.  Use a counter state that
-  // forces a re-render only when the boolean value actually flips.
-  const [toolbarVisible, setToolbarVisible] = useState(false);
+  // ── Toolbar visibility (memoized from editor state) ────────────────────
+  const toolbarVisible = useMemo(() => {
+    if (!editor) return false;
+    return editor.isFocused || editor.state.doc.content.size > 2;
+  }, [editor?.isFocused, editor?.state?.doc?.content?.size]);
 
-  useEffect(() => {
-    if (!editor) return;
-    const check = () => {
-      const next = editor.isFocused || editor.state.doc.content.size > 2;
-      setToolbarVisible((prev) => {
-        if (prev === next) return prev; // no change - no re-render
-        return next;
-      });
-    };
-    check();
-    editor.on("focus", check);
-    editor.on("blur", check);
-    // Also re-check after collaborative updates that change doc size
-    editor.on("update", check);
-    return () => {
-      try {
-        editor.off("focus", check);
-        editor.off("blur", check);
-        editor.off("update", check);
-      } catch (e) {}
-    };
-  }, [editor]);
-
-  const showBottomToolbar = toolbarVisible;
-
-  const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
-
-  // ── Overlay hooks (extracted from monolith) ─────────────────────────────────
+  // ── Overlay hooks ──────────────────────────────────────────────────────
   const {
     triggerFileSelect,
     handleFileChange,
@@ -133,27 +100,25 @@ export default function CanvasEditorUI({
     fileInputRef,
   } = useCanvasFileUpload(editor, canvas, isViewOnly);
 
-  const {
-    startRecording,
-    RecorderOverlay,
-  } = useCanvasMediaRecorder({ isViewOnly, onInsertMedia: insertMedia });
+  const { startRecording, RecorderOverlay } = useCanvasMediaRecorder({
+    isViewOnly,
+    onInsertMedia: insertMedia,
+  });
 
-  const {
-    handleMentionFromToolbar,
-    MentionDropdownPortal,
-  } = useCanvasMentionDropdown({
+  const { handleMentionFromToolbar, MentionDropdownPortal } = useCanvasMentionDropdown({
     editor,
     isViewOnly,
     channelId: canvas?.channelId,
   });
 
-  const {
-    toggleEmojiPicker,
-    EmojiPicker,
-  } = useCanvasEmojiPicker({ editor, isViewOnly, emojiBtnRef });
+  const { toggleEmojiPicker, EmojiPicker } = useCanvasEmojiPicker({
+    editor,
+    isViewOnly,
+    emojiBtnRef,
+  });
 
-  // Insert Menu Handlers - handles all item IDs from the new grouped menu
-  const handleInsertMenuSelect = (id) => {
+  // ── Insert Menu Handler (memoized) ─────────────────────────────────────
+  const handleInsertMenuSelect = useCallback((id) => {
     if (isViewOnly) {
       toast.error(PERMISSION_TOAST_MESSAGE);
       return;
@@ -177,11 +142,7 @@ export default function CanvasEditorUI({
         editor.chain().focus().setHorizontalRule().run();
         break;
       case "table":
-        editor
-          .chain()
-          .focus()
-          .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-          .run();
+        editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
         break;
       case "bullet-list":
         editor.chain().focus().toggleBulletList().run();
@@ -190,41 +151,30 @@ export default function CanvasEditorUI({
         editor.chain().focus().toggleTaskList().run();
         break;
       case "columns-3":
-        editor
-          .chain()
-          .focus()
-          .insertContent({
-            type: "columns",
-            attrs: { count: 3 },
-            content: [
-              { type: "column", content: [{ type: "paragraph" }] },
-              { type: "column", content: [{ type: "paragraph" }] },
-              { type: "column", content: [{ type: "paragraph" }] },
-            ],
-          })
-          .run();
+        editor.chain().focus().insertContent({
+          type: "columns",
+          attrs: { count: 3 },
+          content: [
+            { type: "column", content: [{ type: "paragraph" }] },
+            { type: "column", content: [{ type: "paragraph" }] },
+            { type: "column", content: [{ type: "paragraph" }] },
+          ],
+        }).run();
         break;
       case "code-block":
         editor.chain().focus().toggleCodeBlock().run();
         break;
       case "callout":
-        editor
-          .chain()
-          .focus()
-          .insertContent({
-            type: "callout",
-            attrs: { type: "info", emoji: "💡" },
-            content: [{ type: "text", text: "Important note" }],
-          })
-          .run();
+        editor.chain().focus().insertContent({
+          type: "callout",
+          attrs: { type: "info", emoji: "💡" },
+          content: [{ type: "text", text: "Important note" }],
+        }).run();
         break;
       case "date":
-        const todayStr = new Date().toLocaleDateString("en-US", {
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        });
-        editor.chain().focus().insertContent(todayStr).run();
+        editor.chain().focus().insertContent(
+          new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+        ).run();
         break;
       case "image":
         triggerFileSelect("image");
@@ -237,85 +187,56 @@ export default function CanvasEditorUI({
         break;
       default:
         if (id.startsWith("placeholder-")) {
-          const phName = id.replace("placeholder-", "");
-          editor
-            .chain()
-            .focus()
-            .insertContent({
-              type: "templateVariable",
-              attrs: { name: phName, value: "" },
-            })
-            .run();
+          editor.chain().focus().insertContent({
+            type: "templateVariable",
+            attrs: { name: id.replace("placeholder-", ""), value: "" },
+          }).run();
         } else {
           editor.chain().focus().insertContent(`{{${id}}}`).run();
         }
     }
-  };
+  }, [editor, isViewOnly, startRecording, triggerFileSelect]);
 
-  // Mention detection, emoji selection, and mention toolbar are now
-  // handled by useCanvasMentionDropdown and useCanvasEmojiPicker hooks.
-
-  // Collaboration timeout
-  useEffect(() => {
-    setCollabTimedOut(false);
-    if (!provider) return undefined;
-    const timer = setTimeout(() => setCollabTimedOut(true), COLLAB_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [provider, canvas?._id]);
-
-  useEffect(() => {
-    if (status === "connected" || status === "synced") setCollabTimedOut(false);
-  }, [status]);
-
-  // Title sync, cover actions, and share modal are now in CanvasHeader.
-
-  const handleOpenHistory = async () => {
+  // ── History handlers (memoized) ────────────────────────────────────────
+  const handleOpenHistory = useCallback(async () => {
     if (canvas?._id) await fetchHistory(canvas._id);
     openSidebar("history");
-  };
+  }, [canvas?._id, fetchHistory, openSidebar]);
 
-  const handleRestore = async (historyId) => {
+  const handleRestore = useCallback(async (historyId) => {
     if (!canvas?._id) return;
     await restoreVersion(canvas._id, historyId);
     clearViewingVersion();
     closeSidebar();
-  };
+  }, [canvas?._id, restoreVersion, clearViewingVersion, closeSidebar]);
 
-  // Handle version preview (read-only mode)
   const handlePreviewVersion = useCallback((item) => {
     if (!editor || !item.snapshot) return;
-    // Load snapshot content into editor in read-only mode
     try {
       editor.setEditable(false);
       if (item.snapshot.content) {
         editor.commands.setContent(item.snapshot.content);
       }
     } catch (e) {
-      console.error('Failed to preview version:', e);
+      console.error("Failed to preview version:", e);
     }
   }, [editor]);
 
-  // Exit read-only mode when clearing viewingVersion
-  useEffect(() => {
-    if (!viewingVersion && editor && !isViewOnly) {
-      editor.setEditable(true);
-    }
-  }, [viewingVersion, editor, isViewOnly]);
-
-  const handleDocumentComment = (content) => {
+  const handleDocumentComment = useCallback((content) => {
     const firstBlockId = blocks[0]?._id;
     if (!firstBlockId) return;
     createComment(firstBlockId, content);
-  };
+  }, [blocks, createComment]);
 
-  const collaborationLoading =
-    provider &&
-    status !== "connected" &&
-    status !== "synced" &&
-    status !== "disabled" &&
-    status !== "auth-failed" &&
-    !collabTimedOut;
+  // ── Collaboration timeout ──────────────────────────────────────────────
+  const [collabTimerRef] = useState(() => ({ current: null }));
+  const collaborationLoading = useMemo(() => {
+    if (!provider) return false;
+    if (status === "connected" || status === "synced" || status === "disabled" || status === "auth-failed") return false;
+    return !collabTimedOut;
+  }, [provider, status, collabTimedOut]);
 
+  // ── Loading state ──────────────────────────────────────────────────────
   if (!editor || collaborationLoading) {
     return (
       <div className="canvas-loading">
@@ -327,7 +248,6 @@ export default function CanvasEditorUI({
 
   return (
     <div className="canvas-editor-ui-shell">
-      {/* Header: tabs, cover, title, three-dot menu (extracted) */}
       <CanvasHeader
         canvas={canvas}
         isViewOnly={isViewOnly}
@@ -337,21 +257,13 @@ export default function CanvasEditorUI({
         tabs={tabs}
         activeTab={activeTab}
       />
-
-      {/* Main Content */}
       <div className="canvas-editor-container">
         <main className="canvas-scroll-surface">
           <article className="canvas-document-surface">
-            {/* Editor */}
             <div ref={editorWrapperRef} style={{ position: "relative" }}>
               {isViewOnly && (
                 <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    zIndex: 5,
-                    cursor: "default",
-                  }}
+                  style={{ position: "absolute", inset: 0, zIndex: 5, cursor: "default" }}
                   onClick={() => {
                     if (!permissionToastShownRef.current) {
                       permissionToastShownRef.current = true;
@@ -367,34 +279,40 @@ export default function CanvasEditorUI({
           </article>
         </main>
 
-        {/* Sidebars */}
+        {/* Lazy-loaded sidebars */}
         {activeSidebar === "comments" && (
-          <CommentThreadSidebar
-            comments={comments}
-            onClose={closeSidebar}
-            onResolve={resolveComment}
-            onReply={replyToComment}
-            onCreateDocumentComment={handleDocumentComment}
-          />
+          <Suspense fallback={SIDEBAR_FALLBACK}>
+            <CommentThreadSidebar
+              comments={comments}
+              onClose={closeSidebar}
+              onResolve={resolveComment}
+              onReply={replyToComment}
+              onCreateDocumentComment={handleDocumentComment}
+            />
+          </Suspense>
         )}
         {activeSidebar === "history" && (
-          <CanvasHistoryPanel
-            history={history}
-            onClose={closeSidebar}
-            onRestore={handleRestore}
-            onPreviewVersion={handlePreviewVersion}
-          />
+          <Suspense fallback={SIDEBAR_FALLBACK}>
+            <CanvasHistoryPanel
+              history={history}
+              onClose={closeSidebar}
+              onRestore={handleRestore}
+              onPreviewVersion={handlePreviewVersion}
+            />
+          </Suspense>
         )}
         {activeSidebar === "details" && (
-          <CanvasDetailsSidebar
-            canvas={canvas}
-            onClose={closeSidebar}
-            onOpenShareModal={handleOpenShareModal}
-          />
+          <Suspense fallback={SIDEBAR_FALLBACK}>
+            <CanvasDetailsSidebar
+              canvas={canvas}
+              onClose={closeSidebar}
+              onOpenShareModal={handleOpenShareModal}
+            />
+          </Suspense>
         )}
       </div>
 
-      {/* Hidden File Picker */}
+      {/* Hidden file input */}
       <input
         type="file"
         ref={fileInputRef}
@@ -402,14 +320,14 @@ export default function CanvasEditorUI({
         onChange={handleFileChange}
       />
 
-      {/* Media Recorder Overlay (extracted to useCanvasMediaRecorder hook) */}
+      {/* Media Recorder */}
       {RecorderOverlay}
 
-      {/* Floating Bottom Toolbar with Insert Menu */}
+      {/* Bottom toolbar + insert menu */}
       {!isViewOnly && (
         <CanvasBottomToolbar
           editor={editor}
-          showBottomToolbar={showBottomToolbar}
+          showBottomToolbar={toolbarVisible}
           isInsertMenuOpen={isInsertMenuOpen}
           onToggleInsertMenu={() => setIsInsertMenuOpen((v) => !v)}
           onEmojiClick={toggleEmojiPicker}
@@ -418,7 +336,6 @@ export default function CanvasEditorUI({
           emojiBtnRef={emojiBtnRef}
           toggleBtnRef={toggleBtnRef}
         >
-          {/* Insert Menu - rendered inside toolbar container for proper positioning */}
           {isInsertMenuOpen && (
             <CanvasInsertMenu
               editor={editor}
@@ -430,7 +347,6 @@ export default function CanvasEditorUI({
         </CanvasBottomToolbar>
       )}
 
-      {/* Emoji Picker Portal (extracted to useCanvasEmojiPicker hook) */}
       {EmojiPicker}
 
       <SelectionToolbar
@@ -444,7 +360,6 @@ export default function CanvasEditorUI({
         onClose={closeSlashMenu}
       />
 
-      {/* Share Modal (state managed here, triggered by header + details sidebar) */}
       {showShareModal && (
         <CanvasShareModal
           canvas={canvas}

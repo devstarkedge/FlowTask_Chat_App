@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useChannelStore } from "../../stores/channelStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { getChannelPath } from "../../utils/chatRoutes";
 import { X, Globe, Lock, Plus, Loader2, Hash, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -632,7 +635,9 @@ function VisibilityCard({ icon, label, desc, tag, accentCss, selected, onSelect 
    MAIN MODAL
 ───────────────────────────────────────────── */
 export default function CreateChannelModal({ onClose }) {
-  const { createChannel } = useChannelStore();
+  const navigate = useNavigate();
+  const { createChannel, setActiveChannel } = useChannelStore();
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState("private");
@@ -660,6 +665,13 @@ export default function CreateChannelModal({ onClose }) {
     try {
       const channel = await createChannel({ name: trimmed, description: description.trim(), visibility });
       const displayName = visibility === "public" ? `#${channel.name}` : channel.name;
+
+      // Auto-open the newly created channel
+      setActiveChannel(channel._id);
+      if (activeWorkspaceId) {
+        navigate(getChannelPath(activeWorkspaceId, channel._id));
+      }
+
       toast.success(`Channel ${displayName} created!`);
       onClose();
     } catch (error) {

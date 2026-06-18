@@ -1,9 +1,9 @@
 import React, { useMemo } from "react";
-import { useCanvasStore } from "../../../stores/canvasStore";
+import { useCanvasCollabStore } from "../../../stores/canvasCollabStore";
 
 const CursorOverlay = React.memo(({ awarenessUsers = [] }) => {
-  const socketCursors = useCanvasStore((s) => s.cursors || {});
-  const socketTyping = useCanvasStore((s) => s.typing || {});
+  const socketCursors = useCanvasCollabStore((s) => s.cursors || {});
+  const socketTyping = useCanvasCollabStore((s) => s.typing || {});
 
   // Build cursor map: awareness cursors take precedence over socket cursors
   const cursorMap = useMemo(() => {

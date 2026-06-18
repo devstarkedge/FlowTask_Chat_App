@@ -279,112 +279,152 @@ class MessageService {
   }
 
   /**
+   * Get human-readable preview text for attachments.
+   * @private
+   */
+  _getAttachmentPreview(attachments) {
+    if (!attachments || attachments.length === 0) return null;
+
+    const first = attachments[0];
+    const mimeType = first.mimeType || '';
+    const originalName = first.originalName || first.fileName || '';
+    const ext = originalName.split('.').pop()?.toLowerCase() || '';
+
+    let label;
+    if (mimeType.startsWith('image/')) {
+      label = '📷 Image';
+    } else if (mimeType.startsWith('video/')) {
+      label = '🎥 Video';
+    } else if (mimeType.startsWith('audio/')) {
+      label = '🎵 Audio';
+    } else if (mimeType === 'application/pdf' || ext === 'pdf') {
+      label = '📄 PDF File';
+    } else if (['doc', 'docx'].includes(ext) || mimeType.includes('word') || mimeType.includes('document')) {
+      label = '📄 Word Document';
+    } else if (['xls', 'xlsx'].includes(ext) || mimeType.includes('excel') || mimeType.includes('spreadsheet')) {
+      label = '📊 Excel Spreadsheet';
+    } else if (ext === 'csv' || mimeType.includes('csv')) {
+      label = '📊 CSV File';
+    } else if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(ext) || mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('archive')) {
+      label = '🗜 ZIP Archive';
+    } else {
+      label = '📎 File Attachment';
+    }
+
+    if (attachments.length > 1) {
+      return `${label} (${attachments.length} files)`;
+    }
+
+    return label;
+  }
+
+  /**
    * Send a system message (bot, event notification).
    */
   async sendSystemMessage(
-  channelId,
-  content,
-  flowTaskRef,
-  workspaceId,
-  visibleTo = [],
-  activityMeta = null
-) {
-  const botUser = await userRepository.ensureBotUser();
-
-  // Normalize visibleTo — empty array means "visible to all channel members"
-  let normalizedVisibleTo = [];
-  if (Array.isArray(visibleTo) && visibleTo.length > 0) {
-    normalizedVisibleTo = [...new Set(visibleTo.map(id => id.toString()))];
-  }
-
-  const messageData = {
     channelId,
-    authorId: botUser._id,
     content,
-    htmlContent: content,
-    contentType: activityMeta ? MESSAGE_CONTENT_TYPES.ACTIVITY : MESSAGE_CONTENT_TYPES.SYSTEM,
-    senderSnapshot: {
-      name: botUser.name,
-      avatar: botUser.avatar,
-    },
-    ...(workspaceId && { workspaceId }),
-    // Empty array = visible to all channel members (DB query: visibleTo.$size:0 matches all)
-    // Non-empty array = restricted to specific users
-    visibleTo: normalizedVisibleTo,
-  };
-
-  if (flowTaskRef) {
-    messageData.flowTaskRef = flowTaskRef;
-  }
-
-  if (activityMeta) {
-    messageData.activityMeta = activityMeta;
-  }
-
-  logger.info('sendSystemMessage', {
-    channelId,
-    visibleToCount: normalizedVisibleTo.length,
-    hasActivityMeta: !!activityMeta,
+    flowTaskRef,
     workspaceId,
-  });
+    visibleTo = [],
+    activityMeta = null
+  ) {
+    const botUser = await userRepository.ensureBotUser();
 
-  // Guard: skip creation if an identical activity message already exists within
-  // the last 30 seconds (defense-in-depth against duplicate webhook deliveries).
-  if (activityMeta?.eventType && activityMeta?.taskId) {
-    const isDuplicate = await messageRepository.findRecentActivityDuplicate(
-      channelId,
-      activityMeta.eventType,
-      String(activityMeta.taskId),
-    );
-    if (isDuplicate) {
-      logger.warn('sendSystemMessage: duplicate activity suppressed', {
-        channelId,
-        eventType: activityMeta.eventType,
-        taskId: activityMeta.taskId,
-        workspaceId,
-      });
-      return null;
+    // Normalize visibleTo — empty array means "visible to all channel members"
+    let normalizedVisibleTo = [];
+    if (Array.isArray(visibleTo) && visibleTo.length > 0) {
+      normalizedVisibleTo = [...new Set(visibleTo.map(id => id.toString()))];
     }
-  }
 
-  const message = await messageRepository.create(messageData);
-
-  // Diagnostic: log created system message and room occupancy to help debug
-  try {
-    const roomOcc = getRoomOccupancy(workspaceId?.toString(), 'channel', channelId.toString());
-    logger.info('sendSystemMessage: created', {
-      messageId: message._id?.toString(),
+    const messageData = {
       channelId,
-      workspaceId: workspaceId?.toString(),
+      authorId: botUser._id,
+      content,
+      htmlContent: content,
+      contentType: activityMeta ? MESSAGE_CONTENT_TYPES.ACTIVITY : MESSAGE_CONTENT_TYPES.SYSTEM,
+      senderSnapshot: {
+        name: botUser.name,
+        avatar: botUser.avatar,
+      },
+      ...(workspaceId && { workspaceId }),
+      // Empty array = visible to all channel members (DB query: visibleTo.$size:0 matches all)
+      // Non-empty array = restricted to specific users
+      visibleTo: normalizedVisibleTo,
+    };
+
+    if (flowTaskRef) {
+      messageData.flowTaskRef = flowTaskRef;
+    }
+
+    if (activityMeta) {
+      messageData.activityMeta = activityMeta;
+    }
+
+    logger.info('sendSystemMessage', {
+      channelId,
       visibleToCount: normalizedVisibleTo.length,
-      flowTaskRef: message.flowTaskRef || null,
-      activityMeta: message.activityMeta || null,
-      roomOccupancy: roomOcc,
+      hasActivityMeta: !!activityMeta,
+      workspaceId,
     });
-  } catch (err) {
-    logger.warn('sendSystemMessage: room occupancy check failed', { error: err.message });
+
+    // Guard: skip creation if an identical activity message already exists within
+    // the last 30 seconds (defense-in-depth against duplicate webhook deliveries).
+    if (activityMeta?.eventType && activityMeta?.taskId) {
+      const isDuplicate = await messageRepository.findRecentActivityDuplicate(
+        channelId,
+        activityMeta.eventType,
+        String(activityMeta.taskId),
+      );
+      if (isDuplicate) {
+        logger.warn('sendSystemMessage: duplicate activity suppressed', {
+          channelId,
+          eventType: activityMeta.eventType,
+          taskId: activityMeta.taskId,
+          workspaceId,
+        });
+        return null;
+      }
+    }
+
+    const message = await messageRepository.create(messageData);
+
+    // Diagnostic: log created system message and room occupancy to help debug
+    try {
+      const roomOcc = getRoomOccupancy(workspaceId?.toString(), 'channel', channelId.toString());
+      logger.info('sendSystemMessage: created', {
+        messageId: message._id?.toString(),
+        channelId,
+        workspaceId: workspaceId?.toString(),
+        visibleToCount: normalizedVisibleTo.length,
+        flowTaskRef: message.flowTaskRef || null,
+        activityMeta: message.activityMeta || null,
+        roomOccupancy: roomOcc,
+      });
+    } catch (err) {
+      logger.warn('sendSystemMessage: room occupancy check failed', { error: err.message });
+    }
+
+    const preview = truncate(stripHtml(content), 100);
+    channelRepository
+      .updateLastMessage(channelId, preview, new Date(), workspaceId?.toString())
+      .catch(() => {});
+
+    const socketPayload = messageSocketPayload(message);
+
+    // Emit via socket
+    if (normalizedVisibleTo.length > 0) {
+      // Restricted visibility — send only to specific users
+      normalizedVisibleTo.forEach(uid => {
+        emitToUser(uid, SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
+      });
+    } else {
+      // Broadcast to entire channel (task events, general system messages)
+      emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
+    }
+
+    return message;
   }
-
-  const preview = truncate(stripHtml(content), 100);
-  channelRepository
-    .updateLastMessage(channelId, preview, new Date(), workspaceId?.toString())
-    .catch(() => {});
-
-  const socketPayload = messageSocketPayload(message);
-
-  // Emit via socket
-  if (normalizedVisibleTo.length > 0) {
-    // Restricted visibility — send only to specific users
-    normalizedVisibleTo.forEach(uid => {
-      emitToUser(uid, SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
-    });
-  } else {
-    // Broadcast to entire channel (task events, general system messages)
-    emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
-  }
-
-  return message;
-}
 
   // ──────────────────── Get Messages ────────────────────────────────────────
 
@@ -851,6 +891,11 @@ class MessageService {
     const notificationService = (await import('../notifications/notification.service.js')).default;
     const ChannelMember = (await import('../channels/ChannelMember.model.js')).default;
 
+    // Build preview: prefer text, fall back to attachment label
+    const textPreview = truncate(stripHtml(message.content || ''), 100);
+    const attachmentPreview = this._getAttachmentPreview(message.attachments);
+    const preview = textPreview || attachmentPreview || '';
+
     for (const mention of mentions) {
       if (mention.type === MENTION_TYPES.USER) {
         // Find by ObjectId since targetId is the ChatUser _id
@@ -871,7 +916,7 @@ class MessageService {
             channelId: channel._id,
             channelName: channel.name,
             messageId: message._id,
-            preview: truncate(stripHtml(message.content), 100),
+            preview,
             conversationId: channel._id,
             conversationType: channel.type === CHANNEL_TYPES.DM ? 'dm' : 'channel',
           });
@@ -906,7 +951,7 @@ class MessageService {
               channelId: channel._id,
               channelName: channel.name,
               messageId: message._id,
-              preview: truncate(stripHtml(message.content), 100),
+              preview,
               conversationId: channel._id,
               conversationType: channel.type === CHANNEL_TYPES.DM ? 'dm' : 'channel',
             });
@@ -942,6 +987,9 @@ class MessageService {
       if (channelMutes[channel._id.toString()]) return;
 
       const notificationService = (await import('../notifications/notification.service.js')).default;
+      const dmTextPreview = truncate(stripHtml(message.content || ''), 100);
+      const dmAttachmentPreview = this._getAttachmentPreview(message.attachments);
+      const dmPreview = dmTextPreview || dmAttachmentPreview || '';
       await notificationService.createDMNotification({
         workspaceId: message.workspaceId || channel.workspaceId,
         recipientId: recipient._id,
@@ -950,7 +998,7 @@ class MessageService {
         senderAvatar: message.senderSnapshot?.avatar || null,
         channelId: channel._id,
         messageId: message._id,
-        preview: truncate(stripHtml(message.content), 100),
+        preview: dmPreview,
       });
     } catch (error) {
       logger.error('Failed to notify DM recipient', {
@@ -962,6 +1010,7 @@ class MessageService {
 
   /**
    * Remove draft when a message is sent (non-blocking).
+   * @private
    */
   async _removeDraftOnSend(authorId, channelId, threadId, workspaceId) {
     try {
@@ -1155,55 +1204,53 @@ class MessageService {
     return allForwardedMessages;
   }
 
-    /**
- * Delete messages linked to FlowTask entity (announcement, task, etc.)
- */
-async deleteByFlowTaskRef(entityType, entityId, workspaceId) {
-  const messages = await messageRepository.findByFlowTaskRef(
-    entityType,
-    entityId,
-    workspaceId
-  );
-
-  if (!messages || messages.length === 0) return;
-
-  for (const msg of messages) {
-    //  Get updated message (IMPORTANT)
-    const updatedMessage = await messageRepository.softDelete(
-      msg._id,
-      null, // system delete
+  /**
+   * Delete messages linked to FlowTask entity (announcement, task, etc.)
+   */
+  async deleteByFlowTaskRef(entityType, entityId, workspaceId) {
+    const messages = await messageRepository.findByFlowTaskRef(
+      entityType,
+      entityId,
       workspaceId
     );
 
-    if (!updatedMessage) continue;
+    if (!messages || messages.length === 0) return;
 
-    const payload = {
-      message: updatedMessage
-    };
+    for (const msg of messages) {
+      //  Get updated message (IMPORTANT)
+      const updatedMessage = await messageRepository.softDelete(
+        msg._id,
+        null, // system delete
+        workspaceId
+      );
 
-    //  If message has visibility → send only to those users
-    if (updatedMessage.visibleTo && updatedMessage.visibleTo.length > 0) {
-      updatedMessage.visibleTo.forEach(userId => {
-        emitToUser(
-          userId.toString(),
+      if (!updatedMessage) continue;
+
+      const payload = {
+        message: updatedMessage
+      };
+
+      //  If message has visibility → send only to those users
+      if (updatedMessage.visibleTo && updatedMessage.visibleTo.length > 0) {
+        updatedMessage.visibleTo.forEach(userId => {
+          emitToUser(
+            userId.toString(),
+            SOCKET_EVENTS.MESSAGE_UPDATE,
+            payload,
+            workspaceId?.toString()
+          );
+        });
+      } else {
+        //  Public message → broadcast to channel
+        emitToChannel(
+          updatedMessage.channelId.toString(),
           SOCKET_EVENTS.MESSAGE_UPDATE,
           payload,
           workspaceId?.toString()
         );
-      });
-    } else {
-      //  Public message → broadcast to channel
-      emitToChannel(
-        updatedMessage.channelId.toString(),
-        SOCKET_EVENTS.MESSAGE_UPDATE,
-        payload,
-        workspaceId?.toString()
-      );
+      }
     }
   }
 }
-
-}
-
 
 export default new MessageService();

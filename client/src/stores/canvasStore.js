@@ -3,22 +3,14 @@ import { canvasAPI } from "../services/api";
 import { getSocket } from "../services/socket";
 import { useAuthStore } from "./authStore";
 import { useCanvasUiStore } from "./canvasUiStore";
+import { useCanvasCollabStore } from "./canvasCollabStore";
 import toast from "react-hot-toast";
 import React from "react";
 
 // ── Constants ──────────────────────────────────────────────────────────────────────
-const USER_COLORS = ["#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899", "#06b6d4"];
 const STORAGE_KEY_TABS = "flowtask.canvas.openTabs.v1";
 const STORAGE_KEY_ACTIVE_IDS = "flowtask.canvas.activeIds.v1";
 const STORAGE_KEY_SAVED_IDS = "flowtask.canvas.savedIds.v1";
-
-function getUserColor(userId) {
-  if (!userId) return USER_COLORS[0];
-  let hash = 0;
-  for (let i = 0; i < userId.length; i++) hash = (hash << 5) - hash + userId.charCodeAt(i);
-  const idx = Math.abs(hash) % USER_COLORS.length;
-  return USER_COLORS[idx];
-}
 
 // ── Persistence helpers ────────────────────────────────────────────────────────────
 function loadPersistedOpenTabs() {
@@ -127,9 +119,6 @@ export const useCanvasStore = create((set, get) => ({
   activeCanvas: null,
   blocks: [],
   comments: [],
-  presence: [],
-  cursors: {},
-  typing: {},
   history: [],
   currentJoinedRoom: null,
   // Persisted active canvas ID per channel (survives refresh)
@@ -166,6 +155,9 @@ export const useCanvasStore = create((set, get) => ({
         // Sort blocks by order
         const sortedBlocks = [...blocks].sort((a, b) => a.order - b.order);
 
+        // Reset collaboration state for the newly loaded canvas
+        useCanvasCollabStore.getState().resetCollab();
+
         set((state) => {
           // Sync loaded title into openTabsByChannel so tab label is always fresh
           const nextOpenTabs = { ...state.openTabsByChannel };
@@ -184,9 +176,6 @@ export const useCanvasStore = create((set, get) => ({
             activeCanvas: canvas,
             blocks: sortedBlocks,
             comments: comments || [],
-            presence: [],
-            cursors: {},
-            typing: {},
             activeCanvasIdByChannel: nextActiveIds,
             openTabsByChannel: nextOpenTabs,
           };
@@ -745,13 +734,11 @@ export const useCanvasStore = create((set, get) => ({
     if (currentRoom) {
       get().leaveCanvasRoom(currentRoom);
     }
+    useCanvasCollabStore.getState().resetCollab();
     set({
       activeCanvas: null,
       blocks: [],
       comments: [],
-      presence: [],
-      cursors: {},
-      typing: {},
       history: [],
       currentJoinedRoom: null,
     });
@@ -781,45 +768,25 @@ export const useCanvasStore = create((set, get) => ({
 
     handlers.presenceList = ({ canvasId: cid, users }) => {
       if (cid !== get().currentJoinedRoom) return;
-      set({ presence: users });
+      useCanvasCollabStore.getState().setPresence(users);
     };
 
     handlers.presenceJoin = ({ canvasId: cid, user }) => {
       if (cid !== get().currentJoinedRoom) return;
-      set((state) => {
-        if (state.presence.some((p) => p.userId === user.userId)) return {};
-        return { presence: [...state.presence, user] };
-      });
+      useCanvasCollabStore.getState().addPresenceUser(user);
     };
 
     handlers.presenceLeave = ({ canvasId: cid, userId }) => {
       if (cid !== get().currentJoinedRoom) return;
-      set((state) => {
-        const nextCursors = { ...state.cursors };
-        delete nextCursors[userId];
-        return {
-          presence: state.presence.filter((p) => p.userId !== userId),
-          cursors: nextCursors,
-        };
-      });
+      useCanvasCollabStore.getState().removePresenceUser(userId);
     };
 
     handlers.cursorUpdate = ({ userId, name, blockId, x, y }) => {
-      set((state) => ({
-        cursors: {
-          ...state.cursors,
-          [userId]: { blockId, x, y, name, color: getUserColor(userId) },
-        },
-      }));
+      useCanvasCollabStore.getState().setRemoteCursor(userId, name, blockId, x, y);
     };
 
     handlers.typingUpdate = ({ userId, name, blockId, isTyping }) => {
-      set((state) => {
-        const blockTyping = { ...(state.typing[blockId] || {}) };
-        if (isTyping) blockTyping[userId] = name;
-        else delete blockTyping[userId];
-        return { typing: { ...state.typing, [blockId]: blockTyping } };
-      });
+      useCanvasCollabStore.getState().setRemoteTyping(userId, name, blockId, isTyping);
     };
 
     handlers.blockCreated = (newBlock) => {
@@ -957,42 +924,6 @@ export const useCanvasStore = create((set, get) => ({
   },
 
   // ── Client Triggered Interactions ────────────────────────────────────────────────
-  updateCursor: (blockId, x, y) => {
-    const socket = getSocket();
-    const canvasId = get().currentJoinedRoom;
-    const currentUserId = useAuthStore.getState().user?._id;
-
-    set((state) => ({
-      cursors: {
-        ...state.cursors,
-        [currentUserId]: { blockId, x, y, name: useAuthStore.getState().user?.name || 'You', color: getUserColor(currentUserId) },
-      },
-    }));
-
-    const providerStatus = useCanvasUiStore.getState().providerStatus;
-    if (socket && canvasId && !(providerStatus === 'connected' || providerStatus === 'synced')) {
-      socket.emit("canvas:cursor", { canvasId, blockId, x, y });
-    }
-  },
-
-  setBlockTyping: (blockId, isTyping) => {
-    const socket = getSocket();
-    const canvasId = get().currentJoinedRoom;
-    const currentUserId = useAuthStore.getState().user?._id;
-
-    set((state) => {
-      const blockTyping = { ...(state.typing[blockId] || {}) };
-      if (isTyping) blockTyping[currentUserId] = useAuthStore.getState().user?.name || 'You';
-      else delete blockTyping[currentUserId];
-      return { typing: { ...state.typing, [blockId]: blockTyping } };
-    });
-
-    const providerStatus = useCanvasUiStore.getState().providerStatus;
-    if (socket && canvasId && !(providerStatus === 'connected' || providerStatus === 'synced')) {
-      socket.emit("canvas:typing", { canvasId, blockId, isTyping });
-    }
-  },
-
   createBlock: (blockData) => {
     const socket = getSocket();
     const canvasId = get().currentJoinedRoom;

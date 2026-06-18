@@ -1,0 +1,250 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CANVAS COVER — Cover strip, picker, title zone, action buttons
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Cover Title Zone ─────────────────────────────────────────────────── */
+.canvas-cover-title-zone {
+  position: relative;
+  width: min(800px, calc(100% - 40px));
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.canvas-title-input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 48px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  padding: 4px 48px 4px 0;
+  display: block;
+  box-sizing: border-box;
+}
+
+.canvas-title-input::placeholder {
+  color: var(--text-muted);
+}
+
+.canvas-subtitle {
+  margin: 0 0 48px;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+/* ─── Cover Strip ──────────────────────────────────────────────────────── */
+.canvas-cover-strip {
+  position: relative;
+  width: 100% !important;
+  height: 240px;
+  background-size: cover;
+  background-position: center;
+  z-index: 1;
+  margin-top: 0;
+}
+
+.canvas-cover-strip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.08) 40%, rgba(0,0,0,0) 65%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Cover strip INSIDE cover-title-zone — spans full viewport width */
+.canvas-cover-title-zone .canvas-cover-strip {
+  width: 100vw !important;
+  margin-left: calc(-50vw + 50%) !important;
+  margin-right: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 4px !important;
+  border-radius: 0;
+  height: 240px !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-top: 0 !important;
+  position: relative;
+  left: 0;
+  z-index: 3;
+}
+
+/* ─── Cover Action Buttons (Change / Remove) ───────────────────────────── */
+.canvas-cover-actions {
+  position: absolute;
+  bottom: 12px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 180ms ease, transform 180ms ease;
+  pointer-events: auto;
+}
+
+.canvas-cover-strip:hover .canvas-cover-actions,
+.canvas-cover-strip.is-hovered .canvas-cover-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.canvas-cover-change-btn,
+.canvas-cover-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.canvas-cover-change-btn {
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+}
+
+.canvas-cover-change-btn:hover {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.canvas-cover-remove-btn {
+  background: rgba(220, 38, 38, 0.65);
+  color: #fff;
+}
+
+.canvas-cover-remove-btn:hover {
+  background: rgba(220, 38, 38, 0.85);
+}
+
+/* ─── Add Cover Button ─────────────────────────────────────────────────── */
+.canvas-add-cover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin-bottom: 12px;
+  border: 1px dashed var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 180ms ease, transform 180ms ease, background 140ms ease, border-color 140ms ease;
+  pointer-events: none;
+}
+
+.canvas-add-cover-btn.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.canvas-add-cover-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+/* ─── Three-Dot Menu Button in Title Zone ──────────────────────────────── */
+.canvas-title-zone-three-dot {
+  position: absolute;
+  bottom: 16px;
+  right: 0;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.canvas-title-zone-three-dot:hover {
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+
+/* ─── Cover Picker Overlay ─────────────────────────────────────────────── */
+.canvas-cover-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: fadeIn 150ms ease;
+}
+
+.canvas-cover-picker-panel {
+  width: min(480px, 90vw);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: canvasToolbarIn 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ─── Responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 840px) {
+  .canvas-cover-title-zone {
+    width: calc(100% - 28px);
+  }
+
+  .canvas-title-input {
+    font-size: 28px;
+  }
+
+  .canvas-cover-title-zone .canvas-cover-strip {
+    height: 200px;
+    margin-bottom: 4px;
+  }
+}
+
+@media (max-width: 768px) {
+  .canvas-cover-title-zone {
+    width: calc(100% - 20px);
+  }
+
+  .canvas-title-input {
+    font-size: 24px;
+    padding-right: 40px;
+  }
+
+  .canvas-cover-title-zone .canvas-cover-strip {
+    height: 180px;
+    margin-bottom: 2px;
+  }
+
+  .canvas-cover-actions {
+    bottom: 8px;
+    right: 14px;
+    gap: 6px;
+  }
+
+  .canvas-cover-change-btn,
+  .canvas-cover-remove-btn {
+    padding: 5px 9px;
+    font-size: 11px;
+  }
+}

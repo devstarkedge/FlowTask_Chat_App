@@ -1121,7 +1121,7 @@ body {
 .file-preview-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 10000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9381,6 +9381,346 @@ textarea:focus-visible,
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+/* ── Schedule Modal Picker ──────────────────────────────────────────── */
+
+/* Trigger field */
+.smm-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border-primary);
+  background: var(--surface-secondary, var(--bg-secondary));
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 140ms ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.smm-trigger:hover {
+  border-color: var(--accent-primary, var(--accent-color, #1264a3));
+  background: var(--surface-primary, var(--bg-primary));
+}
+
+.smm-trigger:focus-visible {
+  border-color: var(--accent-primary, var(--accent-color, #1264a3));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary, var(--accent-color, #1264a3)) 16%, transparent);
+  background: var(--surface-primary, var(--bg-primary));
+}
+
+.smm-trigger--active {
+  border-color: var(--accent-primary, var(--accent-color, #1264a3));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary, var(--accent-color, #1264a3)) 16%, transparent);
+  background: var(--surface-primary, var(--bg-primary));
+}
+
+.smm-trigger--has-value {
+  background: var(--surface-primary, var(--bg-primary));
+}
+
+.smm-trigger-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.smm-trigger-text {
+  flex: 1;
+  font-weight: 500;
+}
+
+.smm-trigger-text--placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.smm-trigger-clear {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 130ms ease, color 130ms ease;
+}
+
+.smm-trigger-clear:hover {
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  color: var(--text-primary);
+}
+
+/* Picker dropdown */
+.smm-picker {
+  margin-top: 8px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  background: var(--surface-primary, var(--bg-modal, var(--bg-primary)));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  animation: smm-picker-in 160ms ease both;
+}
+
+@keyframes smm-picker-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Calendar */
+.smm-cal {
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.smm-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.smm-cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 130ms ease, color 130ms ease;
+}
+
+.smm-cal-nav:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.smm-cal-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  user-select: none;
+}
+
+.smm-cal-days-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.smm-cal-day-label {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 2px 0;
+  user-select: none;
+}
+
+.smm-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.smm-cal-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background 120ms ease, color 120ms ease;
+  outline: none;
+}
+
+.smm-cal-cell:hover:not(:disabled):not(.smm-cal-cell--selected) {
+  background: var(--bg-hover);
+}
+
+.smm-cal-cell:focus-visible:not(.smm-cal-cell--empty) {
+  box-shadow: 0 0 0 2px var(--accent-primary, var(--accent-color, #1264a3));
+}
+
+.smm-cal-cell--empty {
+  cursor: default;
+}
+
+.smm-cal-cell--today {
+  font-weight: 700;
+  color: var(--accent-primary, var(--accent-color, #1264a3));
+}
+
+.smm-cal-cell--selected {
+  background: var(--accent-primary, var(--accent-color, #1264a3));
+  color: #fff;
+  font-weight: 700;
+}
+
+.smm-cal-cell--selected:hover {
+  background: var(--accent-primary, var(--accent-color, #1264a3));
+}
+
+.smm-cal-cell--disabled {
+  color: var(--text-disabled, color-mix(in srgb, var(--text-muted) 40%, transparent));
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* Time picker */
+.smm-time {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.smm-time-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.smm-time-picker {
+  display: flex;
+  gap: 8px;
+  height: 130px;
+}
+
+.smm-time-col {
+  flex: 1;
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  background: var(--surface-secondary, var(--bg-secondary));
+  padding: 4px;
+  scrollbar-width: thin;
+}
+
+.smm-time-col::-webkit-scrollbar {
+  width: 4px;
+}
+
+.smm-time-col::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.smm-time-col::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 4px;
+}
+
+.smm-time-col--period {
+  flex: 0 0 56px;
+}
+
+.smm-time-opt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 5px 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background 120ms ease, color 120ms ease;
+  outline: none;
+}
+
+.smm-time-opt:hover:not(.smm-time-opt--active) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.smm-time-opt:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-primary, var(--accent-color, #1264a3));
+}
+
+.smm-time-opt--active {
+  background: var(--accent-primary, var(--accent-color, #1264a3));
+  color: #fff;
+  font-weight: 700;
+}
+
+/* Picker footer */
+.smm-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.smm-picker-btn {
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background 130ms ease, color 130ms ease, opacity 130ms ease;
+  outline: none;
+  border: none;
+}
+
+.smm-picker-btn:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary, var(--accent-color, #1264a3)) 20%, transparent);
+}
+
+.smm-picker-btn--cancel {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+}
+
+.smm-picker-btn--cancel:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.smm-picker-btn--save {
+  background: var(--accent-primary, var(--accent-color, #1264a3));
+  color: #fff;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent-primary, var(--accent-color, #1264a3)) 24%, transparent);
+}
+
+.smm-picker-btn--save:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.smm-picker-btn--save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ── Skeleton ────────────────────────────────────────────────────────── */

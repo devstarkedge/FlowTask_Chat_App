@@ -27,6 +27,10 @@ const workspaceInviteSchema = new Schema({
     lowercase: true,
     trim: true,
   },
+  channels: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Channel',
+  }],
   role: {
     type: String,
     enum: ['owner', 'admin', 'member', 'guest'],

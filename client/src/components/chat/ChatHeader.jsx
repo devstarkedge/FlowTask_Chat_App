@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import { useParams } from "react-router-dom";
 import {
   Lock,
   MessageCircle,
@@ -21,6 +22,7 @@ import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useCanvasStore } from "../../stores/canvasStore";
+import { useFavoritesStore } from "../../stores/favoritesStore";
 import logger from "../../utils/logger";
 import CanvasTabContextMenu from "../canvas/CanvasTabContextMenu";
 import CanvasMenu from "../canvas/CanvasMenu";
@@ -33,7 +35,7 @@ const BASE_TABS = [
 ];
 
 export default function ChatHeader({
-  channel,
+  channel: channelProp,
   onToggleSearch,
   onOpenMobileSidebar,
   onTogglePins,
@@ -58,7 +60,14 @@ export default function ChatHeader({
   onRemoveCanvasTab,
 }) {
   const { membersByChannel, toggleInfoPanel, showInfoPanel } = useChannelStore();
+  // Always read the latest channel from the store so privacy/name/topic changes
+  // reflect instantly in the header without waiting for parent re-render.
+  const channel = useChannelStore((s) =>
+    s.channels.find((c) => c._id === channelProp?._id) || channelProp
+  );
   const { user } = useAuthStore();
+  const { workspaceId } = useParams();
+  const { isFavorited, toggleFavorite } = useFavoritesStore();
   const activeThread = useChatStore((s) => s.activeThread);
   const pinnedMessages =
     useChatStore((s) => s.pinnedMessagesByChannel[channel?._id]) ?? EMPTY_PINS;
@@ -67,8 +76,12 @@ export default function ChatHeader({
 
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [showTabsDropdown, setShowTabsDropdown] = useState(false);
-  const [isStarred, setIsStarred] = useState(false);
   const [narrowTabs, setNarrowTabs] = useState(false);
+
+  const channelId = channel?._id?.toString?.();
+  const isStarred = channelId
+    ? isFavorited("channel", channelId) || isFavorited("private_channel", channelId) || isFavorited("project", channelId)
+    : false;
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState(null); // { x, y }
@@ -328,7 +341,14 @@ export default function ChatHeader({
             tabIndex={-1}
             onClick={(e) => {
               e.stopPropagation();
-              setIsStarred((s) => !s);
+              if (!channelId || !workspaceId) return;
+              const targetType =
+                channel.visibility === "private" || channel.type === "private"
+                  ? "private_channel"
+                  : channel.type === "project"
+                    ? "project"
+                    : "channel";
+              toggleFavorite(targetType, channelId);
             }}
             className={`chat-header__star shrink-0${isStarred ? " is-active" : ""}`}
             title={isStarred ? "Unstar" : "Star channel"}
@@ -391,40 +411,39 @@ export default function ChatHeader({
             size={14}
           />
 
-          {showMoreActions && (
-            <div
-              className="chat-header__menu absolute py-1 z-50 animate-fade-in-up"
-              style={{ top: "calc(100% + 6px)", right: 0, minWidth: 196 }}
-            >
-              {isConstrained && (
-                <>
-                  <DropItem
-                    icon={Search}
-                    label="Search Messages"
-                    onClick={() => { onToggleSearch(); setShowMoreActions(false); }}
-                  />
-                  <DropItem
-                    icon={Pin}
-                    label="Pinned Messages"
-                    sublabel={pinCount > 0 ? `${pinCount} pinned` : undefined}
-                    onClick={() => { onTogglePins(); setShowMoreActions(false); }}
-                  />
-                  <DropItem
-                    icon={Headphones}
-                    label="Huddle"
-                    onClick={() => { logger.log("Huddle", channel?._id); setShowMoreActions(false); }}
-                    className="md:hidden"
-                  />
-                  <div style={{ height: 1, background: "var(--border-primary)", margin: "4px 10px" }} />
-                </>
-              )}
-              <DropItem
-                icon={Info}
-                label="Channel Details"
-                onClick={() => { toggleInfoPanel(); setShowMoreActions(false); }}
-              />
-            </div>
-          )}
+        {showMoreActions && (
+  <div
+    className="chat-header__menu absolute z-50 animate-fade-in-up"
+    style={{
+      top: "calc(100% + 6px)",
+      right: 0,
+      minWidth: 228,
+      borderRadius: "var(--radius-lg)",
+      overflow: "hidden",
+    }}
+  >
+    {/* ── Conversation section ── */}
+    <div style={{ padding: "6px 0" }}>
+      <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", padding: "6px 14px 4px" }}>
+        Conversation
+      </p>
+      <DropItem icon={Search}   iconColor="purple" label="Search messages"   onClick={() => { onToggleSearch(); setShowMoreActions(false); }} />
+      <DropItem icon={Pin}      iconColor="amber"  label="Pinned messages"   sublabel={pinCount > 0 ? `${pinCount} pinned` : undefined} onClick={() => { onTogglePins(); setShowMoreActions(false); }} />
+      <DropItem icon={Headphones} iconColor="teal" label="Start a huddle"    onClick={() => { logger.log("Huddle", channel?._id); setShowMoreActions(false); }} className="md:hidden" />
+    </div>
+
+    {/* ── Divider ── */}
+    <div style={{ height: 1, background: "var(--border-primary)" }} />
+
+    {/* ── Channel section ── */}
+    <div style={{ padding: "6px 0" }}>
+      <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", padding: "6px 14px 4px" }}>
+        Channel
+      </p>
+      <DropItem icon={Info}        iconColor="blue" label="Channel details"  sublabel="Settings, members & more" onClick={() => { toggleInfoPanel(); setShowMoreActions(false); }} />
+    </div>
+  </div>
+)}
         </div>
       </div>
 
@@ -713,26 +732,28 @@ function HdrBtn({ icon: Icon, title, label, onClick, className = "", size = 14 }
 }
 
 /* ── DropItem ────────────────────────────────────────────────────────────── */
-function DropItem({ icon: Icon, label, sublabel, onClick, className = "" }) {
+function DropItem({ icon: Icon, iconColor = "gray", label, sublabel, onClick, className = "" }) {
+  const colorMap = {
+    purple: { bg: "rgba(206,203,246,0.25)", color: "#534AB7" },
+    teal:   { bg: "rgba(29,158,117,0.12)",  color: "#0F6E56" },
+    blue:   { bg: "rgba(53,138,221,0.12)",  color: "#185FA5" },
+    amber:  { bg: "rgba(239,159,39,0.15)",  color: "#854F0B" },
+    red:    { bg: "rgba(226,75,74,0.12)",   color: "#A32D2D" },
+    gray:   { bg: "var(--bg-hover)",        color: "var(--text-muted)" },
+  };
+  const { bg, color } = colorMap[iconColor] ?? colorMap.gray;
+
   return (
     <button
       onClick={onClick}
-      className={[
-        "chat-header__menu-item w-full flex items-center gap-3",
-        "px-3 py-2 text-left transition-colors",
-        className,
-      ].join(" ")}
+      className={["chat-header__menu-item w-full flex items-center gap-3 px-3.5 py-2 text-left transition-colors", className].join(" ")}
     >
-      <Icon size={14} className="shrink-0" style={{ color: "var(--text-muted)" }} />
+      <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 8, background: bg, color, flexShrink: 0 }}>
+        <Icon size={15} />
+      </span>
       <span className="flex flex-col min-w-0">
-        <span className="font-semibold truncate" style={{ fontSize: 13, color: "var(--text-primary)" }}>
-          {label}
-        </span>
-        {sublabel && (
-          <span style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
-            {sublabel}
-          </span>
-        )}
+        <span className="font-semibold truncate" style={{ fontSize: 13.5, color: "var(--text-primary)" }}>{label}</span>
+        {sublabel && <span style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 1 }}>{sublabel}</span>}
       </span>
     </button>
   );

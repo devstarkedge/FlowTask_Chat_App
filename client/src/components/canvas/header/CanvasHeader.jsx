@@ -5,7 +5,7 @@ import { useCanvasStore } from "../../../stores/canvasStore";
 import CanvasCover from "../CanvasCover";
 import CanvasThreeDotMenu from "../CanvasThreeDotMenu";
 import toast from "react-hot-toast";
-import { PERMISSION_TOAST_MESSAGE } from "../permissions/useCanvasPermissions";
+import { showPermissionToast } from "../permissions/useCanvasPermissions";
 
 // ── Cover Style Helper ──────────────────────────────────────────────────────────
 function coverStyle(cover) {
@@ -71,7 +71,7 @@ export default function CanvasHeader({
       debounce(async (nextTitle) => {
         if (!canvas?._id) return;
         if (isViewOnly) {
-          toast.error(PERMISSION_TOAST_MESSAGE);
+          showPermissionToast();
           setTitle(canvas.title || "Untitled");
           return;
         }
@@ -87,7 +87,7 @@ export default function CanvasHeader({
   // ── Cover Actions ──────────────────────────────────────────────────────────────
   const handleCoverReplace = useCallback(() => {
     if (isViewOnly) {
-      toast.error(PERMISSION_TOAST_MESSAGE);
+      showPermissionToast();
       return;
     }
     setShowCoverPicker(true);
@@ -95,7 +95,7 @@ export default function CanvasHeader({
 
   const handleCoverReposition = useCallback(() => {
     if (isViewOnly) {
-      toast.error(PERMISSION_TOAST_MESSAGE);
+      showPermissionToast();
       return;
     }
     setIsRepositioning(true);
@@ -103,7 +103,7 @@ export default function CanvasHeader({
 
   const handleCoverRemove = useCallback(async () => {
     if (isViewOnly) {
-      toast.error(PERMISSION_TOAST_MESSAGE);
+      showPermissionToast();
       return;
     }
     if (canvas?._id) {
@@ -195,56 +195,56 @@ export default function CanvasHeader({
         </div>
       )}
 
-      {/* Unified hover zone for cover + title */}
+      {/* Cover Image (when present) - rendered outside container to occupy 100% of header panel */}
+      {currentCoverStyle && (
+        <div
+          className={`canvas-cover-strip${coverHovered ? " is-hovered" : ""}`}
+          style={currentCoverStyle}
+          onMouseEnter={() => setCoverHovered(true)}
+          onMouseLeave={() => setCoverHovered(false)}
+        >
+          {!isViewOnly && (
+            <div className="canvas-cover-actions">
+              <button
+                className="canvas-cover-change-btn"
+                onClick={() => setShowCoverPicker(true)}
+              >
+                <ImageIcon size={14} />
+                Change cover
+              </button>
+              <button
+                className="canvas-cover-remove-btn"
+                onClick={async () => {
+                  if (canvas?._id) {
+                    await updateCanvasMetadata(canvas._id, { cover: null });
+                  }
+                  setShowCoverPicker(false);
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Unified hover zone for title + add cover + menu */}
       <div
         className="canvas-cover-title-zone"
         onMouseEnter={() => {
-          setCoverHovered(true);
           setTitleHovered(true);
         }}
         onMouseLeave={() => {
-          setCoverHovered(false);
           setTitleHovered(false);
         }}
       >
-        {/* Cover Image (when present) */}
-        {currentCoverStyle && (
-          <div
-            className={`canvas-cover-strip${coverHovered ? " is-hovered" : ""}`}
-            style={currentCoverStyle}
-          >
-            {!isViewOnly && (
-              <div className="canvas-cover-actions">
-                <button
-                  className="canvas-cover-change-btn"
-                  onClick={() => setShowCoverPicker(true)}
-                >
-                  <ImageIcon size={14} />
-                  Change cover
-                </button>
-                <button
-                  className="canvas-cover-remove-btn"
-                  onClick={async () => {
-                    if (canvas?._id) {
-                      await updateCanvasMetadata(canvas._id, { cover: null });
-                    }
-                    setShowCoverPicker(false);
-                  }}
-                >
-                  Remove
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Add Cover Button (only when no cover) */}
         {!canvas?.cover && (
           <button
             className={`canvas-add-cover-btn${showCoverActions ? " is-visible" : ""}`}
             onClick={() => {
               if (isViewOnly) {
-                toast.error(PERMISSION_TOAST_MESSAGE);
+                showPermissionToast();
                 return;
               }
               setShowCoverPicker(true);
@@ -278,6 +278,19 @@ export default function CanvasHeader({
             if (isViewOnly) return;
             setTitle(event.target.value);
             debouncedTitleSave(event.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (isViewOnly) {
+              const allowedKeys = [
+                "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+                "Home", "End", "PageUp", "PageDown",
+                "Control", "Shift", "Alt", "Meta", "CapsLock", "Escape", "Tab"
+              ];
+              if (!allowedKeys.includes(e.key) && !(e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                showPermissionToast();
+              }
+            }
           }}
           onBlur={() => !isViewOnly && debouncedTitleSave.flush()}
         />

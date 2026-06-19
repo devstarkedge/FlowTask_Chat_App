@@ -5,6 +5,18 @@ import toast from "react-hot-toast";
 export const PERMISSION_TOAST_MESSAGE =
   "You do not have permission to edit this canvas.";
 
+/** Last time a permission toast was shown (module-level for global throttling). */
+let lastPermissionToastTime = 0;
+const PERMISSION_TOAST_COOLDOWN_MS = 3000;
+
+/** Show a throttled permission-denied toast (at most once every 3 seconds globally). */
+export function showPermissionToast() {
+  const now = Date.now();
+  if (now - lastPermissionToastTime < PERMISSION_TOAST_COOLDOWN_MS) return;
+  lastPermissionToastTime = now;
+  toast.error(PERMISSION_TOAST_MESSAGE, { duration: 3000 });
+}
+
 // ── Pure Permission Helpers ──────────────────────────────────────────────────────
 
 /**
@@ -90,15 +102,11 @@ export function useCanvasPermissions(canvas, editor, viewingVersion) {
   const canvasRole = getCanvasRole(canvas);
   const permissionToastShownRef = useRef(false);
 
-  // ── 1. Editor editable state + toast ───────────────────────────────────────────
+  // ── 1. Editor editable state (no auto-toast on init) ──────────────────────────
   useEffect(() => {
     if (!editor) return;
     if (isViewOnly) {
       editor.setEditable(false);
-      if (!permissionToastShownRef.current) {
-        permissionToastShownRef.current = true;
-        toast.error(PERMISSION_TOAST_MESSAGE, { duration: 4000 });
-      }
     } else if (!viewingVersion) {
       editor.setEditable(true);
     }

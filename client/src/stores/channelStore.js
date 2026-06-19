@@ -254,9 +254,18 @@ export const useChannelStore = create(
 
   // ─── Channel Management ─────────────────────────────────────────────
   editChannel: async (channelId, data) => {
+    // Optimistic merge: immediately apply the sent data to the store so the
+    // UI (header, info panel, sidebar groups) updates before the API returns.
+    set((state) => ({
+      channels: state.channels.map((c) =>
+        c._id === channelId ? { ...c, ...data } : c,
+      ),
+    }))
+
     try {
       const { data: res } = await channelAPI.update(channelId, data)
       const updated = res.data.channel
+      // Reconcile with the server response (authoritative source of truth).
       set((state) => ({
         channels: state.channels.map((c) =>
           c._id === channelId ? { ...c, ...updated } : c,
@@ -265,6 +274,8 @@ export const useChannelStore = create(
       toast.success('Channel updated')
       return updated
     } catch (error) {
+      // Revert the optimistic update on failure by fetching fresh channel list.
+      get().fetchChannels()
       toast.error(error.response?.data?.message || 'Failed to update channel')
       throw error
     }

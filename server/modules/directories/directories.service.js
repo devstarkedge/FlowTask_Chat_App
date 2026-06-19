@@ -85,6 +85,7 @@ class DirectoriesService {
     result.channels = result.channels.map((ch) => ({
       ...ch,
       isJoined: joinedSet.has(ch._id.toString()),
+      isPrivate: ch.visibility === 'private',
     }));
 
     return result;

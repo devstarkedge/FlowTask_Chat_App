@@ -156,6 +156,15 @@ export const channelAPI = {
   star: (id) => api.put(`/channels/${id}/star`),
 };
 
+// ─── Favorites ────────────────────────────────────────────────────────────
+export const favoritesAPI = {
+  list: () => api.get("/favorites"),
+  add: (targetType, targetId) => api.post("/favorites", { targetType, targetId }),
+  remove: (id) => api.delete(`/favorites/${id}`),
+  toggle: (targetType, targetId) => api.post("/favorites/toggle", { targetType, targetId }),
+  check: (targetType, targetId) => api.get("/favorites/check", { params: { targetType, targetId } }),
+};
+
 // ─── Messages ────────────────────────────────────────────────────────────
 export const messageAPI = {
   list: (channelId, params) =>
@@ -355,7 +364,8 @@ export const workspaceAPI = {
     api.post("/workspaces/join", { inviteCode }),
   regenerateInviteCode: (id) => api.post(`/workspaces/${id}/invite-code`),
   // Email invites
-  inviteByEmail: (id, data) => api.post(`/workspaces/${id}/invite-email`, data),
+  inviteByEmail: (id, { email, channels = [] }) =>
+    api.post(`/workspaces/${id}/invite-email`, { email, channels }),
   getPendingInvites: (id) => api.get(`/workspaces/${id}/invites`),
   revokeInvite: (id, inviteId) =>
     api.delete(`/workspaces/${id}/invites/${inviteId}`),

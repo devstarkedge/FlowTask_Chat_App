@@ -4,7 +4,7 @@ import { useCanvasStore } from "../../../stores/canvasStore";
 import { useCanvasUiStore } from "../../../stores/canvasUiStore";
 import CommentThreadSidebar from "../comments/CommentThreadSidebar";
 import CanvasHistoryPanel from "../history/CanvasHistoryPanel";
-import CanvasDetailsSidebar from "../details/CanvasDetailsSidebar";
+import CanvasDetailsModal from "../details/CanvasDetailsModal";
 import CanvasShareModal from "../CanvasShareModal";
 import PresenceBar from "../realtime/PresenceBar";
 import { useCanvasCollaboration } from "../realtime/useCanvasCollaboration";
@@ -386,10 +386,11 @@ export default function CanvasEditorUI({
           />
         )}
         {activeSidebar === "details" && (
-          <CanvasDetailsSidebar
+          <CanvasDetailsModal
             canvas={canvas}
             onClose={closeSidebar}
             onOpenShareModal={handleOpenShareModal}
+            historyCount={history?.length}
           />
         )}
       </div>

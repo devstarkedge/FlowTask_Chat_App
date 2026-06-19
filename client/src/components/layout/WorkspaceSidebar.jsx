@@ -23,6 +23,7 @@ import HoverPreview from "./HoverPreview";
 import useHoverPanelController from "./hooks/useHoverPanelController";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 
+
 const NAV_ITEMS = [
   { id: "home", icon: Home, label: "Home", path: "" },
   { id: "dms", icon: MessageSquare, label: "DMs", path: "/dms" },
@@ -45,6 +46,7 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
   const [showSetStatus, setShowSetStatus] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const createBtnRef = useRef(null);
   const avatarBtnRef = useRef(null);
   const {
@@ -175,7 +177,13 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
           onClick={() => navigate(basePath)}
           aria-label="Go to home"
         >
-          <img src="/logo.png" alt="Logo" />
+          <img
+            src="/logo.png"
+            alt="Logo"
+            onClick={
+              () => navigate(basePath)
+            }
+          />
         </button>
 
         <div className="workspace-sidebar-divider" />

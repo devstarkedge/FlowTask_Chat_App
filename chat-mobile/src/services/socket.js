@@ -155,7 +155,13 @@ export const connectSocket = async () => {
   });
 
   socket.on('channel:updated', ({ channelId, updates }) => {
-    useChannelStore.getState().updateChannel(channelId, updates);
+    const store = useChannelStore.getState();
+    const exists = store.channels.some((c) => c._id === channelId);
+    if (exists) {
+      store.updateChannel(channelId, updates);
+    } else if (updates?.visibility !== undefined) {
+      store.fetchChannels();
+    }
   });
 
   socket.on('channel:created', ({ channel }) => {

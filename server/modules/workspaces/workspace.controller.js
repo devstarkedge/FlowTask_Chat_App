@@ -121,6 +121,7 @@ export const inviteByEmail = asyncHandler(async (req, res) => {
     req.body.email,
     req.body.role,
     req.user._id,
+    req.body.channels,
   );
   res.status(201).json({ success: true, data: result });
 });

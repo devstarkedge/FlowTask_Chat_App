@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, lazy, Suspense, useMemo } from "react";
+import { useState, useCallback, useRef, lazy, Suspense, useMemo, useEffect } from "react";
 import { EditorContent } from "@tiptap/react";
 import { useCanvasStore } from "../../../stores/canvasStore";
 import { useCanvasUiStore } from "../../../stores/canvasUiStore";
@@ -12,6 +12,7 @@ import CanvasBottomToolbar from "../CanvasBottomToolbar";
 import CanvasInsertMenu from "../CanvasInsertMenu";
 import CanvasHeader from "../header/CanvasHeader";
 import CanvasShareModal from "../CanvasShareModal";
+import CanvasDetailsModal from "../details/CanvasDetailsModal";
 import toast from "react-hot-toast";
 import { useCanvasPermissions, PERMISSION_TOAST_MESSAGE } from "../permissions/useCanvasPermissions";
 import { useCanvasFileUpload } from "../overlays/CanvasFileUpload";
@@ -29,7 +30,6 @@ import "../styles/canvas-media.css";
 // ── Lazy-loaded sidebars (reduced initial bundle) ──────────────────────────
 const CommentThreadSidebar = lazy(() => import("../comments/CommentThreadSidebar"));
 const CanvasHistoryPanel = lazy(() => import("../history/CanvasHistoryPanel"));
-const CanvasDetailsSidebar = lazy(() => import("../details/CanvasDetailsSidebar"));
 
 const SIDEBAR_FALLBACK = <div className="canvas-loading"><span />Loading...</div>;
 
@@ -229,7 +229,17 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
   }, [blocks, createComment]);
 
   // ── Collaboration timeout ──────────────────────────────────────────────
-  const [collabTimerRef] = useState(() => ({ current: null }));
+  useEffect(() => {
+    setCollabTimedOut(false);
+    if (!provider) return undefined;
+    const timer = setTimeout(() => setCollabTimedOut(true), COLLAB_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [provider, canvas?._id]);
+
+  useEffect(() => {
+    if (status === "connected" || status === "synced") setCollabTimedOut(false);
+  }, [status]);
+
   const collaborationLoading = useMemo(() => {
     if (!provider) return false;
     if (status === "connected" || status === "synced" || status === "disabled" || status === "auth-failed") return false;
@@ -261,17 +271,6 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
         <main className="canvas-scroll-surface">
           <article className="canvas-document-surface">
             <div ref={editorWrapperRef} style={{ position: "relative" }}>
-              {isViewOnly && (
-                <div
-                  style={{ position: "absolute", inset: 0, zIndex: 5, cursor: "default" }}
-                  onClick={() => {
-                    if (!permissionToastShownRef.current) {
-                      permissionToastShownRef.current = true;
-                      toast.error(PERMISSION_TOAST_MESSAGE, { duration: 3000 });
-                    }
-                  }}
-                />
-              )}
               <EditorContent editor={editor} spellCheck={false} />
               {MentionDropdownPortal}
             </div>
@@ -302,13 +301,12 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
           </Suspense>
         )}
         {activeSidebar === "details" && (
-          <Suspense fallback={SIDEBAR_FALLBACK}>
-            <CanvasDetailsSidebar
-              canvas={canvas}
-              onClose={closeSidebar}
-              onOpenShareModal={handleOpenShareModal}
-            />
-          </Suspense>
+          <CanvasDetailsModal
+            canvas={canvas}
+            onClose={closeSidebar}
+            onOpenShareModal={handleOpenShareModal}
+            historyCount={history?.length}
+          />
         )}
       </div>
 

@@ -5,9 +5,14 @@
 /* ─── Cover Title Zone ─────────────────────────────────────────────────── */
 .canvas-cover-title-zone {
   position: relative;
-  width: min(800px, calc(100% - 40px));
+  width: 100%;
+  max-width: 800px;  
+
+  
   margin: 0 auto;
   box-sizing: border-box;
+  padding: 24px 20px 16px;
+  margin-bottom: 24px;
 }
 
 .canvas-title-input {
@@ -31,7 +36,7 @@
 }
 
 .canvas-subtitle {
-  margin: 0 0 48px;
+  margin: 6px 0 16px;
   color: var(--text-muted);
   font-size: 15px;
 }
@@ -39,12 +44,17 @@
 /* ─── Cover Strip ──────────────────────────────────────────────────────── */
 .canvas-cover-strip {
   position: relative;
-  width: 100% !important;
+  width: 100vw !important;
+  left: 10%;
+  right: 0%;
+  margin-left: -50vw;
+  /* margin-right: -50vw; */
   height: 240px;
   background-size: cover;
   background-position: center;
   z-index: 1;
   margin-top: 0;
+  margin-bottom: 16px;
 }
 
 .canvas-cover-strip::after {
@@ -56,27 +66,11 @@
   pointer-events: none;
 }
 
-/* Cover strip INSIDE cover-title-zone — spans full viewport width */
-.canvas-cover-title-zone .canvas-cover-strip {
-  width: 100vw !important;
-  margin-left: calc(-50vw + 50%) !important;
-  margin-right: 0 !important;
-  margin-top: 0 !important;
-  margin-bottom: 4px !important;
-  border-radius: 0;
-  height: 240px !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  padding-top: 0 !important;
-  position: relative;
-  left: 0;
-  z-index: 3;
-}
 
 /* ─── Cover Action Buttons (Change / Remove) ───────────────────────────── */
 .canvas-cover-actions {
-  position: absolute;
-  bottom: 12px;
+  position: fixed;
+  top: 260px;
   right: 10px;
   display: flex;
   gap: 8px;

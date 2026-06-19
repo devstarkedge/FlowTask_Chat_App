@@ -404,7 +404,7 @@ class WorkspaceService {
    * - If user exists in system but not workspace: add directly + email notification
    * - If user doesn't exist: create invite record + send invite email with signup link
    */
-  async inviteByEmail(workspaceId, email, role = WORKSPACE_ROLES.MEMBER, invitedBy) {
+  async inviteByEmail(workspaceId, email, role = WORKSPACE_ROLES.MEMBER, invitedBy, channels = []) {
     const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
     const { default: emailService } = await import('../auth/email.service.js');
     const { default: ChatUser } = await import('../users/ChatUser.model.js');
@@ -456,6 +456,7 @@ class WorkspaceService {
       email: email.toLowerCase(),
       role,
       invitedBy,
+      channels: channels || [],
     });
 
     // Get inviter name

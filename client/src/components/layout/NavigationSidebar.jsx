@@ -6,6 +6,7 @@ import { useChatStore } from "../../stores/chatStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useLaterStore } from '../../stores/laterStore';
 import { useScheduledStore } from '../../stores/scheduledStore';
+import { useFavoritesStore } from '../../stores/favoritesStore';
 import {
   Hash,
   Lock,
@@ -23,6 +24,7 @@ import {
   AppWindow,
   BookMarked,
   Clock,
+  Star,
 } from "lucide-react";
 import { Avatar } from "../chat/MemberAvatarGroup";
 import CreateChannelModal from "../chat/CreateChannelModal";
@@ -75,6 +77,13 @@ export default function NavigationSidebar({
   const { switchWorkspace } = useWorkspaceStore();
   const drafts = useDraftStore((s) => s.drafts);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const {
+    favorites,
+    isLoading: favoritesLoading,
+    fetchFavorites,
+    removeFavorite,
+    isFavorited,
+  } = useFavoritesStore();
 
   const activeWorkspacePanel = useUIStore((s) => s.activeWorkspacePanel);
   // Check if we're on the Later page or have the Later panel open to avoid conflicting highlighting
@@ -106,6 +115,13 @@ export default function NavigationSidebar({
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [showJoinWorkspace, setShowJoinWorkspace] = useState(false);
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
+
+  // Fetch favorites when workspace changes
+  useEffect(() => {
+    if (activeWorkspaceId) {
+      fetchFavorites();
+    }
+  }, [activeWorkspaceId, fetchFavorites]);
 
   const [selfDmLoading, setSelfDmLoading] = useState(false);
 
@@ -196,6 +212,28 @@ export default function NavigationSidebar({
       return (a.name || "").localeCompare(b.name || "");
     });
   };
+
+  // Resolve favorite targets to channel objects for sidebar rendering
+  const favoriteChannels = useMemo(() => {
+    const favChannelIds = new Set();
+    const favDMIds = new Set();
+
+    for (const fav of favorites) {
+      if (fav.targetType === 'channel' || fav.targetType === 'private_channel' || fav.targetType === 'project') {
+        favChannelIds.add(fav.targetId);
+      } else if (fav.targetType === 'dm') {
+        favDMIds.add(fav.targetId);
+      }
+    }
+
+    const resolved = [];
+    for (const ch of channels) {
+      if (favChannelIds.has(ch._id) || favDMIds.has(ch._id)) {
+        resolved.push(ch);
+      }
+    }
+    return resolved;
+  }, [favorites, channels]);
 
   const handleSelectChannel = (channelId) => {
     // Don't proceed if we're on the Later page - user needs to explicitly navigate away
@@ -325,6 +363,57 @@ export default function NavigationSidebar({
               }}
             />
           </div>
+        )}
+
+        {/* ── Favorites Section ── */}
+        {!isDMMode && favoriteChannels.length > 0 && (
+          <SidebarSection
+            title="Starred"
+            count={favoriteChannels.length}
+            expanded={true}
+            onToggle={() => {}}
+          >
+            {favoriteChannels.map((channel) => {
+              const favId = favorites.find(
+                (f) => f.targetId === channel._id
+              )?._id;
+              return (
+                <div
+                  key={channel._id}
+                  className="flex items-center group"
+                  style={{ position: 'relative' }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <ChannelListItem
+                      channel={channel}
+                      isActive={!isLaterPage && channel._id === activeChannelId}
+                      unread={unreads[channel._id] || 0}
+                      onClick={() => handleSelectChannel(channel._id)}
+                      onlineUsers={onlineUsers}
+                      hasDraft={hasDraft(channel._id)}
+                    />
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (favId) removeFavorite(favId);
+                    }}
+                    className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{
+                      color: 'var(--accent-yellow)',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      marginRight: 8,
+                    }}
+                    title="Remove from favorites"
+                  >
+                    <Star size={14} fill="currentColor" />
+                  </button>
+                </div>
+              );
+            })}
+          </SidebarSection>
         )}
 
         {/* Channel Sections */}

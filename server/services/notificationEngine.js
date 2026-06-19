@@ -14,6 +14,7 @@ import {
   MENTION_TYPES,
 } from '../config/constants.js';
 import { stripHtml, truncate } from '../utils/sanitize.js';
+import { getAttachmentPreview } from '../utils/getNotificationPreview.js';
 
 /**
  * Notification Engine — the central brain for all notification decisions.
@@ -86,7 +87,7 @@ class NotificationEngine {
 
       // Build message preview — fall back to attachment label when there is no text
       const textPreview = truncate(stripHtml(message.content || ''), 120);
-      const attachmentPreview = this._getAttachmentPreview(message.attachments);
+      const attachmentPreview = getAttachmentPreview(message);
       const preview = textPreview || attachmentPreview || '';
       const senderName = message.senderSnapshot?.name || 'Someone';
       const senderAvatar = message.senderSnapshot?.avatar || null;
@@ -585,46 +586,6 @@ class NotificationEngine {
         });
       }
     }
-  }
-
-  /**
-   * Get human-readable preview text for attachments.
-   * @private
-   */
-  _getAttachmentPreview(attachments) {
-    if (!attachments || attachments.length === 0) return null;
-
-    const first = attachments[0];
-    const mimeType = first.mimeType || '';
-    const originalName = first.originalName || first.fileName || '';
-    const ext = originalName.split('.').pop()?.toLowerCase() || '';
-
-    let label;
-    if (mimeType.startsWith('image/')) {
-      label = '📷 Image';
-    } else if (mimeType.startsWith('video/')) {
-      label = '🎥 Video';
-    } else if (mimeType.startsWith('audio/')) {
-      label = '🎵 Audio';
-    } else if (mimeType === 'application/pdf' || ext === 'pdf') {
-      label = '📄 PDF File';
-    } else if (['doc', 'docx'].includes(ext) || mimeType.includes('word') || mimeType.includes('document')) {
-      label = '📄 Word Document';
-    } else if (['xls', 'xlsx'].includes(ext) || mimeType.includes('excel') || mimeType.includes('spreadsheet')) {
-      label = '📊 Excel Spreadsheet';
-    } else if (ext === 'csv' || mimeType.includes('csv')) {
-      label = '📊 CSV File';
-    } else if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(ext) || mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('archive')) {
-      label = '🗜 ZIP Archive';
-    } else {
-      label = '📎 File Attachment';
-    }
-
-    if (attachments.length > 1) {
-      return `${label} (${attachments.length} files)`;
-    }
-
-    return label;
   }
 
   /**

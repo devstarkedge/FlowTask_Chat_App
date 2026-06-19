@@ -46,10 +46,19 @@ export default function CanvasCover({ cover, canvasId, canvasTitle, channelId, o
   }, [canvasId, updateCanvasMetadata, yOffset]);
 
   const applyImageUrl = useCallback(async () => {
-    if (!canvasId || !customImageUrl.trim()) return;
-    await updateCanvasMetadata(canvasId, {
-      cover: { type: "image", value: customImageUrl.trim(), yOffset },
-    });
+    if (!canvasId || !customImageUrl.trim()) {
+      toast.error("Please enter a valid image URL.");
+      return;
+    }
+    try {
+      await updateCanvasMetadata(canvasId, {
+        cover: { type: "image", value: customImageUrl.trim(), yOffset },
+      });
+      toast.success("Cover image URL applied!");
+    } catch (err) {
+      console.error("[CanvasCover] URL apply error:", err);
+      toast.error("Failed to apply cover image URL.");
+    }
   }, [canvasId, customImageUrl, updateCanvasMetadata, yOffset]);
 
   const removeCover = useCallback(async () => {
@@ -67,11 +76,15 @@ export default function CanvasCover({ cover, canvasId, canvasTitle, channelId, o
   // File upload handler
   const handleFileSelect = useCallback(async (e) => {
     const file = e.target.files?.[0];
-    if (!file || !canvasId) return;
+    if (!file || !canvasId) {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
 
     // Prevent duplicate upload of the same file
     if (isUploadingRef.current) {
       toast.error("Upload already in progress. Please wait.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
@@ -79,6 +92,7 @@ export default function CanvasCover({ cover, canvasId, canvasTitle, channelId, o
     const validTypes = ["image/jpeg", "image/png", "image/webp"];
     if (!validTypes.includes(file.type)) {
       toast.error("Please select a JPG, PNG, or WEBP image.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
@@ -104,11 +118,24 @@ export default function CanvasCover({ cover, canvasId, canvasTitle, channelId, o
           toast.error("Upload succeeded but no URL returned.");
         }
       } else {
-        toast.error("Failed to upload cover image.");
+        const serverMsg = res.data?.error?.message || "Failed to upload cover image.";
+        const debugInfo = res.data?.error?.debug;
+        if (debugInfo && debugInfo.length > 0) {
+          const d = debugInfo[0];
+          console.error("[CanvasCover] Upload validation failed:", {
+            filename: d.filename,
+            declaredType: d.declaredType,
+            detectedType: d.detectedType,
+            reason: d.reason,
+          });
+          toast.error(`Upload failed: ${d.reason || serverMsg}`, { duration: 5000 });
+        } else {
+          toast.error(serverMsg);
+        }
       }
     } catch (err) {
       console.error("[CanvasCover] Upload error:", err);
-      toast.error("Failed to upload cover image.");
+      toast.error(err?.response?.data?.error?.message || "Failed to upload cover image.");
     } finally {
       setIsUploading(false);
       setUploadPreview(null);

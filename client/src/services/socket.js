@@ -104,6 +104,10 @@ const SOCKET_EVENTS = {
   USER_PROFILE_UPDATED: 'user:profile_updated',
   WORKSPACE_MEMBER_UPDATED: 'workspace:member_updated',
   PERMISSIONS_UPDATED: 'permissions:updated',
+
+  // Favorites
+  FAVORITE_ADDED: 'favorite:added',
+  FAVORITE_REMOVED: 'favorite:removed',
 }
 
 export function connectSocket() {
@@ -153,6 +157,23 @@ export function connectSocket() {
       }
     } catch (err) {
       logger.error('[Socket] Failed to join channels on connect:', err.message)
+    }
+  })
+
+  // ─── Favorites Events ──────────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.FAVORITE_ADDED, ({ favorite }) => {
+    try {
+      useFavoritesStore.getState().handleFavoriteAdded(favorite)
+    } catch (err) {
+      logger.error('[Socket] Failed to handle favorite:added:', err.message)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.FAVORITE_REMOVED, ({ favoriteId, targetType, targetId }) => {
+    try {
+      useFavoritesStore.getState().handleFavoriteRemoved(favoriteId, targetType, targetId)
+    } catch (err) {
+      logger.error('[Socket] Failed to handle favorite:removed:', err.message)
     }
   })
 
@@ -359,7 +380,15 @@ export function connectSocket() {
   })
 
   socket.on(SOCKET_EVENTS.CHANNEL_UPDATED, ({ channelId, updates }) => {
-    useChannelStore.getState().updateChannel(channelId, updates)
+    const store = useChannelStore.getState()
+    const exists = store.channels.some((c) => c._id === channelId)
+    if (exists) {
+      store.updateChannel(channelId, updates)
+    } else if (updates?.visibility !== undefined) {
+      // Channel not in local list (e.g. non-member received workspace-wide
+      // visibility change). Refetch to pick up the newly-visible channel.
+      store.fetchChannels()
+    }
   })
 
   // ─── Member Events ──────────────────────────────────────────────────

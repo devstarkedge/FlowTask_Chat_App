@@ -580,7 +580,8 @@ class CanvasService {
       throw new ValidationError("workspaceId is required");
     }
 
-    const canvas = await canvasRepository.findById(canvasId, workspaceId);
+    const Canvas = (await import("./canvas.model.js")).default;
+    const canvas = await Canvas.findOne({ _id: canvasId, workspaceId });
     if (!canvas) {
       throw new NotFoundError("Canvas not found");
     }
@@ -697,7 +698,8 @@ class CanvasService {
 
   // ── Toggle Save for Later
   async toggleSaveForLater(canvasId, userId, workspaceId) {
-    const canvas = await canvasRepository.findById(canvasId, workspaceId);
+    const Canvas = (await import("./canvas.model.js")).default;
+    const canvas = await Canvas.findOne({ _id: canvasId, workspaceId });
     if (!canvas) {
       throw new NotFoundError("Canvas not found");
     }
@@ -728,7 +730,8 @@ class CanvasService {
 
   // ── Update Saved Status
   async updateSavedStatus(canvasId, userId, status, workspaceId) {
-    const canvas = await canvasRepository.findById(canvasId, workspaceId);
+    const Canvas = (await import("./canvas.model.js")).default;
+    const canvas = await Canvas.findOne({ _id: canvasId, workspaceId });
     if (!canvas) {
       throw new NotFoundError("Canvas not found");
     }

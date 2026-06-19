@@ -9,11 +9,13 @@ import {
   LogOut,
   Info,
   Globe,
+  Star,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import MemberItem from "./MemberItem";
 import { useChannelStore } from "../../stores/channelStore";
 import { useAuthStore } from "../../stores/authStore";
+import { useFavoritesStore } from "../../stores/favoritesStore";
 import EditChannelModal from "./EditChannelModal";
 import AddMemberModal from "./AddMemberModal";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
@@ -24,7 +26,7 @@ import "./custom-css/channelInfoPanel.css";
 /* ─────────────────────────────────────────────
    Main component
 ───────────────────────────────────────────── */
-export default function ChannelInfoPanel({ channel, onOpenProfile }) {
+export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }) {
   const {
     membersByChannel,
     isMembersLoading,
@@ -32,10 +34,24 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
     removeMember,
     leaveChannel,
   } = useChannelStore();
+  // Always read the latest channel data from the store so privacy/name/topic
+  // changes reflect immediately, even if the parent's re-render is delayed.
+  const channel = useChannelStore((s) =>
+    s.channels.find((c) => c._id === channelProp?._id) || channelProp
+  );
   const { user } = useAuthStore();
   const { confirm } = useDeleteConfirm();
+  const { isFavorited, toggleFavorite, favorites } = useFavoritesStore();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
+
+  const channelId = channel?._id?.toString?.();
+  const isStarred = channelId
+    ? isFavorited("channel", channelId) || isFavorited("private_channel", channelId) || isFavorited("project", channelId)
+    : false;
+  const favoriteId = channelId
+    ? favorites.find((f) => f.targetId === channelId)?._id
+    : null;
 
   if (!channel) return null;
 
@@ -226,6 +242,26 @@ export default function ChannelInfoPanel({ channel, onOpenProfile }) {
               >
                 <UserPlus size={13} />
                 Add Member
+              </button>
+            )}
+
+            {/* Star / Unstar  */}
+            {channelId && (
+              <button
+                onClick={() => {
+                  const targetType =
+                    channel.visibility === "private" || channel.type === "private"
+                      ? "private_channel"
+                      : channel.type === "project"
+                        ? "project"
+                        : "channel";
+                  toggleFavorite(targetType, channelId);
+                }}
+                className="btn-ghost"
+                style={{ fontSize: 12, padding: "6px 12px", gap: 6, flex: 1, justifyContent: "center" }}
+              >
+                <Star size={13} fill={isStarred ? "currentColor" : "none"} />
+                {isStarred ? "Unstar" : "Star Channel"}
               </button>
             )}
 

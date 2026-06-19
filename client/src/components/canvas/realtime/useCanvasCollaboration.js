@@ -151,9 +151,16 @@ export function useCanvasCollaboration(canvasId) {
         provider.on('synced', handleSynced);
         provider.on('awarenessChange', handleAwareness);
 
-        // Ensure UI shows connecting state until provider reports otherwise
-        setStatus('connecting');
-        setProviderStatus('connecting');
+        // If the provider is already connected/synced (cached), reflect that
+        // immediately instead of forcing "connecting" which causes a reload loop.
+        const initialStatus = provider.status || provider.connectionStatus;
+        if (initialStatus === 'connected' || initialStatus === 'synced') {
+          setStatus(initialStatus);
+          setProviderStatus(initialStatus);
+        } else {
+          setStatus('connecting');
+          setProviderStatus('connecting');
+        }
 
         // Make sure local awareness user is set (safe to call multiple times)
         try {

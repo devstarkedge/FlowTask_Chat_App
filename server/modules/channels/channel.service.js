@@ -10,6 +10,7 @@ import directMessageService from "../dms/directMessage.service.js";
 import {
   emitToChannel,
   emitToUser,
+  emitToWorkspace,
   joinChannelRoom,
   leaveChannelRoom,
 } from "../../sockets/socketManager.js";
@@ -1304,7 +1305,7 @@ class ChannelService {
   // ──────────────────── Channel Updates ─────────────────────────────────────
 
   /**
-   * Update channel details (name, description, topic).
+   * Update channel details (name, description, topic, visibility).
    */
   async updateChannel(channelId, updates, userId, workspaceId) {
     const channel = await channelRepository.findById(channelId, {
@@ -1323,6 +1324,11 @@ class ChannelService {
       if (updates.slug && !channel.adminOverrides?.allowRename) {
         throw new ForbiddenError(
           "Cannot change the slug of a system-managed channel.",
+        );
+      }
+      if (updates.visibility !== undefined) {
+        throw new ForbiddenError(
+          "Cannot change visibility of a system-managed channel.",
         );
       }
       if (updates.adminOverrides !== undefined) {
@@ -1345,9 +1351,23 @@ class ChannelService {
     if (updates.topic !== undefined) {
       allowed.topic = sanitizeHtml(updates.topic);
     }
+    if (updates.visibility !== undefined) {
+      const normalizedVisibility = updates.visibility?.toLowerCase?.();
+      if (
+        normalizedVisibility === CHANNEL_VISIBILITY.PUBLIC ||
+        normalizedVisibility === CHANNEL_VISIBILITY.PRIVATE
+      ) {
+        allowed.visibility = normalizedVisibility;
+      }
+    }
     if (updates.adminOverrides !== undefined) {
       allowed.adminOverrides = updates.adminOverrides;
     }
+
+    // Detect visibility change for workspace-wide broadcast
+    const visibilityChanged =
+      allowed.visibility !== undefined &&
+      allowed.visibility !== channel.visibility;
 
     const updated = await channelRepository.update(
       channelId,
@@ -1355,16 +1375,28 @@ class ChannelService {
       workspaceId,
     );
 
+    const socketPayload = {
+      channelId,
+      updates: allowed,
+      updatedBy: userId,
+    };
+
+    // Always notify channel members
     emitToChannel(
       channelId.toString(),
       SOCKET_EVENTS.CHANNEL_UPDATED,
-      {
-        channelId,
-        updates: allowed,
-        updatedBy: userId,
-      },
+      socketPayload,
       channel.workspaceId?.toString(),
     );
+
+    // When visibility changes, broadcast to the entire workspace so non-members
+    // also update their channel lists (e.g., channel directory, search results).
+    if (visibilityChanged) {
+      const wsId = channel.workspaceId?.toString() || workspaceId;
+      if (wsId) {
+        emitToWorkspace(wsId, SOCKET_EVENTS.CHANNEL_UPDATED, socketPayload);
+      }
+    }
 
     return updated;
   }

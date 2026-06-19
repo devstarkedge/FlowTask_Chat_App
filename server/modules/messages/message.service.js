@@ -21,6 +21,7 @@ import {
   ForbiddenError,
 } from '../../middleware/errorHandler.js';
 import FileReference from '../files/FileReference.model.js';
+import { getAttachmentPreview } from '../../utils/getNotificationPreview.js';
 
 /**
  * Message Service — business logic for sending, editing, deleting messages,
@@ -162,7 +163,11 @@ class MessageService {
     }
 
     // Update channel's last message and emit socket event so sidebar reorders in real-time
-    const preview = truncate(stripHtml(sanitizedContent), 100);
+    // Build preview: text wins, fall back to attachment label so the channel sidebar
+    // never shows an empty last-message preview for file-only messages.
+    const textPreview = truncate(stripHtml(sanitizedContent), 100);
+    const attachmentPreview = getAttachmentPreview(populated);
+    const preview = textPreview || attachmentPreview || '';
     const wsId = (workspaceId || channel.workspaceId)?.toString();
     const lastMessageAt = new Date();
     channelRepository.updateLastMessage(channelId, preview, lastMessageAt, wsId)
@@ -280,42 +285,12 @@ class MessageService {
 
   /**
    * Get human-readable preview text for attachments.
+   * Delegates to the shared getNotificationPreview utility which supports
+   * both embedded attachments and populated fileReferences.
    * @private
    */
-  _getAttachmentPreview(attachments) {
-    if (!attachments || attachments.length === 0) return null;
-
-    const first = attachments[0];
-    const mimeType = first.mimeType || '';
-    const originalName = first.originalName || first.fileName || '';
-    const ext = originalName.split('.').pop()?.toLowerCase() || '';
-
-    let label;
-    if (mimeType.startsWith('image/')) {
-      label = '📷 Image';
-    } else if (mimeType.startsWith('video/')) {
-      label = '🎥 Video';
-    } else if (mimeType.startsWith('audio/')) {
-      label = '🎵 Audio';
-    } else if (mimeType === 'application/pdf' || ext === 'pdf') {
-      label = '📄 PDF File';
-    } else if (['doc', 'docx'].includes(ext) || mimeType.includes('word') || mimeType.includes('document')) {
-      label = '📄 Word Document';
-    } else if (['xls', 'xlsx'].includes(ext) || mimeType.includes('excel') || mimeType.includes('spreadsheet')) {
-      label = '📊 Excel Spreadsheet';
-    } else if (ext === 'csv' || mimeType.includes('csv')) {
-      label = '📊 CSV File';
-    } else if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(ext) || mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('archive')) {
-      label = '🗜 ZIP Archive';
-    } else {
-      label = '📎 File Attachment';
-    }
-
-    if (attachments.length > 1) {
-      return `${label} (${attachments.length} files)`;
-    }
-
-    return label;
+  _getAttachmentPreview(message) {
+    return getAttachmentPreview(message);
   }
 
   /**
@@ -893,7 +868,7 @@ class MessageService {
 
     // Build preview: prefer text, fall back to attachment label
     const textPreview = truncate(stripHtml(message.content || ''), 100);
-    const attachmentPreview = this._getAttachmentPreview(message.attachments);
+    const attachmentPreview = this._getAttachmentPreview(message);
     const preview = textPreview || attachmentPreview || '';
 
     for (const mention of mentions) {
@@ -988,7 +963,7 @@ class MessageService {
 
       const notificationService = (await import('../notifications/notification.service.js')).default;
       const dmTextPreview = truncate(stripHtml(message.content || ''), 100);
-      const dmAttachmentPreview = this._getAttachmentPreview(message.attachments);
+      const dmAttachmentPreview = this._getAttachmentPreview(message);
       const dmPreview = dmTextPreview || dmAttachmentPreview || '';
       await notificationService.createDMNotification({
         workspaceId: message.workspaceId || channel.workspaceId,

@@ -101,6 +101,17 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
 
   const { saveStatus, flushSave, debouncedSave } = useCanvasSave(null, onSave);
 
+  // ── Content Sync — must be created BEFORE useEditor so onUpdate can reference it ──
+  // We pass editor: null initially and patch it after useEditor creates the instance.
+  const contentSync = useCanvasContentSync({
+    editor: null,
+    canvas,
+    provider,
+    ydoc,
+    providerRef,
+    withCollab,
+  });
+
   // ── Create the TipTap editor ──────────────────────────────────────
 
   const editor = useEditor({
@@ -163,16 +174,13 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
     return () => scrollEl.removeEventListener("scroll", onScroll);
   }, [editor]);
 
-  // ── Sub-hooks (run after useEditor so editor is available) ─────────
-
-  const contentSync = useCanvasContentSync({
-    editor,
-    canvas,
-    provider,
-    ydoc,
-    providerRef,
-    withCollab,
-  });
+  // ── Patch contentSync with the real editor after useEditor creates it ─────────
+  useEffect(() => {
+    if (contentSync && editor) {
+      // @ts-ignore — patch the editor ref inside contentSync after mount
+      contentSync.editor = editor;
+    }
+  }, [contentSync, editor]);
 
   useCanvasCursor(editor, providerRef);
   useCanvasTyping(editor, providerRef);

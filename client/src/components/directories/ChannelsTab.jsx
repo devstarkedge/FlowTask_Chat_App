@@ -17,6 +17,7 @@ import { Virtuoso } from "react-virtuoso";
 import { directoriesAPI } from "../../services/directoriesAPI";
 import { useAuthStore } from "../../stores/authStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useChannelStore } from "../../stores/channelStore";
 import { getChannelPath } from "../../utils/chatRoutes";
 import { ListSkeleton } from "./Skeletons";
 import EmptyState from "./EmptyState";
@@ -94,6 +95,22 @@ export default function ChannelsTab() {
     fetchChannels(search, type, sort);
   }, [activeWorkspaceId, type, sort]);
 
+  // Derive a compact signature of channel visibility states from the store.
+  // When any channel's visibility changes (via socket or editChannel), the
+  // signature changes and triggers a directory refetch to stay in sync.
+  const channelVisibilitySignature = useChannelStore((s) =>
+    s.channels.map((c) => `${c._id}:${c.visibility}`).join(',')
+  );
+  const sigRef = useRef(channelVisibilitySignature);
+  useEffect(() => {
+    // Skip the initial render (only react to subsequent changes)
+    if (sigRef.current === channelVisibilitySignature) return;
+    sigRef.current = channelVisibilitySignature;
+    if (!loading) {
+      fetchChannels(search, type, sort);
+    }
+  }, [channelVisibilitySignature, fetchChannels, search, type, sort, loading]);
+
   const handleSearchInput = (e) => {
     const val = e.target.value;
     setSearch(val);
@@ -136,7 +153,9 @@ export default function ChannelsTab() {
   };
 
   const joinedCount = channels.filter((c) => c.isJoined).length;
-  const publicCount = channels.filter((c) => !c.isPrivate).length;
+  const publicCount = channels.filter(
+    (c) => !(c.isPrivate ?? c.visibility === 'private'),
+  ).length;
 
   return (
     <div className="dir-channels-root">
@@ -289,6 +308,8 @@ function ChannelRow({
   const received =
     [...(ch.name || "")].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
   const accentColor = `hsl(${received}, 55%, 52%)`;
+  // Derive privacy flag: trust isPrivate if present, fallback to visibility field
+  const isPrivate = ch.isPrivate ?? ch.visibility === 'private';
 
   return (
     <div
@@ -305,7 +326,7 @@ function ChannelRow({
           borderColor: `hsl(${received}, 55%, 52%, 0.2)`,
         }}
       >
-        {ch.isPrivate ? <Lock size={15} /> : <Hash size={15} />}
+        {isPrivate ? <Lock size={15} /> : <Hash size={15} />}
       </div>
 
       {/* Info */}
@@ -318,7 +339,7 @@ function ChannelRow({
               Joined
             </span>
           )}
-          {ch.isPrivate && (
+          {isPrivate && (
             <span className="dir-channel-private-badge">Private</span>
           )}
         </div>
@@ -332,7 +353,7 @@ function ChannelRow({
       </div>
 
       {/* Join / Leave */}
-      {!ch.isPrivate && (
+      {!isPrivate && (
         <button
           onClick={onJoinLeave}
           disabled={joiningId === ch._id}

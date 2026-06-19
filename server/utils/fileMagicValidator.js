@@ -118,7 +118,7 @@ const MAGIC_SIGNATURES = {
   "application/x-yaml": null,
 };
 
-const HEADER_BYTES_NEEDED = 12;
+const HEADER_BYTES_NEEDED = 16;
 
 /**
  * Read the first N bytes of a file as a Buffer.
@@ -157,18 +157,102 @@ function matchesSignature(header, signature) {
 }
 
 /**
+ * Detect the actual file type from magic bytes.
+ * Returns a human-readable type string for logging.
+ */
+function detectFileType(header) {
+  if (!header || header.length < 4) return "unknown/undetectable";
+
+  const hex = header.toString("hex");
+  const sig = Array.from(header.slice(0, 8));
+
+  // PNG
+  if (sig[0] === 0x89 && sig[1] === 0x50 && sig[2] === 0x4e && sig[3] === 0x47) {
+    return "image/png (detected from magic bytes: 89504e47)";
+  }
+  // JPEG
+  if (sig[0] === 0xff && sig[1] === 0xd8 && sig[2] === 0xff) {
+    return "image/jpeg (detected from magic bytes: ffd8ff)";
+  }
+  // GIF
+  if (sig[0] === 0x47 && sig[1] === 0x49 && sig[2] === 0x46) {
+    return "image/gif (detected from magic bytes: 474946)";
+  }
+  // WEBP (RIFF....WEBP)
+  if (sig[0] === 0x52 && sig[1] === 0x49 && sig[2] === 0x46 && sig[3] === 0x46) {
+    return "image/webp (detected from magic bytes: RIFF....WEBP)";
+  }
+  // PDF
+  if (sig[0] === 0x25 && sig[1] === 0x50 && sig[2] === 0x44 && sig[3] === 0x46) {
+    return "application/pdf (detected from magic bytes: 25504446)";
+  }
+  // ZIP-based (docx, xlsx, pptx, zip)
+  if (sig[0] === 0x50 && sig[1] === 0x4b && sig[2] === 0x03 && sig[3] === 0x04) {
+    return "application/zip-based (detected from magic bytes: 504b0304)";
+  }
+  // OLE2 (old Office: doc, xls, ppt)
+  if (
+    sig[0] === 0xd0 && sig[1] === 0xcf && sig[2] === 0x11 && sig[3] === 0xe0
+  ) {
+    return "application/ole2 (old Office format, detected from magic bytes: d0cf11e0)";
+  }
+  // MP4 / QuickTime
+  if (sig[0] === 0x00 && sig[1] === 0x00 && sig[2] === 0x00 && sig[4] === 0x66 && sig[5] === 0x74 && sig[6] === 0x79 && sig[7] === 0x70) {
+    return "video/mp4 or video/quicktime (detected from magic bytes: ....ftyp)";
+  }
+  // WebM
+  if (sig[0] === 0x1a && sig[1] === 0x45 && sig[2] === 0xdf && sig[3] === 0xa3) {
+    return "video/webm (detected from magic bytes: 1a45dfa3)";
+  }
+  // MP3
+  if (sig[0] === 0xff && (sig[1] === 0xfb || sig[1] === 0xf3 || sig[1] === 0xf2)) {
+    return "audio/mpeg (detected from magic bytes: fffb/f3/f2)";
+  }
+  // FLAC
+  if (sig[0] === 0x66 && sig[1] === 0x4c && sig[2] === 0x61 && sig[3] === 0x43) {
+    return "audio/flac (detected from magic bytes: 664c6143)";
+  }
+  // 7z
+  if (sig[0] === 0x37 && sig[1] === 0x7a && sig[2] === 0xbc && sig[3] === 0xaf) {
+    return "application/x-7z-compressed (detected from magic bytes: 37zbcaf)";
+  }
+  // RAR
+  if (sig[0] === 0x52 && sig[1] === 0x61 && sig[2] === 0x72 && sig[3] === 0x21) {
+    return "application/x-rar-compressed (detected from magic bytes: 52617221)";
+  }
+
+  return `unknown (first 8 bytes hex: ${hex.slice(0, 16)})`;
+}
+
+/**
  * Validate a single file against its declared MIME type.
  *
  * @param {string} filePath   Absolute path on disk
  * @param {string} mimeType   Declared MIME type from multer
- * @returns {{ valid: boolean, reason?: string }}
+ * @param {object} fileInfo   Optional: { originalname, mimetype, size } from multer for enhanced logging
+ * @returns {{ valid: boolean, reason?: string, detectedType?: string, declaredType?: string }}
  */
-export function validateFileMagic(filePath, mimeType) {
+export function validateFileMagic(filePath, mimeType, fileInfo = null) {
   const signatures = MAGIC_SIGNATURES[mimeType];
 
   // MIME type not in our map — reject unknown types defensively
   if (!(mimeType in MAGIC_SIGNATURES)) {
-    return { valid: false, reason: `MIME type not whitelisted: ${mimeType}` };
+    const header = readHeader(filePath);
+    const detectedType = detectFileType(header);
+    logger.warn("fileMagicValidator: MIME type not whitelisted", {
+      originalname: fileInfo?.originalname || "unknown",
+      declaredMimeType: mimeType,
+      detectedType,
+      headerHex: header?.toString("hex"),
+      headerText: header?.toString("utf8"),
+      filePath,
+    });
+    return {
+      valid: false,
+      reason: `MIME type not whitelisted: ${mimeType}`,
+      detectedType,
+      declaredType: mimeType,
+    };
   }
 
   // null entry means "no magic bytes to check" — pass through
@@ -178,26 +262,59 @@ export function validateFileMagic(filePath, mimeType) {
 
   const header = readHeader(filePath);
 
-  console.log("================================");
-  console.log("FILE:", filePath);
-  console.log("MIME:", mimeType);
-  console.log("HEADER HEX:", header?.toString("hex"));
-  console.log("HEADER TEXT:", header?.toString("utf8"));
-  console.log("EXPECTED:", MAGIC_SIGNATURES[mimeType]);
-  console.log("================================");
+  // Enhanced diagnostic logging
+  const detectedType = detectFileType(header);
+  const headerHex = header?.toString("hex") || "unreadable";
+  const headerText = header?.toString("utf8") || "unreadable";
+
+  logger.info("fileMagicValidator: validating file", {
+    originalname: fileInfo?.originalname || "unknown",
+    declaredMimeType: mimeType,
+    detectedType,
+    headerHex,
+    headerText,
+    expectedSignatures: MAGIC_SIGNATURES[mimeType],
+    filePath,
+    fileSize: fileInfo?.size || "unknown",
+  });
+
   if (!header) {
-    return { valid: false, reason: "Could not read file header" };
+    return {
+      valid: false,
+      reason: "Could not read file header",
+      detectedType: "unreadable",
+      declaredType: mimeType,
+    };
   }
 
   const matched = signatures.some((sig) => matchesSignature(header, sig));
   if (!matched) {
+    logger.warn("fileMagicValidator: magic byte mismatch", {
+      originalname: fileInfo?.originalname || "unknown",
+      declaredMimeType: mimeType,
+      detectedType,
+      headerHex,
+      headerText,
+      expectedSignatures: MAGIC_SIGNATURES[mimeType],
+      mismatchReason: `File starts with ${headerHex.slice(0, 16)} but ${mimeType} expects ${MAGIC_SIGNATURES[mimeType].map(s => s.map(b => b === null ? "??" : "0x" + b.toString(16)).join(" ")).join(" OR ")}`,
+      filePath,
+    });
     return {
       valid: false,
-      reason: `File content does not match declared type (${mimeType}). Possible MIME spoofing.`,
+      reason: `File content does not match declared type (${mimeType}). Expected ${MAGIC_SIGNATURES[mimeType].map(s => s.map(b => b === null ? "??" : "0x" + b.toString(16)).join(" ")).join(" OR ")}, got ${headerHex.slice(0, 16)}. Possible MIME spoofing or file corruption.`,
+      detectedType,
+      declaredType: mimeType,
     };
   }
 
-  return { valid: true };
+  logger.info("fileMagicValidator: validation passed", {
+    originalname: fileInfo?.originalname || "unknown",
+    declaredMimeType: mimeType,
+    detectedType,
+    headerHex,
+  });
+
+  return { valid: true, detectedType, declaredType: mimeType };
 }
 
 /**
@@ -212,9 +329,19 @@ export function validateUploadedFileMagic(req, res, next) {
   const invalid = [];
 
   for (const file of files) {
-    const result = validateFileMagic(file.path, file.mimetype);
+    const result = validateFileMagic(file.path, file.mimetype, {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      buffer: file.buffer ? file.buffer.slice(0, 16).toString("hex") : undefined,
+    });
     if (!result.valid) {
-      invalid.push({ filename: file.originalname, reason: result.reason });
+      invalid.push({
+        filename: file.originalname,
+        reason: result.reason,
+        declaredType: result.declaredType,
+        detectedType: result.detectedType,
+      });
       // Delete the suspicious file immediately
       try {
         fs.unlinkSync(file.path);
@@ -244,6 +371,12 @@ export function validateUploadedFileMagic(req, res, next) {
         message: `File validation failed: ${invalid.map((f) => `"${f.filename}" — ${f.reason}`).join("; ")}`,
         code: "INVALID_FILE_CONTENT",
         details: invalid,
+        debug: invalid.map((f) => ({
+          filename: f.filename,
+          declaredType: f.declaredType,
+          detectedType: f.detectedType,
+          reason: f.reason,
+        })),
       },
     });
   }

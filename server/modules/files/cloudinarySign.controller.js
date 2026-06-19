@@ -8,6 +8,131 @@ import {
 } from "../../middleware/errorHandler.js";
 import logger from "../../utils/logger.js";
 
+cloudinary.config({
+  cloud_name: env.CLOUDINARY_CLOUD_NAME,
+  api_key: env.CLOUDINARY_API_KEY,
+  api_secret: env.CLOUDINARY_API_SECRET,
+  secure: true,
+});
+
+function redactDeliveryUrl(url = "") {
+  try {
+    const parsed = new URL(url);
+    if (parsed.searchParams.has("signature")) {
+      parsed.searchParams.set("signature", "redacted");
+    }
+    if (parsed.searchParams.has("api_key")) {
+      parsed.searchParams.set("api_key", "redacted");
+    }
+    return parsed.toString().replace(/\/s--[^/]+--\//, "/s--redacted--/").substring(0, 180);
+  } catch {
+    return url
+      .replace(/\/s--[^/]+--\//, "/s--redacted--/")
+      .replace(/([?&](signature|api_key)=)[^&]+/g, "$1redacted")
+      .substring(0, 180);
+  }
+}
+
+function getResourceTypeFromUrl(url = "") {
+  const match = url.match(/res\.cloudinary\.com\/[^/]+\/(image|video|raw)\/upload\//);
+  return match?.[1] || null;
+}
+
+function getVersionFromUrl(url = "") {
+  const match = url.match(/\/upload\/v(\d+)\//);
+  return match?.[1] || null;
+}
+
+function getOriginalExtension(name = "") {
+  const ext = name.split(".").pop()?.toLowerCase();
+  return ext && ext !== name.toLowerCase() ? ext : null;
+}
+
+function buildSignedDeliveryUrl(asset) {
+  if (
+    !env.CLOUDINARY_CLOUD_NAME ||
+    !env.CLOUDINARY_API_KEY ||
+    !env.CLOUDINARY_API_SECRET ||
+    !asset?.publicId
+  ) {
+    return null;
+  }
+
+  const storedResourceType = asset.resourceType && asset.resourceType !== "auto"
+    ? asset.resourceType
+    : null;
+  const resourceType =
+    storedResourceType ||
+    getResourceTypeFromUrl(asset.secureUrl) ||
+    "raw";
+  const version = getVersionFromUrl(asset.secureUrl);
+  const publicIdHasExtension = /\.[^/.]+$/.test(asset.publicId);
+  const format = publicIdHasExtension ? undefined : getOriginalExtension(asset.originalName);
+
+  return cloudinary.url(asset.publicId, {
+    resource_type: resourceType,
+    type: "upload",
+    secure: true,
+    sign_url: true,
+    ...(version ? { version } : {}),
+    ...(format ? { format } : {}),
+  });
+}
+
+function buildSignedApiDownloadUrl(asset) {
+  if (
+    !env.CLOUDINARY_CLOUD_NAME ||
+    !env.CLOUDINARY_API_KEY ||
+    !env.CLOUDINARY_API_SECRET ||
+    !asset?.publicId
+  ) {
+    return null;
+  }
+
+  const storedResourceType = asset.resourceType && asset.resourceType !== "auto"
+    ? asset.resourceType
+    : null;
+  const resourceType =
+    storedResourceType ||
+    getResourceTypeFromUrl(asset.secureUrl) ||
+    "raw";
+  const publicIdHasExtension = /\.[^/.]+$/.test(asset.publicId);
+  const format = publicIdHasExtension ? undefined : getOriginalExtension(asset.originalName);
+
+  return cloudinary.utils.private_download_url(asset.publicId, format, {
+    resource_type: resourceType,
+    type: "upload",
+    attachment: false,
+  });
+}
+
+function shouldRetryWithSignedUrl(upstream, cldError = "") {
+  if (![401, 403].includes(upstream.status)) return false;
+  return cldError === "unknown" || /deny|acl|unauthorized|forbidden|access/i.test(cldError || "");
+}
+
+async function fetchCloudinaryWithTimeout(fetchUrl, assetId) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    return await fetch(fetchUrl, {
+      signal: controller.signal,
+      headers: { "User-Agent": "FlowTask-Chat/1.0" },
+    });
+  } catch (err) {
+    logger.error("Proxy: Cloudinary fetch failed", {
+      assetId,
+      error: err.message,
+      errorType: err.name,
+      fetchUrl: redactDeliveryUrl(fetchUrl),
+    });
+    throw new Error(`Failed to fetch from Cloudinary: ${err.message}`);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 /**
  * Cloudinary Direct Upload Signing Endpoint.
  *
@@ -159,84 +284,138 @@ export const proxyFileAsset = asyncHandler(async (req, res) => {
     throw new ForbiddenError("Only Cloudinary CDN files can be proxied");
   }
 
-  // IMPORTANT: Always use the stored secureUrl exactly as saved in the database.
-  // Never reconstruct or rewrite Cloudinary URLs — the stored secureUrl is the
-  // canonical URL returned by Cloudinary at upload time and is guaranteed correct.
-  // Reconstructing URLs (e.g. swapping /image/upload/ → /raw/upload/) causes 404s
-  // because Cloudinary stores all assets (including PDFs) under /image/upload/.
-  const fetchUrl = storedUrl;
+  // First try the stored secureUrl exactly as saved in the database. If Cloudinary
+  // rejects raw/document delivery with an ACL-style 401/403, retry with a signed
+  // URL generated from the stored publicId/resourceType.
+  let fetchUrl = storedUrl;
 
   logger.info("Proxy: fetching from Cloudinary using stored secureUrl", {
     assetId,
-    fetchUrl: fetchUrl.substring(0, 150),
+    fetchUrl: redactDeliveryUrl(fetchUrl),
     mimeType: asset.mimeType,
   });
 
-  let upstream;
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-    upstream = await fetch(fetchUrl, {
-      signal: controller.signal,
-      headers: { "User-Agent": "FlowTask-Chat/1.0" },
-    });
-
-    clearTimeout(timeoutId);
-  } catch (err) {
-    logger.error("Proxy: Cloudinary fetch failed", {
-      assetId,
-      error: err.message,
-      errorType: err.name,
-      fetchUrl: fetchUrl.substring(0, 150),
-    });
-    throw new Error(`Failed to fetch from Cloudinary: ${err.message}`);
-  }
+  let upstream = await fetchCloudinaryWithTimeout(fetchUrl, assetId);
 
   logger.info("Proxy: upstream result", {
     assetId,
     status: upstream.status,
     statusText: upstream.statusText,
-    fetchUrl: fetchUrl.substring(0, 150),
+    fetchUrl: redactDeliveryUrl(fetchUrl),
     contentType: upstream.headers.get("content-type"),
     contentLength: upstream.headers.get("content-length"),
   });
 
   if (!upstream.ok) {
-    const body = await upstream.text().catch(() => "");
-    const cldError = upstream.headers.get("x-cld-error") || "unknown";
+    let body = await upstream.text().catch(() => "");
+    let cldError = upstream.headers.get("x-cld-error") || "unknown";
 
-    logger.error("Proxy: Cloudinary upstream failure", {
-      assetId,
-      status: upstream.status,
-      statusText: upstream.statusText,
-      xCldError: cldError,
-      fetchUrl: fetchUrl.substring(0, 150),
-      responseBody: body.slice(0, 300),
-    });
+    if (shouldRetryWithSignedUrl(upstream, cldError)) {
+      const signedUrl = buildSignedDeliveryUrl(asset);
 
-    res.status(502).json({
-      success: false,
-      error: {
-        message: `Cloudinary proxy error: HTTP ${upstream.status} ${upstream.statusText}`,
-        cloudinaryError: cldError,
-        statusCode: upstream.status,
-      },
-    });
-    return;
+      if (signedUrl && signedUrl !== fetchUrl) {
+        logger.warn("Proxy: retrying Cloudinary fetch with signed delivery URL", {
+          assetId,
+          firstStatus: upstream.status,
+          firstCldError: cldError,
+          signedUrl: redactDeliveryUrl(signedUrl),
+          resourceType: asset.resourceType,
+          publicId: asset.publicId,
+        });
+
+        fetchUrl = signedUrl;
+        upstream = await fetchCloudinaryWithTimeout(fetchUrl, assetId);
+
+        logger.info("Proxy: signed upstream result", {
+          assetId,
+          status: upstream.status,
+          statusText: upstream.statusText,
+          fetchUrl: redactDeliveryUrl(fetchUrl),
+          contentType: upstream.headers.get("content-type"),
+          contentLength: upstream.headers.get("content-length"),
+        });
+
+        if (upstream.ok) {
+          body = "";
+          cldError = "none";
+        } else {
+          body = await upstream.text().catch(() => "");
+          cldError = upstream.headers.get("x-cld-error") || cldError;
+        }
+      }
+
+      if (!upstream.ok && shouldRetryWithSignedUrl(upstream, cldError)) {
+        const apiDownloadUrl = buildSignedApiDownloadUrl(asset);
+
+        if (apiDownloadUrl && apiDownloadUrl !== fetchUrl) {
+          logger.warn("Proxy: retrying Cloudinary fetch with signed API download URL", {
+            assetId,
+            previousStatus: upstream.status,
+            previousCldError: cldError,
+            apiDownloadUrl: redactDeliveryUrl(apiDownloadUrl),
+            resourceType: asset.resourceType,
+            publicId: asset.publicId,
+          });
+
+          fetchUrl = apiDownloadUrl;
+          upstream = await fetchCloudinaryWithTimeout(fetchUrl, assetId);
+
+          logger.info("Proxy: API download upstream result", {
+            assetId,
+            status: upstream.status,
+            statusText: upstream.statusText,
+            fetchUrl: redactDeliveryUrl(fetchUrl),
+            contentType: upstream.headers.get("content-type"),
+            contentLength: upstream.headers.get("content-length"),
+          });
+
+          if (upstream.ok) {
+            body = "";
+            cldError = "none";
+          } else {
+            body = await upstream.text().catch(() => "");
+            cldError = upstream.headers.get("x-cld-error") || cldError;
+          }
+        }
+      }
+    }
+
+    if (upstream.ok) {
+      // Continue into the streaming path below after successful signed retry.
+    } else {
+      logger.error("Proxy: Cloudinary upstream failure", {
+        assetId,
+        status: upstream.status,
+        statusText: upstream.statusText,
+        xCldError: cldError,
+        fetchUrl: redactDeliveryUrl(fetchUrl),
+        responseBody: body.slice(0, 300),
+      });
+
+      res.status(502).json({
+        success: false,
+        error: {
+          message: `Cloudinary proxy error: HTTP ${upstream.status} ${upstream.statusText}`,
+          cloudinaryError: cldError,
+          statusCode: upstream.status,
+        },
+      });
+      return;
+    }
   }
 
   // Forward safe headers
+  const upstreamContentType = upstream.headers.get("content-type");
   const contentType =
-    upstream.headers.get("content-type") ||
-    asset.mimeType ||
-    "application/octet-stream";
+    !upstreamContentType || upstreamContentType === "application/octet-stream"
+      ? asset.mimeType || "application/octet-stream"
+      : upstreamContentType;
   const contentLength = upstream.headers.get("content-length");
 
   logger.debug("Proxy file streaming", {
     assetId,
     declaredMimeType: asset.mimeType,
-    upstreamContentType: upstream.headers.get("content-type"),
+    upstreamContentType,
     responseContentType: contentType,
     format: asset.metadata?.format,
   });

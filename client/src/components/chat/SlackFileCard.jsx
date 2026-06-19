@@ -23,6 +23,7 @@ import {
 import { handleDownload } from "../../utils/handleDownload";
 import { messageAPI } from "../../services/api";
 import logger from "../../utils/logger";
+import FilePreviewRenderer from "./FilePreviewRenderer";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -164,7 +165,7 @@ function FileDetailsModal({ file, onClose, onForward }) {
   const mime = file.mimeType || file.type || "";
   const kind = getFileKind(mime, name);
   const size = formatFileSize(file.fileSize || file.size || file.fileSizeBytes || 0);
-  const url = file.secureUrl || file.url || "";
+  const detailsPreviewKinds = new Set(["image", "video", "audio", "pdf", "word", "spreadsheet", "csv", "code", "text"]);
 
   // Fetch full file details from API
   useEffect(() => {
@@ -202,7 +203,6 @@ function FileDetailsModal({ file, onClose, onForward }) {
     : null;
   const downloadCount = details?.downloadCount ?? 0;
   const forwardCount = details?.forwardCount ?? 0;
-  const proxyUrl = assetId ? messageAPI.getFileProxyUrl(assetId) : null;
 
   return createPortal(
     <div
@@ -255,63 +255,20 @@ function FileDetailsModal({ file, onClose, onForward }) {
 
         {/* Scrollable content */}
         <div style={{ flex: 1, overflowY: "auto", padding: "0" }}>
-          {/* Preview for images — ONLY inside File Details modal */}
-          {kind === "image" && url && (
-            <div style={{ padding: "12px 20px" }}>
-              <img
-                src={proxyUrl || url}
-                alt={name}
-                style={{
-                  width: "100%", maxHeight: 220, objectFit: "contain",
-                  borderRadius: 10, background: "rgba(0,0,0,0.2)",
-                  display: "block",
-                }}
-              />
-            </div>
-          )}
-
-          {/* Preview for video — ONLY inside File Details modal */}
-          {kind === "video" && url && (
-            <div style={{ padding: "12px 20px" }}>
-              <video
-                src={proxyUrl || url}
-                controls
-                preload="metadata"
-                poster={file.thumbnailUrl || undefined}
-                style={{
-                  width: "100%", maxHeight: 220, borderRadius: 10,
-                  background: "#000", display: "block",
-                }}
-              />
-            </div>
-          )}
-
-          {/* Preview for audio — ONLY inside File Details modal */}
-          {kind === "audio" && url && (
-            <div style={{ padding: "12px 20px" }}>
-              <audio
-                src={proxyUrl || url}
-                controls
-                preload="metadata"
-                style={{ width: "100%", display: "block" }}
-              />
-            </div>
-          )}
-
-          {/* Preview for PDF (inline via proxy) */}
-          {kind === "pdf" && proxyUrl && (
+          {detailsPreviewKinds.has(kind) && (
             <div style={{ padding: "12px 20px" }}>
               <div style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "14px 16px", borderRadius: 10,
-                background: "rgba(239,68,68,0.08)",
-                border: "1px solid rgba(239,68,68,0.15)",
+                height: kind === "image" || kind === "video" || kind === "audio" ? 220 : 280,
+                borderRadius: 10,
+                overflow: "hidden",
+                background: "var(--bg-primary)",
+                border: "1px solid rgba(255,255,255,0.08)",
               }}>
-                <FileText size={22} style={{ color: "var(--accent-red)", flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>PDF Document • {size}</div>
-              </div>
+                <FilePreviewRenderer
+                  file={file}
+                  variant="details"
+                  onDownload={handleDownload}
+                />
               </div>
             </div>
           )}

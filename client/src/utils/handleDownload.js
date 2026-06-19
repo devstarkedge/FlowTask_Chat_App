@@ -1,6 +1,8 @@
 import { useDownloadStore } from "../stores/downloadStore";
 import toast from "react-hot-toast";
 import { messageAPI } from "../services/api";
+import { useAuthStore } from "../stores/authStore";
+import { useWorkspaceStore } from "../stores/workspaceStore";
 
 export const handleDownload = async (file) => {
   console.log('[handleDownload] Input file object:', {
@@ -22,6 +24,15 @@ export const handleDownload = async (file) => {
   const isCloudinaryUrl = rawUrl && rawUrl.includes('cloudinary.com');
   const useProxy = isCloudinaryUrl && assetId && !rawUrl.startsWith('/');
   const finalUrl = useProxy ? messageAPI.getFileProxyUrl(assetId) : rawUrl;
+  const token = useAuthStore.getState().accessToken;
+  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+  const needsAuthHeaders = useProxy || finalUrl?.startsWith("/api/") || finalUrl?.startsWith("/messages/");
+  const fetchHeaders = needsAuthHeaders
+    ? {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(workspaceId ? { "X-Workspace-Id": workspaceId } : {}),
+      }
+    : {};
 
   const mappedFile = {
     name:
@@ -68,7 +79,11 @@ export const handleDownload = async (file) => {
   if (!downloadItem) return;
 
   try {
-    const response = await fetch(mappedFile.url);
+    const response = await fetch(mappedFile.url, { headers: fetchHeaders });
+
+    if (!response.ok) {
+      throw new Error(`Download failed (HTTP ${response.status})`);
+    }
 
     const contentLength =
       +response.headers.get("Content-Length") || 0;

@@ -27,8 +27,16 @@ function sanitizeMessages(messages) {
   return trimmed.filter((message) => !!message?._id)
 }
 
+/** IndexedDB only accepts string/number/Date/Array as keys. Guard against objects. */
+function isValidKey(id) {
+  return id !== null && id !== undefined &&
+    typeof id === 'string' &&
+    id !== '[object Object]' &&
+    id.length > 0
+}
+
 export async function loadChannelMessagesFromCache(channelId) {
-  if (!channelId) return []
+  if (!isValidKey(channelId)) return []
   try {
     const db = await getDb()
     const record = await db.get(CHANNEL_STORE, channelId)
@@ -40,7 +48,7 @@ export async function loadChannelMessagesFromCache(channelId) {
 }
 
 export async function saveChannelMessagesToCache(channelId, messages) {
-  if (!channelId) return
+  if (!isValidKey(channelId)) return
   try {
     const db = await getDb()
     await db.put(CHANNEL_STORE, {

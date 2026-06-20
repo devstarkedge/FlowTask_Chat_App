@@ -1444,9 +1444,11 @@ export default function ChatLayout() {
 
   const renderContextSidebar = (isMobile = false) => {
     const onJumpToMessage = (msg) => {
-      if (msg.channelId !== activeChannelId)
-        useChannelStore.getState().setActiveChannel(msg.channelId);
-      navigate(getChannelPath(workspaceId, msg.channelId, msg._id));
+      const channelId = asId(msg.channelId) || msg.channelId;
+      const messageId = asId(msg._id) || msg._id;
+      if (channelId !== activeChannelId)
+        useChannelStore.getState().setActiveChannel(channelId);
+      navigate(getChannelPath(workspaceId, channelId, messageId));
       if (isMobile) setShowMobileSidebar(false);
     };
 
@@ -1671,10 +1673,12 @@ export default function ChatLayout() {
                 channelId={activeChannelId}
                 onClose={() => setShowPins(false)}
                 onJumpToMessage={(msg) => {
-                  if (msg.channelId !== activeChannelId) {
-                    useChannelStore.getState().setActiveChannel(msg.channelId);
+                  const channelId = asId(msg.channelId) || msg.channelId;
+                  const messageId = asId(msg._id) || msg._id;
+                  if (channelId !== activeChannelId) {
+                    useChannelStore.getState().setActiveChannel(channelId);
                   }
-                  navigate(getChannelPath(workspaceId, msg.channelId, msg._id));
+                  navigate(getChannelPath(workspaceId, channelId, messageId));
                   setShowPins(false);
                 }}
               />

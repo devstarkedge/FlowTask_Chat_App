@@ -78,6 +78,7 @@ export default function NavigationSidebar({
   const { switchWorkspace } = useWorkspaceStore();
   const drafts = useDraftStore((s) => s.drafts);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const onlineUsers = usePresenceStore((s) => s.presence);
   const {
     favorites,
     isLoading: favoritesLoading,

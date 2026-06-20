@@ -5,6 +5,33 @@ import toast from 'react-hot-toast'
 import logger from '../utils/logger'
 import { useAuthStore } from './authStore'
 
+/**
+ * Extract a plain string ID from any id-like value:
+ *   - Mongoose ObjectId instances → .toString()
+ *   - Populated objects  → ._id (recursive)
+ *   - Plain strings      → returned as-is
+ *   - null/undefined     → null
+ *
+ * Always returns null | string (never an object).
+ */
+function toStringId(val) {
+  if (!val) return null
+  if (typeof val === 'string') return val !== '[object Object]' ? val : null
+  if (typeof val.toString === 'function') {
+    const s = val.toString()
+    if (s !== '[object Object]') return s
+  }
+  if (val._id) return toStringId(val._id)
+  if (val.id) return toStringId(val.id)
+  return null
+}
+
+/** Normalise a single channel object so its _id is always a string. */
+function normalizeChannel(ch) {
+  if (!ch) return ch
+  return { ...ch, _id: toStringId(ch._id) ?? ch._id }
+}
+
 export const useChannelStore = create(
   persist(
     (set, get) => ({
@@ -27,7 +54,9 @@ export const useChannelStore = create(
         ? { headers: { 'X-Workspace-Id': overrideWorkspaceId } }
         : undefined
       const { data } = await channelAPI.list(options)
-      set({ channels: data.data.channels, isLoading: false })
+      // Normalise every channel so _id is always a plain string
+      const channels = (data.data.channels || []).map(normalizeChannel)
+      set({ channels, isLoading: false })
       get().fetchUnreads()
     } catch (error) {
       set({ isLoading: false })
@@ -77,18 +106,23 @@ export const useChannelStore = create(
   },
 
   setActiveChannel: (channelId) => {
-    set({ activeChannelId: channelId, showInfoPanel: false })
-    if (channelId) {
-      readReceiptAPI.markRead(channelId).catch(() => {})
+    // Always store a plain string — never an ObjectId or populated object.
+    const id = toStringId(channelId)
+    set({ activeChannelId: id, showInfoPanel: false })
+    if (id) {
+      readReceiptAPI.markRead(id).catch(() => {})
       set((state) => ({
-        unreads: { ...state.unreads, [channelId]: 0 },
+        unreads: { ...state.unreads, [id]: 0 },
       }))
-      get().fetchMembers(channelId)
+      get().fetchMembers(id)
     }
   },
 
   fetchMembers: async (channelId) => {
-    if (!channelId) return
+    const id = toStringId(channelId) || channelId
+    if (!id || typeof id !== 'string') return
+    // Reassign channelId to the sanitised id for all downstream use
+    channelId = id
     set({ isMembersLoading: true })
     try {
       const { data } = await channelAPI.getMembers(channelId)
@@ -120,9 +154,10 @@ export const useChannelStore = create(
   },
 
   addChannel: (channel) => {
+    const normalized = normalizeChannel(channel)
     set((state) => {
-      if (state.channels.some((c) => c._id === channel._id)) return state
-      return { channels: [...state.channels, channel] }
+      if (state.channels.some((c) => c._id === normalized._id)) return state
+      return { channels: [...state.channels, normalized] }
     })
   },
 
@@ -413,6 +448,14 @@ export const useChannelStore = create(
 {
   name: 'flowtask-channel-storage',
   partialize: (state) => ({ activeChannelId: state.activeChannelId }),
+  onRehydrateStorage: () => (state) => {
+    if (state && state.activeChannelId) {
+      const cleaned = toStringId(state.activeChannelId)
+      if (cleaned !== state.activeChannelId) {
+        state.activeChannelId = cleaned
+      }
+    }
+  },
 }
 )
 )

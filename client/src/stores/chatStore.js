@@ -249,6 +249,11 @@ export const useChatStore = create((set, get) => ({
 
   // ─── Messages ────────────────────────────────────────────────────────
   fetchMessages: async (channelId, options = {}) => {
+    // Guard: reject invalid channelIds before hitting the API or IndexedDB.
+    if (!channelId || typeof channelId !== 'string' || channelId === '[object Object]') {
+      logger.warn('[chatStore] fetchMessages called with invalid channelId:', channelId)
+      return
+    }
     // Debounce guard: prevent duplicate fetches for the same channel
     const fetchKey = `${channelId}-${options.cursor || "initial"}`;
     const fetching = get()._fetchingChannels;

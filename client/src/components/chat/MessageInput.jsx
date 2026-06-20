@@ -187,6 +187,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   // Mention state
   const [mentionType, setMentionType] = useState(null); // 'user' | 'channel' | null
   const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionPos, setMentionPos] = useState({ top: 0, left: 0 });
 
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
@@ -327,6 +328,16 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       const query = match[2];
       setMentionType(triggerChar === "@" ? "user" : "channel");
       setMentionQuery(query);
+      
+      try {
+        const tiptap = ed.getEditor();
+        if (tiptap) {
+          const coords = tiptap.view.coordsAtPos(tiptap.state.selection.from);
+          setMentionPos({ top: coords.top + 20, left: coords.left });
+        }
+      } catch (err) {
+        setMentionPos({ top: 0, left: 0 });
+      }
     } else {
       setMentionType(null);
     }
@@ -520,7 +531,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     const submitThreadId = threadId;
     const submitHtml = html || undefined;
     const submitText = text.trim() || " ";
-    const submitMentions = mentions || [];
+    const submitMentions = (mentions || []).map((m) => m.userId || m.id || m);
     const submitFileReferences = pendingFiles.map((f) => f._id);
 
     // Cancel any pending debounced draft saves immediately
@@ -812,7 +823,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
             type={mentionType}
             query={mentionQuery}
             channelId={channelId}
-            position={{ bottom: "100%", left: 0 }}
+            position={mentionPos}
             onSelect={handleMentionSelect}
             onClose={() => setMentionType(null)}
           />

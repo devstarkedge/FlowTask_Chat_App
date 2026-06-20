@@ -6,6 +6,7 @@ import { useChannelStore } from '../../stores/channelStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { useChatStore } from '../../stores/chatStore'
 import { useAuthStore } from '../../stores/authStore'
+import { usePresenceStore } from '../../stores/presenceStore'
 import { Avatar } from '../chat/MemberAvatarGroup'
 import { Bell, FileText, FolderOpen, MessageSquare, Video, Image as ImageIcon } from 'lucide-react'
 import { fileAPI } from '../../services/api'
@@ -93,10 +94,9 @@ export default function HoverPreview({
   const { workspaceId } = useParams()
   const channels = useChannelStore((s) => s.channels)
   const unreads = useChannelStore((s) => s.unreads)
-  const activeChannelId = useChannelStore((s) => s.activeChannelId)
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel)
-  const { onlineUsers } = useChatStore()
   const { user } = useAuthStore()
+  const presenceMap = usePresenceStore((s) => s.presence)
   const {
     notifications,
     unreadCount,
@@ -398,7 +398,7 @@ export default function HoverPreview({
           {dmChannels.map((channel) => {
             const unread = unreads[channel._id] || 0
             const isActive = activeChannelId === channel._id || location.pathname.includes(`/dms/${channel._id}`)
-            const dmStatus = onlineUsers?.has?.(channel.dmRecipientId) ? 'online' : 'offline'
+            const dmStatus = presenceMap[channel.dmRecipientId] || 'offline'
             return (
               <button
                 key={channel._id}

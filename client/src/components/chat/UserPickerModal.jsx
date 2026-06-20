@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useChatStore } from '../../stores/chatStore'
+import { usePresenceStore } from '../../stores/presenceStore'
 import { userAPI } from '../../services/api'
 import { joinChannel } from '../../services/socket'
 import { X, Search, Loader2, MessageCircle, User, Zap } from 'lucide-react'
@@ -22,7 +23,6 @@ import logger from '../../utils/logger'
 export default function UserPickerModal({ onClose, onSelect }) {
   const { user } = useAuthStore()
   const { channels, createDM } = useChannelStore()
-  const { onlineUsers } = useChatStore()
   const [searchQuery, setSearchQuery] = useState('')
   const [users, setUsers] = useState([])
   const [isLoading, setIsLoading] = useState(false)
@@ -66,6 +66,10 @@ export default function UserPickerModal({ onClose, onSelect }) {
       const { data } = await userAPI.getDMContacts(query)
       const contacts = data.data?.contacts || []
       setFlowTaskFetchFailed(Boolean(data.data?.meta?.flowTaskFetchFailed))
+      
+      // Hydrate presence store
+      usePresenceStore.getState().updateFromUsers(contacts)
+      
       setUsers(contacts)
       setSelectedIndex(0)
     } catch (error) {
@@ -138,8 +142,10 @@ export default function UserPickerModal({ onClose, onSelect }) {
     if (item) item.scrollIntoView({ block: 'nearest' })
   }
 
-  const isUserOnline = (u) =>
-    onlineUsers?.has?.(u.chatUserId) || onlineUsers?.has?.(u.flowTaskUserId) || u.onlineStatus === 'online'
+  const presenceMap = usePresenceStore((state) => state.presence)
+  const isUserOnline = (u) => {
+    return presenceMap[u.chatUserId || u.flowTaskUserId || u._id] === 'online'
+  }
 
   const onlineList = users.filter(isUserOnline)
   const offlineList = users.filter(u => !isUserOnline(u))

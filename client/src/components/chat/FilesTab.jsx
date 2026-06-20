@@ -117,9 +117,9 @@ function KindIcon({ kind, size = 16 }) {
 
 function ExtBadge({ fileName, kind }) {
   const colors = {
-    image: { bg: "rgba(78,124,255,0.18)", color: "var(--accent-primary)" },
-    video: { bg: "rgba(124,58,237,0.18)", color: "var(--accent-purple)" },
-    file: { bg: "rgba(100,116,139,0.14)", color: "var(--text-secondary)" },
+    image: { bg: "color-mix(in srgb, var(--accent-primary) 18%, transparent)", color: "var(--accent-primary)" },
+    video: { bg: "color-mix(in srgb, var(--accent-purple) 18%, transparent)", color: "var(--accent-purple)" },
+    file: { bg: "var(--bg-hover)", color: "var(--text-secondary)" },
   };
   const { bg, color } = colors[kind];
   return (
@@ -160,15 +160,15 @@ function ActionBtn({ title, tone = "neutral", onClick, children, size = 28 }) {
   const tones = {
     danger: {
       color: "var(--accent-red)",
-      background: hover ? "rgba(239,68,68,0.22)" : "rgba(239,68,68,0.12)",
+      background: hover ? "color-mix(in srgb, var(--accent-red) 22%, transparent)" : "color-mix(in srgb, var(--accent-red) 12%, transparent)",
     },
     primary: {
       color: "var(--text-white)",
-      background: hover ? "rgba(78,124,255,0.85)" : "var(--accent-primary)",
+      background: hover ? "color-mix(in srgb, var(--accent-primary) 85%, transparent)" : "var(--accent-primary)",
     },
     neutral: {
       color: "var(--text-primary)",
-      background: hover ? "var(--bg-hover)" : "rgba(255,255,255,0.08)",
+      background: hover ? "var(--bg-hover)" : "transparent",
     },
   };
   return (
@@ -201,7 +201,7 @@ function Pill({ children, active, onClick }) {
         transition: "all 140ms ease",
         background: active ? "var(--accent-primary)" : "var(--bg-hover)",
         color: active ? "var(--text-white)" : "var(--text-primary)",
-        boxShadow: active ? "0 2px 8px rgba(78,124,255,0.25)" : "none",
+        boxShadow: active ? "0 2px 8px color-mix(in srgb, var(--accent-primary) 25%, transparent)" : "none",
       }}
     >
       {children}
@@ -227,8 +227,8 @@ function MediaCard({ file, onPreview, onShare, onDownload, onDelete, index }) {
         border: "1px solid var(--border-secondary)",
         background: "var(--bg-secondary)",
         boxShadow: hover
-          ? "0 12px 32px rgba(0,0,0,0.22)"
-          : "0 2px 8px rgba(0,0,0,0.08)",
+          ? "var(--shadow-lg)"
+          : "var(--shadow-sm)",
         transform: hover
           ? "translateY(-3px) scale(1.012)"
           : "translateY(0) scale(1)",

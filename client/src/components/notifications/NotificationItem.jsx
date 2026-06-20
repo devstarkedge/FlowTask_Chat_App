@@ -1,6 +1,7 @@
 import { formatDistanceToNowStrict } from 'date-fns'
 import { Avatar } from '../chat/MemberAvatarGroup'
 import { getNotificationText, getNotificationMeta, normalizeNotification } from '../../utils/notificationFormat'
+import EmojiRenderer from '../shared/EmojiRenderer'
 
 export default function NotificationItem({
   notification,
@@ -38,6 +39,9 @@ export default function NotificationItem({
       <div className="notification-item-content">
         <p className="notification-item-title" title={text}>
           {text}
+          {data.type === 'reaction' && data.emoji && (
+            <EmojiRenderer emoji={data.emoji} size={14} style={{ marginLeft: 4, verticalAlign: 'middle' }} />
+          )}
         </p>
 
         {showPreview && (

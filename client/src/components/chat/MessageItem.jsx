@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { useLaterStore } from "../../stores/laterStore";
 import SlackFileCard from "./SlackFileCard";
+import { ReactionRenderer } from "../shared/EmojiRenderer";
 import { Avatar } from "./MemberAvatarGroup";
 import EmojiPicker from "./EmojiPicker";
 import EmojiPickerPortal from "./EmojiPickerPortal";
@@ -1044,21 +1045,13 @@ const MessageItem = memo(
                       );
                     const count = reaction.users?.length || reaction.count || 0;
                     return (
-                      <button
+                      <ReactionRenderer
                         key={reaction.emoji}
-                        onClick={() => handleReaction(reaction.emoji)}
-                        title={`${reaction.emoji} ${count}`}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer transition-all"
-                        style={{
-                          background: hasReacted
-                            ? "color-mix(in srgb, var(--accent-color) 22%, transparent)"
-                            : "var(--bg-hover)",
-                          border: `1px solid ${hasReacted ? "var(--accent-primary)" : "var(--border-secondary)"}`,
-                          color: "var(--text-primary)",
-                        }}
-                      >
-                        {reaction.emoji} {count}
-                      </button>
+                        emoji={reaction.emoji}
+                        count={count}
+                        hasReacted={hasReacted}
+                        onClick={handleReaction}
+                      />
                     );
                   })}
                 </div>

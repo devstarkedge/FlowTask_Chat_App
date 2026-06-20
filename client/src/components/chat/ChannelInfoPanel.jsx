@@ -16,6 +16,7 @@ import MemberItem from "./MemberItem";
 import { useChannelStore } from "../../stores/channelStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useFavoritesStore } from "../../stores/favoritesStore";
+import { usePresenceStore } from "../../stores/presenceStore";
 import EditChannelModal from "./EditChannelModal";
 import AddMemberModal from "./AddMemberModal";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
@@ -59,8 +60,18 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
   const memberCount    = channel.memberCount ?? members.length
   const activeMembers  = members.filter((m) => m.registrationStatus !== 'faded')
   const fadedMembers   = members.filter((m) => m.registrationStatus === 'faded')
-  const onlineMembers  = activeMembers.filter((m) => m.onlineStatus === 'online')
-  const offlineMembers = activeMembers.filter((m) => m.onlineStatus !== 'online')
+  
+  const presenceMap = usePresenceStore((state) => state.presence);
+  const onlineMembers  = activeMembers.filter((m) => {
+    const id = m._id || m.userId;
+    const status = presenceMap[id] || m.onlineStatus || 'offline';
+    return status === 'online';
+  })
+  const offlineMembers = activeMembers.filter((m) => {
+    const id = m._id || m.userId;
+    const status = presenceMap[id] || m.onlineStatus || 'offline';
+    return status !== 'online';
+  })
   const ownerCount = members.filter(
     (m) => m.channelRole === "owner" || m.role === "owner",
   ).length

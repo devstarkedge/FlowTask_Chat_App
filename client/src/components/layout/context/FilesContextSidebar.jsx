@@ -379,13 +379,13 @@ const STYLES = `
   font-size: 7px;
   font-weight: 900;
   letter-spacing: 0.04em;
-  color: rgba(255,255,255,0.32);
+  color: #94a3b8;
   font-family: var(--font-mono, monospace);
   line-height: 1;
   text-transform: uppercase;
 }
 .fcs-row.active .fcs-tile-ext {
-  color: color-mix(in srgb, var(--accent-color, #1264a3) 70%, #fff);
+  color: #fff;
 }
 
 /* ── Info ── */
@@ -399,7 +399,7 @@ const STYLES = `
 .fcs-name {
   font-size: 12.5px;
   font-weight: 600;
-  color: rgba(255,255,255,0.82);
+  color: #e2e8f0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -407,7 +407,7 @@ const STYLES = `
   letter-spacing: -0.01em;
   transition: color 150ms ease;
 }
-.fcs-row:hover .fcs-name { color: rgba(255,255,255,0.95); }
+.fcs-row:hover .fcs-name { color: #f1f5f9; }
 .fcs-row.active .fcs-name { color: #fff; font-weight: 700; }
 
 .fcs-channel {
@@ -416,23 +416,23 @@ const STYLES = `
   gap: 3px;
   font-size: 11px;
   font-weight: 500;
-  color: rgba(255,255,255,0.36);
+  color: #cbd5e1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
 }
-.fcs-row.active .fcs-channel { color: rgba(255,255,255,0.6); }
+.fcs-row.active .fcs-channel { color: #e2e8f0; }
 
 .fcs-uploader {
   font-size: 10.5px;
-  color: rgba(255,255,255,0.24);
+  color: #94a3b8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
 }
-.fcs-row.active .fcs-uploader { color: rgba(255,255,255,0.45); }
+.fcs-row.active .fcs-uploader { color: #cbd5e1; }
 
 /* ── Right meta ── */
 .fcs-right {
@@ -445,25 +445,25 @@ const STYLES = `
 .fcs-time {
   font-size: 10px;
   font-weight: 600;
-  color: rgba(255,255,255,0.28);
+  color: #94a3b8;
   white-space: nowrap;
   letter-spacing: 0.01em;
 }
-.fcs-row.active .fcs-time { color: rgba(255,255,255,0.55); }
+.fcs-row.active .fcs-time { color: #cbd5e1; }
 .fcs-size {
   font-size: 9.5px;
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 999px;
   background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.26);
+  color: #cbd5e1;
   letter-spacing: 0.02em;
   border: 1px solid rgba(255,255,255,0.06);
   transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
 }
 .fcs-row.active .fcs-size {
   background: color-mix(in srgb, var(--accent-color, #1264a3) 20%, transparent);
-  color: rgba(255,255,255,0.6);
+  color: #f1f5f9;
   border-color: color-mix(in srgb, var(--accent-color, #1264a3) 30%, transparent);
 }
 

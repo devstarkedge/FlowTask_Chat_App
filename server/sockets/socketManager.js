@@ -249,7 +249,22 @@ export async function initializeSocket(httpServer, corsOptions) {
     }
   });
 
+
+  // Helper to broadcast presence to all workspaces a user belongs to
+  async function broadcastPresence(userId, event, payload) {
+    try {
+      const { default: WorkspaceMembership } = await import('../modules/workspaces/WorkspaceMembership.model.js');
+      const memberships = await WorkspaceMembership.find({ userId, isActive: true }).lean();
+      for (const m of memberships) {
+        io.to(`ws:${m.workspaceId}:workspace`).emit(event, payload);
+      }
+    } catch (err) {
+      console.error('Failed to broadcast presence to workspaces', { error: err.message, userId });
+    }
+  }
+
   // ─── Connection Handler ────────────────────────────────────────────────
+
   io.on('connection', async (socket) => {
     const user = socket.chatUser;
     const userId = user._id.toString();

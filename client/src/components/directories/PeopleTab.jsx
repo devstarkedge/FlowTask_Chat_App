@@ -5,6 +5,7 @@ import { directoriesAPI } from '../../services/directoriesAPI'
 import { useAuthStore } from '../../stores/authStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useChatStore } from '../../stores/chatStore'
+import { usePresenceStore } from '../../stores/presenceStore'
 import { useProfileStore } from '../../stores/profileStore'
 import useResponsive from '../../hooks/useResponsive'
 import { CardSkeletonGrid } from './Skeletons'
@@ -62,6 +63,7 @@ export default function PeopleTab() {
           })
         }
         
+        usePresenceStore.getState().updateFromUsers(usersList)
         setUsers(usersList)
       } catch {
         setUsers([])
@@ -88,9 +90,11 @@ export default function PeopleTab() {
     fetchUsers('', sort)
   }
 
-  const onlineCount = users.filter(
-    (u) => u.isOnline || u.status === 'online'
-  ).length
+  const presenceMap = usePresenceStore((state) => state.presence)
+  const onlineCount = users.filter((u) => {
+    const status = presenceMap[u._id || u.userId]
+    return status === 'online'
+  }).length
 
   const gridCols = isMobile
     ? 'repeat(2, 1fr)'
@@ -224,12 +228,10 @@ function PersonCard({ person, currentUserId, index }) {
   const dept   = person.department || ''
   const formattedRole = role.charAt(0).toUpperCase() + role.slice(1)
 
-  const onlineUsers = useChatStore((s) => s.onlineUsers)
+  const presenceMap = usePresenceStore((s) => s.presence)
   const personId    = person._id || person.userId
-  const liveStatus  = onlineUsers.get(personId)
-  const isOnline    =
-    liveStatus === 'online' ||
-    (!liveStatus && (person.isOnline || person.status === 'online'))
+  const liveStatus  = presenceMap[personId]
+  const isOnline    = liveStatus === 'online'
   const isAway = liveStatus === 'away'
 
   const statusColor = isOnline

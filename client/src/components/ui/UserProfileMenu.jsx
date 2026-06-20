@@ -10,6 +10,7 @@ import { useProfileStore } from '../../stores/profileStore'
 import { dndAPI } from '../../services/api'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUIStore } from "../../stores/uiStore";
+import { usePresenceStore } from '../../stores/presenceStore'
 
 export default function UserProfileMenu({
   anchorRef,
@@ -53,7 +54,8 @@ export default function UserProfileMenu({
     dnd: "Do not disturb",
     offline: "Offline",
   };
-  const userStatus = user?.onlineStatus || "online";
+  const presenceMap = usePresenceStore((s) => s.presence);
+  const userStatus = presenceMap[user?._id] || user?.onlineStatus || "online";
   const isAway =
     userStatus === "away" || userStatus === "offline" || userStatus === "dnd";
 

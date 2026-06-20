@@ -162,8 +162,6 @@ export const useChatStore = create((set, get) => ({
   // Typing indicators keyed by channelId → { userId: name }
   typingByChannel: {},
 
-  // Online users
-  onlineUsers: new Map(),
 
   // Notifications
   notifications: [],
@@ -1455,32 +1453,6 @@ export const useChatStore = create((set, get) => ({
     });
   },
 
-  // ─── Presence ───────────────────────────────────────────────────────
-  setUserOnline: (userId) => {
-    set((state) => {
-      const users = new Map(state.onlineUsers);
-      users.set(userId, "online");
-      return { onlineUsers: users };
-    });
-  },
-
-  setUserOffline: (userId) => {
-    set((state) => {
-      const users = new Map(state.onlineUsers);
-      users.delete(userId);
-      return { onlineUsers: users };
-    });
-  },
-
-  setUserAway: (userId) => {
-    set((state) => {
-      const users = new Map(state.onlineUsers);
-      if (users.has(userId)) {
-        users.set(userId, "away");
-      }
-      return { onlineUsers: users };
-    });
-  },
 
   // ─── Notifications ─────────────────────────────────────────────────
   addNotification: (notification) => {
@@ -1834,7 +1806,7 @@ export const useChatStore = create((set, get) => ({
       threadParentMessages: {},
       threadHasMore: {},
       typingByChannel: {},
-      onlineUsers: new Map(),
+
       notifications: [],
       activeThread: null,
     });

@@ -1,4 +1,5 @@
 // Avatar component — no hover tooltips by design
+import { usePresenceStore } from '../../stores/presenceStore'
 
 const COLORS = [
   '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3',
@@ -16,9 +17,16 @@ function getColor(name) {
 
 function Avatar({ member, size = 28, showStatus = false }) {
   const safeMember = member || {}
-  const isOnline = safeMember.onlineStatus === 'online'
-  const isAway = safeMember.onlineStatus === 'away'
-  const isDnd = safeMember.onlineStatus === 'dnd' || (!!safeMember.chatPreferences && !!safeMember.chatPreferences.dnd && safeMember.chatPreferences.dnd.enabled)
+  
+  // Use presence store if available, fallback to member prop
+  const presenceStoreVal = usePresenceStore((state) => 
+    state.presence[safeMember._id || safeMember.userId]
+  )
+  const effectiveStatus = presenceStoreVal || safeMember.onlineStatus || 'offline'
+
+  const isOnline = effectiveStatus === 'online'
+  const isAway = effectiveStatus === 'away'
+  const isDnd = effectiveStatus === 'dnd' || (!!safeMember.chatPreferences && !!safeMember.chatPreferences.dnd && safeMember.chatPreferences.dnd.enabled)
   const bgColor = getColor(safeMember.name)
   const initials = (safeMember.name || '?')[0].toUpperCase()
   const statusSize = Math.max(8, size * 0.3)
@@ -112,7 +120,13 @@ export default function MemberAvatarGroup({
 }) {
   const visibleMembers = members.slice(0, max)
   const overflowCount = Math.max(0, members.length - max)
-  const onlineCount = members.filter((m) => m.onlineStatus === 'online').length
+  const onlineCount = usePresenceStore((state) => 
+    members.filter((m) => {
+      const id = m._id || m.userId;
+      const status = id ? state.presence[id] : m.onlineStatus;
+      return status === 'online';
+    }).length
+  )
 
   return (
     <div className="flex items-center gap-1">

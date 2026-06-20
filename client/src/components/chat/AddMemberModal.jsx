@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAuthStore } from "../../stores/authStore";
 import { useChannelStore } from "../../stores/channelStore";
-import { useChatStore } from "../../stores/chatStore";
+import { usePresenceStore } from "../../stores/presenceStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { userAPI } from "../../services/api";
 import {
   X,
@@ -327,7 +328,7 @@ export default function AddMemberModal({ channel, onClose }) {
 
   const { user } = useAuthStore();
   const { membersByChannel, addMember } = useChannelStore();
-  const { onlineUsers } = useChatStore();
+  const presence = usePresenceStore((state) => state.presence);
   const channelId = channel?._id;
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -347,7 +348,7 @@ export default function AddMemberModal({ channel, onClose }) {
     [channelId, membersByChannel],
   );
 
-  const onlineSet = useMemo(() => new Set(onlineUsers || []), [onlineUsers]);
+  const onlineSet = useMemo(() => new Set(Object.keys(presence).filter((id) => presence[id] === 'online')), [presence]);
 
   const fetchUsers = useCallback(async (query) => {
     setIsLoading(true);
@@ -362,6 +363,9 @@ export default function AddMemberModal({ channel, onClose }) {
           getContactUserId(u) !== user?._id &&
           !memberIds.has(getContactUserId(u)),
       );
+
+      // Hydrate presence store
+      usePresenceStore.getState().updateFromUsers(contacts);
 
       setUsers(filtered);
     } catch (err) {

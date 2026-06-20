@@ -1,9 +1,12 @@
 import React from 'react'
 import { X } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
+import { usePresenceStore } from '../../stores/presenceStore'
 
 export default function MemberItem({ member, onOpenProfile, canRemove, onRemove }) {
-  const isOnline = member?.onlineStatus === 'online'
+  const presenceMap = usePresenceStore((s) => s.presence);
+  const status = presenceMap[member?._id || member?.userId] || member?.onlineStatus || 'offline';
+  const isOnline = status === 'online'
 
   return (
     <div className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-default ${member?.registrationStatus === 'faded' ? 'opacity-60' : 'hover:bg-(--bg-hover)'}`}>

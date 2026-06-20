@@ -567,8 +567,7 @@ body {
   background: var(--bg-secondary);
 
   transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08),
-    0 0 0 3px rgba(78, 124, 255, 0.15);
+  box-shadow: var(--shadow-md);
 }
 
 .input-field:hover {
@@ -1816,8 +1815,8 @@ body {
 }
 
 .slack-composer.focused {
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: var(--accent-primary);
+  box-shadow: var(--shadow-sm);
 }
 
 .slack-composer.drag-over {

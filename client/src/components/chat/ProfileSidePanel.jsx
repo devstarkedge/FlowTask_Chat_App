@@ -17,6 +17,7 @@ import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useAuthStore } from "../../stores/authStore";
+import { usePresenceStore } from "../../stores/presenceStore";
 import { getDMPath } from "../../utils/chatRoutes";
 import toast from "react-hot-toast";
 
@@ -55,12 +56,12 @@ export default function ProfileSidePanel({ user, onClose }) {
   const navigate = useNavigate();
   const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const currentUser = useAuthStore((s) => s.user);
-  const onlineUsers = useChatStore((s) => s.onlineUsers);
+  const presenceMap = usePresenceStore((s) => s.presence);
   const [showMore, setShowMore] = useState(false);
   const [sendingDM, setSendingDM] = useState(false);
 
   const userId = user?._id || user?.userId;
-  const liveStatus = onlineUsers.get(userId) || user?.onlineStatus || "offline";
+  const liveStatus = presenceMap[userId] || user?.onlineStatus || "offline";
   const isCurrentUser = userId === currentUser?._id;
   const statusMeta = STATUS_META[liveStatus] || STATUS_META.offline;
 

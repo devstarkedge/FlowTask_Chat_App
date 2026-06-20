@@ -1,40 +1,55 @@
+function extractId(val) {
+  if (!val) return null;
+  if (typeof val === 'string') return val;
+  return (val._id || val.id || null)?.toString?.() || null;
+}
+
 export function workspaceBasePath(workspaceId) {
-  return `/workspace/${workspaceId}`
+  return `/workspace/${extractId(workspaceId) || workspaceId}`
 }
 
 export function getActivityPath(workspaceId, notificationId = null) {
-  return notificationId
-    ? `${workspaceBasePath(workspaceId)}/activity/${notificationId}`
+  const nId = extractId(notificationId) || notificationId;
+  return nId
+    ? `${workspaceBasePath(workspaceId)}/activity/${nId}`
     : `${workspaceBasePath(workspaceId)}/activity`
 }
 
 export function getFilesPath(workspaceId, fileRefId = null) {
-  return fileRefId
-    ? `${workspaceBasePath(workspaceId)}/files/${fileRefId}`
+  const fId = extractId(fileRefId) || fileRefId;
+  return fId
+    ? `${workspaceBasePath(workspaceId)}/files/${fId}`
     : `${workspaceBasePath(workspaceId)}/files`
 }
 
 export function getSearchPath(workspaceId, scopeId = null, query = '') {
   const params = new URLSearchParams()
-  if (scopeId) params.set('scope', scopeId)
+  const sId = extractId(scopeId) || scopeId;
+  if (sId) params.set('scope', sId)
   if (query) params.set('q', query)
   const suffix = params.toString()
   return `${workspaceBasePath(workspaceId)}/search${suffix ? `?${suffix}` : ''}`
 }
 
 export function getDMPath(workspaceId, dmId, messageId = null) {
-  const base = `${workspaceBasePath(workspaceId)}/dms/${dmId}`
-  return messageId ? `${base}/message/${messageId}` : base
+  const cId = extractId(dmId) || dmId;
+  const mId = extractId(messageId) || messageId;
+  const base = `${workspaceBasePath(workspaceId)}/dms/${cId}`
+  return mId ? `${base}/message/${mId}` : base
 }
 
 export function getChannelPath(workspaceId, channelId, messageId = null) {
-  const base = `${workspaceBasePath(workspaceId)}/channel/${channelId}`
-  return messageId ? `${base}/message/${messageId}` : base
+  const cId = extractId(channelId) || channelId;
+  const mId = extractId(messageId) || messageId;
+  const base = `${workspaceBasePath(workspaceId)}/channel/${cId}`
+  return mId ? `${base}/message/${mId}` : base
 }
 
 export function getLegacyDMPath(workspaceId, dmId, messageId = null) {
-  const base = `${workspaceBasePath(workspaceId)}/dm/${dmId}`
-  return messageId ? `${base}/message/${messageId}` : base
+  const cId = extractId(dmId) || dmId;
+  const mId = extractId(messageId) || messageId;
+  const base = `${workspaceBasePath(workspaceId)}/dm/${cId}`
+  return mId ? `${base}/message/${mId}` : base
 }
 
 export function getDirectoriesPath(workspaceId) {
@@ -42,8 +57,11 @@ export function getDirectoriesPath(workspaceId) {
 }
 
 export function getThreadPath(workspaceId, channelId, threadId, messageId = null) {
-  const base = `${workspaceBasePath(workspaceId)}/channel/${channelId}`
-  return messageId ? `${base}/message/${messageId}` : `${base}/message/${threadId}`
+  const cId = extractId(channelId) || channelId;
+  const tId = extractId(threadId) || threadId;
+  const mId = extractId(messageId) || messageId;
+  const base = `${workspaceBasePath(workspaceId)}/channel/${cId}`
+  return mId ? `${base}/message/${mId}` : `${base}/message/${tId}`
 }
 
 /**

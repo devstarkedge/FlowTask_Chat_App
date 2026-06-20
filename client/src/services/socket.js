@@ -9,6 +9,7 @@ import { useLaterStore } from '../stores/laterStore'
 import { useScheduledStore } from '../stores/scheduledStore'
 import { throttle } from '../utils/throttle'
 import { conversationPresence } from './conversationPresence'
+import { usePresenceStore } from '../stores/presenceStore'
 import { unreadManager } from './unreadManager'
 import logger from '../utils/logger'
 
@@ -433,16 +434,25 @@ export function connectSocket() {
   })
 
   // ─── Presence Events ────────────────────────────────────────────────
-  socket.on(SOCKET_EVENTS.USER_ONLINE, ({ userId, name }) => {
-    useChatStore.getState().setUserOnline(userId, name)
+  socket.on(SOCKET_EVENTS.USER_ONLINE, ({ userId, flowTaskUserId, name }) => {
+    usePresenceStore.getState().setUserPresence(userId, 'online')
+    if (flowTaskUserId) {
+      usePresenceStore.getState().setUserPresence(flowTaskUserId, 'online')
+    }
   })
 
-  socket.on(SOCKET_EVENTS.USER_OFFLINE, ({ userId }) => {
-    useChatStore.getState().setUserOffline(userId)
+  socket.on(SOCKET_EVENTS.USER_OFFLINE, ({ userId, flowTaskUserId }) => {
+    usePresenceStore.getState().setUserPresence(userId, 'offline')
+    if (flowTaskUserId) {
+      usePresenceStore.getState().setUserPresence(flowTaskUserId, 'offline')
+    }
   })
 
-  socket.on(SOCKET_EVENTS.USER_AWAY, ({ userId }) => {
-    useChatStore.getState().setUserAway(userId)
+  socket.on(SOCKET_EVENTS.USER_AWAY, ({ userId, flowTaskUserId }) => {
+    usePresenceStore.getState().setUserPresence(userId, 'away')
+    if (flowTaskUserId) {
+      usePresenceStore.getState().setUserPresence(flowTaskUserId, 'away')
+    }
   })
 
   // ─── User Role Update Events ────────────────────────────────────────

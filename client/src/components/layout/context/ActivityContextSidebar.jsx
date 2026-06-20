@@ -10,6 +10,7 @@ import {
   UserPlus,
   Settings,
   AlarmClock,
+  Smile,
 } from "lucide-react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { useNotificationStore } from "../../../stores/notificationStore";
@@ -20,6 +21,7 @@ import {
   getNotificationText,
   normalizeNotification,
 } from "../../../utils/notificationFormat";
+import EmojiRenderer from "../../shared/EmojiRenderer";
 
 /* ─────────────────────────────────────────────────────────────
    STYLES
@@ -293,41 +295,50 @@ const STYLES = `
 /* Sender name */
 .acs3-name {
   font-size: 14px; font-weight: 600;
-  color: rgba(255,255,255,0.8);
+  color: #e2e8f0;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   letter-spacing:0; line-height:1.3;
   transition: color 120ms ease;
 }
 .acs3-row.is-unread .acs3-name,
 .acs3-row.is-on .acs3-name {
-  color: #fff;
+  color: #ffffff;
   font-weight: 700;
 }
 /* Timestamp */
 .acs3-time {
   font-size: 11px;
-  color: rgba(255,255,255,0.4);
+  color: #94a3b8;
   white-space:nowrap; flex-shrink:0; line-height:1.4;
 }
-.acs3-row.is-on .acs3-time { color:rgba(255,255,255,0.5); }
+.acs3-row.is-on .acs3-time { color: #cbd5e1; }
 
 /* Notification body text */
 .acs3-text {
+  font-family: "Inter", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif;
   font-size: 13px; line-height: 1.4;
-  color: rgba(255,255,255,0.6);
+  color: #cbd5e1;
   display:-webkit-box;
   -webkit-line-clamp:2; -webkit-box-orient:vertical;
   overflow:hidden;
   transition: color 120ms ease;
+  opacity: 1;
 }
-.acs3-row.is-unread .acs3-text { color:rgba(255,255,255,0.9); }
-.acs3-row.is-on .acs3-text     { color:rgba(255,255,255,0.9); }
+.acs3-row.is-unread .acs3-text { color: #ffffff; }
+.acs3-row.is-on .acs3-text     { color: #ffffff; }
 
 /* Sub-label (channel / body) */
 .acs3-sub {
+  font-family: "Inter", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif;
   font-size:11.5px;
-  color: rgba(255,255,255,0.25);
+  color: #94a3b8;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  opacity: 1;
+  transition: color 120ms ease;
+}
+.acs3-row.is-unread .acs3-sub,
+.acs3-row.is-on .acs3-sub {
+  color: #cbd5e1;
 }
 
 /* ─── Right indicators ───────────────────────────── */
@@ -407,6 +418,7 @@ const STYLES = `
 /* ── Icon map ── */
 const ICONS = {
   mention:          { Icon: AtSign,            color: "var(--accent-primary)" },
+  reaction:         { Icon: Smile,             color: "var(--accent-yellow)" },
   dm:               { Icon: MessageCircle,     color: "var(--accent-green)" },
   thread_reply:     { Icon: MessageSquareText, color: "var(--accent-primary)" },
   channel_invite:   { Icon: UserPlus,          color: "var(--accent-purple)" },
@@ -560,7 +572,12 @@ function NotifRow({ notification, isSelected, animDelay, onSelect, onKeyDown }) 
           <span className="acs3-name">{senderName}</span>
           {timeStr && <span className="acs3-time">{timeStr}</span>}
         </div>
-        <span className="acs3-text">{getNotificationText(notification)}</span>
+        <span className="acs3-text">
+          {getNotificationText(notification)}
+          {notification.type === 'reaction' && notification.emoji && (
+            <EmojiRenderer emoji={notification.emoji} size={14} style={{ marginLeft: 4, verticalAlign: 'middle' }} />
+          )}
+        </span>
         {notification.body && (
           <span className="acs3-sub">{notification.body}</span>
         )}

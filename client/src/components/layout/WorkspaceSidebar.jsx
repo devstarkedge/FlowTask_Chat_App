@@ -14,6 +14,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { useNotificationStore } from "../../stores/notificationStore";
 import { useLaterStore } from "../../stores/laterStore";
 import { useChannelStore } from "../../stores/channelStore";
+import { usePresenceStore } from "../../stores/presenceStore";
 import { Avatar } from "../chat/MemberAvatarGroup";
 import CreateMenu from "../ui/CreateMenu";
 import UserProfileMenu from "../ui/UserProfileMenu";
@@ -39,7 +40,16 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   const { workspaceId } = useParams();
   const { user } = useAuthStore();
   const unreadNotifications = useNotificationStore((s) => s.unreadCount);
+  const presenceMap = usePresenceStore((s) => s.presence);
   const savedCount = useLaterStore((s) => s.savedMessages.length);
+  
+  const userStatus = presenceMap[user?._id] || user?.onlineStatus || "online";
+  const statusColor = 
+    userStatus === "online" ? "var(--status-online)" : 
+    userStatus === "away" ? "var(--status-away)" : 
+    userStatus === "dnd" ? "var(--status-dnd)" : 
+    "var(--status-offline)";
+
   // Combined count for the Later icon badge
   const laterCount = savedCount;
   const [showCreateMenu, setShowCreateMenu] = useState(false);
@@ -263,12 +273,15 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
             member={{
               name: user?.name || "?",
               avatar: user?.avatar,
-              onlineStatus: "online",
+              onlineStatus: userStatus,
             }}
             size={34}
             showStatus={false}
           />
-          <span className="online-dot" />
+          <span 
+            className="online-dot" 
+            style={{ background: statusColor }}
+          />
         </button>
       </nav>
 

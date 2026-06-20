@@ -36,6 +36,8 @@ export function getNotificationText(input) {
       return `${senderName} replied in a thread${channelName ? ` in #${channelName}` : ''}`
     case 'channel_invite':
       return `${senderName} added you to #${channelName || 'channel'}`
+    case 'reaction':
+      return `${senderName} reacted to your message`
     case 'task_update':
       return notification.title || 'Task update'
     case 'reminder_overdue':

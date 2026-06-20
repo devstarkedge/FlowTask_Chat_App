@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation, matchPath } from "react-router-dom
 import { useChannelStore } from "../../stores/channelStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useChatStore } from "../../stores/chatStore";
+import { usePresenceStore } from "../../stores/presenceStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useLaterStore } from '../../stores/laterStore';
 import { useScheduledStore } from '../../stores/scheduledStore';
@@ -42,6 +43,7 @@ import {
   getDirectoriesPath,
 } from "../../utils/chatRoutes";
 import { useDraftStore, countWorkspaceDrafts } from "../../stores/draftStore";
+import { useNotificationStore } from "../../stores/notificationStore";
 import { isContentEmpty } from "../../utils/draftUtils";
 import SidebarContainer from "./sidebar/SidebarContainer";
 import SidebarItem from "./sidebar/SidebarItem";
@@ -73,7 +75,6 @@ export default function NavigationSidebar({
   const { channels, activeChannelId, setActiveChannel, unreads, createDM } =
     useChannelStore();
   const { user } = useAuthStore();
-  const { onlineUsers } = useChatStore();
   const { switchWorkspace } = useWorkspaceStore();
   const drafts = useDraftStore((s) => s.drafts);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
@@ -292,6 +293,7 @@ export default function NavigationSidebar({
   // Combined count: drafts + scheduled messages
   const scheduledCount = useScheduledStore((s) => s.getScheduledCount());
   const workspaceDraftCount = useDraftStore((s) => countWorkspaceDrafts(s.drafts, workspaceId));
+  const fetchUnreadCount = useNotificationStore((s) => s.fetchUnreadCount);
   const laterTotalCount = workspaceDraftCount + scheduledCount;
 
   const header = (
@@ -432,7 +434,7 @@ export default function NavigationSidebar({
                   isActive={!isLaterPage && channel._id === activeChannelId}
                   unread={unreads[channel._id] || 0}
                   onClick={() => handleSelectChannel(channel._id)}
-                  onlineUsers={onlineUsers}
+
                   hasDraft={hasDraft(channel._id)}
                 />
               ))}
@@ -462,7 +464,7 @@ export default function NavigationSidebar({
                   isActive={!isLaterPage && channel._id === activeChannelId}
                   unread={unreads[channel._id] || 0}
                   onClick={() => handleSelectChannel(channel._id)}
-                  onlineUsers={onlineUsers}
+
                   hasDraft={hasDraft(channel._id)}
                 />
               ))}
@@ -492,7 +494,6 @@ export default function NavigationSidebar({
                   isActive={!isLaterPage && channel._id === activeChannelId}
                   unread={unreads[channel._id] || 0}
                   onClick={() => handleSelectChannel(channel._id)}
-                  onlineUsers={onlineUsers}
                   hasDraft={hasDraft(channel._id)}
                 />
               ))}
@@ -534,7 +535,6 @@ export default function NavigationSidebar({
                 isActive={!isLaterPage && channel._id === activeChannelId}
                 unread={unreads[channel._id] || 0}
                 onClick={() => handleSelectChannel(channel._id)}
-                onlineUsers={onlineUsers}
                 hasDraft={hasDraft(channel._id)}
               />
             ))}
@@ -769,7 +769,6 @@ function ChannelListItem({
   isActive,
   unread,
   onClick,
-  onlineUsers,
   hasDraft,
 }) {
   let Icon = CHANNEL_ICONS[channel.type] || Hash;
@@ -805,12 +804,11 @@ function DMListItem({
   isActive,
   unread,
   onClick,
-  onlineUsers,
   hasDraft,
 }) {
-  const isOnline = onlineUsers?.has?.(channel.dmRecipientId);
-  const isAway =
-    isOnline && onlineUsers?.get?.(channel.dmRecipientId) === "away";
+  const status = usePresenceStore((s) => s.presence[channel.dmRecipientId]) || "offline";
+  const isOnline = status === "online";
+  const isAway = status === "away";
 
   const timeAgo = channel.lastMessageAt
     ? (() => {

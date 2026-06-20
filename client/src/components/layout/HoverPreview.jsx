@@ -94,6 +94,7 @@ export default function HoverPreview({
   const { workspaceId } = useParams()
   const channels = useChannelStore((s) => s.channels)
   const unreads = useChannelStore((s) => s.unreads)
+  const activeChannelId = useChannelStore((s) => s.activeChannelId)
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel)
   const { user } = useAuthStore()
   const presenceMap = usePresenceStore((s) => s.presence)

@@ -141,6 +141,70 @@ class AuditLogService {
       workspaceId,
     });
   }
+
+  /**
+   * Log invite created.
+   */
+  logInviteCreated(invite, actorId, actorName, workspaceId) {
+    this.log({
+      action: 'INVITE_CREATED',
+      entityType: 'invite',
+      entityId: invite._id,
+      actorId,
+      actorName,
+      details: {
+        email: invite.email,
+        inviteType: invite.inviteType,
+        role: invite.role,
+      },
+      workspaceId,
+    });
+  }
+
+  /**
+   * Log invite resent.
+   */
+  logInviteResent(inviteId, actorId, actorName, workspaceId) {
+    this.log({
+      action: 'INVITE_RESENT',
+      entityType: 'invite',
+      entityId: inviteId,
+      actorId,
+      actorName,
+      details: {},
+      workspaceId,
+    });
+  }
+
+  /**
+   * Log invite accepted.
+   */
+  logInviteAccepted(inviteId, userId, workspaceId) {
+    this.log({
+      action: 'INVITE_ACCEPTED',
+      entityType: 'invite',
+      entityId: inviteId,
+      actorId: userId,
+      actorName: 'User',
+      details: { userId: userId?.toString() },
+      workspaceId,
+    });
+  }
+
+  /**
+   * Log invite revoked.
+   */
+  logInviteRevoked(inviteId, actorId, actorName, workspaceId) {
+    this.log({
+      action: 'INVITE_REVOKED',
+      entityType: 'invite',
+      entityId: inviteId,
+      actorId,
+      actorName,
+      details: {},
+      workspaceId,
+    });
+  }
 }
 
 export default new AuditLogService();

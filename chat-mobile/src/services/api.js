@@ -148,6 +148,18 @@ export const workspaceAPI = {
   joinByInviteCode: (inviteCode) => api.post('/workspaces/join', { inviteCode }),
   inviteByEmail: (workspaceId, email, role) => api.post(`/workspaces/${workspaceId}/invite-email`, { email, role }),
   leave: (workspaceId) => api.post(`/workspaces/${workspaceId}/leave`),
+
+  // ── Invite management ──
+  getAllInvites: (workspaceId, params = {}) =>
+    api.get(`/workspaces/${workspaceId}/invites`, { params }),
+  resendInvite: (workspaceId, inviteId) =>
+    api.post(`/workspaces/${workspaceId}/invites/${inviteId}/resend`),
+  revokeInvite: (workspaceId, inviteId) =>
+    api.delete(`/workspaces/${workspaceId}/invites/${inviteId}`),
+  acceptEmailInvite: (token) =>
+    api.post('/workspaces/accept-invite', { token }),
+  getInviteInfo: (token) =>
+    api.get(`/workspaces/invite-info/${token}`),
 };
 
 // Channel API

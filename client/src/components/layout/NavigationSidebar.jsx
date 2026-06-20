@@ -36,6 +36,7 @@ import WorkspaceSwitcher from "../workspace/WorkspaceSwitcher";
 import CreateWorkspaceModal from "../workspace/CreateWorkspaceModal";
 import JoinWorkspaceModal from "../workspace/JoinWorkspaceModal";
 import WorkspaceSettingsModal from "../workspace/WorkspaceSettingsModal";
+import InviteMembersModal from "../workspace/InviteMembersModal";
 import { formatDistanceToNowStrict } from "date-fns";
 import {
   getChannelPath,
@@ -117,6 +118,7 @@ export default function NavigationSidebar({
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [showJoinWorkspace, setShowJoinWorkspace] = useState(false);
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
+  const [showInviteMembers, setShowInviteMembers] = useState(false);
 
   // Fetch favorites when workspace changes
   useEffect(() => {
@@ -304,6 +306,7 @@ export default function NavigationSidebar({
           onOpenCreate={() => setShowCreateWorkspace(true)}
           onOpenJoin={() => setShowJoinWorkspace(true)}
           onOpenSettings={() => setShowWorkspaceSettings(true)}
+          onOpenInvite={() => setShowInviteMembers(true)}
         />
         {onClose && (
           <button
@@ -598,6 +601,13 @@ export default function NavigationSidebar({
       {showWorkspaceSettings && (
         <WorkspaceSettingsModal
           onClose={() => setShowWorkspaceSettings(false)}
+        />
+      )}
+      {showInviteMembers && (
+        <InviteMembersModal
+          isOpen={showInviteMembers}
+          onClose={() => setShowInviteMembers(false)}
+          workspaceId={workspaceId}
         />
       )}
     </>

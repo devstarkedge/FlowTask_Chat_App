@@ -14,9 +14,11 @@ function isSystemManagedProjectChannel(channel) {
  * Get all channels for the authenticated user.
  */
 export const getChannels = asyncHandler(async (req, res) => {
+  const role = req.membership?.role || null;
   const channels = await channelService.getChannelsForUser(
     req.user._id,
     req.workspaceId,
+    role,
   );
 
   res.json({

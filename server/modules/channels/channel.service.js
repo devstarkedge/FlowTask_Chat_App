@@ -838,12 +838,51 @@ class ChannelService {
 
   /**
    * Get all channels for a user with unread counts.
+   * @param {string} userId - User ID
+   * @param {string} workspaceId - Workspace ID
+   * @param {string} [role] - User's workspace role (optional, fetched if not provided)
    */
-  async getChannelsForUser(userId, workspaceId) {
+  async getChannelsForUser(userId, workspaceId, role = null) {
+    // If role not provided, fetch it
+    if (!role) {
+      role = await workspaceRepository.getUserRole(userId, workspaceId);
+    }
+
+    // For guests, only return channels they are explicitly members of
+    const isGuest = role === 'guest';
+
     const channels = await channelRepository.findByMember(userId, {
       workspaceId,
     });
 
+    // Guests only see channels they are explicit members of
+    if (isGuest) {
+      const decorated = await this._decorateDMChannels(channels, userId, workspaceId);
+
+      // Merge per-user pin/star state
+      const pins = await ChannelPin.getPinsForUser(userId, workspaceId);
+      const pinMap = new Map(pins.map((p) => [p.channelId.toString(), p]));
+
+      const withPins = decorated.map((ch) => {
+        const raw = ch.toObject ? ch.toObject() : ch;
+        const pin = pinMap.get(raw._id.toString());
+        return {
+          ...raw,
+          isPinned: pin?.isPinned || false,
+          isStarred: pin?.isStarred || false,
+          pinnedOrder: pin?.pinnedOrder || 0,
+        };
+      });
+
+      logger.debug?.('[CHANNEL_FETCH] Channels resolved for guest user', {
+        userId,
+        workspaceId,
+        memberChannels: channels.length,
+        total: withPins.length,
+      });
+
+      return withPins;
+    }
 
     // Get system public channels the user might not be a member of yet
     const systemChannels =

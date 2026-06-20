@@ -364,13 +364,23 @@ export const workspaceAPI = {
     api.post("/workspaces/join", { inviteCode }),
   regenerateInviteCode: (id) => api.post(`/workspaces/${id}/invite-code`),
   // Email invites
-  inviteByEmail: (id, { email, channels = [] }) =>
-    api.post(`/workspaces/${id}/invite-email`, { email, channels }),
-  getPendingInvites: (id) => api.get(`/workspaces/${id}/invites`),
+  inviteByEmail: (id, { email, channels = [], inviteType = 'member', role = 'member' }) =>
+    api.post(`/workspaces/${id}/invite-email`, { email, channels, inviteType, role }),
+  getAllInvites: (id, params = {}) => api.get(`/workspaces/${id}/invites`, { params }),
+  getPendingInvites: (id) => api.get(`/workspaces/${id}/invites/pending`),
+  resendInvite: (id, inviteId) =>
+    api.post(`/workspaces/${id}/invites/${inviteId}/resend`),
   revokeInvite: (id, inviteId) =>
     api.delete(`/workspaces/${id}/invites/${inviteId}`),
   acceptEmailInvite: (token) =>
     api.post("/workspaces/accept-invite", { token }),
+  getInviteInfo: (token) =>
+    api.get(`/workspaces/invite-info/${token}`),
+  // Workspace settings
+  updateDomainRestrictions: (id, data) =>
+    api.patch(`/workspaces/${id}/settings/domain-restrictions`, data),
+  updateGuestSettings: (id, data) =>
+    api.patch(`/workspaces/${id}/settings/guest-settings`, data),
   // Billing & plan
   getBilling: (id) => api.get(`/workspaces/${id}/billing`),
   upgradePlan: (id, plan) =>

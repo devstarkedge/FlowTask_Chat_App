@@ -156,6 +156,7 @@ export const WORKSPACE_ROLES = Object.freeze({
 export const WORKSPACE_LIMITS = Object.freeze({
   free: {
     maxMembers: 50,
+    maxGuests: 0,
     maxChannels: 20,
     maxFileSize: 5 * 1024 * 1024,
     features: {
@@ -172,6 +173,7 @@ export const WORKSPACE_LIMITS = Object.freeze({
   },
   pro: {
     maxMembers: 500,
+    maxGuests: 50,
     maxChannels: -1,
     maxFileSize: 25 * 1024 * 1024,
     features: {
@@ -188,6 +190,7 @@ export const WORKSPACE_LIMITS = Object.freeze({
   },
   enterprise: {
     maxMembers: -1,
+    maxGuests: -1,
     maxChannels: -1,
     maxFileSize: 100 * 1024 * 1024,
     features: {
@@ -296,6 +299,26 @@ export const SOCKET_EVENTS = Object.freeze({
   USER_ACTIVATED: 'user:activated',
   USER_ROLE_UPDATED: 'user:role_updated',
   USER_PROFILE_UPDATED: 'user:profile_updated',
+
+  // Invites
+  INVITE_CREATED: 'invite:created',
+  INVITE_REVOKED: 'invite:revoked',
+  INVITE_ACCEPTED: 'invite:accepted',
+  INVITE_RESENT: 'invite:resent',
+});
+
+// ─── Audit Actions ──────────────────────────────────────────────────────────
+export const AUDIT_ACTIONS = Object.freeze({
+  CHANNEL_CREATED: 'CHANNEL_CREATED',
+  MEMBER_ADDED: 'MEMBER_ADDED',
+  MEMBER_REMOVED: 'MEMBER_REMOVED',
+  CHANNEL_ARCHIVED: 'CHANNEL_ARCHIVED',
+  WEBHOOK_PROCESSED: 'WEBHOOK_PROCESSED',
+  USER_ACTIVATED: 'USER_ACTIVATED',
+  INVITE_CREATED: 'INVITE_CREATED',
+  INVITE_RESENT: 'INVITE_RESENT',
+  INVITE_ACCEPTED: 'INVITE_ACCEPTED',
+  INVITE_REVOKED: 'INVITE_REVOKED',
 });
 
 // ─── Notification Types ──────────────────────────────────────────────────────
@@ -359,6 +382,8 @@ export const RATE_LIMITS = Object.freeze({
   WEBHOOK: { windowMs: 60_000, max: 1000 },
   // Auth: 5 requests per 100 seconds
   AUTH: { windowMs: 100_000, max: 5 },
+  // Invite: 10 requests per minute
+  INVITE: { windowMs: 60_000, max: 10 },
 });
 
 // ─── Circuit Breaker ─────────────────────────────────────────────────────────

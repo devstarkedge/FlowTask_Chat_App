@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useAuthStore } from "../../stores/authStore";
 import {
   ChevronDown,
   Plus,
@@ -10,6 +11,7 @@ import {
   Loader2,
   MessageCircle,
   Sparkles,
+  UserPlus,
 } from "lucide-react";
 import api from "../../services/api";
 
@@ -39,7 +41,7 @@ const HEADER_ORBS = [
  * Action rows config factory.
  * Returns only the actions relevant to the current state.
  */
-const buildActions = (handlers, hasActiveWorkspace) => [
+const buildActions = (handlers, hasActiveWorkspace, canManage) => [
   {
     key: "create",
     label: "Create workspace",
@@ -56,7 +58,19 @@ const buildActions = (handlers, hasActiveWorkspace) => [
     tileClass: "wss-tile--emerald",
     handler: handlers.join,
   },
-  ...(hasActiveWorkspace
+  ...(hasActiveWorkspace && canManage
+    ? [
+        {
+          key: "invite",
+          label: "Invite people",
+          description: "Add members to workspace",
+          Icon: UserPlus,
+          tileClass: "wss-tile--violet",
+          handler: handlers.invite,
+        },
+      ]
+    : []),
+  ...(hasActiveWorkspace && canManage
     ? [
         {
           key: "settings",
@@ -277,10 +291,16 @@ export default function WorkspaceSwitcher({
   onOpenCreate,
   onOpenJoin,
   onOpenSettings,
+  onOpenInvite,
 }) {
   const navigate = useNavigate();
   const { workspaces, activeWorkspace, activeWorkspaceId, isSwitching } =
     useWorkspaceStore();
+  const { user } = useAuthStore();
+
+  // Permission check: only owner or admin can invite / manage
+  const userRole = activeWorkspace?.role || user?.role;
+  const canManage = ["owner", "admin"].includes(userRole);
 
   const [isOpen, setIsOpen] = useState(false);
   const [unread, setUnread] = useState({});
@@ -328,9 +348,11 @@ export default function WorkspaceSwitcher({
     {
       create: () => handleAction(onOpenCreate),
       join: () => handleAction(onOpenJoin),
+      invite: () => handleAction(onOpenInvite),
       settings: () => handleAction(onOpenSettings),
     },
     !!activeWorkspace,
+    canManage,
   );
 
   /* Unread dot on trigger — total across all non-active workspaces */

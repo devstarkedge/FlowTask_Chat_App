@@ -243,3 +243,59 @@ export const createWorkspaceSchema = z.object({
   plan: z.enum(["free", "pro", "enterprise"]).optional().default("free"),
   slug: z.string().max(100).optional(),
 });
+
+// ─── Invites ─────────────────────────────────────────────────────────────────
+
+export const inviteByEmailSchema = z
+  .object({
+    email: z.string().email("Invalid email address").max(255),
+    role: z.enum(["admin", "member", "guest"]).optional().default("member"),
+    inviteType: z.enum(["member", "guest"]).optional().default("member"),
+    channels: z.array(objectId).max(50).optional().default([]),
+    domainRestriction: z
+      .string()
+      .regex(/^@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, "Invalid domain format (e.g., @company.com)")
+      .max(100)
+      .optional(),
+  })
+  .refine(
+    (data) => {
+      // If inviteType is guest, channels must not be empty
+      if (data.inviteType === "guest") {
+        return data.channels && data.channels.length > 0;
+      }
+      return true;
+    },
+    { message: "Guest invites must specify at least one channel" }
+  )
+  .refine(
+    (data) => {
+      // If inviteType is guest, role must be guest
+      if (data.inviteType === "guest") {
+        return data.role === "guest";
+      }
+      return true;
+    },
+    { message: "Guest invite type must have guest role" }
+  );
+
+export const getAllInvitesSchema = z.object({
+  status: z.enum(["pending", "accepted", "expired", "revoked"]).optional(),
+  inviteType: z.enum(["member", "guest"]).optional(),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
+
+export const updateDomainRestrictionsSchema = z.object({
+  enabled: z.boolean(),
+  allowedDomains: z
+    .array(
+      z.string().regex(/^@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, "Invalid domain format")
+    )
+    .max(20),
+});
+
+export const updateGuestSettingsSchema = z.object({
+  maxGuests: z.number().int().min(-1).optional(),
+  guestChannelRestriction: z.boolean().optional(),
+});

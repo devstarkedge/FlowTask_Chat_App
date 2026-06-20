@@ -1,0 +1,360 @@
+/* ── PendingInvitesList.css ───────────────────────────────────────────────── */
+
+.pil-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* ── status tabs ── */
+.pil-tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    padding-bottom: 10px;
+}
+
+.pil-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 13px;
+    border-radius: 8px;
+    border: 1.5px solid transparent;
+    background: transparent;
+    color: var(--text-secondary, rgba(255,255,255,0.6));
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .14s;
+    font-family: inherit;
+}
+
+.pil-tab:hover:not(.pil-tab--active) {
+    background: var(--surface-hover, rgba(255,255,255,0.05));
+    color: var(--text-primary, #e2e8f0);
+}
+
+.pil-tab--active {
+    background: color-mix(in srgb, var(--accent-primary, #6366f1) 15%, transparent);
+    border-color: color-mix(in srgb, var(--accent-primary, #6366f1) 40%, transparent);
+    color: var(--accent-primary, #6366f1);
+}
+
+/* ── type filter ── */
+.pil-type-filter {
+    display: flex;
+    gap: 6px;
+}
+
+.pil-type-btn {
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1.5px solid var(--border-color, rgba(255,255,255,0.12));
+    background: transparent;
+    color: var(--text-secondary, rgba(255,255,255,0.6));
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .14s;
+    font-family: inherit;
+}
+
+.pil-type-btn:hover:not(.pil-type-btn--active) {
+    border-color: var(--border-color, rgba(255,255,255,0.25));
+    color: var(--text-primary, #e2e8f0);
+}
+
+.pil-type-btn--active {
+    background: var(--accent-primary, #6366f1);
+    border-color: var(--accent-primary, #6366f1);
+    color: #fff;
+}
+
+/* ── loading / empty ── */
+.pil-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 40px 0;
+    color: var(--text-muted, rgba(255,255,255,0.45));
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.pil-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 44px 0;
+    color: var(--text-muted, rgba(255,255,255,0.4));
+    text-align: center;
+}
+
+.pil-empty p {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary, rgba(255,255,255,0.6));
+}
+
+.pil-empty-hint {
+    font-size: 12.5px;
+    font-weight: 500;
+}
+
+/* ── table ── */
+.pil-table-wrap {
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1.5px solid var(--border-color, rgba(255,255,255,0.08));
+    background: var(--bg-secondary, rgba(255,255,255,0.02));
+}
+
+.pil-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.pil-table thead tr {
+    border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+}
+
+.pil-table th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted, rgba(255,255,255,0.4));
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    background: var(--bg-secondary, rgba(255,255,255,0.02));
+}
+
+.pil-table tbody tr {
+    border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.05));
+    transition: background .1s;
+}
+
+.pil-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.pil-table tbody tr:hover {
+    background: var(--surface-hover, rgba(255,255,255,0.035));
+}
+
+.pil-table td {
+    padding: 11px 14px;
+    vertical-align: middle;
+    color: var(--text-primary, #e2e8f0);
+    white-space: nowrap;
+}
+
+/* ── email cell ── */
+.pil-td-email {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-weight: 600;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pil-email-icon {
+    flex-shrink: 0;
+    color: var(--text-muted, rgba(255,255,255,0.4));
+}
+
+/* ── type badge ── */
+.pil-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.pil-type--member {
+    background: color-mix(in srgb, var(--accent-primary, #6366f1) 18%, transparent);
+    color: var(--accent-primary, #6366f1);
+}
+
+.pil-type--guest {
+    background: color-mix(in srgb, var(--accent-amber, #f59e0b) 18%, transparent);
+    color: var(--accent-amber, #f59e0b);
+}
+
+/* ── role ── */
+.pil-td-role {
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.pil-role-guest,
+.pil-role-admin,
+.pil-role-member {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.pil-role-admin {
+    color: var(--accent-purple, #7c3aed);
+}
+
+.pil-role-guest {
+    color: var(--accent-amber, #f59e0b);
+}
+
+.pil-role-member {
+    color: var(--text-secondary, rgba(255,255,255,0.65));
+}
+
+/* ── status badge ── */
+.pil-status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.pil-badge--pending {
+    background: color-mix(in srgb, var(--accent-blue, #38bdf8) 18%, transparent);
+    color: var(--accent-blue, #38bdf8);
+}
+
+.pil-badge--accepted {
+    background: color-mix(in srgb, var(--accent-green, #22c55e) 18%, transparent);
+    color: var(--accent-green, #22c55e);
+}
+
+.pil-badge--expired {
+    background: rgba(255,255,255,0.07);
+    color: var(--text-muted, rgba(255,255,255,0.45));
+}
+
+.pil-badge--revoked {
+    background: color-mix(in srgb, var(--accent-red, #f87171) 15%, transparent);
+    color: var(--accent-red, #f87171);
+}
+
+/* ── inviter / date ── */
+.pil-td-inviter {
+    color: var(--text-secondary, rgba(255,255,255,0.65));
+    font-weight: 500;
+}
+
+.pil-td-date {
+    color: var(--text-muted, rgba(255,255,255,0.45));
+    font-size: 12.5px;
+}
+
+/* ── action buttons ── */
+.pil-td-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.pil-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1.5px solid var(--border-color, rgba(255,255,255,0.1));
+    background: transparent;
+    cursor: pointer;
+    transition: all .14s;
+    color: var(--text-secondary, rgba(255,255,255,0.55));
+}
+
+.pil-action-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.pil-action-btn--resend:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent-primary, #6366f1) 18%, transparent);
+    border-color: var(--accent-primary, #6366f1);
+    color: var(--accent-primary, #6366f1);
+}
+
+.pil-action-btn--revoke:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent-red, #f87171) 15%, transparent);
+    border-color: var(--accent-red, #f87171);
+    color: var(--accent-red, #f87171);
+}
+
+/* ── pagination ── */
+.pil-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color, rgba(255,255,255,0.06));
+}
+
+.pil-page-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1.5px solid var(--border-color, rgba(255,255,255,0.12));
+    background: transparent;
+    color: var(--text-secondary, rgba(255,255,255,0.6));
+    cursor: pointer;
+    transition: all .14s;
+}
+
+.pil-page-btn:hover:not(:disabled) {
+    background: var(--surface-hover, rgba(255,255,255,0.06));
+    border-color: var(--accent-primary, #6366f1);
+    color: var(--accent-primary, #6366f1);
+}
+
+.pil-page-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.pil-page-info {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary, rgba(255,255,255,0.6));
+}
+
+.pil-page-total {
+    color: var(--text-muted, rgba(255,255,255,0.4));
+    font-weight: 500;
+}
+
+/* ── responsive ── */
+@media (max-width: 640px) {
+    .pil-table th,
+    .pil-table td {
+        padding: 9px 10px;
+        font-size: 12px;
+    }
+
+    .pil-td-email {
+        max-width: 140px;
+    }
+}

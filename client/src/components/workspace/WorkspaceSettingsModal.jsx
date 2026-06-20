@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useAuthStore } from "../../stores/authStore";
 import {
@@ -20,11 +20,17 @@ import {
   Check,
   Sparkles,
   AlertTriangle,
+  UserPlus,
+  Globe,
+  Eye,
+  Plus,
 } from "lucide-react";
 import { Avatar } from "../chat/MemberAvatarGroup";
 import toast from "react-hot-toast";
-import api from "../../services/api";
+import api, { workspaceAPI } from "../../services/api";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
+import InviteMembersModal from "./InviteMembersModal";
+import PendingInvitesList from "./PendingInvitesList";
 import "./custom-css/WorkspaceSettingsModal.css";
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -106,6 +112,8 @@ export default function WorkspaceSettingsModal({ onClose }) {
   const [isSaving, setIsSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [tabKey, setTabKey] = useState(0);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteRefreshKey, setInviteRefreshKey] = useState(0);
 
   useEffect(() => {
     if (activeWorkspaceId) fetchMembers();
@@ -277,6 +285,14 @@ export default function WorkspaceSettingsModal({ onClose }) {
                 isRegenerating={isRegenerating}
                 onCopy={handleCopyInviteCode}
                 onRegenerate={handleRegenerate}
+                workspaceId={activeWorkspaceId}
+                currentUserRole={currentUserRole}
+                plan={activeWorkspace?.plan || 'free'}
+                workspace={activeWorkspace}
+                showInviteModal={showInviteModal}
+                setShowInviteModal={setShowInviteModal}
+                inviteRefreshKey={inviteRefreshKey}
+                setInviteRefreshKey={setInviteRefreshKey}
               />
             )}
             {activeTab === "integrations" && (
@@ -602,42 +618,97 @@ function MembersTab({
 /* ─────────────────────────────────────────────────────────────────────────
    INVITE TAB
 ───────────────────────────────────────────────────────────────────────── */
+const GUEST_ACCESS_PLANS = { free: false, pro: true, enterprise: true };
+
 function InviteTab({
   inviteCode,
   canManage,
   isRegenerating,
   onCopy,
   onRegenerate,
+  workspaceId,
+  currentUserRole,
+  plan,
+  workspace,
+  showInviteModal,
+  setShowInviteModal,
+  inviteRefreshKey,
+  setInviteRefreshKey,
 }) {
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("member");
-  const [isSendingInvite, setIsSendingInvite] = useState(false);
   const [copied, setCopied] = useState(false);
-  const { activeWorkspaceId } = useWorkspaceStore();
+  const isOwner = currentUserRole === "owner";
+  const guestAccess = GUEST_ACCESS_PLANS[plan] ?? false;
 
-  const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  /* ── Domain Restrictions state ── */
+  const domainRestrictions = workspace?.settings?.domainRestrictions || { enabled: false, allowedDomains: [] };
+  const [domainEnabled, setDomainEnabled]       = useState(domainRestrictions.enabled);
+  const [domainList, setDomainList]             = useState(domainRestrictions.allowedDomains || []);
+  const [newDomain, setNewDomain]               = useState("");
+  const [savingDomain, setSavingDomain]         = useState(false);
 
-  const handleSend = async () => {
-    const email = inviteEmail.trim();
-    if (!email) return;
-    if (!isValidEmail(email)) {
-      toast.error("Please enter a valid email address");
+  /* ── Guest Settings state ── */
+  const guestSettings = workspace?.settings?.guestSettings || { maxGuests: -1, guestChannelRestriction: true };
+  const [maxGuests, setMaxGuests]               = useState(guestSettings.maxGuests);
+  const [guestChannelRestriction, setGuestChannelRestriction] = useState(guestSettings.guestChannelRestriction);
+  const [savingGuest, setSavingGuest]           = useState(false);
+
+  useEffect(() => {
+    setDomainEnabled(domainRestrictions.enabled);
+    setDomainList(domainRestrictions.allowedDomains || []);
+  }, [domainRestrictions.enabled, domainRestrictions.allowedDomains]);
+
+  useEffect(() => {
+    setMaxGuests(guestSettings.maxGuests);
+    setGuestChannelRestriction(guestSettings.guestChannelRestriction);
+  }, [guestSettings.maxGuests, guestSettings.guestChannelRestriction]);
+
+  /* ── Domain Restrictions handlers ── */
+  const addDomain = () => {
+    const d = newDomain.trim().toLowerCase().replace(/^@/, "");
+    if (!d || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) {
+      toast.error("Enter a valid domain (e.g. company.com)");
       return;
     }
-    setIsSendingInvite(true);
+    if (domainList.includes(d)) { toast.error("Domain already added"); return; }
+    setDomainList((p) => [...p, d]);
+    setNewDomain("");
+  };
+
+  const removeDomain = (d) => setDomainList((p) => p.filter((x) => x !== d));
+
+  const saveDomainRestrictions = async () => {
+    setSavingDomain(true);
     try {
-      await api.post(`/workspaces/${activeWorkspaceId}/invite-email`, {
-        email,
-        role: inviteRole,
+      await workspaceAPI.updateDomainRestrictions(workspaceId, {
+        enabled: domainEnabled,
+        allowedDomains: domainList,
       });
-      toast.success(`Invite sent to ${email}`);
-      setInviteEmail("");
+      toast.success("Domain restrictions saved");
     } catch (err) {
-      toast.error(
-        err.response?.data?.error?.message || "Failed to send invite",
-      );
-    }
-    setIsSendingInvite(false);
+      toast.error(err.response?.data?.error?.message || "Failed to save domain restrictions");
+    } finally { setSavingDomain(false); }
+  };
+
+  /* ── Guest Settings handlers ── */
+  const saveGuestSettings = async () => {
+    setSavingGuest(true);
+    try {
+      await workspaceAPI.updateGuestSettings(workspaceId, {
+        maxGuests: Number(maxGuests),
+        guestChannelRestriction,
+      });
+      toast.success("Guest settings saved");
+    } catch (err) {
+      toast.error(err.response?.data?.error?.message || "Failed to save guest settings");
+    } finally { setSavingGuest(false); }
+  };
+
+  /* ── Invite modal trigger ── */
+  const handleOpenInviteModal = () => setShowInviteModal(true);
+  const handleCloseInviteModal = () => {
+    setShowInviteModal(false);
+    // Refresh pending list after modal closes
+    setInviteRefreshKey((k) => k + 1);
   };
 
   const handleCopy = () => {
@@ -648,63 +719,28 @@ function InviteTab({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-      {/* Email invite */}
+      {/* ── Invite Members Button ── */}
       {canManage && (
         <div>
-          <SectionLabel>Invite by Email</SectionLabel>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <input
-              className="wsm-field"
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              placeholder="name@company.com"
-              style={{ flex: "1 1 180px", minWidth: 0 }}
-            />
-            <select
-              className="wsm-field"
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value)}
-              style={{ width: 110 }}
-            >
-              <option value="admin">Admin</option>
-              <option value="member">Member</option>
-              <option value="guest">Guest</option>
-            </select>
-            <button
-              className="wsm-btn-primary"
-              onClick={handleSend}
-              disabled={!inviteEmail.trim() || isSendingInvite}
-              style={{ flexShrink: 0 }}
-            >
-              {isSendingInvite ? (
-                <Loader2 size={14} className="wsm-spin" />
-              ) : (
-                "Send Invite"
-              )}
-            </button>
-          </div>
+          <SectionLabel>Invite People</SectionLabel>
+          <p style={{ fontSize: 12.5, color: "var(--text-secondary)", marginBottom: 14, lineHeight: 1.6 }}>
+            Send email invitations to new members or external guests. Guests are restricted to assigned channels only.
+          </p>
+          <button className="wsm-btn-primary" onClick={handleOpenInviteModal}>
+            <UserPlus size={14} />
+            Open Invite Panel
+          </button>
         </div>
       )}
 
-      {/* Invite code */}
+      {/* ── Invite Code ── */}
       <div>
         <SectionLabel>Invite Code</SectionLabel>
-        <p
-          style={{
-            fontSize: 12.5,
-            color: "var(--text-secondary)",
-            marginBottom: 16,
-            lineHeight: 1.6,
-          }}
-        >
-          Share this code with anyone you'd like to add. They can use it to join
-          this workspace directly.
+        <p style={{ fontSize: 12.5, color: "var(--text-secondary)", marginBottom: 16, lineHeight: 1.6 }}>
+          Share this code with anyone you'd like to add. They can use it to join this workspace directly.
         </p>
-
         {inviteCode ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 12,  }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div className="wsm-invite-code wsm-mono">{inviteCode}</div>
             <button
               className="wsm-copy-btn"
@@ -716,13 +752,7 @@ function InviteTab({
                 color: copied ? "var(--accent-primary, #6366f1)" : "var(--text-secondary)",
               }}
             >
-              {copied ? (
-                <span className="wsm-check">
-                  <Check size={18} />
-                </span>
-              ) : (
-                <Copy size={10} />
-              )}
+              {copied ? <span className="wsm-check"><Check size={18} /></span> : <Copy size={10} />}
             </button>
           </div>
         ) : (
@@ -731,23 +761,143 @@ function InviteTab({
           </p>
         )}
       </div>
-
       {canManage && (
         <div>
-          <button
-            className="wsm-btn-ghost"
-            onClick={onRegenerate}
-            disabled={isRegenerating}
-          >
-            {isRegenerating ? (
-              <Loader2 size={14} className="wsm-spin" />
-            ) : (
-              <RefreshCw size={14} />
-            )}
+          <button className="wsm-btn-ghost" onClick={onRegenerate} disabled={isRegenerating}>
+            {isRegenerating ? <Loader2 size={14} className="wsm-spin" /> : <RefreshCw size={14} />}
             {inviteCode ? "Regenerate Code" : "Generate Invite Code"}
           </button>
         </div>
       )}
+
+      {/* ── Pending Invites List ── */}
+      {canManage && (
+        <div>
+          <SectionLabel>Pending & Recent Invites</SectionLabel>
+          <PendingInvitesList workspaceId={workspaceId} refreshKey={inviteRefreshKey} />
+        </div>
+      )}
+
+      {/* ── Domain Restrictions (owner/admin) ── */}
+      {canManage && (
+        <div>
+          <SectionLabel>Domain Restrictions</SectionLabel>
+          <p style={{ fontSize: 12.5, color: "var(--text-secondary)", marginBottom: 14, lineHeight: 1.6 }}>
+            Restrict email invites to specific domains. When enabled, only emails from allowed domains can be invited.
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
+              <input
+                type="checkbox"
+                checked={domainEnabled}
+                onChange={(e) => setDomainEnabled(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: "var(--accent-primary)" }}
+              />
+              Enable domain restrictions
+            </label>
+          </div>
+          {domainEnabled && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  className="wsm-field"
+                  type="text"
+                  placeholder="company.com"
+                  value={newDomain}
+                  onChange={(e) => setNewDomain(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addDomain()}
+                  style={{ flex: 1 }}
+                />
+                <button className="wsm-btn-ghost" onClick={addDomain} style={{ flexShrink: 0 }}>
+                  <Plus size={13} /> Add
+                </button>
+              </div>
+              {domainList.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {domainList.map((d) => (
+                    <span
+                      key={d}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                        padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600,
+                        background: "color-mix(in srgb, var(--accent-primary) 15%, transparent)",
+                        border: "1px solid color-mix(in srgb, var(--accent-primary) 30%, transparent)",
+                        color: "var(--accent-primary)",
+                      }}
+                    >
+                      <Globe size={11} />{d}
+                      <button
+                        type="button"
+                        onClick={() => removeDomain(d)}
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "inherit", display: "flex" }}
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <button
+                className="wsm-btn-primary"
+                onClick={saveDomainRestrictions}
+                disabled={savingDomain}
+                style={{ alignSelf: "flex-start" }}
+              >
+                {savingDomain ? <Loader2 size={13} className="wsm-spin" /> : <Check size={13} />}
+                Save Domain Settings
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Guest Settings (owner only, pro/enterprise) ── */}
+      {isOwner && guestAccess && (
+        <div>
+          <SectionLabel>Guest Settings</SectionLabel>
+          <p style={{ fontSize: 12.5, color: "var(--text-secondary)", marginBottom: 14, lineHeight: 1.6 }}>
+            Configure guest access limits and channel visibility for guest users.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
+              Max guests (-1 = unlimited):
+              <input
+                type="number"
+                className="wsm-field"
+                value={maxGuests}
+                onChange={(e) => setMaxGuests(e.target.value)}
+                min={-1}
+                style={{ width: 80, textAlign: "center" }}
+              />
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
+              <input
+                type="checkbox"
+                checked={guestChannelRestriction}
+                onChange={(e) => setGuestChannelRestriction(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: "var(--accent-primary)" }}
+              />
+              Restrict guests to assigned channels only
+            </label>
+            <button
+              className="wsm-btn-primary"
+              onClick={saveGuestSettings}
+              disabled={savingGuest}
+              style={{ alignSelf: "flex-start" }}
+            >
+              {savingGuest ? <Loader2 size={13} className="wsm-spin" /> : <Check size={13} />}
+              Save Guest Settings
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Invite Members Modal ── */}
+      <InviteMembersModal
+        isOpen={showInviteModal}
+        onClose={handleCloseInviteModal}
+        workspaceId={workspaceId}
+      />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useChannelStore } from "../../stores/channelStore";
 import { workspaceAPI } from "../../services/api";
 import toast from "react-hot-toast";
+import "./custom-css/InviteMembersModal.css";
 import {
   X,
   UserPlus,
@@ -17,7 +18,26 @@ import {
   AlertCircle,
   Users,
   Link,
+  Shield,
+  Info,
+  ChevronDown,
+  Eye,
 } from "lucide-react";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONSTANTS
+   ───────────────────────────────────────────────────────────────────────────── */
+
+const PLAN_FEATURES = {
+  free:       { guestAccess: false },
+  pro:        { guestAccess: true  },
+  enterprise: { guestAccess: true  },
+};
+
+const MEMBER_ROLES = [
+  { value: 'member', label: 'Member'  },
+  { value: 'admin',  label: 'Admin'   },
+];
 
 /* ─────────────────────────────────────────────────────────────────────────────
    HELPERS
@@ -86,15 +106,18 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
   const { activeWorkspace } = useWorkspaceStore();
   const { channels, fetchChannels } = useChannelStore();
 
-  const [emails, setEmails] = useState([]);
-  const [emailInput, setEmailInput] = useState("");
+  const [emails, setEmails]             = useState([]);
+  const [emailInput, setEmailInput]     = useState("");
   const [selectedChannels, setSelectedChannels] = useState([]);
   const [channelSearch, setChannelSearch] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [inviteLink, setInviteLink] = useState("");
-  const [linkCopied, setLinkCopied] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [isLoading, setIsLoading]       = useState(false);
+  const [isSending, setIsSending]       = useState(false);
+  const [inviteLink, setInviteLink]     = useState("");
+  const [linkCopied, setLinkCopied]     = useState(false);
+  const [errors, setErrors]             = useState({});
+  const [inviteType, setInviteType]     = useState('member');
+  const [role, setRole]                 = useState('member');
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
 
   const overlayRef = useRef(null);
   const emailInputRef = useRef(null);
@@ -230,6 +253,13 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
       return;
     }
 
+    // Guest channel validation
+    if (inviteType === 'guest' && selectedChannels.length === 0) {
+      setErrors((prev) => ({ ...prev, channels: 'Guests must be assigned to at least one channel' }));
+      toast.error('Please select at least one channel for guest invites');
+      return;
+    }
+
     setIsSending(true);
 
     try {
@@ -239,6 +269,8 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
           workspaceAPI.inviteByEmail(workspaceId, {
             email,
             channels: selectedChannels,
+            inviteType,
+            role: inviteType === 'guest' ? 'guest' : role,
           }),
         ),
       );
@@ -275,6 +307,9 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
     setChannelSearch("");
     setErrors({});
     setLinkCopied(false);
+    setInviteType('member');
+    setRole('member');
+    setRoleMenuOpen(false);
   };
 
   const handleClose = () => {
@@ -285,7 +320,25 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
 
   if (!isOpen) return null;
 
-  const workspaceName = activeWorkspace?.name || "Workspace";
+  const workspaceName = activeWorkspace?.name  || "Workspace";
+  const plan          = activeWorkspace?.plan  || 'free';
+  const guestAccess   = PLAN_FEATURES[plan]?.guestAccess ?? false;
+
+  // When inviteType changes to guest, force role = 'guest'
+  const handleInviteTypeChange = (type) => {
+    setInviteType(type);
+    if (type === 'guest') setRole('guest');
+    else if (role === 'guest') setRole('member');
+    setErrors((prev) => ({ ...prev, channels: null }));
+  };
+
+  // Close role dropdown on outside click
+  useEffect(() => {
+    if (!roleMenuOpen) return;
+    const handler = () => setRoleMenuOpen(false);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [roleMenuOpen]);
 
   return createPortal(
     <div className="imm-overlay" ref={overlayRef} onClick={handleOverlayClick}>
@@ -315,6 +368,83 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
 
         {/* ══ BODY ══ */}
         <div className="imm-body">
+          {/* Invite Type Toggle (only show guest option if plan supports it) */}
+          <div className="imm-section">
+            <label className="imm-label">
+              <Users size={13} />
+              <span>Invite type</span>
+            </label>
+            <div className="imm-type-toggle">
+              <button
+                type="button"
+                className={`imm-type-btn${inviteType === 'member' ? ' imm-type-btn--active' : ''}`}
+                onClick={() => handleInviteTypeChange('member')}
+              >
+                <Users size={14} />
+                <span>Member</span>
+              </button>
+              {guestAccess && (
+                <button
+                  type="button"
+                  className={`imm-type-btn${inviteType === 'guest' ? ' imm-type-btn--active-guest' : ''}`}
+                  onClick={() => handleInviteTypeChange('guest')}
+                >
+                  <Eye size={14} />
+                  <span>Guest</span>
+                </button>
+              )}
+            </div>
+            {inviteType === 'guest' && (
+              <div className="imm-guest-banner">
+                <Info size={14} />
+                <span>
+                  Guests have limited access and can only see channels you explicitly assign them to.
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Role Selector (member type only) */}
+          {inviteType === 'member' && (
+            <div className="imm-section">
+              <label className="imm-label">
+                <Shield size={13} />
+                <span>Role</span>
+              </label>
+              <div className="imm-role-dropdown">
+                <button
+                  type="button"
+                  className="imm-role-trigger"
+                  onClick={(e) => { e.stopPropagation(); setRoleMenuOpen((v) => !v); }}
+                >
+                  <span>{MEMBER_ROLES.find((r) => r.value === role)?.label ?? 'Member'}</span>
+                  <ChevronDown size={14} className={`imm-role-caret${roleMenuOpen ? ' imm-role-caret--open' : ''}`} />
+                </button>
+                {roleMenuOpen && (
+                  <ul className="imm-role-menu">
+                    {MEMBER_ROLES.map((r) => (
+                      <li key={r.value}>
+                        <button
+                          type="button"
+                          className={`imm-role-option${role === r.value ? ' imm-role-option--selected' : ''}`}
+                          onClick={() => { setRole(r.value); setRoleMenuOpen(false); }}
+                        >
+                          {r.label}
+                          {role === r.value && <Check size={13} />}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <p className="imm-hint">
+                {role === 'admin'
+                  ? 'Admins can manage workspace settings, channels, and members.'
+                  : 'Members can view and participate in all public channels.'}
+              </p>
+            </div>
+          )}
+
           {/* Email Input Section */}
           <div className="imm-section">
             <label className="imm-label">
@@ -353,7 +483,9 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
           <div className="imm-section">
             <label className="imm-label">
               <Hash size={13} />
-              <span>Add to channels (optional)</span>
+              <span>
+                Add to channels{inviteType === 'guest' ? ' (required for guests)' : ' (optional)'}
+              </span>
             </label>
 
             {/* Channel Search */}
@@ -396,6 +528,9 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
               <p className="imm-hint">
                 {selectedChannels.length} channel{selectedChannels.length > 1 ? "s" : ""} selected
               </p>
+            )}
+            {errors.channels && (
+              <p className="imm-error-text">{errors.channels}</p>
             )}
           </div>
 

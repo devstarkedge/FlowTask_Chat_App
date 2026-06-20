@@ -3942,6 +3942,10 @@ body {
   animation-delay: .28s;
 }
 
+.wss-action-stagger:nth-child(4) {
+  animation-delay: .33s;
+}
+
 .wss-icon-tile {
   display: flex;
   align-items: center;
@@ -3973,6 +3977,12 @@ body {
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   border: 1px solid var(--border-primary);
+}
+
+.wss-tile--violet {
+  background: color-mix(in srgb, var(--accent-purple) 10%, transparent);
+  color: var(--accent-purple);
+  border: 1px solid color-mix(in srgb, var(--accent-purple) 25%, transparent);
 }
 
 .wss-action-row__text {

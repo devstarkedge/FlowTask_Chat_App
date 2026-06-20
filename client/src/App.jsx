@@ -18,6 +18,7 @@ const PricingPage = lazy(() => import('./pages/PricingPage'))
 const CreateWorkspacePage = lazy(() => import('./pages/CreateWorkspacePage'))
 const WorkspaceSelectorPage = lazy(() => import('./pages/WorkspaceSelectorPage'))
 const WorkspaceSetupWizard = lazy(() => import('./components/workspace/WorkspaceSetupWizard'))
+const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage'))
 
 function PageFallback() {
   return (
@@ -67,6 +68,9 @@ function App() {
         <Route path="/register" element={!user ? <RegisterPage /> : <Navigate to="/select-workspace" />} />
         <Route path="/forgot-password" element={!user ? <ForgotPasswordPage /> : <Navigate to="/select-workspace" />} />
         <Route path="/reset-password/:token" element={!user ? <ResetPasswordPage /> : <Navigate to="/select-workspace" />} />
+
+        {/* Invite acceptance — public (works for both logged-in and logged-out users) */}
+        <Route path="/invite/:token" element={<AcceptInvitePage />} />
 
         {/* Workspace selection & creation (requires auth) */}
         <Route path="/select-workspace" element={user ? <WorkspaceSelectorPage /> : <Navigate to="/login" />} />

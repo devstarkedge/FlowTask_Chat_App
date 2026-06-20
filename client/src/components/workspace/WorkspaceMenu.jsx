@@ -189,7 +189,8 @@ export default function WorkspaceMenu({
 
   // Check if user can invite (owner or admin)
   const userRole = activeWorkspace?.role || user?.role;
-  const canInvite = ["owner", "admin"].includes(userRole);
+  const canInvite  = ["owner", "admin"].includes(userRole);
+  const canManage  = canInvite; // guests should not see workspace settings
 
   // Sign out handler
   const handleSignOut = useCallback(async () => {
@@ -305,21 +306,23 @@ export default function WorkspaceMenu({
               </span>
             </button>
 
-            {/* Tools & Settings */}
-            <button
-              role="menuitem"
-              className="wm-menu-item"
-              onClick={() => {
-                handleAction(() => navigate(`/workspace/${activeWorkspaceId}/tools`));
-              }}
-            >
-              <span className="wm-menu-item__icon">
-                <Wrench size={16} />
-              </span>
-              <span className="wm-menu-item__text">
-                <span className="wm-menu-item__label">Tools & Settings</span>
-              </span>
-            </button>
+            {/* Tools & Settings — hidden from guests */}
+            {canManage && (
+              <button
+                role="menuitem"
+                className="wm-menu-item"
+                onClick={() => {
+                  handleAction(() => navigate(`/workspace/${activeWorkspaceId}/tools`));
+                }}
+              >
+                <span className="wm-menu-item__icon">
+                  <Wrench size={16} />
+                </span>
+                <span className="wm-menu-item__text">
+                  <span className="wm-menu-item__label">Tools & Settings</span>
+                </span>
+              </button>
+            )}
 
             {/* Sign In On Mobile */}
             <button

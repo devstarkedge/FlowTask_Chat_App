@@ -50,6 +50,16 @@ const workspaceSettingsSchema = new Schema({
     apiUrl: { type: String, default: '' },
     webhookSecret: { type: String, default: '', select: false },
   },
+  // Domain restrictions for invites
+  domainRestrictions: {
+    enabled: { type: Boolean, default: false },
+    allowedDomains: [{ type: String }],
+  },
+  // Guest settings
+  guestSettings: {
+    maxGuests: { type: Number, default: -1 },
+    guestChannelRestriction: { type: Boolean, default: true },
+  },
 }, { _id: false });
 
 const workspaceSchema = new Schema({

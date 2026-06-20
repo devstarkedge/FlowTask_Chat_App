@@ -121,7 +121,11 @@ export const inviteByEmail = asyncHandler(async (req, res) => {
     req.body.email,
     req.body.role,
     req.user._id,
-    req.body.channels,
+    {
+      channels: req.body.channels,
+      inviteType: req.body.inviteType,
+      domainRestriction: req.body.domainRestriction,
+    },
   );
   res.status(201).json({ success: true, data: result });
 });
@@ -136,9 +140,52 @@ export const getPendingInvites = asyncHandler(async (req, res) => {
   res.json({ success: true, data: invites });
 });
 
+export const getAllInvites = asyncHandler(async (req, res) => {
+  const result = await workspaceService.getAllInvites(req.params.id, req.query);
+  res.json({ success: true, data: result });
+});
+
+export const resendInvite = asyncHandler(async (req, res) => {
+  const result = await workspaceService.resendInvite(
+    req.params.inviteId,
+    req.params.id,
+    req.user._id,
+  );
+  res.json({ success: true, data: result });
+});
+
 export const revokeInvite = asyncHandler(async (req, res) => {
-  const invite = await workspaceService.revokeInvite(req.params.inviteId, req.params.id);
+  const invite = await workspaceService.revokeInvite(
+    req.params.inviteId,
+    req.params.id,
+    req.user._id,
+  );
   res.json({ success: true, data: invite });
+});
+
+export const getInviteInfo = asyncHandler(async (req, res) => {
+  const info = await workspaceService.getInviteInfoByToken(req.params.token);
+  res.json({ success: true, data: info });
+});
+
+// ─── Workspace Settings ─────────────────────────────────────────────────────────────
+
+export const updateDomainRestrictions = asyncHandler(async (req, res) => {
+  const result = await workspaceService.updateDomainRestrictions(
+    req.params.id,
+    req.body,
+    req.user._id,
+  );
+  res.json({ success: true, data: result });
+});
+
+export const updateGuestSettings = asyncHandler(async (req, res) => {
+  const result = await workspaceService.updateGuestSettings(
+    req.params.id,
+    req.body,
+    req.user._id,
+  );
+  res.json({ success: true, data: result });
 });
 
 // ─── Billing & Plan ───────────────────────────────────────────────────────────

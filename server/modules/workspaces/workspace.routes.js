@@ -3,7 +3,13 @@ import { protect } from '../auth/auth.middleware.js';
 import { resolveWorkspace, requireWorkspaceRole } from '../../middleware/workspaceContext.js';
 import { WORKSPACE_ROLES } from '../../config/constants.js';
 import { validate } from '../../middleware/validate.js';
-import { createWorkspaceSchema } from '../../middleware/schemas.js';
+import { 
+  createWorkspaceSchema,
+  inviteByEmailSchema,
+  getAllInvitesSchema,
+  updateDomainRestrictionsSchema,
+  updateGuestSettingsSchema,
+} from '../../middleware/schemas.js';
 import * as ctrl from './workspace.controller.js';
 
 const router = Router();
@@ -13,6 +19,10 @@ router.get('/mine', protect, ctrl.getMyWorkspaces);
 router.post('/', protect, validate({ body: createWorkspaceSchema }), ctrl.createWorkspace);
 router.post('/join', protect, ctrl.joinByInviteCode);
 router.get('/slug/:slug', protect, ctrl.getWorkspaceBySlug);
+router.post('/accept-invite', protect, ctrl.acceptInvite);
+
+// ─── Public (no auth required) ───────────────────────────────────────────────
+router.get('/invite-info/:token', ctrl.getInviteInfo);
 
 // ─── Workspace-scoped routes ───────────────────────────────────────────────
 router.get('/:id', protect, resolveWorkspace, ctrl.getWorkspace);
@@ -30,11 +40,17 @@ router.post('/:id/leave', protect, resolveWorkspace, ctrl.leaveWorkspace);
 router.post('/:id/invite-code/regenerate', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.regenerateInviteCode);
 // Compatibility alias used by the client: POST /workspaces/:id/invite-code
 router.post('/:id/invite-code', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.regenerateInviteCode);
+
 // ─── Email Invites ─────────────────────────────────────────────────────────────────
-router.post('/:id/invite-email', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.inviteByEmail);
-router.get('/:id/invites', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.getPendingInvites);
+router.post('/:id/invite-email', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), validate({ body: inviteByEmailSchema }), ctrl.inviteByEmail);
+router.get('/:id/invites', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), validate({ query: getAllInvitesSchema }), ctrl.getAllInvites);
+router.get('/:id/invites/pending', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.getPendingInvites);
+router.post('/:id/invites/:inviteId/resend', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.resendInvite);
 router.delete('/:id/invites/:inviteId', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.revokeInvite);
-router.post('/accept-invite', protect, ctrl.acceptInvite);
+
+// ─── Workspace Settings ─────────────────────────────────────────────────────────────
+router.patch('/:id/settings/domain-restrictions', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), validate({ body: updateDomainRestrictionsSchema }), ctrl.updateDomainRestrictions);
+router.patch('/:id/settings/guest-settings', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER), validate({ body: updateGuestSettingsSchema }), ctrl.updateGuestSettings);
 
 // ─── Billing & Plan ──────────────────────────────────────────────────────────
 router.get('/:id/billing', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.getWorkspaceBilling);

@@ -404,20 +404,68 @@ class WorkspaceService {
    * - If user exists in system but not workspace: add directly + email notification
    * - If user doesn't exist: create invite record + send invite email with signup link
    */
-  async inviteByEmail(workspaceId, email, role = WORKSPACE_ROLES.MEMBER, invitedBy, channels = []) {
+  async inviteByEmail(workspaceId, email, role = WORKSPACE_ROLES.MEMBER, invitedBy, options = {}) {
     const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
     const { default: emailService } = await import('../auth/email.service.js');
     const { default: ChatUser } = await import('../users/ChatUser.model.js');
+    const { default: auditLogService } = await import('../../services/auditLog.service.js');
+    const { SOCKET_EVENTS } = await import('../../config/constants.js');
+    const { emitToWorkspace } = await import('../../sockets/socketManager.js');
+
+    const { channels = [], inviteType = 'member', domainRestriction } = options;
 
     const workspace = await this.getWorkspace(workspaceId);
+    const planConfig = WORKSPACE_LIMITS[workspace.plan] || WORKSPACE_LIMITS.free;
 
-    // Check plan limits
+    // Check guest access if inviteType is guest
+    if (inviteType === 'guest') {
+      if (!planConfig.features.guestAccess) {
+        throw new ForbiddenError(`Guest invites are not available on the ${workspace.plan} plan.`);
+      }
+
+      // Check guest count limit
+      const maxGuests = workspace.settings?.guestSettings?.maxGuests ?? planConfig.maxGuests;
+      if (maxGuests >= 0) {
+        const { default: WorkspaceMembership } = await import('./WorkspaceMembership.model.js');
+        const guestCount = await WorkspaceMembership.countDocuments({
+          workspaceId,
+          role: WORKSPACE_ROLES.GUEST,
+          isActive: true,
+        });
+        if (guestCount >= maxGuests) {
+          throw new BadRequestError(
+            `Workspace has reached the guest limit (${maxGuests}) for the ${workspace.plan} plan.`,
+          );
+        }
+      }
+
+      // Guest invites require channels
+      if (!channels || channels.length === 0) {
+        throw new BadRequestError('Guest invites must specify at least one channel.');
+      }
+    }
+
+    // Check plan member limits
     const currentCount = await workspaceRepository.countMembers(workspaceId);
-    const limit = WORKSPACE_LIMITS[workspace.plan]?.maxMembers || WORKSPACE_LIMITS.free.maxMembers;
+    const limit = planConfig.maxMembers;
     if (limit > 0 && currentCount >= limit) {
       throw new BadRequestError(
         `Workspace has reached the member limit (${limit}) for the ${workspace.plan} plan.`,
       );
+    }
+
+    // Check domain restrictions if enabled
+    if (workspace.settings?.domainRestrictions?.enabled) {
+      const allowedDomains = workspace.settings.domainRestrictions.allowedDomains || [];
+      if (allowedDomains.length > 0) {
+        const emailDomain = `@${email.split('@')[1]}`.toLowerCase();
+        const isAllowed = allowedDomains.some(d => d.toLowerCase() === emailDomain);
+        if (!isAllowed) {
+          throw new BadRequestError(
+            `Email domain ${emailDomain} is not allowed for this workspace. Allowed domains: ${allowedDomains.join(', ')}`,
+          );
+        }
+      }
     }
 
     // Check if user exists and already in workspace
@@ -429,6 +477,14 @@ class WorkspaceService {
       }
       // User exists but not in workspace — add directly
       const membership = await workspaceRepository.addMember(existingUser._id, workspaceId, role, invitedBy);
+      
+      // Auto-join channels for existing users
+      if (inviteType === 'guest') {
+        await this._joinSpecificChannels(existingUser._id, channels, workspaceId);
+      } else {
+        await this._autoJoinPublicChannels(existingUser._id, workspaceId);
+      }
+
       await emailService.sendWorkspaceInviteEmail(
         email,
         workspace.name,
@@ -455,6 +511,7 @@ class WorkspaceService {
       workspaceId,
       email: email.toLowerCase(),
       role,
+      inviteType,
       invitedBy,
       channels: channels || [],
     });
@@ -463,7 +520,7 @@ class WorkspaceService {
     const inviter = await ChatUser.findById(invitedBy).lean();
     const inviterName = inviter?.name || 'A team member';
 
-    // Send invite email
+    // Send invite email with plain token
     await emailService.sendWorkspaceInviteEmail(
       email,
       workspace.name,
@@ -471,8 +528,37 @@ class WorkspaceService {
       invite.token,
     );
 
+    // Fire audit log
+    auditLogService.logInviteCreated(invite, invitedBy, inviterName, workspaceId);
+
+    // Emit socket event
+    try {
+      emitToWorkspace(workspaceId.toString(), SOCKET_EVENTS.INVITE_CREATED, {
+        invite: {
+          _id: invite._id,
+          email: invite.email,
+          role: invite.role,
+          inviteType: invite.inviteType,
+          status: invite.status,
+          expiresAt: invite.expiresAt,
+        },
+      });
+    } catch (err) {
+      logger.warn('Failed to emit INVITE_CREATED socket event', { error: err.message });
+    }
+
     logger.info(`Invite email sent to ${email} for workspace ${workspace.slug}`);
-    return { type: 'email_invite', invite: { _id: invite._id, email: invite.email, role: invite.role, status: invite.status, expiresAt: invite.expiresAt } };
+    return {
+      type: 'email_invite',
+      invite: {
+        _id: invite._id,
+        email: invite.email,
+        role: invite.role,
+        inviteType: invite.inviteType,
+        status: invite.status,
+        expiresAt: invite.expiresAt,
+      },
+    };
   }
 
   /**
@@ -480,16 +566,32 @@ class WorkspaceService {
    */
   async acceptInvite(token, userId) {
     const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
+    const { default: ChatUser } = await import('../users/ChatUser.model.js');
+    const { default: auditLogService } = await import('../../services/auditLog.service.js');
+    const { SOCKET_EVENTS } = await import('../../config/constants.js');
+    const { emitToWorkspace } = await import('../../sockets/socketManager.js');
 
     const invite = await WorkspaceInvite.findValidByToken(token);
     if (!invite) {
       throw new NotFoundError('Invalid or expired invite.');
     }
 
+    // Verify email matches (security: prevent invite link sharing)
+    const user = await ChatUser.findById(userId).lean();
+    if (!user) {
+      throw new NotFoundError('User not found.');
+    }
+    if (user.email.toLowerCase() !== invite.email.toLowerCase()) {
+      throw new ForbiddenError(
+        'This invite was sent to a different email address. Please sign in with the correct account.',
+      );
+    }
+
     // Check plan limits
     const workspace = invite.workspaceId;
     const currentCount = await workspaceRepository.countMembers(workspace._id);
-    const limit = WORKSPACE_LIMITS[workspace.plan]?.maxMembers || WORKSPACE_LIMITS.free.maxMembers;
+    const planConfig = WORKSPACE_LIMITS[workspace.plan] || WORKSPACE_LIMITS.free;
+    const limit = planConfig.maxMembers;
     if (limit > 0 && currentCount >= limit) {
       throw new BadRequestError(
         `Workspace has reached the member limit (${limit}) for the ${workspace.plan} plan.`,
@@ -507,8 +609,25 @@ class WorkspaceService {
     const membership = await workspaceRepository.addMember(userId, workspace._id, invite.role);
     await WorkspaceInvite.markAccepted(token, userId);
 
-    // Auto-add to all public channels in this workspace
-    await this._autoJoinPublicChannels(userId, workspace._id);
+    // Auto-join channels based on invite type
+    if (invite.inviteType === 'guest' && invite.channels && invite.channels.length > 0) {
+      await this._joinSpecificChannels(userId, invite.channels, workspace._id);
+    } else {
+      await this._autoJoinPublicChannels(userId, workspace._id);
+    }
+
+    // Fire audit log
+    auditLogService.logInviteAccepted(invite._id, userId, workspace._id);
+
+    // Emit socket event
+    try {
+      emitToWorkspace(workspace._id.toString(), SOCKET_EVENTS.INVITE_ACCEPTED, {
+        userId: userId.toString(),
+        workspaceId: workspace._id.toString(),
+      });
+    } catch (err) {
+      logger.warn('Failed to emit INVITE_ACCEPTED socket event', { error: err.message });
+    }
 
     logger.info(`User ${userId} accepted invite to workspace ${workspace.slug}`);
     return { workspace, membership, alreadyMember: false };
@@ -523,15 +642,196 @@ class WorkspaceService {
   }
 
   /**
+   * Get all invites for a workspace with filters and pagination.
+   */
+  async getAllInvites(workspaceId, { status, inviteType, page = 1, limit = 20 }) {
+    const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
+    return WorkspaceInvite.findAll(workspaceId, { status, inviteType, page, limit });
+  }
+
+  /**
+   * Resend a pending invite with a new token.
+   */
+  async resendInvite(inviteId, workspaceId, requesterId) {
+    const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
+    const { default: emailService } = await import('../auth/email.service.js');
+    const { default: ChatUser } = await import('../users/ChatUser.model.js');
+    const { default: auditLogService } = await import('../../services/auditLog.service.js');
+    const { SOCKET_EVENTS } = await import('../../config/constants.js');
+    const { emitToWorkspace } = await import('../../sockets/socketManager.js');
+
+    // Find the invite first
+    const existingInvite = await WorkspaceInvite.findOne({
+      _id: inviteId,
+      workspaceId,
+      status: 'pending',
+    });
+
+    if (!existingInvite) {
+      throw new NotFoundError('Invite not found or already used.');
+    }
+
+    // Check resend limit (max 3 resends)
+    if (existingInvite.resendCount >= 3) {
+      throw new BadRequestError(
+        'This invite has reached the maximum resend limit. Please revoke and create a new invite.',
+      );
+    }
+
+    // Resend with new token
+    const { invite, newToken } = await WorkspaceInvite.resend(inviteId, workspaceId);
+
+    // Get workspace and inviter info
+    const workspace = await this.getWorkspace(workspaceId);
+    const inviter = await ChatUser.findById(requesterId).lean();
+    const inviterName = inviter?.name || 'A team member';
+
+    // Send email with new token
+    await emailService.sendWorkspaceInviteEmail(
+      invite.email,
+      workspace.name,
+      inviterName,
+      newToken,
+    );
+
+    // Fire audit log
+    auditLogService.logInviteResent(inviteId, requesterId, inviterName, workspaceId);
+
+    // Emit socket event
+    try {
+      emitToWorkspace(workspaceId.toString(), SOCKET_EVENTS.INVITE_RESENT, {
+        inviteId: inviteId.toString(),
+        email: invite.email,
+      });
+    } catch (err) {
+      logger.warn('Failed to emit INVITE_RESENT socket event', { error: err.message });
+    }
+
+    logger.info(`Invite resent to ${invite.email} for workspace ${workspace.slug}`);
+    return {
+      _id: invite._id,
+      email: invite.email,
+      role: invite.role,
+      inviteType: invite.inviteType,
+      status: invite.status,
+      expiresAt: invite.expiresAt,
+      resendCount: invite.resendCount,
+    };
+  }
+
+  /**
    * Revoke a pending invite.
    */
-  async revokeInvite(inviteId, workspaceId) {
+  async revokeInvite(inviteId, workspaceId, revokedBy) {
     const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
-    const invite = await WorkspaceInvite.revoke(inviteId, workspaceId);
+    const { default: auditLogService } = await import('../../services/auditLog.service.js');
+    const { SOCKET_EVENTS } = await import('../../config/constants.js');
+    const { emitToWorkspace } = await import('../../sockets/socketManager.js');
+
+    const invite = await WorkspaceInvite.revoke(inviteId, workspaceId, revokedBy);
     if (!invite) {
       throw new NotFoundError('Invite not found or already used.');
     }
+
+    // Fire audit log
+    auditLogService.logInviteRevoked(inviteId, revokedBy, 'Admin', workspaceId);
+
+    // Emit socket event
+    try {
+      emitToWorkspace(workspaceId.toString(), SOCKET_EVENTS.INVITE_REVOKED, {
+        inviteId: inviteId.toString(),
+        email: invite.email,
+      });
+    } catch (err) {
+      logger.warn('Failed to emit INVITE_REVOKED socket event', { error: err.message });
+    }
+
     return invite;
+  }
+
+  /**
+   * Get public invite info by token (no auth required).
+   */
+  async getInviteInfoByToken(token) {
+    const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
+    const { default: ChatUser } = await import('../users/ChatUser.model.js');
+
+    const invite = await WorkspaceInvite.findValidByToken(token);
+    if (!invite) {
+      throw new NotFoundError('Invalid or expired invite.');
+    }
+
+    const inviter = await ChatUser.findById(invite.invitedBy).lean();
+    const workspace = invite.workspaceId;
+
+    return {
+      workspaceName: workspace.name,
+      workspaceLogo: workspace.logo,
+      workspaceSlug: workspace.slug,
+      inviterName: inviter?.name || 'A team member',
+      inviteType: invite.inviteType,
+      role: invite.role,
+      expiresAt: invite.expiresAt,
+      workspaceId: workspace._id,
+    };
+  }
+
+  // ─── Workspace Settings ─────────────────────────────────────────────
+
+  /**
+   * Update domain restriction settings for a workspace.
+   */
+  async updateDomainRestrictions(workspaceId, { enabled, allowedDomains }, requesterId) {
+    const workspace = await this.getWorkspace(workspaceId);
+
+    // Only owner/admin can update
+    const role = await workspaceRepository.getUserRole(requesterId, workspaceId);
+    if (!role || ![WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN].includes(role)) {
+      throw new ForbiddenError('Only workspace owner or admin can update domain restrictions.');
+    }
+
+    const updated = await workspaceRepository.update(workspaceId, {
+      'settings.domainRestrictions.enabled': enabled,
+      'settings.domainRestrictions.allowedDomains': allowedDomains || [],
+    });
+
+    logger.info(`Domain restrictions updated for workspace ${workspace.slug}`, {
+      enabled,
+      allowedDomains,
+      updatedBy: requesterId,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Update guest settings for a workspace.
+   */
+  async updateGuestSettings(workspaceId, { maxGuests, guestChannelRestriction }, requesterId) {
+    const workspace = await this.getWorkspace(workspaceId);
+
+    // Only owner can update guest settings
+    if (workspace.owner.toString() !== requesterId.toString()) {
+      throw new ForbiddenError('Only the workspace owner can update guest settings.');
+    }
+
+    const updates = {};
+    if (maxGuests !== undefined) {
+      updates['settings.guestSettings.maxGuests'] = maxGuests;
+    }
+    if (guestChannelRestriction !== undefined) {
+      updates['settings.guestSettings.guestChannelRestriction'] = guestChannelRestriction;
+    }
+
+    const updated = await workspaceRepository.update(workspaceId, updates);
+
+    logger.info(`Guest settings updated for workspace ${workspace.slug}`, {
+      maxGuests,
+      guestChannelRestriction,
+      updatedBy: requesterId,
+    });
+
+    return updated;
   }
 
   // ─── Billing & Plan ────────────────────────────────────────────────
@@ -592,10 +892,21 @@ class WorkspaceService {
   /**
    * Auto-add a user to all public channels in a workspace.
    * Called when a user first joins a workspace (invite, invite code, or email accept).
+   * Skips for guest users (they only get access to explicitly assigned channels).
    * Non-critical — logs errors but does not fail the join operation.
    * @private
    */
   async _autoJoinPublicChannels(userId, workspaceId) {
+    // Check if user is a guest — guests don't auto-join public channels
+    const role = await workspaceRepository.getUserRole(userId, workspaceId);
+    if (role === WORKSPACE_ROLES.GUEST) {
+      logger.info('[WORKSPACE_JOIN] Skipping auto-join for guest user', {
+        userId,
+        workspaceId,
+      });
+      return;
+    }
+
     try {
       const { default: channelRepository } = await import('../channels/channel.repository.js');
       const { default: ChannelMember } = await import('../channels/ChannelMember.model.js');
@@ -650,6 +961,69 @@ class WorkspaceService {
       });
     } catch (error) {
       logger.error('[WORKSPACE_JOIN] Failed to auto-join public channels', {
+        userId,
+        workspaceId,
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Add a user to specific channels (for guest invites).
+   * Non-critical — logs errors but does not fail the join operation.
+   * @private
+   */
+  async _joinSpecificChannels(userId, channelIds, workspaceId) {
+    if (!channelIds || channelIds.length === 0) return;
+
+    try {
+      const { default: ChannelMember } = await import('../channels/ChannelMember.model.js');
+      const { default: Channel } = await import('../channels/Channel.model.js');
+      const { emitToUser, joinChannelRoom } = await import('../../sockets/socketManager.js');
+      const { SOCKET_EVENTS } = await import('../../config/constants.js');
+
+      const wsId = workspaceId.toString();
+      const uid = userId.toString();
+
+      for (const channelId of channelIds) {
+        // Upsert into ChannelMember collection
+        await ChannelMember.addMember(channelId, userId, wsId, CHANNEL_MEMBER_ROLES.MEMBER);
+
+        // Update embedded members array for backward compat
+        const channel = await Channel.findOneAndUpdate(
+          { _id: channelId, 'members.userId': { $ne: userId } },
+          {
+            $push: { members: { userId, role: CHANNEL_MEMBER_ROLES.MEMBER, joinedAt: new Date() } },
+            $inc: { memberCount: 1 },
+          },
+          { new: true },
+        );
+
+        if (channel) {
+          // Notify user's connected sockets
+          const channelPayload = {
+            _id: channel._id,
+            name: channel.name,
+            slug: channel.slug,
+            type: channel.type,
+            visibility: channel.visibility,
+            description: channel.description,
+            memberCount: channel.memberCount || 1,
+            workspaceId: channel.workspaceId,
+            createdBy: channel.createdBy,
+          };
+          emitToUser(uid, SOCKET_EVENTS.CHANNEL_ADDED, { channel: channelPayload }, wsId);
+          joinChannelRoom(uid, channelId.toString(), wsId);
+        }
+      }
+
+      logger.info('[WORKSPACE_JOIN] Added user to specific channels', {
+        userId: uid,
+        workspaceId: wsId,
+        channelCount: channelIds.length,
+      });
+    } catch (error) {
+      logger.error('[WORKSPACE_JOIN] Failed to join specific channels', {
         userId,
         workspaceId,
         error: error.message,

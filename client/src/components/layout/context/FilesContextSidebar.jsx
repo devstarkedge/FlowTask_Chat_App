@@ -16,6 +16,11 @@ import toast from "react-hot-toast";
 import { fileAPI } from "../../../services/api";
 import SidebarContainer from "../sidebar/SidebarContainer";
 import WorkspaceSwitcher from "../../workspace/WorkspaceSwitcher";
+import { useWorkspaceStore } from "../../../stores/workspaceStore";
+import CreateWorkspaceModal from "../../workspace/CreateWorkspaceModal";
+import JoinWorkspaceModal from "../../workspace/JoinWorkspaceModal";
+import WorkspaceSettingsModal from "../../workspace/WorkspaceSettingsModal";
+import InviteMembersModal from "../../workspace/InviteMembersModal";
 
 /* ─── Helpers ──────────────────────────────────────────────────────── */
 
@@ -730,6 +735,13 @@ export default function FilesContextSidebar({
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const inputRef = useRef(null);
 
+  // Workspace modal states
+  const { activeWorkspaceId } = useWorkspaceStore();
+  const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
+  const [showJoinWorkspace, setShowJoinWorkspace] = useState(false);
+  const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
+  const [showInviteMembers, setShowInviteMembers] = useState(false);
+
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query.trim()), 260);
     return () => clearTimeout(t);
@@ -792,6 +804,7 @@ export default function FilesContextSidebar({
       onOpenCreate={() => setShowCreateWorkspace(true)}
       onOpenJoin={() => setShowJoinWorkspace(true)}
       onOpenSettings={() => setShowWorkspaceSettings(true)}
+      onOpenInvite={() => setShowInviteMembers(true)}
     />
   );
 
@@ -865,6 +878,7 @@ export default function FilesContextSidebar({
   );
 
   return (
+    <>
     <SidebarContainer header={header} subHeader={subHeader} aria-label="Files sidebar">
       {/* Scrollable list */}
       <div className="fcs-list-scroll" role="listbox" aria-label="Files list">
@@ -971,5 +985,24 @@ export default function FilesContextSidebar({
         )}
       </div>
     </SidebarContainer>
+
+    {/* Workspace Modals */}
+    {showCreateWorkspace && (
+      <CreateWorkspaceModal onClose={() => setShowCreateWorkspace(false)} />
+    )}
+    {showJoinWorkspace && (
+      <JoinWorkspaceModal onClose={() => setShowJoinWorkspace(false)} />
+    )}
+    {showWorkspaceSettings && (
+      <WorkspaceSettingsModal onClose={() => setShowWorkspaceSettings(false)} />
+    )}
+    {showInviteMembers && (
+      <InviteMembersModal
+        isOpen={showInviteMembers}
+        onClose={() => setShowInviteMembers(false)}
+        workspaceId={activeWorkspaceId}
+      />
+    )}
+  </>
   );
 }

@@ -131,19 +131,38 @@ export default function NavigationSidebar({
     setExpandedSections((s) => ({ ...s, [section]: !s[section] }));
   };
 
+  /**
+   * FIX: Use visibility field for channel categorization instead of relying
+   * solely on the static `type` field. When visibility changes (e.g., private→public),
+   * the channel automatically moves to the correct section without a page refresh.
+   */
   const projectChannels = channels.filter(
     (c) => c.type === "project" && c.visibility !== "private" && !c.isArchived,
   );
   const publicChannels = channels.filter(
-    (c) => c.type === "public" && !c.isArchived,
+    (c) =>
+      // A channel is public if:
+      // 1. Its type is "public" AND visibility is NOT "private" (handles Public→Private transition)
+      // 2. OR its visibility is "public" (handles Private→Public transition where type stays "private")
+      ((c.type === "public" && c.visibility !== "private") ||
+        (c.type !== "public" && c.visibility === "public")) &&
+      !c.isArchived &&
+      c.type !== "project" &&
+      c.type !== "department" &&
+      c.type !== "team" &&
+      c.type !== "dm" &&
+      c.type !== "system" &&
+      c.type !== "self",
   );
   const privateChannels = channels.filter(
     (c) =>
-      (c.type === "private" ||
-        (c.visibility === "private" &&
-          c.type !== "dm" &&
-          c.type !== "system" &&
-          c.type !== "self")) &&
+      // A channel is private if:
+      // 1. Its type is "private" (AND visibility is NOT "public" — handles Private→Public transition)
+      // 2. OR its visibility is explicitly "private" (handles Public→Private transition)
+      ((c.type === "private" && c.visibility !== "public") || c.visibility === "private") &&
+      c.type !== "dm" &&
+      c.type !== "system" &&
+      c.type !== "self" &&
       !c.isArchived,
   );
 
@@ -782,9 +801,15 @@ function ChannelListItem({
   onlineUsers,
   hasDraft,
 }) {
+  /**
+   * FIX: Use visibility field to determine the icon, not just the static type.
+   * When visibility changes (e.g., private→public), the icon updates instantly.
+   */
   let Icon = CHANNEL_ICONS[channel.type] || Hash;
   if (channel.visibility === "private") Icon = Lock;
   else if (channel.visibility === "public") Icon = Hash;
+  // Also handle the case where type is "private" but visibility changed to "public"
+  else if (channel.type === "private" && channel.visibility !== "private") Icon = Hash;
 
   return (
     <SidebarItem

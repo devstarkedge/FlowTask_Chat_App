@@ -62,6 +62,11 @@ const env = Object.freeze({
   NODE_ENV: process.env.NODE_ENV || 'development',
   IS_PRODUCTION,
   BASE_URL: process.env.BASE_URL || (IS_PRODUCTION ? '' : 'http://localhost:3200'),
+  // Client/frontend URL — used in emails and invite links.
+  // Priority: CLIENT_URL env → first CORS origin → Vite dev default.
+  CLIENT_URL: process.env.CLIENT_URL
+    || (parseCorsOrigins(process.env.CORS_ORIGINS) || [])[0]
+    || (IS_PRODUCTION ? '' : 'http://localhost:5174'),
 
   // Database
   MONGO_URI: process.env.MONGO_URI,

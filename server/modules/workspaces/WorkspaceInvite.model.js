@@ -219,11 +219,10 @@ workspaceInviteSchema.statics.findAll = function (workspaceId, { status, inviteT
 
 // ─── Pre-save Hook ───────────────────────────────────────────────────────────
 // Automatically hash the token when it's set or modified
-workspaceInviteSchema.pre('save', function (next) {
+workspaceInviteSchema.pre('save', function () {
   if (this.isModified('token') && this.token) {
     this.tokenHash = hashToken(this.token);
   }
-  next();
 });
 
 const WorkspaceInvite = model('WorkspaceInvite', workspaceInviteSchema);

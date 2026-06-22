@@ -219,9 +219,11 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
     );
   };
 
-  const filteredChannels = channels.filter((ch) =>
-    ch.name.toLowerCase().includes(channelSearch.toLowerCase()),
-  );
+  const filteredChannels = channels.filter((ch) => {
+    // Exclude DMs, group DMs, system channels, and self channels
+    if (ch.type === 'dm' || ch.type === 'group_dm' || ch.type === 'system' || ch.type === 'self') return false;
+    return ch.name.toLowerCase().includes(channelSearch.toLowerCase());
+  });
 
   // Copy invite link
   const copyInviteLink = async () => {
@@ -276,21 +278,31 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
       );
 
       const succeeded = results.filter((r) => r.status === "fulfilled").length;
-      const failed = results.filter((r) => r.status === "rejected").length;
+      const rejected  = results.filter((r) => r.status === "rejected");
 
       if (succeeded > 0) {
         toast.success(`Invitation${succeeded > 1 ? "s" : ""} sent to ${succeeded} email${succeeded > 1 ? "s" : ""}!`);
       }
 
-      if (failed > 0) {
-        toast.error(`${failed} invitation${failed > 1 ? "s" : ""} failed to send`);
+      // Show specific error messages for each failure (deduplicated)
+      if (rejected.length > 0) {
+        const seenMessages = new Set();
+        rejected.forEach((r) => {
+          const msg = r.reason?.response?.data?.error?.message || "Failed to send";
+          if (!seenMessages.has(msg)) {
+            seenMessages.add(msg);
+            toast.error(msg);
+          }
+        });
       }
 
-      // Close modal after short delay
-      setTimeout(() => {
-        onClose();
-        resetForm();
-      }, 1500);
+      // Close modal after short delay only if all succeeded
+      if (rejected.length === 0) {
+        setTimeout(() => {
+          onClose();
+          resetForm();
+        }, 1500);
+      }
     } catch (error) {
       const message = error.response?.data?.error?.message || "Failed to send invitations";
       toast.error(message);

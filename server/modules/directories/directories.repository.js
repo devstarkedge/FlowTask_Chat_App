@@ -114,7 +114,49 @@ class DirectoriesRepository {
       // (logger not imported here to avoid cycles; caller may log)
     }
 
-    return { users, total, page, limit };
+    // ─── Include pending guest invites ──────────────────────────────────────
+    // Guest invites that haven't been accepted yet should appear in the directory
+    // with isPendingInvite=true so the UI can show a "Pending Invitation" badge.
+    try {
+      const inviteFilter = {
+        workspaceId,
+        status: 'pending',
+        expiresAt: { $gt: new Date() },
+      };
+      if (search) {
+        const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        inviteFilter.email = regex;
+      }
+      const pendingInvites = await WorkspaceInvite.find(inviteFilter)
+        .populate('invitedBy', 'name avatar')
+        .sort({ createdAt: -1 })
+        .lean();
+
+      const existingEmails = new Set(users.map((u) => (u.email || '').toLowerCase()));
+      for (const inv of pendingInvites) {
+        // Don't duplicate if user already accepted and appears in member list
+        if (existingEmails.has(inv.email)) continue;
+        users.push({
+          _id: inv._id,
+          name: inv.email.split('@')[0],
+          email: inv.email,
+          avatar: null,
+          role: inv.inviteType === 'guest' ? 'guest' : (inv.role || 'member'),
+          onlineStatus: 'offline',
+          customStatus: null,
+          workspaceRole: inv.inviteType === 'guest' ? 'guest' : (inv.role || 'member'),
+          joinedAt: null,
+          isPendingInvite: true,
+          inviteId: inv._id,
+          invitedBy: inv.invitedBy ? { name: inv.invitedBy.name, avatar: inv.invitedBy.avatar } : null,
+          expiresAt: inv.expiresAt,
+        });
+      }
+    } catch (err) {
+      // Non-fatal — continue without pending invites
+    }
+
+    return { users, total: users.length, page, limit };
   }
 
   /**

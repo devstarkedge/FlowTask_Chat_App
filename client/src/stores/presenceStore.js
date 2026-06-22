@@ -1,6 +1,17 @@
 import { create } from 'zustand'
 import { directoriesAPI } from '../services/directoriesAPI'
-import logger from '../utils/logger'
+
+/**
+ * Resolve presence for a user across multiple possible ID keys.
+ * Socket events store presence under both chatUserId and flowTaskUserId,
+ * so we must check all known ID variants when looking up status.
+ */
+function resolvePresence(presenceMap, ...ids) {
+  for (const id of ids) {
+    if (id && presenceMap[id]) return presenceMap[id]
+  }
+  return 'offline'
+}
 
 export const usePresenceStore = create((set, get) => ({
   presence: {},
@@ -23,27 +34,38 @@ export const usePresenceStore = create((set, get) => ({
 
   updateFromUsers: (users) => {
     if (!Array.isArray(users)) return
-    
+
     set((state) => {
       const nextPresence = { ...state.presence }
       let changed = false
-      
+
       for (const user of users) {
-        const userId = user._id || user.userId
-        if (!userId) continue
-        
-        // Only set if we don't already have presence info (socket takes precedence)
-        if (nextPresence[userId] === undefined) {
-          if (user.isOnline || user.status === 'online') {
-            nextPresence[userId] = 'online'
-            changed = true
-          } else if (user.status) {
-            nextPresence[userId] = user.status
+        // Collect all possible ID keys for this user
+        const ids = [
+          user._id,
+          user.userId,
+          user.flowTaskUserId,
+          user.chatUserId,
+        ].filter(Boolean)
+
+        if (ids.length === 0) continue
+
+        const status =
+          user.isOnline || user.status === 'online'
+            ? 'online'
+            : user.status || null
+
+        if (!status) continue
+
+        for (const id of ids) {
+          // Only set if we don't already have socket-driven presence (socket takes precedence)
+          if (nextPresence[id] === undefined) {
+            nextPresence[id] = status
             changed = true
           }
         }
       }
-      
+
       if (changed) {
         directoriesAPI.invalidateCache('users')
         return { presence: nextPresence }
@@ -52,13 +74,16 @@ export const usePresenceStore = create((set, get) => ({
     })
   },
 
-  getPresence: (userId) => {
-    if (!userId) return 'offline'
-    return get().presence[userId] || 'offline'
+  /**
+   * Get presence for a user, checking all known ID variants.
+   * Pass additional IDs as extra arguments for robust lookup.
+   */
+  getPresence: (...ids) => {
+    return resolvePresence(get().presence, ...ids)
   },
 
-  isOnline: (userId) => get().presence[userId] === 'online',
-  isAway: (userId) => get().presence[userId] === 'away',
+  isOnline: (...ids) => resolvePresence(get().presence, ...ids) === 'online',
+  isAway: (...ids) => resolvePresence(get().presence, ...ids) === 'away',
   clearPresence: () => set({ presence: {} }),
 }))
 

@@ -64,12 +64,12 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
   const presenceMap = usePresenceStore((state) => state.presence);
   const onlineMembers  = activeMembers.filter((m) => {
     const id = m._id || m.userId;
-    const status = presenceMap[id] || m.onlineStatus || 'offline';
+    const status = presenceMap[id] || presenceMap[m.flowTaskUserId] || presenceMap[m.chatUserId] || m.onlineStatus || 'offline';
     return status === 'online';
   })
   const offlineMembers = activeMembers.filter((m) => {
     const id = m._id || m.userId;
-    const status = presenceMap[id] || m.onlineStatus || 'offline';
+    const status = presenceMap[id] || presenceMap[m.flowTaskUserId] || presenceMap[m.chatUserId] || m.onlineStatus || 'offline';
     return status !== 'online';
   })
   const ownerCount = members.filter(

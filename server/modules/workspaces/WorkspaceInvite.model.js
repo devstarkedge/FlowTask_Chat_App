@@ -58,7 +58,7 @@ const workspaceInviteSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'accepted', 'expired', 'revoked'],
+    enum: ['pending', 'accepted', 'expired', 'revoked', 'email_failed'],
     default: 'pending',
   },
   token: {

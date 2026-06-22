@@ -55,7 +55,7 @@ export default function UserProfileMenu({
     offline: "Offline",
   };
   const presenceMap = usePresenceStore((s) => s.presence);
-  const userStatus = presenceMap[user?._id] || user?.onlineStatus || "online";
+  const userStatus = presenceMap[user?._id] || presenceMap[user?.flowTaskUserId] || user?.onlineStatus || "online";
   const isAway =
     userStatus === "away" || userStatus === "offline" || userStatus === "dnd";
 

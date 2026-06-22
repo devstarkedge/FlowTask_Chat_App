@@ -264,6 +264,7 @@
       font-size: 13.5px;
       font-weight: 500;
       outline: none;
+      box-shadow: none;
       font-family: inherit;
   }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useMemo } from 'react'
-import { Search, UserPlus, ChevronDown, X, Users } from 'lucide-react'
+import { Search, UserPlus, ChevronDown, X, Users, Shield, Clock } from 'lucide-react'
 import { VirtuosoGrid } from 'react-virtuoso'
 import { directoriesAPI } from '../../services/directoriesAPI'
 import { useAuthStore } from '../../stores/authStore'
@@ -92,7 +92,7 @@ export default function PeopleTab() {
 
   const presenceMap = usePresenceStore((state) => state.presence)
   const onlineCount = users.filter((u) => {
-    const status = presenceMap[u._id || u.userId]
+    const status = presenceMap[u._id || u.userId] || presenceMap[u.flowTaskUserId] || presenceMap[u.chatUserId]
     return status === 'online'
   }).length
 
@@ -118,6 +118,9 @@ export default function PeopleTab() {
     [gridCols]
   )
 
+  const activeMembers = users.filter((u) => !u.isPendingInvite).length
+  const pendingCount = users.filter((u) => u.isPendingInvite).length
+
   return (
     <div className="dir-people-root">
       {/* ── Header strip ── */}
@@ -125,8 +128,14 @@ export default function PeopleTab() {
         <div className="dir-people-header-left">
           <div className="dir-people-stat">
             <Users size={13} className="dir-stat-icon" />
-            <span>{users.length} members</span>
+            <span>{activeMembers} member{activeMembers !== 1 ? 's' : ''}</span>
           </div>
+          {pendingCount > 0 && (
+            <div className="dir-people-stat" style={{ opacity: 0.7 }}>
+              <Clock size={13} className="dir-stat-icon" />
+              <span>{pendingCount} pending</span>
+            </div>
+          )}
           {onlineCount > 0 && (
             <div className="dir-people-stat online">
               <span className="dir-online-dot" />
@@ -221,27 +230,31 @@ export default function PeopleTab() {
 function PersonCard({ person, currentUserId, index }) {
   const isCurrentUser =
     person._id === currentUserId || person.userId === currentUserId
+  const isPending = person.isPendingInvite === true
   const name   = person.name || person.displayName || 'Unknown'
   const avatar = person.avatar || person.profilePicture
-  const role   = person.role || 'member'
+  // Use workspaceRole for display (e.g. 'guest'), fallback to global role
+  const role   = person.workspaceRole || person.role || 'member'
   const title  = person.title || ''
   const dept   = person.department || ''
   const formattedRole = role.charAt(0).toUpperCase() + role.slice(1)
+  const isGuest = role === 'guest'
 
   const presenceMap = usePresenceStore((s) => s.presence)
   const personId    = person._id || person.userId
-  const liveStatus  = presenceMap[personId]
-  const isOnline    = liveStatus === 'online'
-  const isAway = liveStatus === 'away'
+  const liveStatus  = presenceMap[personId] || presenceMap[person.flowTaskUserId] || presenceMap[person.chatUserId]
+  const isOnline    = !isPending && liveStatus === 'online'
+  const isAway = !isPending && liveStatus === 'away'
 
   const statusColor = isOnline
     ? 'var(--status-online,#22c55e)'
     : isAway
       ? 'var(--status-away,#f59e0b)'
       : 'var(--status-offline,#6b7280)'
-  const statusLabel = isOnline ? 'online' : isAway ? 'away' : 'offline'
-  const availabilityLabel = isOnline ? 'Active now' : isAway ? 'Away' : 'Offline'
-  const secondaryText = title || dept || formattedRole
+  const statusLabel = isPending ? 'pending' : isOnline ? 'online' : isAway ? 'away' : 'offline'
+  const secondaryText = isPending
+    ? 'Pending Invitation'
+    : title || dept || formattedRole
 
   const hue = [...name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360
   const avatarGradient = `linear-gradient(135deg, hsl(${hue},60%,45%), hsl(${(hue + 40) % 360},70%,35%))`
@@ -249,6 +262,7 @@ function PersonCard({ person, currentUserId, index }) {
   const handleClick = (e) => {
     e.preventDefault()
     e.stopPropagation()
+    if (isPending) return // No profile for pending invites
     useProfileStore.getState().openProfile(person)
   }
 
@@ -261,12 +275,15 @@ function PersonCard({ person, currentUserId, index }) {
           handleClick(e)
         }
       }}
-      style={{ animationDelay: `${Math.min(index * 40, 400)}ms` }}
+      style={{
+        animationDelay: `${Math.min(index * 40, 400)}ms`,
+        ...(isPending ? { opacity: 0.75, cursor: 'default' } : {}),
+      }}
       role="button"
       tabIndex={0}
-      aria-label={`Open profile for ${name}`}
+      aria-label={isPending ? `Pending invite for ${name}` : `Open profile for ${name}`}
     >
-      {(role === 'owner' || role === 'admin') && (
+      {(role === 'owner' || role === 'admin') && !isPending && (
         <div className="dir-person-ribbon">{role}</div>
       )}
 
@@ -283,22 +300,51 @@ function PersonCard({ person, currentUserId, index }) {
         )}
         <span
           className="dir-person-status-dot"
-          style={{ background: statusColor }}
+          style={{
+            background: isPending ? 'var(--status-offline,#9ca3af)' : statusColor,
+          }}
           title={statusLabel}
         />
       </div>
 
       <div className="dir-person-info">
         <p className="dir-person-name">
-          {name}
+          {isPending ? (person.email || name) : name}
           {isCurrentUser && <span className="dir-person-you">you</span>}
         </p>
-        <p className="dir-person-title">{secondaryText}</p>
+        <p className="dir-person-title" style={isPending ? { fontStyle: 'italic' } : {}}>
+          {isPending && <Clock size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />}
+          {secondaryText}
+        </p>
       </div>
 
-      <div className="dir-person-hover-cta">
-        <span>View profile</span>
-      </div>
+      {isGuest && !isPending && (
+        <span
+          style={{
+            position: 'absolute',
+            top: 6,
+            right: 6,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 3,
+            fontSize: 10,
+            fontWeight: 600,
+            color: 'var(--text-muted, #6b7280)',
+            background: 'var(--bg-secondary, #f3f4f6)',
+            borderRadius: 4,
+            padding: '2px 6px',
+          }}
+        >
+          <Shield size={10} />
+          Guest
+        </span>
+      )}
+
+      {!isPending && (
+        <div className="dir-person-hover-cta">
+          <span>View profile</span>
+        </div>
+      )}
     </div>
   )
 }

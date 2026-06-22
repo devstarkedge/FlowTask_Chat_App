@@ -278,6 +278,7 @@ const STYLES = `
     background: transparent;
     border: none;
     outline: none;
+    box-shadow: none;
     color: var(--text-primary);
     font-size: 14px;
     font-family: var(--font-sans);
@@ -305,6 +306,7 @@ const STYLES = `
     background: transparent;
     border: none;
     outline: none;
+    box-shadow: none;
     color: var(--text-primary);
     font-size: 13px;
     font-family: var(--font-sans);

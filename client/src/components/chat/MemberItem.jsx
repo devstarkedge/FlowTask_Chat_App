@@ -5,7 +5,8 @@ import { usePresenceStore } from '../../stores/presenceStore'
 
 export default function MemberItem({ member, onOpenProfile, canRemove, onRemove }) {
   const presenceMap = usePresenceStore((s) => s.presence);
-  const status = presenceMap[member?._id || member?.userId] || member?.onlineStatus || 'offline';
+  const id = member?._id || member?.userId;
+  const status = presenceMap[id] || presenceMap[member?.flowTaskUserId] || presenceMap[member?.chatUserId] || member?.onlineStatus || 'offline';
   const isOnline = status === 'online'
 
   return (

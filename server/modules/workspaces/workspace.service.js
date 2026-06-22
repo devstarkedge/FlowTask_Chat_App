@@ -485,12 +485,17 @@ class WorkspaceService {
         await this._autoJoinPublicChannels(existingUser._id, workspaceId);
       }
 
-      await emailService.sendWorkspaceInviteEmail(
-        email,
-        workspace.name,
-        (await ChatUser.findById(invitedBy).lean())?.name || 'A team member',
-        null, // No token needed — user already exists
-      );
+      try {
+        await emailService.sendWorkspaceInviteEmail(
+          email,
+          workspace.name,
+          (await ChatUser.findById(invitedBy).lean())?.name || 'A team member',
+          null, // No token needed — user already exists
+        );
+      } catch (emailErr) {
+        // Email failure for existing user is non-critical (user is already added to workspace)
+        logger.warn(`Notification email failed for existing user ${email}`, { error: emailErr.message });
+      }
       logger.info(`Existing user ${email} added to workspace ${workspace.slug}`);
       return { type: 'direct_add', membership };
     }
@@ -524,12 +529,19 @@ class WorkspaceService {
     const inviterName = inviter?.name || 'A team member';
 
     // Send invite email with plain token
-    await emailService.sendWorkspaceInviteEmail(
-      email,
-      workspace.name,
-      inviterName,
-      invite.token,
-    );
+    try {
+      await emailService.sendWorkspaceInviteEmail(
+        email,
+        workspace.name,
+        inviterName,
+        invite.token,
+      );
+    } catch (emailErr) {
+      // Email failed — mark invite as email_failed so it doesn't appear as pending
+      logger.error(`Invite email failed for ${email} (workspace ${workspace.slug})`, { error: emailErr.message });
+      await WorkspaceInvite.findByIdAndUpdate(invite._id, { status: 'email_failed' });
+      throw new Error(`Invitation created but email delivery failed: ${emailErr.message}`);
+    }
 
     // Fire audit log
     auditLogService.logInviteCreated(invite, invitedBy, inviterName, workspaceId);
@@ -690,12 +702,18 @@ class WorkspaceService {
     const inviterName = inviter?.name || 'A team member';
 
     // Send email with new token
-    await emailService.sendWorkspaceInviteEmail(
-      invite.email,
-      workspace.name,
-      inviterName,
-      newToken,
-    );
+    try {
+      await emailService.sendWorkspaceInviteEmail(
+        invite.email,
+        workspace.name,
+        inviterName,
+        newToken,
+      );
+    } catch (emailErr) {
+      logger.error(`Resend email failed for ${invite.email}`, { error: emailErr.message });
+      await WorkspaceInvite.findByIdAndUpdate(inviteId, { status: 'email_failed' });
+      throw new Error(`Resend failed — email delivery error: ${emailErr.message}`);
+    }
 
     // Fire audit log
     auditLogService.logInviteResent(inviteId, requesterId, inviterName, workspaceId);

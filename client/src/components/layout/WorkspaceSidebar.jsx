@@ -43,7 +43,7 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   const presenceMap = usePresenceStore((s) => s.presence);
   const savedCount = useLaterStore((s) => s.savedMessages.length);
   
-  const userStatus = presenceMap[user?._id] || user?.onlineStatus || "online";
+  const userStatus = presenceMap[user?._id] || presenceMap[user?.flowTaskUserId] || user?.onlineStatus || "online";
   const statusColor = 
     userStatus === "online" ? "var(--status-online)" : 
     userStatus === "away" ? "var(--status-away)" : 

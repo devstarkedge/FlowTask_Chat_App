@@ -61,7 +61,7 @@ export default function ProfileSidePanel({ user, onClose }) {
   const [sendingDM, setSendingDM] = useState(false);
 
   const userId = user?._id || user?.userId;
-  const liveStatus = presenceMap[userId] || user?.onlineStatus || "offline";
+  const liveStatus = presenceMap[userId] || presenceMap[user?.flowTaskUserId] || presenceMap[user?.chatUserId] || user?.onlineStatus || "offline";
   const isCurrentUser = userId === currentUser?._id;
   const statusMeta = STATUS_META[liveStatus] || STATUS_META.offline;
 

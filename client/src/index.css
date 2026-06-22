@@ -556,21 +556,16 @@ body {
     border-color 0.15s ease,
     box-shadow 0.15s ease,
     background 0.15s ease;
-  transition: all 0.2s ease;
-
-  /* subtle depth */
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
-.input-field:focus {
+.input-field:focus,
+.input-field:focus-visible {
   border-color: var(--accent-primary);
   background: var(--bg-secondary);
-
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 14%, transparent);
 }
 
-.input-field:hover {
+.input-field:hover:not(:focus) {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
@@ -7141,7 +7136,7 @@ body {
   --overlay-bg: rgba(0, 0, 0, 0.56);
   --search-backdrop: rgba(0, 0, 0, 0.62);
   --search-selected-text: #ffffff;
-  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent-color) 26%, transparent);
+  /* --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent-color) 26%, transparent); */
   --accent-primary: var(--accent-color);
   --accent-primary-hover: color-mix(in srgb, var(--accent-color) 88%, #ffffff);
   --accent-red: var(--danger-color);
@@ -7204,8 +7199,8 @@ body {
   --search-row-icon-bg: color-mix(in srgb, var(--surface-hover) 82%, var(--surface-secondary));
   --search-highlight-bg: color-mix(in srgb, var(--accent-yellow) 30%, transparent);
   --search-highlight-border: color-mix(in srgb, var(--accent-yellow) 54%, transparent);
-  --search-control-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 8px rgba(0, 0, 0, 0.22);
-  --search-control-hover-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 22px rgba(0, 0, 0, 0.18);
+  --search-control-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+  --search-control-hover-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
   --search-control-open-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 18%, transparent), 0 28px 70px rgba(0, 0, 0, 0.42);
   --search-panel-shadow: 0 34px 90px rgba(0, 0, 0, 0.48), 0 12px 30px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
   --search-icon-surface: color-mix(in srgb, var(--surface-hover) 78%, var(--surface-secondary));
@@ -7270,8 +7265,8 @@ body {
   --search-row-icon-bg: color-mix(in srgb, var(--surface-hover) 70%, var(--surface-primary));
   --search-highlight-bg: color-mix(in srgb, var(--accent-yellow) 24%, transparent);
   --search-highlight-border: color-mix(in srgb, var(--accent-yellow) 38%, transparent);
-  --search-control-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74), 0 2px 6px rgba(29, 28, 29, 0.06);
-  --search-control-hover-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 12px 24px rgba(29, 28, 29, 0.08);
+  --search-control-shadow: 0 2px 6px rgba(29, 28, 29, 0.06);
+  --search-control-hover-shadow: 0 12px 24px rgba(29, 28, 29, 0.08);
   --search-control-open-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 14%, transparent), 0 22px 56px rgba(29, 28, 29, 0.16);
   --search-panel-shadow: 0 28px 72px rgba(29, 28, 29, 0.18), 0 10px 24px rgba(29, 28, 29, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.78) inset;
   --search-icon-surface: color-mix(in srgb, var(--surface-hover) 72%, var(--surface-primary));
@@ -7790,7 +7785,7 @@ textarea:focus-visible,
 .slack-composer.focused,
 .slack-composer.drag-over {
   border-color: var(--accent-color);
-  box-shadow: var(--focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 18%, transparent);
 }
 
 .slack-composer-drag-overlay {
@@ -8557,7 +8552,7 @@ textarea:focus-visible,
 .create-workspace-card input:focus,
 .create-workspace-card textarea:focus {
   border-color: var(--accent-color);
-  box-shadow: var(--focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 16%, transparent);
 }
 
 .create-workspace-card textarea {
@@ -14729,7 +14724,7 @@ textarea:focus-visible,
 
 .slack-composer.editing-scheduled {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 1px var(--accent-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 18%, transparent);
 }
 
 

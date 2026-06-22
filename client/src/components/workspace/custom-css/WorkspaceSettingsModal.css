@@ -428,14 +428,12 @@
       color: #1e293b;
       outline: none;
       font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-      transition: border-color .15s, box-shadow .15s, transform .12s;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+      transition: border-color .15s, box-shadow .15s;
   }
 
   .wsm-field:focus {
       border-color: #6366f1;
-      box-shadow: 0 0 0 4px rgba(99, 102, 241, .1);
-      transform: translateY(-1px);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, .1);
   }
 
   .wsm-field:disabled {

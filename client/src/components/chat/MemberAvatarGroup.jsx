@@ -19,9 +19,10 @@ function Avatar({ member, size = 28, showStatus = false }) {
   const safeMember = member || {}
   
   // Use presence store if available, fallback to member prop
-  const presenceStoreVal = usePresenceStore((state) => 
-    state.presence[safeMember._id || safeMember.userId]
-  )
+  const presenceStoreVal = usePresenceStore((state) => {
+    const p = state.presence
+    return p[safeMember._id || safeMember.userId] || p[safeMember.flowTaskUserId] || p[safeMember.chatUserId]
+  })
   const effectiveStatus = presenceStoreVal || safeMember.onlineStatus || 'offline'
 
   const isOnline = effectiveStatus === 'online'
@@ -123,7 +124,8 @@ export default function MemberAvatarGroup({
   const onlineCount = usePresenceStore((state) => 
     members.filter((m) => {
       const id = m._id || m.userId;
-      const status = id ? state.presence[id] : m.onlineStatus;
+      const p = state.presence;
+      const status = (id ? p[id] : null) || p[m.flowTaskUserId] || p[m.chatUserId] || m.onlineStatus;
       return status === 'online';
     }).length
   )

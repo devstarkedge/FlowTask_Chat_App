@@ -144,7 +144,8 @@ export default function UserPickerModal({ onClose, onSelect }) {
 
   const presenceMap = usePresenceStore((state) => state.presence)
   const isUserOnline = (u) => {
-    return presenceMap[u.chatUserId || u.flowTaskUserId || u._id] === 'online'
+    const status = presenceMap[u.chatUserId] || presenceMap[u.flowTaskUserId] || presenceMap[u._id]
+    return status === 'online'
   }
 
   const onlineList = users.filter(isUserOnline)

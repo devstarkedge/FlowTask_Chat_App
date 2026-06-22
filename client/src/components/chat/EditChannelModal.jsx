@@ -495,6 +495,49 @@ export default function EditChannelModal({ channel, onClose }) {
                 </motion.div>
               )}
 
+              {/* ── Canvas Permissions (Private Channels Only) ── */}
+              {visibility === "private" && (
+                <motion.div variants={item}>
+                  <SectionDivider label="Canvas Permissions" />
+                  <FieldLabel hint="for private channels">
+                    Allow channel members to edit canvases
+                  </FieldLabel>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '10px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--surface-secondary)',
+                    border: '1px solid var(--border-color)',
+                  }}>
+                    <label style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      cursor: 'pointer', fontSize: 13,
+                      color: 'var(--text-secondary)',
+                      userSelect: 'none',
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={channel.allowAllMembersEditCanvas !== false}
+                        onChange={async (e) => {
+                          const newValue = e.target.checked;
+                          try {
+                            await editChannel(channel._id, { allowAllMembersEditCanvas: newValue });
+                            toast.success(newValue
+                              ? 'All members can now edit canvases'
+                              : 'Only admins can now edit canvases'
+                            );
+                          } catch (err) {
+                            toast.error('Failed to update canvas permissions');
+                          }
+                        }}
+                        style={{ accentColor: 'var(--accent-color)' }}
+                      />
+                      <span>Allow all channel members to edit canvases</span>
+                    </label>
+                  </div>
+                </motion.div>
+              )}
+
               <SectionDivider label="Details" />
 
               {/* ── Topic ── */}

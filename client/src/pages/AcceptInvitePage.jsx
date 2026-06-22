@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
@@ -20,6 +20,14 @@ import "./custom-css/acceptInvitePage.css";
 /**
  * AcceptInvitePage — Public page for accepting workspace invites.
  * Route: /invite/:token
+ *
+ * Enterprise flow:
+ *   Scenario A (authenticated):
+ *     Accept Invite → Validate Token → Join Workspace → Set Active Workspace → Redirect Directly To Invited Workspace
+ *     No login page. No signup page.
+ *
+ *   Scenario B (not authenticated):
+ *     Accept Invite → Store invite token → Redirect to Login/Register → Complete Auth → Resume Invitation Flow → Join Workspace → Open Invited Workspace
  */
 export default function AcceptInvitePage() {
   const { token } = useParams();
@@ -34,8 +42,57 @@ export default function AcceptInvitePage() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [expiresIn, setExpiresIn] = useState("");
+  const autoAcceptTriggered = useRef(false);
 
-  // Fetch invite info on mount
+  // ─── Accept invite logic (shared by auto-accept and manual click) ───
+  const acceptInvite = async () => {
+    if (!accessToken) {
+      // Scenario B: Store pending invite token in session storage for post-login resume
+      sessionStorage.setItem("pendingInviteToken", token);
+      navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`);
+      return;
+    }
+
+    setAccepting(true);
+    try {
+      const response = await workspaceAPI.acceptEmailInvite(token);
+      const data = response.data?.data || response.data;
+
+      setSuccess(true);
+      toast.success(`Welcome to ${inviteInfo.workspaceName}!`);
+
+      // Determine the workspace ID from multiple sources for robustness
+      const workspaceId =
+        data.workspaceId ||
+        data.workspace?._id ||
+        inviteInfo?.workspaceId;
+
+      // Refresh workspaces list without auto-selecting (skipAutoSelect = true)
+      // This prevents the store from selecting the first workspace before we switch
+      await fetchWorkspaces(true);
+
+      if (workspaceId) {
+        // Scenario A: Switch to the invited workspace directly
+        await switchWorkspace(workspaceId);
+        // Use redirectTo from backend if available, otherwise construct
+        const redirectTo = data.redirectTo || `/workspace/${workspaceId}`;
+        navigate(redirectTo);
+      } else {
+        navigate("/select-workspace");
+      }
+    } catch (err) {
+      const message =
+        err.response?.data?.error?.message ||
+        err.response?.data?.message ||
+        "Failed to accept invite. Please try again.";
+      toast.error(message);
+      setError(message);
+    } finally {
+      setAccepting(false);
+    }
+  };
+
+  // ─── Fetch invite info on mount ───
   useEffect(() => {
     if (!token) {
       setError("Invalid invite link.");
@@ -62,9 +119,13 @@ export default function AcceptInvitePage() {
           }
 
           const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-          const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          const hours = Math.floor(
+            (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
+          );
           setExpiresIn(
-            days > 0 ? `${days} day${days > 1 ? "s" : ""}` : `${hours} hour${hours > 1 ? "s" : ""}`
+            days > 0
+              ? `${days} day${days > 1 ? "s" : ""}`
+              : `${hours} hour${hours > 1 ? "s" : ""}`,
           );
         }
       } catch (err) {
@@ -81,50 +142,23 @@ export default function AcceptInvitePage() {
     fetchInviteInfo();
   }, [token]);
 
-  // Handle accept invite
-  const handleAccept = async () => {
-    if (!accessToken) {
-      // Redirect to login with return URL
-      const returnUrl = location.pathname;
-      navigate(`/login?redirect=${encodeURIComponent(returnUrl)}`);
-      return;
+  // ─── Auto-accept (Scenario A): when authenticated and invite info is loaded ───
+  useEffect(() => {
+    if (
+      !loading &&
+      !error &&
+      inviteInfo &&
+      accessToken &&
+      !success &&
+      !accepting &&
+      !autoAcceptTriggered.current
+    ) {
+      autoAcceptTriggered.current = true;
+      acceptInvite();
     }
+  }, [loading, error, inviteInfo, accessToken, success, accepting]);
 
-    setAccepting(true);
-    try {
-      const response = await workspaceAPI.acceptEmailInvite(token);
-      const data = response.data?.data || response.data;
-
-      setSuccess(true);
-      toast.success(`Welcome to ${inviteInfo.workspaceName}!`);
-
-      // Determine the workspace ID from multiple sources for robustness
-      const workspaceId = data.workspaceId
-        || data.workspace?._id
-        || inviteInfo?.workspaceId;
-
-      // Refresh workspaces list, then switch to the invited workspace
-      await fetchWorkspaces();
-
-      if (workspaceId) {
-        await switchWorkspace(workspaceId);
-        navigate(`/workspace/${workspaceId}`);
-      } else {
-        navigate("/select-workspace");
-      }
-    } catch (err) {
-      const message =
-        err.response?.data?.error?.message ||
-        err.response?.data?.message ||
-        "Failed to accept invite. Please try again.";
-      toast.error(message);
-      setError(message);
-    } finally {
-      setAccepting(false);
-    }
-  };
-
-  // Loading state
+  // ─── Loading state ───
   if (loading) {
     return (
       <div className="aip-container">
@@ -136,7 +170,7 @@ export default function AcceptInvitePage() {
     );
   }
 
-  // Error state
+  // ─── Error state (invite info could not be loaded) ───
   if (error && !inviteInfo) {
     return (
       <div className="aip-container">
@@ -161,7 +195,19 @@ export default function AcceptInvitePage() {
     );
   }
 
-  // Success state
+  // ─── Auto-accepting state (authenticated user, accepting in progress) ───
+  if (accepting && accessToken) {
+    return (
+      <div className="aip-container">
+        <div className="aip-loading">
+          <Loader2 size={48} className="aip-spinner" />
+          <p>Joining {inviteInfo?.workspaceName}...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Success state ───
   if (success) {
     return (
       <div className="aip-container">
@@ -175,7 +221,8 @@ export default function AcceptInvitePage() {
           </div>
           <h2>Welcome aboard!</h2>
           <p>
-            You've successfully joined <strong>{inviteInfo?.workspaceName}</strong>.
+            You've successfully joined{" "}
+            <strong>{inviteInfo?.workspaceName}</strong>.
           </p>
           <p className="aip-redirect-text">Redirecting to workspace...</p>
         </motion.div>
@@ -183,7 +230,7 @@ export default function AcceptInvitePage() {
     );
   }
 
-  // Main invite display
+  // ─── Main invite display (unauthenticated users or manual accept) ───
   return (
     <div className="aip-container">
       <motion.div
@@ -240,11 +287,7 @@ export default function AcceptInvitePage() {
         <div className="aip-details">
           <div className="aip-detail-item">
             <Clock size={16} />
-            <span>
-              {expiresIn
-                ? `Expires in ${expiresIn}`
-                : "Expires in 7 days"}
-            </span>
+            <span>{expiresIn ? `Expires in ${expiresIn}` : "Expires in 7 days"}</span>
           </div>
           <div className="aip-detail-item">
             <Shield size={16} />
@@ -255,9 +298,7 @@ export default function AcceptInvitePage() {
           {inviteInfo.inviteType === "guest" && (
             <div className="aip-guest-notice">
               <AlertCircle size={14} />
-              <span>
-                Guest accounts have limited access to specific channels only.
-              </span>
+              <span>Guest accounts have limited access to specific channels only.</span>
             </div>
           )}
         </div>
@@ -271,7 +312,7 @@ export default function AcceptInvitePage() {
               </p>
               {error && <p className="aip-inline-error">{error}</p>}
               <button
-                onClick={handleAccept}
+                onClick={acceptInvite}
                 disabled={accepting}
                 className="aip-accept-btn"
               >

@@ -30,7 +30,7 @@ export const useWorkspaceStore = create(
       error: null,
 
       // ─── Fetch user's workspaces ───────────────────────────────────────
-      fetchWorkspaces: async () => {
+      fetchWorkspaces: async (skipAutoSelect = false) => {
         set({ isLoading: true, error: null })
         try {
           const { data } = await api.get('/workspaces/mine')
@@ -40,7 +40,8 @@ export const useWorkspaceStore = create(
           // Auto-select if no active workspace or current one is invalid
           const { activeWorkspaceId } = get()
           if (!activeWorkspaceId || !workspaces.find((w) => w._id === activeWorkspaceId)) {
-            if (workspaces.length > 0) {
+            // Only auto-select first workspace if not skipping (used during invite flow)
+            if (!skipAutoSelect && workspaces.length > 0) {
               set({
                 activeWorkspaceId: workspaces[0]._id,
                 activeWorkspace: workspaces[0],

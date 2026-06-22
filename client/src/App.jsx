@@ -1,5 +1,5 @@
 import { useEffect, Suspense, lazy } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import { useThemeStore } from './stores/themeStore'
 import { usePresenceTracker } from './hooks/usePresenceTracker'
@@ -28,6 +28,25 @@ function PageFallback() {
         style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }} />
     </div>
   )
+}
+
+/**
+ * Smart redirect for authenticated users landing on auth pages (login, register, etc.).
+ * Checks for pending invite or explicit redirect param before falling back to workspace selector.
+ */
+function SmartAuthRedirect() {
+  const [searchParams] = useSearchParams()
+  const redirectTo = searchParams.get('redirect')
+  const pendingInvite = sessionStorage.getItem('pendingInviteToken')
+
+  if (pendingInvite) {
+    sessionStorage.removeItem('pendingInviteToken')
+    return <Navigate to={`/invite/${pendingInvite}`} replace />
+  }
+  if (redirectTo) {
+    return <Navigate to={redirectTo} replace />
+  }
+  return <Navigate to="/select-workspace" replace />
 }
 
 function App() {
@@ -67,10 +86,10 @@ function App() {
         {/* Public routes */}
         <Route path="/" element={!user ? <LandingPage /> : <Navigate to="/select-workspace" />} />
         <Route path="/pricing" element={<PricingPage />} />
-        <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/select-workspace" />} />
-        <Route path="/register" element={!user ? <RegisterPage /> : <Navigate to="/select-workspace" />} />
-        <Route path="/forgot-password" element={!user ? <ForgotPasswordPage /> : <Navigate to="/select-workspace" />} />
-        <Route path="/reset-password/:token" element={!user ? <ResetPasswordPage /> : <Navigate to="/select-workspace" />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={!user ? <ForgotPasswordPage /> : <SmartAuthRedirect />} />
+        <Route path="/reset-password/:token" element={!user ? <ResetPasswordPage /> : <SmartAuthRedirect />} />
 
         {/* Invite acceptance — public (works for both logged-in and logged-out users) */}
         <Route path="/invite/:token" element={<AcceptInvitePage />} />

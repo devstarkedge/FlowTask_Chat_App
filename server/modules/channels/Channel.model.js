@@ -188,6 +188,15 @@ const channelSchema = new Schema(
         createdAt: { type: Date, default: Date.now },
       },
     ],
+    // ─── Canvas Permissions ───────────────────────────────────────────
+    // For PRIVATE channels: if true, all members can edit canvases.
+    // If false, only canvas owner, channel owner, and channel admin can edit.
+    // This toggle is ONLY relevant for private channels.
+    // Public channels always allow all members to edit canvases.
+    allowAllMembersEditCanvas: {
+      type: Boolean,
+      default: true,
+    },
     // ─── Department categorization (from FlowTask board.department) ───
     departmentRef: {
       departmentId: { type: String, default: null },

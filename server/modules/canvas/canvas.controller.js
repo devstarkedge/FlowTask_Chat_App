@@ -209,6 +209,15 @@ const getMyCanvases = asyncHandler(async (req, res) => {
   });
 });
 
+// ── Get Canvas Permissions (for frontend consumption)
+const getCanvasPermissions = asyncHandler(async (req, res) => {
+  // Permissions are already resolved by checkCanvasAccess middleware
+  return res.status(200).json({
+    success: true,
+    data: req.canvasPermissions,
+  });
+});
+
 export default {
   getCanvas,
   getCanvasById,
@@ -223,4 +232,5 @@ export default {
   toggleCanvasSaveForLater,
   updateCanvasSavedStatus,
   getSavedCanvases,
+  getCanvasPermissions,
 };

@@ -2,12 +2,19 @@ import express from "express";
 import canvasController from "./canvas.controller.js";
 import { protect } from "../auth/auth.middleware.js";
 import { resolveWorkspace } from "../../middleware/workspaceContext.js";
-import { checkCanvasAccess, requireCanvasRole } from "./canvasPermission.middleware.js";
+import { checkCanvasAccess, requireCanvasRole, requireCanvasPermission } from "./canvasPermission.middleware.js";
 
 const router = express.Router();
 
 // All canvas routes require authentication + workspace context
 router.use(protect, resolveWorkspace);
+
+// ── Permissions endpoint (returns resolved permissions for frontend) ─────
+router.get(
+  "/permissions/:canvasId",
+  checkCanvasAccess,
+  canvasController.getCanvasPermissions
+);
 
 // ── Read routes — viewer access allowed ─────────────────────────────────────
 router.get(

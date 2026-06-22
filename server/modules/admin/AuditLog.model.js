@@ -22,6 +22,13 @@ const AUDIT_ACTIONS = [
   'CHANNEL_SYNCED',
   'USER_ACTIVATED',
   'WEBHOOK_PROCESSED',
+  // Invitation lifecycle
+  'INVITE_CREATED',
+  'INVITE_ACCEPTED',
+  'INVITE_DECLINED',
+  'INVITE_EXPIRED',
+  'INVITE_REVOKED',
+  'INVITE_RESENT',
 ];
 
 const auditLogSchema = new Schema(
@@ -38,7 +45,7 @@ const auditLogSchema = new Schema(
     },
     entityType: {
       type: String,
-      enum: ['channel', 'user', 'workspace', 'member'],
+      enum: ['channel', 'user', 'workspace', 'member', 'invite'],
       required: true,
     },
     entityId: {

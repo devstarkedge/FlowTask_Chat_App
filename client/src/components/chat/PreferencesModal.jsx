@@ -338,7 +338,7 @@ export default function PreferencesModal({ onClose }) {
               </div>
             </section>
 
-            <section className="appearance-section">
+            {/* <section className="appearance-section">
               <SectionTitle
                 icon={Palette}
                 title="Custom theme"
@@ -354,7 +354,7 @@ export default function PreferencesModal({ onClose }) {
                   />
                 ))}
               </div>
-            </section>
+            </section> */}
 
             <section className="appearance-section">
               <SectionTitle

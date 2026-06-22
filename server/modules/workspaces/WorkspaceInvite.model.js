@@ -30,12 +30,14 @@ const workspaceInviteSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'Workspace',
     required: true,
+    index: true,
   },
   email: {
     type: String,
     required: true,
     lowercase: true,
     trim: true,
+    index: true,
   },
   channels: [{
     type: Schema.Types.ObjectId,
@@ -58,17 +60,14 @@ const workspaceInviteSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'accepted', 'expired', 'revoked', 'email_failed'],
+    enum: ['pending', 'accepted', 'declined', 'expired', 'revoked', 'email_failed'],
     default: 'pending',
-  },
-  token: {
-    type: String,
-    default: () => crypto.randomBytes(32).toString('hex'),
   },
   tokenHash: {
     type: String,
     unique: true,
     sparse: true,
+    required: true,
   },
   acceptedAt: {
     type: Date,
@@ -112,8 +111,14 @@ workspaceInviteSchema.index(
 );
 // Token hash lookup for accepting invites
 workspaceInviteSchema.index({ tokenHash: 1 }, { unique: true, sparse: true });
+// Email + status for invite lookups by email
+workspaceInviteSchema.index({ email: 1, status: 1 });
 // TTL for auto-expiry (only pending invites not yet expired)
 workspaceInviteSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// Performance: status + workspace lookups
+workspaceInviteSchema.index({ status: 1, workspaceId: 1 });
+// Performance: invitedBy lookups
+workspaceInviteSchema.index({ invitedBy: 1 });
 
 // ─── Static Methods ──────────────────────────────────────────────────────────
 
@@ -127,7 +132,7 @@ workspaceInviteSchema.statics.findValidByToken = function (token) {
     tokenHash,
     status: 'pending',
     expiresAt: { $gt: new Date() },
-  }).populate('workspaceId', 'name slug logo');
+  }).populate('workspaceId', 'name slug logo plan');
 };
 
 /**
@@ -170,24 +175,24 @@ workspaceInviteSchema.statics.revoke = function (inviteId, workspaceId, revokedB
 
 /**
  * Resend a pending invite with a new token.
+ * Returns the updated invite and the plain token for email delivery.
  */
 workspaceInviteSchema.statics.resend = function (inviteId, workspaceId) {
-  const newToken = crypto.randomBytes(32).toString('hex');
-  const newTokenHash = hashToken(newToken);
+  const { token, tokenHash } = this.generateTokenPair();
   const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   
   return this.findOneAndUpdate(
     { _id: inviteId, workspaceId, status: 'pending' },
     { 
       $set: { 
-        tokenHash: newTokenHash,
+        tokenHash,
         expiresAt: newExpiresAt,
         lastResentAt: new Date(),
       },
       $inc: { resendCount: 1 },
     },
     { returnDocument: 'after' },
-  ).then(invite => ({ invite, newToken }));
+  ).then(invite => ({ invite, newToken: token }));
 };
 
 /**
@@ -217,13 +222,17 @@ workspaceInviteSchema.statics.findAll = function (workspaceId, { status, inviteT
   }));
 };
 
-// ─── Pre-save Hook ───────────────────────────────────────────────────────────
-// Automatically hash the token when it's set or modified
-workspaceInviteSchema.pre('save', function () {
-  if (this.isModified('token') && this.token) {
-    this.tokenHash = hashToken(this.token);
-  }
-});
+// ─── Static: generate token pair ────────────────────────────────────────────
+/**
+ * Generate a plain token and its SHA-256 hash.
+ * The plain token is returned for email delivery; only the hash is stored.
+ * @returns {{ token: string, tokenHash: string }}
+ */
+workspaceInviteSchema.statics.generateTokenPair = function () {
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashToken(token);
+  return { token, tokenHash };
+};
 
 const WorkspaceInvite = model('WorkspaceInvite', workspaceInviteSchema);
 

@@ -405,6 +405,9 @@ const MessageItem = memo(
       pinMessage,
       unpinMessage,
       highlightMessageId,
+      messageIdToDelete,
+      setMessageIdToDelete,
+      clearMessageIdToDelete,
     } = useChatStore();
     const { confirm } = useDeleteConfirm();
 
@@ -795,10 +798,17 @@ const MessageItem = memo(
         style={{
           background: isSelected
             ? "color-mix(in srgb, var(--accent-primary, #5865f2) 12%, transparent)"
-            : showActions
-              ? "var(--bg-hover)"
-              : "transparent",
-          transition: "background 150ms ease",
+            : messageIdToDelete === message._id
+              ? "var(--bg-danger, rgba(239, 68, 68, 0.08))"
+              : showActions
+                ? "var(--bg-hover)"
+                : "transparent",
+          border: messageIdToDelete === message._id
+            ? "1px solid var(--border-danger, rgba(239, 68, 68, 0.25))"
+            : isSelected
+              ? "1px solid var(--accent-primary, #5865f2)"
+              : "1px solid transparent",
+          transition: "background 150ms ease, border-color 150ms ease",
           opacity: isPending ? 0.6 : isFailed ? 0.5 : 1,
           marginTop: compact ? 2 : 12,
         }}
@@ -931,7 +941,7 @@ const MessageItem = memo(
                     borderBottom: "1px solid var(--border-secondary)",
                     fontSize: 12,
                     fontStyle: "italic",
-                    color: "var(--text-muted)",
+                    color: "var(--text-secondary)",
                     opacity: 0.8,
                   }}
                 >
@@ -1124,11 +1134,13 @@ const MessageItem = memo(
                       title="Delete"
                       danger
                       onClick={async () => {
+                        setMessageIdToDelete(message._id);
                         const ok = await confirm({
                           title: "Delete message",
                           message:
                             "This message will be permanently removed for everyone.",
                         });
+                        clearMessageIdToDelete();
                         if (ok) deleteMessage(message._id, message.channelId);
                       }}
                     />
@@ -1280,7 +1292,8 @@ const MessageItem = memo(
       prev.isPinnedHighlight === next.isPinnedHighlight &&
       prev.message.forwardMeta === next.message.forwardMeta &&
       prev.isSelecting === next.isSelecting &&
-      prev.isSelected === next.isSelected
+      prev.isSelected === next.isSelected &&
+      prev.messageIdToDelete === next.messageIdToDelete
     );
   },
 );

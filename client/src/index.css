@@ -7,7 +7,7 @@
   border-radius: 6px;
   background: transparent;
   border: 1px solid transparent;
-  color: var(--text-muted);
+  /* color: var(--text-muted); */
 }
 
 [data-theme="dark"] .chat-header__star {
@@ -718,7 +718,6 @@ body {
 }
 
 .message-content em {
-  color: var(--text-secondary);
   font-style: italic;
 }
 
@@ -3415,8 +3414,8 @@ body {
 
 /* ── Received (left) colour ────────────────────────────────────────────── */
 .message-bubble.received {
-  background: var(--bubble-receiver-bg);
-  color: var(--bubble-receiver-text);
+  background:var(--bubble-sender-bg) ;
+  color: var(--bubble-sender-text);
 }
 
 /*
@@ -7158,7 +7157,7 @@ body {
   --surface-tertiary: #2a2f35;
   --surface-hover: #2f343b;
   --bg-hover: var(--surface-hover);
-  --bg-active: color-mix(in srgb, var(--accent-color) 22%, transparent);
+  /* --bg-active: color-mix(in srgb, var(--accent-color) 22%, transparent); */
   --bg-input: #171a1f;
   --bg-modal: var(--surface-primary);
   --bg-card: var(--surface-secondary);

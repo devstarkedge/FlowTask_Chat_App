@@ -245,7 +245,7 @@ class WorkspaceService {
     const currentCount = await workspaceRepository.countMembers(workspaceId);
     const limit = WORKSPACE_LIMITS[workspace.plan]?.maxMembers || WORKSPACE_LIMITS.free.maxMembers;
 
-    if (currentCount >= limit) {
+    if (workspace.plan !== 'enterprise' && limit > 0 && currentCount >= limit) {
       throw new BadRequestError(
         `Workspace has reached the member limit (${limit}) for the ${workspace.plan} plan.`,
       );
@@ -336,7 +336,7 @@ class WorkspaceService {
     const currentCount = await workspaceRepository.countMembers(workspace._id);
     const limit = WORKSPACE_LIMITS[workspace.plan]?.maxMembers || WORKSPACE_LIMITS.free.maxMembers;
 
-    if (currentCount >= limit) {
+    if (workspace.plan !== 'enterprise' && limit > 0 && currentCount >= limit) {
       throw new BadRequestError(
         `Workspace has reached the member limit (${limit}) for the ${workspace.plan} plan.`,
       );
@@ -414,43 +414,41 @@ class WorkspaceService {
 
     const { channels = [], inviteType = 'member', domainRestriction } = options;
 
+    // 1. Check workspace exists.
     const workspace = await this.getWorkspace(workspaceId);
-    const planConfig = WORKSPACE_LIMITS[workspace.plan] || WORKSPACE_LIMITS.free;
 
-    // Check guest access if inviteType is guest
-    if (inviteType === 'guest') {
-      if (!planConfig.features.guestAccess) {
-        throw new ForbiddenError(`Guest invites are not available on the ${workspace.plan} plan.`);
-      }
+    // 2. Check inviter has permission.
+    const inviterRole = await workspaceRepository.getUserRole(invitedBy, workspaceId);
+    const { hasPermission } = await import('../../middleware/permissions.js');
+    if (!inviterRole || !hasPermission(inviterRole, 'member:invite')) {
+      throw new ForbiddenError('You do not have permission to invite members to this workspace.');
+    }
 
-      // Check guest count limit
-      const maxGuests = workspace.settings?.guestSettings?.maxGuests ?? planConfig.maxGuests;
-      if (maxGuests >= 0) {
-        const { default: WorkspaceMembership } = await import('./WorkspaceMembership.model.js');
-        const guestCount = await WorkspaceMembership.countDocuments({
-          workspaceId,
-          role: WORKSPACE_ROLES.GUEST,
-          isActive: true,
-        });
-        if (guestCount >= maxGuests) {
-          throw new BadRequestError(
-            `Workspace has reached the guest limit (${maxGuests}) for the ${workspace.plan} plan.`,
-          );
-        }
-      }
+    // Guest invites validation on input parameters (done early)
+    if (inviteType === 'guest' && (!channels || channels.length === 0)) {
+      throw new BadRequestError('Guest invites must specify at least one channel.');
+    }
 
-      // Guest invites require channels
-      if (!channels || channels.length === 0) {
-        throw new BadRequestError('Guest invites must specify at least one channel.');
+    // 3. Check if user is already an ACTIVE workspace member.
+    const existingUser = await ChatUser.findOne({ email: email.toLowerCase() }).lean();
+    if (existingUser) {
+      const isActiveMember = await workspaceRepository.isMember(existingUser._id, workspaceId);
+      if (isActiveMember) {
+        throw new BadRequestError('This user is already a member of this workspace.');
       }
     }
 
-    // Check plan member limits
-    const currentCount = await workspaceRepository.countMembers(workspaceId);
-    const limit = planConfig.maxMembers;
-    if (limit > 0 && currentCount >= limit) {
-      throw new BadRequestError(
-        `Workspace has reached the member limit (${limit}) for the ${workspace.plan} plan.`,
+    // 4. Check if a PENDING invitation already exists.
+    const existingInvite = await WorkspaceInvite.findOne({
+      workspaceId,
+      email: email.toLowerCase(),
+      status: 'pending',
+      expiresAt: { $gt: new Date() },
+    });
+    if (existingInvite) {
+      throw new ConflictError(
+        'You have already sent an invitation to this user.',
+        'INVITATION_ALREADY_PENDING',
       );
     }
 
@@ -468,51 +466,50 @@ class WorkspaceService {
       }
     }
 
-    // Check if user exists and already in workspace
-    const existingUser = await ChatUser.findOne({ email: email.toLowerCase() }).lean();
-    if (existingUser) {
-      const isMember = await workspaceRepository.isMember(existingUser._id, workspaceId);
-      if (isMember) {
-        throw new BadRequestError('This user is already a member of this workspace.');
-      }
-      // User exists but not in workspace — add directly
-      const membership = await workspaceRepository.addMember(existingUser._id, workspaceId, role, invitedBy);
-      
-      // Auto-join channels for existing users
+    // 5. If Enterprise plan: Skip member limit validation entirely.
+    if (workspace.plan !== 'enterprise') {
+      const planConfig = WORKSPACE_LIMITS[workspace.plan] || WORKSPACE_LIMITS.free;
+
+      // Check guest access / limits if inviteType is guest
       if (inviteType === 'guest') {
-        await this._joinSpecificChannels(existingUser._id, channels, workspaceId);
+        if (!planConfig.features.guestAccess) {
+          throw new ForbiddenError(`Guest invites are not available on the ${workspace.plan} plan.`);
+        }
+
+        // Check guest count limit
+        const maxGuests = workspace.settings?.guestSettings?.maxGuests ?? planConfig.maxGuests;
+        if (maxGuests >= 0) {
+          const { default: WorkspaceMembership } = await import('./WorkspaceMembership.model.js');
+          const guestCount = await WorkspaceMembership.countDocuments({
+            workspaceId,
+            role: WORKSPACE_ROLES.GUEST,
+            isActive: true,
+          });
+          if (guestCount >= maxGuests) {
+            throw new BadRequestError(
+              `Workspace has reached the guest limit (${maxGuests}) for the ${workspace.plan} plan.`,
+            );
+          }
+        }
       } else {
-        await this._autoJoinPublicChannels(existingUser._id, workspaceId);
+        // Check plan member limits
+        const currentCount = await workspaceRepository.countMembers(workspaceId);
+        const limit = planConfig.maxMembers;
+        if (limit > 0 && currentCount >= limit) {
+          throw new BadRequestError(
+            `Workspace has reached the member limit (${limit}) for the ${workspace.plan} plan.`,
+          );
+        }
       }
-
-      try {
-        await emailService.sendWorkspaceInviteEmail(
-          email,
-          workspace.name,
-          (await ChatUser.findById(invitedBy).lean())?.name || 'A team member',
-          null, // No token needed — user already exists
-        );
-      } catch (emailErr) {
-        // Email failure for existing user is non-critical (user is already added to workspace)
-        logger.warn(`Notification email failed for existing user ${email}`, { error: emailErr.message });
-      }
-      logger.info(`Existing user ${email} added to workspace ${workspace.slug}`);
-      return { type: 'direct_add', membership };
     }
 
-    // Check for existing pending invite
-    const existingInvite = await WorkspaceInvite.findOne({
-      workspaceId,
-      email: email.toLowerCase(),
-      status: 'pending',
-      expiresAt: { $gt: new Date() },
-    });
-    if (existingInvite) {
-      throw new ConflictError(
-        'You have already sent an invitation to this user.',
-        'INVITATION_ALREADY_PENDING',
-      );
-    }
+    // Filter DM/group_dm channels from the channels list before storing
+    const filteredChannels = channels.length > 0
+      ? await this._filterNonDMChannels(channels, workspaceId)
+      : [];
+
+    // Generate token and hash upfront — only the hash is stored in DB
+    const { token: plainToken, tokenHash } = WorkspaceInvite.generateTokenPair();
 
     // Create invite record
     const invite = await WorkspaceInvite.create({
@@ -521,20 +518,21 @@ class WorkspaceService {
       role,
       inviteType,
       invitedBy,
-      channels: channels || [],
+      channels: filteredChannels,
+      tokenHash,
     });
 
     // Get inviter name
     const inviter = await ChatUser.findById(invitedBy).lean();
     const inviterName = inviter?.name || 'A team member';
 
-    // Send invite email with plain token
+    // Send invite email with plain token (never stored in DB)
     try {
       await emailService.sendWorkspaceInviteEmail(
         email,
         workspace.name,
         inviterName,
-        invite.token,
+        plainToken,
       );
     } catch (emailErr) {
       // Email failed — mark invite as email_failed so it doesn't appear as pending
@@ -543,8 +541,8 @@ class WorkspaceService {
       throw new Error(`Invitation created but email delivery failed: ${emailErr.message}`);
     }
 
-    // Fire audit log
-    auditLogService.logInviteCreated(invite, invitedBy, inviterName, workspaceId);
+    // Non-blocking audit log — never fails the invitation flow
+    this._safeAudit(() => auditLogService.logInviteCreated(invite, invitedBy, inviterName, workspaceId));
 
     // Emit socket event
     try {
@@ -604,20 +602,28 @@ class WorkspaceService {
 
     // Check plan limits
     const workspace = invite.workspaceId;
-    const currentCount = await workspaceRepository.countMembers(workspace._id);
-    const planConfig = WORKSPACE_LIMITS[workspace.plan] || WORKSPACE_LIMITS.free;
-    const limit = planConfig.maxMembers;
-    if (limit > 0 && currentCount >= limit) {
-      throw new BadRequestError(
-        `Workspace has reached the member limit (${limit}) for the ${workspace.plan} plan.`,
-      );
+    if (workspace.plan !== 'enterprise') {
+      const currentCount = await workspaceRepository.countMembers(workspace._id);
+      const planConfig = WORKSPACE_LIMITS[workspace.plan] || WORKSPACE_LIMITS.free;
+      const limit = planConfig.maxMembers;
+      if (limit > 0 && currentCount >= limit) {
+        throw new BadRequestError(
+          `Workspace has reached the member limit (${limit}) for the ${workspace.plan} plan.`,
+        );
+      }
     }
 
     // Check if already a member
     const isMember = await workspaceRepository.isMember(userId, workspace._id);
     if (isMember) {
       await WorkspaceInvite.markAccepted(token, userId);
-      return { workspace, workspaceId: workspace._id.toString(), alreadyMember: true };
+      return {
+        workspace,
+        workspaceId: workspace._id.toString(),
+        workspaceSlug: workspace.slug,
+        redirectTo: `/workspace/${workspace._id}`,
+        alreadyMember: true,
+      };
     }
 
     // Add as member with the invite's role
@@ -631,8 +637,8 @@ class WorkspaceService {
       await this._autoJoinPublicChannels(userId, workspace._id);
     }
 
-    // Fire audit log
-    auditLogService.logInviteAccepted(invite._id, userId, workspace._id);
+    // Non-blocking audit log — never fails the invitation flow
+    this._safeAudit(() => auditLogService.logInviteAccepted(invite._id, userId, workspace._id));
 
     // Emit socket event
     try {
@@ -645,7 +651,14 @@ class WorkspaceService {
     }
 
     logger.info(`User ${userId} accepted invite to workspace ${workspace.slug}`);
-    return { workspace, workspaceId: workspace._id.toString(), membership, alreadyMember: false };
+    return {
+      workspace,
+      workspaceId: workspace._id.toString(),
+      workspaceSlug: workspace.slug,
+      redirectTo: `/workspace/${workspace._id}`,
+      membership,
+      alreadyMember: false,
+    };
   }
 
   /**
@@ -715,8 +728,8 @@ class WorkspaceService {
       throw new Error(`Resend failed — email delivery error: ${emailErr.message}`);
     }
 
-    // Fire audit log
-    auditLogService.logInviteResent(inviteId, requesterId, inviterName, workspaceId);
+    // Non-blocking audit log — never fails the invitation flow
+    this._safeAudit(() => auditLogService.logInviteResent(inviteId, requesterId, inviterName, workspaceId));
 
     // Emit socket event
     try {
@@ -754,8 +767,8 @@ class WorkspaceService {
       throw new NotFoundError('Invite not found or already used.');
     }
 
-    // Fire audit log
-    auditLogService.logInviteRevoked(inviteId, revokedBy, 'Admin', workspaceId);
+    // Non-blocking audit log — never fails the invitation flow
+    this._safeAudit(() => auditLogService.logInviteRevoked(inviteId, revokedBy, 'Admin', workspaceId));
 
     // Emit socket event
     try {
@@ -1072,6 +1085,51 @@ class WorkspaceService {
     logger.info(`User ${userId} left workspace ${workspaceId}`);
 
     return { message: 'Left workspace successfully.' };
+  }
+
+  // ─── Enterprise Invite Helpers ───────────────────────────────────────────
+
+  /**
+   * Fire a synchronous audit log without breaking the calling flow.
+   * Audit failures are caught, logged, and swallowed — never thrown.
+   * @param {Function} auditFn - Function that calls auditLogService
+   * @private
+   */
+  _safeAudit(auditFn) {
+    try {
+      auditFn();
+    } catch (err) {
+      logger.warn('AuditLog: non-blocking audit failed (swallowed)', {
+        error: err.message,
+      });
+    }
+  }
+
+  /**
+   * Filter out DM and group DM channels from a list of channel IDs.
+   * Only returns channels where type is NOT 'dm' and NOT 'group_dm'.
+   * @param {string[]} channelIds - Array of channel ObjectId strings
+   * @param {string} workspaceId - Workspace ObjectId string
+   * @returns {Promise<string[]>} Filtered channel IDs
+   * @private
+   */
+  async _filterNonDMChannels(channelIds, workspaceId) {
+    if (!channelIds || channelIds.length === 0) return [];
+
+    try {
+      const { default: Channel } = await import('../channels/Channel.model.js');
+      const channels = await Channel.find({
+        _id: { $in: channelIds },
+        workspaceId,
+        type: { $nin: ['dm', 'group_dm'] },
+      }).select('_id').lean();
+
+      return channels.map(ch => ch._id.toString());
+    } catch (err) {
+      logger.error('[INVITE] Failed to filter DM channels', { error: err.message });
+      // Fallback: return original list if filtering fails (non-critical)
+      return channelIds;
+    }
   }
 }
 

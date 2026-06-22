@@ -14,6 +14,7 @@ import CanvasHeader from "../header/CanvasHeader";
 import CanvasShareModal from "../CanvasShareModal";
 import CanvasDetailsModal from "../details/CanvasDetailsModal";
 import toast from "react-hot-toast";
+import { useChannelStore } from "../../../stores/channelStore";
 import { useCanvasPermissions, PERMISSION_TOAST_MESSAGE } from "../permissions/useCanvasPermissions";
 import { useCanvasFileUpload } from "../overlays/CanvasFileUpload";
 import { useCanvasMediaRecorder } from "../overlays/CanvasMediaRecorder";
@@ -80,8 +81,13 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
   });
 
   // ── Permissions ────────────────────────────────────────────────────────
-  const { isViewOnly, canvasRole, permissionToastShownRef } = useCanvasPermissions(
+  // Resolve channel from canvas store for permission context
+  const channel = useChannelStore((s) =>
+    canvas?.channelId ? s.channels.find((c) => c._id === canvas.channelId) : null
+  );
+  const { isViewOnly, canvasRole, canEdit, canDelete, canShare, canComment, canManagePermissions, permissionToastShownRef } = useCanvasPermissions(
     canvas,
+    channel,
     editor,
     viewingVersion,
   );

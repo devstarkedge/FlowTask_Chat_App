@@ -1,15 +1,19 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useMemo, useCallback } from "react";
 import { useAuthStore } from "../../../stores/authStore";
 import toast from "react-hot-toast";
 
+// ── Toast Throttling ──────────────────────────────────────────────────────────
 export const PERMISSION_TOAST_MESSAGE =
   "You do not have permission to edit this canvas.";
 
-/** Last time a permission toast was shown (module-level for global throttling). */
 let lastPermissionToastTime = 0;
 const PERMISSION_TOAST_COOLDOWN_MS = 3000;
 
-/** Show a throttled permission-denied toast (at most once every 3 seconds globally). */
+/**
+ * Show a throttled permission-denied toast (at most once every 3 seconds globally).
+ * Only fires when user ATTEMPTS an action (typing, deleting, formatting, uploading).
+ * Does NOT fire on initial load.
+ */
 export function showPermissionToast() {
   const now = Date.now();
   if (now - lastPermissionToastTime < PERMISSION_TOAST_COOLDOWN_MS) return;
@@ -17,109 +21,227 @@ export function showPermissionToast() {
   toast.error(PERMISSION_TOAST_MESSAGE, { duration: 3000 });
 }
 
-// ── Pure Permission Helpers ──────────────────────────────────────────────────────
-
-/**
- * Extract a user ID string from a field that may be a populated
- * object `{ _id, name, avatar }` or a plain ObjectId / string.
- */
-export function extractUserId(field) {
+// ── Helper ────────────────────────────────────────────────────────────────────
+function extractUserId(field) {
   if (!field) return null;
   if (typeof field === "object" && field._id) return field._id.toString();
   return field.toString();
 }
 
-/**
- * Determine the current user's role on a canvas.
- * Priority: owner > editor > viewer > null (no access).
- */
-export function getCanvasRole(canvas) {
-  if (!canvas) return null;
-  const currentUser = useAuthStore.getState().user;
-  if (!currentUser) return null;
-  const userId = currentUser._id?.toString();
-  if (!userId) return null;
+function isChannelPublic(channel) {
+  if (!channel) return false;
+  return (
+    channel.visibility === "public" ||
+    channel.type === "public" ||
+    (!channel.visibility && channel.type !== "private" && channel.type !== "dm")
+  );
+}
 
-  // 1. Owner — full access, overrides ALL share settings
-  const createdById = extractUserId(canvas.createdBy);
-  if (createdById === userId) return "owner";
+// ── CENTRALIZED PERMISSION RESOLVER ───────────────────────────────────────────
+// SINGLE SOURCE OF TRUTH for all canvas permission decisions on the frontend.
+// Every UI component MUST consume this.
+//
+// Resolution hierarchy:
+//   1. Canvas Owner → full access
+//   2. Channel Owner/Admin → edit access (but cannot delete)
+//   3. Public Channel Member → edit access
+//   4. Private Channel Member with toggle ON → edit access
+//   5. Private Channel Member with toggle OFF → view-only
+//   6. Explicit share permissions → editor or viewer
+//   7. Non-member → no access
 
-  // 2. Editor — explicit editor permission via share settings
+export function getCanvasPermissions({
+  user,
+  canvas,
+  channel,
+  isChannelMember = false,
+  channelRole = null,
+}) {
+  // Default: no access
+  const result = {
+    canView: false,
+    canEdit: false,
+    canDelete: false,
+    canComment: false,
+    canShare: false,
+    canManagePermissions: false,
+    role: null,
+    isViewOnly: true,
+  };
+
+  if (!user || !canvas) return result;
+
+  const userId = extractUserId(user._id || user.id);
+  if (!userId) return result;
+
+  const ownerId = extractUserId(canvas.createdBy);
+  const isCanvasOwner = ownerId === userId;
+
+  // ── Canvas Owner ─────────────────────────────────────────────────────
+  if (isCanvasOwner) {
+    result.canView = true;
+    result.canEdit = true;
+    result.canDelete = true;
+    result.canComment = true;
+    result.canShare = true;
+    result.canManagePermissions = true;
+    result.role = "owner";
+    result.isViewOnly = false;
+    return result;
+  }
+
+  // ── Check explicit share permissions ────────────────────────────────
   const users = canvas.permissions?.users || [];
-  const userPerm = users.find((u) => u.userId?.toString() === userId);
-  if (userPerm && userPerm.role === "editor") return "editor";
+  const userPerm = users.find((u) => extractUserId(u.userId) === userId);
+  const hasEditorPerm = userPerm?.role === "editor";
+  const hasViewerPerm = userPerm?.role === "viewer";
 
-  // 3. Editor — via accessLevel "edit" (channel members can edit)
-  if (canvas.permissions?.accessLevel === "edit") return "editor";
-
-  // 4. Viewer — explicit viewer permission via share settings
-  if (userPerm && userPerm.role === "viewer") return "viewer";
-
-  // 5. Viewer — legacy allowedUserIds
+  // Legacy allowedUserIds
   const legacyIds = canvas.permissions?.allowedUserIds || [];
-  if (legacyIds.some((id) => id.toString() === userId)) return "viewer";
+  const hasLegacyAccess = legacyIds.some((id) => extractUserId(id) === userId);
 
-  // 6. Viewer — via accessLevel "view" (channel members can view)
-  if (canvas.permissions?.accessLevel === "view") return "viewer";
+  // ── No channel context → fall back to explicit permissions only ──────
+  if (!channel) {
+    if (hasEditorPerm) {
+      result.canView = true;
+      result.canEdit = true;
+      result.canComment = true;
+      result.canShare = true;
+      result.role = "editor";
+      result.isViewOnly = false;
+      return result;
+    }
+    if (hasViewerPerm || hasLegacyAccess) {
+      result.canView = true;
+      result.canEdit = false;
+      result.canComment = true;
+      result.role = "viewer";
+      result.isViewOnly = true;
+      return result;
+    }
+    return result;
+  }
 
-  // 7. Viewer — via visibility "channel" or "workspace"
-  const visibility = canvas.permissions?.visibility || "channel";
-  if (visibility === "channel" || visibility === "workspace") return "viewer";
+  // ── Non-member ───────────────────────────────────────────────────────
+  if (!isChannelMember && !hasEditorPerm && !hasViewerPerm && !hasLegacyAccess) {
+    return result;
+  }
 
-  // 8. No access — "invite_only" with no explicit permission
-  return null;
+  // ── Channel Owner/Admin ──────────────────────────────────────────────
+  if (channelRole === "owner" || channelRole === "admin") {
+    result.canView = true;
+    result.canEdit = true;
+    result.canDelete = false;
+    result.canComment = true;
+    result.canShare = true;
+    result.canManagePermissions = true;
+    result.role = "editor";
+    result.isViewOnly = false;
+    return result;
+  }
+
+  // ── Public Channel ───────────────────────────────────────────────────
+  if (isChannelPublic(channel)) {
+    result.canView = true;
+    result.canEdit = true;
+    result.canComment = true;
+    result.canShare = true;
+    result.role = "editor";
+    result.isViewOnly = false;
+    return result;
+  }
+
+  // ── Private Channel ──────────────────────────────────────────────────
+  const allowEdit = channel.allowAllMembersEditCanvas !== false;
+
+  if (allowEdit) {
+    result.canView = true;
+    result.canEdit = true;
+    result.canComment = true;
+    result.canShare = true;
+    result.role = "editor";
+    result.isViewOnly = false;
+    return result;
+  }
+
+  // Toggle OFF
+  result.canView = true;
+  result.canEdit = false;
+  result.canComment = true;
+  result.role = "viewer";
+  result.isViewOnly = true;
+  return result;
 }
 
-/** Whether the current user may edit the canvas content. */
-export function canEditCanvas(canvas) {
-  const role = getCanvasRole(canvas);
-  return role === "owner" || role === "editor";
-}
-
-/** Whether the current user may delete the canvas (owner only). */
-export function canDeleteCanvas(canvas) {
-  const role = getCanvasRole(canvas);
-  return role === "owner";
-}
-
-// ── Permission Enforcement Hook ──────────────────────────────────────────────────
+// ── REACT HOOK ─────────────────────────────────────────────────────────────────
 
 /**
- * Manages read-only enforcement for a canvas editor.
+ * useCanvasPermissions — Centralized permission hook for all canvas areas.
  *
- * Responsibilities:
- *  1. Sets `editor.setEditable(false)` for viewers / historical versions.
- *  2. Shows a one-time toast when the user lacks edit permission.
- *  3. Blocks keydown / paste / drop / input events at the DOM level.
+ * Resolves permissions using the single source of truth (getCanvasPermissions).
  *
- * @param {Object}  canvas          - The canvas document (from store / props).
- * @param {Editor|null} editor      - TipTap editor instance.
- * @param {boolean} viewingVersion  - Whether the user is viewing a historical version.
- * @returns {{ isViewOnly: boolean, canvasRole: string|null }}
+ * @param {Object}  canvas           - Canvas document
+ * @param {Object}  [channel]        - Channel document (optional, fetched if not provided)
+ * @param {Object}  [editor]         - TipTap editor instance (for read-only mode)
+ * @param {boolean} [viewingVersion] - Whether viewing a historical version
+ * @param {boolean} [isChannelMember]- Whether user is a channel member
+ * @param {string}  [channelRole]    - User's channel role
+ * @returns {{
+ *   canView: boolean,
+ *   canEdit: boolean,
+ *   canDelete: boolean,
+ *   canComment: boolean,
+ *   canShare: boolean,
+ *   canManagePermissions: boolean,
+ *   role: string|null,
+ *   isViewOnly: boolean,
+ *   permissionToastShownRef: React.MutableRefObject<boolean>,
+ *   PERMISSION_TOAST_MESSAGE: string,
+ * }}
  */
-export function useCanvasPermissions(canvas, editor, viewingVersion) {
-  const isViewOnly = !canEditCanvas(canvas);
-  const canvasRole = getCanvasRole(canvas);
+export function useCanvasPermissions(
+  canvas,
+  channel = null,
+  editor = null,
+  viewingVersion = false,
+  isChannelMember = false,
+  channelRole = null,
+) {
+  const user = useAuthStore((s) => s.user);
+
+  // Resolve permissions using the centralized pure function
+  const permissions = useMemo(
+    () =>
+      getCanvasPermissions({
+        user,
+        canvas,
+        channel,
+        isChannelMember,
+        channelRole,
+      }),
+    [user, canvas, channel, isChannelMember, channelRole],
+  );
+
   const permissionToastShownRef = useRef(false);
 
-  // ── 1. Editor editable state (no auto-toast on init) ──────────────────────────
+  // ── 1. Editor editable state ──────────────────────────────────────────────
   useEffect(() => {
     if (!editor) return;
-    if (isViewOnly) {
+    if (permissions.isViewOnly) {
       editor.setEditable(false);
     } else if (!viewingVersion) {
       editor.setEditable(true);
     }
-  }, [editor, isViewOnly, viewingVersion]);
+  }, [editor, permissions.isViewOnly, viewingVersion]);
 
-  // Reset toast flag when canvas changes so it fires once per canvas.
+  // Reset toast flag when canvas changes
   useEffect(() => {
     permissionToastShownRef.current = false;
   }, [canvas?._id]);
 
-  // ── 2. DOM-level event blocking ────────────────────────────────────────────────
+  // ── 2. DOM-level event blocking (only blocks on EDIT ATTEMPTS, not on load) ─┈
   useEffect(() => {
-    if (!editor || !isViewOnly) return;
+    if (!editor || !permissions.isViewOnly) return;
     const dom = editor.view?.dom;
     if (!dom) return;
 
@@ -128,11 +250,19 @@ export function useCanvasPermissions(canvas, editor, viewingVersion) {
       if (e.key === "Tab") return;
       // Allow Ctrl+C / Cmd+C for copy
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") return;
+      // Allow navigation keys
+      const navKeys = [
+        "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+        "Home", "End", "PageUp", "PageDown",
+        "Control", "Shift", "Alt", "Meta",
+      ];
+      if (navKeys.includes(e.key)) return;
+
       e.preventDefault();
       e.stopPropagation();
       if (!permissionToastShownRef.current) {
         permissionToastShownRef.current = true;
-        toast.error(PERMISSION_TOAST_MESSAGE, { duration: 3000 });
+        showPermissionToast();
       }
     };
 
@@ -151,11 +281,10 @@ export function useCanvasPermissions(canvas, editor, viewingVersion) {
       dom.removeEventListener("drop", blockEvent, true);
       dom.removeEventListener("input", blockEvent, true);
     };
-  }, [editor, isViewOnly]);
+  }, [editor, permissions.isViewOnly]);
 
   return {
-    isViewOnly,
-    canvasRole,
+    ...permissions,
     permissionToastShownRef,
     PERMISSION_TOAST_MESSAGE,
   };

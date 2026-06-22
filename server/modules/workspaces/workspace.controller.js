@@ -164,8 +164,21 @@ export const revokeInvite = asyncHandler(async (req, res) => {
 });
 
 export const getInviteInfo = asyncHandler(async (req, res) => {
-  const info = await workspaceService.getInviteInfoByToken(req.params.token);
-  res.json({ success: true, data: info });
+  try {
+    const info = await workspaceService.getInviteInfoByToken(req.params.token);
+    res.json({ success: true, data: info });
+  } catch (err) {
+    // Ensure consistent error response for failed invite lookups
+    const statusCode = err.statusCode || 404;
+    const message = err.message || 'Invalid or expired invite.';
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        message,
+        code: 'INVITE_NOT_FOUND',
+      },
+    });
+  }
 });
 
 // ─── Workspace Settings ─────────────────────────────────────────────────────────────

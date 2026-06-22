@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import {
   Link2,
   Share2,
@@ -17,6 +17,8 @@ import {
 import toast from "react-hot-toast";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { useCanvasUiStore } from "../../stores/canvasUiStore";
+import { getCanvasPermissions } from "../canvas/permissions/useCanvasPermissions";
+import { useAuthStore } from "../../stores/authStore";
 
 const FONT_FAMILIES = [
   { label: "System UI", value: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" },

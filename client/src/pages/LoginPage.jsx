@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "../stores/authStore";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import {
   Eye,
   EyeOff,
@@ -116,8 +116,11 @@ export default function LoginPage() {
     error,
     clearError,
     flowtaskEnabled,
+    user,
   } = useAuthStore();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const redirectTo = searchParams.get("redirect");
 
   const [activeTab, setActiveTab] = useState(
     flowtaskEnabled ? "flowtask" : "native",
@@ -129,6 +132,21 @@ export default function LoginPage() {
   const [autoLoginAttempted, setAutoLoginAttempted] = useState(false);
   const [autoLoginInProgress, setAutoLoginInProgress] = useState(false);
 
+  /* ── Post-login redirect (handles ALL login paths: form, FlowTask SSO, already-authenticated) ── */
+  useEffect(() => {
+    if (!user) return;
+    // User is authenticated — check for pending invite or explicit redirect
+    const pendingInvite = sessionStorage.getItem("pendingInviteToken");
+    if (pendingInvite) {
+      sessionStorage.removeItem("pendingInviteToken");
+      navigate(`/invite/${pendingInvite}`, { replace: true });
+    } else if (redirectTo) {
+      navigate(redirectTo, { replace: true });
+    } else {
+      navigate("/select-workspace", { replace: true });
+    }
+  }, [user, navigate, redirectTo]);
+
   /* ── auto-login from FlowTask redirect ── */
   useEffect(() => {
     if (autoLoginAttempted) return;
@@ -138,7 +156,10 @@ export default function LoginPage() {
       setAutoLoginAttempted(true);
       setAutoLoginInProgress(true);
       loginFlowTask(token)
-        .then(() => toast.success("Welcome from FlowTask!"))
+        .then(() => {
+          toast.success("Welcome from FlowTask!");
+          // Redirect handled by the user-watch useEffect above
+        })
         .catch(() => {
           toast.error("FlowTask auto-login failed. Please try again.");
           setAutoLoginInProgress(false);
@@ -172,6 +193,7 @@ export default function LoginPage() {
     try {
       await loginNative({ email, password });
       toast.success("Welcome back!");
+      // Redirect handled by the user-watch useEffect above
     } catch {
       /* error in store */
     }
@@ -187,6 +209,7 @@ export default function LoginPage() {
     try {
       await loginFlowTask(flowtaskToken.trim());
       toast.success("FlowTask login successful!");
+      // Redirect handled by the user-watch useEffect above
     } catch {
       /* error in store */
     }

@@ -134,6 +134,11 @@ export const useChatStore = create((set, get) => ({
   scrollToMessageId: null,
   setScrollToMessageId: (id) => set({ scrollToMessageId: id }),
 
+  // Delete confirmation highlight — persists until modal closes
+  messageIdToDelete: null,
+  setMessageIdToDelete: (id) => set({ messageIdToDelete: id }),
+  clearMessageIdToDelete: () => set({ messageIdToDelete: null }),
+
   // Pinned messages keyed by channelId
   pinnedMessagesByChannel: {},
   isLoadingPins: false,

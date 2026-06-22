@@ -531,7 +531,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     const submitThreadId = threadId;
     const submitHtml = html || undefined;
     const submitText = text.trim() || " ";
-    const submitMentions = (mentions || []).map((m) => m.userId || m.id || m);
+    const submitMentions = mentions || [];
     const submitFileReferences = pendingFiles.map((f) => f._id);
 
     // Cancel any pending debounced draft saves immediately

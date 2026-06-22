@@ -14,6 +14,8 @@ import {
   ForbiddenError,
 } from "../../middleware/errorHandler.js";
 import { MENTION_TYPES } from "../../config/constants.js";
+import canvasPermissionService from "./canvasPermission.service.js";
+import Channel from "../channels/Channel.model.js";
 
 class CanvasService {
   normalizeContent(content) {

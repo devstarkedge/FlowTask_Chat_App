@@ -82,12 +82,12 @@ export const SIDEBAR_THEME_PRESETS = [
       accentColor: '#3f7fbf',
     },
   },
-  {
-    id: 'custom',
-    name: 'Custom',
-    description: 'Your palette',
-    colors: null,
-  },
+  // {
+  //   id: 'custom',
+  //   name: 'Custom',
+  //   description: 'Your palette',
+  //   colors: null,
+  // },
 ]
 
 export const DEFAULT_APPEARANCE = {

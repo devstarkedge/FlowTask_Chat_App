@@ -388,6 +388,9 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
     removeReaction,
     editThreadReply,
     deleteThreadReply,
+    messageIdToDelete,
+    setMessageIdToDelete,
+    clearMessageIdToDelete,
   } = useChatStore();
   const { toggleSaveMessage } = useLaterStore();
   const isSaved = useLaterStore((s) => s.savedMessageIds.has(message._id));
@@ -547,11 +550,23 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
     !isPending &&
     !isFailed;
 
+  const isDeleteTarget = messageIdToDelete === message._id;
+
   return (
     <div
       ref={containerRef}
       className={`thread-message thread-message--interactive${isRoot ? " thread-message--root" : ""}`}
-      style={{ background: showActions ? "var(--bg-hover)" : "transparent" }}
+      style={{
+        background: isDeleteTarget
+          ? "var(--bg-danger, rgba(239, 68, 68, 0.08))"
+          : showActions
+            ? "var(--bg-hover)"
+            : "transparent",
+        border: isDeleteTarget
+          ? "1px solid var(--border-danger, rgba(239, 68, 68, 0.25))"
+          : "1px solid transparent",
+        transition: "background 150ms ease, border-color 150ms ease",
+      }}
       onMouseEnter={() => {
         if (!isDeleted && !isRoot) setShowActions(true);
       }}
@@ -758,10 +773,12 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
                 title="Delete message"
                 danger
                 onClick={async () => {
+                  setMessageIdToDelete(message._id);
                   const ok = await confirm({
                     title: "Delete reply",
                     message: "This reply will be permanently removed.",
                   });
+                  clearMessageIdToDelete();
                   if (ok) deleteThreadReply(message._id);
                 }}
               />

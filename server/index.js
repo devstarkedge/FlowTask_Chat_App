@@ -220,6 +220,7 @@ app.get('/api/chat/debug/env', (req, res) => {
     timestamp: new Date().toISOString(),
     config: {
       BASE_URL: env.BASE_URL || '(not set)',
+      CLIENT_URL: env.CLIENT_URL || '(not set)',
       PORT: env.PORT,
       FLOWTASK_ENABLED: env.FLOWTASK_ENABLED,
       FLOWTASK_API_URL: env.FLOWTASK_API_URL || '(not set)',

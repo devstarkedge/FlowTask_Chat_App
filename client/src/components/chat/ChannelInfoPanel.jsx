@@ -87,7 +87,8 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
   const isSystemManagedProject =
     channel.type === "project" && channel.systemManaged;
   const isPrivate =
-    channel.visibility === "private" || channel.type === "private";
+    channel.visibility === "private" ||
+    (channel.visibility == null && channel.type === "private");
   const canManageMembership =
     isAdmin && !isDM && !isSystem && !isSystemManagedProject;
   const isLastOwner = isOwner && (isResolvingMembers || ownerCount <= 1)
@@ -195,7 +196,7 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
                       textTransform: "capitalize",
                     }}
                   >
-                    {channel.type} channel
+                    {channel.visibility || channel.type} channel
                   </span>
                 )}
               </div>

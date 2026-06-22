@@ -224,7 +224,7 @@ export default function ChatHeader({
 
   const isPrivate =
     channel.visibility?.toLowerCase() === "private" ||
-    channel.type?.toLowerCase() === "private" ||
+    (channel.visibility !== "public" && channel.type?.toLowerCase() === "private") ||
     channel.isPrivate;
 
   const members = membersByChannel[channel._id] || [];

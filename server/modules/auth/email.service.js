@@ -102,31 +102,47 @@ class EmailService {
 
   /**
    * Send workspace invite email.
+   * Uses table-based button for maximum email-client compatibility (iOS Mail, Outlook, Gmail).
    * @param {string} email - Recipient email
    * @param {string} workspaceName - Name of the workspace
    * @param {string} inviterName - Name of the person who invited
    * @param {string|null} token - Invite token (null if user already exists)
    */
   async sendWorkspaceInviteEmail(email, workspaceName, inviterName, token) {
-    const clientBaseUrl = Array.isArray(env.CORS_ORIGINS) ? env.CORS_ORIGINS[0] : env.CORS_ORIGINS;
     const actionUrl = token
-      ? `${clientBaseUrl}/invite/${token}`
-      : `${clientBaseUrl}/login`;
+      ? `${env.CLIENT_URL}/invite/${token}`
+      : `${env.CLIENT_URL}/login`;
     const actionText = token ? 'Accept Invite' : 'Sign In';
 
     await this.send({
       to: email,
       subject: `${inviterName} invited you to ${workspaceName} on ${env.APP_NAME}`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; max-width: 500px; margin: 0 auto; color: #333;">
           <h2>You're invited to ${workspaceName}!</h2>
           <p>${inviterName} has invited you to join the <strong>${workspaceName}</strong> workspace on ${env.APP_NAME}.</p>
-          <p style="text-align: center; margin: 30px 0;">
-            <a href="${actionUrl}" 
-               style="background: #4F46E5; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
-              ${actionText}
-            </a>
-          </p>
+
+          <!-- Table-based button: works in iOS Mail, Outlook, Gmail, Apple Mail -->
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 30px auto;">
+            <tr>
+              <td style="border-radius: 6px; background-color: #4F46E5;">
+                <!--[if mso]>
+                <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${actionUrl}" style="height:44px;v-text-anchor:middle;width:200px;" arcsize="14%" stroke="f" fillcolor="#4F46E5">
+                <w:anchorlock/>
+                <center>
+                <![endif]-->
+                <a href="${actionUrl}"
+                   style="display: inline-block; background-color: #4F46E5; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 16px; mso-padding-alt: 0; text-align: center;">
+                  ${actionText}
+                </a>
+                <!--[if mso]>
+                </center>
+                </v:roundrect>
+                <![endif]-->
+              </td>
+            </tr>
+          </table>
+
           <p style="color: #666; font-size: 14px;">
             Or copy this link: <br/>
             <a href="${actionUrl}">${actionUrl}</a>
@@ -145,9 +161,7 @@ class EmailService {
    * @param {string} token - Reset token
    */
   async sendPasswordResetEmail(email, name, token) {
-    // Client-side route handles the actual reset form
-    const clientBaseUrl = Array.isArray(env.CORS_ORIGINS) ? env.CORS_ORIGINS[0] : env.CORS_ORIGINS;
-    const resetUrl = `${clientBaseUrl}/reset-password/${token}`;
+    const resetUrl = `${env.CLIENT_URL}/reset-password/${token}`;
 
     await this.send({
       to: email,

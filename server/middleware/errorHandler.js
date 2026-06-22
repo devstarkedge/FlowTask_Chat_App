@@ -42,8 +42,8 @@ export class ValidationError extends AppError {
 }
 
 export class ConflictError extends AppError {
-  constructor(message = 'Resource conflict') {
-    super(message, 409, 'CONFLICT');
+  constructor(message = 'Resource conflict', code = 'CONFLICT') {
+    super(message, 409, code);
   }
 }
 

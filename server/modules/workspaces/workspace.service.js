@@ -4,7 +4,7 @@ import workspaceRepository from './workspace.repository.js';
 import { WORKSPACE_ROLES, WORKSPACE_LIMITS, DEFAULT_CHANNELS, CHANNEL_VISIBILITY, CHANNEL_MEMBER_ROLES } from '../../config/constants.js';
 import env from '../../config/environment.js';
 import logger from '../../utils/logger.js';
-import { BadRequestError, NotFoundError, ForbiddenError } from '../../middleware/errorHandler.js';
+import { BadRequestError, NotFoundError, ForbiddenError, ConflictError } from '../../middleware/errorHandler.js';
 
 /**
  * Workspace Service — business logic for workspace management.
@@ -503,7 +503,10 @@ class WorkspaceService {
       expiresAt: { $gt: new Date() },
     });
     if (existingInvite) {
-      throw new BadRequestError('An invite is already pending for this email.');
+      throw new ConflictError(
+        'You have already sent an invitation to this user.',
+        'INVITATION_ALREADY_PENDING',
+      );
     }
 
     // Create invite record
@@ -602,7 +605,7 @@ class WorkspaceService {
     const isMember = await workspaceRepository.isMember(userId, workspace._id);
     if (isMember) {
       await WorkspaceInvite.markAccepted(token, userId);
-      return { workspace, alreadyMember: true };
+      return { workspace, workspaceId: workspace._id.toString(), alreadyMember: true };
     }
 
     // Add as member with the invite's role
@@ -630,7 +633,7 @@ class WorkspaceService {
     }
 
     logger.info(`User ${userId} accepted invite to workspace ${workspace.slug}`);
-    return { workspace, membership, alreadyMember: false };
+    return { workspace, workspaceId: workspace._id.toString(), membership, alreadyMember: false };
   }
 
   /**

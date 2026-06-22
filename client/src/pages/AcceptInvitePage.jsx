@@ -98,16 +98,19 @@ export default function AcceptInvitePage() {
       setSuccess(true);
       toast.success(`Welcome to ${inviteInfo.workspaceName}!`);
 
-      // Refresh workspaces and switch to the new one
+      // Determine the workspace ID from multiple sources for robustness
+      const workspaceId = data.workspaceId
+        || data.workspace?._id
+        || inviteInfo?.workspaceId;
+
+      // Refresh workspaces list, then switch to the invited workspace
       await fetchWorkspaces();
-      if (data.workspace?._id || data.workspaceId) {
-        const workspaceId = data.workspace?._id || data.workspaceId;
-        setTimeout(() => {
-          switchWorkspace(workspaceId);
-          navigate(`/workspace/${workspaceId}`);
-        }, 1500);
+
+      if (workspaceId) {
+        await switchWorkspace(workspaceId);
+        navigate(`/workspace/${workspaceId}`);
       } else {
-        setTimeout(() => navigate("/select-workspace"), 1500);
+        navigate("/select-workspace");
       }
     } catch (err) {
       const message =

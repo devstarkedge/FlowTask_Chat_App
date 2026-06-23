@@ -34,10 +34,6 @@ export function EmojiComponent({ emoji, size = 16, className = '', style = {} })
  */
 export default EmojiComponent;
 
-/**
- * ReactionRenderer
- * Standardized component for rendering a reaction button with consistent emojis.
- */
 export function ReactionRenderer({ emoji, count, hasReacted, onClick }) {
   return (
     <button
@@ -46,17 +42,31 @@ export function ReactionRenderer({ emoji, count, hasReacted, onClick }) {
         onClick?.(emoji);
       }}
       title={`${emoji} ${count}`}
-      className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer transition-all reaction-renderer"
+      className="reaction-renderer"
       style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '4px',
+        padding: '3px 8px',
+        minHeight: '22px',
+        borderRadius: '20px',
+        fontSize: '11px',
+        fontWeight: hasReacted ? '600' : '500',
+        lineHeight: '1',
+        cursor: 'pointer',
+        transition: 'all 0.15s ease',
         background: hasReacted
-          ? "color-mix(in srgb, var(--accent-primary) 15%, transparent)"
-          : "var(--bg-hover)",
-        border: `1px solid ${hasReacted ? "var(--accent-primary)" : "var(--border-secondary)"}`,
-        color: hasReacted ? "var(--accent-primary)" : "var(--text-primary)",
+          ? "color-mix(in srgb, var(--accent-primary, var(--accent-color, #1264a3)) 12%, transparent)"
+          : "var(--bg-hover, rgba(255,255,255,0.05))",
+        border: `1px solid ${hasReacted ? "var(--accent-primary, var(--accent-color, #1264a3))" : "var(--border-secondary, rgba(255,255,255,0.12))"}`,
+        color: hasReacted ? "var(--accent-primary, var(--accent-color, #1264a3))" : "var(--text-primary, #d1d2d3)",
+        outline: 'none',
+        userSelect: 'none',
       }}
     >
-      <EmojiComponent emoji={emoji} size={14} /> 
-      <span style={{ fontWeight: hasReacted ? 600 : 500, fontSize: 11 }}>{count}</span>
+      <EmojiComponent emoji={emoji} size={13} /> 
+      <span style={{ fontSize: '11px', display: 'inline-block', color: 'inherit' }}>{count}</span>
     </button>
   );
 }

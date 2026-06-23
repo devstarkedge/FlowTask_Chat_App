@@ -833,15 +833,19 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
         {allPreviewFiles.length > 0 && (
           <div className="slack-input-previews">
             {allPreviewFiles.map((file) => {
-              const isImg = file.mimeType?.startsWith("image/");
-              const thumbSrc =
-                file.preview || file.thumbnailUrl || file.secureUrl || file.url;
+              const mime = file.mimeType || file.type || file.mimetype || file.contentType || "";
+              const isImg = mime.startsWith("image/");
+              
+              let thumbSrc = file.preview || file.thumbnailUrl || file.secureUrl || file.url;
+              if (thumbSrc === "/placeholder-loading") {
+                thumbSrc = null;
+              }
+              
               const name = file.name || file.originalName || file.fileName || "File";
               const lastDotIndex = name.lastIndexOf('.')
               const ext = lastDotIndex > -1 ? name.slice(lastDotIndex) : ''
               const key = file.localId || file._id || file.idx;
               const fileSize = file.size || file.fileSize || 0;
-              const mime = file.mimeType || file.type || "";
               const kind = getFileKind(mime, name);
 
               return (

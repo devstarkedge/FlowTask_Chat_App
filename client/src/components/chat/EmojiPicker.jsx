@@ -87,6 +87,7 @@ export default function EmojiPickerComponent({ onSelect, onClose }) {
             'activities',
             'objects',
             'symbols',
+            'flags',
           ]}
           defaultSkinTone="neutral"
         />

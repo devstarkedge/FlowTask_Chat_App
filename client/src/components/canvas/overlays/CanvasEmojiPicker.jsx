@@ -1,7 +1,5 @@
 import { useState, useCallback } from "react";
 import EmojiPickerPortal from "../../chat/EmojiPickerPortal";
-import toast from "react-hot-toast";
-import { PERMISSION_TOAST_MESSAGE } from "../permissions/useCanvasPermissions";
 
 /**
  * useCanvasEmojiPicker — manages emoji picker visibility and
@@ -14,15 +12,11 @@ export function useCanvasEmojiPicker({ editor, isViewOnly, emojiBtnRef }) {
 
   const handleEmojiSelect = useCallback(
     (emoji) => {
-      if (isViewOnly) {
-        toast.error(PERMISSION_TOAST_MESSAGE);
-        return;
-      }
       if (!editor) return;
       editor.chain().focus().insertContent(emoji).run();
       setShowEmojiPicker(false);
     },
-    [editor, isViewOnly],
+    [editor],
   );
 
   const toggleEmojiPicker = useCallback(() => {

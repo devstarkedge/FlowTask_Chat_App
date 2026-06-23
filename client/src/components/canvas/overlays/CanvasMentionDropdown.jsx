@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import MentionDropdown from "../../chat/MentionDropdown";
-import toast from "react-hot-toast";
-import { PERMISSION_TOAST_MESSAGE } from "../permissions/useCanvasPermissions";
 
 /**
  * CanvasMentionDropdown — handles mention detection (@ and # triggers),
@@ -67,10 +65,6 @@ export function useCanvasMentionDropdown({ editor, isViewOnly, channelId }) {
 
   const handleMentionSelect = useCallback(
     (item) => {
-      if (isViewOnly) {
-        toast.error(PERMISSION_TOAST_MESSAGE);
-        return;
-      }
       if (!editor) return;
       try {
         const { state } = editor;
@@ -113,13 +107,9 @@ export function useCanvasMentionDropdown({ editor, isViewOnly, channelId }) {
 
   // Mention from toolbar button
   const handleMentionFromToolbar = useCallback(() => {
-    if (isViewOnly) {
-      toast.error(PERMISSION_TOAST_MESSAGE);
-      return;
-    }
     if (!editor) return;
     editor.chain().focus().insertContent("@").run();
-  }, [editor, isViewOnly]);
+  }, [editor]);
 
   const MentionDropdownPortal =
     mentionType && typeof document !== "undefined"

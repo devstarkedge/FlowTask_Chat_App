@@ -14,8 +14,6 @@ import CanvasHeader from "../header/CanvasHeader";
 import CanvasShareModal from "../CanvasShareModal";
 import CanvasDetailsModal from "../details/CanvasDetailsModal";
 import toast from "react-hot-toast";
-import { useChannelStore } from "../../../stores/channelStore";
-import { useCanvasPermissions, PERMISSION_TOAST_MESSAGE } from "../permissions/useCanvasPermissions";
 import { useCanvasFileUpload } from "../overlays/CanvasFileUpload";
 import { useCanvasMediaRecorder } from "../overlays/CanvasMediaRecorder";
 import { useCanvasMentionDropdown } from "../overlays/CanvasMentionDropdown";
@@ -24,6 +22,7 @@ import "../styles/canvas-shell.css";
 import "../styles/canvas-editor.css";
 import "../styles/canvas-toolbar.css";
 import "../styles/canvas-cover.css";
+import "../styles/canvas-cover-tokens.css";
 import "../styles/canvas-sidebars.css";
 import "../styles/canvas-overlays.css";
 import "../styles/canvas-media.css";
@@ -80,17 +79,9 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
     ydoc,
   });
 
-  // ── Permissions ────────────────────────────────────────────────────────
-  // Resolve channel from canvas store for permission context
-  const channel = useChannelStore((s) =>
-    canvas?.channelId ? s.channels.find((c) => c._id === canvas.channelId) : null
-  );
-  const { isViewOnly, canvasRole, canEdit, canDelete, canShare, canComment, canManagePermissions, permissionToastShownRef } = useCanvasPermissions(
-    canvas,
-    channel,
-    editor,
-    viewingVersion,
-  );
+  // ── Canvas is always editable for authenticated users ──────────────────
+  const isViewOnly = false;
+  const canvasRole = "editor";
 
   // ── Toolbar visibility (memoized from editor state) ────────────────────
   const toolbarVisible = useMemo(() => {
@@ -125,10 +116,6 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
 
   // ── Insert Menu Handler (memoized) ─────────────────────────────────────
   const handleInsertMenuSelect = useCallback((id) => {
-    if (isViewOnly) {
-      toast.error(PERMISSION_TOAST_MESSAGE);
-      return;
-    }
     if (!editor) return;
 
     switch (id) {
@@ -266,8 +253,6 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
     <div className="canvas-editor-ui-shell">
       <CanvasHeader
         canvas={canvas}
-        isViewOnly={isViewOnly}
-        canvasRole={canvasRole}
         onBack={onBack}
         onOpenShareModal={handleOpenShareModal}
         tabs={tabs}
@@ -328,28 +313,26 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
       {RecorderOverlay}
 
       {/* Bottom toolbar + insert menu */}
-      {!isViewOnly && (
-        <CanvasBottomToolbar
-          editor={editor}
-          showBottomToolbar={toolbarVisible}
-          isInsertMenuOpen={isInsertMenuOpen}
-          onToggleInsertMenu={() => setIsInsertMenuOpen((v) => !v)}
-          onEmojiClick={toggleEmojiPicker}
-          onFileClick={() => triggerFileSelect("fileAttachment")}
-          onMentionClick={handleMentionFromToolbar}
-          emojiBtnRef={emojiBtnRef}
-          toggleBtnRef={toggleBtnRef}
-        >
-          {isInsertMenuOpen && (
-            <CanvasInsertMenu
-              editor={editor}
-              onSelect={handleInsertMenuSelect}
-              onClose={() => setIsInsertMenuOpen(false)}
-              triggerRef={toggleBtnRef}
-            />
-          )}
-        </CanvasBottomToolbar>
-      )}
+      <CanvasBottomToolbar
+        editor={editor}
+        showBottomToolbar={toolbarVisible}
+        isInsertMenuOpen={isInsertMenuOpen}
+        onToggleInsertMenu={() => setIsInsertMenuOpen((v) => !v)}
+        onEmojiClick={toggleEmojiPicker}
+        onFileClick={() => triggerFileSelect("fileAttachment")}
+        onMentionClick={handleMentionFromToolbar}
+        emojiBtnRef={emojiBtnRef}
+        toggleBtnRef={toggleBtnRef}
+      >
+        {isInsertMenuOpen && (
+          <CanvasInsertMenu
+            editor={editor}
+            onSelect={handleInsertMenuSelect}
+            onClose={() => setIsInsertMenuOpen(false)}
+            triggerRef={toggleBtnRef}
+          />
+        )}
+      </CanvasBottomToolbar>
 
       {EmojiPicker}
 

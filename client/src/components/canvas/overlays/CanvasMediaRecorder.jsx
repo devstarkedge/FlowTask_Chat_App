@@ -1,7 +1,5 @@
 import { useState, useRef, useCallback } from "react";
 import { Mic } from "lucide-react";
-import toast from "react-hot-toast";
-import { PERMISSION_TOAST_MESSAGE } from "../permissions/useCanvasPermissions";
 
 /**
  * CanvasMediaRecorder — self-contained component that manages video/audio
@@ -21,10 +19,6 @@ export function useCanvasMediaRecorder({ isViewOnly, onInsertMedia }) {
 
   const startRecording = useCallback(
     async (type) => {
-      if (isViewOnly) {
-        toast.error(PERMISSION_TOAST_MESSAGE);
-        return;
-      }
       setRecordingType(type);
       setRecordingState("recording");
       setRecordedBlob(null);
@@ -65,7 +59,6 @@ export function useCanvasMediaRecorder({ isViewOnly, onInsertMedia }) {
         setRecordingType(null);
       }
     },
-    [isViewOnly],
   );
 
   const stopRecording = useCallback(() => {

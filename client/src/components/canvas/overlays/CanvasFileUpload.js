@@ -1,7 +1,7 @@
 import { useRef, useCallback } from "react";
 import { messageAPI } from "../../../services/api";
 import toast from "react-hot-toast";
-import { PERMISSION_TOAST_MESSAGE } from "../permissions/useCanvasPermissions";
+// import { PERMISSION_TOAST_MESSAGE } from "../permissions/useCanvasPermissions";
 
 /**
  * Hook encapsulating all file upload logic for the canvas editor.

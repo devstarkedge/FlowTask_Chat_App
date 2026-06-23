@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import debounce from "lodash/debounce";
-import { MoreHorizontal, Image as ImageIcon } from "lucide-react";
+import { MoreHorizontal, Image as ImageIcon, Move } from "lucide-react";
 import { useCanvasStore } from "../../../stores/canvasStore";
-import CanvasCover from "../CanvasCover";
+import CanvasCoverImage from "../cover/CanvasCoverImage";
+import CanvasCoverActions from "../cover/CanvasCoverActions";
+import CanvasCover from "../cover/CanvasCover";
 import CanvasThreeDotMenu from "../CanvasThreeDotMenu";
-import toast from "react-hot-toast";
-import { showPermissionToast } from "../permissions/useCanvasPermissions";
+import "../styles/canvas-cover-tokens.css";
 
 // ── Cover Style Helper ──────────────────────────────────────────────────────────
 function coverStyle(cover) {
@@ -22,12 +23,10 @@ function coverStyle(cover) {
 
 /**
  * CanvasHeader — manages the tab nav bar, cover strip, title editing,
- * cover picker, share modal, three-dot menu, and view-only banner.
+ * cover picker, share modal, and three-dot menu.
  *
  * @param {Object}  props
  * @param {Object}  props.canvas        - Canvas document
- * @param {boolean} props.isViewOnly    - Read-only mode flag
- * @param {string|null} props.canvasRole - User's role on this canvas
  * @param {Function} props.onBack       - Navigate back handler
  * @param {Function} props.onOpenShareModal - Open share modal handler
  * @param {Array}   props.tabs          - Tab list for secondary navigation
@@ -35,8 +34,6 @@ function coverStyle(cover) {
  */
 export default function CanvasHeader({
   canvas,
-  isViewOnly,
-  canvasRole,
   onBack,
   onOpenShareModal,
   tabs = [],
@@ -55,9 +52,13 @@ export default function CanvasHeader({
   const threeDotBtnRef = useRef(null);
 
   // ── Title Sync ─────────────────────────────────────────────────────────────────
+  // Only reset the local title when switching to a DIFFERENT canvas (_id changes).
+  // Do NOT include canvas?.title in deps — that would overwrite the user's
+  // in-progress typing every time the debounced save writes back to the store.
   useEffect(() => {
     setTitle(canvas?.title || "");
-  }, [canvas?._id, canvas?.title]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvas?._id]);
 
   // Sync browser tab title with canvas title
   useEffect(() => {
@@ -70,47 +71,30 @@ export default function CanvasHeader({
     () =>
       debounce(async (nextTitle) => {
         if (!canvas?._id) return;
-        if (isViewOnly) {
-          showPermissionToast();
-          setTitle(canvas.title || "Untitled");
-          return;
-        }
         await updateCanvasMetadata(canvas._id, {
           title: nextTitle.trim() || "Untitled canvas",
         });
       }, 600),
-    [canvas?._id, updateCanvasMetadata, isViewOnly],
+    [canvas?._id, updateCanvasMetadata],
   );
 
   useEffect(() => () => debouncedTitleSave.cancel(), [debouncedTitleSave]);
 
   // ── Cover Actions ──────────────────────────────────────────────────────────────
   const handleCoverReplace = useCallback(() => {
-    if (isViewOnly) {
-      showPermissionToast();
-      return;
-    }
     setShowCoverPicker(true);
-  }, [isViewOnly]);
+  }, []);
 
   const handleCoverReposition = useCallback(() => {
-    if (isViewOnly) {
-      showPermissionToast();
-      return;
-    }
     setIsRepositioning(true);
-  }, [isViewOnly]);
+  }, []);
 
   const handleCoverRemove = useCallback(async () => {
-    if (isViewOnly) {
-      showPermissionToast();
-      return;
-    }
     if (canvas?._id) {
       await updateCanvasMetadata(canvas._id, { cover: null });
     }
     setIsRepositioning(false);
-  }, [canvas?._id, updateCanvasMetadata, isViewOnly]);
+  }, [canvas?._id, updateCanvasMetadata]);
 
   const handleOpenShareModal = useCallback(() => {
     if (onOpenShareModal) onOpenShareModal();
@@ -158,73 +142,51 @@ export default function CanvasHeader({
             onCoverReposition={handleCoverReposition}
             onCoverRemove={handleCoverRemove}
             hasCover={!!canvas?.cover}
-            isViewOnly={isViewOnly}
-            canvasRole={canvasRole}
           />
         </div>
       </div>
 
-      {/* View-only banner */}
-      {isViewOnly && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            padding: "6px 12px",
-            fontSize: 12,
-            fontWeight: 600,
-            color: "var(--warning-color, #f59e0b)",
-            background: "var(--bg-secondary)",
-            borderBottom: "1px solid var(--border-primary)",
-          }}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-          View-only — You do not have permission to edit this canvas.
-        </div>
-      )}
-
-      {/* Cover Image (when present) - rendered outside container to occupy 100% of header panel */}
+      {/* Cover Image (when present) - uses modular cover components with design tokens */}
       {currentCoverStyle && (
         <div
           className={`canvas-cover-strip${coverHovered ? " is-hovered" : ""}`}
-          style={currentCoverStyle}
           onMouseEnter={() => setCoverHovered(true)}
           onMouseLeave={() => setCoverHovered(false)}
+          style={{ 
+            width: "100%",
+            position: "relative",
+          }}
         >
-          {!isViewOnly && (
-            <div className="canvas-cover-actions">
-              <button
-                className="canvas-cover-change-btn"
-                onClick={() => setShowCoverPicker(true)}
-              >
-                <ImageIcon size={14} />
-                Change cover
-              </button>
-              <button
-                className="canvas-cover-remove-btn"
-                onClick={async () => {
-                  if (canvas?._id) {
-                    await updateCanvasMetadata(canvas._id, { cover: null });
-                  }
-                  setShowCoverPicker(false);
-                }}
-              >
-                Remove
-              </button>
+          <CanvasCoverImage
+            cover={canvas?.cover}
+            yOffset={canvas?.cover?.yOffset ?? 50}
+            isDragging={false}
+          />
+          <div className="canvas-cover-overlay" />
+          <div className="canvas-cover-title">
+            {canvas?.title || "Untitled Canvas"}
+          </div>
+          {canvas?.cover?.type === "image" && coverHovered && (
+            <div className="canvas-cover-drag-hint">
+              <Move size={10} />
+              Drag to reposition
             </div>
           )}
+          <div className="canvas-cover-actions">
+            <button
+              className="canvas-cover-change-btn"
+              onClick={() => setShowCoverPicker(true)}
+            >
+              <ImageIcon size={14} />
+              Change cover
+            </button>
+            <button
+              className="canvas-cover-remove-btn"
+              onClick={handleCoverRemove}
+            >
+              Remove
+            </button>
+          </div>
         </div>
       )}
 
@@ -243,10 +205,6 @@ export default function CanvasHeader({
           <button
             className={`canvas-add-cover-btn${showCoverActions ? " is-visible" : ""}`}
             onClick={() => {
-              if (isViewOnly) {
-                showPermissionToast();
-                return;
-              }
               setShowCoverPicker(true);
             }}
           >
@@ -272,27 +230,11 @@ export default function CanvasHeader({
           value={title}
           placeholder="Your canvas title"
           spellCheck={false}
-          readOnly={isViewOnly}
-          style={isViewOnly ? { cursor: "default", opacity: 0.8 } : {}}
           onChange={(event) => {
-            if (isViewOnly) return;
             setTitle(event.target.value);
             debouncedTitleSave(event.target.value);
           }}
-          onKeyDown={(e) => {
-            if (isViewOnly) {
-              const allowedKeys = [
-                "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
-                "Home", "End", "PageUp", "PageDown",
-                "Control", "Shift", "Alt", "Meta", "CapsLock", "Escape", "Tab"
-              ];
-              if (!allowedKeys.includes(e.key) && !(e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                showPermissionToast();
-              }
-            }
-          }}
-          onBlur={() => !isViewOnly && debouncedTitleSave.flush()}
+          onBlur={() => debouncedTitleSave.flush()}
         />
       </div>
 
@@ -304,15 +246,15 @@ export default function CanvasHeader({
             if (e.target === e.currentTarget) setShowCoverPicker(false);
           }}
         >
-          <div className="canvas-cover-picker-panel">
-            <CanvasCover
-              cover={canvas?.cover}
-              canvasId={canvas?._id}
-              canvasTitle={title}
-              channelId={canvas?.channelId}
-              onClose={() => setShowCoverPicker(false)}
-              isViewOnly={isViewOnly}
-            />
+          <div className="canvas-cover-picker-panel" style={{ width: "min(600px, 90vw)" }}>
+              <CanvasCover
+                cover={canvas?.cover}
+                canvasId={canvas?._id}
+                canvasTitle={title}
+                channelId={canvas?.channelId}
+                onClose={() => setShowCoverPicker(false)}
+                mode="picker"
+              />
           </div>
         </div>
       )}

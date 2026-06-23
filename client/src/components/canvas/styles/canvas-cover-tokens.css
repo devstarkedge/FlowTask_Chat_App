@@ -1,0 +1,305 @@
+/* ── Canvas Cover Design Tokens ─────────────────────────────────────────────── */
+/* Enterprise SaaS responsive cover system                                    */
+
+:root {
+  /* Cover heights — desktop-first, scales down for smaller screens */
+  --canvas-cover-height: 240px;
+  --canvas-cover-height-lg: 240px;
+  --canvas-cover-height-md: 200px;
+  --canvas-cover-height-sm: 180px;
+
+  /* Cover overlay gradients */
+  --canvas-cover-overlay-top: rgba(0, 0, 0, 0.1);
+  --canvas-cover-overlay-bottom: rgba(0, 0, 0, 0.4);
+
+  /* Cover action buttons */
+  --canvas-cover-action-bg: rgba(0, 0, 0, 0.45);
+  --canvas-cover-action-hover-bg: rgba(0, 0, 0, 0.65);
+  --canvas-cover-action-color: #fff;
+  --canvas-cover-action-radius: 20px;
+
+  /* Cover title */
+  --canvas-cover-title-color: #fff;
+  --canvas-cover-title-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  --canvas-cover-title-size: 20px;
+
+  /* Cover drag hint */
+  --canvas-cover-drag-hint-bg: rgba(0, 0, 0, 0.5);
+  --canvas-cover-drag-hint-size: 11px;
+
+  /* Cover picker panel */
+  --canvas-cover-picker-radius: 0 0 12px 12px;
+  --canvas-cover-picker-bg: var(--bg-modal, #fff);
+  --canvas-cover-picker-border: var(--border-primary, #e5e7eb);
+}
+
+/* ── Responsive Breakpoints ─────────────────────────────────────────────────── */
+
+/* Large screens (1440px+) */
+@media (min-width: 1440px) {
+  :root {
+    --canvas-cover-height: var(--canvas-cover-height-lg);
+  }
+}
+
+/* Tablet (768px - 1023px) */
+@media (max-width: 1023px) {
+  :root {
+    --canvas-cover-height: var(--canvas-cover-height-md);
+  }
+}
+
+/* Mobile (< 768px) */
+@media (max-width: 767px) {
+  :root {
+    --canvas-cover-height: var(--canvas-cover-height-sm);
+    --canvas-cover-title-size: 16px;
+  }
+}
+
+/* ── Cover Component Classes ────────────────────────────────────────────────── */
+
+.canvas-cover-strip {
+  position: relative;
+  width: 100%;
+  min-height: var(--canvas-cover-height);
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: min-height 0.2s ease;
+}
+
+.canvas-cover-strip.is-hovered {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* Cover overlay for text legibility */
+.canvas-cover-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--canvas-cover-overlay-top) 0%,
+    var(--canvas-cover-overlay-bottom) 100%
+  );
+  pointer-events: none;
+}
+
+/* Cover title */
+.canvas-cover-title {
+  position: absolute;
+  bottom: 16px;
+  left: 20px;
+  color: var(--canvas-cover-title-color);
+  font-size: var(--canvas-cover-title-size);
+  font-weight: 700;
+  text-shadow: var(--canvas-cover-title-shadow);
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Cover drag hint */
+.canvas-cover-drag-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--canvas-cover-drag-hint-bg);
+  color: #fff;
+  font-size: var(--canvas-cover-drag-hint-size);
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: var(--canvas-cover-action-radius);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.canvas-cover-strip:hover .canvas-cover-drag-hint {
+  opacity: 1;
+}
+
+/* Cover actions container */
+.canvas-cover-actions {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transform: translateY(6px);
+}
+
+.canvas-cover-strip:hover .canvas-cover-actions,
+.canvas-cover-strip.is-hovered .canvas-cover-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Cover action buttons */
+.canvas-cover-change-btn,
+.canvas-cover-remove-btn,
+.canvas-cover-reposition-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: var(--canvas-cover-action-bg);
+  border: none;
+  color: var(--canvas-cover-action-color);
+  border-radius: var(--canvas-cover-action-radius);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.12s ease;
+  white-space: nowrap;
+}
+
+.canvas-cover-change-btn:hover,
+.canvas-cover-reposition-btn:hover {
+  background: var(--canvas-cover-action-hover-bg);
+  transform: translateY(-1px);
+}
+
+.canvas-cover-remove-btn:hover {
+  background: rgba(239, 68, 68, 0.7);
+  transform: translateY(-1px);
+}
+
+.canvas-cover-remove-btn.is-confirming {
+  background: rgba(239, 68, 68, 0.85);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Cover picker panel */
+.canvas-cover-picker-panel {
+  background: var(--canvas-cover-picker-bg);
+  border: 1px solid var(--canvas-cover-picker-border);
+  border-radius: var(--canvas-cover-picker-radius);
+  padding: 12px 14px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Cover close button */
+.canvas-cover-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--canvas-cover-action-bg);
+  border: none;
+  color: #fff;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s ease;
+  z-index: 10;
+}
+
+.canvas-cover-close-btn:hover {
+  background: var(--canvas-cover-action-hover-bg);
+}
+
+/* ── Cover Title Zone (when no cover) ───────────────────────────────────────── */
+
+.canvas-cover-title-zone {
+  position: relative;
+  padding: 16px 20px;
+  background: var(--bg-primary, #fff);
+  border-bottom: 1px solid var(--border-primary, #e5e7eb);
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.canvas-add-cover-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-secondary, #f3f4f6);
+  border: 1px dashed var(--border-primary, #d1d5db);
+  border-radius: var(--radius-md, 8px);
+  color: var(--text-secondary, #6b7280);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.canvas-add-cover-btn.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.canvas-add-cover-btn:hover {
+  border-color: var(--accent-primary, #3b82f6);
+  color: var(--accent-primary, #3b82f6);
+  background: var(--bg-hover, #f9fafb);
+}
+
+/* ── Cover Picker Overlay ───────────────────────────────────────────────────── */
+
+.canvas-cover-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: canvasFadeIn 0.15s ease-out;
+  padding-top: 40px;
+}
+
+.canvas-cover-picker-overlay>* {
+  animation: canvasSlideUp 0.15s ease-out;
+}
+
+@keyframes canvasFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes canvasSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

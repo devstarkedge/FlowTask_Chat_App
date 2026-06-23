@@ -22,12 +22,26 @@ export const handleDownload = async (file) => {
   const rawUrl = file.url || file.secureUrl;
   const assetId = file._id || file.fileId || file.assetId;
   const isCloudinaryUrl = rawUrl && rawUrl.includes('cloudinary.com');
-  const useProxy = isCloudinaryUrl && assetId && !rawUrl.startsWith('/');
+  // Always route Cloudinary files through the server proxy when we have an assetId.
+  // Direct Cloudinary CDN fetches return 401 for access-restricted deliveries.
+  // Also proxy when rawUrl is missing/relative so the server can resolve the asset.
+  const useProxy = assetId && (isCloudinaryUrl || !rawUrl || rawUrl.startsWith('/'));
   const finalUrl = useProxy ? messageAPI.getFileProxyUrl(assetId) : rawUrl;
   const token = useAuthStore.getState().accessToken;
   const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
-  const needsAuthHeaders = useProxy || finalUrl?.startsWith("/api/") || finalUrl?.startsWith("/messages/");
-  const fetchHeaders = needsAuthHeaders
+
+  // Always attach auth headers for proxy URLs (which are internal server endpoints)
+  // and for any relative or absolute URL pointing to our own API.
+  // Note: api.defaults.baseURL may be an absolute URL (e.g. http://localhost:3200/api/chat)
+  // so we cannot rely solely on startsWith("/api/") — check both relative and absolute cases.
+  const baseURL = (typeof finalUrl === "string" && finalUrl) || "";
+  const isOwnApiUrl =
+    useProxy ||
+    baseURL.startsWith("/api/") ||
+    baseURL.startsWith("/messages/") ||
+    baseURL.includes("/api/chat/") ||
+    baseURL.includes("/messages/files/");
+  const fetchHeaders = isOwnApiUrl
     ? {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(workspaceId ? { "X-Workspace-Id": workspaceId } : {}),

@@ -1205,7 +1205,7 @@ const MessageItem = memo(
                   }}
                 />
               )}
-              <MoreMenuItem
+              {/* <MoreMenuItem
                 icon={Link2}
                 label="Copy link"
                 onClick={async () => {
@@ -1220,7 +1220,7 @@ const MessageItem = memo(
                   setShowMoreMenu(false);
                   setShowActions(false);
                 }}
-              />
+              /> */}
               <MoreMenuItem
                 icon={Forward}
                 label="Forward message"

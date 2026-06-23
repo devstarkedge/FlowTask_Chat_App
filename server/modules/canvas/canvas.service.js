@@ -11,11 +11,8 @@ import { MESSAGE_CONTENT_TYPES } from "../../config/constants.js";
 import {
   ValidationError,
   NotFoundError,
-  ForbiddenError,
 } from "../../middleware/errorHandler.js";
 import { MENTION_TYPES } from "../../config/constants.js";
-import canvasPermissionService from "./canvasPermission.service.js";
-import Channel from "../channels/Channel.model.js";
 
 class CanvasService {
   normalizeContent(content) {
@@ -283,10 +280,6 @@ class CanvasService {
       createdBy: userId,
       updatedBy: userId,
       lastEditedBy: userId,
-      permissions: data.permissions || {
-        visibility: "channel",
-        inheritFromChannel: true,
-      },
     });
 
     const blockContext = {
@@ -338,7 +331,6 @@ class CanvasService {
     if (updates.type !== undefined) allowedUpdates.type = updates.type;
     if (updates.cover !== undefined) allowedUpdates.cover = updates.cover;
     if (updates.content !== undefined) allowedUpdates.content = this.normalizeContent(updates.content);
-    if (updates.permissions !== undefined) allowedUpdates.permissions = updates.permissions;
 
     allowedUpdates.updatedBy = userId;
     allowedUpdates.lastEditedBy = userId;
@@ -434,7 +426,6 @@ class CanvasService {
   }
 
   // ── Delete Canvas and all dependencies
-  // ── Backend Protection: Verify ownership before deletion
   async deleteCanvas(canvasId, userId, workspaceId) {
     if (!workspaceId) {
       throw new ValidationError("workspaceId is required");
@@ -443,13 +434,6 @@ class CanvasService {
     const canvas = await canvasRepository.findById(canvasId, workspaceId);
     if (!canvas) {
       throw new NotFoundError("Canvas not found");
-    }
-
-    // Backend Protection: Only canvas owner can delete this canvas
-    const userIdStr = (userId && userId._id ? userId._id : userId).toString();
-    const createdByIdStr = (canvas.createdBy && canvas.createdBy._id ? canvas.createdBy._id : canvas.createdBy).toString();
-    if (createdByIdStr !== userIdStr) {
-      throw new ForbiddenError("Only canvas owner can delete this canvas.");
     }
 
     const channelId = canvas.channelId.toString();
@@ -525,10 +509,6 @@ class CanvasService {
       createdBy: userId,
       updatedBy: userId,
       lastEditedBy: userId,
-      permissions: src.permissions || {
-        visibility: "channel",
-        inheritFromChannel: true,
-      },
     });
 
     const srcBlocks = await CanvasBlock.find({ canvasId }).sort({ order: 1 }).lean();
@@ -679,17 +659,10 @@ class CanvasService {
     const userIdStr = userId.toString();
     const Canvas = (await import("./canvas.model.js")).default;
 
-    // Find canvases where user is:
-    // 1. Owner (createdBy)
-    // 2. Explicitly shared (permissions.users[], permissions.allowedUserIds[])
-    // 3. Channel member with view/edit access
+    // Find canvases where user is the creator
     const canvases = await Canvas.find({
       workspaceId,
-      $or: [
-        { createdBy: userId },
-        { "permissions.users.userId": userId },
-        { "permissions.allowedUserIds": userId },
-      ],
+      createdBy: userId,
     })
       .populate("createdBy updatedBy lastEditedBy", "name avatar")
       .sort({ updatedAt: -1 })

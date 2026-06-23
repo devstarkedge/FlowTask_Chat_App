@@ -6,9 +6,7 @@
 .canvas-cover-title-zone {
   position: relative;
   width: 100%;
-  max-width: 800px;  
-
-  
+  max-width: 800px;
   margin: 0 auto;
   box-sizing: border-box;
   padding: 24px 20px 16px;
@@ -42,37 +40,78 @@
 }
 
 /* ─── Cover Strip ──────────────────────────────────────────────────────── */
+/*
+ * IMPORTANT: Do NOT use width: 100vw, left, or negative margin-left here.
+ * The strip must fill its parent container naturally (width: 100%).
+ * canvas-cover-tokens.css already sets width: 100% and min-height correctly.
+ */
 .canvas-cover-strip {
   position: relative;
-  width: 100vw !important;
-  left: 10%;
-  right: 0%;
-  margin-left: -50vw;
-  /* margin-right: -50vw; */
+  width: 100%;
   height: 240px;
+  overflow: hidden;
   background-size: cover;
   background-position: center;
-  z-index: 1;
-  margin-top: 0;
   margin-bottom: 16px;
+  /* No left / margin-left / 100vw tricks — those break alignment */
 }
 
 .canvas-cover-strip::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.08) 40%, rgba(0,0,0,0) 65%);
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.08) 40%,
+    rgba(0, 0, 0, 0) 65%
+  );
   z-index: 2;
   pointer-events: none;
 }
 
-
-/* ─── Cover Action Buttons (Change / Remove) ───────────────────────────── */
-.canvas-cover-actions {
-  position: fixed;
-  top: 260px;
-  right: 10px;
+/* ─── Cover Drag Hint ──────────────────────────────────────────────────── */
+/*
+ * Center it both horizontally and vertically over the image.
+ * Sits above the gradient overlay (z-index: 3).
+ */
+.canvas-cover-drag-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
   display: flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+  white-space: nowrap;
+  /* Subtle entrance */
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.canvas-cover-strip:hover .canvas-cover-drag-hint {
+  opacity: 1;
+}
+
+/* ─── Cover Action Buttons (Change / Remove / Reposition) ──────────────── */
+/*
+ * position: absolute (NOT fixed) so buttons are constrained to the strip.
+ * Placed at bottom-right corner of the image with backdrop-blur.
+ */
+.canvas-cover-actions {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: row;
   gap: 8px;
   z-index: 10;
   opacity: 0;
@@ -88,19 +127,22 @@
 }
 
 .canvas-cover-change-btn,
-.canvas-cover-remove-btn {
+.canvas-cover-remove-btn,
+.canvas-cover-reposition-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 6px 12px;
+  height: 32px;
   border: none;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  transition: background 140ms ease, color 140ms ease;
+  transition: background 140ms ease, transform 140ms ease;
 }
 
 .canvas-cover-change-btn {
@@ -110,6 +152,17 @@
 
 .canvas-cover-change-btn:hover {
   background: rgba(0, 0, 0, 0.65);
+  transform: translateY(-1px);
+}
+
+.canvas-cover-reposition-btn {
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+}
+
+.canvas-cover-reposition-btn:hover {
+  background: rgba(0, 0, 0, 0.65);
+  transform: translateY(-1px);
 }
 
 .canvas-cover-remove-btn {
@@ -119,6 +172,17 @@
 
 .canvas-cover-remove-btn:hover {
   background: rgba(220, 38, 38, 0.85);
+  transform: translateY(-1px);
+}
+
+.canvas-cover-remove-btn.is-confirming {
+  background: rgba(220, 38, 38, 0.85);
+  animation: coverPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes coverPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.7; }
 }
 
 /* ─── Add Cover Button ─────────────────────────────────────────────────── */
@@ -209,7 +273,7 @@
     font-size: 28px;
   }
 
-  .canvas-cover-title-zone .canvas-cover-strip {
+  .canvas-cover-strip {
     height: 200px;
     margin-bottom: 4px;
   }
@@ -225,20 +289,22 @@
     padding-right: 40px;
   }
 
-  .canvas-cover-title-zone .canvas-cover-strip {
+  .canvas-cover-strip {
     height: 180px;
     margin-bottom: 2px;
   }
 
   .canvas-cover-actions {
     bottom: 8px;
-    right: 14px;
+    right: 10px;
     gap: 6px;
   }
 
   .canvas-cover-change-btn,
-  .canvas-cover-remove-btn {
+  .canvas-cover-remove-btn,
+  .canvas-cover-reposition-btn {
     padding: 5px 9px;
+    height: 28px;
     font-size: 11px;
   }
 }

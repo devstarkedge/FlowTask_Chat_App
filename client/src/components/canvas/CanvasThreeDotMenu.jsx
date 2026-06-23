@@ -12,13 +12,10 @@ import {
   Type,
   Trash2,
   ChevronRight,
-  AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { useCanvasUiStore } from "../../stores/canvasUiStore";
-import { getCanvasPermissions } from "../canvas/permissions/useCanvasPermissions";
-import { useAuthStore } from "../../stores/authStore";
 
 const FONT_FAMILIES = [
   { label: "System UI", value: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" },
@@ -67,8 +64,6 @@ export default function CanvasThreeDotMenu({
   onCoverReposition,
   onCoverRemove,
   hasCover,
-  isViewOnly = false,
-  canvasRole = null,
 }) {
   const menuRef = useRef(null);
   const [showCoverSubmenu, setShowCoverSubmenu] = useState(false);
@@ -175,43 +170,27 @@ export default function CanvasThreeDotMenu({
   }, [canvasId, toggleSaveForLater, onClose]);
 
   const handleAddCover = useCallback(() => {
-    if (isViewOnly) {
-      toast.error("You do not have permission to change the cover.");
-      return;
-    }
     onOpenCoverPicker?.();
     onClose();
-  }, [onOpenCoverPicker, onClose, isViewOnly]);
+  }, [onOpenCoverPicker, onClose]);
 
   const handleCoverReplace = useCallback(() => {
-    if (isViewOnly) {
-      toast.error("You do not have permission to change the cover.");
-      return;
-    }
     onCoverReplace?.();
     setShowCoverSubmenu(false);
     onClose();
-  }, [onCoverReplace, onClose, isViewOnly]);
+  }, [onCoverReplace, onClose]);
 
   const handleCoverReposition = useCallback(() => {
-    if (isViewOnly) {
-      toast.error("You do not have permission to change the cover.");
-      return;
-    }
     onCoverReposition?.();
     setShowCoverSubmenu(false);
     onClose();
-  }, [onCoverReposition, onClose, isViewOnly]);
+  }, [onCoverReposition, onClose]);
 
   const handleCoverRemove = useCallback(() => {
-    if (isViewOnly) {
-      toast.error("You do not have permission to change the cover.");
-      return;
-    }
     onCoverRemove?.();
     setShowCoverSubmenu(false);
     onClose();
-  }, [onCoverRemove, onClose, isViewOnly]);
+  }, [onCoverRemove, onClose]);
 
   const handleShowThreads = useCallback(() => {
     openSidebar("comments");
@@ -245,10 +224,6 @@ export default function CanvasThreeDotMenu({
 
   const handleDelete = useCallback(() => {
     if (!canvasId) return;
-    if (canvasRole !== "owner") {
-      toast.error("Only canvas owner can delete this canvas.");
-      return;
-    }
     const confirmed = window.confirm(
       "Are you sure you want to delete this canvas? This action cannot be undone."
     );
@@ -257,12 +232,10 @@ export default function CanvasThreeDotMenu({
     deleteCanvas(canvasId).then((result) => {
       if (result) onBack?.();
     });
-  }, [canvasId, deleteCanvas, onClose, onBack, canvasRole]);
+  }, [canvasId, deleteCanvas, onClose, onBack]);
 
-  // ── Determine if delete should be shown ─────────────────────────────────
-  const canDelete = canvasRole === "owner";
-  const isEditor = canvasRole === "editor";
-  const isViewer = canvasRole === "viewer" || canvasRole === null;
+  // ── Delete is available to all users ────────────────────────────────────
+  const canDelete = true;
 
   if (!isOpen) return null;
 
@@ -278,19 +251,18 @@ export default function CanvasThreeDotMenu({
         onClick={handleSaveForLater}
       />
 
-      <div className="canvas-three-dot-divider" />
+      {/* <div className="canvas-three-dot-divider" /> */}
 
       {/* Group 2: Cover */}
-      {hasCover ? (
+      {/* {hasCover ? (
         <MenuItem
           icon={ImageIcon}
           label="Cover image"
           hasSubmenu
-          disabled={isViewOnly}
-          onMouseEnter={() => !isViewOnly && setShowCoverSubmenu(true)}
+          onMouseEnter={() => setShowCoverSubmenu(true)}
           onMouseLeave={() => setShowCoverSubmenu(false)}
         >
-          {showCoverSubmenu && !isViewOnly && (
+          {showCoverSubmenu && (
             <div className="canvas-three-dot-submenu">
               <button className="canvas-three-dot-submenu-item" onClick={handleCoverReplace}>
                 Replace
@@ -309,9 +281,8 @@ export default function CanvasThreeDotMenu({
           icon={ImageIcon}
           label="Add cover image"
           onClick={handleAddCover}
-          disabled={isViewOnly}
         />
-      )}
+      )} */}
 
       <div className="canvas-three-dot-divider" />
 
@@ -319,10 +290,10 @@ export default function CanvasThreeDotMenu({
       <MenuItem icon={MessageSquare} label="Show all threads" onClick={handleShowThreads} />
       <MenuItem icon={History} label="View version history" onClick={handleViewHistory} />
 
-      <div className="canvas-three-dot-divider" />
+      {/* <div className="canvas-three-dot-divider" /> */}
 
       {/* Group 4: Output */}
-      <MenuItem icon={Printer} label="Print canvas" onClick={handlePrint} />
+      {/* <MenuItem icon={Printer} label="Print canvas" onClick={handlePrint} /> */}
 
       <div className="canvas-three-dot-divider" />
 
@@ -357,36 +328,12 @@ export default function CanvasThreeDotMenu({
       {/* <div className="canvas-three-dot-divider" /> */}
 
       {/* Group 6: Destructive — Delete canvas */}
-      {canDelete ? (
-        <MenuItem
-          icon={Trash2}
-          label="Delete canvas"
-          onClick={handleDelete}
-          destructive
-        />
-      ) : isEditor ? (
-        <div
-          className="canvas-three-dot-item-wrapper"
-          title="Only canvas owner can delete this canvas."
-        >
-          <button
-            className="canvas-three-dot-item is-disabled"
-            disabled
-            onClick={(e) => {
-              e.preventDefault();
-              toast.error("Only canvas owner can delete this canvas.");
-            }}
-          >
-            <span className="item-icon">
-              <Trash2 size={16} />
-            </span>
-            <span className="item-label">Delete canvas (Disabled)</span>
-            <span className="item-chevron" style={{ marginLeft: "auto" }}>
-              <AlertTriangle size={12} />
-            </span>
-          </button>
-        </div>
-      ) : null}
+      <MenuItem
+        icon={Trash2}
+        label="Delete canvas"
+        onClick={handleDelete}
+        destructive
+      />
     </div>
   );
 }

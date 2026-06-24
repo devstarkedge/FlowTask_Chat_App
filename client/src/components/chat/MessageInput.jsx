@@ -1,11 +1,11 @@
 import { useState, useRef, useCallback, useEffect, memo } from "react";
 import { useChatStore } from "../../stores/chatStore";
-import { useChannelStore } from "../../stores/channelStore";
 import { useDraftStore } from "../../stores/draftStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { messageAPI } from "../../services/api";
 import { emitTypingStart, emitTypingStop } from "../../services/socket";
 import useDraftAutoSave from "../../hooks/useDraftAutoSave";
+import useMentions from "../../hooks/useMentions";
 import {
   Send,
   Paperclip,
@@ -184,11 +184,6 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     codeBlock: false,
   });
 
-  // Mention state
-  const [mentionType, setMentionType] = useState(null); // 'user' | 'channel' | null
-  const [mentionQuery, setMentionQuery] = useState("");
-  const [mentionPos, setMentionPos] = useState({ top: 0, left: 0 });
-
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   const sendMessage = useChatStore((s) => s.sendMessage);
@@ -309,74 +304,20 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     }, 3000);
   }, [channelId]);
 
-  // ─── Mention Detection ────────────────────────────────────────────────────
+  // ─── Centralized Mention System ──────────────────────────────────────────
 
-  const detectMention = useCallback(() => {
-    const ed = editorRef.current;
-    if (!ed) return;
-
-    const textBefore = ed.getTextBeforeCursor();
-    if (!textBefore) {
-      setMentionType(null);
-      return;
-    }
-
-    // Look backwards for @ or # trigger
-    const match = textBefore.match(/([@#])([^\s@#]*)$/);
-    if (match) {
-      const triggerChar = match[1];
-      const query = match[2];
-      setMentionType(triggerChar === "@" ? "user" : "channel");
-      setMentionQuery(query);
-      
-      try {
-        const tiptap = ed.getEditor();
-        if (tiptap) {
-          const coords = tiptap.view.coordsAtPos(tiptap.state.selection.from);
-          setMentionPos({ top: coords.top + 20, left: coords.left });
-        }
-      } catch (err) {
-        setMentionPos({ top: 0, left: 0 });
-      }
-    } else {
-      setMentionType(null);
-    }
-  }, []);
-
-  // ─── Mention Selection ────────────────────────────────────────────────────
-
-  const handleMentionSelect = useCallback(
-    (item) => {
-      const ed = editorRef.current;
-      if (!ed) return;
-
-      const tiptap = ed.getEditor();
-      if (!tiptap) return;
-
-      // Delete the trigger character + query text
-      const textBefore = ed.getTextBeforeCursor();
-      const match = textBefore.match(/([@#])([^\s@#]*)$/);
-      if (match) {
-        const deleteCount = match[0].length;
-        const { from } = tiptap.state.selection;
-        tiptap
-          .chain()
-          .focus()
-          .deleteRange({ from: from - deleteCount, to: from })
-          .run();
-      }
-
-      // Insert mention node
-      ed.insertMention(
-        item.id,
-        item.name,
-        mentionType === "user" ? "user" : "channel",
-      );
-      setMentionType(null);
-      setMentionQuery("");
-    },
-    [mentionType],
-  );
+  const {
+    mentionType,
+    mentionQuery,
+    mentionPos,
+    activeIndex,
+    items: mentionItems,
+    detectMention,
+    selectMention,
+    closeMentions,
+    setActiveIndex,
+    handleMentionKeyDown,
+  } = useMentions({ channelId, editorRef });
 
   // ─── File Processing ─────────────────────────────────────────────────────
 
@@ -682,15 +623,10 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
   const handleKeyDown = useCallback(
     (event) => {
+      // Let the centralized mention system handle mention-related keys first
       if (mentionType) {
-        if (["ArrowUp", "ArrowDown", "Tab", "Enter"].includes(event.key)) {
-          return false;
-        }
-        if (event.key === "Escape") {
-          event.preventDefault();
-          setMentionType(null);
-          return true;
-        }
+        const handled = handleMentionKeyDown(event)
+        if (handled) return true
       }
 
       if (event.key === "Escape") {
@@ -706,7 +642,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
       return false;
     },
-    [mentionType, showEmoji, showLinkModal],
+    [mentionType, showEmoji, showLinkModal, handleMentionKeyDown],
   );
 
   // ─── Link Insert ──────────────────────────────────────────────────────────
@@ -817,15 +753,15 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
           onKeyDown={handleKeyDown}
         />
 
-        {/* Mention Dropdown */}
-        {mentionType && (
+        {/* Mention Dropdown — centralized */}
+        {mentionType && mentionItems.length > 0 && (
           <MentionDropdown
-            type={mentionType}
-            query={mentionQuery}
-            channelId={channelId}
+            items={mentionItems}
+            activeIndex={activeIndex}
             position={mentionPos}
-            onSelect={handleMentionSelect}
-            onClose={() => setMentionType(null)}
+            onSelect={selectMention}
+            onClose={closeMentions}
+            setActiveIndex={setActiveIndex}
           />
         )}
 

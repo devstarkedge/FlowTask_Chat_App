@@ -42,6 +42,7 @@ export default function ChatPanel({
   const channelMessageIds = useChatStore((s) => s.channelMessageIds[channelId] || EMPTY_LIST);
   const messagesById = useChatStore((s) => s.messagesById);
   const connectionStatus = useChatStore((s) => s.connectionStatus);
+  const editingMessageId = useChatStore((s) => s.editingMessageId);
 
   // Debounce the connection banner: only show if status stays non-connected
   // for more than 1.5s. This prevents brief reconnect blips from flashing a banner.
@@ -80,6 +81,10 @@ export default function ChatPanel({
     if (!channelMessageIds.length) return EMPTY_LIST;
     return channelMessageIds.map((id) => messagesById[id]).filter(Boolean);
   }, [legacyMessages, channelMessageIds, messagesById]);
+
+  const isEditingInChannel = useMemo(() => {
+    return editingMessageId && messages.some(m => m._id === editingMessageId);
+  }, [editingMessageId, messages]);
 
   // When channel changes, reset tab, join room and request server tabs
   useEffect(() => {
@@ -316,7 +321,7 @@ export default function ChatPanel({
             onSaveMessage={onSaveMessage}
           />
           <TypingIndicator channelId={channelId} />
-          <MessageInput channelId={channelId} />
+          {!isEditingInChannel && <MessageInput channelId={channelId} />}
         </>
       )}
     </div>

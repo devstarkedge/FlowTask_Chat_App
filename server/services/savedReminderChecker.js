@@ -154,7 +154,7 @@ async function processDueReminders() {
         const claimed = await SavedMessage.findOneAndUpdate(
           { _id: saved._id, overdueNotificationSent: { $ne: true } },
           updateData,
-          { new: true },
+          { returnDocument: 'after' },
         );
 
         if (!claimed) continue;

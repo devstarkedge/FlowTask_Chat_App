@@ -38,6 +38,7 @@ import { Avatar } from "./MemberAvatarGroup";
 import EmojiPicker from "./EmojiPicker";
 import EmojiPickerPortal from "./EmojiPickerPortal";
 import { sanitizeHtml } from "../../utils/sanitize";
+import { extractPlainText } from "../../utils/extractPlainText";
 import toast from "react-hot-toast";
 import { handleDownload } from "../../utils/handleDownload";
 import { getFileUrl, getFileAssetId } from "../../utils/fileProxy";
@@ -73,6 +74,7 @@ if (typeof document !== "undefined" && !document.getElementById(STYLE_ID)) {
       background: var(--bg-primary, #1a1d21);
       box-shadow: 0 2px 12px rgba(0,0,0,0.18);
       animation: inlineEditorIn 140ms cubic-bezier(0.2, 0, 0.13, 1.3) both;
+      margin-bottom: 8px;
     }
     @keyframes inlineEditorIn {
       from { opacity: 0; transform: scaleY(0.94); transform-origin: top; }
@@ -120,6 +122,8 @@ if (typeof document !== "undefined" && !document.getElementById(STYLE_ID)) {
       border-top: 1px solid var(--border-primary, rgba(255,255,255,0.08));
       background: var(--bg-secondary, #222529);
       gap: 8px;
+      flex-shrink: 0;
+      border-radius: 0 0 10px 10px;
     }
     .inline-editor-hint {
       font-size: 11px;
@@ -259,6 +263,7 @@ const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000;
  */
 function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
   const editorRef = useRef(null);
+  const wrapRef = useRef(null);
 
   const [formatState, setFormatState] = useState({
     bold: false,
@@ -303,6 +308,13 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
 
       ed.focus("end");
       syncFormatState();
+
+      // Scroll into view gently after DOM update
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          wrapRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      });
     }, 50);
 
     return () => clearTimeout(timer);
@@ -337,7 +349,7 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
   }, [syncFormatState]);
 
   return (
-    <div className="inline-editor-wrap">
+    <div className="inline-editor-wrap" ref={wrapRef}>
       {/* Toolbar — shared FormattingToolbar in compact variant */}
       <div className="inline-editor-toolbar">
         <FormattingToolbar
@@ -408,13 +420,18 @@ const MessageItem = memo(
       messageIdToDelete,
       setMessageIdToDelete,
       clearMessageIdToDelete,
+      editingMessageId,
+      setEditingMessageId,
+      clearEditingMessageId,
     } = useChatStore();
     const { confirm } = useDeleteConfirm();
+    
+    // Derive edit state from global store (single source of truth)
+    const isEditing = editingMessageId === message._id;
 
     const isSaved = useLaterStore((s) => s.savedMessageIds.has(message._id));
 
     const [showActions, setShowActions] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
     const [showReactionPicker, setShowReactionPicker] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
     const [showMessageDetails, setShowMessageDetails] = useState(false);
@@ -437,6 +454,7 @@ const MessageItem = memo(
       );
       return () => clearTimeout(t);
     }, [isPinnedHighlight]);
+
 
     // ── Close reaction picker on outside click / Escape ──────────────────────
     useEffect(() => {
@@ -586,9 +604,9 @@ const MessageItem = memo(
             htmlContent: html,
           });
         }
-        setIsEditing(false);
+        clearEditingMessageId();
       },
-      [editMessage, message._id],
+      [editMessage, message._id, clearEditingMessageId],
     );
 
     const handleReaction = (emoji) => {
@@ -683,7 +701,7 @@ const MessageItem = memo(
         <div
           id={`msg-${message._id}`}
           ref={messageRef}
-          style={{ marginTop: compact ? 2 : 12, padding: "4px 16px 8px" }}
+          style={{ marginTop: compact ? 2 : 12, padding: "4px 16px 16px" }}
         >
           {/* Name row */}
           {!compact && (
@@ -718,7 +736,7 @@ const MessageItem = memo(
             initialHtml={message.htmlContent || ""}
             initialText={message.content}
             onSave={handleEdit}
-            onCancel={() => setIsEditing(false)}
+            onCancel={clearEditingMessageId}
           />
         </div>
       );
@@ -1126,7 +1144,7 @@ const MessageItem = memo(
                       <ActionButton
                         icon={Edit}
                         title="Edit"
-                        onClick={() => setIsEditing(true)}
+                        onClick={() => setEditingMessageId(message._id)}
                       />
                     )}
                     <ActionButton
@@ -1183,11 +1201,14 @@ const MessageItem = memo(
                   label="Copy text"
                   onClick={async () => {
                     try {
+                      const raw = message.htmlContent || message.content || "";
+                      const plainText = extractPlainText(raw);
+
                       if (navigator?.clipboard?.writeText) {
-                        await navigator.clipboard.writeText(message.content);
+                        await navigator.clipboard.writeText(plainText);
                       } else {
                         const ta = document.createElement("textarea");
-                        ta.value = message.content;
+                        ta.value = plainText;
                         ta.style.cssText = "position:fixed;opacity:0";
                         document.body.appendChild(ta);
                         ta.select();
@@ -1207,7 +1228,7 @@ const MessageItem = memo(
               )}
               {/* <MoreMenuItem
                 icon={Link2}
-                label="Copy link"
+                laabel="Copy link"
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(

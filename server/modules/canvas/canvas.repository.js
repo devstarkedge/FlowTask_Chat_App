@@ -37,7 +37,7 @@ class CanvasRepository {
 
   // ── Update ────────────────────────────────────────────────────────────────
   async update(canvasId, updates) {
-    return Canvas.findByIdAndUpdate(canvasId, updates, { new: true })
+    return Canvas.findByIdAndUpdate(canvasId, updates, { returnDocument: 'after' })
       .populate(USER_FIELDS, USER_SELECT)
       .lean();
   }

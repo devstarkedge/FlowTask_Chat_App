@@ -12,6 +12,7 @@ import {
   Alert,
   Image,
   Linking,
+  ScrollView,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useShallow } from 'zustand/react/shallow';
@@ -104,7 +105,7 @@ const isImageUrl = (url) => {
 // ─── ChatScreen ──────────────────────────────────────────────────────────────
 
 const ChatScreen = ({ route, navigation }) => {
-  const { channelId, channelName } = route.params;
+  const { channelId, channelName, initialTab, canvasId: deepLinkCanvasId } = route.params;
 
   // Granular store subscriptions — prevent unnecessary re-renders
   const messages = useChatStore(useShallow((s) => s.messagesByChannel[channelId] || []));
@@ -147,6 +148,9 @@ const ChatScreen = ({ route, navigation }) => {
   const [replyingTo, setReplyingTo] = useState(null); // message object or null
   const [editingMessage, setEditingMessage] = useState(null); // message object or null
   const [reminderTarget, setReminderTarget] = useState(null); // messageId or null
+
+  // Tab navigation — supports 'messages' and 'canvas'; deep-linked via initialTab param
+  const [activeTab, setActiveTab] = useState(initialTab === 'canvas' ? 'canvas' : 'messages');
 
   const displayedMessages = useMemo(() => [...messages].reverse(), [messages]);
 
@@ -194,11 +198,20 @@ const ChatScreen = ({ route, navigation }) => {
   }, [isDM, channelMembers, channel, user, channelName]);
 
   const flatListRef = useRef(null);
+  const canvasScrollRef = useRef(null);
 
   useEffect(() => {
     fetchMessages(channelId);
     fetchMembers(channelId);
   }, [channelId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When opened from Later Panel with a specific canvasId, scroll to that canvas item
+  const [highlightedCanvasId, setHighlightedCanvasId] = useState(deepLinkCanvasId || null);
+  useEffect(() => {
+    if (activeTab === 'canvas' && deepLinkCanvasId) {
+      setHighlightedCanvasId(deepLinkCanvasId);
+    }
+  }, [activeTab, deepLinkCanvasId]);
 
   // Debounced search — avoid re-running on every displayedMessages change
   const searchTimeoutRef = useRef(null);
@@ -833,7 +846,74 @@ const ChatScreen = ({ route, navigation }) => {
         </View>
       )}
 
-      <KeyboardAvoidingView
+      {/* Tab Bar — Messages / Canvas */}
+      <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'messages' && styles.tabItemActive]}
+          onPress={() => setActiveTab('messages')}
+          activeOpacity={0.7}
+        >
+          <MessageSquare
+            size={15}
+            color={activeTab === 'messages' ? colors.primary : colors.textSecondary}
+          />
+          <Text style={[
+            styles.tabLabel,
+            { color: activeTab === 'messages' ? colors.primary : colors.textSecondary },
+            activeTab === 'messages' && styles.tabLabelActive,
+          ]}>
+            Messages
+          </Text>
+          {activeTab === 'messages' && (
+            <View style={[styles.tabUnderline, { backgroundColor: colors.primary }]} />
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'canvas' && styles.tabItemActive]}
+          onPress={() => setActiveTab('canvas')}
+          activeOpacity={0.7}
+        >
+          <FileText
+            size={15}
+            color={activeTab === 'canvas' ? colors.primary : colors.textSecondary}
+          />
+          <Text style={[
+            styles.tabLabel,
+            { color: activeTab === 'canvas' ? colors.primary : colors.textSecondary },
+            activeTab === 'canvas' && styles.tabLabelActive,
+          ]}>
+            Canvas
+          </Text>
+          {activeTab === 'canvas' && (
+            <View style={[styles.tabUnderline, { backgroundColor: colors.primary }]} />
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Canvas Tab Panel */}
+      {activeTab === 'canvas' && (
+        <ScrollView
+          ref={canvasScrollRef}
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.canvasTabContent}
+        >
+          <View style={[styles.canvasPlaceholder, { borderColor: colors.border, backgroundColor: colors.backgroundSecondary }]}>
+            <FileText size={40} color={colors.textTertiary} />
+            <Text style={[styles.canvasPlaceholderTitle, { color: colors.textPrimary }]}>
+              Canvas
+            </Text>
+            <Text style={[styles.canvasPlaceholderText, { color: colors.textSecondary }]}>
+              {deepLinkCanvasId
+                ? `Opening canvas ${deepLinkCanvasId}…`
+                : 'Canvases for this channel will appear here.'}
+            </Text>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* Messages Tab — KeyboardAvoidingView + FlatList */}
+      {activeTab === 'messages' && (
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
@@ -917,6 +997,7 @@ const ChatScreen = ({ route, navigation }) => {
           onCancelEdit={() => { setEditingMessage(null); setText(""); }}
         />
       </KeyboardAvoidingView>
+      )} {/* end activeTab === 'messages' */}
 
       {/* Reminder Modal */}
       <ReminderModal
@@ -1168,6 +1249,63 @@ const createStyles = (colors) =>
     typingText: {
       fontSize: 12,
       fontStyle: "italic",
+    },
+    // ─── Tab bar ───────────────────────────────────────────────────────────
+    tabBar: {
+      flexDirection: 'row',
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    tabItem: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 10,
+      gap: 6,
+      position: 'relative',
+    },
+    tabItemActive: {},
+    tabLabel: {
+      fontSize: 13,
+      fontWeight: '500',
+    },
+    tabLabelActive: {
+      fontWeight: '700',
+    },
+    tabUnderline: {
+      position: 'absolute',
+      bottom: 0,
+      left: 12,
+      right: 12,
+      height: 2,
+      borderRadius: 1,
+    },
+    // ─── Canvas tab placeholder ────────────────────────────────────────────
+    canvasTabContent: {
+      flexGrow: 1,
+      padding: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    canvasPlaceholder: {
+      width: '100%',
+      borderRadius: 16,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 48,
+      paddingHorizontal: 24,
+      gap: 12,
+    },
+    canvasPlaceholderTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+    },
+    canvasPlaceholderText: {
+      fontSize: 14,
+      textAlign: 'center',
+      lineHeight: 20,
     },
     inputBar: {
       flexDirection: "row",

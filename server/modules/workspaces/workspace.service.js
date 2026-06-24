@@ -1030,7 +1030,7 @@ class WorkspaceService {
             $push: { members: { userId, role: CHANNEL_MEMBER_ROLES.MEMBER, joinedAt: new Date() } },
             $inc: { memberCount: 1 },
           },
-          { new: true },
+          { returnDocument: 'after' },
         );
 
         if (channel) {

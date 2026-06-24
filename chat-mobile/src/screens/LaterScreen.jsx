@@ -11,8 +11,10 @@ import { useLaterStore } from '../stores/laterStore';
 import { useThemeStore } from '../stores/themeStore';
 import { formatRelativeTime } from '../utils/dateUtils';
 import { ScreenLayout, ScreenHeader, FilterTabs, LoadingState, EmptyState } from '../components/common';
+import RichText from '../components/RichText';
 import { 
   Bookmark,
+  FileText,
   Clock,
   CheckCircle2,
   Archive,
@@ -27,7 +29,7 @@ const LaterScreen = ({ navigation }) => {
   const fetchSavedMessages = useLaterStore(state => state.fetchSavedMessages);
   const updateStatus = useLaterStore(state => state.updateStatus);
   const toggleSaveMessage = useLaterStore(state => state.toggleSaveMessage);
-  const [filter, setFilter] = useState('in_progress'); // in_progress, completed, archived
+  const [filter, setFilter] = useState('all'); // all, message, canvas, file
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchSavedMessagesRef = useRef(fetchSavedMessages);
@@ -45,13 +47,24 @@ const LaterScreen = ({ navigation }) => {
 
   const filteredMessages = useMemo(() => savedMessages.filter(msg => {
     if (filter === 'all') return true;
-    return msg.status === filter;
+    // Legacy items with no type field are treated as messages
+    const itemType = msg.type || 'message';
+    return itemType === filter;
   }), [savedMessages, filter]);
 
   const handleMessagePress = useCallback((savedMessage) => {
-    if (savedMessage.messageId) {
+    const channelId = savedMessage.channelId?._id;
+    if (!channelId) return;
+
+    if (savedMessage.type === 'canvas') {
+      // Navigate to the Canvas tab of ChatScreen
+      const params = { channelId, initialTab: 'canvas' };
+      if (savedMessage.canvasId) params.canvasId = savedMessage.canvasId;
+      navigation.navigate('Chat', params);
+    } else if (savedMessage.messageId) {
+      // Default: navigate to the message in the Messages tab
       navigation.navigate('Chat', {
-        channelId: savedMessage.channelId?._id,
+        channelId,
         messageId: savedMessage.messageId._id,
       });
     }
@@ -76,7 +89,13 @@ const LaterScreen = ({ navigation }) => {
   const renderSavedItem = useCallback(({ item }) => {
     const message = item.messageId;
     const channel = item.channelId;
-    
+    const isCanvas = item.type === 'canvas';
+
+    // Determine the content to render
+    const htmlContent = message?.htmlContent || item.htmlContent || null;
+    const textContent = message?.content || item.content || null;
+    const hasContent = htmlContent || textContent;
+
     return (
       <TouchableOpacity
         style={[styles.savedItem, { backgroundColor: colors.card }]}
@@ -85,7 +104,10 @@ const LaterScreen = ({ navigation }) => {
       >
         <View style={styles.savedHeader}>
           <View style={styles.savedIconContainer}>
-            <Bookmark size={16} color={colors.warning} fill={colors.warning} />
+            {isCanvas
+              ? <FileText size={16} color={colors.primary} />
+              : <Bookmark size={16} color={colors.warning} fill={colors.warning} />
+            }
           </View>
           <View style={styles.savedInfo}>
             <Text style={[styles.channelName, { color: colors.textSecondary }]} numberOfLines={1}>
@@ -99,20 +121,23 @@ const LaterScreen = ({ navigation }) => {
           </View>
           <TouchableOpacity
             style={styles.removeButton}
-            onPress={() => handleRemove(message?._id)}
+            onPress={() => handleRemove(message?._id || item._id)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <X size={18} color={colors.textTertiary} />
           </TouchableOpacity>
         </View>
 
-        {message?.content && (
-          <Text 
-            style={[styles.messageContent, { color: colors.textSecondary }]} 
-            numberOfLines={3}
-          >
-            {message.content.replace(/<[^>]*>/g, '')}
-          </Text>
+        {/* Rich-text content preview — clipped to 3 lines via style */}
+        {hasContent && (
+          <View style={styles.contentPreview} pointerEvents="none">
+            <RichText
+              html={htmlContent}
+              text={textContent}
+              colors={colors}
+              baseStyle={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20 }}
+            />
+          </View>
         )}
 
         {item.note && (
@@ -153,9 +178,10 @@ const LaterScreen = ({ navigation }) => {
 
   const styles = createStyles(colors);
   const filterTabs = [
-    { key: 'in_progress', label: 'In Progress' },
-    { key: 'completed', label: 'Completed' },
-    { key: 'archived', label: 'Archived' },
+    { key: 'all', label: 'All' },
+    { key: 'message', label: 'Messages' },
+    { key: 'canvas', label: 'Canvases' },
+    { key: 'file', label: 'Files' },
   ];
 
   return (
@@ -230,6 +256,10 @@ const createStyles = (colors) => StyleSheet.create({
   messageContent: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  contentPreview: {
+    maxHeight: 66, // ~3 lines at lineHeight 20 + spacing
+    overflow: 'hidden',
   },
   noteContainer: {
     padding: 12,

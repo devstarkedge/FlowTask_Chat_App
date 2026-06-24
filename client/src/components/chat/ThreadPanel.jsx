@@ -25,6 +25,7 @@ import {
 import { Avatar } from "./MemberAvatarGroup";
 import { format } from "date-fns";
 import { sanitizeHtml } from "../../utils/sanitize";
+import { extractPlainText } from "../../utils/extractPlainText";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 import SlackFileCard from "./SlackFileCard";
 import { handleDownload } from "../../utils/handleDownload";
@@ -188,6 +189,7 @@ if (typeof document !== "undefined" && !document.getElementById(TP_STYLE_ID)) {
  */
 function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
   const editorRef = useRef(null);
+  const wrapRef = useRef(null);
 
   const [formatState, setFormatState] = useState({
     bold: false,
@@ -230,6 +232,12 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
       }
       ed.focus("end");
       syncFormatState();
+      
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          wrapRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      });
     }, 50);
     return () => clearTimeout(timer);
   }, [initialHtml, initialText, syncFormatState]);
@@ -391,13 +399,15 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
     messageIdToDelete,
     setMessageIdToDelete,
     clearMessageIdToDelete,
+    editingMessageId,
+    setEditingMessageId,
+    clearEditingMessageId,
   } = useChatStore();
   const { toggleSaveMessage } = useLaterStore();
   const isSaved = useLaterStore((s) => s.savedMessageIds.has(message._id));
   const { confirm } = useDeleteConfirm();
 
   const [showActions, setShowActions] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
@@ -423,6 +433,8 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
     !isRoot && // Root message edits go through main channel; suppress in thread view
     Date.now() - new Date(message.createdAt).getTime() < MESSAGE_EDIT_WINDOW_MS;
 
+  const isEditing = editingMessageId === message._id;
+
   // Derive attachments
   const derivedAttachments =
     message.fileReferences?.length > 0
@@ -434,6 +446,7 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
           )
           .filter(Boolean)
       : message.attachments || [];
+
 
   // Close reaction picker on outside click / Escape
   useEffect(() => {
@@ -491,9 +504,9 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
       if (text?.trim()) {
         editThreadReply(message._id, { content: text, htmlContent: html });
       }
-      setIsEditing(false);
+      clearEditingMessageId();
     },
-    [editThreadReply, message._id],
+    [editThreadReply, message._id, clearEditingMessageId],
   );
 
   const handleReaction = (emoji) => {
@@ -510,11 +523,14 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
 
   const handleCopyText = async () => {
     try {
+      const raw = message.htmlContent || message.content || "";
+      const plainText = extractPlainText(raw);
+
       if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(message.content || "");
+        await navigator.clipboard.writeText(plainText);
       } else {
         const ta = document.createElement("textarea");
-        ta.value = message.content || "";
+        ta.value = plainText;
         ta.style.cssText = "position:fixed;opacity:0";
         document.body.appendChild(ta);
         ta.select();
@@ -609,7 +625,7 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
               initialHtml={message.htmlContent || ""}
               initialText={message.content}
               onSave={handleEdit}
-              onCancel={() => setIsEditing(false)}
+              onCancel={clearEditingMessageId}
             />
           </div>
         ) : (() => {
@@ -763,7 +779,7 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
                   icon={Edit}
                   title="Edit message"
                   onClick={() => {
-                    setIsEditing(true);
+                    setEditingMessageId(message._id);
                     setShowActions(false);
                   }}
                 />
@@ -909,6 +925,7 @@ export default function ThreadPanel({ thread, onClose }) {
   const messagesById = useChatStore((s) => s.messagesById);
   const threadParentMessages = useChatStore((s) => s.threadParentMessages);
   const setScrollAndHighlightMessage = useChatStore((s) => s.setScrollAndHighlightMessage);
+  const editingMessageId = useChatStore((s) => s.editingMessageId);
 
   const replies = useMemo(() => {
     if (!CHAT_FEATURE_FLAGS.normalizedMessageStore) return legacyReplies;
@@ -924,6 +941,10 @@ export default function ThreadPanel({ thread, onClose }) {
     }
     return channelMessages.find((m) => m._id === thread.rootMessageId) || threadParentMessages[thread.rootMessageId] || null;
   }, [messagesById, thread.rootMessageId, channelMessages, threadParentMessages]);
+
+  const isEditingInThread = useMemo(() => {
+    return editingMessageId && (rootMessage?._id === editingMessageId || replies.some(r => r._id === editingMessageId));
+  }, [editingMessageId, rootMessage?._id, replies]);
 
   const bottomRef = useRef(null);
   const prevReplyCountRef = useRef(replies.length);
@@ -1058,13 +1079,15 @@ export default function ThreadPanel({ thread, onClose }) {
       </div>
 
       {/* ── Reply Composer ─────────────────────────────────────────────── */}
-      <div className="thread-panel__composer">
-        <MessageInput
-          channelId={thread.channelId}
-          threadId={thread.rootMessageId}
-          placeholder="Reply in thread…"
-        />
-      </div>
+      {!isEditingInThread && (
+        <div className="thread-panel__composer">
+          <MessageInput
+            channelId={thread.channelId}
+            threadId={thread.rootMessageId}
+            placeholder="Reply in thread…"
+          />
+        </div>
+      )}
 
       {/* Forward Message Modal */}
       {forwardTarget && (

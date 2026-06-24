@@ -211,15 +211,17 @@ class FileUploadService {
 
     for (let attempt = 1; attempt <= UPLOAD_RETRY.MAX_ATTEMPTS; attempt++) {
       try {
-        let result;
-        if (fileSize > 10 * 1024 * 1024) {
-          result = await cloudinary.uploader.upload_large(
-            filePath,
-            uploadOptions,
-          );
-        } else {
-          result = await cloudinary.uploader.upload(filePath, uploadOptions);
-        }
+        const result = await new Promise((resolve, reject) => {
+          const cb = (err, res) => {
+            if (err) reject(err);
+            else resolve(res);
+          };
+          if (fileSize > 10 * 1024 * 1024) {
+            cloudinary.uploader.upload_large(filePath, uploadOptions, cb);
+          } else {
+            cloudinary.uploader.upload(filePath, uploadOptions, cb);
+          }
+        });
         return result;
       } catch (error) {
         lastError = error;

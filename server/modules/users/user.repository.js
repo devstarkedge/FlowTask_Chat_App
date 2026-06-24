@@ -229,7 +229,7 @@ class UserRepository {
           chatPreferences: {},
         },
       },
-      { upsert: true, returnDocument: 'after', new: true },
+      { upsert: true, returnDocument: 'after' },
     );
     
     return updated;
@@ -580,7 +580,7 @@ class UserRepository {
     return ChatUser.findByIdAndUpdate(
       userId,
       { $set: updates },
-      { returnDocument: 'after', new: true },
+      { returnDocument: 'after' },
     ).exec();
   }
 }

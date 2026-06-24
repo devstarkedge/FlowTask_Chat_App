@@ -274,7 +274,7 @@ class ChannelRepository {
       await ChannelMember.findOneAndUpdate(
         { channelId, userId },
         { $set: { isActive: false } },
-        { new: true, session },
+        { returnDocument: 'after', session },
       );
 
       // Only decrement if member was actually in the embedded array
@@ -284,7 +284,7 @@ class ChannelRepository {
           $pull: { members: { userId } },
           $inc: { memberCount: -1 },
         },
-        { new: true, session },
+        { returnDocument: 'after', session },
       );
 
       await session.commitTransaction();

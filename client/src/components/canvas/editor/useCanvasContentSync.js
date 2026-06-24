@@ -28,6 +28,7 @@ export function useCanvasContentSync({
 }) {
   const localEditRef = useRef(false);
   const initialContentSetRef = useRef(false);
+  const previousCanvasIdRef = useRef(null);
 
   // Keep providerRef up to date
   useEffect(() => {
@@ -127,11 +128,30 @@ export function useCanvasContentSync({
   }, [canvas?.content, editor]);
 
   // ─── Non-collab content sync ─────────────────────────────────────
+  //
+  // IMPORTANT: This effect MUST always run when canvas?._id changes, even if
+  // localEditRef is true from a previous canvas's edits.  The localEditRef
+  // guard only applies when sync fires for the SAME canvas (to prevent cursor
+  // reset after debounced saves / file uploads that update the store's content
+  // pointer).  When switching to an entirely different canvas, the ref is
+  // overridden below.
 
   useEffect(() => {
     if (!editor || providerRef.current) return undefined;
 
-    // If the content change was triggered by a local edit, skip setContent().
+    const newCanvasId = canvas?._id;
+    const prevCanvasId = previousCanvasIdRef.current;
+
+    // Canvas switched — always sync, regardless of localEditRef state
+    // from prior canvas interaction.
+    if (newCanvasId && newCanvasId !== prevCanvasId) {
+      localEditRef.current = false;
+      initialContentSetRef.current = false;
+      previousCanvasIdRef.current = newCanvasId;
+    }
+
+    // If the content change was triggered by a local edit on the *same* canvas,
+    // skip setContent() to avoid cursor/selection reset.
     if (localEditRef.current) {
       localEditRef.current = false;
       return undefined;
@@ -142,22 +162,29 @@ export function useCanvasContentSync({
       const currentJSON =
         typeof editor.getJSON === "function" ? editor.getJSON() : null;
 
-      if (
-        !currentJSON ||
-        JSON.stringify(currentJSON) !== JSON.stringify(newJSON)
-      ) {
-        editor.commands.setContent(newJSON, false);
-        try {
-          convertTokensToVariableNodes(editor);
-        } catch (e) {
-          console.warn("convertTokensToVariableNodes failed", e);
-        }
-        initialContentSetRef.current = true;
+      // Also skip if content hasn't changed at all (prevents unnecessary DOM
+      // churn on re-renders that don't change the actual document).
+      if (currentJSON && JSON.stringify(currentJSON) === JSON.stringify(newJSON)) {
+        return undefined;
       }
+
+      editor.commands.setContent(newJSON, false);
+      try {
+        convertTokensToVariableNodes(editor);
+      } catch (e) {
+        console.warn("convertTokensToVariableNodes failed", e);
+      }
+      initialContentSetRef.current = true;
     } catch (e) {
       console.warn("non-collab content sync failed", e);
     }
-  }, [editor, canvas?.content]);
+  }, [editor, canvas?._id, canvas?.content]);
+
+  // Also clear localEditRef when canvas changes (defensive catch-all)
+  useEffect(() => {
+    if (!canvas?._id) return;
+    previousCanvasIdRef.current = canvas._id;
+  }, [canvas?._id]);
 
   return { localEditRef, initialContentSetRef };
 }

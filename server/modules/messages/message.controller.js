@@ -680,7 +680,7 @@ export const updateSavedMessageStatus = asyncHandler(async (req, res) => {
   let saved = await SavedMessage.findOneAndUpdate(
     { userId: req.user._id, messageId: req.params.id, workspaceId: req.workspaceId },
     { $set: { status } },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!saved) {
@@ -688,7 +688,7 @@ export const updateSavedMessageStatus = asyncHandler(async (req, res) => {
     saved = await SavedMessage.findOneAndUpdate(
       { userId: req.user._id, _id: req.params.id, workspaceId: req.workspaceId },
       { $set: { status } },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 
@@ -756,7 +756,7 @@ export const updateSavedMessageReminder = asyncHandler(async (req, res) => {
   let saved = await SavedMessage.findOneAndUpdate(
     { userId: req.user._id, messageId: req.params.id, workspaceId: req.workspaceId },
     { $set: updateData },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!saved) {
@@ -764,7 +764,7 @@ export const updateSavedMessageReminder = asyncHandler(async (req, res) => {
     saved = await SavedMessage.findOneAndUpdate(
       { userId: req.user._id, _id: req.params.id, workspaceId: req.workspaceId },
       { $set: updateData },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 
@@ -831,14 +831,14 @@ export const snoozeSavedReminder = asyncHandler(async (req, res) => {
   let saved = await SavedMessage.findOneAndUpdate(
     { userId: req.user._id, messageId: req.params.id, workspaceId: req.workspaceId },
     { $set: { snoozedUntil: when }, $push: { snoozeHistory: { snoozedAt: new Date(), snoozeUntil: when, userId: req.user._id } } },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!saved) {
     saved = await SavedMessage.findOneAndUpdate(
       { userId: req.user._id, _id: req.params.id, workspaceId: req.workspaceId },
       { $set: { snoozedUntil: when }, $push: { snoozeHistory: { snoozedAt: new Date(), snoozeUntil: when, userId: req.user._id } } },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 

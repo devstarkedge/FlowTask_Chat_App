@@ -230,7 +230,7 @@ export default function registerCanvasSocket(io, socket) {
       const updatedBlock = await CanvasBlock.findOneAndUpdate(
         { _id: blockId, canvasId },
         { $set: setData, $inc },
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       if (updatedBlock) {
@@ -450,7 +450,7 @@ export default function registerCanvasSocket(io, socket) {
       const comment = await CanvasComment.findOneAndUpdate(
         { _id: commentId, canvasId },
         { resolved: true, resolvedBy: userId, resolvedAt: new Date() },
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       if (comment) {

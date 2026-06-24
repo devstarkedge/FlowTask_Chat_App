@@ -1,94 +1,30 @@
-import { useState, useEffect, useRef, useCallback, memo } from 'react'
-import { useChannelStore } from '../../stores/channelStore'
+import { useEffect, useRef, useCallback, memo } from 'react'
+import { createPortal } from 'react-dom'
 import { Hash, User } from 'lucide-react'
 
-const EMPTY_MEMBERS = []
-const EMPTY_CHANNELS = []
-
+/**
+ * Reusable Mention Dropdown — renders a positioned list of mentionable items.
+ *
+ * Works with the centralized useMentions() hook. Get items, activeIndex,
+ * mentionPos, selectMention, closeMentions, setActiveIndex from the hook.
+ *
+ * @param {object} props
+ * @param {Array}  props.items          - Filtered list of { id, name, avatar, type }
+ * @param {number} props.activeIndex    - Currently highlighted index
+ * @param {object} props.position       - { top, left } cursor-based position
+ * @param {function} props.onSelect     - (item) => void (usually selectMention)
+ * @param {function} props.onClose      - () => void (usually closeMentions)
+ * @param {function} props.setActiveIndex - (index) => void
+ */
 const MentionDropdown = memo(function MentionDropdown({
-  type,        // 'user' or 'channel'
-  query,       // search string after @ or #
-  channelId,   // current channel for member lookup
-  position,    // { top, left } viewport coordinates (fixed positioning)
-  onSelect,    // (item) => void
-  onClose,     // () => void
+  items,
+  activeIndex,
+  position,
+  onSelect,
+  onClose,
+  setActiveIndex,
 }) {
-  const [activeIndex, setActiveIndex] = useState(0)
   const listRef = useRef(null)
-  const members = useChannelStore((s) => s.membersByChannel[channelId]) ?? EMPTY_MEMBERS
-  const channels = useChannelStore((s) => s.channels) ?? EMPTY_CHANNELS
-
-  const items = type === 'user'
-    ? members
-        .filter((m) => {
-          if (!query) return true
-          const name = (m.name || m.userId?.name || '').toLowerCase()
-          const email = (m.email || m.userId?.email || '').toLowerCase()
-          return name.includes(query.toLowerCase()) || email.includes(query.toLowerCase())
-        })
-        .slice(0, 8)
-        .map((m) => ({
-          id: m._id || m.userId?._id || m.userId,
-          name: m.name || m.userId?.name || 'Unknown',
-          avatar: m.avatar || m.userId?.avatar,
-          type: 'user',
-        }))
-    : channels
-        .filter((c) => {
-          if (!query) return true
-          return (c.name || '').toLowerCase().includes(query.toLowerCase())
-        })
-        .slice(0, 8)
-        .map((c) => ({
-          id: c._id,
-          name: c.name,
-          type: 'channel',
-        }))
-
-  // Reset active index when items change
-  useEffect(() => {
-    setActiveIndex(0)
-  }, [items.length, query])
-
-  // Keyboard navigation
-  const handleKeyDown = useCallback(
-    (e) => {
-      if (!items.length) return
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        e.stopPropagation()
-        setActiveIndex((prev) => (prev + 1) % items.length)
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        e.stopPropagation()
-        setActiveIndex((prev) => (prev - 1 + items.length) % items.length)
-      } else if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault()
-        e.stopPropagation()
-        onSelect(items[activeIndex])
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        onClose()
-      }
-    },
-    [items, activeIndex, onSelect, onClose]
-  )
-
-  useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown, true)
-    return () => document.removeEventListener('keydown', handleKeyDown, true)
-  }, [handleKeyDown])
-
-  // Scroll active item into view
-  useEffect(() => {
-    const list = listRef.current
-    if (!list) return
-    const activeEl = list.children[activeIndex]
-    if (activeEl) {
-      activeEl.scrollIntoView({ block: 'nearest' })
-    }
-  }, [activeIndex])
 
   // Close on click outside
   useEffect(() => {
@@ -101,7 +37,17 @@ const MentionDropdown = memo(function MentionDropdown({
     return () => document.removeEventListener('mousedown', handleClick)
   }, [onClose])
 
-  if (items.length === 0) return null
+  // Scroll active item into view
+  useEffect(() => {
+    const list = listRef.current
+    if (!list) return
+    const activeEl = list.children[activeIndex]
+    if (activeEl) {
+      activeEl.scrollIntoView({ block: 'nearest' })
+    }
+  }, [activeIndex])
+
+  if (!items || items.length === 0) return null
 
   // Compute fixed position with flip logic so the dropdown stays in viewport
   const dropdownWidth = 260
@@ -113,15 +59,15 @@ const MentionDropdown = memo(function MentionDropdown({
   // Flip vertically if the dropdown would overflow the bottom edge
   const flipDown = top + dropdownMaxHeight > window.innerHeight - 12
 
-  return (
+  // Render via portal to escape any CSS transform contexts (e.g. thread panel)
+  return createPortal(
     <div
       ref={listRef}
       className="mention-dropdown animate-fade-in-scale"
       style={{
         position: 'fixed',
         top: flipDown ? top - dropdownMaxHeight - 8 : top,
-        left: flipRight ? left - dropdownWidth + 60 : left,
-        // Raise above canvas selection toolbar (z-index:1000)
+        left: flipRight ? Math.max(8, left - dropdownWidth + 60) : left,
         zIndex: 1200,
         minWidth: 220,
         maxWidth: 320,
@@ -146,7 +92,7 @@ const MentionDropdown = memo(function MentionDropdown({
           letterSpacing: '0.5px',
         }}
       >
-        {type === 'user' ? 'Members' : 'Channels'}
+        {items[0]?.type === 'user' ? 'Members' : 'Channels'}
       </div>
       {items.map((item, i) => (
         <button
@@ -168,7 +114,7 @@ const MentionDropdown = memo(function MentionDropdown({
             textAlign: 'left',
             transition: 'background 80ms ease',
           }}
-          onMouseEnter={() => setActiveIndex(i)}
+          onMouseEnter={() => setActiveIndex?.(i)}
         >
           {item.type === 'user' ? (
             item.avatar ? (
@@ -208,7 +154,8 @@ const MentionDropdown = memo(function MentionDropdown({
           </span>
         </button>
       ))}
-    </div>
+    </div>,
+    document.body
   )
 })
 

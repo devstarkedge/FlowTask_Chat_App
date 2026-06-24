@@ -134,6 +134,11 @@ export const useChatStore = create((set, get) => ({
   scrollToMessageId: null,
   setScrollToMessageId: (id) => set({ scrollToMessageId: id }),
 
+  // Global edit state — single source of truth for which message is being edited
+  editingMessageId: null,
+  setEditingMessageId: (id) => set({ editingMessageId: id }),
+  clearEditingMessageId: () => set({ editingMessageId: null }),
+
   // Delete confirmation highlight — persists until modal closes
   messageIdToDelete: null,
   setMessageIdToDelete: (id) => set({ messageIdToDelete: id }),

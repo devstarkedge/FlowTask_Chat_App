@@ -85,6 +85,7 @@ import { useDownloadStore } from "../../stores/downloadStore";
 import { onPreviewRequest } from "../../services/previewService";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 import { handleDownload } from "../../utils/handleDownload";
+import { useAppHistory } from "../../hooks/useAppHistory";
 
 const EMPTY_LIST = [];
 
@@ -726,6 +727,8 @@ export default function ChatLayout() {
   const [showTopSetStatus, setShowTopSetStatus] = useState(false);
   const addDownload = useDownloadStore((state) => state.addDownload);
   const user = useAuthStore((s) => s.user);
+
+  const { canGoBack, canGoForward, goBack, goForward } = useAppHistory();
 
   useLayoutStylesInjected();
 
@@ -1567,8 +1570,10 @@ export default function ChatLayout() {
           searchRef={globalSearchRef}
           messages={localSearchMessages}
           unreadCount={unreadNotifications}
-          onBack={() => navigate(-1)}
-          onForward={() => navigate(1)}
+          onBack={goBack}
+          onForward={goForward}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
           onOpenSearchResult={handleOpenSearchResult}
           onOpenResultsPage={openLocalSearchResultsPage}
           onOpenChange={setIsSearchOpen}
@@ -1747,6 +1752,8 @@ function GlobalTopBar({
   unreadCount,
   onBack,
   onForward,
+  canGoBack,
+  canGoForward,
   onOpenSearchResult,
   onOpenResultsPage,
   onOpenChange,
@@ -1771,6 +1778,11 @@ function GlobalTopBar({
           onClick={onBack}
           aria-label="Go back"
           title="Go back"
+          disabled={!canGoBack}
+          style={{
+            opacity: canGoBack ? 1 : 0.4,
+            cursor: canGoBack ? "pointer" : "default"
+          }}
         >
           <ArrowLeft size={15} />
         </button>
@@ -1779,6 +1791,11 @@ function GlobalTopBar({
           onClick={onForward}
           aria-label="Go forward"
           title="Go forward"
+          disabled={!canGoForward}
+          style={{
+            opacity: canGoForward ? 1 : 0.4,
+            cursor: canGoForward ? "pointer" : "default"
+          }}
         >
           <ArrowRight size={15} />
         </button>

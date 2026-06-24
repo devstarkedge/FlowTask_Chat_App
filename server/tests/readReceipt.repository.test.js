@@ -72,7 +72,7 @@ describe('readReceiptRepository', () => {
           unreadCount: 0,
           unreadMentionCount: 0,
         }),
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
       expect(result).toEqual(mockReceipt);
     });

@@ -30,6 +30,7 @@ export default function MessageList({
   const setHighlightMessageId = useChatStore((s) => s.setHighlightMessageId);
   const scrollToMessageId = useChatStore((s) => s.scrollToMessageId);
   const setScrollToMessageId = useChatStore((s) => s.setScrollToMessageId);
+  const editingMessageId = useChatStore((s) => s.editingMessageId);
 
   const lastReadMessageId = useChannelStore(
     (s) => s.lastReadByChannel?.[channelId]
@@ -191,7 +192,7 @@ export default function MessageList({
         currentUserId != null &&
         String(authorId) === String(currentUserId);
 
-      if (isAtBottomRef.current || isOwnMessage) {
+      if ((isAtBottomRef.current || isOwnMessage) && !editingMessageId) {
         setTimeout(() => {
           virtuosoRef.current?.scrollToIndex({
             index: "LAST",
@@ -369,6 +370,8 @@ export default function MessageList({
     }
   }, [highlightMessageId, flattenedItems, setHighlightMessageId]);
 
+
+
   // ─── Scroll-to from pinned messages ───────────────────────────────────
   useEffect(() => {
     if (
@@ -473,6 +476,7 @@ export default function MessageList({
           // rendering), which can cause render-update loops. `atBottomStateChange`
           // will handle updating component state.
           isAtBottomRef.current = isAtBottom;
+          if (editingMessageId) return false;
           return isAtBottom ? "smooth" : false;
         }}
         atBottomStateChange={(atBottom) => {

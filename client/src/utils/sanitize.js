@@ -17,6 +17,7 @@ const ALLOWED_TAGS = new Set([
 const ALLOWED_ATTRS = new Set([
   'href', 'target', 'rel', 'class',
   'data-mention-id', 'data-mention-type',
+  'contenteditable',
 ])
 
 /**

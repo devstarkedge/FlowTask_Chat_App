@@ -315,7 +315,7 @@ export const updateThemePreferences = asyncHandler(async (req, res) => {
           'chatPreferences.customTheme': '',
         },
       },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     ).select('chatPreferences');
     
     return res.json({ 
@@ -354,7 +354,7 @@ export const updateThemePreferences = asyncHandler(async (req, res) => {
   const user = await ChatUser.findByIdAndUpdate(
     req.user._id,
     { $set: updatePayload },
-    { new: true, runValidators: true }
+    { returnDocument: 'after', runValidators: true }
   ).select('chatPreferences');
   
   if (!user) {

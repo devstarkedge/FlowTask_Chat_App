@@ -456,28 +456,6 @@ const MessageItem = memo(
     }, [isPinnedHighlight]);
 
 
-    // ── Close reaction picker on outside click / Escape ──────────────────────
-    useEffect(() => {
-      if (!showReactionPicker) return;
-      const onDown = (e) => {
-        if (messageRef.current && !messageRef.current.contains(e.target)) {
-          setShowReactionPicker(false);
-          setShowActions(false);
-        }
-      };
-      const onKey = (e) => {
-        if (e.key === "Escape") {
-          setShowReactionPicker(false);
-          setShowActions(false);
-        }
-      };
-      document.addEventListener("mousedown", onDown);
-      document.addEventListener("keydown", onKey);
-      return () => {
-        document.removeEventListener("mousedown", onDown);
-        document.removeEventListener("keydown", onKey);
-      };
-    }, [showReactionPicker]);
 
     // ── Close more-menu on outside click / Escape ────────────────────────────
     useEffect(() => {
@@ -1062,29 +1040,30 @@ const MessageItem = memo(
                 </div>
               )}
 
-              {/* Reactions */}
-              {message.reactions?.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {message.reactions.map((reaction) => {
-                    const hasReacted =
-                      reaction.users?.includes(user?._id) ||
-                      reaction.userIds?.some(
-                        (id) => id?.toString() === user?._id,
-                      );
-                    const count = reaction.users?.length || reaction.count || 0;
-                    return (
-                      <ReactionRenderer
-                        key={reaction.emoji}
-                        emoji={reaction.emoji}
-                        count={count}
-                        hasReacted={hasReacted}
-                        onClick={handleReaction}
-                      />
-                    );
-                  })}
-                </div>
-              )}
             </div>
+
+            {/* Reactions */}
+            {message.reactions?.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1 px-1">
+                {message.reactions.map((reaction) => {
+                  const hasReacted =
+                    reaction.users?.includes(user?._id) ||
+                    reaction.userIds?.some(
+                      (id) => id?.toString() === user?._id,
+                    );
+                  const count = reaction.users?.length || reaction.count || 0;
+                  return (
+                    <ReactionRenderer
+                      key={reaction.emoji}
+                      emoji={reaction.emoji}
+                      count={count}
+                      hasReacted={hasReacted}
+                      onClick={handleReaction}
+                    />
+                  );
+                })}
+              </div>
+            )}
 
             {/* Thread preview — outside bubble */}
             {message.replyCount > 0 && (

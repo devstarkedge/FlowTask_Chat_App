@@ -36,6 +36,7 @@ import ForwardMessageModal from "./ForwardMessageModal";
 import toast from "react-hot-toast";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
+import { ReactionRenderer } from "../shared/EmojiRenderer";
 
 const EMPTY_LIST = [];
 const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
@@ -448,28 +449,6 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
       : message.attachments || [];
 
 
-  // Close reaction picker on outside click / Escape
-  useEffect(() => {
-    if (!showReactionPicker) return;
-    const onDown = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setShowReactionPicker(false);
-        setShowActions(false);
-      }
-    };
-    const onKey = (e) => {
-      if (e.key === "Escape") {
-        setShowReactionPicker(false);
-        setShowActions(false);
-      }
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [showReactionPicker]);
 
   // Close more-menu on outside click / Escape
   useEffect(() => {
@@ -715,21 +694,13 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
                 reaction.userIds?.some((id) => id?.toString() === user?._id);
               const count = reaction.users?.length || reaction.count || 0;
               return (
-                <button
+                <ReactionRenderer
                   key={reaction.emoji}
-                  onClick={() => handleReaction(reaction.emoji)}
-                  title={`${reaction.emoji} ${count}`}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer transition-all"
-                  style={{
-                    background: hasReacted
-                      ? "color-mix(in srgb, var(--accent-color) 22%, transparent)"
-                      : "var(--bg-hover)",
-                    border: `1px solid ${hasReacted ? "var(--accent-primary)" : "var(--border-secondary)"}`,
-                    color: "var(--text-primary)",
-                  }}
-                >
-                  {reaction.emoji} {count}
-                </button>
+                  emoji={reaction.emoji}
+                  count={count}
+                  hasReacted={hasReacted}
+                  onClick={handleReaction}
+                />
               );
             })}
           </div>

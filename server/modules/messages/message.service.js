@@ -139,7 +139,11 @@ class MessageService {
         : channel.type === CHANNEL_TYPES.DM
           ? 'dm'
           : 'channel';
-      const refsToCreate = fileReferences.map((fileId) => ({
+          
+      // Deduplicate fileIds to prevent E11000 duplicate key error on workspaceId_messageId_fileId index
+      const uniqueFileReferences = [...new Set(fileReferences.map(id => id.toString()))];
+      
+      const refsToCreate = uniqueFileReferences.map((fileId) => ({
         fileId,
         channelId,
         messageId: message._id,
@@ -1128,7 +1132,16 @@ class MessageService {
 
         // ── Clone FileReferences (shared file storage, new reference records) ──
         if (origFileRefs.length > 0) {
-          const newRefs = origFileRefs.map(ref => ({
+          // Deduplicate based on fileId to prevent duplicate key errors
+          const uniqueRefsMap = new Map();
+          origFileRefs.forEach(ref => {
+            const fId = (ref.fileId?._id || ref.fileId).toString();
+            if (!uniqueRefsMap.has(fId)) {
+              uniqueRefsMap.set(fId, ref);
+            }
+          });
+          
+          const newRefs = Array.from(uniqueRefsMap.values()).map(ref => ({
             workspaceId,
             fileId: ref.fileId?._id || ref.fileId,
             channelId: destChannelId,

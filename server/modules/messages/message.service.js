@@ -1054,7 +1054,13 @@ class MessageService {
 
       const originalAuthorId = original.authorId?._id || original.authorId;
       const originalAuthorName = original.senderSnapshot?.name || 'Unknown';
-      const sourceChannelName = sourceChannel.name || 'unknown';
+      // Format DM channel name to only show the other participants
+      let sourceChannelName = sourceChannel.name || 'unknown';
+      if (sourceChannel.type === CHANNEL_TYPES.DM) {
+        const parts = sourceChannelName.split(',').map(s => s.trim());
+        const otherParts = parts.filter(p => p !== senderSnapshot.name);
+        sourceChannelName = otherParts.length > 0 ? otherParts.join(', ') : 'Direct Message';
+      }
 
       // Pre-fetch original FileReferences so we can clone them
       let origFileRefs = original.fileReferences && original.fileReferences.length > 0
@@ -1124,6 +1130,7 @@ class MessageService {
             originalSenderName: originalAuthorName,
             originalChannelId: original.channelId,
             originalChannelName: sourceChannelName,
+            originalChannelType: sourceChannel.type,
           },
         };
 

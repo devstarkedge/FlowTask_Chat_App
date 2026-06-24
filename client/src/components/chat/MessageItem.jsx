@@ -37,6 +37,7 @@ import { ReactionRenderer } from "../shared/EmojiRenderer";
 import { Avatar } from "./MemberAvatarGroup";
 import EmojiPicker from "./EmojiPicker";
 import EmojiPickerPortal from "./EmojiPickerPortal";
+import FloatingPortal from "./FloatingPortal";
 import { sanitizeHtml } from "../../utils/sanitize";
 import { extractPlainText } from "../../utils/extractPlainText";
 import toast from "react-hot-toast";
@@ -423,6 +424,9 @@ const MessageItem = memo(
       editingMessageId,
       setEditingMessageId,
       clearEditingMessageId,
+      activeMessageMenuId,
+      setActiveMessageMenuId,
+      clearActiveMessageMenuId,
     } = useChatStore();
     const { confirm } = useDeleteConfirm();
     
@@ -431,9 +435,10 @@ const MessageItem = memo(
 
     const isSaved = useLaterStore((s) => s.savedMessageIds.has(message._id));
 
+    const showMoreMenu = activeMessageMenuId === message._id;
+
     const [showActions, setShowActions] = useState(false);
     const [showReactionPicker, setShowReactionPicker] = useState(false);
-    const [showMoreMenu, setShowMoreMenu] = useState(false);
     const [showMessageDetails, setShowMessageDetails] = useState(false);
 
     const messageRef = useRef(null);
@@ -458,27 +463,7 @@ const MessageItem = memo(
 
 
     // ── Close more-menu on outside click / Escape ────────────────────────────
-    useEffect(() => {
-      if (!showMoreMenu) return;
-      const onDown = (e) => {
-        if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
-          setShowMoreMenu(false);
-          setShowActions(false);
-        }
-      };
-      const onKey = (e) => {
-        if (e.key === "Escape") {
-          setShowMoreMenu(false);
-          setShowActions(false);
-        }
-      };
-      document.addEventListener("mousedown", onDown);
-      document.addEventListener("keydown", onKey);
-      return () => {
-        document.removeEventListener("mousedown", onDown);
-        document.removeEventListener("keydown", onKey);
-      };
-    }, [showMoreMenu]);
+    // Handled by FloatingPortal now
 
     // ── Handle forward attachment ─────────────────────────────────────────────
     // When a specific file is passed (from SlackFileCard's per-file Forward button),
@@ -869,7 +854,7 @@ const MessageItem = memo(
             className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}
             style={{ maxWidth: "min(65%, 480px)" }}
           >
-            {!compact && (
+            {!compact && !isDMChannel && (
               <div
                 className={`flex items-baseline gap-1.5 mb-1 px-1 ${isOwn ? "flex-row-reverse" : ""}`}
               >
@@ -946,7 +931,9 @@ const MessageItem = memo(
                     Forwarded from{" "}
                     <strong style={{ color: "var(--text-secondary)", fontWeight: 600 }}>
                       {message.forwardMeta.originalChannelName
-                        ? `#${message.forwardMeta.originalChannelName}`
+                        ? (message.forwardMeta.originalChannelType === "dm" 
+                            ? message.forwardMeta.originalChannelName 
+                            : `#${message.forwardMeta.originalChannelName}`)
                         : message.forwardMeta.originalSenderName || "Unknown"}
                     </strong>
                   </span>
@@ -1143,24 +1130,34 @@ const MessageItem = memo(
                     />
                   </>
                 )}
-                <ActionButton
-                  icon={MoreVertical}
-                  title="More actions"
-                  onClick={() => setShowMoreMenu(!showMoreMenu)}
-                />
+                <div ref={moreMenuRef} style={{ display: "inline-flex" }}>
+                  <ActionButton
+                    icon={MoreVertical}
+                    title="More actions"
+                    onClick={() => setActiveMessageMenuId(showMoreMenu ? null : message._id)}
+                  />
+                </div>
               </div>
             )}
 
           {/* More menu */}
-          {showMoreMenu && (
+          <FloatingPortal
+            anchorRef={moreMenuRef}
+            isOpen={showMoreMenu}
+            onClose={() => {
+              clearActiveMessageMenuId();
+              setShowActions(false);
+            }}
+            position="bottom-end"
+            minWidth={192}
+            minHeight={160}
+            offset={4}
+          >
             <div
-              ref={moreMenuRef}
-              className="absolute z-20 w-48 rounded-md shadow-lg py-1"
+              className="w-48 rounded-md shadow-lg py-1"
               style={{
                 background: "var(--bg-secondary)",
                 border: "1px solid var(--border-primary)",
-                top: "-40px",
-                right: "40px",
               }}
             >
               <MoreMenuItem
@@ -1170,7 +1167,7 @@ const MessageItem = memo(
                   message.isPinned
                     ? unpinMessage(message._id)
                     : pinMessage(message._id);
-                  setShowMoreMenu(false);
+                  clearActiveMessageMenuId();
                   setShowActions(false);
                 }}
               />
@@ -1200,7 +1197,7 @@ const MessageItem = memo(
                       toast.error("Copy failed");
                     }
 
-                    setShowMoreMenu(false);
+                    clearActiveMessageMenuId();
                     setShowActions(false);
                   }}
                 />
@@ -1225,7 +1222,7 @@ const MessageItem = memo(
                 icon={Forward}
                 label="Forward message"
                 onClick={() => {
-                  setShowMoreMenu(false);
+                  clearActiveMessageMenuId();
                   setShowActions(false);
                   onForwardMessage?.(message);
                 }}
@@ -1234,13 +1231,13 @@ const MessageItem = memo(
                 icon={Info}
                 label="Message Details"
                 onClick={() => {
-                  setShowMoreMenu(false);
+                  clearActiveMessageMenuId();
                   setShowActions(false);
                   setShowMessageDetails(true);
                 }}
               />
             </div>
-          )}
+          </FloatingPortal>
 
           {/* Message Details Panel (Portal-based) */}
           {showMessageDetails && (

@@ -294,6 +294,7 @@ export function useDeleteConfirm() {
           />
         ),
         {
+          id: 'global-delete-confirm', // Prevents multiple instances
           duration: Infinity,       // stays until the user acts
           position: 'top-center',
           removeDelay: 0,           // skip exit animation — removes instantly

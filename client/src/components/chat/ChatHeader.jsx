@@ -374,7 +374,7 @@ export default function ChatHeader({
           ref={moreMenuRef}
           style={{ gap: 2, position: "relative" }}
         >
-          {!isConstrained && (
+          {!isConstrained && channel?.type !== "dm" && (
             <ChannelMemberCount
               count={memberCount}
               onClick={(e) => {

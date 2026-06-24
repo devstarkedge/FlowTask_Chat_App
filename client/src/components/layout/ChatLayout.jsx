@@ -1455,9 +1455,23 @@ export default function ChatLayout() {
       if (isMobile) setShowMobileSidebar(false);
     };
 
+    const onJumpToCanvas = (canvas) => {
+      const channelId = asId(canvas.channelId) || canvas.channelId;
+      const canvasId = asId(canvas._id) || canvas._id;
+      if (channelId !== activeChannelId)
+        useChannelStore.getState().setActiveChannel(channelId);
+      navigate(getChannelPath(workspaceId, channelId), {
+        state: { targetTab: `canvas:${canvasId}`, targetChannelId: channelId }
+      });
+      if (isMobile) setShowMobileSidebar(false);
+    };
+
     if (showLaterPanelInSidebar) {
       return (
-        <LaterPanel onJumpToMessage={onJumpToMessage} />
+        <LaterPanel 
+          onJumpToMessage={onJumpToMessage} 
+          onJumpToCanvas={onJumpToCanvas}
+        />
       );
     }
 

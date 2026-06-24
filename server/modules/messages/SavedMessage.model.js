@@ -173,7 +173,10 @@ savedMessageSchema.statics.getUserSaved = async function (userId, workspaceId, {
     .limit(limit)
     .populate({
       path: 'messageId',
-      populate: { path: 'authorId', select: 'name avatar' },
+      populate: [
+        { path: 'authorId', select: 'name avatar' },
+        { path: 'fileReferences', populate: { path: 'fileId' } }
+      ],
     })
     .populate('channelId', 'name type')
     .lean();

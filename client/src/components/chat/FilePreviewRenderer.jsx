@@ -316,7 +316,7 @@ function parseCsv(text) {
 
 function LoadingState({ label }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, width: '100%', height: '100%', color: 'var(--text-secondary)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, width: '100%', height: '100%', color: 'var(--preview-text-color, var(--text-secondary))' }}>
       <div style={{
         width: 36,
         height: 36,

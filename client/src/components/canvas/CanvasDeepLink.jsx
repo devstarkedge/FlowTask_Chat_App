@@ -78,8 +78,11 @@ export default function CanvasDeepLink() {
 
         // Step 5: Navigate to workspace layout with the channel selected
         // The canvas is already loaded in the store, so when ChatPanel renders
-        // it will see the activeCanvas and show the canvas tab
-        navigate(`/workspace/${workspaceId}/channel/${channelId}`, { replace: true });
+        // it will see the activeCanvas and the targetTab state will tell it to show the canvas tab
+        navigate(`/workspace/${workspaceId}/channel/${channelId}`, { 
+          replace: true,
+          state: { targetTab: `canvas:${canvasId}`, targetChannelId: channelId }
+        });
       } catch (err) {
         if (!cancelled) {
           setError(err?.response?.data?.message || "Failed to load canvas.");

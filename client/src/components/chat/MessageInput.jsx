@@ -361,17 +361,18 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
         },
       );
 
-      localPreviews.forEach(({ preview }) => {
-        if (preview) URL.revokeObjectURL(preview);
-      });
-
       setUploadingFiles((prev) =>
         prev.filter(
           (f) => !localPreviews.some((lp) => lp.localId === f.localId),
         ),
       );
       setPendingFiles((prev) => {
-        const updated = [...prev, ...data.data.files];
+        // Attach the local preview URL to the uploaded file response so it stays visible
+        const newFiles = data.data.files.map((apiFile, index) => ({
+          ...apiFile,
+          preview: localPreviews[index]?.preview || null
+        }));
+        const updated = [...prev, ...newFiles];
 
         pendingFilesRef.current = updated;
 
@@ -404,6 +405,10 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
   const removePendingFile = (index) => {
     setPendingFiles((prev) => {
+      const removed = prev[index];
+      if (removed?.preview) {
+        URL.revokeObjectURL(removed.preview);
+      }
       const updated = prev.filter((_, i) => i !== index);
 
       // Sync ref immediately
@@ -477,6 +482,11 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
     // Cancel any pending debounced draft saves immediately
     cancelPendingDraft();
+
+    // Revoke any local previews to prevent memory leaks
+    pendingFiles.forEach((f) => {
+      if (f.preview) URL.revokeObjectURL(f.preview);
+    });
 
     // Optimistic UX: clear composer immediately so next message can be sent right away.
     ed.clear();
@@ -573,6 +583,17 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     },
     [pendingFiles.length, uploadingFiles.length],
   ); // eslint-disable-line react-hooks/exhaustive-deps
+
+
+
+  // Cleanup object URLs on unmount
+  useEffect(() => {
+    return () => {
+      pendingFilesRef.current?.forEach((f) => {
+        if (f.preview) URL.revokeObjectURL(f.preview);
+      });
+    };
+  }, []);
 
   // Attach paste listener to the editor DOM once it's mounted
   useEffect(() => {

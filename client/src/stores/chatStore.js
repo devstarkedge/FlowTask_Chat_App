@@ -144,6 +144,11 @@ export const useChatStore = create((set, get) => ({
   setMessageIdToDelete: (id) => set({ messageIdToDelete: id }),
   clearMessageIdToDelete: () => set({ messageIdToDelete: null }),
 
+  // Single source of truth for the active "More actions" menu
+  activeMessageMenuId: null,
+  setActiveMessageMenuId: (id) => set({ activeMessageMenuId: id }),
+  clearActiveMessageMenuId: () => set({ activeMessageMenuId: null }),
+
   // Pinned messages keyed by channelId
   pinnedMessagesByChannel: {},
   isLoadingPins: false,

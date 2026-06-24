@@ -419,7 +419,9 @@ export default function MessageDetailsPanel({ message, onClose, onForward }) {
                   }}>
                     <Forward size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
                     <span style={{ color: "var(--text-primary)" }}>
-                      Forwarded from <strong style={{ color: "var(--accent-primary)" }}>#{forwardMeta.originalChannelName}</strong>
+                      Forwarded from <strong style={{ color: "var(--accent-primary)" }}>
+                        {forwardMeta.originalChannelType === "dm" ? forwardMeta.originalChannelName : `#${forwardMeta.originalChannelName}`}
+                      </strong>
                     </span>
                   </div>
                 )}

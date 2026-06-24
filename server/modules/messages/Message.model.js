@@ -288,6 +288,7 @@ const messageSchema = new Schema({
     originalSenderName: { type: String, default: null },
     originalChannelId: { type: Schema.Types.ObjectId, ref: 'Channel', default: null },
     originalChannelName: { type: String, default: null },
+    originalChannelType: { type: String, default: null },
   },
 }, {
   timestamps: true,

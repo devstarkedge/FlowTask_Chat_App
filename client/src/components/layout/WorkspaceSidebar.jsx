@@ -13,6 +13,7 @@ import { useUIStore } from "../../stores/uiStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useNotificationStore } from "../../stores/notificationStore";
 import { useLaterStore } from "../../stores/laterStore";
+import { useCanvasStore } from "../../stores/canvasStore";
 import { useChannelStore } from "../../stores/channelStore";
 import { usePresenceStore } from "../../stores/presenceStore";
 import { Avatar } from "../chat/MemberAvatarGroup";
@@ -41,7 +42,8 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   const { user } = useAuthStore();
   const unreadNotifications = useNotificationStore((s) => s.unreadCount);
   const presenceMap = usePresenceStore((s) => s.presence);
-  const savedCount = useLaterStore((s) => s.savedMessages.length);
+  const savedCount = useLaterStore((s) => s.savedMessages.filter(m => m.status === 'in_progress').length);
+  const savedCanvasCount = useCanvasStore((s) => s.savedCanvases.filter(c => c.savedForLaterStatus === 'in_progress').length);
   
   const userStatus = presenceMap[user?._id] || presenceMap[user?.flowTaskUserId] || user?.onlineStatus || "online";
   const statusColor = 
@@ -51,7 +53,7 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
     "var(--status-offline)";
 
   // Combined count for the Later icon badge
-  const laterCount = savedCount;
+  const laterCount = savedCount + savedCanvasCount;
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);

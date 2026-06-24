@@ -126,6 +126,8 @@ export const useCanvasStore = create((set, get) => ({
   openTabsByChannel: loadPersistedOpenTabs(),
   globalSocketAttached: false,
   lastDeletedCanvas: null,
+  savedCanvasIds: loadPersistedSavedIds(),
+  savedCanvases: [],
 
   // ── Set active canvas ID for a channel (persisted) ───────────────────────────────
   setActiveCanvasId: (channelId, canvasId) => {
@@ -689,14 +691,16 @@ export const useCanvasStore = create((set, get) => ({
       }
     });
 
-    // ── Save-for-later sync from other devices
-    socket.on('canvas:saved:later', ({ canvasId }) => {
+    socket.on('canvas:saved:later', ({ canvasId, canvas }) => {
       if (!canvasId) return;
       set((state) => {
         const next = new Set(state.savedCanvasIds);
         next.add(canvasId);
         persistSavedIds(next);
-        return { savedCanvasIds: next };
+        const newCanvases = canvas && !state.savedCanvases.find(c => c._id === canvasId) 
+          ? [canvas, ...state.savedCanvases] 
+          : state.savedCanvases;
+        return { savedCanvasIds: next, savedCanvases: newCanvases };
       });
     });
 
@@ -706,7 +710,10 @@ export const useCanvasStore = create((set, get) => ({
         const next = new Set(state.savedCanvasIds);
         next.delete(canvasId);
         persistSavedIds(next);
-        return { savedCanvasIds: next };
+        return { 
+          savedCanvasIds: next,
+          savedCanvases: state.savedCanvases.filter(c => c._id !== canvasId)
+        };
       });
     });
 
@@ -1046,36 +1053,63 @@ export const useCanvasStore = create((set, get) => ({
       } else {
         newIds.add(canvasId);
       }
-      set({ savedCanvasIds: newIds });
+      set((state) => ({ 
+        savedCanvasIds: newIds,
+        savedCanvases: wasSaved ? state.savedCanvases.filter(c => c._id !== canvasId) : state.savedCanvases
+      }));
       persistSavedIds(newIds);
 
       const { data } = await canvasAPI.toggleSaveForLater(canvasId);
       const saved = data.data?.saved;
-      if (saved) {
+      const canvas = data.data?.canvas;
+      
+      if (saved && canvas) {
+        set((state) => {
+          if (!state.savedCanvases.find(c => c._id === canvas._id)) {
+            return { savedCanvases: [canvas, ...state.savedCanvases] };
+          }
+          return {};
+        });
         toast.success("Saved for later");
-      } else {
+      } else if (!saved) {
         toast.success("Removed from saved for later");
       }
     } catch {
-      set({ savedCanvasIds: prevIds });
+      set((state) => ({
+        savedCanvasIds: prevIds,
+        savedCanvases: state.savedCanvases // revert logic could be more complex but keeping it simple
+      }));
       persistSavedIds(prevIds);
       toast.error("Failed to update saved status");
     }
   },
 
   updateSavedCanvasStatus: async (canvasId, status) => {
+    // Optimistic update
+    set((state) => ({
+      savedCanvases: state.savedCanvases.map((c) =>
+        c._id === canvasId ? { ...c, savedForLaterStatus: status } : c
+      ),
+    }));
     try {
       await canvasAPI.updateSavedStatus(canvasId, status);
       toast.success(`Moved to ${status.replace('_', ' ')}`);
     } catch {
       toast.error("Failed to update status");
+      // Re-fetch to fix state on failure
+      get().fetchSavedCanvases();
     }
   },
 
-  fetchSavedCanvases: async (channelId, status) => {
+  fetchSavedCanvases: async () => {
     try {
-      const { data } = await canvasAPI.getSavedCanvases(channelId, status);
-      return data.data || [];
+      // Always fetch all saved canvases to keep counts accurate
+      const { data } = await canvasAPI.getSavedCanvases(null, null);
+      const canvases = data.data || [];
+      const ids = new Set(canvases.map(c => c._id));
+      set({ savedCanvases: canvases, savedCanvasIds: ids });
+      persistSavedIds(ids);
+      return canvases;
     } catch {
       return [];
     }

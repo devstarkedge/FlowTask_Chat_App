@@ -544,11 +544,11 @@ export default function NavigationSidebar({
               onClick={handleSavedMessages}
             />
             {/* ── CHATBOT ── */}
-            <SidebarItem
+            {/* <SidebarItem
               icon={<Bot size={18} />}
               label="ChatBot"
               onClick={handleChatBot}
-            />
+            /> */}
 
             {/* ── Regular DM list ── */}
             {sortChannels(dmChannels).map((channel) => (

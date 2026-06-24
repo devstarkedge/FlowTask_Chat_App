@@ -1119,8 +1119,7 @@ body {
   align-items: center;
   justify-content: center;
   background: var(--preview-overlay);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  --preview-text-color: rgba(255, 255, 255, 0.9);
   animation: fadeIn 150ms ease;
 }
 

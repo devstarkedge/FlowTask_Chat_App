@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useCanvasStore } from "../../stores/canvasStore";
@@ -86,6 +87,9 @@ export default function ChatPanel({
     return editingMessageId && messages.some(m => m._id === editingMessageId);
   }, [editingMessageId, messages]);
 
+  const location = useLocation();
+  const prevChannelForTabRef = useRef(channelId);
+
   // When channel changes, reset tab, join room and request server tabs
   useEffect(() => {
     if (!channelId) return;
@@ -98,8 +102,24 @@ export default function ChatPanel({
 
     fetchMessages(channelId);
     fetchPinnedMessages(channelId);
-    // Reset to messages tab and close any open popup
-    setActiveTab("messages");
+
+    // Check location state for a specific target tab (e.g. from canvas deep link)
+    const targetTab = location.state?.targetTab;
+    const targetChannelId = location.state?.targetChannelId;
+
+    if (targetTab && targetChannelId === channelId) {
+      setActiveTab(targetTab);
+      // Ensure it's added to open tabs if it's a canvas
+      const cvsId = targetTab.split(":")[1];
+      if (cvsId) {
+        addOpenTab(channelId, { _id: cvsId }).catch(() => {});
+      }
+    } else if (prevChannelForTabRef.current !== channelId) {
+      // Only default to messages if we are explicitly switching to a NEW channel
+      setActiveTab("messages");
+    }
+    
+    prevChannelForTabRef.current = channelId;
     setShowCanvasPopup(false);
     setCanvasIntent(null);
 
@@ -113,7 +133,7 @@ export default function ChatPanel({
     return () => {
       leaveChannel(channelId);
     };
-  }, [channelId, fetchMessages, fetchPinnedMessages, requestChannelTabs]);
+  }, [channelId, fetchMessages, fetchPinnedMessages, requestChannelTabs, location.state, addOpenTab]);
 
   // Note: persistence now handled by server-side channel tabs; client keeps local view in store
 

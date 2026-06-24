@@ -24,6 +24,8 @@ import {
 } from "date-fns";
 import ReminderModal from "./ReminderModal";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
+import { sanitizeHtml } from "../../utils/sanitize";
+import { KindIcon, getFileKind } from "./SlackFileCard";
 
 /* ─────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -111,6 +113,9 @@ function SavedMessageCard({
     },
   ].filter(Boolean);
 
+  const validRefs = msg?.fileReferences?.filter((r) => r.fileId && r.fileId.status !== "deleted") || [];
+  const fileAssets = validRefs.map((r) => r.fileId);
+
   return (
     <div
       className={`lp-item${isActive ? " lp-item--active" : ""}`}
@@ -161,8 +166,42 @@ function SavedMessageCard({
                   <span className="lp-item__time">{formatTime(msg?.createdAt)}</span>
                 </div>
                 <div className="lp-item__preview">
-                  {msg?.content || <em className="lp-item__preview--empty">Attachment</em>}
+                  {msg?.htmlContent ? (
+                    <div 
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.htmlContent) }} 
+                      className="lp-item__rich-text"
+                      style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}
+                    />
+                  ) : (
+                    msg?.content || (fileAssets.length === 0 && <em className="lp-item__preview--empty">Attachment</em>)
+                  )}
                 </div>
+                {fileAssets.length > 0 && (
+                  <div className="lp-item__media-row" style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                    {fileAssets.map((file) => {
+                      const isImg = file.mimeType?.startsWith('image/') || file.mimeType?.startsWith('video/');
+                      const thumb = file.thumbnailUrl || file.secureUrl || file.url;
+                      const kind = getFileKind(file.mimeType, file.originalName);
+                      return (
+                        <div key={file._id} style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          background: 'rgba(255,255,255,0.04)', padding: '4px 8px',
+                          borderRadius: 6, border: '1px solid rgba(255,255,255,0.08)',
+                          maxWidth: '100%'
+                        }}>
+                          {isImg && thumb && thumb !== "/placeholder-loading" ? (
+                            <img src={thumb} alt="" style={{ width: 16, height: 16, borderRadius: 3, objectFit: 'cover' }} />
+                          ) : (
+                            <KindIcon kind={kind} size={14} />
+                          )}
+                          <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {file.originalName || "File"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </>
@@ -184,7 +223,7 @@ function SavedMessageCard({
 /* ─────────────────────────────────────────────────────────────────
    SAVED CANVAS CARD
 ───────────────────────────────────────────────────────────────── */
-function SavedCanvasCard({ canvas, onStatusChange, onJump }) {
+function SavedCanvasCard({ canvas, onStatusChange, onJump, onSetReminder }) {
   const statusActions = [
     canvas.savedForLaterStatus !== "completed" && {
       icon: Check,
@@ -227,6 +266,7 @@ function SavedCanvasCard({ canvas, onStatusChange, onJump }) {
 
       {/* Hover actions */}
       <div className="lp-item__actions" onClick={(e) => e.stopPropagation()}>
+        <ActionBtn icon={Clock} label="Set reminder" onClick={() => onSetReminder(canvas)} />
         {statusActions.map((a) => (
           <ActionBtn
             key={a.status}
@@ -258,7 +298,7 @@ export default function LaterPanel({ onJumpToMessage, onJumpToCanvas }) {
 
   const fetchSavedCanvases = useCanvasStore((s) => s.fetchSavedCanvases);
   const updateSavedCanvasStatus = useCanvasStore((s) => s.updateSavedCanvasStatus);
-  const [savedCanvases, setSavedCanvases] = useState([]);
+  const savedCanvases = useCanvasStore((s) => s.savedCanvases);
   const [canvasesLoading, setCanvasesLoading] = useState(false);
 
   const [showReminderModal, setShowReminderModal] = useState(false);
@@ -279,13 +319,12 @@ export default function LaterPanel({ onJumpToMessage, onJumpToCanvas }) {
     fetchSavedMessages();
   }, [fetchSavedMessages]);
 
-  /* ── Fetch saved canvases on mount and activeTab ── */
+  /* ── Fetch saved canvases on mount ── */
   useEffect(() => {
     setCanvasesLoading(true);
-    fetchSavedCanvases(null, activeTab === "in_progress" ? undefined : activeTab)
-      .then((canvases) => setSavedCanvases(canvases || []))
+    fetchSavedCanvases()
       .finally(() => setCanvasesLoading(false));
-  }, [activeTab, fetchSavedCanvases]);
+  }, [fetchSavedCanvases]);
 
   /* Auto-highlight first card and automatically open it in Chat Panel */
   useEffect(() => {
@@ -323,11 +362,19 @@ export default function LaterPanel({ onJumpToMessage, onJumpToCanvas }) {
     setShowReminderModal(true);
   };
 
+  const handleSetReminderForCanvas = (canvas) => {
+    setSelectedSaved({
+      type: 'standalone',
+      title: `Canvas: ${canvas.title || 'Untitled canvas'}`,
+      canvasRef: canvas._id,
+      channelId: canvas.channelId,
+    });
+    setIsStandaloneReminder(true);
+    setShowReminderModal(true);
+  };
+
   const handleCanvasStatusChange = async (canvasId, status) => {
     await updateSavedCanvasStatus(canvasId, status);
-    setSavedCanvases((prev) =>
-      prev.map((c) => (c._id === canvasId ? { ...c, savedForLaterStatus: status } : c))
-    );
   };
 
   const handleCanvasJump = (canvas) => {
@@ -381,9 +428,8 @@ export default function LaterPanel({ onJumpToMessage, onJumpToCanvas }) {
         {/* Tabs */}
         <div className="lp-tabs">
           {TABS.map((tab) => {
-            const count = savedMessages.filter(
-              (m) => m.status === tab.id,
-            ).length;
+            const count = savedMessages.filter((m) => m.status === tab.id).length
+                        + savedCanvases.filter((c) => c.savedForLaterStatus === tab.id).length;
             const isActive = activeTab === tab.id;
             return (
               <button
@@ -434,6 +480,7 @@ export default function LaterPanel({ onJumpToMessage, onJumpToCanvas }) {
                   canvas={canvas}
                   onStatusChange={handleCanvasStatusChange}
                   onJump={handleCanvasJump}
+                  onSetReminder={handleSetReminderForCanvas}
                 />
               </div>
             ))}

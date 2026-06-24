@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useChatStore } from '../../stores/chatStore'
+import { useLaterStore } from '../../stores/laterStore'
+import { useCanvasStore } from '../../stores/canvasStore'
 import { connectSocket } from '../../services/socket'
 import ChatLayout from './ChatLayout'
 
@@ -53,6 +55,14 @@ export default function WorkspaceLayout() {
       connectSocket()
     }
   }, [activeWorkspaceId, workspaceId, connectionStatus])
+
+  // Fetch global context data that drives badges/indicators across the workspace
+  useEffect(() => {
+    if (activeWorkspaceId && activeWorkspaceId === workspaceId) {
+      useLaterStore.getState().fetchSavedMessages()
+      useCanvasStore.getState().fetchSavedCanvases(null, undefined)
+    }
+  }, [activeWorkspaceId, workspaceId])
 
   // Don't render ChatLayout until workspace context is set
   if (!activeWorkspaceId || activeWorkspaceId !== workspaceId) {

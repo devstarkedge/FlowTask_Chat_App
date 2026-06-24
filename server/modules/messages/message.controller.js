@@ -859,7 +859,7 @@ export const snoozeSavedReminder = asyncHandler(async (req, res) => {
  * Create a standalone reminder.
  */
 export const createStandaloneReminder = asyncHandler(async (req, res) => {
-  const { title, reminderAt, reminderDescription, channelId, recurrence } = req.body;
+  const { title, reminderAt, reminderDescription, channelId, recurrence, canvasRef } = req.body;
 
   if (!title || !reminderAt) {
     return res.status(400).json({ success: false, error: { message: 'Title and reminderAt are required' } });
@@ -880,6 +880,7 @@ export const createStandaloneReminder = asyncHandler(async (req, res) => {
     reminderDescription,
     channelId,
     recurrence: recurrence || 'none',
+    canvasRef,
   });
 
   const populated = await SavedMessage.findById(reminder._id)

@@ -92,6 +92,8 @@ export default function ReminderModal({ saved, onClose, isStandalone = false }) 
           reminderAt: reminderAt.toISOString(),
           reminderDescription: description,
           recurrence,
+          canvasRef: saved?.canvasRef || null,
+          channelId: saved?.channelId || null,
         });
       } else {
         // Use saved._id for standalone reminders, messageId._id for saved messages

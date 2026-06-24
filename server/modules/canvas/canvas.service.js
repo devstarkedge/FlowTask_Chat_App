@@ -684,6 +684,20 @@ class CanvasService {
 
     if (alreadySaved) {
       canvas.savedForLaterBy = canvas.savedForLaterBy.filter(id => id.toString() !== userIdStr);
+      try {
+        const SavedMessage = (await import("../messages/SavedMessage.model.js")).default;
+        await SavedMessage.deleteMany({
+          userId,
+          workspaceId,
+          type: 'standalone',
+          $or: [
+            { canvasRef: canvasId },
+            { canvasRef: canvasId.toString() }
+          ]
+        });
+      } catch (err) {
+        console.error("Failed to delete standalone canvas reminder on unsave:", err);
+      }
     } else {
       if (!canvas.savedForLaterBy) canvas.savedForLaterBy = [];
       canvas.savedForLaterBy.push(userId);

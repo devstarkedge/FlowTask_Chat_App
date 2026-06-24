@@ -13870,12 +13870,17 @@ textarea:focus-visible,
   white-space: nowrap;
 }
 
+/* ── Item Channel ────────────────────────────────────────────── */
 .lp-item__channel {
   font-weight: 600;
   color: var(--sidebar-text-dim, rgba(255, 255, 255, 0.65));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
 }
 
 .lp-item__body {

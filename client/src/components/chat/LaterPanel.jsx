@@ -250,9 +250,14 @@ function SavedCanvasCard({ canvas, onStatusChange, onJump, onSetReminder }) {
     >
       <div className="lp-item__content">
         <div className="lp-item__channel-row">
+          {canvas.reminderAt && (
+            <span className="lp-item__due">{formatDue(canvas.reminderAt)}</span>
+          )}
           <span className="lp-item__channel">
-            <FileText size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-            {canvas.title || "Untitled canvas"}
+            <FileText size={14} style={{ marginRight: 6, flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {canvas.title || "Untitled canvas"}
+            </span>
           </span>
         </div>
         <div className="lp-item__body">
@@ -329,7 +334,7 @@ export default function LaterPanel({ onJumpToMessage, onJumpToCanvas }) {
   /* Auto-highlight first card and automatically open it in Chat Panel */
   useEffect(() => {
     if (loading) return;
-    const filtered = savedMessages.filter((m) => m.status === activeTab);
+    const filtered = savedMessages.filter((m) => m.status === activeTab && !(m.type === "standalone" && m.canvasRef));
     if (filtered.length > 0 && !activeSavedMessageId) {
       const first = filtered[0];
       setActiveSavedMessageId(first._id);
@@ -363,25 +368,35 @@ export default function LaterPanel({ onJumpToMessage, onJumpToCanvas }) {
   };
 
   const handleSetReminderForCanvas = (canvas) => {
-    setSelectedSaved({
-      type: 'standalone',
-      title: `Canvas: ${canvas.title || 'Untitled canvas'}`,
-      canvasRef: canvas._id,
-      channelId: canvas.channelId,
-    });
-    setIsStandaloneReminder(true);
+    const existing = savedMessages.find(m => m.type === "standalone" && m.canvasRef === canvas._id);
+    if (existing) {
+      setSelectedSaved(existing);
+      setIsStandaloneReminder(false);
+    } else {
+      setSelectedSaved({
+        type: 'standalone',
+        title: `Canvas: ${canvas.title || 'Untitled canvas'}`,
+        canvasRef: canvas._id,
+        channelId: canvas.channelId,
+      });
+      setIsStandaloneReminder(true);
+    }
     setShowReminderModal(true);
   };
 
   const handleCanvasStatusChange = async (canvasId, status) => {
     await updateSavedCanvasStatus(canvasId, status);
+    const standaloneReminder = savedMessages.find(m => m.type === "standalone" && m.canvasRef === canvasId);
+    if (standaloneReminder) {
+      await updateStatus(standaloneReminder._id, status);
+    }
   };
 
   const handleCanvasJump = (canvas) => {
     onJumpToCanvas?.(canvas);
   };
 
-  const filteredMessages = savedMessages.filter((m) => m.status === activeTab);
+  const filteredMessages = savedMessages.filter((m) => m.status === activeTab && !(m.type === "standalone" && m.canvasRef));
   const filteredCanvases = savedCanvases.filter(
     (c) => c.savedForLaterStatus === activeTab
   );
@@ -428,7 +443,7 @@ export default function LaterPanel({ onJumpToMessage, onJumpToCanvas }) {
         {/* Tabs */}
         <div className="lp-tabs">
           {TABS.map((tab) => {
-            const count = savedMessages.filter((m) => m.status === tab.id).length
+            const count = savedMessages.filter((m) => m.status === tab.id && !(m.type === "standalone" && m.canvasRef)).length
                         + savedCanvases.filter((c) => c.savedForLaterStatus === tab.id).length;
             const isActive = activeTab === tab.id;
             return (
@@ -470,20 +485,22 @@ export default function LaterPanel({ onJumpToMessage, onJumpToCanvas }) {
         ) : (
           <div className="lp-list">
             {/* Canvas cards */}
-            {filteredCanvases.map((canvas, i) => (
+            {filteredCanvases.map((canvas, i) => {
+              const standaloneReminder = savedMessages.find(m => m.type === "standalone" && m.canvasRef === canvas._id);
+              return (
               <div
                 key={`canvas-${canvas._id}`}
                 className="lp-list__item"
                 style={{ animationDelay: `${i * 45}ms` }}
               >
                 <SavedCanvasCard
-                  canvas={canvas}
+                  canvas={{ ...canvas, reminderAt: standaloneReminder?.reminderAt }}
                   onStatusChange={handleCanvasStatusChange}
                   onJump={handleCanvasJump}
                   onSetReminder={handleSetReminderForCanvas}
                 />
               </div>
-            ))}
+            )})}
             {/* Message cards */}
             {filteredMessages.map((saved, i) => (
               <div

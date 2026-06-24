@@ -6,6 +6,7 @@ import { useCanvasUiStore } from "./canvasUiStore";
 import { useCanvasCollabStore } from "./canvasCollabStore";
 import toast from "react-hot-toast";
 import React from "react";
+import { useLaterStore } from "./laterStore";
 
 // ── Constants ──────────────────────────────────────────────────────────────────────
 const STORAGE_KEY_TABS = "flowtask.canvas.openTabs.v1";
@@ -710,6 +711,20 @@ export const useCanvasStore = create((set, get) => ({
         const next = new Set(state.savedCanvasIds);
         next.delete(canvasId);
         persistSavedIds(next);
+        
+        // Clean up standalone canvas reminder if any
+        try {
+          const { savedMessages } = useLaterStore.getState();
+          const reminder = savedMessages.find(m => m.type === "standalone" && m.canvasRef === canvasId);
+          if (reminder) {
+            useLaterStore.setState({
+              savedMessages: savedMessages.filter(m => m._id !== reminder._id)
+            });
+          }
+        } catch (err) {
+          console.error("Failed to remove canvas reminder on socket event:", err);
+        }
+
         return { 
           savedCanvasIds: next,
           savedCanvases: state.savedCanvases.filter(c => c._id !== canvasId)
@@ -1050,6 +1065,18 @@ export const useCanvasStore = create((set, get) => ({
       const newIds = new Set(prevIds);
       if (wasSaved) {
         newIds.delete(canvasId);
+        // Clean up standalone canvas reminder locally
+        try {
+          const { savedMessages } = useLaterStore.getState();
+          const reminder = savedMessages.find(m => m.type === "standalone" && m.canvasRef === canvasId);
+          if (reminder) {
+            useLaterStore.setState({
+              savedMessages: savedMessages.filter(m => m._id !== reminder._id)
+            });
+          }
+        } catch (err) {
+          console.error("Failed to remove canvas reminder locally on toggleSaveCanvas:", err);
+        }
       } else {
         newIds.add(canvasId);
       }

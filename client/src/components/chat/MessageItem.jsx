@@ -632,20 +632,36 @@ const MessageItem = memo(
       const status = message.status || "sent";
       if (status === "seen")
         return (
-          <span title="Seen" className="inline-flex items-center ml-1">
+          <span title="Seen" className="inline-flex items-center">
             <CheckCheck size={13} style={{ color: "var(--accent-primary)" }} />
           </span>
         );
       if (status === "delivered")
         return (
-          <span title="Delivered" className="inline-flex items-center ml-1">
+          <span title="Delivered" className="inline-flex items-center">
             <CheckCheck size={13} style={{ color: "var(--text-muted)" }} />
           </span>
         );
       return (
-        <span title="Sent" className="inline-flex items-center ml-1">
+        <span title="Sent" className="inline-flex items-center">
           <Check size={13} style={{ color: "var(--text-muted)" }} />
         </span>
+      );
+    };
+
+    // Rendered inside the bubble at the bottom-right for DM own messages
+    const renderBubbleStatusRow = () => {
+      if (!isDMChannel || !isOwn || isPending || isFailed) return null;
+      return (
+        <div
+          className="flex items-center justify-end gap-1 mt-1"
+          style={{ opacity: 0.75, minHeight: 14 }}
+        >
+          <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
+            {time}
+          </span>
+          {renderDeliveryStatus()}
+        </div>
       );
     };
 
@@ -898,7 +914,6 @@ const MessageItem = memo(
                 {message.isPinned && (
                   <Pin size={11} style={{ color: "var(--accent-yellow)" }} />
                 )}
-                {renderDeliveryStatus()}
               </div>
             )}
 
@@ -1026,6 +1041,9 @@ const MessageItem = memo(
                   </div>
                 </div>
               )}
+
+              {/* DM delivery status row — shown inside bubble for own messages */}
+              {renderBubbleStatusRow()}
 
             </div>
 

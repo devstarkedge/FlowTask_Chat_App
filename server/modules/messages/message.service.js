@@ -2,7 +2,7 @@ import messageRepository from './message.repository.js';
 import channelRepository from '../channels/channel.repository.js';
 import threadRepository from '../threads/thread.repository.js';
 import userRepository from '../users/user.repository.js';
-import { emitToChannel, emitToUser, getRoomOccupancy } from '../../sockets/socketManager.js';
+import { emitToChannel, emitToUser, getRoomOccupancy, getIO } from '../../sockets/socketManager.js';
 import { sanitizeHtml, stripHtml, truncate, extractMentions } from '../../utils/sanitize.js';
 import { parsePagination, buildCursorFilter, cursorPaginationResponse } from '../../utils/pagination.js';
 import { messageSocketPayload, reactionSocketPayload, deleteSocketPayload } from '../../utils/socketPayload.js';
@@ -690,34 +690,82 @@ class MessageService {
   async _updateDeliveryStatus(message, channel, senderUserId) {
     try {
       const senderIdStr = senderUserId.toString();
-      // dmParticipants now always stores ChatUser _id values
       const recipientParticipantId = channel.dmParticipants?.find(
         (p) => p.toString() !== senderIdStr
       );
       if (!recipientParticipantId) return;
 
-      // Look up recipient by ChatUser _id (consistent with dmParticipants format)
       const recipient = await userRepository.findById(recipientParticipantId);
       if (!recipient) return;
 
       // Check if recipient is online (has active sockets)
       if (recipient.socketIds && recipient.socketIds.length > 0) {
         const now = new Date();
-        message.status = 'delivered';
-        message.deliveredAt = now;
-        
-        await messageRepository.update(message._id, {
-          status: 'delivered',
-          deliveredAt: now,
-        }, channel.workspaceId?.toString());
+        const channelIdStr = channel._id.toString();
+        const recipientIdStr = recipientParticipantId.toString();
 
-        // Notify the sender about delivery
-        emitToUser(senderUserId.toString(), SOCKET_EVENTS.MESSAGE_STATUS, {
-          messageId: message._id.toString(),
-          channelId: channel._id.toString(),
-          status: 'delivered',
-          deliveredAt: now,
-        }, channel.workspaceId?.toString());
+        // ── Check if recipient is actively viewing this DM ──────────────────
+        // Use in-memory socket state (socket.activeChannelId) rather than DB
+        // because socket.activeChannelId is set synchronously when window:focus
+        // fires, while the DB write is async and may lag by milliseconds.
+        let recipientIsViewing = false;
+        const io = getIO();
+        if (io) {
+          try {
+            const sockets = await io.fetchSockets();
+            for (const sock of sockets) {
+              const sockUserId = sock.chatUser?._id?.toString?.();
+              if (sockUserId === recipientIdStr && sock.activeChannelId === channelIdStr) {
+                recipientIsViewing = true;
+                break;
+              }
+            }
+          } catch (err) {
+            // Fallback to DB-based check if socket fetch fails
+            const activeWinChannel = recipient.chatPreferences?.activeWindowChannel?.toString();
+            recipientIsViewing = activeWinChannel === channelIdStr;
+          }
+        } else {
+          // Fallback: DB-based check
+          const activeWinChannel = recipient.chatPreferences?.activeWindowChannel?.toString();
+          recipientIsViewing = activeWinChannel === channelIdStr;
+        }
+
+        if (recipientIsViewing) {
+          // Recipient has the DM open — skip 'delivered', go straight to 'seen'
+          message.status = 'seen';
+          message.seenAt = now;
+
+          await messageRepository.update(message._id, {
+            status: 'seen',
+            seenAt: now,
+          }, channel.workspaceId?.toString());
+
+          // Notify the sender with blue double-tick immediately
+          emitToUser(senderUserId.toString(), SOCKET_EVENTS.MESSAGE_STATUS, {
+            messageId: message._id.toString(),
+            channelId: channelIdStr,
+            status: 'seen',
+            seenAt: now,
+          }, channel.workspaceId?.toString());
+        } else {
+          // Recipient is online but not actively viewing — mark as delivered
+          message.status = 'delivered';
+          message.deliveredAt = now;
+
+          await messageRepository.update(message._id, {
+            status: 'delivered',
+            deliveredAt: now,
+          }, channel.workspaceId?.toString());
+
+          // Notify the sender about delivery
+          emitToUser(senderUserId.toString(), SOCKET_EVENTS.MESSAGE_STATUS, {
+            messageId: message._id.toString(),
+            channelId: channelIdStr,
+            status: 'delivered',
+            deliveredAt: now,
+          }, channel.workspaceId?.toString());
+        }
       }
     } catch (error) {
       logger.error('Failed to update delivery status', {

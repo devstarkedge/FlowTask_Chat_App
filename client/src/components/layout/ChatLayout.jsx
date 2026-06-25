@@ -1236,22 +1236,26 @@ export default function ChatLayout() {
     setShowMobileSidebar(false);
   }, [activeChannelId]);
 
-  // Track conversation presence for unread count management
+  // Track conversation presence for unread count management.
+  // IMPORTANT: 'channels' is intentionally NOT in the dependency array.
+  // Adding it would cause clearActive() + setActive() to fire on every incoming
+  // message (because handleNewMessage mutates the channels array), which creates
+  // a race condition where isActive() returns false exactly when MESSAGE_CREATE fires.
   useEffect(() => {
     if (activeChannelId) {
-      // Determine conversation type from channel
-      const channel = channels.find(c => c._id === activeChannelId);
+      const channel = useChannelStore.getState().channels.find(c => c._id === activeChannelId);
       const type = channel?.type === 'dm' ? 'dm' : 'channel';
       conversationPresence.setActive(activeChannelId, type);
     } else {
       conversationPresence.clearActive();
     }
-    
+
     return () => {
-      // Cleanup when component unmounts or activeChannelId changes
+      // Only clear on unmount, not on every channels array mutation
       conversationPresence.clearActive();
     };
-  }, [activeChannelId, channels]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChannelId]);
 
   /**
    * Open a thread panel.

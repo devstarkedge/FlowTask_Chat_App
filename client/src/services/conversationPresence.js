@@ -35,32 +35,22 @@ class ConversationPresenceManager {
       return;
     }
 
-    // Visibility API — tracks tab switching
+    // Visibility API — tracks tab switching and minimization.
+    // This is the source of truth for whether the user can actually see the screen.
+    // We avoid window focus/blur because they trigger when clicking on other apps
+    // (e.g., editor or devtools) in split-screen/multi-monitor setups, where the
+    // browser window is still visible and readable.
     document.addEventListener('visibilitychange', () => {
-      const wasVisible = this.tabVisible;
       this.tabVisible = document.visibilityState === 'visible';
+      this.appFocused = this.tabVisible; // Sync appFocused with visibility
       
-      if (this.tabVisible && !wasVisible) {
-        // Tab became visible again — emit focus if conversation is active
+      if (this.tabVisible) {
         if (this.activeConversationId) {
           this.emitSocketFocus(this.activeConversationId);
         }
+      } else {
+        this.emitSocketBlur();
       }
-    });
-
-    // Window focus — tracks app minimization/restoration
-    window.addEventListener('focus', () => {
-      this.appFocused = true;
-      
-      // Window regained focus — emit focus if conversation is active
-      if (this.activeConversationId) {
-        this.emitSocketFocus(this.activeConversationId);
-      }
-    });
-
-    window.addEventListener('blur', () => {
-      this.appFocused = false;
-      this.emitSocketBlur();
     });
 
     // Page unload — cleanup

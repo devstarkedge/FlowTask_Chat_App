@@ -4,6 +4,7 @@ import { channelAPI, readReceiptAPI } from '../services/api'
 import toast from 'react-hot-toast'
 import logger from '../utils/logger'
 import { useAuthStore } from './authStore'
+import { getSocket } from '../services/socket'
 
 /**
  * Extract a plain string ID from any id-like value:
@@ -115,6 +116,20 @@ export const useChannelStore = create(
         unreads: { ...state.unreads, [id]: 0 },
       }))
       get().fetchMembers(id)
+
+      // For DM channels, emit dm:markSeen so the other user's sent messages
+      // are updated to 'seen' status (blue double-tick) in real time.
+      const activeChannel = get().channels.find((c) => c._id === id)
+      if (activeChannel?.type === 'dm') {
+        try {
+          const socket = getSocket()
+          if (socket?.connected) {
+            socket.emit('dm:markSeen', { channelId: id })
+          }
+        } catch (err) {
+          logger.debug('Failed to emit dm:markSeen on channel open', { error: err?.message })
+        }
+      }
     }
   },
 

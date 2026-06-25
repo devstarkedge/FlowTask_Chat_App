@@ -112,18 +112,6 @@ class FileUploadService {
   async queueUpload(file, userId, workspaceId) {
     const checksumHash = await this.generateChecksum(file.path);
 
-    // Duplicate detection: reuse existing file asset
-    const existingAsset = await FileAsset.findOne({
-      checksumHash,
-      workspaceId,
-      status: "available",
-    });
-    if (existingAsset) {
-      // Clean up the temporary local file as it's a duplicate
-      fs.unlink(file.path, () => {});
-      return existingAsset;
-    }
-
     // Determine resource type for Cloudinary
     const resourceType = file.mimetype.startsWith("image/")
       ? "image"

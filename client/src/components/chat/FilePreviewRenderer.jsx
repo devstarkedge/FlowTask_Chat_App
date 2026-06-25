@@ -433,13 +433,21 @@ function CsvPreview({ rows, showAll, onShowAll, variant }) {
   const visibleRows = showAll ? rows.slice(1) : rows.slice(1, 51)
   const panel = variant === 'panel'
 
+  // Modal preview is always rendered on a dark overlay, so we use dark-theme colours
+  // regardless of the user's light/dark preference. Panel view follows the theme.
+  const modalHeaderBg = '#1e293b'
+  const modalRowBg = '#0f172a'
+  const modalText = '#e2e8f0'
+  const modalSubtext = '#94a3b8'
+  const modalBorder = 'rgba(255,255,255,0.08)'
+
   return (
     <div style={{
       width: '100%',
       height: '100%',
       maxWidth: panel ? 'none' : 900,
       overflow: 'auto',
-      background: panel ? 'var(--bg-primary)' : 'var(--preview-card-bg, var(--bg-secondary))',
+      background: panel ? 'var(--bg-primary)' : modalRowBg,
       borderRadius: panel ? 0 : 12,
       padding: panel ? 0 : 16,
     }}>
@@ -456,9 +464,9 @@ function CsvPreview({ rows, showAll, onShowAll, variant }) {
                 padding: '8px 12px',
                 textAlign: 'left',
                 fontWeight: 700,
-                color: 'var(--text-primary)',
-                background: 'var(--bg-secondary)',
-                borderBottom: '1px solid var(--border-secondary)',
+                color: panel ? 'var(--text-primary)' : modalText,
+                background: panel ? 'var(--bg-secondary)' : modalHeaderBg,
+                borderBottom: panel ? '1px solid var(--border-secondary)' : `1px solid ${modalBorder}`,
                 position: 'sticky',
                 top: 0,
                 whiteSpace: 'nowrap',
@@ -474,8 +482,8 @@ function CsvPreview({ rows, showAll, onShowAll, variant }) {
               {(rows[0] || row).map((_, ci) => (
                 <td key={ci} style={{
                   padding: '7px 12px',
-                  color: 'var(--text-secondary)',
-                  borderBottom: '1px solid var(--border-secondary)',
+                  color: panel ? 'var(--text-secondary)' : modalSubtext,
+                  borderBottom: panel ? '1px solid var(--border-secondary)' : `1px solid ${modalBorder}`,
                   whiteSpace: 'nowrap',
                   maxWidth: 300,
                   overflow: 'hidden',

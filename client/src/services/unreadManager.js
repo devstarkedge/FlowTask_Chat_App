@@ -51,6 +51,21 @@ class UnreadManager {
         channelId, 
         messageId 
       });
+
+      // If it's a DM channel, emit dm:markSeen immediately (no debounce)
+      // so the sender's tick flips to blue without any delay.
+      const channel = useChannelStore.getState().channels.find((c) => c._id === channelId);
+      if (channel?.type === 'dm') {
+        try {
+          const socket = getSocket();
+          if (socket?.connected) {
+            socket.emit('dm:markSeen', { channelId });
+          }
+        } catch (err) {
+          logger.debug('Failed to immediately emit dm:markSeen', { error: err?.message });
+        }
+      }
+
       this.scheduleAutoMarkAsRead(channelId, messageId);
       return; // Don't increment unread
     }

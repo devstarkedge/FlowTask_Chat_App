@@ -52,7 +52,7 @@ const GLOBAL_SECTIONS = [
   { key: 'users', title: 'People' },
   { key: 'messages', title: 'Messages' },
   { key: 'channels', title: 'Channels' },
-  { key: 'dms', title: 'Direct Messages' },
+  { key: 'dms', title: 'Projects' },
   { key: 'files', title: 'Files' },
   { key: 'links', title: 'Links' },
   { key: 'pages', title: 'Pages' },
@@ -120,7 +120,7 @@ function getSubtitle(item) {
     switch (item.type) {
       case 'recentSearch': return 'Press enter to search again'
       case 'user':
-        return [item.email, item.role, item.department, item.status].filter(Boolean).join(' · ')
+        return ''
       case 'message':
         return [item.senderName || 'Someone', item.channelName ? `in ${item.channelName}` : null]
           .filter(Boolean).join(' ')

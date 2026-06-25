@@ -75,7 +75,7 @@ export default function UserGroupsTab() {
             className="dir-search-input"
           />
           {search && (
-            <button onClick={clearSearch} className="dir-search-clear">
+            <button onClick={clearSearch} className="dir-search-clear" aria-label="Clear search">
               <X size={12} />
             </button>
           )}
@@ -86,6 +86,7 @@ export default function UserGroupsTab() {
             value={sort}
             onChange={(e) => setSort(e.target.value)}
             className="dir-select"
+            aria-label="Sort user groups"
           >
             <option value="asc">A → Z</option>
             <option value="desc">Z → A</option>
@@ -93,6 +94,26 @@ export default function UserGroupsTab() {
           <ChevronDown size={13} className="dir-select-arrow" />
         </div>
       </div>
+
+      {/* Summary stats strip */}
+      {!loading && groups.length > 0 && (
+        <div className="dir-groups-header-strip" style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '8px 18px',
+          background: 'var(--bg-primary)',
+          borderBottom: '1px solid var(--border-secondary)',
+          fontSize: '12px',
+          color: 'var(--text-muted)',
+          gap: '12px',
+          flexShrink: 0
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <UsersRound size={13} style={{ color: 'var(--accent-primary)' }} />
+            <span>{groups.length} group{groups.length !== 1 ? 's' : ''}</span>
+          </div>
+        </div>
+      )}
 
       {/* List */}
       <div className="dir-groups-body">
@@ -117,12 +138,17 @@ export default function UserGroupsTab() {
                 <div
                   key={g._id}
                   className={`dir-group-item ${isExpanded ? 'dir-group-item--open' : ''}`}
-                  style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
+                  style={{
+                    animationDelay: `${Math.min(index * 30, 300)}ms`,
+                    borderColor: isExpanded ? accentColor : undefined,
+                    boxShadow: isExpanded ? `0 4px 18px color-mix(in srgb, ${accentColor} 10%, transparent)` : undefined
+                  }}
                 >
                   {/* Group row */}
                   <button
                     onClick={() => handleToggleExpand(g._id)}
                     className="dir-group-row"
+                    aria-expanded={isExpanded}
                   >
                     {/* Icon */}
                     <div
@@ -151,7 +177,7 @@ export default function UserGroupsTab() {
 
                     {/* Member count */}
                     <div className="dir-group-meta">
-                      <Users size={12} />
+                      <Users size={12} style={{ color: isExpanded ? accentColor : 'var(--text-muted)' }} />
                       <span>{g.memberCount ?? g.members?.length ?? 0}</span>
                     </div>
 
@@ -163,7 +189,10 @@ export default function UserGroupsTab() {
 
                   {/* Expanded members panel */}
                   {isExpanded && (
-                    <div className="dir-group-members">
+                    <div
+                      className="dir-group-members"
+                      style={{ borderLeft: `3px solid ${accentColor}` }}
+                    >
                       {loadingMembers ? (
                         <div className="dir-group-members-loading">
                           {[1, 2, 3].map(i => (
@@ -181,19 +210,27 @@ export default function UserGroupsTab() {
                             const name = m.name || m.displayName || 'Unknown'
                             const avatar = m.avatar || m.profilePicture
                             const mhue = [...name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360
+                            const avatarGradient = `linear-gradient(135deg, hsl(${mhue},60%,45%), hsl(${(mhue + 40) % 360},70%,35%))`
                             return (
                               <div
                                 key={m._id}
                                 onClick={() => useProfileStore.getState().openProfile(m)}
                                 className="dir-group-member-row"
                                 style={{ animationDelay: `${mi * 25}ms` }}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    useProfileStore.getState().openProfile(m)
+                                  }
+                                }}
                               >
                                 {avatar ? (
                                   <img src={avatar} alt={name} className="dir-group-member-avatar" />
                                 ) : (
                                   <div
                                     className="dir-group-member-avatar dir-group-member-avatar--fallback"
-                                    style={{ background: `hsl(${mhue},55%,45%)` }}
+                                    style={{ background: avatarGradient }}
                                   >
                                     {name.charAt(0).toUpperCase()}
                                   </div>

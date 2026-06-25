@@ -156,6 +156,12 @@ export function connectSocket() {
       for (const ch of channels) {
         socket.emit('channel:join', ch._id)
       }
+      
+      // Sync active conversation focus with the server upon connect
+      const activeChannelId = useChannelStore.getState().activeChannelId
+      if (activeChannelId && document.visibilityState === 'visible') {
+        socket.emit('window:focus', { channelId: activeChannelId })
+      }
     } catch (err) {
       logger.error('[Socket] Failed to join channels on connect:', err.message)
     }
@@ -207,6 +213,11 @@ export function connectSocket() {
       const activeChannelId = useChannelStore.getState().activeChannelId
       if (activeChannelId) {
         socket.emit('channel:join', activeChannelId)
+        
+        // Re-sync active conversation focus with the server upon reconnect
+        if (document.visibilityState === 'visible') {
+          socket.emit('window:focus', { channelId: activeChannelId })
+        }
       }
     } catch (err) {
       logger.error('[Socket] Failed to rejoin rooms after reconnect:', err.message)
@@ -276,6 +287,23 @@ export function connectSocket() {
     if (message.threadId) return
 
     useChatStore.getState().addMessage(message)
+
+    // ── Instant blue-tick for DMs ────────────────────────────────────────
+    // If the incoming message is in a DM AND the recipient is currently viewing
+    // that exact channel, emit dm:markSeen immediately at the socket event level.
+    // This fires BEFORE any React render cycle, so it's immune to state race
+    // conditions in conversationPresence.isActive() or component re-renders.
+    const { channelId } = message
+    if (channelId) {
+      const activeChannelId = useChannelStore.getState().activeChannelId
+      if (activeChannelId === channelId) {
+        const channels = useChannelStore.getState().channels
+        const channel = channels.find((c) => c._id === channelId)
+        if (channel?.type === 'dm' && document.visibilityState === 'visible') {
+          socket.emit('dm:markSeen', { channelId })
+        }
+      }
+    }
 
     // Update sidebar: lastMessageAt, lastMessagePreview, and unread count.
     // UnreadManager handles presence-based filtering to prevent unread increment

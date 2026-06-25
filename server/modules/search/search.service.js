@@ -449,10 +449,12 @@ async function searchMessages(query, regex, workspaceId, userId, channelIds, cha
 function searchChannels(query, regex, channels, channelSignals) {
   const matches = channels
     .filter((channel) => (
-      regex.test(channel.name || '')
-      || regex.test(channel.slug || '')
-      || regex.test(channel.description || '')
-      || regex.test(channel.topic || '')
+      channel.type !== CHANNEL_TYPES.DM && (
+        regex.test(channel.name || '')
+        || regex.test(channel.slug || '')
+        || regex.test(channel.description || '')
+        || regex.test(channel.topic || '')
+      )
     ))
     .map((channel) => ({
       id: channel._id.toString(),
@@ -469,14 +471,14 @@ function searchChannels(query, regex, channels, channelSignals) {
 
   const ranked = sortByRank(matches, (item) => (
     scoreText(query, item.name, item.slug, item.description, item.topic)
-    + scoreRecency(item.lastMessageAt, item.channelType === CHANNEL_TYPES.DM ? 22 : 14)
+    + scoreRecency(item.lastMessageAt, 14)
     + Math.min(Math.floor((item.memberCount || 0) / 25), 6)
     + scoreChannelSignal(channelSignals, item.id)
   ));
 
   return {
-    channels: applyLimit(ranked.filter((item) => item.channelType !== CHANNEL_TYPES.DM), SECTION_LIMITS.channels),
-    dms: applyLimit(ranked.filter((item) => item.channelType === CHANNEL_TYPES.DM).map((item) => ({ ...item, type: 'dm' })), SECTION_LIMITS.dms),
+    channels: applyLimit(ranked, SECTION_LIMITS.channels),
+    dms: applyLimit([], SECTION_LIMITS.dms),
   };
 }
 
@@ -759,10 +761,56 @@ export async function globalSearch({ query, scope = null, limit = null, cursor =
   const users = usersResult.items;
   const messages = messagesResult.items;
   const regularChannels = channelResults.channels.items;
-  const dms = channelResults.dms.items;
   const files = filesResult.items;
   const links = linksResult.items;
   const pages = pagesResult.items;
+
+  // Find project channels that the matched users are members of.
+  // Must be accessible to the searching user (i.e. in scopedChannels).
+  let projectsForUsers = [];
+  if (users.length > 0) {
+    try {
+      const matchedUserIds = users.map((u) => u.id);
+      const memberships = await ChannelMember.find({
+        userId: { $in: matchedUserIds.map((id) => new mongoose.Types.ObjectId(id)) },
+        workspaceId,
+        isActive: true,
+      }).select('channelId').lean();
+
+      const matchedUserChannelIds = new Set(memberships.map((m) => m.channelId.toString()));
+
+      // Filter to only keep projects (type === 'project') that the current user has access to
+      const matchingChannels = scopedChannels.filter((channel) =>
+        channel.type === 'project' && matchedUserChannelIds.has(channel._id.toString())
+      );
+
+      const matches = matchingChannels.map((channel) => ({
+        id: channel._id.toString(),
+        name: channel.name,
+        slug: channel.slug,
+        description: channel.description,
+        topic: channel.topic,
+        channelType: channel.type,
+        type: 'channel', // Render as a regular channel (using # or prefix)
+        visibility: channel.visibility,
+        memberCount: channel.memberCount || 0,
+        lastMessageAt: channel.lastMessageAt,
+      }));
+
+      projectsForUsers = sortByRank(matches, (item) => (
+        scoreText(activeQuery, item.name, item.slug, item.description, item.topic)
+        + scoreRecency(item.lastMessageAt, 14)
+        + Math.min(Math.floor((item.memberCount || 0) / 25), 6)
+        + scoreChannelSignal(channelSignals, item.id)
+      ));
+    } catch (err) {
+      logger.error('Failed to search projects for matched users', { error: err.message });
+    }
+  }
+
+  const dmsLimitResult = applyLimit(projectsForUsers, SECTION_LIMITS.dms);
+  const dms = dmsLimitResult.items;
+
   const topMatches = buildTopMatches({ users, channels: regularChannels, messages, files, links, pages, dms });
 
   return {
@@ -789,7 +837,7 @@ export async function globalSearch({ query, scope = null, limit = null, cursor =
         users: buildSectionMeta(users, usersResult.hasMore),
         messages: buildSectionMeta(messages, messagesResult.hasMore, messagesResult.nextCursor),
         channels: buildSectionMeta(regularChannels, channelResults.channels.hasMore),
-        dms: buildSectionMeta(dms, channelResults.dms.hasMore),
+        dms: buildSectionMeta(dms, dmsLimitResult.hasMore),
         files: buildSectionMeta(files, filesResult.hasMore),
         links: buildSectionMeta(links, linksResult.hasMore),
         pages: buildSectionMeta(pages, pagesResult.hasMore),

@@ -240,17 +240,7 @@ export default function PinnedBar({ channelId }) {
           <Pin size={13} strokeWidth={2.2} />
         </div>
 
-        {/* Navigation: up arrow (only when >1 pin) */}
-        {hasMultiple && (
-          <button
-            className="pin-nav-btn"
-            onClick={prev}
-            title="Previous pinned message"
-            aria-label="Previous pinned message"
-          >
-            <ChevronUp size={13} strokeWidth={2} />
-          </button>
-        )}
+      
 
         {/* Clickable content area */}
         <div
@@ -277,6 +267,17 @@ export default function PinnedBar({ channelId }) {
             </span>
           )}
         </div>
+          {/* Navigation: up arrow (only when >1 pin) */}
+        {hasMultiple && (
+          <button
+            className="pin-nav-btn"
+            onClick={prev}
+            title="Previous pinned message"
+            aria-label="Previous pinned message"
+          >
+            <ChevronUp size={13} strokeWidth={2} />
+          </button>
+        )}
 
         {/* Down arrow */}
         {hasMultiple && (

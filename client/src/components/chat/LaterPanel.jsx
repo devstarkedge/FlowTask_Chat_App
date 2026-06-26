@@ -4,13 +4,13 @@ import {
   Plus,
   Check,
   Archive,
-  Loader2,
   ListFilter,
   Inbox,
   Trash2,
   CircleDot,
   FileText,
 } from "lucide-react";
+import Loader from "../shared/Loader";
 import { useLaterStore } from "../../stores/laterStore";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { Avatar } from "../chat/MemberAvatarGroup";
@@ -462,10 +462,7 @@ export default function LaterPanel({ onJumpToMessage, onJumpToCanvas }) {
       {/* ── Content ── */}
       <div className="lp-content">
         {loading || canvasesLoading ? (
-          <div className="lp-loading">
-            <Loader2 size={28} className="lp-spinner" />
-            <p className="lp-loading__text">Loading…</p>
-          </div>
+          <Loader center size="lg" label="Loading…" />
         ) : isEmpty ? (
           <div className="lp-empty">
             <div className="lp-empty__icon-wrap">

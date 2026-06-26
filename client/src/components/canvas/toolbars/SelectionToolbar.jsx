@@ -1,50 +1,90 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Bold,
   Code,
   Code2,
-  Highlighter,
   Italic,
   Link,
   List,
   ListOrdered,
   MessageSquarePlus,
-  Quote,
-  Heading1,
-  Heading2,
-  Heading3,
   Strikethrough,
   Underline,
-  Palette,
-  Type,
-  RemoveFormatting,
   Pilcrow,
   AlignLeft,
   AlignCenter,
   AlignRight,
   AlignJustify,
+  Smile,
+  ChevronDown,
+  CheckSquare,
 } from "lucide-react";
 
-const TEXT_COLORS = [
-  { label: "Default", value: "" },
-  { label: "Red", value: "#ef4444" },
-  { label: "Orange", value: "#f97316" },
-  { label: "Yellow", value: "#eab308" },
-  { label: "Green", value: "#22c55e" },
-  { label: "Blue", value: "#3b82f6" },
-  { label: "Purple", value: "#a855f7" },
-  { label: "Pink", value: "#ec4899" },
-];
-
-const HIGHLIGHT_COLORS = [
-  { label: "None", value: "" },
-  { label: "Yellow", value: "#fef08a" },
-  { label: "Green", value: "#bbf7d0" },
-  { label: "Blue", value: "#bfdbfe" },
-  { label: "Pink", value: "#fbcfe8" },
-  { label: "Purple", value: "#e9d5ff" },
-  { label: "Orange", value: "#fed7aa" },
-  { label: "Red", value: "#fecaca" },
+const BLOCK_TYPES = [
+  { 
+    id: "paragraph", 
+    label: "Paragraph", 
+    icon: Pilcrow, 
+    shortcut: "Ctrl+Alt+0", 
+    action: (editor) => editor.chain().focus().setParagraph().run(), 
+    isActive: (editor) => editor.isActive("paragraph") 
+  },
+  { 
+    id: "h1", 
+    label: "Big heading", 
+    icon: () => <span style={{ fontWeight: "bold", fontSize: 13, fontFamily: "var(--font-sans)" }}>H1</span>, 
+    shortcut: "Ctrl+Alt+1", 
+    action: (editor) => editor.chain().focus().toggleHeading({ level: 1 }).run(), 
+    isActive: (editor) => editor.isActive("heading", { level: 1 }) 
+  },
+  { 
+    id: "h2", 
+    label: "Medium heading", 
+    icon: () => <span style={{ fontWeight: "bold", fontSize: 13, fontFamily: "var(--font-sans)" }}>H2</span>, 
+    shortcut: "Ctrl+Alt+2", 
+    action: (editor) => editor.chain().focus().toggleHeading({ level: 2 }).run(), 
+    isActive: (editor) => editor.isActive("heading", { level: 2 }) 
+  },
+  { 
+    id: "h3", 
+    label: "Small heading", 
+    icon: () => <span style={{ fontWeight: "bold", fontSize: 13, fontFamily: "var(--font-sans)" }}>H3</span>, 
+    shortcut: "Ctrl+Alt+3", 
+    action: (editor) => editor.chain().focus().toggleHeading({ level: 3 }).run(), 
+    isActive: (editor) => editor.isActive("heading", { level: 3 }) 
+  },
+  { 
+    id: "taskList", 
+    label: "Check list", 
+    icon: CheckSquare, 
+    shortcut: "Ctrl+Shift+9", 
+    action: (editor) => editor.chain().focus().toggleTaskList().run(), 
+    isActive: (editor) => editor.isActive("taskList") 
+  },
+  { 
+    id: "orderedList", 
+    label: "Ordered list", 
+    icon: ListOrdered, 
+    shortcut: "Ctrl+Shift+7", 
+    action: (editor) => editor.chain().focus().toggleOrderedList().run(), 
+    isActive: (editor) => editor.isActive("orderedList") 
+  },
+  { 
+    id: "bulletList", 
+    label: "Bulleted list", 
+    icon: List, 
+    shortcut: "Ctrl+Shift+8", 
+    action: (editor) => editor.chain().focus().toggleBulletList().run(), 
+    isActive: (editor) => editor.isActive("bulletList") 
+  },
+  { 
+    id: "codeBlock", 
+    label: "Code block", 
+    icon: Code2, 
+    shortcut: "Ctrl+Alt+Shift+C", 
+    action: (editor) => editor.chain().focus().toggleCodeBlock().run(), 
+    isActive: (editor) => editor.isActive("codeBlock") 
+  },
 ];
 
 function ToolbarButton({ label, active, onClick, children, disabled }) {
@@ -64,10 +104,22 @@ function ToolbarButton({ label, active, onClick, children, disabled }) {
 }
 
 function ToolbarDivider() {
-  return <span className="canvas-selection-divider" />;
+  return (
+    <span
+      className="canvas-selection-divider"
+      style={{
+        display: "inline-block",
+        width: 1,
+        height: 20,
+        background: "var(--border-primary, rgba(255,255,255,0.15))",
+        margin: "0 6px",
+        flexShrink: 0,
+      }}
+    />
+  );
 }
 
-function ColorDropdown({ icon: Icon, label, colors, activeColor, onSelect }) {
+function BlockSelector({ editor }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -80,43 +132,183 @@ function ColorDropdown({ icon: Icon, label, colors, activeColor, onSelect }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  const activeBlock = BLOCK_TYPES.find(b => b.isActive(editor)) || BLOCK_TYPES[0];
+  const ActiveIcon = activeBlock.icon;
+
+  return (
+    <div ref={ref} style={{ position: "relative", display: "inline-flex" }}>
+      <button
+        type="button"
+        className="canvas-selection-button block-selector-btn"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "0 8px",
+          width: "auto",
+          height: 34,
+          color: "var(--text-secondary)",
+          background: "transparent",
+          border: "none",
+          borderRadius: 8,
+          cursor: "pointer",
+        }}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <ActiveIcon size={15} />
+        <ChevronDown size={12} style={{ opacity: 0.8 }} />
+      </button>
+      {open && (
+        <div
+          className="canvas-block-dropdown"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            left: 0,
+            zIndex: 1010,
+            width: 260,
+            background: "var(--bg-primary, #1e1f22)",
+            border: "1px solid var(--border-primary, rgba(255,255,255,0.1))",
+            borderRadius: 8,
+            boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+            padding: "4px 0",
+            display: "flex",
+            flexDirection: "column",
+          }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          {BLOCK_TYPES.map((b) => {
+            const isActive = b.isActive(editor);
+            const Icon = b.icon;
+            return (
+              <button
+                key={b.id}
+                type="button"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "8px 12px",
+                  background: "transparent",
+                  border: "none",
+                  color: isActive ? "var(--accent-primary, #38bdf8)" : "var(--text-primary, #e2e8f0)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  gap: 10,
+                  width: "100%",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-hover, rgba(255,255,255,0.08))"}
+                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                onClick={() => {
+                  b.action(editor);
+                  setOpen(false);
+                }}
+              >
+                <span style={{ width: 12, display: "inline-flex", justifyContent: "center", fontWeight: "bold" }}>
+                  {isActive ? "✓" : ""}
+                </span>
+                <span style={{ display: "inline-flex", width: 16, height: 16, alignItems: "center", justifyContent: "center" }}>
+                  <Icon size={14} />
+                </span>
+                <span style={{ flex: 1 }}>{b.label}</span>
+                {b.shortcut && (
+                  <span style={{ fontSize: 10.5, color: "var(--text-muted, #94a3b8)", opacity: 0.8 }}>
+                    {b.shortcut}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AlignDropdown({ editor }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const alignments = [
+    { value: "left", label: "Align left", icon: AlignLeft },
+    { value: "center", label: "Align center", icon: AlignCenter },
+    { value: "right", label: "Align right", icon: AlignRight },
+    { value: "justify", label: "Justify", icon: AlignJustify },
+  ];
+
+  const activeAlign = alignments.find(a => editor.isActive({ textAlign: a.value })) || alignments[0];
+  const ActiveIcon = activeAlign.icon;
+
   return (
     <div ref={ref} style={{ position: "relative", display: "inline-flex" }}>
       <ToolbarButton
-        label={label}
-        active={open || !!activeColor}
+        label="Align text"
+        active={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <Icon size={15} />
+        <ActiveIcon size={15} />
       </ToolbarButton>
       {open && (
         <div
-          className="canvas-color-dropdown"
+          className="canvas-align-dropdown"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 1010,
+            background: "var(--bg-primary, #1e1f22)",
+            border: "1px solid var(--border-primary, rgba(255,255,255,0.1))",
+            borderRadius: 8,
+            boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+            padding: "4px",
+            display: "flex",
+            gap: 4,
+          }}
           onMouseDown={(e) => e.preventDefault()}
         >
-          {colors.map((c) => (
-            <button
-              key={c.label}
-              type="button"
-              title={c.label}
-              className={`canvas-color-swatch${c.value === activeColor ? " is-active" : ""}`}
-              style={{
-                background: c.value || "transparent",
-                border: c.value ? "none" : "1px dashed var(--text-muted)",
-              }}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                onSelect(c.value);
-                setOpen(false);
-              }}
-            >
-              {!c.value && (
-                <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
-                  ∅
-                </span>
-              )}
-            </button>
-          ))}
+          {alignments.map((a) => {
+            const isActive = editor.isActive({ textAlign: a.value });
+            const Icon = a.icon;
+            return (
+              <button
+                key={a.value}
+                type="button"
+                title={a.label}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 30,
+                  height: 30,
+                  borderRadius: 6,
+                  border: "none",
+                  background: isActive ? "var(--bg-hover, rgba(255,255,255,0.12))" : "transparent",
+                  color: isActive ? "var(--accent-primary, #38bdf8)" : "var(--text-secondary, #94a3b8)",
+                  cursor: "pointer",
+                }}
+                onMouseEnter={(e) => !isActive && (e.currentTarget.style.background = "var(--bg-hover, rgba(255,255,255,0.08))")}
+                onMouseLeave={(e) => !isActive && (e.currentTarget.style.background = "transparent")}
+                onClick={() => {
+                  editor.chain().focus().setTextAlign(a.value).run();
+                  setOpen(false);
+                }}
+              >
+                <Icon size={14} />
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -137,9 +329,6 @@ const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar,
     editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
   };
 
-  const activeTextColor = editor.getAttributes("textStyle")?.color || "";
-  const activeHighlight = editor.getAttributes("highlight")?.color || "";
-
   return (
     <div
       className="canvas-selection-toolbar"
@@ -148,47 +337,27 @@ const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar,
       aria-label="Text formatting"
       onMouseDown={(e) => e.preventDefault()}
     >
-      {/* Headings */}
-      <ToolbarButton
-        label="Heading 1"
-        active={editor.isActive("heading", { level: 1 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-      >
-        <Heading1 size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Heading 2"
-        active={editor.isActive("heading", { level: 2 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-      >
-        <Heading2 size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Heading 3"
-        active={editor.isActive("heading", { level: 3 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-      >
-        <Heading3 size={15} />
-      </ToolbarButton>
+      {/* 1. Paragraph / Heading Dropdown */}
+      <BlockSelector editor={editor} />
       <ToolbarDivider />
 
-      {/* Inline formatting */}
+      {/* 2. Bold, Italic, Underline, Strikethrough */}
       <ToolbarButton
-        label="Bold"
+        label="Bold (Ctrl+B)"
         active={editor.isActive("bold")}
         onClick={() => editor.chain().focus().toggleBold().run()}
       >
         <Bold size={15} />
       </ToolbarButton>
       <ToolbarButton
-        label="Italic"
+        label="Italic (Ctrl+I)"
         active={editor.isActive("italic")}
         onClick={() => editor.chain().focus().toggleItalic().run()}
       >
         <Italic size={15} />
       </ToolbarButton>
       <ToolbarButton
-        label="Underline"
+        label="Underline (Ctrl+U)"
         active={editor.isActive("underline")}
         onClick={() => editor.chain().focus().toggleUnderline().run()}
       >
@@ -201,6 +370,16 @@ const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar,
       >
         <Strikethrough size={15} />
       </ToolbarButton>
+      <ToolbarDivider />
+
+      {/* 3. Bullet list, Inline Code, Link, Text Align Dropdown */}
+      <ToolbarButton
+        label="Bulleted list"
+        active={editor.isActive("bulletList")}
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+      >
+        <List size={15} />
+      </ToolbarButton>
       <ToolbarButton
         label="Inline code"
         active={editor.isActive("code")}
@@ -208,71 +387,6 @@ const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar,
       >
         <Code size={15} />
       </ToolbarButton>
-      <ToolbarDivider />
-
-      {/* Block formatting */}
-      <ToolbarButton
-        label="Code block"
-        active={editor.isActive("codeBlock")}
-        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-      >
-        <Code2 size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Quote"
-        active={editor.isActive("blockquote")}
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
-      >
-        <Quote size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Bullet list"
-        active={editor.isActive("bulletList")}
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-      >
-        <List size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Ordered list"
-        active={editor.isActive("orderedList")}
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-      >
-        <ListOrdered size={15} />
-      </ToolbarButton>
-      <ToolbarDivider />
-
-      {/* Text Alignment */}
-      <ToolbarButton
-        label="Align left"
-        active={editor.isActive({ textAlign: "left" })}
-        onClick={() => editor.chain().focus().setTextAlign("left").run()}
-      >
-        <AlignLeft size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Align center"
-        active={editor.isActive({ textAlign: "center" })}
-        onClick={() => editor.chain().focus().setTextAlign("center").run()}
-      >
-        <AlignCenter size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Align right"
-        active={editor.isActive({ textAlign: "right" })}
-        onClick={() => editor.chain().focus().setTextAlign("right").run()}
-      >
-        <AlignRight size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Justify"
-        active={editor.isActive({ textAlign: "justify" })}
-        onClick={() => editor.chain().focus().setTextAlign("justify").run()}
-      >
-        <AlignJustify size={15} />
-      </ToolbarButton>
-      <ToolbarDivider />
-
-      {/* Link */}
       <ToolbarButton
         label="Link"
         active={editor.isActive("link")}
@@ -280,50 +394,23 @@ const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar,
       >
         <Link size={15} />
       </ToolbarButton>
-
-      {/* Colors */}
-      <ColorDropdown
-        icon={Type}
-        label="Text color"
-        colors={TEXT_COLORS}
-        activeColor={activeTextColor}
-        onSelect={(color) => {
-          if (color) {
-            editor.chain().focus().setHighlight({ color }).run();
-            console.log("set text color", color);
-          } else {
-            editor.chain().focus().unsetColor().run();
-          }
-        }}
-      />
-      <ColorDropdown
-        icon={Highlighter}
-        label="Highlight color"
-        colors={HIGHLIGHT_COLORS}
-        activeColor={activeHighlight}
-        onSelect={(color) => {
-          if (color) {
-            editor.chain().focus().setHighlight({ color }).run();
-            console.log("set highlight", color);
-          } else {
-            editor.chain().focus().unsetHighlight().run();
-          }
-        }}
-      />
-
-      {/* Clear formatting */}
-      <ToolbarButton
-        label="Clear formatting"
-        onClick={() =>
-          editor.chain().focus().clearNodes().unsetAllMarks().run()
-        }
-      >
-        <RemoveFormatting size={15} />
-      </ToolbarButton>
-
-      {/* Comment */}
+      <AlignDropdown editor={editor} />
       <ToolbarDivider />
-      <ToolbarButton label="Comment" onClick={onComment}>
+
+      {/* 4. Reaction / Comment */}
+      <ToolbarButton
+        label="Add reaction"
+        onClick={() => {
+          // Open comments sidebar as a placeholder for reactions/comments
+          onComment?.();
+        }}
+      >
+        <Smile size={15} />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Comment"
+        onClick={onComment}
+      >
         <MessageSquarePlus size={15} />
       </ToolbarButton>
     </div>

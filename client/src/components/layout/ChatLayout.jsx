@@ -21,6 +21,7 @@ import { useLaterStore } from "../../stores/laterStore";
 import { emitPresenceUpdate, getSocket } from "../../services/socket";
 import { conversationPresence } from "../../services/conversationPresence";
 import usePushSubscription from "../../hooks/usePushSubscription";
+import useResponsive from "../../hooks/useResponsive";
 import ErrorBoundary from "../ErrorBoundary";
 import WorkspaceSidebar from "./WorkspaceSidebar";
 import NavigationSidebar from "./NavigationSidebar";
@@ -729,8 +730,58 @@ export default function ChatLayout() {
   const user = useAuthStore((s) => s.user);
 
   const { canGoBack, canGoForward, goBack, goForward } = useAppHistory();
+  const responsive = useResponsive();
+
+  useEffect(() => {
+    if (responsive && !responsive.isMobile) {
+      setShowMobileSidebar(false);
+    }
+  }, [responsive]);
 
   useLayoutStylesInjected();
+
+  // Coordinate right-side panel exclusivity (Thread, Profile, Channel Info, Pins, Notifications, All Threads)
+  const lastOpenedPanelRef = useRef(null);
+  const threadOpen = !!activeThread;
+  const profileOpen = !!profileUser;
+  const infoOpen = !!showInfoPanel;
+  const pinsOpen = !!showPins;
+
+  useEffect(() => {
+    const openPanels = [];
+    if (threadOpen) openPanels.push("thread");
+    if (profileOpen) openPanels.push("profile");
+    if (infoOpen) openPanels.push("info");
+    if (pinsOpen) openPanels.push("pins");
+    if (showAllThreads) openPanels.push("allThreads");
+    if (showNotifications) openPanels.push("notifications");
+
+    if (openPanels.length > 1) {
+      const newest = openPanels.find((p) => p !== lastOpenedPanelRef.current) || openPanels[openPanels.length - 1];
+      if (newest) {
+        lastOpenedPanelRef.current = newest;
+        if (newest !== "thread" && threadOpen) closeThread();
+        if (newest !== "profile" && profileOpen) useProfileStore.getState().closeProfile();
+        if (newest !== "info" && infoOpen) useChannelStore.getState().setShowInfoPanel(false);
+        if (newest !== "pins" && pinsOpen) setShowPins(false);
+        if (newest !== "allThreads" && showAllThreads) setShowAllThreads(false);
+        if (newest !== "notifications" && showNotifications) setShowNotifications(false);
+      }
+    } else if (openPanels.length === 1) {
+      lastOpenedPanelRef.current = openPanels[0];
+    } else {
+      lastOpenedPanelRef.current = null;
+    }
+  }, [
+    threadOpen,
+    profileOpen,
+    infoOpen,
+    pinsOpen,
+    showAllThreads,
+    showNotifications,
+    closeThread,
+    setShowPins,
+  ]);
 
   const globalSearchRef = useRef(null);
 
@@ -939,6 +990,13 @@ export default function ChatLayout() {
   const [sidebarWidth, setSidebarWidth] = useState(getSavedSidebarWidth);
   const isResizingRef = useRef(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [hasResized, setHasResized] = useState(() => {
+    try {
+      return !!localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    } catch {
+      return false;
+    }
+  });
   const widthBeforeCollapseRef = useRef(SIDEBAR_DEFAULT);
   const sidebarCollapsed = sidebarWidth === SIDEBAR_COLLAPSED;
   const persistWidth = useCallback((w) => {
@@ -961,6 +1019,7 @@ export default function ChatLayout() {
         setSidebarWidth(
           Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startW + delta)),
         );
+        setHasResized(true);
       };
       const onUp = () => {
         isResizingRef.current = false;
@@ -981,6 +1040,7 @@ export default function ChatLayout() {
   );
 
   const handleResizeDoubleClick = useCallback(() => {
+    setHasResized(true);
     if (sidebarCollapsed) {
       const r = widthBeforeCollapseRef.current;
       setSidebarWidth(r);
@@ -1549,8 +1609,8 @@ export default function ChatLayout() {
       <div
         className="hide-on-mobile relative"
         style={{
-          width: sidebarWidth,
-          minWidth: sidebarWidth,
+          width: sidebarCollapsed ? "60px" : (hasResized ? `${sidebarWidth}px` : "var(--nav-sidebar-width)"),
+          minWidth: sidebarCollapsed ? "60px" : (hasResized ? `${sidebarWidth}px` : "var(--nav-sidebar-width)"),
           transition: isResizing
             ? "none"
             : "width 200ms ease, min-width 200ms ease",

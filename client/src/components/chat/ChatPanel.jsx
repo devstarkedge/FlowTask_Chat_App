@@ -11,7 +11,8 @@ import ChatHeader from "./ChatHeader";
 import TypingIndicator from "./TypingIndicator";
 import FilesTab from "./FilesTab";
 import PinnedBar from "./PinnedBar";
-import { WifiOff, Loader2 } from "lucide-react";
+import { WifiOff } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 import CanvasPanel from "../canvas/CanvasPanel";
 import { canvasAPI } from "../../services/api";
@@ -293,7 +294,7 @@ export default function ChatPanel({
           className="flex items-center justify-center gap-2 py-1.5 text-xs font-medium animate-fade-in"
           style={{ background: "var(--warning-color)", color: "var(--text-inverse)" }}
         >
-          <Loader2 size={12} className="animate-spin" />
+          <Loader size={12} />
           Reconnecting…
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Bookmark, X, Loader2, Search, Hash, MessageSquare, Clock, ChevronRight, Filter } from 'lucide-react'
+import { Bookmark, X, Search, Hash, MessageSquare, Clock, ChevronRight, Filter } from 'lucide-react'
+import Loader from '../shared/Loader'
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns'
 import { Avatar } from './MemberAvatarGroup'
 import { sanitizeHtml } from '../../utils/sanitize'
@@ -111,7 +112,7 @@ function MessageCard({ saved, index, onJump, onUnsave, unsaving }) {
           title="Remove bookmark"
         >
           {unsaving
-            ? <Loader2 size={13} className="smp-spin" />
+            ? <Loader size="xs" />
             : <Bookmark size={13} />}
         </button>
       </div>
@@ -848,14 +849,7 @@ export default function SavedMessagesPanel({ onClose, onJumpToMessage }) {
         {/* Body */}
         <div className="smp-body">
           {loading ? (
-            <div className="smp-loading">
-              <div className="smp-loading__dots">
-                <div className="smp-loading__dot" />
-                <div className="smp-loading__dot" />
-                <div className="smp-loading__dot" />
-              </div>
-              <span className="smp-loading__text">Loading saved messages…</span>
-            </div>
+            <Loader center size="sm" label="Loading saved messages…" />
           ) : savedMessages.length === 0 ? (
             <div className="smp-empty">
               <div className="smp-empty__icon">

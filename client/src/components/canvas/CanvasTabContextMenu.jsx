@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Edit2, Copy, XSquare, Trash2, Loader2 } from "lucide-react";
+import { Edit2, Copy, XSquare, Trash2 } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { useCanvasStore } from "../../stores/canvasStore";
 
 export default function CanvasTabContextMenu({
@@ -122,7 +123,7 @@ export default function CanvasTabContextMenu({
 
       {isProcessing ? (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "12px", gap: "8px", color: "var(--text-muted)", fontSize: "12px" }}>
-          <Loader2 size={14} className="animate-spin" />
+          <Loader size={14} />
           Processing...
         </div>
       ) : (

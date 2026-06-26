@@ -2,7 +2,8 @@ import { useEffect, useMemo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useAuthStore } from '../../stores/authStore'
-import { X, MessageSquareText, Hash, Lock, Loader2, MessagesSquare, Paperclip, File } from 'lucide-react'
+import { X, MessageSquareText, Hash, Lock, MessagesSquare, Paperclip, File } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { Avatar } from './MemberAvatarGroup'
 import { sanitizeHtml } from '../../utils/sanitize'
 import { handleDownload } from '../../utils/handleDownload'
@@ -56,7 +57,7 @@ export default function AllThreadsPanel({ onClose, onOpenThread }) {
         {/* Loading */}
         {allThreadsLoading && sortedThreads.length === 0 && (
           <div className="atp-loading">
-            <Loader2 size={18} className="atp-spinner" />
+            <Loader size={18} />
             <span>Loading threads…</span>
           </div>
         )}

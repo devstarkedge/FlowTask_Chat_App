@@ -6,18 +6,8 @@ import { messageAPI } from "../../services/api";
 import { emitTypingStart, emitTypingStop } from "../../services/socket";
 import useDraftAutoSave from "../../hooks/useDraftAutoSave";
 import useMentions from "../../hooks/useMentions";
-import {
-  Send,
-  Paperclip,
-  Smile,
-  Bold,
-  Loader2,
-  Plus,
-  AtSign,
-  ChevronDown,
-  Clock,
-  X,
-} from "lucide-react";
+import { Send, Paperclip, Smile, Bold, Plus, AtSign, ChevronDown, Clock, X } from 'lucide-react';
+import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import EmojiPickerPortal from "./EmojiPickerPortal";
 import MentionDropdown from "./MentionDropdown";
@@ -714,7 +704,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
 
   return (
     <div
-      className="slack-composer-wrapper"
+      className="slack-composer-wrapper chat-layout-grid"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -831,10 +821,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
                   {/* Upload spinner overlay */}
                   {file.uploading && (
                     <div className="slack-input-preview-loading">
-                      <Loader2
-                        size={24}
-                        className="animate-spin upload-spinner"
-                      />
+                      <Loader size={24} className=" upload-spinner" />
                       {typeof file.progress === "number" && file.progress > 0 && (
                         <span className="upload-progress-text">
                           {file.progress}%
@@ -946,7 +933,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
               aria-label="Send message"
             >
               {isUploading ? (
-                <Loader2 size={16} className="animate-spin" />
+                <Loader size={16} />
               ) : (
                 <Send size={16} />
               )}

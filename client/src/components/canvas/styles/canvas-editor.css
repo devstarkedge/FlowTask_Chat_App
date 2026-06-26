@@ -855,3 +855,82 @@
   user-select: none;
   -webkit-user-drag: none;
 }
+
+/* ─── Table Hover Controls (Row & Column Insert) ────────────────────────── */
+.table-hover-control-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.table-hover-control-btn-circle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-primary, #0ea5e9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  border: 1.5px solid #fff;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+[data-theme="dark"] .table-hover-control-btn-circle {
+  border-color: #1e1e24;
+}
+
+.table-hover-control-btn:hover .table-hover-control-btn-circle {
+  transform: scale(1.15);
+  background: color-mix(in srgb, var(--accent-primary) 85%, #fff);
+}
+
+.table-hover-control-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-primary, #0ea5e9);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  border: 1px solid #fff;
+  pointer-events: none;
+}
+
+[data-theme="dark"] .table-hover-control-dot {
+  border-color: #1e1e24;
+}
+
+.table-hover-control-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  background: #000;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
+}
+
+.table-hover-control-btn:hover .table-hover-control-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.table-hover-control-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: #000 transparent transparent transparent;
+}

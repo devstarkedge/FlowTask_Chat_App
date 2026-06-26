@@ -6,23 +6,8 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
 import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
-import {
-  Trash2,
-  Send,
-  Search,
-  Loader2,
-  PencilLine,
-  Hash,
-  Lock,
-  X,
-  FileText,
-  FileArchive,
-  FileCode,
-  Music,
-  Video,
-  File,
-  Clock,
-} from "lucide-react";
+import { Trash2, Send, Search, PencilLine, Hash, Lock, X, FileText, FileArchive, FileCode, Music, Video, File, Clock } from 'lucide-react';
+import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import ScheduleMessageModal from "./ScheduleMessageModal";
@@ -303,7 +288,7 @@ function DraftCard({
           aria-label="Send draft"
         >
           {isSending ? (
-            <Loader2 size={13} className="dsl-spin" />
+            <Loader size={13} />
           ) : (
             <Send size={13} />
           )}

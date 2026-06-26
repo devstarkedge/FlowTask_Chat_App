@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
-import { X, Loader2, Plus, Check, Sparkles, Layers, ArrowRight } from 'lucide-react'
+import { X, Plus, Check, Sparkles, Layers, ArrowRight } from 'lucide-react';
+import Loader from '../shared/Loader';
 import useRipple from '../../hooks/useRipple'
 import { motion, AnimatePresence } from 'framer-motion'
 import './custom-css/createWorkspaceModal.css'
@@ -319,7 +320,7 @@ export default function CreateWorkspaceModal({ onClose, onCreated }) {
                   whileTap={!name.trim() || isLoading ? {} : { y: 0, scale: .98 }}
                 >
                   {isLoading ? (
-                    <Loader2 size={16} className="cw-spin" />
+                    <Loader size={16} className="cw-spin" />
                   ) : submitted ? (
                     <span className="cw-check"><Check size={16} strokeWidth={3} /></span>
                   ) : (

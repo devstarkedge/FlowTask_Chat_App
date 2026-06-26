@@ -18,10 +18,12 @@ import { useCanvasFileUpload } from "../overlays/CanvasFileUpload";
 import { useCanvasMediaRecorder } from "../overlays/CanvasMediaRecorder";
 import { useCanvasMentionDropdown } from "../overlays/CanvasMentionDropdown";
 import { useCanvasEmojiPicker } from "../overlays/CanvasEmojiPicker";
+import TableHoverControls from "./TableHoverControls";
 import "../styles/canvas-shell.css";
 import "../styles/canvas-editor.css";
 import "../styles/canvas-toolbar.css";
 import "../styles/canvas-cover.css";
+import Loader from "../../shared/Loader";
 import "../styles/canvas-cover-tokens.css";
 import "../styles/canvas-sidebars.css";
 import "../styles/canvas-overlays.css";
@@ -31,7 +33,7 @@ import "../styles/canvas-media.css";
 const CommentThreadSidebar = lazy(() => import("../comments/CommentThreadSidebar"));
 const CanvasHistoryPanel = lazy(() => import("../history/CanvasHistoryPanel"));
 
-const SIDEBAR_FALLBACK = <div className="canvas-loading"><span />Loading...</div>;
+const SIDEBAR_FALLBACK = <Loader center size="sm" label="Loading..." />;
 
 const COLLAB_TIMEOUT_MS = 4_000;
 
@@ -234,6 +236,7 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
   }, [status]);
 
   const collaborationLoading = useMemo(() => {
+    if (status === "connecting") return true;
     if (!provider) return false;
     if (status === "connected" || status === "synced" || status === "disabled" || status === "auth-failed") return false;
     return !collabTimedOut;
@@ -241,12 +244,7 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
 
   // ── Loading state ──────────────────────────────────────────────────────
   if (!editor || collaborationLoading) {
-    return (
-      <div className="canvas-loading">
-        <span />
-        Loading canvas...
-      </div>
-    );
+    return <Loader center label="Loading canvas..." />;
   }
 
   return (
@@ -264,6 +262,7 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
             <div ref={editorWrapperRef} style={{ position: "relative" }}>
               <EditorContent editor={editor} spellCheck={false} />
               {MentionDropdownPortal}
+              <TableHoverControls editor={editor} containerRef={editorWrapperRef} />
             </div>
             <CursorOverlay awarenessUsers={awarenessUsers} />
           </article>

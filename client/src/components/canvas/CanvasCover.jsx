@@ -1,7 +1,9 @@
 import { useState, useRef, useCallback } from "react";
-import { Image, Palette, Move, X, ChevronDown, Upload, Loader2 } from "lucide-react";
+import { Image, Palette, Move, X, ChevronDown, Upload } from 'lucide-react';
+import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import { useCanvasStore } from "../../stores/canvasStore";
+import { useChannelStore } from "../../stores/channelStore";
 import { messageAPI } from "../../services/api";
 
 const GRADIENT_PRESETS = [
@@ -106,7 +108,16 @@ export default function CanvasCover({ cover, canvasId, canvasTitle, channelId, o
       const formData = new FormData();
       formData.append("files", file);
 
-      const res = await messageAPI.uploadFiles(channelId, formData);
+      const channelIdToUse = channelId || useChannelStore.getState().activeChannelId || useChannelStore.getState().channels?.[0]?._id;
+      if (!channelIdToUse) {
+        toast.error("No active channel context found for uploading.");
+        setIsUploading(false);
+        isUploadingRef.current = false;
+        setUploadPreview(null);
+        return;
+      }
+
+      const res = await messageAPI.uploadFilesSync(channelIdToUse, formData);
       if (res.data && res.data.success) {
         const uploadedUrl = res.data.data?.urls?.[0] || res.data.data?.files?.[0]?.url;
         if (uploadedUrl) {
@@ -366,7 +377,7 @@ export default function CanvasCover({ cover, canvasId, canvasTitle, channelId, o
                   display: "flex", alignItems: "center", justifyContent: "center",
                   color: "#fff", fontSize: 12, fontWeight: 600, gap: 6,
                 }}>
-                  <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                  <Loader size={14} />
                   Uploading...
                 </div>
               </div>

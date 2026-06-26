@@ -21,27 +21,8 @@
  *   onShowResultsPage {function}      — channel mode "Show results" action
  */
 
-import {
-  AtSign,
-  Bell,
-  Clock,
-  FileAudio,
-  FileImage,
-  FileText,
-  FileVideo,
-  Hash,
-  Link as LinkIcon,
-  Loader2,
-  Lock,
-  MessageSquare,
-  Search,
-  Settings,
-  Sparkles,
-  Star,
-  User,
-  Users,
-  X,
-} from 'lucide-react'
+import { AtSign, Bell, Clock, FileAudio, FileImage, FileText, FileVideo, Hash, Link as LinkIcon, Lock, MessageSquare, Search, Settings, Sparkles, Star, User, Users, X } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { Avatar } from '../chat/MemberAvatarGroup'
 import SearchResultItem from './SearchResultItem'
 
@@ -354,7 +335,7 @@ export default function SearchDropdown({
       {/* Loading */}
       {hasQuery && loading && (
         <div className="global-search__state">
-          <Loader2 size={16} className="global-search__spinner" />
+          <Loader size={16} className="global-search__spinner" />
           <span>Searching…</span>
         </div>
       )}

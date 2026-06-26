@@ -1,150 +1,98 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from "react";
-import { Image, Palette, Move, X, ChevronDown, Upload, Loader2 } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
+import { Upload, Image as ImageIcon } from "lucide-react";
+import Loader from "../../shared/Loader";
 import { useCanvasStore } from "../../../stores/canvasStore";
+import { useChannelStore } from "../../../stores/channelStore";
 import { messageAPI } from "../../../services/api";
-import CanvasCoverImage from "./CanvasCoverImage";
-import CanvasCoverActions from "./CanvasCoverActions";
+import toast from "react-hot-toast";
 
-const GRADIENT_PRESETS = [
-  { label: "Ocean Blue", value: "linear-gradient(135deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%)" },
-  { label: "Vivid Purple", value: "linear-gradient(135deg, #2d1b69 0%, #7c3aed 60%, #a855f7 100%)" },
-  { label: "Sunset Orange", value: "linear-gradient(135deg, #78350f 0%, #c2410c 50%, #f97316 100%)" },
-  { label: "Forest Green", value: "linear-gradient(135deg, #064e3b 0%, #065f46 50%, #059669 100%)" },
-  { label: "Rose Pink", value: "linear-gradient(135deg, #881337 0%, #be185d 50%, #f43f5e 100%)" },
-  { label: "Slate Storm", value: "linear-gradient(135deg, #1e293b 0%, #334155 60%, #475569 100%)" },
-  { label: "Indigo Dusk", value: "linear-gradient(135deg, #1e1b4b 0%, #3730a3 50%, #6366f1 100%)" },
-  { label: "Amber Glow", value: "linear-gradient(135deg, #78350f 0%, #b45309 50%, #f59e0b 100%)" },
+const LIBRARY_PRESETS = [
+  { label: "Desk Items", value: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80" },
+  { label: "Cozy Room", value: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=600&q=80" },
+  { label: "Abstract Shapes", value: "https://images.unsplash.com/photo-1604871000636-074fa5117945?auto=format&fit=crop&w=600&q=80" },
+  { label: "Forest Sunlight", value: "https://images.unsplash.com/photo-1502082553048-f009c37129b9?auto=format&fit=crop&w=600&q=80" },
+  { label: "City Street View", value: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?auto=format&fit=crop&w=600&q=80" },
+  { label: "Modern Gallery", value: "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=600&q=80" },
+  { label: "Desk Work", value: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=600&q=80" },
+  { label: "Retro Workspace", value: "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=600&q=80" },
+  { label: "Bookshelves", value: "https://images.unsplash.com/photo-1516979187457-637abb4f9353?auto=format&fit=crop&w=600&q=80" },
+  { label: "Sunny Beach", value: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=600&q=80" },
+  { label: "Gradient Abstract", value: "https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=600&q=80" },
+  { label: "Minimalist Block House", value: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=600&q=80" }
 ];
 
-const SOLID_COLORS = [
-  "#0f172a", "#1e293b", "#334155", "#1d4ed8", "#7c3aed",
-  "#db2777", "#dc2626", "#16a34a", "#b45309", "#0e7490",
-];
-
-/**
- * CanvasCover — Modular cover picker component.
- *
- * Composes:
- *  - CanvasCoverImage: renders the cover preview
- *  - CanvasCoverActions: renders hover action buttons
- *
- * Uses design tokens from canvas-cover-tokens.css for responsive heights.
- */
 export default function CanvasCover({
   cover,
   canvasId,
-  canvasTitle,
   channelId,
-  onClose,
-  mode = "picker", // "picker" | "preview"
+  onClose
 }) {
   const updateCanvasMetadata = useCanvasStore((s) => s.updateCanvasMetadata);
-  const [activeTab, setActiveTab] = useState("gradient");
-  const [customImageUrl, setCustomImageUrl] = useState("");
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStartY, setDragStartY] = useState(null);
-  const [yOffset, setYOffset] = useState(cover?.yOffset ?? 50);
+  const [activeTab, setActiveTab] = useState("library"); // library | upload
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadPreview, setUploadPreview] = useState(null);
-  const [isRepositioning, setIsRepositioning] = useState(false);
-  const coverRef = useRef(null);
+  const [originalCover] = useState(cover);
   const fileInputRef = useRef(null);
 
-  // ── Cover offset sync ──────────────────────────────────────────────────────────
-  // When the modal opens (or the cover prop changes — e.g. after a reposition on
-  // the main canvas), re-seed yOffset from the latest saved cover data so the
-  // picker always shows the current repositioned state, NOT the stale mount value.
-  // We only do this when NOT actively dragging so we don't fight the user's input.
-  useEffect(() => {
-    if (!isDragging) {
-      setYOffset(cover?.yOffset ?? 50);
+  const handleCancel = async () => {
+    if (canvasId) {
+      await updateCanvasMetadata(canvasId, { cover: originalCover });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cover?.yOffset, cover?.value]);
-  
-  // Callbacks for cover actions
-  const onRemoveCover = useCallback(async () => {
-    if (!canvasId) return;
-    await updateCanvasMetadata(canvasId, { cover: null });
     onClose?.();
-  }, [canvasId, updateCanvasMetadata, onClose]);
-  
-  const onOpenCoverPicker = useCallback(() => {
-    // In preview mode, this would open the picker modal
-    // Handled by parent component
-  }, []);
+  };
 
-  // Prevent duplicate uploads
-  const isUploadingRef = useRef(false);
-  const lastUploadedUrlRef = useRef(null);
+  const handleSave = () => {
+    onClose?.();
+  };
 
-  const applyPreset = useCallback(async (type, value) => {
-    if (!canvasId) return;
-    await updateCanvasMetadata(canvasId, { cover: { type, value, yOffset } });
-  }, [canvasId, updateCanvasMetadata, yOffset]);
-
-  const applyImageUrl = useCallback(async () => {
-    if (!canvasId || !customImageUrl.trim()) {
-      toast.error("Please enter a valid image URL.");
-      return;
+  const handleRemove = async () => {
+    if (canvasId) {
+      await updateCanvasMetadata(canvasId, { cover: null });
     }
-    try {
+    onClose?.();
+  };
+
+  const selectLibraryImage = async (url) => {
+    if (canvasId) {
       await updateCanvasMetadata(canvasId, {
-        cover: { type: "image", value: customImageUrl.trim(), yOffset },
+        cover: { type: "image", value: url, yOffset: 50 }
       });
-      toast.success("Cover image URL applied!");
-    } catch (err) {
-      console.error("[CanvasCover] URL apply error:", err);
-      toast.error("Failed to apply cover image URL.");
     }
-  }, [canvasId, customImageUrl, updateCanvasMetadata, yOffset]);
+  };
 
-  const removeCover = useCallback(async () => {
-    if (!canvasId) return;
-    await updateCanvasMetadata(canvasId, { cover: null });
-    onClose?.();
-  }, [canvasId, updateCanvasMetadata, onClose]);
-
-  const handleReposition = useCallback(() => {
-    setIsRepositioning(true);
-  }, []);
-
-  // File upload handler
   const handleFileSelect = useCallback(async (e) => {
     const file = e.target.files?.[0];
-    if (!file || !canvasId) {
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      return;
-    }
+    if (!file || !canvasId) return;
 
-    if (isUploadingRef.current) {
+    if (isUploading) {
       toast.error("Upload already in progress. Please wait.");
-      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
     const validTypes = ["image/jpeg", "image/png", "image/webp"];
     if (!validTypes.includes(file.type)) {
       toast.error("Please select a JPG, PNG, or WEBP image.");
-      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
-    const previewUrl = URL.createObjectURL(file);
-    setUploadPreview(previewUrl);
     setIsUploading(true);
-    isUploadingRef.current = true;
 
     try {
       const formData = new FormData();
       formData.append("files", file);
 
-      const res = await messageAPI.uploadFiles(channelId, formData);
+      const channelIdToUse = channelId || useChannelStore.getState().activeChannelId || useChannelStore.getState().channels?.[0]?._id;
+      if (!channelIdToUse) {
+        toast.error("No active channel context found for uploading.");
+        setIsUploading(false);
+        return;
+      }
+
+      const res = await messageAPI.uploadFilesSync(channelIdToUse, formData);
       if (res.data && res.data.success) {
         const uploadedUrl = res.data.data?.urls?.[0] || res.data.data?.files?.[0]?.url;
         if (uploadedUrl) {
           await updateCanvasMetadata(canvasId, {
-            cover: { type: "image", value: uploadedUrl, yOffset },
+            cover: { type: "image", value: uploadedUrl, yOffset: 50 },
           });
           toast.success("Cover image uploaded!");
         } else {
@@ -152,331 +100,244 @@ export default function CanvasCover({
         }
       } else {
         const serverMsg = res.data?.error?.message || "Failed to upload cover image.";
-        const debugInfo = res.data?.error?.debug;
-        if (debugInfo && debugInfo.length > 0) {
-          const d = debugInfo[0];
-          console.error("[CanvasCover] Upload validation failed:", {
-            filename: d.filename,
-            declaredType: d.declaredType,
-            detectedType: d.detectedType,
-            reason: d.reason,
-          });
-          toast.error(`Upload failed: ${d.reason || serverMsg}`, { duration: 5000 });
-        } else {
-          toast.error(serverMsg);
-        }
+        toast.error(serverMsg);
       }
     } catch (err) {
       console.error("[CanvasCover] Upload error:", err);
       toast.error(err?.response?.data?.error?.message || "Failed to upload cover image.");
     } finally {
       setIsUploading(false);
-      setUploadPreview(null);
-      isUploadingRef.current = false;
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [canvasId, channelId, updateCanvasMetadata, yOffset]);
-
-  // Drag-to-reposition cover image
-  const handleMouseDown = useCallback((e) => {
-    if (cover?.type !== "image") return;
-    setIsDragging(true);
-    setDragStartY(e.clientY);
-  }, [cover?.type]);
-
-  const handleMouseMove = useCallback((e) => {
-    if (!isDragging || !coverRef.current) return;
-    const dy = e.clientY - dragStartY;
-    const containerH = coverRef.current.offsetHeight;
-    const delta = (dy / containerH) * 100;
-    setYOffset((prev) => Math.max(0, Math.min(100, prev - delta)));
-    setDragStartY(e.clientY);
-  }, [isDragging, dragStartY]);
-
-  const handleMouseUp = useCallback(async () => {
-    if (!isDragging) return;
-    setIsDragging(false);
-    if (cover?.type === "image" && canvasId) {
-      await updateCanvasMetadata(canvasId, {
-        cover: { type: "image", value: cover.value, yOffset },
-      });
-    }
-  }, [isDragging, cover, canvasId, yOffset, updateCanvasMetadata]);
-
-  const handleClose = useCallback(() => {
-    onClose?.();
-  }, [onClose]);
+  }, [canvasId, channelId, updateCanvasMetadata, isUploading]);
 
   return (
-    <div style={{ fontFamily: "var(--font-sans)" }}>
-      {/* Cover Preview using modular component */}
-      <div
-        ref={coverRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        className="canvas-cover-strip"
-        style={{ width: "100%" }}
-      >
-        <CanvasCoverImage
-          cover={cover}
-          yOffset={yOffset}
-          isDragging={isDragging}
-        />
-
-        {/* Gradient overlay for text legibility */}
-        <div className="canvas-cover-overlay" />
-
-        {/* Canvas Title */}
-        <div className="canvas-cover-title">
-          {canvasTitle || "Untitled Canvas"}
-        </div>
-
-        {/* Drag hint for images */}
-        {cover?.type === "image" && (
-          <div className="canvas-cover-drag-hint">
-            <Move size={10} />
-            Drag to reposition
-          </div>
-        )}
-
-        {/* Close button - only in picker mode */}
-        {onClose && mode === "picker" && (
-          <button
-            onClick={handleClose}
-            className="canvas-cover-close-btn"
-            aria-label="Close cover picker"
-          >
-            <X size={13} />
-          </button>
-        )}
-
-        {/* Cover Actions using modular component - only in preview mode */}
-        {mode === "preview" && (
-          <CanvasCoverActions
-            hasCover={!!cover}
-            onOpenCoverPicker={onOpenCoverPicker}
-            onRemoveCover={onRemoveCover}
-            onReposition={handleReposition}
-            isRepositioning={isRepositioning}
-            coverType={cover?.type}
-          />
-        )}
-      </div>
-
-      {/* Picker Panel - only in picker mode */}
-      {mode === "picker" && (
-        <div className="canvas-cover-picker-panel">
-        {/* Tab strip */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
-          {[
-            { id: "gradient", label: "Gradients", icon: Palette },
-            { id: "color", label: "Colors", icon: Palette },
-            { id: "image", label: "Image URL", icon: Image },
-            { id: "upload", label: "Upload", icon: Upload },
-          ].map(({ id, label, icon: Icon }) => (
+    <div style={{
+      fontFamily: "var(--font-sans)",
+      background: "var(--bg-primary, #fff)",
+      padding: "16px 20px",
+      borderRadius: 12,
+      border: "1px solid var(--border-primary, rgba(0,0,0,0.1))",
+      boxShadow: "0 10px 30px rgba(0, 0, 0, 0.08)",
+      boxSizing: "border-box",
+      width: "100%",
+    }}>
+      {/* Tab strip */}
+      <div style={{
+        display: "flex",
+        gap: 16,
+        marginBottom: 16,
+        borderBottom: "1px solid var(--border-primary, rgba(0,0,0,0.1))",
+        position: "relative",
+      }}>
+        {[
+          { id: "library", label: "Library" },
+          { id: "upload", label: "Upload" },
+        ].map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
             <button
-              key={id}
-              onClick={() => setActiveTab(id)}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
               style={{
-                padding: "5px 10px",
-                borderRadius: "var(--radius-sm)",
+                padding: "8px 4px 10px",
                 border: "none",
+                background: "none",
                 cursor: "pointer",
-                fontSize: 11,
-                fontWeight: 600,
-                background: activeTab === id ? "var(--accent-primary)" : "var(--bg-secondary)",
-                color: activeTab === id ? "#fff" : "var(--text-secondary)",
-                transition: "all 150ms",
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Gradient presets */}
-        {activeTab === "gradient" && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-            {GRADIENT_PRESETS.map((g) => (
-              <button
-                key={g.label}
-                title={g.label}
-                onClick={() => applyPreset("gradient", g.value)}
-                style={{
-                  height: 36,
-                  borderRadius: "var(--radius-md)",
-                  background: g.value,
-                  border: "2px solid transparent",
-                  cursor: "pointer",
-                  transition: "border-color 150ms, transform 150ms",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "var(--accent-primary)";
-                  e.currentTarget.style.transform = "scale(1.05)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "transparent";
-                  e.currentTarget.style.transform = "scale(1)";
-                }}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Solid colors */}
-        {activeTab === "color" && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {SOLID_COLORS.map((c) => (
-              <button
-                key={c}
-                title={c}
-                onClick={() => applyPreset("color", c)}
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: "50%",
-                  background: c,
-                  border: "2px solid transparent",
-                  cursor: "pointer",
-                  transition: "border-color 150ms, transform 150ms",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "var(--accent-primary)";
-                  e.currentTarget.style.transform = "scale(1.1)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "transparent";
-                  e.currentTarget.style.transform = "scale(1)";
-                }}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Image URL */}
-        {activeTab === "image" && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <input
-              type="text"
-              placeholder="Paste an image URL…"
-              value={customImageUrl}
-              onChange={(e) => setCustomImageUrl(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && applyImageUrl()}
-              style={{
-                flex: 1,
-                padding: "7px 10px",
-                fontSize: 12,
-                borderRadius: "var(--radius-md)",
-                border: "1px solid var(--border-primary)",
-                background: "var(--bg-secondary)",
-                color: "var(--text-primary)",
-                outline: "none",
-                fontFamily: "var(--font-sans)",
-              }}
-              onFocus={(e) => (e.target.style.borderColor = "var(--accent-primary)")}
-              onBlur={(e) => (e.target.style.borderColor = "var(--border-primary)")}
-            />
-            <button
-              onClick={applyImageUrl}
-              style={{
-                padding: "7px 14px",
-                borderRadius: "var(--radius-md)",
-                border: "none",
-                background: "var(--accent-primary)",
-                color: "#fff",
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              Apply
-            </button>
-          </div>
-        )}
-
-        {/* Upload from Computer */}
-        {activeTab === "upload" && (
-          <div style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 10,
-            padding: "8px 0",
-          }}>
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept=".jpg,.jpeg,.png,.webp"
-              onChange={handleFileSelect}
-              style={{ display: "none" }}
-            />
-            {isUploading && uploadPreview && (
-              <div style={{
-                width: "100%",
-                height: 80,
-                borderRadius: "var(--radius-md)",
-                backgroundImage: `url(${uploadPreview})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
+                fontSize: 14,
+                fontWeight: isActive ? 600 : 500,
+                color: isActive ? "var(--text-primary, #111)" : "var(--text-muted, #777)",
                 position: "relative",
-                overflow: "hidden",
-              }}>
+                transition: "color 150ms",
+              }}
+            >
+              {tab.label}
+              {isActive && (
                 <div style={{
                   position: "absolute",
-                  inset: 0,
-                  background: "rgba(0,0,0,0.45)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#fff",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  gap: 6,
-                }}>
-                  <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
-                  Uploading...
-                </div>
-              </div>
-            )}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "10px 20px",
-                borderRadius: "var(--radius-md)",
-                border: "1px dashed var(--border-primary)",
-                background: "var(--bg-secondary)",
-                color: "var(--text-primary)",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: isUploading ? "not-allowed" : "pointer",
-                transition: "all 150ms",
-                width: "100%",
-                justifyContent: "center",
-                opacity: isUploading ? 0.6 : 1,
-              }}
-              onMouseEnter={(e) => {
-                if (!isUploading) e.currentTarget.style.borderColor = "var(--accent-primary)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = "var(--border-primary)";
-              }}
-            >
-              <Upload size={16} />
-              {isUploading ? "Uploading..." : "Upload from Computer"}
+                  bottom: -1,
+                  left: 0,
+                  right: 0,
+                  height: 2,
+                  background: "#0079bf", // Notion / Trello blue indicator bar
+                  borderRadius: 2,
+                }} />
+              )}
             </button>
-            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-              JPG, PNG, or WEBP
-            </span>
-          </div>
-        )}
+          );
+        })}
       </div>
+
+      {/* Library tab content */}
+      {activeTab === "library" && (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 12,
+          maxHeight: 280,
+          overflowY: "auto",
+          paddingRight: 4,
+          boxSizing: "border-box",
+        }}>
+          {LIBRARY_PRESETS.map((preset) => {
+            const isSelected = cover?.type === "image" && cover.value === preset.value;
+            return (
+              <button
+                key={preset.value}
+                onClick={() => selectLibraryImage(preset.value)}
+                style={{
+                  height: 80,
+                  borderRadius: 8,
+                  backgroundImage: `url(${preset.value})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  border: isSelected ? "3px solid #0079bf" : "1px solid var(--border-primary, rgba(0,0,0,0.1))",
+                  cursor: "pointer",
+                  outline: "none",
+                  boxSizing: "border-box",
+                  transition: "transform 120ms ease",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.03)"}
+                onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
+              />
+            );
+          })}
+        </div>
       )}
+
+      {/* Upload tab content */}
+      {activeTab === "upload" && (
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          height: 240,
+          border: "1px dashed var(--border-primary, rgba(0,0,0,0.15))",
+          borderRadius: 8,
+          background: "var(--bg-secondary, #fafafa)",
+          padding: 24,
+          boxSizing: "border-box",
+          textAlign: "center",
+          position: "relative",
+        }}>
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".jpg,.jpeg,.png,.webp"
+            onChange={handleFileSelect}
+            style={{ display: "none" }}
+          />
+          {isUploading ? (
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 8,
+            }}>
+              <Loader size="lg" />
+              <p style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)" }}>
+                Uploading cover...
+              </p>
+            </div>
+          ) : (
+            <>
+              <ImageIcon size={44} style={{ color: "var(--text-muted, #999)", marginBottom: 12 }} />
+              <h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 600, color: "var(--text-primary, #111)" }}>
+                Upload an image
+              </h3>
+              <p style={{ margin: "0 0 16px", fontSize: 13, color: "var(--text-muted, #777)" }}>
+                Images larger than 100kb work best.
+              </p>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: 6,
+                  border: "1px solid var(--border-primary, rgba(0,0,0,0.15))",
+                  background: "var(--bg-primary, #fff)",
+                  color: "var(--text-primary, #111)",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 140ms ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "var(--text-secondary, #555)";
+                  e.currentTarget.style.background = "var(--bg-hover, #f3f4f6)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "var(--border-primary, rgba(0,0,0,0.15))";
+                  e.currentTarget.style.background = "var(--bg-primary, #fff)";
+                }}
+              >
+                Upload
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Footer bar */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginTop: 20,
+        paddingTop: 16,
+        borderTop: "1px solid var(--border-primary, rgba(0,0,0,0.1))",
+      }}>
+        {cover ? (
+          <button
+            onClick={handleRemove}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#de350b", // red remove link
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            Remove cover
+          </button>
+        ) : (
+          <div />
+        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={handleCancel}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 6,
+              border: "1px solid var(--border-primary, rgba(0,0,0,0.15))",
+              background: "var(--bg-primary, #fff)",
+              color: "var(--text-primary, #111)",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 6,
+              border: "none",
+              background: "#0079bf", // matching Notion/Trello save
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Save
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

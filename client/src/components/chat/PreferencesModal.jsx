@@ -1,23 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  X,
-  Bell,
-  BellOff,
-  Volume2,
-  VolumeX,
-  Monitor,
-  Moon,
-  Sun,
-  AlignLeft,
-  Loader2,
-  Check,
-  RotateCcw,
-  Palette,
-  Sidebar,
-  MessageSquare,
-  ClipboardList,
-  Inbox,
-} from 'lucide-react'
+import { X, Bell, BellOff, Volume2, VolumeX, Monitor, Moon, Sun, AlignLeft, Check, RotateCcw, Palette, Sidebar, MessageSquare, ClipboardList, Inbox } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { useAuthStore } from '../../stores/authStore'
 import {
   getSidebarThemeColors,
@@ -422,7 +405,7 @@ export default function PreferencesModal({ onClose }) {
                 : 'No unsaved changes. Save changes will close this dialog.'}
             </span>
             <button className="appearance-primary-btn appearance-save-btn" onClick={handleSaveChanges} disabled={savingPrefs}>
-              {savingPrefs && <Loader2 size={15} className="animate-spin" />}
+              {savingPrefs && <Loader size={15} />}
               Save changes
             </button>
           </div>
@@ -448,7 +431,7 @@ function SaveStateIndicator({ state }) {
   if (state === 'saving') {
     return (
       <span className="appearance-save-state">
-        <Loader2 size={13} className="animate-spin" />
+        <Loader size={13} />
         Saving
       </span>
     )

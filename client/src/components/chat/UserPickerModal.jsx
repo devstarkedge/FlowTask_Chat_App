@@ -5,7 +5,8 @@ import { useChatStore } from '../../stores/chatStore'
 import { usePresenceStore } from '../../stores/presenceStore'
 import { userAPI } from '../../services/api'
 import { joinChannel } from '../../services/socket'
-import { X, Search, Loader2, MessageCircle, User, Zap } from 'lucide-react'
+import { X, Search, MessageCircle, User, Zap } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { Avatar } from './MemberAvatarGroup'
 import toast from 'react-hot-toast'
 import logger from '../../utils/logger'

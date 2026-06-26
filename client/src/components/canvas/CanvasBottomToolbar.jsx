@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React from "react";
 import {
   Plus,
   X,
@@ -6,13 +6,6 @@ import {
   Paperclip,
   CheckSquare,
   Table2,
-  Heading1,
-  List,
-  ListOrdered,
-  Code2,
-  Undo2,
-  Redo2,
-  AtSign,
   LayoutGrid,
 } from "lucide-react";
 
@@ -23,7 +16,6 @@ const CanvasBottomToolbar = React.memo(function CanvasBottomToolbar({
   onToggleInsertMenu,
   onEmojiClick,
   onFileClick,
-  onMentionClick,
   emojiBtnRef,
   toggleBtnRef,
   children,
@@ -56,7 +48,7 @@ const CanvasBottomToolbar = React.memo(function CanvasBottomToolbar({
 
         <span className="canvas-toolbar-divider" />
 
-        {/* Heading 1 */}
+        {/* Heading 1 (Aa) */}
         <button
           className={`canvas-toolbar-btn ${
             editor.isActive("heading", { level: 1 }) ? "is-active" : ""
@@ -67,55 +59,7 @@ const CanvasBottomToolbar = React.memo(function CanvasBottomToolbar({
             editor.chain().focus().toggleHeading({ level: 1 }).run()
           }
         >
-          <span className="canvas-toolbar-aa-label">H</span>
-        </button>
-
-        {/* Ordered List */}
-        <button
-          className={`canvas-toolbar-btn ${
-            editor.isActive("orderedList") ? "is-active" : ""
-          }`}
-          title="Numbered list (Ctrl+Shift+7)"
-          aria-label="Numbered list"
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        >
-          <ListOrdered size={16} />
-        </button>
-
-        {/* Bullet List */}
-        <button
-          className={`canvas-toolbar-btn ${
-            editor.isActive("bulletList") ? "is-active" : ""
-          }`}
-          title="Bullet list (Ctrl+Shift+8)"
-          aria-label="Bullet list"
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-        >
-          <List size={16} />
-        </button>
-
-        {/* Checklist */}
-        <button
-          className={`canvas-toolbar-btn ${
-            editor.isActive("taskList") ? "is-active" : ""
-          }`}
-          title="Checklist"
-          aria-label="Checklist"
-          onClick={() => editor.chain().focus().toggleTaskList().run()}
-        >
-          <CheckSquare size={16} />
-        </button>
-
-        <span className="canvas-toolbar-divider" />
-
-        {/* Mention @ */}
-        <button
-          className="canvas-toolbar-btn"
-          title="Mention a user (@)"
-          aria-label="Mention user"
-          onClick={onMentionClick}
-        >
-          <AtSign size={16} />
+          <span className="canvas-toolbar-aa-label">Aa</span>
         </button>
 
         {/* Emoji Selector */}
@@ -139,6 +83,18 @@ const CanvasBottomToolbar = React.memo(function CanvasBottomToolbar({
           <Paperclip size={16} />
         </button>
 
+        {/* Checklist */}
+        <button
+          className={`canvas-toolbar-btn ${
+            editor.isActive("taskList") ? "is-active" : ""
+          }`}
+          title="Checklist"
+          aria-label="Checklist"
+          onClick={() => editor.chain().focus().toggleTaskList().run()}
+        >
+          <CheckSquare size={16} />
+        </button>
+
         {/* Table */}
         <button
           className="canvas-toolbar-btn"
@@ -153,18 +109,6 @@ const CanvasBottomToolbar = React.memo(function CanvasBottomToolbar({
           }
         >
           <Table2 size={16} />
-        </button>
-
-        {/* Code Block */}
-        <button
-          className={`canvas-toolbar-btn ${
-            editor.isActive("codeBlock") ? "is-active" : ""
-          }`}
-          title="Code block (Ctrl+Alt+C)"
-          aria-label="Code block"
-          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-        >
-          <Code2 size={16} />
         </button>
 
         {/* Layout / Columns */}
@@ -189,30 +133,6 @@ const CanvasBottomToolbar = React.memo(function CanvasBottomToolbar({
           }
         >
           <LayoutGrid size={16} />
-        </button>
-
-        <span className="canvas-toolbar-divider" />
-
-        {/* Undo */}
-        <button
-          className="canvas-toolbar-btn"
-          title="Undo (Ctrl+Z)"
-          aria-label="Undo"
-          disabled={!editor.can().undo()}
-          onClick={() => editor.chain().focus().undo().run()}
-        >
-          <Undo2 size={16} />
-        </button>
-
-        {/* Redo */}
-        <button
-          className="canvas-toolbar-btn"
-          title="Redo (Ctrl+Y)"
-          aria-label="Redo"
-          disabled={!editor.can().redo()}
-          onClick={() => editor.chain().focus().redo().run()}
-        >
-          <Redo2 size={16} />
         </button>
       </div>
     </div>

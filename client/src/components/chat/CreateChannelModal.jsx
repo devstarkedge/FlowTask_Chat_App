@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useChannelStore } from "../../stores/channelStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { getChannelPath } from "../../utils/chatRoutes";
-import { X, Globe, Lock, Plus, Loader2, Hash, Sparkles } from "lucide-react";
+import { X, Globe, Lock, Plus, Hash, Sparkles } from 'lucide-react';
+import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 
 /* ─────────────────────────────────────────────
@@ -841,7 +842,7 @@ export default function CreateChannelModal({ onClose }) {
               <button type="submit" className="ccm-btn-submit" disabled={!canSubmit}>
                 {isSubmitting ? (
                   <>
-                    <Loader2 size={14} className="ccm-spin" />
+                    <Loader size={14} />
                     Creating…
                   </>
                 ) : (

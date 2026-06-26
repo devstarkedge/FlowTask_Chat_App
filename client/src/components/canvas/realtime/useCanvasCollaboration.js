@@ -35,7 +35,12 @@ export function useCanvasCollaboration(canvasId) {
   // Keep the provider and ydoc in refs to avoid re-renders that recreate them.
   const providerRef = useRef(null);
   const ydocRef = useRef(null);
-  const [status, setStatus] = useState("idle");
+  const [status, setStatus] = useState(() => (canvasId && workspaceId) ? "connecting" : "disabled");
+  const [prevCanvasId, setPrevCanvasId] = useState(canvasId);
+  if (canvasId !== prevCanvasId) {
+    setPrevCanvasId(canvasId);
+    setStatus(canvasId && workspaceId ? "connecting" : "disabled");
+  }
   const [awarenessUsers, setAwarenessUsers] = useState([]);
   const awarenessUpdateTimerRef = useRef(null);
 

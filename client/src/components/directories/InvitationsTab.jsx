@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Mail, RefreshCw, XCircle, Loader2, UserPlus, Clock, CheckCircle2, AlertCircle, Ban } from 'lucide-react'
+import { Mail, RefreshCw, XCircle, UserPlus, Clock, CheckCircle2, AlertCircle, Ban } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { directoriesAPI } from '../../services/directoriesAPI'
 import { useAuthStore } from '../../stores/authStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
@@ -196,7 +197,7 @@ export default function InvitationsTab() {
                         title="Resend invitation"
                       >
                         {isProcessing
-                          ? <Loader2 size={13} className="dir-spin" />
+                          ? <Loader size={13} />
                           : <RefreshCw size={13} />
                         }
                       </button>

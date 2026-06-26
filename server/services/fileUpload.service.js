@@ -144,6 +144,43 @@ class FileUploadService {
   }
 
   /**
+   * Uploads a file to Cloudinary synchronously (blocks until done) and returns the completed FileAsset.
+   */
+  async uploadImmediately(file, userId, workspaceId) {
+    const checksumHash = await this.generateChecksum(file.path);
+
+    // Determine resource type for Cloudinary
+    const resourceType = file.mimetype.startsWith("image/")
+      ? "image"
+      : file.mimetype.startsWith("video/")
+        ? "video"
+        : "raw";
+
+    const asset = new FileAsset({
+      publicId: `pending_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+      secureUrl: "/placeholder-loading",
+      resourceType,
+      mimeType: file.mimetype,
+      fileSize: file.size,
+      originalName: file.originalname,
+      uploadedBy: userId,
+      workspaceId,
+      checksumHash,
+      status: "uploading",
+      metadata: { localPath: file.path },
+    });
+
+    await asset.save();
+
+    // Call handleUpload directly and await it
+    await this.handleUpload(asset._id, file);
+
+    // Fetch the updated asset from database
+    const finalAsset = await FileAsset.findById(asset._id);
+    return finalAsset || asset;
+  }
+
+  /**
    * Processes the upload queue sequentially.
    */
   async processQueue() {

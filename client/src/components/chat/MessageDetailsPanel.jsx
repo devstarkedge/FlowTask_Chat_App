@@ -263,6 +263,34 @@ export default function MessageDetailsPanel({ message, onClose, onForward }) {
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.5px" }}>
               Message
             </div>
+            {msg.forwardMeta?.isForwarded && msg.forwardMeta.customMessage && (
+              <div style={{
+                fontSize: 13, color: "var(--text-primary, #ddd)",
+                whiteSpace: "pre-wrap", lineHeight: 1.5, wordBreak: "break-word",
+                marginBottom: 12,
+              }}>
+                {msg.forwardMeta.customMessage}
+              </div>
+            )}
+            {msg.forwardMeta?.isForwarded && (
+              <div style={{
+                fontSize: 12, fontStyle: "italic", color: "var(--text-secondary)",
+                opacity: 0.8, display: "flex", alignItems: "center", gap: 5,
+                marginBottom: 12, paddingBottom: 6, borderBottom: "1px solid var(--border-secondary)",
+              }}>
+                <Forward size={12} />
+                <span>
+                  Forwarded from{" "}
+                  <strong>
+                    {msg.forwardMeta.originalChannelName
+                      ? (msg.forwardMeta.originalChannelType === "dm" 
+                          ? msg.forwardMeta.originalChannelName 
+                          : `#${msg.forwardMeta.originalChannelName}`)
+                      : msg.forwardMeta.originalSenderName || "Unknown"}
+                  </strong>
+                </span>
+              </div>
+            )}
             {looksLikeHtml ? (
               <div
                 className="rich-message-content"

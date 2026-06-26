@@ -5,24 +5,8 @@ import { useChannelStore } from "../../stores/channelStore";
 import { workspaceAPI } from "../../services/api";
 import toast from "react-hot-toast";
 import "./custom-css/InviteMembersModal.css";
-import {
-  X,
-  UserPlus,
-  Mail,
-  Hash,
-  Search,
-  Copy,
-  Check,
-  Send,
-  Loader2,
-  AlertCircle,
-  Users,
-  Link,
-  Shield,
-  Info,
-  ChevronDown,
-  Eye,
-} from "lucide-react";
+import { X, UserPlus, Mail, Hash, Search, Copy, Check, Send, AlertCircle, Users, Link, Shield, Info, ChevronDown, Eye } from 'lucide-react';
+import Loader from '../shared/Loader';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -520,7 +504,7 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
             <div className="imm-channel-list">
               {isLoading ? (
                 <div className="imm-channel-loading">
-                  <Loader2 size={16} className="wm-spin" />
+                  <Loader size={16} className="wm-spin" />
                   <span>Loading channels...</span>
                 </div>
               ) : filteredChannels.length === 0 ? (
@@ -603,7 +587,7 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
           >
             {isSending ? (
               <>
-                <Loader2 size={16} className="wm-spin" />
+                <Loader size={16} className="wm-spin" />
                 <span>Sending...</span>
               </>
             ) : (

@@ -22,6 +22,7 @@ import { useCanvasEmojiPicker } from "../overlays/CanvasEmojiPicker";
 import "../styles/canvas-shell.css";
 import "../styles/canvas-editor.css";
 import "../styles/canvas-toolbar.css";
+import Loader from "../../shared/Loader";
 import "../styles/canvas-cover.css";
 import "../styles/canvas-sidebars.css";
 import "../styles/canvas-overlays.css";
@@ -293,20 +294,17 @@ export default function CanvasEditorUI({
   };
 
   const collaborationLoading =
+    status === "connecting" || (
     provider &&
     status !== "connected" &&
     status !== "synced" &&
     status !== "disabled" &&
     status !== "auth-failed" &&
-    !collabTimedOut;
+    !collabTimedOut
+  );
 
   if (!editor || collaborationLoading) {
-    return (
-      <div className="canvas-loading">
-        <span />
-        Loading canvas...
-      </div>
-    );
+    return <Loader center label="Loading canvas..." />;
   }
 
   return (

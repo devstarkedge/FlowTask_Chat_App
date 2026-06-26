@@ -396,6 +396,34 @@ class ChannelService {
       joinChannelRoom(ids[1], channel._id.toString(), workspaceId);
     }
 
+    // Build a safe channel payload for emission
+    const channelPayload = {
+      _id: channel._id.toString(),
+      name: channel.name,
+      slug: channel.slug,
+      type: channel.type,
+      visibility: channel.visibility,
+      dmParticipants: channel.dmParticipants,
+      workspaceId: channel.workspaceId,
+      memberCount: channel.memberCount,
+    };
+
+    try {
+      const decorated = await this._decorateDMChannels([channelPayload], ids[0], workspaceId);
+      if (decorated && decorated[0]) {
+        emitToUser(ids[0], SOCKET_EVENTS.CHANNEL_ADDED, { channel: decorated[0] }, workspaceId);
+      }
+      
+      if (!isSelfDM) {
+        const decoratedRecipient = await this._decorateDMChannels([channelPayload], ids[1], workspaceId);
+        if (decoratedRecipient && decoratedRecipient[0]) {
+          emitToUser(ids[1], SOCKET_EVENTS.CHANNEL_ADDED, { channel: decoratedRecipient[0] }, workspaceId);
+        }
+      }
+    } catch (err) {
+      logger.error("Failed to emit CHANNEL_ADDED for DM creation", { error: err.message });
+    }
+
     logger.info("DM channel created", {
       channelId: channel._id,
       participants: ids,
@@ -1539,22 +1567,27 @@ class ChannelService {
   async getAIDMChannel(userId, workspaceId) {
     return Channel.findOne({
       workspaceId,
-      type: "dm",
-      isAI: true,
-      "members.userId": userId,
+      slug: `ai-${userId}`,
     });
   }
 
   async createAIDMChannel(userId, workspaceId) {
-    const channel = await Channel.create({
-      name: "ChatBot",
-      slug: `ai-${userId}`,
-      type: "dm",
-      isAI: true,
-      members: [{ userId }],
-      memberCount: 1,
-      workspaceId,
-    });
+    const slug = `ai-${userId}`;
+    const channel = await Channel.findOneAndUpdate(
+      { workspaceId, slug },
+      {
+        $setOnInsert: {
+          name: "ChatBot",
+          slug,
+          type: "dm",
+          isAI: true,
+          members: [{ userId }],
+          memberCount: 1,
+          workspaceId,
+        }
+      },
+      { upsert: true, new: true }
+    );
 
     return channel;
   }

@@ -2,17 +2,8 @@ import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useAuthStore } from "../../stores/authStore";
-import {
-  ChevronDown,
-  Plus,
-  Settings,
-  LogIn,
-  Check,
-  Loader2,
-  MessageCircle,
-  Sparkles,
-  UserPlus,
-} from "lucide-react";
+import { ChevronDown, Plus, Settings, LogIn, Check, MessageCircle, Sparkles, UserPlus } from 'lucide-react';
+import Loader from '../shared/Loader';
 import api from "../../services/api";
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -221,12 +212,7 @@ const WorkspaceRow = memo(function WorkspaceRow({
         )}
         {!isActive && <UnreadBadge count={unreadCount} />}
         {isSwitching && isActive && (
-          <Loader2
-            size={16}
-            className="animate-spin"
-            style={{ color: "var(--accent-primary)", flexShrink: 0 }}
-            aria-label="Switching workspace…"
-          />
+          <Loader size={16} style={{ color: "var(--accent-primary)", flexShrink: 0 }} aria-label="Switching workspace…" />
         )}
       </div>
     </button>

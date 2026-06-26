@@ -178,10 +178,27 @@ export default function NavigationSidebar({
     const currentFlowTaskId = user?.flowTaskUserId?.toString?.();
     const selfIds = new Set([currentChatId, currentFlowTaskId].filter(Boolean));
 
-    return channels
-      .filter(
-        (c) => c.type === "dm" && !c.isArchived && !c.isAI && !c.isSelf && !c.isSelfDM,
-      )
+    const regularDMs = channels.filter(
+      (c) => c.type === "dm" && !c.isArchived && !c.isAI && !c.isSelf && !c.isSelfDM,
+    );
+
+    const aiDMs = channels.filter(
+      (c) => c.type === "dm" && !c.isArchived && c.isAI
+    );
+
+    // Keep only the most recent AI DM if multiple exist
+    const validAiDM = aiDMs.sort((a, b) => {
+      const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+      return bTime - aTime;
+    })[0];
+
+    const mergedDMs = [...regularDMs];
+    if (validAiDM) {
+      mergedDMs.push(validAiDM);
+    }
+
+    return mergedDMs
       .map((c) => {
         const participants = Array.isArray(c.dmParticipants)
           ? c.dmParticipants.map((p) => p?.toString?.() || String(p))

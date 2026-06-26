@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
-import { CreditCard, Check, ArrowRight, Loader2, AlertCircle } from 'lucide-react'
+import { CreditCard, Check, ArrowRight, AlertCircle } from 'lucide-react';
+import Loader from '../shared/Loader';
 import logger from '../../utils/logger'
 
 const PLAN_DETAILS = {
@@ -51,7 +52,7 @@ export default function BillingSettingsPanel() {
   if (isLoading) {
     return (
       <div style={{ padding: 24, textAlign: 'center' }}>
-        <Loader2 size={24} className="animate-spin" style={{ color: 'var(--text-muted)', margin: '0 auto' }} />
+        <Loader size={24} color="var(--text-muted)', margin: '0 auto" />
       </div>
     )
   }
@@ -198,7 +199,7 @@ export default function BillingSettingsPanel() {
                       opacity: !!upgrading ? 0.6 : 1,
                     }}
                   >
-                    {upgrading === planId ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
+                    {upgrading === planId ? <Loader size={14} /> : <ArrowRight size={14} />}
                     {upgrading === planId ? 'Changing...' : 'Select'}
                   </button>
                 )

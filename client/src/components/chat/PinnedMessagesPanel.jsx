@@ -1,7 +1,8 @@
 import { useEffect, useCallback, useState } from "react";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
-import { X, Pin, Loader2, Hash, Search, PinOff } from "lucide-react";
+import { X, Pin, Hash, Search, PinOff } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { format } from "date-fns";
 import { Avatar } from "./MemberAvatarGroup";
 import PinnedAttachmentCard from "./PinnedAttachmentCard";
@@ -109,9 +110,9 @@ export default function PinnedMessagesPanel({ channelId, onClose }) {
         .pm-panel {
           display: flex;
           flex-direction: column;
-          width: 360px;
-          min-width: 320px;
-          max-width: 400px;
+          width: var(--thread-panel-width, 360px);
+          min-width: var(--thread-panel-width, 320px);
+          max-width: var(--thread-panel-width, 400px);
           height: 100%;
           background: var(--surface-primary, var(--bg-secondary));
           border-left: 1px solid var(--border-color, var(--border-primary));
@@ -574,7 +575,7 @@ export default function PinnedMessagesPanel({ channelId, onClose }) {
                       >
                         {isUnpinning ? (
                           <span className="pm-unpin-spin">
-                            <Loader2 size={11} />
+                            <Loader size={11} />
                           </span>
                         ) : (
                           <PinOff size={11} />

@@ -1,18 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Search,
-  Hash,
-  Lock,
-  Plus,
-  Users,
-  ChevronDown,
-  Loader2,
-  X,
-  Globe,
-  TrendingUp,
-  CheckCircle2,
-} from "lucide-react";
+import { Search, Hash, Lock, Plus, Users, ChevronDown, X, Globe, TrendingUp, CheckCircle2 } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { Virtuoso } from "react-virtuoso";
 import { directoriesAPI } from "../../services/directoriesAPI";
 import { useAuthStore } from "../../stores/authStore";
@@ -360,7 +349,7 @@ function ChannelRow({
           className={`dir-channel-action-btn ${ch.isJoined ? "leave" : "join"}`}
         >
           {joiningId === ch._id ? (
-            <Loader2 size={12} className="dir-spin" />
+            <Loader size={12} />
           ) : ch.isJoined ? (
             "Leave"
           ) : (

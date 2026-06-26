@@ -260,14 +260,21 @@ export const uploadFiles = asyncHandler(async (req, res) => {
       .json({ success: false, error: { message: "No files provided" } });
   }
 
+  const isSync = req.query.sync === "true";
   const uploads = [];
 
   for (const file of req.files) {
-    const asset = await fileUploadService.queueUpload(
-      file,
-      req.user._id,
-      req.workspaceId,
-    );
+    const asset = isSync
+      ? await fileUploadService.uploadImmediately(
+          file,
+          req.user._id,
+          req.workspaceId,
+        )
+      : await fileUploadService.queueUpload(
+          file,
+          req.user._id,
+          req.workspaceId,
+        );
 
     uploads.push({
       _id: asset._id, // This is now a FileAsset _id
@@ -1207,7 +1214,7 @@ export const sendScheduledNow = asyncHandler(async (req, res) => {
  * references are cloned (used when forwarding a single file from a multi-file message).
  */
 export const forwardMessage = asyncHandler(async (req, res) => {
-  const { destinationIds, messageIds, attachmentFileIds } = req.body;
+  const { destinationIds, messageIds, attachmentFileIds, customMessage } = req.body;
   const messageId = req.params.id; // single-message route param (optional when using body.messageIds)
 
   if (!destinationIds || !Array.isArray(destinationIds) || destinationIds.length === 0) {
@@ -1235,9 +1242,53 @@ export const forwardMessage = asyncHandler(async (req, res) => {
     attachmentFileIds: Array.isArray(attachmentFileIds) ? attachmentFileIds : undefined,
     userId: req.user._id,
     workspaceId: req.workspaceId,
+    customMessage,
   });
 
   res.json({ success: true, data: { messages } });
+});
+
+/**
+ * POST /api/chat/messages/:id/forward-group
+ * Forward a message to a newly created group channel.
+ * Creates a private channel with the specified members and forwards the
+ * message(s) into it in a single operation (Instagram-style "Create a Group").
+ *
+ * Body: { memberIds: string[], groupName?: string, messageIds?: string[], attachmentFileIds?: string[] }
+ */
+export const forwardToNewGroup = asyncHandler(async (req, res) => {
+  const { memberIds, groupName, messageIds, attachmentFileIds, customMessage } = req.body;
+  const messageId = req.params.id;
+
+  if (!memberIds || !Array.isArray(memberIds) || memberIds.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'At least one member is required to create a group' },
+    });
+  }
+
+  const hasSingle = !!messageId;
+  const hasBulk = Array.isArray(messageIds) && messageIds.length > 0;
+
+  if (!hasSingle && !hasBulk) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'At least one message ID is required (param :id or body.messageIds)' },
+    });
+  }
+
+  const result = await messageService.forwardToNewGroup({
+    messageId: hasSingle ? messageId : undefined,
+    messageIds: hasBulk ? messageIds : undefined,
+    memberIds,
+    groupName: groupName || undefined,
+    attachmentFileIds: Array.isArray(attachmentFileIds) ? attachmentFileIds : undefined,
+    userId: req.user._id,
+    workspaceId: req.workspaceId,
+    customMessage,
+  });
+
+  res.json({ success: true, data: result });
 });
 
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { X, Loader2, Mail } from 'lucide-react'
+import { X, Mail } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { directoriesAPI } from '../../services/directoriesAPI'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import toast from 'react-hot-toast'
@@ -106,7 +107,7 @@ export default function InviteModal({ onClose, onSuccess }) {
             >
               {isSubmitting ? (
                 <div className="flex items-center gap-2">
-                  <Loader2 size={14} className="animate-spin" />
+                  <Loader size={14} />
                   Sending...
                 </div>
               ) : (

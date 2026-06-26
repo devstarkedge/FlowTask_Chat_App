@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, FileText, Clock, Search, Plus } from "lucide-react";
+import { FileText, Clock, Search, Plus } from "lucide-react";
+import Loader from "../shared/Loader";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { canvasAPI } from "../../services/api";
 import logger from "../../utils/logger";
@@ -308,25 +309,7 @@ function CanvasListItem({ canvas, onSelect }) {
 // ─── Loading Skeleton ─────────────────────────────────────────────────────────
 
 function LoadingSkeleton() {
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100%",
-        gap: 10,
-      }}
-    >
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      <Loader2
-        size={16}
-        style={{ animation: "spin 1s linear infinite", color: "var(--text-muted)" }}
-      />
-      <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading canvas…</p>
-    </div>
-  );
+  return <Loader center size="sm" label="Loading canvas…" />;
 }
 
 // templates and content builders are provided by ./templates

@@ -26,7 +26,7 @@ export default function TypingIndicator({ channelId }) {
 
   return (
     <div
-      className="px-5 py-1 animate-fade-in"
+      className="chat-layout-grid py-1 animate-fade-in"
       style={{ minHeight: 24 }}
     >
       <div className="flex items-center gap-2">

@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
-import {
-  MessageSquare, ArrowRight, Loader2,
-  Check, Sparkles, Layers, Users, Zap, Shield,
-} from 'lucide-react'
+import { MessageSquare, ArrowRight, Check, Sparkles, Layers, Users, Zap, Shield } from 'lucide-react';
+import Loader from '../components/shared/Loader';
 import toast from 'react-hot-toast'
 import { motion, AnimatePresence } from 'framer-motion'
 import './custom-css/createWorkspacePage.css'

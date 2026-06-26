@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { X, Loader2, LogIn, Lock, Info, Check } from "lucide-react";
+import { X, LogIn, Lock, Info, Check } from 'lucide-react';
+import Loader from '../shared/Loader';
 import useRipple from "../../hooks/useRipple";
 import toast from "react-hot-toast";
 import "./custom-css/joinWorkspaceModal.css";
@@ -129,7 +130,7 @@ export default function JoinWorkspaceModal({ onClose, onJoined }) {
               }`}
             >
               {isLoading ? (
-                <Loader2 size={14} className="jw-spin" />
+                <Loader size={14} className="jw-spin" />
               ) : joined ? (
                 <Check size={14} />
               ) : (

@@ -4,16 +4,8 @@ import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { workspaceAPI } from "../services/api";
 import { motion } from "framer-motion";
-import {
-  UserPlus,
-  Check,
-  Clock,
-  AlertCircle,
-  Loader2,
-  Building2,
-  Shield,
-  User,
-} from "lucide-react";
+import { UserPlus, Check, Clock, AlertCircle, Building2, Shield, User } from 'lucide-react';
+import Loader from '../components/shared/Loader';
 import toast from "react-hot-toast";
 import "./custom-css/acceptInvitePage.css";
 
@@ -163,7 +155,7 @@ export default function AcceptInvitePage() {
     return (
       <div className="aip-container">
         <div className="aip-loading">
-          <Loader2 size={48} className="aip-spinner" />
+          <Loader size={48} className="aip-spinner" />
           <p>Loading invite details...</p>
         </div>
       </div>
@@ -200,7 +192,7 @@ export default function AcceptInvitePage() {
     return (
       <div className="aip-container">
         <div className="aip-loading">
-          <Loader2 size={48} className="aip-spinner" />
+          <Loader size={48} className="aip-spinner" />
           <p>Joining {inviteInfo?.workspaceName}...</p>
         </div>
       </div>
@@ -318,7 +310,7 @@ export default function AcceptInvitePage() {
               >
                 {accepting ? (
                   <>
-                    <Loader2 size={18} className="aip-spinner-sm" />
+                    <Loader size={18} className="aip-spinner-sm" />
                     Accepting...
                   </>
                 ) : (

@@ -3,22 +3,8 @@ import { workspaceAPI } from "../../services/api";
 import { getSocket } from "../../services/socket";
 import toast from "react-hot-toast";
 import "./custom-css/PendingInvitesList.css";
-import {
-  RefreshCw,
-  Ban,
-  Mail,
-  Loader2,
-  ChevronLeft,
-  ChevronRight,
-  Users,
-  Eye,
-  Shield,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  Filter,
-} from "lucide-react";
+import { RefreshCw, Ban, Mail, ChevronLeft, ChevronRight, Users, Eye, Shield, Clock, CheckCircle2, XCircle, AlertCircle, Filter } from 'lucide-react';
+import Loader from '../shared/Loader';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -229,7 +215,7 @@ export default function PendingInvitesList({ workspaceId, refreshKey = 0 }) {
       {/* ── Loading ── */}
       {loading && (
         <div className="pil-loading">
-          <Loader2 size={18} className="wm-spin" />
+          <Loader size={18} className="wm-spin" />
           <span>Loading invites…</span>
         </div>
       )}
@@ -323,7 +309,7 @@ export default function PendingInvitesList({ workspaceId, refreshKey = 0 }) {
                             onClick={() => handleResend(inv._id)}
                           >
                             {resendBusy
-                              ? <Loader2 size={13} className="wm-spin" />
+                              ? <Loader size={13} className="wm-spin" />
                               : <RefreshCw size={13} />}
                           </button>
                           <button
@@ -334,7 +320,7 @@ export default function PendingInvitesList({ workspaceId, refreshKey = 0 }) {
                             onClick={() => handleRevoke(inv._id)}
                           >
                             {revokeBusy
-                              ? <Loader2 size={13} className="wm-spin" />
+                              ? <Loader size={13} className="wm-spin" />
                               : <Ban size={13} />}
                           </button>
                         </>

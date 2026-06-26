@@ -4,23 +4,8 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useAuthStore } from "../../stores/authStore";
 import { workspaceAPI } from "../../services/api";
 import toast from "react-hot-toast";
-import {
-  ChevronDown,
-  Plus,
-  Settings,
-  LogIn,
-  Check,
-  Loader2,
-  MessageCircle,
-  Sparkles,
-  UserPlus,
-  LogOut,
-  Palette,
-  Shield,
-  BarChart3,
-  CreditCard,
-  Users,
-} from "lucide-react";
+import { ChevronDown, Plus, Settings, LogIn, Check, MessageCircle, Sparkles, UserPlus, LogOut, Palette, Shield, BarChart3, CreditCard, Users } from 'lucide-react';
+import Loader from '../shared/Loader';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -354,7 +339,7 @@ export default function WorkspaceMenu({
             >
               <span className="wm-menu-item__icon">
                 {isSigningOut ? (
-                  <Loader2 size={16} className="animate-spin" />
+                  <Loader size={16} />
                 ) : (
                   <LogOut size={16} />
                 )}

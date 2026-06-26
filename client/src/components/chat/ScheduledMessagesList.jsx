@@ -5,22 +5,8 @@ import { useChannelStore } from "../../stores/channelStore";
 import { useScheduledStore } from "../../stores/scheduledStore";
 import { scheduledMessageAPI } from "../../services/api";
 import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
-import {
-  Clock,
-  Trash2,
-  Send,
-  Edit3,
-  Loader2,
-  Search,
-  AlertCircle,
-  Paperclip,
-  X,
-  CheckCircle,
-  Hash,
-  Lock,
-  ClockFading,
-  CalendarClock,
-} from "lucide-react";
+import { Clock, Trash2, Send, Edit3, Search, AlertCircle, Paperclip, X, CheckCircle, Hash, Lock, ClockFading, CalendarClock } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { toast } from "react-hot-toast";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 
@@ -199,7 +185,7 @@ function RescheduleForm({
             disabled={isLoading || !rescheduleDate}
           >
             {isLoading ? (
-              <Loader2 size={11} className="sml-spin" />
+              <Loader size={11} />
             ) : (
               <CheckCircle size={11} />
             )}
@@ -315,7 +301,7 @@ function MessageCard({
           title="Send now"
         >
           {isLoading ? (
-            <Loader2 size={13} className="sml-spin" />
+            <Loader size={13} />
           ) : (
             <Send size={13} />
           )}

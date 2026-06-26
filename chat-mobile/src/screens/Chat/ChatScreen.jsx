@@ -914,10 +914,11 @@ const ChatScreen = ({ route, navigation }) => {
 
       {/* Messages Tab — KeyboardAvoidingView + FlatList */}
       {activeTab === 'messages' && (
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+        >
         <FlatList
           ref={flatListRef}
           data={displayedMessages}

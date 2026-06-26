@@ -1,17 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  File,
-  FileText,
-  Loader2,
-  Search,
-  FileImage,
-  FileVideo,
-  X,
-  ChevronDown,
-  Files,
-  Hash,
-  MessageSquare,
-} from "lucide-react";
+import { File, FileText, Search, FileImage, FileVideo, X, ChevronDown, Files, Hash, MessageSquare } from 'lucide-react';
+import Loader from '../../shared/Loader';
 import toast from "react-hot-toast";
 import { fileAPI } from "../../../services/api";
 import SidebarContainer from "../sidebar/SidebarContainer";
@@ -836,11 +825,7 @@ export default function FilesContextSidebar({
             aria-label="Search files"
           />
           {isLoading && query && (
-            <Loader2
-              size={12}
-              className="fcs-spin"
-              style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }}
-            />
+            <Loader size={12} className="fcs-spin" style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
           )}
           {query && !isLoading && (
             <button
@@ -965,11 +950,7 @@ export default function FilesContextSidebar({
         {/* Pagination spinner */}
         {isLoading && files.length > 0 && (
           <div className="fcs-pagination-loader">
-            <Loader2
-              size={15}
-              className="fcs-spin"
-              style={{ color: "rgba(255,255,255,0.2)" }}
-            />
+            <Loader size={15} className="fcs-spin" color="rgba(255,255,255,0.2)" />
           </div>
         )}
 

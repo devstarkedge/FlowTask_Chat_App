@@ -504,11 +504,12 @@ export default function MessageList({
           if (item.isDateSeparator) {
             return (
               <div
-                className="animate-fade-in"
+                className="animate-fade-in chat-layout-grid"
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  padding: "12px 20px 4px",
+                  paddingTop: 12,
+                  paddingBottom: 4,
                   gap: 12,
                 }}
               >
@@ -546,7 +547,7 @@ export default function MessageList({
 
           if (isActivityMessage(item)) {
             return (
-              <div style={{ padding: "2px 20px" }}>
+              <div className="chat-layout-grid" style={{ paddingTop: 2, paddingBottom: 2 }}>
                 <AutoActivityMessage message={item} />
               </div>
             );
@@ -555,11 +556,12 @@ export default function MessageList({
           if (item.isUnreadSeparator) {
             return (
               <div
-                className="animate-fade-in"
+                className="animate-fade-in chat-layout-grid"
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  padding: "8px 20px 4px",
+                  paddingTop: 8,
+                  paddingBottom: 4,
                   gap: 12,
                 }}
               >
@@ -717,8 +719,8 @@ export default function MessageList({
 function MessageSkeleton() {
   return (
     <div
-      style={{ display: "flex", gap: 10, padding: "6px 0" }}
-      className="animate-fade-in"
+      style={{ display: "flex", gap: 10, paddingTop: 6, paddingBottom: 6 }}
+      className="animate-fade-in chat-layout-grid"
     >
       <div
         className="skeleton"

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, Globe, Trash2, Loader2, X } from 'lucide-react'
+import { Search, Globe, Trash2, X } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { directoriesAPI } from '../../services/directoriesAPI'
 import { useAuthStore } from '../../stores/authStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
@@ -221,7 +222,7 @@ export default function ExternalTab() {
                       title="Remove external user"
                     >
                       {removingId === userId ? (
-                        <Loader2 size={14} className="dir-spin animate-spin" />
+                        <Loader size={14} />
                       ) : (
                         <Trash2 size={14} />
                       )}

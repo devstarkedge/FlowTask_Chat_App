@@ -174,19 +174,58 @@ class ChannelRepository {
           channels = [...channels, ...missingEmbeddedChannels];
         }
 
-        return channels.sort((a, b) => {
+        // Deduplicate AI channels: only keep the most recent one
+        const nonAi = channels.filter((c) => !c.isAI);
+        const ai = channels.filter((c) => c.isAI);
+        const validAi = ai.sort((a, b) => {
+          const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+          const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+          return bTime - aTime;
+        })[0];
+
+        const merged = [...nonAi];
+        if (validAi) {
+          merged.push(validAi);
+        }
+
+        return merged.sort((a, b) => {
           const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
           const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
           return bTime - aTime;
         });
       }
 
-      return embeddedChannels;
+      // Deduplicate embeddedChannels if channelIds is empty
+      const nonAi = embeddedChannels.filter((c) => !c.isAI);
+      const ai = embeddedChannels.filter((c) => c.isAI);
+      const validAi = ai.sort((a, b) => {
+        const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+        return bTime - aTime;
+      })[0];
+
+      const merged = [...nonAi];
+      if (validAi) {
+        merged.push(validAi);
+      }
+      return merged;
     }
 
     // Fallback to embedded array query
     channels = await Channel.findUserChannels(userId, includeArchived, workspaceId).lean();
-    return channels;
+    const nonAi = channels.filter((c) => !c.isAI);
+    const ai = channels.filter((c) => c.isAI);
+    const validAi = ai.sort((a, b) => {
+      const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+      return bTime - aTime;
+    })[0];
+
+    const merged = [...nonAi];
+    if (validAi) {
+      merged.push(validAi);
+    }
+    return merged;
   }
 
   /**
@@ -379,11 +418,27 @@ class ChannelRepository {
         { 'members.userId': userId }, // fallback to embedded array
       ],
     }, workspaceId);
-    return Channel.find(filter)
+    
+    const found = await Channel.find(filter)
       .limit(limit)
-      .select('name slug type visibility memberCount lastMessageAt')
+      .select('name slug type visibility memberCount lastMessageAt isAI')
       .sort({ memberCount: -1 })
-      .exec();
+      .lean();
+
+    // Deduplicate AI channels: only keep the most recent one
+    const nonAi = found.filter((c) => !c.isAI);
+    const ai = found.filter((c) => c.isAI);
+    const validAi = ai.sort((a, b) => {
+      const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+      return bTime - aTime;
+    })[0];
+
+    const results = [...nonAi];
+    if (validAi) {
+      results.push(validAi);
+    }
+    return results;
   }
 
   /**

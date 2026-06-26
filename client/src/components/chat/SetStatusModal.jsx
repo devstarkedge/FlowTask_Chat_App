@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, Smile, Loader2, Clock } from 'lucide-react'
+import { X, Smile, Clock } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { userAPI } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import EmojiPicker from './EmojiPicker'
@@ -240,7 +241,7 @@ export default function SetStatusModal({ onClose }) {
                 type="button"
                 className="action-btn save-btn"
               >
-                {saving && <Loader2 size={14} className="animate-spin" />}
+                {saving && <Loader size={14} />}
                 <span>Save</span>
               </button>
             </div>

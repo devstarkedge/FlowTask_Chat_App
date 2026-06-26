@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import {
-  BarChart3, Users, Hash, Settings, Loader2, ChevronLeft,
-  Shield, UserX, UserCheck, Archive, Trash2, Search,
-} from 'lucide-react'
+import { BarChart3, Users, Hash, Settings, ChevronLeft, Shield, UserX, UserCheck, Archive, Trash2, Search } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { adminAPI } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import toast from 'react-hot-toast'
@@ -88,7 +86,7 @@ function OverviewTab() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="flex justify-center py-12"><Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-muted)' }} /></div>
+  if (loading) return <div className="flex justify-center py-12"><Loader size={20} color="var(--text-muted)" /></div>
   if (!analytics) return null
 
   const stats = [
@@ -227,7 +225,7 @@ function UsersTab() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-muted)' }} /></div>
+        <div className="flex justify-center py-8"><Loader size={20} color="var(--text-muted)" /></div>
       ) : (
         <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-secondary)' }}>
           {users.map((u) => (
@@ -352,7 +350,7 @@ function ChannelsTab() {
     <div>
       <h3 className="font-semibold text-sm mb-4" style={{ color: 'var(--text-white)' }}>Channels</h3>
       {loading ? (
-        <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-muted)' }} /></div>
+        <div className="flex justify-center py-8"><Loader size={20} color="var(--text-muted)" /></div>
       ) : (
         <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-secondary)' }}>
           {channels.map((ch) => (
@@ -419,7 +417,7 @@ function SettingsTab() {
     }
   }
 
-  if (loading) return <div className="flex justify-center py-12"><Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-muted)' }} /></div>
+  if (loading) return <div className="flex justify-center py-12"><Loader size={20} color="var(--text-muted)" /></div>
 
   return (
     <div>

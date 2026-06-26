@@ -4,17 +4,8 @@ import { useChannelStore } from "../../stores/channelStore";
 import { usePresenceStore } from "../../stores/presenceStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { userAPI } from "../../services/api";
-import {
-  X,
-  Search,
-  Loader2,
-  UserPlus,
-  Check,
-  Users,
-  Hash,
-  Mail,
-  UserCheck,
-} from "lucide-react";
+import { X, Search, UserPlus, Check, Users, Hash, Mail, UserCheck } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { Avatar } from "./MemberAvatarGroup";
 import { motion, AnimatePresence } from "framer-motion";
 import logger from "../../utils/logger";
@@ -307,10 +298,7 @@ function UserRow({ u, isOnline, isAdding, wasAdded, addingAny, onAdd }) {
             }}
           >
             {isAdding ? (
-              <Loader2
-                size={12}
-                style={{ animation: "amm-spin .8s linear infinite" }}
-              />
+              <Loader size={12} style={{ animation: "amm-spin .8s linear infinite" }} />
             ) : (
               <UserPlus size={12} />
             )}
@@ -665,14 +653,7 @@ export default function AddMemberModal({ channel, onClose }) {
                     exit={{ opacity: 0, scale: 0.8 }}
                     transition={{ duration: 0.14 }}
                   >
-                    <Loader2
-                      size={13}
-                      style={{
-                        color: "var(--text-muted)",
-                        flexShrink: 0,
-                        animation: "amm-spin .8s linear infinite",
-                      }}
-                    />
+                    <Loader size={13} style={{ color: "var(--text-muted)", flexShrink: 0, animation: "amm-spin .8s linear infinite", }} />
                   </motion.div>
                 ) : searchQuery ? (
                   <motion.div

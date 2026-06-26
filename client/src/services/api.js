@@ -191,11 +191,14 @@ export const messageAPI = {
     api.delete(`/messages/${id}/reactions/${emoji}`),
   pin: (id) => api.post(`/messages/${id}/pin`),
   unpin: (id) => api.delete(`/messages/${id}/pin`),
-  forward: (id, destinationIds, attachmentFileIds) =>
-    api.post(`/messages/${id}/forward`, { destinationIds, attachmentFileIds }),
+  forward: (id, destinationIds, attachmentFileIds, customMessage) =>
+    api.post(`/messages/${id}/forward`, { destinationIds, attachmentFileIds, customMessage }),
   // Bulk forward multiple messages at once
-  forwardBulk: (messageIds, destinationIds) =>
-    api.post(`/messages/${messageIds[0]}/forward`, { messageIds, destinationIds }),
+  forwardBulk: (messageIds, destinationIds, customMessage) =>
+    api.post(`/messages/${messageIds[0]}/forward`, { messageIds, destinationIds, customMessage }),
+  // Forward to a newly created group (Instagram-style "Create a Group")
+  forwardToNewGroup: (id, memberIds, groupName, messageIds, attachmentFileIds, customMessage) =>
+    api.post(`/messages/${id}/forward-group`, { memberIds, groupName, messageIds, attachmentFileIds, customMessage }),
   getPinned: (channelId) => api.get(`/channels/${channelId}/pins`),
   search: (q, channelId) =>
     api.get("/messages/search", { params: { q, channelId } }),
@@ -203,6 +206,12 @@ export const messageAPI = {
   markDMSeen: (channelId) => api.post(`/channels/${channelId}/seen`),
   uploadFiles: (channelId, formData, onUploadProgress) =>
     api.post(`/channels/${channelId}/upload`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 60000,
+      onUploadProgress,
+    }),
+  uploadFilesSync: (channelId, formData, onUploadProgress) =>
+    api.post(`/channels/${channelId}/upload?sync=true`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
       timeout: 60000,
       onUploadProgress,

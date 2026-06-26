@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Hash, Lock, Users, Search, X, Loader2 } from 'lucide-react'
+import { Hash, Lock, Users, Search, X } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { channelAPI } from '../../services/api'
 import { useChannelStore } from '../../stores/channelStore'
 import toast from 'react-hot-toast'
@@ -103,7 +104,7 @@ export default function ChannelBrowser({ onClose }) {
         <div className="overflow-y-auto" style={{ maxHeight: 'calc(80vh - 130px)' }}>
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-muted)' }} />
+              <Loader size={20} color="var(--text-muted)" />
             </div>
           ) : filtered.length === 0 ? (
             <p className="text-center text-sm py-8" style={{ color: 'var(--text-muted)' }}>

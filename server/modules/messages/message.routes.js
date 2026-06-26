@@ -33,6 +33,7 @@ import {
   updateScheduledMessage,
   sendScheduledNow,
   forwardMessage,
+  forwardToNewGroup,
 } from './message.controller.js';
 import { protect, requireChannelAccess, requireMessageAccess } from '../auth/auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
@@ -106,6 +107,7 @@ router.post('/reminders/standalone', createStandaloneReminder);
 router.post('/reminders/parse', parseReminderText);
 router.delete('/reminders/:id', deleteReminder);
 router.post('/:id/forward', requireMessageAccess(), forwardMessage);
+router.post('/:id/forward-group', requireMessageAccess(), forwardToNewGroup);
 router.post('/:id/reminder-suggestions', requireMessageAccess(), suggestRemindersFromMessage);
 export default router;
 

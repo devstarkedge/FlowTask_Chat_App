@@ -1,30 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useAuthStore } from "../../stores/authStore";
-import {
-  X,
-  Settings,
-  Users,
-  Link2,
-  Copy,
-  RefreshCw,
-  Loader2,
-  Crown,
-  Shield,
-  UserMinus,
-  ChevronDown,
-  Trash2,
-  Zap,
-  Lock,
-  Bell,
-  Check,
-  Sparkles,
-  AlertTriangle,
-  UserPlus,
-  Globe,
-  Eye,
-  Plus,
-} from "lucide-react";
+import { X, Settings, Users, Link2, Copy, RefreshCw, Crown, Shield, UserMinus, ChevronDown, Trash2, Zap, Lock, Bell, Check, Sparkles, AlertTriangle, UserPlus, Globe, Eye, Plus } from 'lucide-react';
+import Loader from '../shared/Loader';
 import { Avatar } from "../chat/MemberAvatarGroup";
 import toast from "react-hot-toast";
 import api, { workspaceAPI } from "../../services/api";
@@ -376,7 +354,7 @@ function GeneralTab({
             disabled={!name.trim() || isSaving}
           >
             {isSaving ? (
-              <Loader2 size={14} className="wsm-spin" />
+              <Loader size={14} className="wsm-spin" />
             ) : (
               <span className="wsm-check">
                 <Check size={14} />
@@ -764,7 +742,7 @@ function InviteTab({
       {canManage && (
         <div>
           <button className="wsm-btn-ghost" onClick={onRegenerate} disabled={isRegenerating}>
-            {isRegenerating ? <Loader2 size={14} className="wsm-spin" /> : <RefreshCw size={14} />}
+            {isRegenerating ? <Loader size={14} className="wsm-spin" /> : <RefreshCw size={14} />}
             {inviteCode ? "Regenerate Code" : "Generate Invite Code"}
           </button>
         </div>
@@ -843,7 +821,7 @@ function InviteTab({
                 disabled={savingDomain}
                 style={{ alignSelf: "flex-start" }}
               >
-                {savingDomain ? <Loader2 size={13} className="wsm-spin" /> : <Check size={13} />}
+                {savingDomain ? <Loader size={13} className="wsm-spin" /> : <Check size={13} />}
                 Save Domain Settings
               </button>
             </div>
@@ -885,7 +863,7 @@ function InviteTab({
               disabled={savingGuest}
               style={{ alignSelf: "flex-start" }}
             >
-              {savingGuest ? <Loader2 size={13} className="wsm-spin" /> : <Check size={13} />}
+              {savingGuest ? <Loader size={13} className="wsm-spin" /> : <Check size={13} />}
               Save Guest Settings
             </button>
           </div>

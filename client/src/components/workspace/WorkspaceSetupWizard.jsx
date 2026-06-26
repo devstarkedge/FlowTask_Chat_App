@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
- import {
-   ArrowRight, ArrowLeft, Check, Users, Settings, Zap, Loader2,
-   Mail, Plus, X, Copy,
- } from 'lucide-react'
+ import { ArrowRight, ArrowLeft, Check, Users, Settings, Zap, Mail, Plus, X, Copy } from 'lucide-react';
+import Loader from '../shared/Loader';
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 
@@ -458,7 +456,7 @@ export default function WorkspaceSetupWizard({ onComplete }) {
                 border: 'none',
               }}
             >
-              {(isLoading || isSendingInvites) && <Loader2 size={14} className="animate-spin" />}
+              {(isLoading || isSendingInvites) && <Loader size={14} />}
               {currentStep === 3 ? 'Finish' : 'Next'}
               <ArrowRight size={14} />
             </button>

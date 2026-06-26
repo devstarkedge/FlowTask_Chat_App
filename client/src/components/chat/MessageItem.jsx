@@ -101,7 +101,7 @@ if (typeof document !== "undefined" && !document.getElementById(STYLE_ID)) {
     /* Override TipTap editor padding inside the inline editor */
     .inline-editor-content .ProseMirror {
       padding: 10px 14px;
-      font-size: 15px;
+      font-size: 14px;
       line-height: 1.5;
       color: var(--text-primary, #d1d2d3);
       outline: none;
@@ -736,7 +736,7 @@ const MessageItem = memo(
       if (isDeleted) {
         return (
           <div
-            className="message-content text-[16px] leading-relaxed italic"
+            className="message-content text-[14px] leading-relaxed italic"
             style={{ color: deletedTextColor }}
           >
             {deletedText}
@@ -752,7 +752,7 @@ const MessageItem = memo(
       ) {
         return (
           <div
-            className="message-content rich-message-content text-[15px] leading-relaxed break-words"
+            className="message-content rich-message-content text-[14px] leading-relaxed break-words"
             style={{ color: "inherit" }}
             dangerouslySetInnerHTML={{
               __html: sanitizeHtml(message.htmlContent),
@@ -767,7 +767,7 @@ const MessageItem = memo(
       if (typeof rawContent === "string" && /<[a-z][\s\S]*>/i.test(rawContent)) {
         return (
           <div
-            className="message-content rich-message-content text-[15px] leading-relaxed break-words"
+            className="message-content rich-message-content text-[14px] leading-relaxed break-words"
             style={{ color: "inherit" }}
             dangerouslySetInnerHTML={{
               __html: sanitizeHtml(rawContent),
@@ -779,7 +779,7 @@ const MessageItem = memo(
       // Plain Text Fallback
       return (
         <div
-          className="message-content text-[15px] leading-relaxed break-words whitespace-pre-wrap"
+          className="message-content text-[14px] leading-relaxed break-words whitespace-pre-wrap"
           style={{ color: "inherit" }}
         >
           {rawContent}
@@ -817,7 +817,7 @@ const MessageItem = memo(
         }}
       >
         <div
-          className={`flex items-start gap-2 px-4 pb-0 ${isOwn ? "flex-row-reverse" : ""}`}
+          className={`flex items-start gap-2 chat-layout-grid pb-0 ${isOwn ? "flex-row-reverse" : ""}`}
         >
           {/* Selection checkbox (visible in selection mode or on hover when selecting) */}
           {isSelecting && (
@@ -925,6 +925,16 @@ const MessageItem = memo(
                 transition: "opacity 200ms ease",
               }}
             >
+              {/* ── Custom message (if forwarded with a comment) ── */}
+              {message.forwardMeta?.isForwarded && message.forwardMeta.customMessage && (
+                <div
+                  className="message-content text-[14px] leading-relaxed break-words whitespace-pre-wrap mb-2"
+                  style={{ color: "inherit" }}
+                >
+                  {message.forwardMeta.customMessage}
+                </div>
+              )}
+
               {/* ── Forwarded indicator ── */}
               {message.forwardMeta?.isForwarded && (
                 <div

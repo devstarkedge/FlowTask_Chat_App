@@ -1,10 +1,8 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { useChannelStore } from '../../stores/channelStore'
-import {
-  X, Bell, AtSign, MessageCircle, CheckCheck, Loader2,
-  Settings, MessageSquareText, PauseCircle, Filter,
-} from 'lucide-react'
+import { X, Bell, AtSign, MessageCircle, CheckCheck, Settings, MessageSquareText, PauseCircle, Filter } from 'lucide-react';
+import Loader from '../shared/Loader';
 import NotificationItem from './NotificationItem'
 import NotificationSettingsModal from './NotificationSettingsModal'
 import PauseNotificationsDropdown from './PauseNotificationsDropdown'
@@ -188,7 +186,7 @@ export default function NotificationPanel({ onClose, onSelectNotification }) {
         >
           {isLoading && notifications.length === 0 && (
             <div className="flex items-center justify-center py-12">
-              <Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-muted)' }} />
+              <Loader size={20} color="var(--text-muted)" />
             </div>
           )}
 
@@ -226,7 +224,7 @@ export default function NotificationPanel({ onClose, onSelectNotification }) {
 
           {isLoading && notifications.length > 0 && (
             <div className="flex items-center justify-center py-4">
-              <Loader2 size={16} className="animate-spin" style={{ color: 'var(--text-muted)' }} />
+              <Loader size={16} color="var(--text-muted)" />
             </div>
           )}
         </div>

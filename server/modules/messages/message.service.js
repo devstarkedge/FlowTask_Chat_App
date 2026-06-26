@@ -1051,6 +1051,67 @@ class MessageService {
   // ──────────────────── Forward Message ──────────────────────────────────────
 
   /**
+   * Forward message(s) to a newly created group channel.
+   * Creates a private channel with the given members, then forwards the
+   * message(s) into it using the existing forwardMessage() pipeline.
+   *
+   * @param {Object} params
+   * @param {string}   params.messageId        - Single message ID (from URL param)
+   * @param {string[]} params.messageIds       - Bulk message IDs (optional)
+   * @param {string[]} params.memberIds        - ChatUser IDs to include in the new group
+   * @param {string}   params.groupName        - Optional custom group name
+   * @param {string[]} params.attachmentFileIds - Optional file filter (single-file forward)
+   * @param {string}   params.userId           - Current user ID (creator)
+   * @param {string}   params.workspaceId      - Workspace scope
+   * @returns {Promise<{ channel: Object, messages: Object[] }>}
+   */
+  async forwardToNewGroup({ messageId, messageIds, memberIds, groupName, attachmentFileIds, userId, workspaceId, customMessage }) {
+    if (!memberIds || !Array.isArray(memberIds) || memberIds.length === 0) {
+      throw new ValidationError('At least one member is required to create a group');
+    }
+
+    // Deduplicate and ensure creator is not in the memberIds (createCustomChannel adds them as owner)
+    const uniqueMembers = [...new Set(memberIds.map(String))].filter(
+      (id) => id !== userId.toString(),
+    );
+
+    // Build a display name if none provided — use member names
+    let channelName = groupName?.trim();
+    if (!channelName) {
+      const allIds = [userId.toString(), ...uniqueMembers];
+      const users = await userRepository.findByIds(allIds);
+      const names = users.map((u) => u.name || 'Unknown');
+      channelName = names.join(', ');
+      // Truncate if too long
+      if (channelName.length > 80) {
+        channelName = channelName.slice(0, 77) + '...';
+      }
+    }
+
+    // Create a private channel with the selected members
+    // Dynamic import to avoid circular dependency (channels ↔ messages)
+    const { default: channelService } = await import('../channels/channel.service.js');
+    const channel = await channelService.createCustomChannel(
+      { name: channelName, visibility: 'private', memberIds: uniqueMembers },
+      userId,
+      workspaceId,
+    );
+
+    // Forward the message(s) to the new channel
+    const forwarded = await this.forwardMessage({
+      messageId,
+      messageIds,
+      destinationIds: [channel._id.toString()],
+      attachmentFileIds,
+      userId,
+      workspaceId,
+      customMessage,
+    });
+
+    return { channel, messages: forwarded };
+  }
+
+  /**
    * Forward one or more messages to one or more destination channels.
    * Clones content, htmlContent, attachments, fileReferences, and forwardMeta.
    * Accepts either `messageId` (single) or `messageIds` (bulk) from the controller.
@@ -1059,7 +1120,7 @@ class MessageService {
    * only the file references and attachments matching those IDs are cloned.
    * Used when forwarding a single file from a multi-file message.
    */
-  async forwardMessage({ messageId, messageIds, destinationIds, attachmentFileIds, userId, workspaceId }) {
+  async forwardMessage({ messageId, messageIds, destinationIds, attachmentFileIds, userId, workspaceId, customMessage }) {
     if (!destinationIds || !Array.isArray(destinationIds) || destinationIds.length === 0) {
       throw new ValidationError('At least one destination is required');
     }
@@ -1179,6 +1240,7 @@ class MessageService {
             originalChannelId: original.channelId,
             originalChannelName: sourceChannelName,
             originalChannelType: sourceChannel.type,
+            customMessage: customMessage || null,
           },
         };
 
@@ -1243,6 +1305,8 @@ class MessageService {
         allForwardedMessages.push(populated);
       }
     }
+
+
 
     return allForwardedMessages;
   }

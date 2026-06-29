@@ -22,7 +22,7 @@ const notificationSchema = new Schema({
   type: {
     type: String,
     enum: [
-      'mention', 'dm', 'channel_invite', 'task_update', 'system', 'thread_reply',
+      'mention', 'dm', 'channel_invite', 'channel_remove', 'task_update', 'system', 'thread_reply',
       'group_message', 'channel_message', 'keyword_match', 'bot_alert',
       'workspace_invite', 'role_change', 'security_alert', 'call_invite',
       'reminder_overdue',

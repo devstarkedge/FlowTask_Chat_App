@@ -58,6 +58,10 @@ export function buildRedirectFromMeta(meta) {
     return url ? { url, label: 'View Announcement' } : null
   }
 
+  if (meta.eventType && meta.eventType.startsWith('CANVAS_')) {
+    return { url: `/canvas/${meta.canvasId}`, label: 'Open Canvas' }
+  }
+
   // All task-related events
   const url = buildTaskUrl(meta.departmentId, meta.projectId, meta.taskId)
   return url ? { url, label: 'Open Task' } : null

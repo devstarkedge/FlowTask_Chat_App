@@ -616,6 +616,10 @@ class ChannelService {
     // Join creator to channel room
     joinChannelRoom(creatorId.toString(), channelId, wsId);
 
+    // Get creator details to populate in invite notifications
+    const creatorUser = await userRepository.findById(creatorId);
+    const creatorName = creatorUser?.name || 'Someone';
+
     // Notify explicitly added members (for private channels or explicit invites)
     for (const member of members) {
       if (member.userId.toString() !== creatorId.toString()) {
@@ -623,6 +627,22 @@ class ChannelService {
           channel: channelPayload,
         }, wsId);
         joinChannelRoom(member.userId.toString(), channelId, wsId);
+
+        // Persist channel invite notification
+        import("../notifications/notification.service.js").then(
+          ({ default: notificationService }) => {
+            notificationService
+              .createChannelInviteNotification({
+                workspaceId: channel.workspaceId,
+                recipientId: member.userId,
+                channelId: channel._id,
+                channelName: channel.name,
+                inviterName: creatorName,
+                inviterId: creatorId,
+              })
+              .catch(() => {});
+          },
+        );
       }
     }
 
@@ -682,11 +702,35 @@ class ChannelService {
         },
       );
 
+      // Fetch creator details for invite notifications
+      const creatorUser = await userRepository.findById(creatorId);
+      const creatorName = creatorUser?.name || 'Someone';
+
       // Notify each new member via socket and join them to channel room
       for (const uid of newMemberUserIds) {
         emitToUser(uid, SOCKET_EVENTS.CHANNEL_ADDED, { channel: channelPayload }, workspaceId);
         joinChannelRoom(uid, channelId, workspaceId);
       }
+
+      // Persist channel invite notification for auto-added members
+      import("../notifications/notification.service.js").then(
+        ({ default: notificationService }) => {
+          for (const uid of newMemberUserIds) {
+            notificationService
+              .createChannelInviteNotification({
+                workspaceId,
+                recipientId: uid,
+                channelId: channel._id,
+                channelName: channel.name,
+                inviterName: creatorName,
+                inviterId: creatorId,
+              })
+              .catch((err) => {
+                logger.warn('Failed to send public channel auto-add notification', { userId: uid, error: err.message });
+              });
+          }
+        },
+      );
 
       logger.info('[PUBLIC_CHANNEL] Auto-added workspace members', {
         channelId,
@@ -1078,6 +1122,7 @@ class ChannelService {
     userId,
     role = CHANNEL_MEMBER_ROLES.MEMBER,
     workspaceId,
+    addedByUserId = null,
   ) {
     const channel = await channelRepository.findById(channelId, {
       workspaceId,
@@ -1133,15 +1178,22 @@ class ChannelService {
 
     // Persist channel invite notification
     import("../notifications/notification.service.js").then(
-      ({ default: notificationService }) => {
+      async ({ default: notificationService }) => {
+        let inviterName = "System";
+        if (addedByUserId) {
+          const inviter = await userRepository.findById(addedByUserId);
+          if (inviter) {
+            inviterName = inviter.name;
+          }
+        }
         notificationService
           .createChannelInviteNotification({
             workspaceId: channel.workspaceId,
             recipientId: chatUserId,
             channelId: channel._id,
             channelName: channel.name,
-            inviterName: "System",
-            inviterId: null,
+            inviterName,
+            inviterId: addedByUserId,
           })
           .catch(() => {});
       },
@@ -1365,6 +1417,29 @@ class ChannelService {
       { channelId, userId },
       channel.workspaceId?.toString(),
     );
+
+    // Persist channel remove notification
+    if (userId.toString() !== removedBy?.toString()) {
+      import("../notifications/notification.service.js").then(
+        async ({ default: notificationService }) => {
+          let removerName = "System";
+          if (removedBy && removedBy !== "system") {
+            const remover = await userRepository.findById(removedBy);
+            if (remover) removerName = remover.name;
+          }
+          notificationService
+            .createChannelRemoveNotification({
+              workspaceId: channel.workspaceId,
+              recipientId: userId,
+              channelId: channel._id,
+              channelName: channel.name,
+              removerName,
+              removerId: removedBy === "system" ? null : removedBy,
+            })
+            .catch(() => {});
+        },
+      );
+    }
 
     return updated;
   }

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { NodeViewWrapper, NodeViewContent } from "@tiptap/react";
 import { useCanvasStore } from "../../../stores/canvasStore";
 import { useCanvasCollabStore } from "../../../stores/canvasCollabStore";
@@ -6,7 +6,8 @@ import { useCanvasUiStore } from "../../../stores/canvasUiStore";
 import ParagraphBlock from "./components/ParagraphBlock";
 import HeadingBlock from "./components/HeadingBlock";
 import TaskBlock from "./components/TaskBlock";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Smile, MessageSquarePlus } from "lucide-react";
+import EmojiPickerPortal from "../../chat/EmojiPickerPortal";
 
 /**
  * CommentBadge — inline marker for anchored comments on a block.
@@ -47,7 +48,11 @@ function CommentBadge({ comment, index }) {
 }
 
 export default function BlockWrapper({ node, editor, getPos }) {
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiButtonRef = useRef(null);
+
   const blocks = useCanvasStore((s) => s.blocks);
+  const toggleBlockReaction = useCanvasStore((s) => s.toggleBlockReaction);
   const comments = useCanvasStore((s) => s.comments);
   const openSidebar = useCanvasUiStore((s) => s.openSidebar);
   const setHoveredBlockId = useCanvasUiStore((s) => s.setHoveredBlockId);
@@ -108,7 +113,31 @@ export default function BlockWrapper({ node, editor, getPos }) {
   }, [attrBlockId, block, editor, getPos, node]);
 
   const handleOpenComments = () => {
-    if (block) setHoveredBlockId(block._id);
+    if (block) {
+      setHoveredBlockId(block._id);
+      
+      let blockNode = null;
+      try {
+        editor.state.doc.descendants((node) => {
+          if (node.attrs && node.attrs.blockId === block._id) {
+            blockNode = node;
+            return false;
+          }
+        });
+      } catch (e) {}
+
+      if (blockNode) {
+        useCanvasUiStore.getState().setPendingCommentRange({
+          blockId: block._id,
+          startOffset: 0,
+          endOffset: blockNode.content.size,
+          selectedText: blockNode.textContent || "",
+          blockType: blockNode.type.name,
+        });
+      } else {
+        useCanvasUiStore.getState().setPendingCommentRange(null);
+      }
+    }
     openSidebar("comments");
   };
 
@@ -245,6 +274,35 @@ export default function BlockWrapper({ node, editor, getPos }) {
           );
         })()}
 
+        {/* Reaction button */}
+        <div style={{ display: "inline-flex", position: "relative" }} ref={emojiButtonRef}>
+          <button
+            type="button"
+            className="block-comment-btn"
+            onClick={() => setShowEmojiPicker((v) => !v)}
+            aria-label="Add reaction"
+            title="Add reaction"
+          >
+            <Smile size={16} />
+          </button>
+          {showEmojiPicker && (
+            <EmojiPickerPortal
+              anchorRef={emojiButtonRef}
+              isOpen={showEmojiPicker}
+              onClose={() => setShowEmojiPicker(false)}
+              onSelect={(emoji) => {
+                if (block?._id) {
+                  toggleBlockReaction(block._id, emoji);
+                }
+                setShowEmojiPicker(false);
+              }}
+              position="top-start"
+              zIndex={1100}
+            />
+          )}
+        </div>
+
+        {/* Comment button */}
         <button
           type="button"
           className="block-comment-btn"
@@ -252,10 +310,10 @@ export default function BlockWrapper({ node, editor, getPos }) {
           aria-label="Open comments"
           title="Open comments"
         >
-          💬
+          <MessageSquarePlus size={16} />
         </button>
 
-        {block?.reactions && (
+        {block?.reactions && Object.keys(block.reactions).length > 0 && (
           <div className="block-reactions" aria-hidden>
             {Object.keys(block.reactions).length}
           </div>

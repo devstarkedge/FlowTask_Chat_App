@@ -14743,6 +14743,7 @@ textarea:focus-visible,
 /* Canvas Editor UI - Clean Minimal Design */
 
 .canvas-editor-ui-shell {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;

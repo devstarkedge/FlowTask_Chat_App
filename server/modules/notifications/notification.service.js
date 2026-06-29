@@ -227,6 +227,29 @@ class NotificationService {
   }
 
   /**
+   * Create a channel remove notification.
+   */
+  async createChannelRemoveNotification({ workspaceId, recipientId, channelId, channelName, removerName, removerId }) {
+    const safeRemoverName = removerName || 'Someone';
+    const safeChannelName = channelName || 'channel';
+    return this.create({
+      workspaceId,
+      recipientId,
+      type: 'channel_remove',
+      title: removerId?.toString() === recipientId?.toString()
+        ? `You left #${safeChannelName}`
+        : `${safeRemoverName} removed you from #${safeChannelName}`,
+      body: '',
+      sourceType: 'channel',
+      sourceId: channelId,
+      channelId,
+      senderId: removerId,
+      senderName: safeRemoverName,
+      channelName: safeChannelName,
+    });
+  }
+
+  /**
    * Create a thread reply notification.
    */
   async createThreadReplyNotification({ workspaceId, recipientId, senderId, senderName, senderAvatar, channelId, channelName, threadId, messageId, preview }) {

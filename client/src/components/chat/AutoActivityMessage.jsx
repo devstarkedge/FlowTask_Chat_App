@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, FileText } from 'lucide-react'
 import { buildRedirectFromMeta } from '../../utils/flowTaskUrl'
 
 /**
@@ -34,6 +34,11 @@ const EVENT_CONFIG = {
   NANO_COMPLETED:        { label: 'completed checklist item',  accent: 'var(--accent-green, #22c55e)' },
   NANO_DELETED:          { label: 'deleted checklist item',    accent: 'var(--accent-red)' },
   ATTACHMENT_ADDED:      { label: 'uploaded attachment',        accent: 'var(--text-link)' },
+  CANVAS_CREATED:        { label: 'created the Canvas',        accent: 'var(--accent-primary)' },
+  CANVAS_UPDATED:        { label: 'renamed Canvas to',         accent: 'var(--accent-primary)' },
+  CANVAS_EDITED:         { label: 'made updates to',           accent: 'var(--accent-primary)' },
+  CANVAS_DELETED:        { label: 'deleted the Canvas',        accent: 'var(--accent-red)' },
+  CANVAS_COMMENTED:      { label: 'commented on a block in',   accent: 'var(--text-link)' },
 }
 
 const FIELD_LABELS = {
@@ -101,6 +106,98 @@ export default function AutoActivityMessage({ message }) {
   const eventType = meta.eventType || ''
   const config = EVENT_CONFIG[eventType] || { label: 'activity', accent: 'var(--accent-primary)' }
   const redirect = buildRedirectFromMeta(meta)
+
+  // ─── Canvas Custom Slack-like Card Renderer ───
+  if (eventType.startsWith('CANVAS_')) {
+    const titleText = eventType === 'CANVAS_CREATED' 
+      ? 'Canvas created' 
+      : eventType === 'CANVAS_DELETED' 
+      ? 'Canvas deleted' 
+      : 'Canvas updated';
+    const actionLabel = config.label || 'made updates to';
+
+    return (
+      <div className="auto-activity-card" style={{ borderLeftColor: config.accent, padding: '12px 16px', position: 'relative' }}>
+        {redirect && eventType !== 'CANVAS_DELETED' && (
+          <div className="activity-cta">
+            <a 
+              href={redirect.url} 
+              className="activity-cta-btn" 
+              title="Open Canvas"
+              onClick={(e) => {
+                e.preventDefault();
+                window.location.pathname = `/canvas/${meta.canvasId}`;
+              }}
+            >
+              Open Canvas
+              <ExternalLink size={11} />
+            </a>
+          </div>
+        )}
+
+        <div style={{ paddingRight: (redirect && eventType !== 'CANVAS_DELETED') ? 100 : 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 24,
+              height: 24,
+              borderRadius: 6,
+              background: 'var(--bg-secondary, rgba(255,255,255,0.08))',
+              color: config.accent
+            }}>
+              <FileText size={14} />
+            </div>
+            <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text-primary)' }}>
+              {titleText}
+            </span>
+            <span className="activity-timestamp" style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+              {formatTime(message.createdAt)}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
+            {meta.actorAvatar && (
+              <img
+                src={meta.actorAvatar}
+                alt={meta.actorName || ''}
+                style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+              />
+            )}
+            <span>
+              <span className="activity-actor" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{meta.actorName || 'Someone'}</span>
+              {' '}{actionLabel}{' '}
+              {eventType !== 'CANVAS_DELETED' ? (
+                <a 
+                  href={`/canvas/${meta.canvasId}`}
+                  style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: 4, 
+                    color: 'var(--accent-primary, #38bdf8)', 
+                    textDecoration: 'none',
+                    fontWeight: 600
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.location.pathname = `/canvas/${meta.canvasId}`;
+                  }}
+                >
+                  <FileText size={13} style={{ display: 'inline', verticalAlign: 'middle', marginTop: -2 }} />
+                  {meta.canvasTitle || 'Canvas'}
+                </a>
+              ) : (
+                <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>
+                  "{meta.canvasTitle}"
+                </span>
+              )}
+              .
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
   const isTimeEntry = eventType.startsWith('TIME_ENTRY_')
     || eventType.startsWith('LOGGED_TIME_')
     || eventType.startsWith('ESTIMATED_TIME_')

@@ -1,11 +1,14 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useChannelStore } from "../../stores/channelStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useAuthStore } from "../../stores/authStore";
 import { getChannelPath } from "../../utils/chatRoutes";
-import { X, Globe, Lock, Plus, Hash, Sparkles } from 'lucide-react';
+import { X, Globe, Lock, Plus, Hash, Sparkles, Search, Check } from 'lucide-react';
 import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
+import { userAPI } from "../../services/api";
+import { Avatar } from "./MemberAvatarGroup";
 
 /* ─────────────────────────────────────────────
    STYLES — scoped with .ccm- prefix
@@ -205,6 +208,8 @@ const STYLES = `
     display: flex;
     flex-direction: column;
     gap: 20px;
+    max-height: 52vh;
+    overflow-y: auto;
   }
 
   /* ── Field wrapper ── */
@@ -582,6 +587,137 @@ const STYLES = `
     .ccm-vis-card { padding: 11px 12px; }
     .ccm-vis-card__desc { display: none; }
   }
+
+  /* ── Selected users chips ── */
+  .ccm-selected-users {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+    max-height: 90px;
+    overflow-y: auto;
+    padding: 2px;
+  }
+  .ccm-selected-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: color-mix(in srgb, var(--accent-primary) 12%, var(--surface-secondary));
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 22%, var(--border-primary));
+    padding: 4px 8px;
+    border-radius: 999px;
+    animation: ccm-badge-pop 200ms cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  .ccm-selected-chip__name {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    max-width: 100px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ccm-selected-chip__remove {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin-left: 2px;
+    border-radius: 50%;
+    width: 14px; height: 14px;
+    transition: background 120ms, color 120ms;
+  }
+  .ccm-selected-chip__remove:hover {
+    background: rgba(255,255,255,0.12);
+    color: var(--text-primary);
+  }
+
+  /* ── Search results dropdown ── */
+  .ccm-search-results {
+    margin-top: 6px;
+    background: var(--bg-modal, var(--surface-primary));
+    border: 1px solid var(--border-primary);
+    border-radius: 12px;
+    max-height: 180px;
+    overflow-y: auto;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.22);
+    animation: ccm-field-in 200ms ease;
+  }
+  .ccm-search-no-results {
+    padding: 12px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+  .ccm-search-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background 120ms;
+  }
+  .ccm-search-row:hover {
+    background: var(--surface-hover, var(--bg-hover));
+  }
+  .ccm-search-row.is-selected {
+    background: color-mix(in srgb, var(--accent-primary) 5%, transparent);
+  }
+  .ccm-search-row__info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+  .ccm-search-row__name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ccm-search-row__email {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ccm-search-row__check {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ccm-check-indicator {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: ccm-badge-pop 160ms cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  .ccm-plus-indicator {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    border: 1px solid var(--border-primary);
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 120ms, color 120ms;
+  }
+  .ccm-search-row:hover .ccm-plus-indicator {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+  }
 `;
 
 /* ─────────────────────────────────────────────
@@ -641,11 +777,21 @@ export default function CreateChannelModal({ onClose }) {
   const navigate = useNavigate();
   const { createChannel, setActiveChannel } = useChannelStore();
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const { user } = useAuthStore();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState("private");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const nameInputRef = useRef(null);
+
+  // member selection states
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const [memberSearchResults, setMemberSearchResults] = useState([]);
+  const [selectedMembers, setSelectedMembers] = useState([]);
+  const [isSearchingMembers, setIsSearchingMembers] = useState(false);
+  const debMemberRef = useRef(null);
+
+  const selectedMemberIds = useMemo(() => new Set(selectedMembers.map(m => m._id)), [selectedMembers]);
 
   /* auto-focus */
   useEffect(() => { nameInputRef.current?.focus(); }, []);
@@ -657,6 +803,55 @@ export default function CreateChannelModal({ onClose }) {
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  /* Member search handler */
+  const fetchMemberSearchResults = async (query) => {
+    setIsSearchingMembers(true);
+    try {
+      const { data } = await userAPI.getDMContacts(query);
+      const contacts = data.data?.contacts || [];
+      const filtered = contacts
+        .map(u => ({
+          _id: u.chatUserId || u._id || u.flowTaskUserId,
+          name: u.name || u.displayName,
+          email: u.email,
+          avatar: u.avatar
+        }))
+        .filter(u => u._id && u._id !== user?._id);
+      setMemberSearchResults(filtered);
+    } catch (err) {
+      console.error("Failed to fetch search members:", err);
+      setMemberSearchResults([]);
+    } finally {
+      setIsSearchingMembers(false);
+    }
+  };
+
+  /* Debounce member search query */
+  useEffect(() => {
+    if (visibility !== "private") return;
+    const query = memberSearchQuery.trim();
+    clearTimeout(debMemberRef.current);
+    debMemberRef.current = setTimeout(() => {
+      fetchMemberSearchResults(query);
+    }, query ? 350 : 50);
+    return () => clearTimeout(debMemberRef.current);
+  }, [memberSearchQuery, visibility]);
+
+  const handleToggleMember = (member) => {
+    setSelectedMembers((prev) => {
+      const exists = prev.some((m) => m._id === member._id);
+      if (exists) {
+        return prev.filter((m) => m._id !== member._id);
+      } else {
+        return [...prev, member];
+      }
+    });
+  };
+
+  const handleRemoveSelectedMember = (memberId) => {
+    setSelectedMembers((prev) => prev.filter((m) => m._id !== memberId));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const trimmed = name.trim();
@@ -666,7 +861,13 @@ export default function CreateChannelModal({ onClose }) {
     }
     setIsSubmitting(true);
     try {
-      const channel = await createChannel({ name: trimmed, description: description.trim(), visibility });
+      const payload = {
+        name: trimmed,
+        description: description.trim(),
+        visibility,
+        memberIds: visibility === "private" ? selectedMembers.map((m) => m._id) : [],
+      };
+      const channel = await createChannel(payload);
       const displayName = visibility === "public" ? `#${channel.name}` : channel.name;
 
       // Auto-open the newly created channel
@@ -832,6 +1033,86 @@ export default function CreateChannelModal({ onClose }) {
                   />
                 </div>
               </div>
+
+              {/* ── Add Members (Private only) ── */}
+              {visibility === "private" && (
+                <div className="ccm-field" style={{ animationDelay: "300ms" }}>
+                  <FieldLabel
+                    gradient="linear-gradient(135deg, var(--accent-primary), var(--accent-cyan, #0891b2))"
+                    text="Add Members"
+                    optional
+                  />
+
+                  {/* Selected members tags/chips */}
+                  {selectedMembers.length > 0 && (
+                    <div className="ccm-selected-users">
+                      {selectedMembers.map((m) => (
+                        <div key={m._id} className="ccm-selected-chip">
+                          <Avatar member={m} size={20} />
+                          <span className="ccm-selected-chip__name">{m.name}</span>
+                          <button
+                            type="button"
+                            className="ccm-selected-chip__remove"
+                            onClick={() => handleRemoveSelectedMember(m._id)}
+                          >
+                            <X size={10} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Search Input */}
+                  <div className="ccm-input-wrap" style={{ marginTop: selectedMembers.length > 0 ? 8 : 0 }}>
+                    <Search size={14} className="ccm-input-wrap__icon" />
+                    <input
+                      type="text"
+                      className="ccm-input"
+                      placeholder="Search people to add..."
+                      value={memberSearchQuery}
+                      onChange={(e) => setMemberSearchQuery(e.target.value)}
+                    />
+                    {isSearchingMembers && <Loader size={12} />}
+                  </div>
+
+                  {/* Search Results Dropdown/List */}
+                  <div className="ccm-search-results">
+                    {memberSearchResults.length === 0 ? (
+                      <div className="ccm-search-no-results">
+                        {isSearchingMembers ? "Loading..." : "No people found"}
+                      </div>
+                    ) : (
+                      memberSearchResults.map((m) => {
+                        const isSelected = selectedMemberIds.has(m._id);
+                        return (
+                          <div
+                            key={m._id}
+                            className={`ccm-search-row ${isSelected ? 'is-selected' : ''}`}
+                            onClick={() => handleToggleMember(m)}
+                          >
+                            <Avatar member={m} size={28} />
+                            <div className="ccm-search-row__info">
+                              <span className="ccm-search-row__name">{m.name}</span>
+                              <span className="ccm-search-row__email">{m.email}</span>
+                            </div>
+                            <div className="ccm-search-row__check">
+                              {isSelected ? (
+                                <div className="ccm-check-indicator">
+                                  <Check size={10} strokeWidth={3} />
+                                </div>
+                              ) : (
+                                <div className="ccm-plus-indicator">
+                                  <Plus size={10} strokeWidth={3} />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* ── Footer ── */}

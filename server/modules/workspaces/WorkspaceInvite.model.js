@@ -109,8 +109,6 @@ workspaceInviteSchema.index(
   { workspaceId: 1, email: 1 },
   { unique: true, partialFilterExpression: { status: 'pending' } },
 );
-// Token hash lookup for accepting invites
-workspaceInviteSchema.index({ tokenHash: 1 }, { unique: true, sparse: true });
 // Email + status for invite lookups by email
 workspaceInviteSchema.index({ email: 1, status: 1 });
 // TTL for auto-expiry (only pending invites not yet expired)

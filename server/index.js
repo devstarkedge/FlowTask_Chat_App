@@ -298,6 +298,9 @@ async function startServer() {
     // 1. Connect to MongoDB
     await connectDatabase();
 
+    // 1b. Initialize Cache Service (loads Redis if configured)
+    await cache.initialize();
+
     // 2. Register webhook event handlers (only when FlowTask is enabled)
     if (env.FLOWTASK_ENABLED) {
       registerAllEventHandlers();
@@ -367,6 +370,7 @@ async function startServer() {
       logger.info(`FlowTask Chat server running`, {
         port: env.PORT,
         env: env.NODE_ENV,
+        clientUrl: env.CLIENT_URL,
         flowtaskEnabled: env.FLOWTASK_ENABLED,
         flowtaskApi: env.FLOWTASK_ENABLED ? env.FLOWTASK_API_URL : 'disabled',
       });

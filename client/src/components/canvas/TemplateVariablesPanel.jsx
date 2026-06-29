@@ -4,7 +4,7 @@ export default function TemplateVariablesPanel({ editor, onClose }) {
   const [variables, setVariables] = useState([]);
 
   const scanVariables = () => {
-    if (!editor) return [];
+    if (!editor || !editor.state) return [];
     const vars = {};
     editor.state.doc.descendants((node) => {
       if (node.type.name === 'templateVariable') {
@@ -25,7 +25,7 @@ export default function TemplateVariablesPanel({ editor, onClose }) {
   }, [editor]);
 
   const updateVariableValue = (name, value) => {
-    if (!editor) return;
+    if (!editor || !editor.state) return;
     const { tr } = editor.state;
     const { doc, schema } = editor.state;
 
@@ -49,7 +49,7 @@ export default function TemplateVariablesPanel({ editor, onClose }) {
   };
 
   const replaceVariablesWithText = (name) => {
-    if (!editor) return;
+    if (!editor || !editor.state) return;
     const { tr } = editor.state;
     const { doc } = editor.state;
     const updates = [];

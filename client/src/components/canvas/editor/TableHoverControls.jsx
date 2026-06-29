@@ -1,18 +1,27 @@
 import { useState, useEffect } from 'react';
 
 /**
-5:  * TableHoverControls — Displays hover-triggered controls on table borders to quickly
-6:  * insert rows (bottom border) or columns (right border) using standard TipTap commands.
-7:  */
+ * TableHoverControls — Displays hover-triggered controls on table borders.
+ *
+ * - Bottom border: "Insert row" (blue +) and "Delete row" (red −) buttons
+ * - Right border:  "Insert column" (blue +) and "Delete column" (red −) buttons
+ */
 export default function TableHoverControls({ editor, containerRef }) {
   const [hoveredTable, setHoveredTable] = useState(null);
   const [isVisible, setIsVisible] = useState(false);
-  const [activeAxis, setActiveAxis] = useState('row'); // 'row' or 'col'
-  const [btnX, setBtnX] = useState(0);
-  const [btnY, setBtnY] = useState(0);
+  const [activeAxis, setActiveAxis] = useState('row'); // 'row' | 'col'
+
+  // Insert button position (bottom/right border)
+  const [insertX, setInsertX] = useState(0);
+  const [insertY, setInsertY] = useState(0);
+
+  // Delete button position — beside the insert button
+  const [deleteX, setDeleteX] = useState(0);
+  const [deleteY, setDeleteY] = useState(0);
+
+  // Inactive axis dot position
   const [dotX, setDotX] = useState(0);
   const [dotY, setDotY] = useState(0);
-  const [tooltip, setTooltip] = useState('Insert row');
 
   useEffect(() => {
     const container = containerRef.current;
@@ -25,13 +34,18 @@ export default function TableHoverControls({ editor, containerRef }) {
       }
 
       const target = e.target;
+
+      // Don't hide when hovering our own control buttons
+      if (
+        target.closest('.table-hover-control-btn') ||
+        target.closest('.table-hover-control-dot')
+      ) {
+        return;
+      }
+
       const tableEl = target.closest('.ProseMirror table');
-      
+
       if (!tableEl) {
-        // Prevent hiding if the mouse is currently hovering our controls
-        if (target.closest('.table-hover-control-btn') || target.closest('.table-hover-control-dot')) {
-          return;
-        }
         setIsVisible(false);
         setHoveredTable(null);
         return;
@@ -51,53 +65,48 @@ export default function TableHoverControls({ editor, containerRef }) {
 
       const rows = Array.from(tableEl.querySelectorAll('tr'));
       if (rows.length === 0) return;
+
       const firstRowCells = Array.from(rows[0].querySelectorAll('td, th'));
 
-      // Calculate column right boundary offsets relative to the table
-      const colEdges = firstRowCells.map(cell => {
+      // Column right‑edge offsets (relative to table left)
+      const colEdges = firstRowCells.map((cell) => {
         const cellRect = cell.getBoundingClientRect();
         return cellRect.right - rect.left;
       });
 
-      // Calculate row bottom boundary offsets relative to the table
-      const rowEdges = rows.map(row => {
+      // Row bottom‑edge offsets (relative to table top)
+      const rowEdges = rows.map((row) => {
         const rowRect = row.getBoundingClientRect();
         return rowRect.bottom - rect.top;
       });
 
-      // Use internal boundaries or center fallback if 1 column/row
+      // Internal separator lines (exclude last edge = table border)
       const verticalLines = colEdges.length > 1 ? colEdges.slice(0, -1) : [rect.width / 2];
       const horizontalLines = rowEdges.length > 1 ? rowEdges.slice(0, -1) : [rect.height / 2];
 
-      // Nearest column line
+      // Nearest column separator to mouse X
       let nearestColIdx = 0;
       let minColDist = Infinity;
       verticalLines.forEach((x, idx) => {
         const dist = Math.abs(x - mouseX);
-        if (dist < minColDist) {
-          minColDist = dist;
-          nearestColIdx = idx;
-        }
+        if (dist < minColDist) { minColDist = dist; nearestColIdx = idx; }
       });
       const targetX = verticalLines[nearestColIdx];
 
-      // Nearest row line
+      // Nearest row separator to mouse Y
       let nearestRowIdx = 0;
       let minRowDist = Infinity;
       horizontalLines.forEach((y, idx) => {
         const dist = Math.abs(y - mouseY);
-        if (dist < minRowDist) {
-          minRowDist = dist;
-          nearestRowIdx = idx;
-        }
+        if (dist < minRowDist) { minRowDist = dist; nearestRowIdx = idx; }
       });
       const targetY = horizontalLines[nearestRowIdx];
 
-      // Distance to bottom vs right borders
+      // Distance to bottom vs right outer border
       const distBottom = Math.abs(rect.height - mouseY);
       const distRight = Math.abs(rect.width - mouseX);
 
-      // Threshold: only show within 120px boundary range for mouse comfort
+      // Only show within 120 px of an outer border
       const maxDistance = 120;
       if (distBottom > maxDistance && distRight > maxDistance) {
         setIsVisible(false);
@@ -105,21 +114,37 @@ export default function TableHoverControls({ editor, containerRef }) {
       }
 
       const isBottomActive = distBottom < distRight;
+      // Offset between insert and delete buttons (px)
+      const GAP = 28;
 
       if (isBottomActive) {
+        // ── Row axis: buttons sit below the table ───────────────────────
         setActiveAxis('row');
-        setBtnX(tableLeft + targetX);
-        setBtnY(tableTop + rect.height);
-        setTooltip('Insert row');
 
+        // Insert (+) centered at nearest column separator, below table
+        setInsertX(tableLeft + targetX);
+        setInsertY(tableTop + rect.height);
+
+        // Delete (−) just to the right of insert
+        setDeleteX(tableLeft + targetX + GAP);
+        setDeleteY(tableTop + rect.height);
+
+        // Dot on right border at nearest row separator
         setDotX(tableLeft + rect.width);
         setDotY(tableTop + targetY);
       } else {
+        // ── Column axis: buttons sit to the right of the table ──────────
         setActiveAxis('col');
-        setBtnX(tableLeft + rect.width);
-        setBtnY(tableTop + targetY);
-        setTooltip('Insert column');
 
+        // Insert (+) centered at nearest row separator, right of table
+        setInsertX(tableLeft + rect.width);
+        setInsertY(tableTop + targetY);
+
+        // Delete (−) just below insert
+        setDeleteX(tableLeft + rect.width);
+        setDeleteY(tableTop + targetY + GAP);
+
+        // Dot on bottom border at nearest column separator
         setDotX(tableLeft + targetX);
         setDotY(tableTop + rect.height);
       }
@@ -141,7 +166,22 @@ export default function TableHoverControls({ editor, containerRef }) {
 
   if (!isVisible) return null;
 
-  const handleBtnClick = (e) => {
+  // ── Helpers ─────────────────────────────────────────────────────────────
+
+  const focusCell = (tableEl, selector) => {
+    const cell = tableEl?.querySelector(selector);
+    if (!cell || !editor) return false;
+    try {
+      const pos = editor.view.posAtDOM(cell, 0);
+      editor.chain().focus().setTextSelection(pos).run();
+      return true;
+    } catch {
+      editor.chain().focus().run();
+      return false;
+    }
+  };
+
+  const handleInsertClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (!hoveredTable || !editor) return;
@@ -149,60 +189,100 @@ export default function TableHoverControls({ editor, containerRef }) {
     if (activeAxis === 'row') {
       const rows = hoveredTable.querySelectorAll('tr');
       const lastRow = rows[rows.length - 1];
-      const targetCell = lastRow?.querySelector('td, th');
-      if (targetCell) {
-        try {
-          const pos = editor.view.posAtDOM(targetCell, 0);
-          editor.chain().focus().setTextSelection(pos).addRowAfter().run();
-        } catch (err) {
-          console.error('Failed using posAtDOM:', err);
-          editor.chain().focus().addRowAfter().run();
-        }
-      }
+      focusCell(lastRow, 'td, th');
+      editor.chain().focus().addRowAfter().run();
     } else {
       const rows = hoveredTable.querySelectorAll('tr');
-      const targetCell = rows[0]?.querySelector('td:last-child, th:last-child');
-      if (targetCell) {
-        try {
-          const pos = editor.view.posAtDOM(targetCell, 0);
-          editor.chain().focus().setTextSelection(pos).addColumnAfter().run();
-        } catch (err) {
-          console.error('Failed using posAtDOM:', err);
-          editor.chain().focus().addColumnAfter().run();
-        }
-      }
+      focusCell(rows[0], 'td:last-child, th:last-child');
+      editor.chain().focus().addColumnAfter().run();
     }
 
-    // Hide controls momentarily to refresh position
     setIsVisible(false);
     setHoveredTable(null);
   };
 
+  const handleDeleteClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!hoveredTable || !editor) return;
+
+    if (activeAxis === 'row') {
+      // Delete the row closest to the mouse (last non‑header row as a sensible default)
+      const rows = hoveredTable.querySelectorAll('tr');
+      const targetRow = rows[rows.length - 1];
+      const cell = targetRow?.querySelector('td, th');
+      if (cell) {
+        try {
+          const pos = editor.view.posAtDOM(cell, 0);
+          editor.chain().focus().setTextSelection(pos).deleteRow().run();
+        } catch {
+          editor.chain().focus().deleteRow().run();
+        }
+      }
+    } else {
+      // Delete the column closest to the mouse (last column as a sensible default)
+      const rows = hoveredTable.querySelectorAll('tr');
+      const cell = rows[0]?.querySelector('td:last-child, th:last-child');
+      if (cell) {
+        try {
+          const pos = editor.view.posAtDOM(cell, 0);
+          editor.chain().focus().setTextSelection(pos).deleteColumn().run();
+        } catch {
+          editor.chain().focus().deleteColumn().run();
+        }
+      }
+    }
+
+    setIsVisible(false);
+    setHoveredTable(null);
+  };
+
+  const insertLabel = activeAxis === 'row' ? 'Insert row' : 'Insert column';
+  const deleteLabel = activeAxis === 'row' ? 'Delete row' : 'Delete column';
+
   return (
     <>
-      {/* Active button with tooltip */}
+      {/* ── Insert button (blue +) ────────────────────────────────── */}
       <div
         className="table-hover-control-btn"
         style={{
           position: 'absolute',
-          left: `${btnX}px`,
-          top: `${btnY}px`,
+          left: `${insertX}px`,
+          top: `${insertY}px`,
           transform: 'translate(-50%, -50%)',
           zIndex: 50,
         }}
-        onClick={handleBtnClick}
+        onClick={handleInsertClick}
       >
-        <div className="table-hover-control-btn-circle">
+        <div className="table-hover-control-btn-circle table-hover-control-btn-insert">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M6 2.5V9.5M2.5 6H9.5" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+            <path d="M6 2.5V9.5M2.5 6H9.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </div>
-        <div className="table-hover-control-tooltip">
-          {tooltip}
-        </div>
+        <div className="table-hover-control-tooltip">{insertLabel}</div>
       </div>
 
-      {/* Inactive helper dot */}
+      {/* ── Delete button (red −) ─────────────────────────────────── */}
+      <div
+        className="table-hover-control-btn"
+        style={{
+          position: 'absolute',
+          left: `${deleteX}px`,
+          top: `${deleteY}px`,
+          transform: 'translate(-50%, -50%)',
+          zIndex: 50,
+        }}
+        onClick={handleDeleteClick}
+      >
+        <div className="table-hover-control-btn-circle table-hover-control-btn-delete">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M2.5 6H9.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </div>
+        <div className="table-hover-control-tooltip">{deleteLabel}</div>
+      </div>
+
+      {/* ── Inactive axis dot ─────────────────────────────────────── */}
       <div
         className="table-hover-control-dot"
         style={{

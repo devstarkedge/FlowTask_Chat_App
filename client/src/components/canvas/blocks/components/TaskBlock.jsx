@@ -55,11 +55,25 @@ export default function TaskBlock({ block, checked = false, onToggle, children, 
         </button>
         {block?.reactions && (
           <div className="block-reactions-inline">
-            {Object.entries(block.reactions).map(([emoji, users]) => (
-              <span key={emoji} className="reaction-pill">
-                {emoji} {Array.isArray(users) ? users.length : users}
-              </span>
-            ))}
+            {Object.entries(block.reactions).map(([emoji, users]) => {
+              const count = Array.isArray(users) ? users.length : users;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="reaction-pill"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (block?._id) {
+                      useCanvasStore.getState().toggleBlockReaction(block._id, emoji);
+                    }
+                  }}
+                >
+                  {emoji} {count}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

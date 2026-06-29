@@ -326,6 +326,7 @@ export const NOTIFICATION_TYPES = Object.freeze({
   MENTION: 'mention',
   DM: 'dm',
   CHANNEL_INVITE: 'channel_invite',
+  CHANNEL_REMOVE: 'channel_remove',
   TASK_UPDATE: 'task_update',
   SYSTEM: 'system',
   THREAD_REPLY: 'thread_reply',

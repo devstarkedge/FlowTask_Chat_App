@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Check, MessageSquarePlus, X, Reply, Clock } from "lucide-react";
 import { Avatar } from "../../chat/MemberAvatarGroup";
+import { useCanvasUiStore } from "../../../stores/canvasUiStore";
 
 function formatTime(value) {
   if (!value) return "";
@@ -38,12 +39,25 @@ export default function CommentThreadSidebar({
   const [newComment, setNewComment] = useState("");
   const listEndRef = useRef(null);
 
+  const activeCommentId = useCanvasUiStore((s) => s.activeCommentId);
+  const setActiveCommentId = useCanvasUiStore((s) => s.setActiveCommentId);
+
+  // Smooth scroll the active comment card into view
+  useEffect(() => {
+    if (activeCommentId) {
+      const el = document.getElementById(`comment-thread-${activeCommentId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
+  }, [activeCommentId]);
+
   // Auto-scroll to bottom when new comments arrive
   useEffect(() => {
-    if (listEndRef.current) {
+    if (listEndRef.current && !activeCommentId) {
       listEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
     }
-  }, [comments.length]);
+  }, [comments.length, activeCommentId]);
 
   return (
     <aside className="canvas-sidebar canvas-comments-sidebar" aria-label="Canvas comments">
@@ -103,8 +117,15 @@ export default function CommentThreadSidebar({
             const replyValue = replyByComment[comment._id] || "";
             const replies = comment.replies || [];
 
+            const isActive = comment._id === activeCommentId;
+
             return (
-              <article className="canvas-comment-thread" key={comment._id}>
+              <article
+                className={`canvas-comment-thread${isActive ? " is-active" : ""}`}
+                key={comment._id}
+                id={`comment-thread-${comment._id}`}
+                onClick={() => setActiveCommentId(comment._id)}
+              >
                 {/* Main comment header */}
                 <header className="canvas-comment-thread-header">
                   <div className="canvas-comment-author-row">

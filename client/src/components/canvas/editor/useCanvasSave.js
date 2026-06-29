@@ -1,5 +1,5 @@
 /**
- * useCanvasSave.js — Debounced save with Ctrl+S shortcut.
+   Debounced save with Ctrl+S shortcut.
  *
  * Owns: debouncedSave, saveStatus state, Ctrl+S handler, cleanup.
  */

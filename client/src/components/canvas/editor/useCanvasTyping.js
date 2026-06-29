@@ -1,5 +1,5 @@
 /**
- * useCanvasTyping.js — Typing indicator emission for collaborative presence.
+ * Typing indicator emission for collaborative presence.
  *
  * Detects typing activity and emits per-block typing state (start/stop)
  * along with caret coordinates for remote typing bubbles.

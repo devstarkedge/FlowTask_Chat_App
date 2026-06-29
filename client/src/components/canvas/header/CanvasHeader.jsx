@@ -213,7 +213,7 @@ export default function CanvasHeader({
         <div
           className={`canvas-cover-strip${coverHovered ? " is-hovered" : ""}`}
           onMouseEnter={() => !isRepositioning && setCoverHovered(true)}
-          onMouseLeave={() => !isRepositioning && setCoverHovered(false)}
+          // onMouseLeave={() => !isRepositioning && setCoverHovered(false)}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}

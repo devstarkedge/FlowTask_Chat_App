@@ -1,5 +1,5 @@
 /**
- * useCanvasContentSync.js — Collab seeding + non-collab content sync.
+ * Collab seeding + non-collab content sync.
  *
  * Handles seeding initial content into the Yjs fragment when it is empty,
  * and syncing content from the store in non-collab mode (with a localEditRef

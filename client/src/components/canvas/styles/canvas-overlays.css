@@ -313,3 +313,41 @@
   color: var(--text-muted);
   white-space: nowrap;
 }
+
+/* ─── Emoji Picker ───────────────────────────────────────────────────── */
+/* Ensure proper flag emoji rendering */
+.emoji-picker-wrapper {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "EmojiOne Color", "Android Emoji", "Twemoji Mozilla", sans-serif;
+}
+
+.emoji-picker-wrapper .EmojiPickerReact .epr-emoji-category-content {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "EmojiOne Color", "Android Emoji", "Twemoji Mozilla", sans-serif;
+}
+
+.emoji-picker-wrapper .EmojiPickerReact .epr-emoji-img {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "EmojiOne Color", "Android Emoji", "Twemoji Mozilla", sans-serif;
+}
+
+/* Prevent any text-transform or letter-spacing from breaking emoji */
+.emoji-picker-wrapper * {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  font-variant-emoji: emoji;
+}
+
+/* Ensure flag emojis display as colorful emoji images, not text */
+.emoji-picker-wrapper img.epr-emoji-img,
+.emoji-picker-wrapper span.epr-emoji-img {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "EmojiOne Color", "Android Emoji", "Twemoji Mozilla", sans-serif;
+  color: transparent;
+  text-shadow: 0 0 0 var(--text-primary);
+}
+
+/* Mention dropdown styles */
+.mention-dropdown {
+  font-family: var(--font-sans);
+}
+
+.mention-dropdown-item {
+  font-family: var(--font-sans);
+}

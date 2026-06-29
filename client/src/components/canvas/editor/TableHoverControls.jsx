@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 
 /**
- * TableHoverControls — Displays hover-triggered controls on table borders.
+ * Displays hover-triggered controls on table borders.
  *
  * - Bottom border: "Insert row" (blue +) and "Delete row" (red −) buttons
  * - Right border:  "Insert column" (blue +) and "Delete column" (red −) buttons

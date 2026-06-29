@@ -1143,6 +1143,7 @@ export const useCanvasStore = create((set, get) => ({
   },
 
   isCanvasSaved: (canvasId) => {
-    return get().savedCanvasIds.has(canvasId);
+    const ids = get().savedCanvasIds;
+    return ids && typeof ids.has === "function" ? ids.has(canvasId) : false;
   },
 }));

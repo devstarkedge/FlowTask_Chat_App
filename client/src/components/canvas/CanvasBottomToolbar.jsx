@@ -4,6 +4,7 @@ import {
   X,
   Smile,
   Paperclip,
+  AtSign,
   CheckSquare,
   Table2,
   LayoutGrid,
@@ -16,6 +17,7 @@ const CanvasBottomToolbar = React.memo(function CanvasBottomToolbar({
   onToggleInsertMenu,
   onEmojiClick,
   onFileClick,
+  onMentionClick,
   emojiBtnRef,
   toggleBtnRef,
   children,
@@ -48,8 +50,18 @@ const CanvasBottomToolbar = React.memo(function CanvasBottomToolbar({
 
         <span className="canvas-toolbar-divider" />
 
-        {/* Heading 1 (Aa) */}
+        {/* @ Mention */}
         <button
+          className="canvas-toolbar-btn"
+          title="Mention someone (@)"
+          aria-label="Insert mention"
+          onClick={onMentionClick}
+        >
+          <AtSign size={16} />
+        </button>
+
+        {/* Heading 1 (Aa) */}
+        {/* <button
           className={`canvas-toolbar-btn ${
             editor.isActive("heading", { level: 1 }) ? "is-active" : ""
           }`}
@@ -60,7 +72,7 @@ const CanvasBottomToolbar = React.memo(function CanvasBottomToolbar({
           }
         >
           <span className="canvas-toolbar-aa-label">Aa</span>
-        </button>
+        </button> */}
 
         {/* Emoji Selector */}
         <button

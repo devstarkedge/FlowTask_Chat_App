@@ -1,5 +1,5 @@
 /**
- * useCanvasCursor.js — Cursor position emission for collaborative presence.
+ * Cursor position emission for collaborative presence.
  *
  * Emits cursor position on selectionUpdate so other peers can show a
  * lightweight presence cursor anchored to the block DOM element.

@@ -1,5 +1,5 @@
 /**
- * useCanvasEditor.js — Thin orchestrator that composes focused sub-hooks.
+ * Thin orchestrator that composes focused sub-hooks.
  *
  * Creates the TipTap editor via useEditor(), wires up stable callback refs,
  * and delegates save / content-sync / cursor / typing to dedicated hooks.

@@ -1,20 +1,87 @@
-import Image from '@tiptap/extension-image';
+/**
+ * ImageNode — Enhanced canvas image node with rich metadata, error handling,
+ * and preview modal integration using custom events.
+ *
+ * Attributes stored:
+ *  - src, fileId, fileName, mimeType, fileSize, thumbnailUrl
+ *  - alt, width, height, loading
+ *
+ * The preview modal is triggered via a custom DOM event that the parent
+ * EnterpriseCanvasEditor listens for, avoiding React rendering inside
+ * ProseMirror node views.
+ */
 
-// Minimum and maximum resize bounds (pixels)
+import Image from '@tiptap/extension-image';
+import { buildImageUrl, isPlaceholderUrl } from '../../../services/mediaService';
+
 const MIN_WIDTH = 100;
 const MIN_HEIGHT = 60;
 
+// Custom event name for opening previews from ProseMirror node views
+const PREVIEW_EVENT = 'canvas:open-preview';
+
 export default Image.extend({
+  name: 'image',
+
   addAttributes() {
     return {
       ...this.parent?.(),
+      // Rich metadata
+      fileId: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-file-id'),
+        renderHTML: attributes => {
+          if (!attributes.fileId) return {};
+          return { 'data-file-id': attributes.fileId };
+        },
+      },
+      fileName: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-file-name'),
+        renderHTML: attributes => {
+          if (!attributes.fileName) return {};
+          return { 'data-file-name': attributes.fileName };
+        },
+      },
+      mimeType: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-mime-type'),
+        renderHTML: attributes => {
+          if (!attributes.mimeType) return {};
+          return { 'data-mime-type': attributes.mimeType };
+        },
+      },
+      fileSize: {
+        default: 0,
+        parseHTML: element => parseInt(element.getAttribute('data-file-size'), 10) || 0,
+        renderHTML: attributes => {
+          if (!attributes.fileSize) return {};
+          return { 'data-file-size': String(attributes.fileSize) };
+        },
+      },
+      thumbnailUrl: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-thumbnail-url'),
+        renderHTML: attributes => {
+          if (!attributes.thumbnailUrl) return {};
+          return { 'data-thumbnail-url': attributes.thumbnailUrl };
+        },
+      },
+      // Display attributes
+      alt: {
+        default: null,
+        parseHTML: element => element.getAttribute('alt'),
+        renderHTML: attributes => {
+          if (!attributes.alt) return {};
+          return { alt: attributes.alt };
+        },
+      },
       width: {
         default: '100%',
         parseHTML: element => element.getAttribute('width') || element.style.width || '100%',
         renderHTML: attributes => {
           if (!attributes.width) return {};
           const w = attributes.width;
-          // If it's a number, treat as px; otherwise use as-is (e.g. "80%", "400px")
           const widthVal = typeof w === 'number' ? `${w}px` : w;
           return {
             width: typeof w === 'number' ? w : undefined,
@@ -46,22 +113,6 @@ export default Image.extend({
           };
         },
       },
-      alt: {
-        default: null,
-        parseHTML: element => element.getAttribute('alt'),
-        renderHTML: attributes => {
-          if (!attributes.alt) return {};
-          return { alt: attributes.alt };
-        },
-      },
-      title: {
-        default: null,
-        parseHTML: element => element.getAttribute('title'),
-        renderHTML: attributes => {
-          if (!attributes.title) return {};
-          return { title: attributes.title };
-        },
-      },
     };
   },
 
@@ -71,13 +122,31 @@ export default Image.extend({
       container.className = 'canvas-image-node-container';
       container.style.cssText = 'position: relative; margin: 12px 0; display: inline-block; max-width: 100%;';
 
+      // ── Image element ──────────────────────────────────────────────────
       const img = document.createElement('img');
-      img.src = node.attrs.src || '';
-      img.alt = node.attrs.alt || '';
-      // Apply stored dimensions
+
+      // CRITICAL: Use proxy URL for authenticated access to Cloudinary
+      // Direct Cloudinary URLs fail without auth; proxy routes through our server
+      const imageFile = {
+        secureUrl: node.attrs.src,
+        fileId: node.attrs.fileId,
+        _id: node.attrs.fileId,
+        assetId: node.attrs.fileId,
+      };
+      const resolvedSrc = buildImageUrl(imageFile);
+
+      // Handle placeholder URLs (still uploading)
+      if (!resolvedSrc || isPlaceholderUrl(resolvedSrc)) {
+        img.style.display = 'none';
+      } else {
+        img.src = resolvedSrc;
+      }
+
+      img.alt = node.attrs.alt || node.attrs.fileName || '';
+
+      let imgStyle = 'max-width: 100%; height: auto; border-radius: 8px; display: block; cursor: pointer; border: 1px solid var(--border-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.04);';
       const storedWidth = node.attrs.width;
       const storedHeight = node.attrs.height;
-      let imgStyle = 'max-width: 100%; height: auto; border-radius: 8px; display: block; cursor: pointer; border: 1px solid var(--border-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.04);';
       if (storedWidth && storedWidth !== '100%') {
         imgStyle += ` width: ${typeof storedWidth === 'number' ? storedWidth + 'px' : storedWidth};`;
       }
@@ -86,6 +155,79 @@ export default Image.extend({
       }
       img.style.cssText = imgStyle;
 
+      // ── Loading placeholder ────────────────────────────────────────────
+      const loadingPlaceholder = document.createElement('div');
+      loadingPlaceholder.style.cssText = [
+        'display: none',
+        'align-items: center',
+        'justify-content: center',
+        'gap: 8px',
+        'padding: 20px 24px',
+        'background: var(--bg-secondary)',
+        'border: 1px dashed var(--border-primary)',
+        'border-radius: 10px',
+        'margin: 12px 0',
+        'color: var(--text-muted)',
+        'font-size: 13px',
+      ].join(';');
+      loadingPlaceholder.innerHTML = '<div style="width:20px;height:20px;border:2px solid var(--border-primary);border-top-color:var(--accent-primary);border-radius:50%;animation:spin 0.8s linear infinite;"></div><span>Loading image...</span>';
+
+      // Show loading state for placeholder URLs
+      if (!resolvedSrc || isPlaceholderUrl(resolvedSrc)) {
+        loadingPlaceholder.style.display = 'flex';
+      }
+
+      // ── Error placeholder ──────────────────────────────────────────────
+      const errorPlaceholder = document.createElement('div');
+      errorPlaceholder.style.cssText = [
+        'display: none',
+        'align-items: center',
+        'justify-content: center',
+        'gap: 8px',
+        'padding: 20px 24px',
+        'background: var(--bg-secondary)',
+        'border: 1px dashed var(--border-primary)',
+        'border-radius: 10px',
+        'margin: 12px 0',
+        'color: var(--text-muted)',
+        'font-size: 13px',
+        'cursor: pointer',
+      ].join(';');
+      errorPlaceholder.innerHTML = '<span>🖼️</span><span>Image failed to load — click to retry</span>';
+      errorPlaceholder.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Retry with proxy URL
+        const retryFile = {
+          secureUrl: node.attrs.src,
+          fileId: node.attrs.fileId,
+          _id: node.attrs.fileId,
+          assetId: node.attrs.fileId,
+        };
+        const retryUrl = buildImageUrl(retryFile);
+        if (retryUrl && !isPlaceholderUrl(retryUrl)) {
+          img.src = retryUrl;
+          loadingPlaceholder.style.display = 'none';
+          errorPlaceholder.style.display = 'none';
+          img.style.display = 'block';
+        }
+      });
+
+      img.addEventListener('error', () => {
+        // Only show error if we have a real URL that failed (not placeholder)
+        if (resolvedSrc && !isPlaceholderUrl(resolvedSrc)) {
+          img.style.display = 'none';
+          loadingPlaceholder.style.display = 'none';
+          errorPlaceholder.style.display = 'flex';
+        }
+      });
+
+      img.addEventListener('load', () => {
+        loadingPlaceholder.style.display = 'none';
+        errorPlaceholder.style.display = 'none';
+        img.style.display = 'block';
+      });
+
+      // ── Loading state ──────────────────────────────────────────────────
       if (node.attrs.loading) {
         img.style.opacity = '0.4';
         img.style.filter = 'blur(2px)';
@@ -93,30 +235,45 @@ export default Image.extend({
         img.style.background = 'var(--bg-secondary)';
       }
 
-      // Click to preview — open image in overlay (only when not resizing)
+      // ── Click to preview via custom event ──────────────────────────────
       let isResizing = false;
+
       img.addEventListener('click', (e) => {
         if (isResizing) return;
         e.stopPropagation();
+        e.preventDefault(); // CRITICAL: prevents any navigation/redirect
+
         if (!node.attrs.src || node.attrs.loading) return;
 
-        const overlay = document.createElement('div');
-        overlay.className = 'canvas-image-preview-overlay';
-        overlay.style.cssText = 'position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; cursor: pointer; animation: fadeIn 200ms ease;';
+        // Build complete file metadata for preview modal
+        const fileData = {
+          _id: node.attrs.fileId,
+          fileId: node.attrs.fileId,
+          assetId: node.attrs.fileId,
+          url: node.attrs.src,
+          src: node.attrs.src,
+          secureUrl: node.attrs.src,
+          fileName: node.attrs.fileName || 'Image',
+          name: node.attrs.fileName || 'Image',
+          originalName: node.attrs.fileName || 'Image',
+          mimeType: node.attrs.mimeType || 'image/png',
+          type: node.attrs.mimeType || 'image/png',
+          fileSize: node.attrs.fileSize || 0,
+          size: node.attrs.fileSize || 0,
+          thumbnailUrl: node.attrs.thumbnailUrl || node.attrs.src,
+          alt: node.attrs.alt || '',
+        };
 
-        const previewImg = document.createElement('img');
-        previewImg.src = node.attrs.src;
-        previewImg.style.cssText = 'max-width: 90vw; max-height: 90vh; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); object-fit: contain;';
-
-        overlay.appendChild(previewImg);
-        overlay.addEventListener('click', () => overlay.remove());
-        document.addEventListener('keydown', function escClose(e) {
-          if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', escClose); }
+        // Dispatch custom event for parent component to handle
+        const event = new CustomEvent(PREVIEW_EVENT, {
+          bubbles: true,
+          cancelable: true,
+          detail: { file: fileData },
         });
-        document.body.appendChild(overlay);
+        container.dispatchEvent(event);
       });
 
-      // ── Resize handle (bottom-right corner) ─────────────────────────────
+      // ── Resize handle ──────────────────────────────────────────────────
       const resizeHandle = document.createElement('div');
       resizeHandle.className = 'canvas-image-resize-handle';
       resizeHandle.style.cssText = [
@@ -135,56 +292,41 @@ export default Image.extend({
         'box-shadow: 0 1px 3px rgba(0,0,0,0.3)',
       ].join(';');
 
-      // Show/hide handle on hover
       container.addEventListener('mouseenter', () => { resizeHandle.style.opacity = '1'; });
       container.addEventListener('mouseleave', () => {
         if (!isResizing) resizeHandle.style.opacity = '0';
       });
 
-      // ── Drag-to-resize logic ────────────────────────────────────────────
       resizeHandle.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
         isResizing = true;
         resizeHandle.style.opacity = '1';
 
-        // Capture natural dimensions at drag start
         const rect = img.getBoundingClientRect();
         const naturalWidth = rect.width;
         const naturalHeight = rect.height;
         const aspectRatio = naturalWidth / naturalHeight;
         const startX = e.clientX;
         const startWidth = naturalWidth;
-
-        // Compute the max width from the container's parent (the editor)
         const editorEl = editor.view?.dom;
         const maxAllowedWidth = editorEl
-          ? editorEl.getBoundingClientRect().width - 40  // 40px gutter
+          ? editorEl.getBoundingClientRect().width - 40
           : window.innerWidth - 40;
 
         const onMouseMove = (moveEvent) => {
           moveEvent.preventDefault();
           const deltaX = moveEvent.clientX - startX;
           let newWidth = Math.round(startWidth + deltaX);
-
-          // Enforce min/max bounds
           newWidth = Math.max(MIN_WIDTH, Math.min(newWidth, maxAllowedWidth));
-
-          // Aspect ratio lock: compute height from width
           const newHeight = Math.round(newWidth / aspectRatio);
-
-          // Enforce minimum height
           const clampedHeight = Math.max(MIN_HEIGHT, newHeight);
           const clampedWidth = clampedHeight !== newHeight
             ? Math.round(newHeight * aspectRatio)
             : newWidth;
-
-          // Live preview (update DOM immediately for smooth UX)
           img.style.width = `${clampedWidth}px`;
           img.style.height = `${clampedHeight}px`;
           img.style.maxWidth = `${clampedWidth}px`;
-
-          // Show dimension tooltip
           showDimensionTooltip(container, clampedWidth, clampedHeight);
         };
 
@@ -194,16 +336,10 @@ export default Image.extend({
           document.removeEventListener('mouseup', onMouseUp);
           removeDimensionTooltip(container);
           resizeHandle.style.opacity = '0';
-
-          // Compute final dimensions
           const finalRect = img.getBoundingClientRect();
           const finalWidth = Math.round(finalRect.width);
           const finalHeight = Math.round(finalRect.height);
-
-          // Reset isResizing after a short delay to prevent click-through
           setTimeout(() => { isResizing = false; }, 100);
-
-          // Persist to ProseMirror node attrs via a transaction
           if (typeof getPos === 'function') {
             const pos = getPos();
             if (typeof pos === 'number') {
@@ -216,7 +352,6 @@ export default Image.extend({
                   }),
                 );
               } catch (err) {
-                // eslint-disable-next-line no-console
                 console.warn('[ImageNode] Failed to persist resize:', err);
               }
             }
@@ -227,13 +362,13 @@ export default Image.extend({
         document.addEventListener('mouseup', onMouseUp);
       });
 
-      // Prevent editor from handling mousedown on the resize handle
       resizeHandle.addEventListener('mousedown', (e) => e.stopPropagation(), true);
 
       container.appendChild(img);
+      container.appendChild(loadingPlaceholder);
+      container.appendChild(errorPlaceholder);
       container.appendChild(resizeHandle);
 
-      // ── Dimension tooltip helper ────────────────────────────────────────
       function showDimensionTooltip(parent, w, h) {
         let tooltip = parent.querySelector('.canvas-image-resize-tooltip');
         if (!tooltip) {
@@ -266,17 +401,40 @@ export default Image.extend({
         dom: container,
         update: (updatedNode) => {
           if (updatedNode.type.name !== 'image') return false;
-          img.src = updatedNode.attrs.src || '';
+
+          // CRITICAL: Re-resolve proxy URL on every update
+          const updatedImageFile = {
+            secureUrl: updatedNode.attrs.src,
+            fileId: updatedNode.attrs.fileId,
+            _id: updatedNode.attrs.fileId,
+            assetId: updatedNode.attrs.fileId,
+          };
+          const resolvedSrc = buildImageUrl(updatedImageFile);
+          const newSrc = resolvedSrc || updatedNode.attrs.src || '';
+
+          if (newSrc !== img.src) {
+            img.src = newSrc;
+            // Reset states on src change
+            errorPlaceholder.style.display = 'none';
+            loadingPlaceholder.style.display = isPlaceholderUrl(newSrc) ? 'flex' : 'none';
+            img.style.display = newSrc && !isPlaceholderUrl(newSrc) ? 'block' : 'none';
+          }
+
+          img.alt = updatedNode.attrs.alt || updatedNode.attrs.fileName || '';
           if (updatedNode.attrs.loading) {
             img.style.opacity = '0.4';
             img.style.filter = 'blur(2px)';
             img.style.minHeight = '120px';
+            loadingPlaceholder.style.display = 'flex';
           } else {
             img.style.opacity = '1';
             img.style.filter = 'none';
             img.style.minHeight = '';
+            if (!isPlaceholderUrl(newSrc)) {
+              loadingPlaceholder.style.display = 'none';
+            }
           }
-          // Apply stored dimensions on update (e.g., after collab sync)
+
           const w = updatedNode.attrs.width;
           const h = updatedNode.attrs.height;
           if (w && w !== '100%') {
@@ -289,6 +447,7 @@ export default Image.extend({
           } else {
             img.style.height = '';
           }
+
           return true;
         },
       };

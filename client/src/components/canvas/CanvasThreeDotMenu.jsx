@@ -75,7 +75,7 @@ export default function CanvasThreeDotMenu({
   const openSidebar = useCanvasUiStore((s) => s.openSidebar);
 
   const canvasId = canvas?._id;
-  const savedForLater = canvasId ? isCanvasSaved(canvasId) : false;
+  const savedForLater = (canvasId && typeof isCanvasSaved === "function") ? isCanvasSaved(canvasId) : false;
 
   const [currentFontLabel, setCurrentFontLabel] = useState(() => {
     const persisted = loadPersistedFont();

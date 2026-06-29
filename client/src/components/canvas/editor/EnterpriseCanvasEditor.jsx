@@ -19,6 +19,7 @@ import { useCanvasFileUpload } from "../overlays/CanvasFileUpload";
 import { useCanvasMediaRecorder } from "../overlays/CanvasMediaRecorder";
 import { useCanvasMentionDropdown } from "../overlays/CanvasMentionDropdown";
 import { useCanvasEmojiPicker } from "../overlays/CanvasEmojiPicker";
+import CanvasPreviewModal from "../CanvasPreviewModal";
 import "../styles/canvas-shell.css";
 import "../styles/canvas-editor.css";
 import "../styles/canvas-toolbar.css";
@@ -44,6 +45,8 @@ export default function CanvasEditorUI({
   const [collabTimedOut, setCollabTimedOut] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const handleOpenShareModal = useCallback(() => setShowShareModal(true), []);
+  const [previewFile, setPreviewFile] = useState(null);
+  const handleClosePreview = useCallback(() => setPreviewFile(null), []);
   const emojiBtnRef = useRef(null);
   const toggleBtnRef = useRef(null);
   const editorWrapperRef = useRef(null);
@@ -114,6 +117,20 @@ export default function CanvasEditorUI({
 
   const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
 
+  // ── Wire mention keyboard navigation into editor ──────────────────────────
+  useEffect(() => {
+    if (!editor) return;
+    const editorDom = editor.view?.dom;
+    if (!editorDom) return;
+
+    const handler = (event) => {
+      handleMentionKeyDown(event);
+    };
+
+    editorDom.addEventListener('keydown', handler);
+    return () => editorDom.removeEventListener('keydown', handler);
+  }, [editor, handleMentionKeyDown]);
+
   // ── Overlay hooks (extracted from monolith) ─────────────────────────────────
   const {
     triggerFileSelect,
@@ -130,6 +147,7 @@ export default function CanvasEditorUI({
   const {
     handleMentionFromToolbar,
     MentionDropdownPortal,
+    handleMentionKeyDown,
   } = useCanvasMentionDropdown({
     editor,
     isViewOnly,
@@ -236,6 +254,28 @@ export default function CanvasEditorUI({
         }
     }
   };
+
+  // ── Listen for custom 'canvas:open-preview' events from node views ──────
+  useEffect(() => {
+    if (!editor) return undefined;
+    const editorDom = editor.view?.dom;
+    if (!editorDom) return undefined;
+
+    const handler = (e) => {
+      // Prevent any default navigation behavior
+      e.preventDefault?.();
+      const file = e.detail?.file;
+      if (file) {
+        setPreviewFile(file);
+      }
+    };
+
+    // Listen on the editor DOM for bubbling custom events from nodes
+    editorDom.addEventListener('canvas:open-preview', handler);
+    return () => {
+      editorDom.removeEventListener('canvas:open-preview', handler);
+    };
+  }, [editor]);
 
   // Mention detection, emoji selection, and mention toolbar are now
   // handled by useCanvasMentionDropdown and useCanvasEmojiPicker hooks.
@@ -406,6 +446,11 @@ export default function CanvasEditorUI({
         menu={slashMenu}
         onClose={closeSlashMenu}
       />
+
+      {/* File Preview Modal (triggered by custom events from media node views) */}
+      {previewFile && (
+        <CanvasPreviewModal file={previewFile} onClose={handleClosePreview} />
+      )}
 
       {/* Share Modal (state managed here, triggered by header + details sidebar) */}
       {showShareModal && (

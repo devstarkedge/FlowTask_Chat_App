@@ -101,11 +101,23 @@ const markdownToHtml = (text) => {
   // Blockquotes (lines starting with >)
   html = html.replace(/^&gt;\s?(.*)$/gm, "<blockquote>$1</blockquote>");
 
-  // Bullet list items (lines starting with - or *)
-  html = html.replace(/^[-*]\s+(.*)$/gm, "<li>$1</li>");
+  // Bullet list blocks (consecutive lines starting with - or *)
+  html = html.replace(/(?:^[-*]\s+.*(?:\r?\n|$))+/gm, (match) => {
+    const items = match.trim().split('\n').map(line => {
+      const content = line.replace(/^[-*]\s+/, '');
+      return `<li>${content}</li>`;
+    }).join('');
+    return `<ul>${items}</ul>`;
+  });
 
-  // Numbered list items
-  html = html.replace(/^\d+\.\s+(.*)$/gm, "<li>$1</li>");
+  // Numbered list blocks (consecutive lines starting with digits)
+  html = html.replace(/(?:^\d+\.\s+.*(?:\r?\n|$))+/gm, (match) => {
+    const items = match.trim().split('\n').map(line => {
+      const content = line.replace(/^\d+\.\s+/, '');
+      return `<li>${content}</li>`;
+    }).join('');
+    return `<ol>${items}</ol>`;
+  });
 
   // Wrap paragraphs
   html = html
@@ -708,7 +720,10 @@ const createStyles = (colors) =>
       flex: 1,
       fontSize: 15,
       maxHeight: 100,
-      paddingVertical: 8,
+      paddingVertical: Platform.OS === 'android' ? 6 : 8,
+      paddingHorizontal: Platform.OS === 'android' ? 4 : 0,
+      textAlignVertical: 'center',
+      letterSpacing: 0,
       ...(Platform.OS === "web" && { outlineWidth: 0, outlineStyle: "none" }),
     },
     sendButton: {

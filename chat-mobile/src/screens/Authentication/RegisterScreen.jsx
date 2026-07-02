@@ -202,9 +202,9 @@ const RegisterScreen = ({ navigation }) => {
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Password</Text>
-              <View style={styles.passwordWrapper}>
+              <View style={[styles.passwordWrapper, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
                   <TextInput
-                    style={[styles.passwordInput, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.inputText }]}
+                    style={[styles.passwordInput, { color: colors.inputText }]}
                     placeholder="Create a strong password"
                     placeholderTextColor={colors.inputPlaceholder}
                     secureTextEntry={!showPassword}
@@ -225,15 +225,15 @@ const RegisterScreen = ({ navigation }) => {
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Confirm Password</Text>
-              <View style={styles.passwordWrapper}>
+              <View style={[
+                styles.passwordWrapper,
+                form.confirmPassword &&
+                  form.confirmPassword !== form.password &&
+                  styles.inputError,
+                { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }
+              ]}>
                   <TextInput
-                    style={[
-                      styles.passwordInput,
-                      form.confirmPassword &&
-                        form.confirmPassword !== form.password &&
-                        styles.inputError,
-                      { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.inputText }
-                    ]}
+                    style={[styles.passwordInput, { color: colors.inputText }]}
                     placeholder="Confirm password"
                     placeholderTextColor={colors.inputPlaceholder}
                     secureTextEntry={!showConfirm}
@@ -305,10 +305,10 @@ const createStyles = (colors) =>
     formGroup: { marginBottom: 16 },
     label: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6, color: colors.textTertiary },
     input: { borderWidth: 1, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14, fontSize: 15, backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.inputText },
-    passwordWrapper: { position: 'relative' },
-    passwordInput: { borderWidth: 1, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14, paddingRight: 44, fontSize: 15, backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.inputText },
+    passwordWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10 },
+    passwordInput: { flex: 1, paddingVertical: 12, paddingHorizontal: 14, fontSize: 15 },
     inputError: { borderColor: `${colors.error}33` },
-    eyeButton: { position: 'absolute', right: 12, top: '50%', transform: [{ translateY: -9 }], padding: 8 },
+    eyeButton: { paddingHorizontal: 12, justifyContent: 'center', alignItems: 'center' },
     strengthBar: { height: 3, borderRadius: 3, overflow: 'hidden', marginTop: 8, backgroundColor: colors.border },
     strengthFill: { height: '100%', borderRadius: 3 },
     checksContainer: { borderRadius: 10, padding: 12, marginVertical: 12, gap: 8, backgroundColor: `${colors.primary}08` },

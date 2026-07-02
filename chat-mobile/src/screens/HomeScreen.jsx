@@ -399,13 +399,12 @@ const HomeScreen = ({ navigation }) => {
   );
 
   // Categorize channels
-  const { unreadChannels, regularChannels, dmChannels } = useMemo(() => {
-    const nonDM = channels.filter((c) => c.type !== "dm");
-    const unread = nonDM.filter((c) => (unreads[c._id] || 0) > 0);
-    const regular = nonDM.filter((c) => (unreads[c._id] || 0) === 0);
-    const dms = channels.filter((c) => c.type === "dm");
+  const { unreadConversations, regularChannels, regularDMs } = useMemo(() => {
+    const unread = channels.filter((c) => (unreads[c._id] || 0) > 0);
+    const regularCh = channels.filter((c) => c.type !== "dm" && (unreads[c._id] || 0) === 0);
+    const regularD = channels.filter((c) => c.type === "dm" && (unreads[c._id] || 0) === 0);
 
-    dms.sort((a, b) => {
+    regularD.sort((a, b) => {
       const aIsSelf = a.dmRecipientId === user?._id;
       const bIsSelf = b.dmRecipientId === user?._id;
       if (aIsSelf && !bIsSelf) return -1;
@@ -420,22 +419,24 @@ const HomeScreen = ({ navigation }) => {
     });
 
     return {
-      unreadChannels: unread,
-      regularChannels: regular,
-      dmChannels: dms,
+      unreadConversations: unread,
+      regularChannels: regularCh,
+      regularDMs: regularD,
     };
   }, [channels, unreads, user]);
 
   const sections = useMemo(() => {
     const result = [];
-    result.push({
-      key: "unreads",
-      title: "Unreads",
-      icon: null,
-      data: sectionsExpanded.unreads ? unreadChannels : [],
-      type: "channel",
-      showAddChannel: true,
-    });
+    if (unreadConversations.length > 0) {
+      result.push({
+        key: "unreads",
+        title: "Unreads",
+        icon: null,
+        data: sectionsExpanded.unreads ? unreadConversations : [],
+        type: "mixed",
+        showAddChannel: false,
+      });
+    }
     result.push({
       key: "channels",
       title: "Channels",
@@ -448,12 +449,12 @@ const HomeScreen = ({ navigation }) => {
       key: "dms",
       title: "Direct Messages",
       icon: null,
-      data: sectionsExpanded.dms ? dmChannels : [],
+      data: sectionsExpanded.dms ? regularDMs : [],
       type: "dm",
       showAddChannel: false,
     });
     return result;
-  }, [unreadChannels, regularChannels, dmChannels, sectionsExpanded]);
+  }, [unreadConversations, regularChannels, regularDMs, sectionsExpanded]);
 
   const renderSectionHeader = useCallback(
     ({ section }) => (
@@ -461,7 +462,7 @@ const HomeScreen = ({ navigation }) => {
         title={section.title}
         icon={section.icon}
         sectionKey={section.key}
-        isExpanded={sectionsExpanded[section.key]}
+        isExpanded={sectionsExpanded[section.key] ?? true}
         onToggle={toggleSection}
         colors={colors}
       />
@@ -480,13 +481,13 @@ const HomeScreen = ({ navigation }) => {
         />
       );
     },
-    [sectionsExpanded, navigation, colors],
+    [sectionsExpanded, colors],
   );
 
   const renderItem = useCallback(
     ({ item, section }) => {
       const unreadCount = unreads[item._id] || 0;
-      if (section.type === "dm") {
+      if (section.type === "dm" || (section.type === "mixed" && item.type === "dm")) {
         const isSelf = item.dmRecipientId === user?._id;
         return (
           <DMRow

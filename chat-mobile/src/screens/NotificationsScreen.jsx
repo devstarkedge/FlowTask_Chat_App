@@ -1,6 +1,6 @@
 /**
- * NotificationsScreen — notification preferences + feed.
- * Slack-like: preference controls at top, notification list below.
+ * notification preferences + feed.
+ * preference controls at top, notification list below.
  */
 import React, { useEffect, useCallback } from "react";
 import {

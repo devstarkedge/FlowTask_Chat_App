@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -44,7 +44,11 @@ import FilesScreen from "../screens/FilesScreen";
 import SearchScreen from "../screens/SearchScreen";
 import PinnedMessagesScreen from "../screens/PinnedMessagesScreen";
 import PeopleScreen from "../screens/PeopleScreen";
+import InviteManagementScreen from "../screens/InviteManagementScreen";
 import NewMessageScreen from "../screens/NewMessageScreen";
+import CanvasListScreen from "../screens/Canvas/CanvasListScreen";
+import CanvasEditorScreen from "../screens/Canvas/CanvasEditorScreen";
+
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -109,9 +113,9 @@ function BottomTabs({ navigation }) {
             backgroundColor: colors.backgroundSecondary,
             borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: colors.border,
-            paddingBottom: insets.bottom > 0 ? insets.bottom : 4,
+            paddingBottom: insets.bottom > 0 ? insets.bottom : 6,
             paddingTop: 4,
-            height: 50 + (insets.bottom > 0 ? insets.bottom : 0),
+            height: 50 + (insets.bottom > 0 ? insets.bottom : 6),
           },
           tabBarLabelStyle: {
             fontSize: 10,
@@ -257,7 +261,12 @@ export default function AppNavigation() {
           <Stack.Screen
             name="ChannelDetails"
             component={ChannelDetailsScreen}
-            options={{ headerShown: true, title: "Channel Details" }}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="InviteManagement"
+            component={InviteManagementScreen}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="Threads"
@@ -287,7 +296,7 @@ export default function AppNavigation() {
           <Stack.Screen
             name="Notifications"
             component={NotificationsScreen}
-            options={{ headerShown: true, title: "Notifications" }}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="Preferences"
@@ -302,7 +311,7 @@ export default function AppNavigation() {
           <Stack.Screen
             name="Files"
             component={FilesScreen}
-            options={{ headerShown: true, title: "Files" }}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="Search"
@@ -327,6 +336,16 @@ export default function AppNavigation() {
               presentation: 'modal',
               animation: 'slide_from_bottom',
             }}
+          />
+          <Stack.Screen
+            name="CanvasList"
+            component={CanvasListScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="CanvasEditor"
+            component={CanvasEditorScreen}
+            options={{ headerShown: false }}
           />
         </>
       )}

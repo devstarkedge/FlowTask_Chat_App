@@ -20,6 +20,7 @@ import {
   Search,
   Users,
   User,
+  UserPlus,
 } from "lucide-react-native";
 import logger from '../utils/logger';
 
@@ -141,7 +142,13 @@ const PeopleScreen = ({ navigation }) => {
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
           People
         </Text>
-        <View style={{ width: 32 }} />
+        <TouchableOpacity
+          onPress={() => navigation.navigate("InviteManagement")}
+          style={styles.backButton}
+          hitSlop={8}
+        >
+          <UserPlus size={20} color={colors.accent || colors.primary} />
+        </TouchableOpacity>
       </View>
 
       {/* Search */}

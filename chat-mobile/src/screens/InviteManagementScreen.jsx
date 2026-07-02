@@ -1,349 +1,395 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  RefreshControl,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
+  Switch,
+  Modal,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeStore } from "../stores/themeStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
+import { useChannelStore } from "../stores/channelStore";
 import { workspaceAPI } from "../services/api";
+import * as Clipboard from "expo-clipboard";
 import Toast from "react-native-toast-message";
 import {
   ArrowLeft,
-  Send,
-  UserPlus,
-  RefreshCw,
-  Ban,
   Mail,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  Users,
-  Eye,
+  Plus,
+  X,
+  Check,
+  Copy,
+  ChevronRight,
+  Search,
+  Hash,
+  Globe,
+  UserPlus,
   Shield,
+  Info,
 } from "lucide-react-native";
 import logger from "../utils/logger";
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   CONSTANTS
-   ───────────────────────────────────────────────────────────────────────────── */
-
-const STATUS_CONFIG = {
-  pending:  { label: "Pending",  icon: Clock,       color: "#38bdf8" },
-  accepted: { label: "Accepted", icon: CheckCircle2, color: "#22c55e" },
-  expired:  { label: "Expired",  icon: AlertCircle,  color: "#94a3b8" },
-  revoked:  { label: "Revoked",  icon: XCircle,      color: "#f87171" },
+const PLAN_FEATURES = {
+  free:       { guestAccess: false },
+  pro:        { guestAccess: true  },
+  enterprise: { guestAccess: true  },
 };
-
-const TYPE_CONFIG = {
-  member: { label: "Member", icon: Users, color: "#6366f1" },
-  guest:  { label: "Guest",  icon: Eye,   color: "#f59e0b" },
-};
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   MAIN COMPONENT
-   ───────────────────────────────────────────────────────────────────────────── */
 
 export default function InviteManagementScreen({ navigation }) {
-  const { colors } = useThemeStore();
+  const { colors, effectiveTheme } = useThemeStore();
+  const insets = useSafeAreaInsets();
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const activeWorkspace   = useWorkspaceStore((s) => s.activeWorkspace);
+  const { channels, fetchChannels } = useChannelStore();
 
-  /* ── Send invite state ── */
-  const [email, setEmail]           = useState("");
-  const [inviteType, setInviteType] = useState("member");
-  const [sending, setSending]       = useState(false);
-
-  /* ── Pending invites state ── */
-  const [invites, setInvites]       = useState([]);
-  const [loading, setLoading]       = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [emails, setEmails] = useState([]);
+  const [emailInput, setEmailInput] = useState("");
+  const [isGuest, setIsGuest] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  
+  const [selectedChannels, setSelectedChannels] = useState([]);
+  const [channelSearch, setChannelSearch] = useState("");
+  const [channelModalVisible, setChannelModalVisible] = useState(false);
+  
+  const [sending, setSending] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 
-  /* ── Fetch invites ── */
-  const fetchInvites = useCallback(async () => {
-    if (!activeWorkspaceId) return;
-    try {
-      const { data } = await workspaceAPI.getAllInvites(activeWorkspaceId, {
-        status: "pending",
-        limit: 50,
-      });
-      setInvites(data.data?.invites || []);
-    } catch (err) {
-      logger.error("Failed to load invites:", err);
-    }
-  }, [activeWorkspaceId]);
-
+  // Load channels
   useEffect(() => {
-    setLoading(true);
-    fetchInvites().finally(() => setLoading(false));
-  }, [fetchInvites]);
+    if (activeWorkspaceId) {
+      fetchChannels(activeWorkspaceId).catch(() => {});
+    }
+  }, [activeWorkspaceId, fetchChannels]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchInvites();
-    setRefreshing(false);
-  };
+  // Pre-select general channel by default
+  useEffect(() => {
+    if (channels.length > 0 && selectedChannels.length === 0) {
+      const generalCh = channels.find(c => c.name.toLowerCase() === "general");
+      if (generalCh) {
+        // Store as string to avoid ObjectId reference-equality failures in .includes()
+        setSelectedChannels([String(generalCh._id)]);
+      }
+    }
+  }, [channels]);
 
-  /* ── Send invite ── */
-  const handleSend = async () => {
-    const trimmed = email.trim();
+  // Invite Link
+  const inviteLink = useMemo(() => {
+    const inviteCode = activeWorkspace?.inviteCode || activeWorkspaceId;
+    return `https://chat-app-api-cyyl.onrender.com/invite?code=${inviteCode}`;
+  }, [activeWorkspace, activeWorkspaceId]);
+
+  const addEmailChip = () => {
+    const trimmed = emailInput.trim().toLowerCase();
     if (!trimmed) return;
     if (!isValidEmail(trimmed)) {
-      Toast.show({ type: "error", text1: "Invalid email", text2: "Please enter a valid email address" });
+      Toast.show({ type: "error", text1: "Invalid email address" });
       return;
     }
+    if (emails.includes(trimmed)) {
+      Toast.show({ type: "error", text1: "Email already added" });
+      return;
+    }
+    setEmails([...emails, trimmed]);
+    setEmailInput("");
+  };
+
+  const removeEmailChip = (target) => {
+    setEmails(emails.filter((e) => e !== target));
+  };
+
+  const filteredChannels = useMemo(() => {
+    return channels.filter((ch) => {
+      if (ch.type === "dm" || ch.type === "group_dm" || ch.type === "system" || ch.type === "self" || ch.isArchived) return false;
+      return ch.name.toLowerCase().includes(channelSearch.toLowerCase());
+    });
+  }, [channels, channelSearch]);
+
+  const toggleChannel = (channelId) => {
+    const id = String(channelId);
+    setSelectedChannels((prev) =>
+      prev.includes(id)
+        ? prev.filter((prevId) => prevId !== id)
+        : [...prev, id]
+    );
+  };
+
+  const copyInviteLink = async () => {
+    await Clipboard.setStringAsync(inviteLink);
+    setLinkCopied(true);
+    Toast.show({ type: "success", text1: "Invite link copied!" });
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
+
+  const handleSend = async () => {
+    let finalEmails = [...emails];
+    if (emailInput.trim()) {
+      const trimmed = emailInput.trim().toLowerCase();
+      if (isValidEmail(trimmed) && !finalEmails.includes(trimmed)) {
+        finalEmails.push(trimmed);
+      } else if (!isValidEmail(trimmed)) {
+        Toast.show({ type: "error", text1: "Invalid email address" });
+        return;
+      }
+    }
+
+    if (finalEmails.length === 0) {
+      Toast.show({ type: "error", text1: "Please add at least one email address" });
+      return;
+    }
+
+    if (isGuest && selectedChannels.length === 0) {
+      Toast.show({ type: "error", text1: "Guests must join at least one channel" });
+      return;
+    }
+
     setSending(true);
+
     try {
-      await workspaceAPI.inviteByEmail(activeWorkspaceId, trimmed, inviteType === "guest" ? "guest" : "member");
-      Toast.show({ type: "success", text1: "Invite sent", text2: `Invitation sent to ${trimmed}` });
-      setEmail("");
-      fetchInvites();
+      const role = isGuest ? "guest" : (isAdmin ? "admin" : "member");
+      const inviteType = isGuest ? "guest" : "member";
+
+      const results = await Promise.allSettled(
+        finalEmails.map((email) =>
+          workspaceAPI.inviteByEmail(activeWorkspaceId, {
+            email,
+            channels: selectedChannels,
+            inviteType,
+            role,
+          })
+        )
+      );
+
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const rejected = results.filter((r) => r.status === "rejected");
+
+      if (succeeded > 0) {
+        Toast.show({
+          type: "success",
+          text1: "Invitations Sent",
+          text2: `Successfully sent ${succeeded} invitation${succeeded > 1 ? "s" : ""}`,
+        });
+        setEmails([]);
+        setEmailInput("");
+        // Reset but keep default channels
+        const generalCh = channels.find(c => c.name.toLowerCase() === "general");
+        setSelectedChannels(generalCh ? [generalCh._id] : []);
+        navigation.goBack();
+      }
+
+      if (rejected.length > 0) {
+        rejected.forEach((r) => {
+          const msg = r.reason?.response?.data?.error?.message || "Failed to invite";
+          Toast.show({ type: "error", text1: "Invite failed", text2: msg });
+        });
+      }
     } catch (err) {
-      const msg = err.response?.data?.error?.message || "Failed to send invite";
-      Toast.show({ type: "error", text1: "Send failed", text2: msg });
+      logger.error("Failed to send invitations:", err);
+      Toast.show({ type: "error", text1: "Error sending invitations" });
     } finally {
       setSending(false);
     }
   };
 
-  /* ── Revoke invite ── */
-  const handleRevoke = (inviteId, inviteEmail) => {
-    Alert.alert(
-      "Revoke Invite",
-      `Revoke the invitation sent to ${inviteEmail}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Revoke",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await workspaceAPI.revokeInvite(activeWorkspaceId, inviteId);
-              Toast.show({ type: "success", text1: "Invite revoked" });
-              setInvites((prev) =>
-                prev.map((inv) =>
-                  inv._id === inviteId ? { ...inv, status: "revoked" } : inv,
-                ),
-              );
-            } catch (err) {
-              Toast.show({
-                type: "error",
-                text1: "Failed",
-                text2: err.response?.data?.error?.message || "Could not revoke invite",
-              });
-            }
-          },
-        },
-      ],
-    );
-  };
+  const plan = activeWorkspace?.plan || "free";
+  const guestAccess = PLAN_FEATURES[plan]?.guestAccess ?? false;
 
-  /* ── Resend invite ── */
-  const handleResend = async (inviteId) => {
-    try {
-      await workspaceAPI.resendInvite(activeWorkspaceId, inviteId);
-      Toast.show({ type: "success", text1: "Invite resent", text2: "A new invite link has been sent" });
-      fetchInvites();
-    } catch (err) {
-      Toast.show({
-        type: "error",
-        text1: "Resend failed",
-        text2: err.response?.data?.error?.message || "Could not resend invite",
-      });
-    }
-  };
-
-  /* ────────────────────────────────────────────── RENDER HELPERS ── */
-
-  const renderInviteItem = ({ item }) => {
-    const statusCfg = STATUS_CONFIG[item.status] || STATUS_CONFIG.pending;
-    const typeCfg   = TYPE_CONFIG[item.inviteType] || TYPE_CONFIG.member;
-    const StatusIcon = statusCfg.icon;
-    const TypeIcon   = typeCfg.icon;
-    const isPending  = item.status === "pending";
-    const canResend  = isPending && (item.resendCount ?? 0) < 3;
-
-    return (
-      <View style={[styles.inviteCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-        <View style={styles.inviteRow}>
-          <View style={styles.inviteInfo}>
-            <View style={styles.inviteEmailRow}>
-              <Mail size={13} color={colors.textSecondary} />
-              <Text style={[styles.inviteEmail, { color: colors.textPrimary }]} numberOfLines={1}>
-                {item.email}
-              </Text>
-            </View>
-            <View style={styles.inviteBadges}>
-              <View style={[styles.badge, { backgroundColor: typeCfg.color + "22" }]}>
-                <TypeIcon size={10} color={typeCfg.color} />
-                <Text style={[styles.badgeText, { color: typeCfg.color }]}>{typeCfg.label}</Text>
-              </View>
-              <View style={[styles.badge, { backgroundColor: statusCfg.color + "22" }]}>
-                <StatusIcon size={10} color={statusCfg.color} />
-                <Text style={[styles.badgeText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
-              </View>
-            </View>
-          </View>
-          {isPending && (
-            <View style={styles.inviteActions}>
-              {canResend && (
-                <TouchableOpacity
-                  style={[styles.actionBtn, { borderColor: colors.border }]}
-                  onPress={() => handleResend(item._id)}
-                >
-                  <RefreshCw size={14} color={colors.accent} />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[styles.actionBtn, { borderColor: colors.border }]}
-                onPress={() => handleRevoke(item._id, item.email)}
-              >
-                <Ban size={14} color="#f87171" />
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  };
-
-  const styles = getStyles(colors);
+  const selectedChannelsNames = useMemo(() => {
+    return channels
+      .filter((ch) => selectedChannels.includes(ch._id))
+      .map((ch) => `#${ch.name}`)
+      .join(", ");
+  }, [channels, selectedChannels]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top"]}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-      >
-        {/* ── Header ── */}
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <ArrowLeft size={20} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <View style={styles.headerText}>
-            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Invite People</Text>
-            <Text style={[styles.headerSub, { color: colors.textSecondary }]} numberOfLines={1}>
-              {activeWorkspace?.name || "Workspace"}
-            </Text>
-          </View>
-        </View>
-
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
-          }
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top"]}>
+      {/* Slack Header */}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+          <X size={22} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Add Members</Text>
+        <TouchableOpacity
+          onPress={handleSend}
+          disabled={sending || (emails.length === 0 && !emailInput.trim())}
+          style={[styles.sendBtn, (emails.length === 0 && !emailInput.trim()) && { opacity: 0.4 }]}
         >
-          {/* ── Send Invite Section ── */}
-          <View style={[styles.section, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-            <View style={styles.sectionHeader}>
-              <UserPlus size={15} color={colors.accent} />
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Send Invite</Text>
-            </View>
+          {sending ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : (
+            <Text style={[styles.sendText, { color: colors.accent }]}>Invite</Text>
+          )}
+        </TouchableOpacity>
+      </View>
 
-            {/* Email Input */}
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        {/* Recipient area (Slack To: style) */}
+        <View style={[styles.recipientArea, { borderBottomColor: colors.border }]}>
+          <Text style={[styles.toLabel, { color: colors.textSecondary }]}>To:</Text>
+          <View style={styles.recipientInputWrap}>
+            {emails.length > 0 && (
+              <View style={styles.chipsRow}>
+                {emails.map((e) => (
+                  <View key={e} style={[styles.chip, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
+                    <Text style={[styles.chipText, { color: colors.textPrimary }]} numberOfLines={1}>{e}</Text>
+                    <TouchableOpacity onPress={() => removeEmailChip(e)} style={styles.chipRemove}>
+                      <X size={10} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
             <TextInput
-              style={[styles.emailInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.textPrimary }]}
-              placeholder="name@company.com"
+              style={[styles.input, { color: colors.textPrimary }]}
+              placeholder={emails.length === 0 ? "Enter email address" : "Add another..."}
               placeholderTextColor={colors.textMuted}
-              value={email}
-              onChangeText={setEmail}
+              value={emailInput}
+              onChangeText={setEmailInput}
+              onSubmitEditing={addEmailChip}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              blurOnSubmit={false}
             />
-
-            {/* Type Toggle */}
-            <View style={styles.typeToggle}>
-              <TouchableOpacity
-                style={[
-                  styles.typeBtn,
-                  inviteType === "member" && { backgroundColor: colors.accent + "22", borderColor: colors.accent },
-                  inviteType !== "member" && { borderColor: colors.border },
-                ]}
-                onPress={() => setInviteType("member")}
-              >
-                <Users size={13} color={inviteType === "member" ? colors.accent : colors.textSecondary} />
-                <Text style={[styles.typeBtnText, { color: inviteType === "member" ? colors.accent : colors.textSecondary }]}>
-                  Member
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.typeBtn,
-                  inviteType === "guest" && { backgroundColor: "#f59e0b22", borderColor: "#f59e0b" },
-                  inviteType !== "guest" && { borderColor: colors.border },
-                ]}
-                onPress={() => setInviteType("guest")}
-              >
-                <Eye size={13} color={inviteType === "guest" ? "#f59e0b" : colors.textSecondary} />
-                <Text style={[styles.typeBtnText, { color: inviteType === "guest" ? "#f59e0b" : colors.textSecondary }]}>
-                  Guest
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Send Button */}
-            <TouchableOpacity
-              style={[styles.sendBtn, { backgroundColor: colors.accent }, (!email.trim() || sending) && { opacity: 0.5 }]}
-              onPress={handleSend}
-              disabled={!email.trim() || sending}
-            >
-              {sending ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Send size={15} color="#fff" />
-                  <Text style={styles.sendBtnText}>Send Invitation</Text>
-                </>
-              )}
-            </TouchableOpacity>
           </View>
+        </View>
 
-          {/* ── Pending Invites Section ── */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Clock size={15} color={colors.textSecondary} />
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Pending Invites</Text>
-            </View>
-
-            {loading ? (
-              <View style={styles.loadingWrap}>
-                <ActivityIndicator size="small" color={colors.accent} />
-                <Text style={[styles.loadingText, { color: colors.textMuted }]}>Loading…</Text>
-              </View>
-            ) : invites.length === 0 ? (
-              <View style={styles.emptyWrap}>
-                <Mail size={28} color={colors.textMuted} />
-                <Text style={[styles.emptyText, { color: colors.textMuted }]}>No pending invites</Text>
-              </View>
-            ) : (
-              <FlatList
-                data={invites}
-                keyExtractor={(item) => item._id}
-                renderItem={renderInviteItem}
-                scrollEnabled={false}
-                ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
-              />
-            )}
+        {/* Channels Row */}
+        <TouchableOpacity
+          style={[styles.rowItem, { borderBottomColor: colors.border }]}
+          onPress={() => setChannelModalVisible(true)}
+        >
+          <View style={styles.rowLeft}>
+            <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>Add to channels</Text>
+            <Text style={[styles.rowValue, { color: colors.textSecondary }]} numberOfLines={1}>
+              {selectedChannelsNames || "Select channels..."}
+            </Text>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          <ChevronRight size={20} color={colors.textTertiary} />
+        </TouchableOpacity>
+
+        {/* Guest Toggle (if permitted) */}
+        {guestAccess && (
+          <View style={[styles.rowItem, { borderBottomColor: colors.border }]}>
+            <View style={styles.rowLeft}>
+              <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>Invite as guest</Text>
+              <Text style={[styles.rowSubLabel, { color: colors.textSecondary }]}>
+                Guests only have access to selected channels
+              </Text>
+            </View>
+            <Switch
+              value={isGuest}
+              onValueChange={(val) => {
+                setIsGuest(val);
+                if (val) setIsAdmin(false);
+              }}
+              trackColor={{ false: "#767577", true: colors.accent + "80" }}
+              thumbColor={isGuest ? colors.accent : "#f4f3f4"}
+            />
+          </View>
+        )}
+
+        {/* Admin Toggle (only if member type) */}
+        {!isGuest && (
+          <View style={[styles.rowItem, { borderBottomColor: colors.border }]}>
+            <View style={styles.rowLeft}>
+              <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>Make workspace admin</Text>
+              <Text style={[styles.rowSubLabel, { color: colors.textSecondary }]}>
+                Admins can manage channels, members, and settings
+              </Text>
+            </View>
+            <Switch
+              value={isAdmin}
+              onValueChange={setIsAdmin}
+              trackColor={{ false: "#767577", true: colors.accent + "80" }}
+              thumbColor={isAdmin ? colors.accent : "#f4f3f4"}
+            />
+          </View>
+        )}
+
+        {/* Link Copy Widget */}
+        <View style={styles.linkContainer}>
+          <Text style={[styles.linkLabel, { color: colors.textSecondary }]}>Or invite by sharing a link:</Text>
+          <TouchableOpacity
+            style={[styles.linkBox, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}
+            onPress={copyInviteLink}
+            activeOpacity={0.7}
+          >
+            <Copy size={16} color={colors.accent} />
+            <Text style={[styles.linkText, { color: colors.textPrimary }]} numberOfLines={1}>
+              {inviteLink}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </SafeAreaView>
+
+    {/* Channel Multi-Select Modal */}
+    <Modal
+      visible={channelModalVisible}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={() => setChannelModalVisible(false)}
+    >
+      <View style={[styles.modalContainer, { backgroundColor: colors.background, paddingTop: insets.top > 0 ? insets.top : 20 }]}>
+        {/* Modal Header */}
+        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => setChannelModalVisible(false)} style={styles.modalHeaderBtn}>
+            <Text style={[styles.cancelText, { color: colors.textPrimary }]}>Cancel</Text>
+          </TouchableOpacity>
+          <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Select Channels</Text>
+          <TouchableOpacity onPress={() => setChannelModalVisible(false)} style={styles.modalHeaderBtn}>
+            <Text style={[styles.doneText, { color: colors.accent }]}>Done</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Modal Search */}
+        <View style={[styles.searchBox, { backgroundColor: colors.backgroundSecondary }]}>
+          <Search size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.textPrimary }]}
+            placeholder="Search channels..."
+            placeholderTextColor={colors.textMuted}
+            value={channelSearch}
+            onChangeText={setChannelSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </View>
+
+        {/* Modal Channels List */}
+        <ScrollView keyboardShouldPersistTaps="handled">
+          {filteredChannels.map((item) => {
+            const isSelected = selectedChannels.includes(String(item._id));
+            return (
+              <TouchableOpacity
+                key={String(item._id)}
+                style={[styles.channelItemRow, { borderBottomColor: colors.border }]}
+                onPress={() => toggleChannel(item._id)}
+                activeOpacity={0.7}
+              >
+                <Hash size={18} color={colors.textSecondary} style={{ marginRight: 10 }} />
+                <Text style={[styles.channelItemName, { color: colors.textPrimary }]}>{item.name}</Text>
+                <View style={[styles.checkOuter, { borderColor: colors.border }, isSelected && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+                  {isSelected && <Check size={12} color="#fff" />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+          {filteredChannels.length === 0 && (
+            <Text style={[styles.emptyLabel, { color: colors.textSecondary }]}>No channels found</Text>
+          )}
+        </ScrollView>
+      </View>
+    </Modal>
+  </View>
   );
 }
 
@@ -351,169 +397,195 @@ export default function InviteManagementScreen({ navigation }) {
    STYLES
    ───────────────────────────────────────────────────────────────────────────── */
 
-function getStyles(colors) {
-  return StyleSheet.create({
-    container: {
-      flex: 1,
-    },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      gap: 12,
-    },
-    backBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    headerText: {
-      flex: 1,
-    },
-    headerTitle: {
-      fontSize: 17,
-      fontWeight: "700",
-    },
-    headerSub: {
-      fontSize: 12,
-      marginTop: 1,
-    },
-    scrollContent: {
-      padding: 16,
-      gap: 20,
-    },
-    section: {
-      borderRadius: 14,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surfaceSecondary,
-    },
-    sectionHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      marginBottom: 14,
-    },
-    sectionTitle: {
-      fontSize: 14,
-      fontWeight: "700",
-    },
-    emailInput: {
-      borderWidth: 1.5,
-      borderRadius: 11,
-      paddingHorizontal: 14,
-      paddingVertical: 11,
-      fontSize: 14,
-      fontWeight: "500",
-      marginBottom: 12,
-    },
-    typeToggle: {
-      flexDirection: "row",
-      gap: 8,
-      marginBottom: 14,
-    },
-    typeBtn: {
-      flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 6,
-      paddingVertical: 10,
-      borderRadius: 10,
-      borderWidth: 1.5,
-    },
-    typeBtnText: {
-      fontSize: 13,
-      fontWeight: "600",
-    },
-    sendBtn: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      paddingVertical: 12,
-      borderRadius: 11,
-    },
-    sendBtnText: {
-      color: "#fff",
-      fontSize: 14,
-      fontWeight: "700",
-    },
-    loadingWrap: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      paddingVertical: 30,
-    },
-    loadingText: {
-      fontSize: 13,
-    },
-    emptyWrap: {
-      alignItems: "center",
-      gap: 8,
-      paddingVertical: 32,
-    },
-    emptyText: {
-      fontSize: 13,
-      fontWeight: "500",
-    },
-    inviteCard: {
-      borderRadius: 11,
-      padding: 12,
-      borderWidth: 1,
-    },
-    inviteRow: {
-      flexDirection: "row",
-      alignItems: "center",
-    },
-    inviteInfo: {
-      flex: 1,
-      gap: 6,
-    },
-    inviteEmailRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-    },
-    inviteEmail: {
-      fontSize: 13.5,
-      fontWeight: "600",
-      flex: 1,
-    },
-    inviteBadges: {
-      flexDirection: "row",
-      gap: 6,
-    },
-    badge: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 20,
-    },
-    badgeText: {
-      fontSize: 10.5,
-      fontWeight: "700",
-    },
-    inviteActions: {
-      flexDirection: "row",
-      gap: 6,
-      marginLeft: 8,
-    },
-    actionBtn: {
-      width: 32,
-      height: 32,
-      borderRadius: 8,
-      borderWidth: 1.5,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-  });
-}
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerBtn: {
+    padding: 4,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  sendBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  sendText: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  recipientArea: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    alignItems: "flex-start",
+  },
+  toLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginRight: 10,
+    marginTop: 4,
+  },
+  recipientInputWrap: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    alignItems: "center",
+  },
+  chipsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 0.5,
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: "500",
+    maxWidth: 150,
+  },
+  chipRemove: {
+    marginLeft: 4,
+    padding: 2,
+  },
+  input: {
+    fontSize: 16,
+    paddingVertical: 4,
+    minWidth: 150,
+    flex: 1,
+  },
+  rowItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    justifyContent: "space-between",
+  },
+  rowLeft: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  rowLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  rowSubLabel: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  rowValue: {
+    fontSize: 14,
+    marginTop: 4,
+    fontWeight: "500",
+  },
+  linkContainer: {
+    padding: 16,
+    marginTop: 16,
+  },
+  linkLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  linkBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 8,
+  },
+  linkText: {
+    fontSize: 14,
+    fontWeight: "500",
+    flex: 1,
+  },
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  modalHeaderBtn: {
+    paddingVertical: 4,
+  },
+  cancelText: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  doneText: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    margin: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  searchInput: {
+    fontSize: 15,
+    flex: 1,
+    paddingVertical: 0,
+  },
+  channelItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  channelItemName: {
+    fontSize: 16,
+    fontWeight: "500",
+    flex: 1,
+  },
+  checkOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyLabel: {
+    textAlign: "center",
+    padding: 32,
+    fontSize: 14,
+  },
+});
+// File touched to trigger metro reload

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import storage from '../services/storage';
-import { channelAPI, usersAPI } from '../services/api';
+import { channelAPI, usersAPI, readReceiptAPI } from '../services/api';
+import { getSocket } from '../services/socket';
 import logger from '../utils/logger';
 import Toast from 'react-native-toast-message';
 
@@ -25,9 +26,49 @@ export const useChannelStore = create(
           const starredIds = channels.filter(c => c.isStarred || c.starred).map(c => c._id);
           const pinnedIds = channels.filter(c => c.isPinned || c.pinned).map(c => c._id);
           set({ channels, starredIds, pinnedIds, isLoading: false });
+          get().fetchUnreads();
         } catch (error) {
           set({ isLoading: false });
           logger.error('Failed to fetch channels:', error);
+        }
+      },
+
+      fetchUnreads: async () => {
+        try {
+          const { data } = await readReceiptAPI.getUnread();
+          const unreads = {};
+          if (data?.data?.unreads) {
+            for (const item of data.data.unreads) {
+              const cid = item.channelId?._id || item.channelId;
+              if (cid) {
+                unreads[cid] = item.unreadCount || 0;
+              }
+            }
+          }
+          set({ unreads });
+        } catch (error) {
+          logger.error('Failed to fetch unreads:', error);
+        }
+      },
+
+      markAsRead: async (channelId, messageId = null) => {
+        if (!channelId) return;
+        try {
+          // Reset locally immediately for fast UI
+          set((state) => ({
+            unreads: { ...state.unreads, [channelId]: 0 }
+          }));
+
+          // Call REST API
+          await readReceiptAPI.markRead(channelId, messageId);
+          
+          // Emit socket seen event (in case it is a DM)
+          const socket = getSocket();
+          if (socket && socket.connected) {
+            socket.emit('dm:markSeen', { channelId });
+          }
+        } catch (error) {
+          logger.error('[ChannelStore] markAsRead error:', error);
         }
       },
 
@@ -111,9 +152,7 @@ export const useChannelStore = create(
       setActiveChannel: (channelId) => {
         set({ activeChannelId: channelId });
         if (channelId) {
-          set((state) => ({
-            unreads: { ...state.unreads, [channelId]: 0 },
-          }));
+          get().markAsRead(channelId);
         }
       },
 
@@ -146,11 +185,29 @@ export const useChannelStore = create(
       },
 
       handleNewMessage: (message) => {
-        const { channelId, content, createdAt } = message;
+        const { channelId, content, createdAt, attachments, files, fileReferences } = message;
         if (!channelId) return;
 
         const rawText = (content || '').replace(/<[^>]*>/g, '').trim();
-        const preview = rawText.length > 50 ? rawText.substring(0, 50) + '...' : rawText;
+        let preview = '';
+        if (rawText) {
+          preview = rawText.length > 50 ? rawText.substring(0, 50) + '...' : rawText;
+        } else {
+          const allAttachments = attachments || files || fileReferences || [];
+          if (allAttachments.length > 0) {
+            const first = allAttachments[0];
+            const mime = first.mimeType || first.type || '';
+            if (mime.startsWith('image/')) {
+              preview = 'Sent an image';
+            } else if (mime.startsWith('video/')) {
+              preview = 'Sent a video';
+            } else {
+              preview = 'Sent a file';
+            }
+          } else {
+            preview = '';
+          }
+        }
         const timestamp = createdAt || new Date().toISOString();
 
         set((state) => {

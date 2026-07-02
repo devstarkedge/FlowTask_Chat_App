@@ -82,6 +82,23 @@ export const useLaterStore = create(
         }
       },
 
+      updateReminder: async (messageId, reminderAt) => {
+        try {
+          set((state) => ({
+            savedMessages: state.savedMessages.map((m) =>
+              (m._id === messageId || m.messageId?._id === messageId)
+                ? { ...m, reminderAt }
+                : m
+            ),
+          }));
+          const targetId = messageId;
+          await laterAPI.updateReminder(targetId, { reminderAt });
+        } catch (error) {
+          get().fetchSavedMessages();
+          logger.error('Failed to update reminder:', error);
+        }
+      },
+
       // Local-only status update — used by socket handler to avoid API feedback loop
       updateSavedMessageStatus: (messageId, status) => {
         set((state) => ({

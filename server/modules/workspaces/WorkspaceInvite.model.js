@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import crypto from 'node:crypto';
+import '../users/ChatUser.model.js';
 
 const { Schema, model } = mongoose;
 

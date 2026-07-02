@@ -362,25 +362,24 @@ const createStyles = (colors) =>
       marginTop: 6,
     },
     passwordWrapper: {
-      position: 'relative',
-    },
-    passwordInput: {
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: colors.inputBackground,
       borderWidth: 1,
       borderColor: colors.inputBorder,
       borderRadius: 10,
+    },
+    passwordInput: {
+      flex: 1,
       paddingVertical: 12,
       paddingHorizontal: 14,
-      paddingRight: 44,
       fontSize: 15,
       color: colors.inputText,
     },
     eyeButton: {
-      position: 'absolute',
-      right: 12,
-      top: '50%',
-      transform: [{ translateY: -9 }],
-      padding: 8,
+      paddingHorizontal: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     labelRow: {
       flexDirection: 'row',

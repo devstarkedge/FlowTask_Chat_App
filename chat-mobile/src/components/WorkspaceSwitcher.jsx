@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Platform,
   Dimensions,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useWorkspaceStore } from "../stores/workspaceStore";
@@ -54,9 +55,27 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
     }).start();
   }, [visible]);
 
-  const handleWorkspaceSwitch = async (workspaceId) => {
+  const handleInvite = (ws) => {
+    const code = ws?.inviteCode || ws?.code || 'WS123';
+    Alert.alert(
+      'Invite to Workspace',
+      `Share this invite code with others to let them join ${ws.name}:\n\nCode: ${code}`,
+      [
+        { text: 'OK' },
+        {
+          text: 'Copy Code',
+          onPress: () => {
+            const Clipboard = require('expo-clipboard');
+            Clipboard.setStringAsync(code);
+          }
+        }
+      ]
+    );
+  };
+
+  const handleWorkspaceSwitch = (workspaceId) => {
     if (workspaceId === activeWorkspace?._id) { onClose(); return; }
-    await switchWorkspace(workspaceId);
+    switchWorkspace(workspaceId);
     onClose();
   };
 
@@ -104,29 +123,45 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
               {workspaces.map((ws) => {
                 const isActive = ws._id === activeWorkspace?._id;
                 return (
-                  <TouchableOpacity
-                    key={ws._id}
-                    style={[styles.wsCard, { backgroundColor: isActive ? colors.backgroundTertiary : "transparent" }]}
-                    onPress={() => handleWorkspaceSwitch(ws._id)}
-                    activeOpacity={0.7}
-                  >
-                    <WorkspaceAvatar workspace={ws} size={40} />
-                    <View style={styles.wsInfo}>
-                      <Text style={[styles.wsName, { color: colors.textPrimary }]} numberOfLines={1}>{ws.name}</Text>
-                      <Text style={[styles.wsUrl, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {(ws.slug || ws.name || "").toLowerCase().replace(/\s+/g, "")}
-                      </Text>
-                    </View>
+                  <View key={ws._id}>
                     <TouchableOpacity
-                      style={styles.moreBtn}
-                      onPress={(e) => {
-                        e.stopPropagation?.();
-                        setActionMenuVisible(actionMenuVisible === ws._id ? null : ws._id);
-                      }}
+                      style={[styles.wsCard, { backgroundColor: isActive ? colors.backgroundTertiary : "transparent" }]}
+                      onPress={() => handleWorkspaceSwitch(ws._id)}
+                      activeOpacity={0.7}
                     >
-                      <MoreVertical size={18} color={colors.textSecondary} style={{ opacity: 0.6 }} />
+                      <WorkspaceAvatar workspace={ws} size={40} />
+                      <View style={styles.wsInfo}>
+                        <Text style={[styles.wsName, { color: colors.textPrimary }]} numberOfLines={1}>{ws.name}</Text>
+                        <Text style={[styles.wsUrl, { color: colors.textSecondary }]} numberOfLines={1}>
+                          {(ws.slug || ws.name || "").toLowerCase().replace(/\s+/g, "")}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.moreBtn}
+                        onPress={(e) => {
+                          e.stopPropagation?.();
+                          setActionMenuVisible(actionMenuVisible === ws._id ? null : ws._id);
+                        }}
+                      >
+                        <MoreVertical size={18} color={colors.textSecondary} style={{ opacity: 0.6 }} />
+                      </TouchableOpacity>
                     </TouchableOpacity>
-                  </TouchableOpacity>
+                    {actionMenuVisible === ws._id && (
+                      <View style={[styles.actionDropdown, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
+                        <TouchableOpacity
+                          style={styles.dropdownItem}
+                          onPress={() => {
+                            setActionMenuVisible(null);
+                            onClose();
+                            navigation?.navigate("InviteManagement");
+                          }}
+                        >
+                          <Plus size={16} color={colors.primary} />
+                          <Text style={[styles.dropdownText, { color: colors.textPrimary }]}>Invite Members</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
                 );
               })}
             </View>
@@ -274,6 +309,27 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 14,
     textAlign: "center",
+  },
+  actionDropdown: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginHorizontal: 16,
+    marginVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  dropdownText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

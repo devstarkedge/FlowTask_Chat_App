@@ -283,7 +283,7 @@ export default function FilesScreen({ route, navigation }) {
           {
             borderBottomColor: colors.border,
             backgroundColor: colors.backgroundSecondary,
-            paddingTop: insets.top + 8,
+            paddingTop: 8,
           },
         ]}
       >

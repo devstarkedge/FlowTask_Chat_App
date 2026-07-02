@@ -116,7 +116,7 @@ api.interceptors.response.use(
         const newToken = await refreshPromise;
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return api(originalRequest);
-      } catch {
+      } catch (refreshError) {
         // Refresh failed — clear tokens, user will be redirected to login
         clearApiCache();
         await secureMultiRemove([
@@ -124,6 +124,12 @@ api.interceptors.response.use(
           'chat_refresh_token',
         ]);
         await storage.removeItem('chat_user');
+        try {
+          const { useAuthStore } = require('../stores/authStore');
+          useAuthStore.getState().logout();
+        } catch (storeError) {
+          logger.error('[API] Failed to trigger store logout:', storeError);
+        }
       }
     }
 
@@ -146,12 +152,14 @@ export const workspaceAPI = {
   mine: () => api.get('/workspaces/mine'),
   create: (data) => api.post('/workspaces', data),
   joinByInviteCode: (inviteCode) => api.post('/workspaces/join', { inviteCode }),
-  inviteByEmail: (workspaceId, email, role) => api.post(`/workspaces/${workspaceId}/invite-email`, { email, role }),
+  inviteByEmail: (workspaceId, payload) => api.post(`/workspaces/${workspaceId}/invite-email`, payload),
   leave: (workspaceId) => api.post(`/workspaces/${workspaceId}/leave`),
 
   // ── Invite management ──
   getAllInvites: (workspaceId, params = {}) =>
     api.get(`/workspaces/${workspaceId}/invites`, { params }),
+  getPendingInvites: (workspaceId) =>
+    api.get(`/workspaces/${workspaceId}/invites/pending`),
   resendInvite: (workspaceId, inviteId) =>
     api.post(`/workspaces/${workspaceId}/invites/${inviteId}/resend`),
   revokeInvite: (workspaceId, inviteId) =>
@@ -166,7 +174,7 @@ export const workspaceAPI = {
 export const channelAPI = {
   list: () => api.get('/channels'),
   create: (data) => api.post('/channels', data),
-  createDM: (userId) => api.post('/channels/dm', { userId }),
+  createDM: (userId) => api.post('/channels/dm', { targetUserId: userId }),
   archive: (id) => api.post(`/channels/${id}/archive`),
   leave: (id) => api.post(`/channels/${id}/leave`),
   pin: (id) => api.put(`/channels/${id}/pin`),
@@ -230,8 +238,15 @@ export const fileAPI = {
 // Users API — presence and custom status
 export const usersAPI = {
   setPresence: (status) => api.put('/users/presence', { status }),
-  setCustomStatus: (data) => api.put('/users/custom-status', data),
+  setCustomStatus: (data) => api.put('/users/status', data),
   getChannelMembers: (channelId) => api.get(`/channels/${channelId}/members`),
+};
+
+// Read Receipts API
+export const readReceiptAPI = {
+  getUnread: () => api.get("/unread"),
+  markRead: (channelId, lastReadMessageId = null) =>
+    api.post(`/channels/${channelId}/read`, { lastReadMessageId }),
 };
 
 // Pinned messages API
@@ -277,4 +292,31 @@ export const notificationPrefAPI = {
   removeChannel: (channelId) => api.delete(`/notifications/preferences/channel/${channelId}`),
 };
 
+// ─── Canvas API ───────────────────────────────────────────────────────────────
+export const canvasAPI = {
+  getById: (canvasId) => api.get(`/canvas/by-id/${canvasId}`),
+  getAllForChannel: (channelId) => api.get(`/canvas/channel/all/${channelId}`),
+  getMy: () => api.get(`/canvas/my/all`),
+  create: (channelId, data) => api.post(`/canvas/${channelId}`, data),
+  update: (canvasId, data) => api.put(`/canvas/update/${canvasId}`, data),
+  delete: (canvasId) => api.delete(`/canvas/${canvasId}`),
+  duplicate: (canvasId) => api.post(`/canvas/duplicate/${canvasId}`),
+  getHistory: (canvasId) => api.get(`/canvas/history/${canvasId}`),
+  restoreVersion: (canvasId, historyId) =>
+    api.post(`/canvas/history/restore/${canvasId}/${historyId}`),
+  toggleSaveForLater: (canvasId) => api.post(`/canvas/save-later/${canvasId}`),
+  updateSavedStatus: (canvasId, status) =>
+    api.patch(`/canvas/save-later/${canvasId}/status`, { status }),
+};
+
+// ─── Canvas Comment API ────────────────────────────────────────────────────────
+export const canvasCommentAPI = {
+  getForCanvas: (canvasId) => api.get(`/canvas-comments/${canvasId}`),
+  create: (canvasId, data) => api.post(`/canvas-comments/${canvasId}`, data),
+  reply: (commentId, content) =>
+    api.post(`/canvas-comments/${commentId}/reply`, { content }),
+  resolve: (commentId) => api.patch(`/canvas-comments/${commentId}/resolve`),
+};
+
 export default api;
+

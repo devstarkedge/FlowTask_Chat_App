@@ -5,3 +5,4 @@ export { default as ScreenHeader } from './ScreenHeader';
 export { default as FilterTabs } from './FilterTabs';
 export { default as LoadingState } from './LoadingState';
 export { default as EmptyState } from './EmptyState';
+export { default as MobileFileCard } from './MobileFileCard';

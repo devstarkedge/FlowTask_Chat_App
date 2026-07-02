@@ -1,14 +1,29 @@
 import { io } from 'socket.io-client';
 import { AppState } from 'react-native';
-import { useAuthStore } from '../stores/authStore';
-import { useChatStore } from '../stores/chatStore';
-import { useChannelStore } from '../stores/channelStore';
-import { useThreadStore } from '../stores/threadStore';
-import { useLaterStore } from '../stores/laterStore';
-import { useScheduledStore } from '../stores/scheduledStore';
 import storage from './storage';
 import ENV from '../config/environment';
 import logger from '../utils/logger';
+
+// Dynamic getters to resolve require cycles
+const useAuthStore = {
+  get getState() { return require('../stores/authStore').useAuthStore.getState; },
+  get setState() { return require('../stores/authStore').useAuthStore.setState; }
+};
+const useChatStore = {
+  get getState() { return require('../stores/chatStore').useChatStore.getState; }
+};
+const useChannelStore = {
+  get getState() { return require('../stores/channelStore').useChannelStore.getState; }
+};
+const useThreadStore = {
+  get getState() { return require('../stores/threadStore').useThreadStore.getState; }
+};
+const useLaterStore = {
+  get getState() { return require('../stores/laterStore').useLaterStore.getState; }
+};
+const useScheduledStore = {
+  get getState() { return require('../stores/scheduledStore').useScheduledStore.getState; }
+};
 
 let socket = null;
 let isConnecting = false;
@@ -88,6 +103,14 @@ export const connectSocket = async () => {
   socket.on('connect_error', (error) => {
     logger.error('[Socket] Connection error:', error.message);
     isConnecting = false;
+    if (error.message && (error.message.toLowerCase().includes('token') || error.message.toLowerCase().includes('auth') || error.message.toLowerCase().includes('unauthorized'))) {
+      try {
+        const { useAuthStore } = require('../stores/authStore');
+        useAuthStore.getState().logout();
+      } catch (storeError) {
+        logger.error('[Socket] Failed to trigger store logout:', storeError);
+      }
+    }
   });
 
   // Message Events
@@ -366,6 +389,97 @@ export const connectSocket = async () => {
     const { useWorkspaceStore } = require('../stores/workspaceStore');
     useWorkspaceStore.getState().updateMemberProfile(userId, updates);
     logger.info('[Socket] User profile updated', { userId, fields: Object.keys(updates || {}) });
+  });
+
+  // ─── Canvas Events ──────────────────────────────────────────────────────────
+  socket.on('canvas:title-updated', ({ canvasId, title }) => {
+    try {
+      const { useCanvasStore } = require('../stores/canvasStore');
+      useCanvasStore.getState().handleSocketTitleUpdated({ canvasId, title });
+    } catch (err) {
+      logger.error('[Socket] canvas:title-updated error:', err.message);
+    }
+  });
+
+  socket.on('canvas:deleted', ({ canvasId }) => {
+    try {
+      const { useCanvasStore } = require('../stores/canvasStore');
+      useCanvasStore.getState().handleSocketDeleted({ canvasId });
+    } catch (err) {
+      logger.error('[Socket] canvas:deleted error:', err.message);
+    }
+  });
+
+  socket.on('canvas:comment-created', (comment) => {
+    try {
+      const { useCanvasStore } = require('../stores/canvasStore');
+      useCanvasStore.getState().handleSocketCommentCreated(comment);
+    } catch (err) {
+      logger.error('[Socket] canvas:comment-created error:', err.message);
+    }
+  });
+
+  socket.on('canvas:comment-replied', (comment) => {
+    try {
+      const { useCanvasStore } = require('../stores/canvasStore');
+      useCanvasStore.getState().handleSocketCommentReplied(comment);
+    } catch (err) {
+      logger.error('[Socket] canvas:comment-replied error:', err.message);
+    }
+  });
+
+  socket.on('canvas:comment-resolved', ({ commentId }) => {
+    try {
+      const { useCanvasStore } = require('../stores/canvasStore');
+      useCanvasStore.getState().handleSocketCommentResolved({ commentId });
+    } catch (err) {
+      logger.error('[Socket] canvas:comment-resolved error:', err.message);
+    }
+  });
+
+  socket.on('canvas:saved-later', ({ canvasId }) => {
+    try {
+      const { useCanvasStore } = require('../stores/canvasStore');
+      useCanvasStore.getState().handleSocketSavedLater({ canvasId });
+    } catch (err) {
+      logger.error('[Socket] canvas:saved-later error:', err.message);
+    }
+  });
+
+  socket.on('canvas:unsaved-later', ({ canvasId }) => {
+    try {
+      const { useCanvasStore } = require('../stores/canvasStore');
+      useCanvasStore.getState().handleSocketUnsavedLater({ canvasId });
+    } catch (err) {
+      logger.error('[Socket] canvas:unsaved-later error:', err.message);
+    }
+  });
+
+  socket.on('canvas:presence', ({ users }) => {
+    try {
+      const { useCanvasStore } = require('../stores/canvasStore');
+      useCanvasStore.getState().setPresence(users);
+    } catch (err) {
+      logger.error('[Socket] canvas:presence error:', err.message);
+    }
+  });
+
+  socket.on('canvas:user-joined', ({ user }) => {
+    try {
+      const { useCanvasStore } = require('../stores/canvasStore');
+      useCanvasStore.getState().addPresenceUser(user);
+    } catch (err) {
+      logger.error('[Socket] canvas:user-joined error:', err.message);
+    }
+  });
+
+  socket.on('canvas:user-left', ({ userId }) => {
+    try {
+      const { useCanvasStore } = require('../stores/canvasStore');
+      useCanvasStore.getState().removePresenceUser(userId);
+    } catch (err) {
+      logger.error('[Socket] canvas:user-left error:', err.message);
+    }
   });
 
   // ─── Reconnect re-sync ──────────────────────────────────────────────────

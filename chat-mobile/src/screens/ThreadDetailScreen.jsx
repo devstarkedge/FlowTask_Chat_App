@@ -25,7 +25,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useChatStore } from '../stores/chatStore';
 import { formatMessageTime, formatRelativeTime } from '../utils/dateUtils';
-import { ScreenLayout, AppAvatar } from '../components/common';
+import { ScreenLayout, AppAvatar, MobileFileCard } from '../components/common';
 import RichText from '../components/RichText';
 import ReactionBar from '../components/ReactionBar';
 import EmojiPickerModal from '../components/EmojiPickerModal';
@@ -34,6 +34,7 @@ import {
   CircleChevronLeft,
   Send,
   MessageSquare,
+  Reply,
 } from 'lucide-react-native';
 
 const formatTime = formatMessageTime;
@@ -94,38 +95,200 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     replyCount: initialReplyCount,
   };
 
-  const renderReply = useCallback(({ item }) => {
+  const getAuthorId = (msg) => {
+    if (!msg) return null;
+    if (typeof msg.authorId === "string") return msg.authorId;
+    return msg.authorId?._id || msg.senderSnapshot?._id || null;
+  };
+
+  const getMessageAttachments = (msg) => {
+    if (!msg) return [];
+    const refs = msg.fileReferences || [];
+    if (refs.length > 0) {
+      return refs
+        .map((ref) => {
+          if (!ref.fileId) return null;
+          const file = ref.fileId;
+          return {
+            _id: file._id,
+            name: file.originalName || file.fileName || file.name || 'File',
+            fileName: file.originalName || file.fileName || file.name || 'File',
+            url: file.url || file.secureUrl,
+            thumbnailUrl: file.thumbnailUrl,
+            mimeType: file.mimeType,
+            fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
+          };
+        })
+        .filter(Boolean);
+    }
+    return msg.attachments || msg.files || [];
+  };
+
+  const renderReply = useCallback(({ item, index }) => {
     const isMe = item.authorId?._id === user?._id || item.authorId === user?._id;
+    const isSystem = item.contentType === "system" && !item.activityMeta;
+
+    if (isSystem) {
+      return (
+        <View style={styles.systemMessageContainer} key={item._id}>
+          <View style={[styles.systemMessageLine, { backgroundColor: colors.border }]} />
+          <Text style={[styles.systemMessageText, { color: colors.textSecondary }]}>
+            {item.content}
+          </Text>
+          <View style={[styles.systemMessageLine, { backgroundColor: colors.border }]} />
+        </View>
+      );
+    }
+
+    const isDeleted = item.isDeleted === true;
+    const deletedText = isMe
+      ? "You deleted this message"
+      : "This message was deleted";
+
     const sender = item.senderSnapshot || item.authorId;
 
-    return (
-      <View style={[styles.replyContainer, isMe ? styles.myReply : styles.theirReply]}>
-      <AppAvatar user={sender} size={28} showStatus={false} />
-        <View style={{ flexShrink: 1 }}>
-          <View style={styles.replyHeader}>
-            <Text style={[styles.replyAuthor, { color: colors.textSecondary }]}>
-              {sender?.name || 'Unknown'}
-            </Text>
-            <Text style={[styles.replyTime, { color: colors.textTertiary }]}>
-              {formatTime(item.createdAt)}
-            </Text>
-          </View>
+    // Message grouping (chronological): compact if same author and within 5 minutes of prev message (index - 1)
+    const prevItem = replies[index - 1]; // chronological previous
+    const isCompact =
+      prevItem &&
+      getAuthorId(item) === getAuthorId(prevItem) &&
+      !item.isActivity &&
+      !prevItem.isActivity &&
+      Math.abs(new Date(item.createdAt) - new Date(prevItem.createdAt)) <
+        5 * 60 * 1000;
 
+    // Last in group: true if the next chronological message (index + 1) is not by the same author or is not within 5 mins
+    const nextItem = replies[index + 1]; // chronological next
+    const sameAsNext =
+      nextItem &&
+      getAuthorId(item) === getAuthorId(nextItem) &&
+      !item.isActivity &&
+      !nextItem.isActivity &&
+      Math.abs(new Date(nextItem.createdAt) - new Date(item.createdAt)) <
+        5 * 60 * 1000;
+    const isLastInGroup = !sameAsNext;
+
+    const groupPos =
+      !isCompact && isLastInGroup
+        ? "solo"
+        : !isCompact
+          ? "first"
+          : isLastInGroup
+            ? "last"
+            : "middle";
+
+    // Dynamic border radius
+    let bubbleRadiusStyle = {};
+    if (isMe) {
+      if (groupPos === 'first') {
+        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomRightRadius: 4, borderBottomLeftRadius: 18 };
+      } else if (groupPos === 'middle') {
+        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 4, borderBottomRightRadius: 4, borderBottomLeftRadius: 18 };
+      } else if (groupPos === 'last') {
+        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 4, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
+      } else { // solo
+        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
+      }
+    } else {
+      if (groupPos === 'first') {
+        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 4 };
+      } else if (groupPos === 'middle') {
+        bubbleRadiusStyle = { borderTopLeftRadius: 4, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 4 };
+      } else if (groupPos === 'last') {
+        bubbleRadiusStyle = { borderTopLeftRadius: 4, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
+      } else { // solo
+        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
+      }
+    }
+
+    const attachments = getMessageAttachments(item);
+    const contentColor = isMe ? colors.messageTextSent : colors.messageTextReceived;
+
+    return (
+      <View style={[styles.replyContainer, isMe ? styles.myReply : styles.theirReply, isCompact && { marginTop: 1 }]} key={item._id}>
+        {/* Avatar */}
+        {!isMe && !isCompact && (
+          <AppAvatar user={sender} size={28} showStatus={false} style={{ marginTop: 2 }} />
+        )}
+        {!isMe && isCompact && <View style={{ width: 28 }} />}
+
+        <View style={{ flexShrink: 1, flex: 1 }}>
+          {/* Header */}
+          {!isMe && !isCompact && (
+            <View style={styles.replyHeader}>
+              <Text style={[styles.replyAuthor, { color: colors.textSecondary }]}>
+                {sender?.name || 'Unknown'}
+              </Text>
+              <Text style={[styles.replyTime, { color: colors.textTertiary }]}>
+                {formatTime(item.createdAt)}
+              </Text>
+            </View>
+          )}
+
+          {/* Reply Bubble */}
           <View style={[
             styles.replyBubble,
+            bubbleRadiusStyle,
             { backgroundColor: isMe ? colors.messageBubbleSent : colors.messageBubbleReceived },
           ]}>
-            {item.htmlContent ? (
+            {/* Forwarded indicator */}
+            {item.forwardMeta?.isForwarded && (
+              <View
+                style={[
+                  styles.forwardedRow,
+                  { borderBottomColor: colors.border },
+                ]}
+              >
+                <Reply size={12} color={contentColor} style={{ marginRight: 4, transform: [{ scaleX: -1 }] }} />
+                <Text style={[styles.forwardedText, { color: contentColor, opacity: 0.8 }]}>
+                  Forwarded from{" "}
+                  <Text style={{ fontWeight: "700" }}>
+                    {item.forwardMeta.originalChannelName
+                      ? (item.forwardMeta.originalChannelType === "dm"
+                          ? item.forwardMeta.originalChannelName
+                          : `#${item.forwardMeta.originalChannelName}`)
+                      : item.forwardMeta.originalSenderName || "Unknown"}
+                  </Text>
+                </Text>
+              </View>
+            )}
+
+            {isDeleted ? (
+              <Text
+                style={[styles.replyText, { color: colors.textTertiary, fontStyle: 'italic' }]}
+              >
+                {deletedText}
+              </Text>
+            ) : item.htmlContent ? (
               <RichText
                 html={item.htmlContent}
                 text={item.content}
-                colors={{ ...colors, textPrimary: isMe ? colors.messageTextSent : colors.messageTextReceived }}
-                baseStyle={{ color: isMe ? colors.messageTextSent : colors.messageTextReceived, fontSize: 15, lineHeight: 22 }}
+                colors={{
+                  ...colors,
+                  textPrimary: contentColor,
+                  codeBackground: isMe ? 'rgba(255,255,255,0.15)' : colors.codeBackground,
+                  codeBlockBackground: isMe ? 'rgba(0,0,0,0.2)' : colors.codeBlockBackground,
+                  codeBlockText: isMe ? '#fff' : colors.codeBlockText,
+                }}
+                baseStyle={{ color: contentColor, fontSize: 15, lineHeight: 22 }}
               />
             ) : (
-              <Text style={[styles.replyText, { color: isMe ? colors.messageTextSent : colors.messageTextReceived }]}>
+              <Text style={[styles.replyText, { color: contentColor }]}>
                 {item.content}
               </Text>
+            )}
+
+            {/* File attachments */}
+            {!isDeleted && attachments.length > 0 && (
+              <View style={{ marginTop: 4, width: '100%', gap: 4 }}>
+                {attachments.map((file, i) => (
+                  <MobileFileCard
+                    key={file._id || i}
+                    file={file}
+                    colors={colors}
+                  />
+                ))}
+              </View>
             )}
           </View>
 
@@ -141,7 +304,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         </View>
       </View>
     );
-  }, [user, colors, addReaction, removeReaction]);
+  }, [user, colors, replies, addReaction, removeReaction]);
 
   const styles = createStyles(colors);
 
@@ -207,7 +370,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        keyboardVerticalOffset={0}
       >
         {replies.length > 0 && (
           <View style={[styles.repliesHeader, { borderBottomColor: colors.border }]}>
@@ -436,6 +599,34 @@ const createStyles = (colors) => StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  systemMessageContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  systemMessageLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
+  systemMessageText: {
+    fontSize: 12,
+    fontStyle: "italic",
+    textAlign: "center",
+  },
+  forwardedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingBottom: 4,
+    marginBottom: 6,
+    gap: 4,
+  },
+  forwardedText: {
+    fontSize: 12,
+    fontStyle: "italic",
   },
 });
 

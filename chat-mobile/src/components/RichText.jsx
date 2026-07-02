@@ -323,6 +323,65 @@ function extractText(node) {
   return node.children.map(extractText).join('');
 }
 
+function markdownToHtml(text) {
+  if (!text) return "";
+
+  let html = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  // Code blocks (```...```)
+  html = html.replace(
+    /```([\s\S]*?)```/g,
+    (_, code) => `<pre><code>${code.trim()}</code></pre>`,
+  );
+
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+
+  // Bold
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+  // Italic
+  html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+
+  // Strikethrough
+  html = html.replace(/~~(.+?)~~/g, "<del>$1</del>");
+
+  // Underline
+  html = html.replace(/__(.+?)__/g, "<u>$1</u>");
+
+  // Links [text](url)
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+
+  // Horizontal rule
+  html = html.replace(/^---$/gm, "<hr>");
+
+  // Blockquotes (lines starting with >)
+  html = html.replace(/^&gt;\s?(.*)$/gm, "<blockquote>$1</blockquote>");
+
+  // Bullet list blocks (consecutive lines starting with - or *)
+  html = html.replace(/(?:^[-*]\s+.*(?:\r?\n|$))+/gm, (match) => {
+    const items = match.trim().split('\n').map(line => {
+      const content = line.replace(/^[-*]\s+/, '');
+      return `<li>${content}</li>`;
+    }).join('');
+    return `<ul>${items}</ul>`;
+  });
+
+  // Numbered list blocks (consecutive lines starting with digits)
+  html = html.replace(/(?:^\d+\.\s+.*(?:\r?\n|$))+/gm, (match) => {
+    const items = match.trim().split('\n').map(line => {
+      const content = line.replace(/^\d+\.\s+/, '');
+      return `<li>${content}</li>`;
+    }).join('');
+    return `<ol>${items}</ol>`;
+  });
+
+  return html;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 const RichText = React.memo(function RichText({ html, text, colors, baseStyle }) {
@@ -330,10 +389,14 @@ const RichText = React.memo(function RichText({ html, text, colors, baseStyle })
     keyCounter = 0; // reset key counter per render
     if (!html && !text) return null;
 
-    // If we have HTML content, parse it
-    if (html && html.trim() && html.trim() !== '<p></p>') {
+    // Use HTML directly if available, otherwise compile Markdown fallback to HTML
+    const targetHtml = (html && html.trim() && html.trim() !== '<p></p>')
+      ? html
+      : markdownToHtml(text || '');
+
+    if (targetHtml && targetHtml.trim() && targetHtml.trim() !== '<p></p>') {
       try {
-        const tokens = tokenize(html);
+        const tokens = tokenize(targetHtml);
         const ast = buildAST(tokens);
         return ast.children.map((node, i) => renderNode(node, colors || {}, baseStyle || {}));
       } catch (e) {
@@ -342,8 +405,7 @@ const RichText = React.memo(function RichText({ html, text, colors, baseStyle })
       }
     }
 
-    // Plain text fallback
-    return <Text style={baseStyle}>{text || ''}</Text>;
+    return null;
   }, [html, text, colors, baseStyle]);
 
   return <View style={styles.container}>{elements}</View>;

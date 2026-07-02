@@ -1,0 +1,1206 @@
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
+  TextInput,
+  Alert,
+  Modal,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  Animated,
+  Dimensions,
+  Switch,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  Plus,
+  Search,
+  FileText,
+  ArrowLeft,
+  X,
+  ChevronRight,
+  Sparkles,
+  Layers,
+  ChevronLeft,
+  Image as ImageIcon,
+  Copy,
+  Clock,
+  Link as LinkIcon,
+} from 'lucide-react-native';
+import { useCanvasStore } from '../../stores/canvasStore';
+import { useThemeStore } from '../../stores/themeStore';
+import CanvasCard from '../../components/canvas/CanvasCard';
+import { TEMPLATES, CATEGORIES, buildTemplateContent } from '../../utils/templates';
+
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
+
+export default function CanvasListScreen({ route, navigation }) {
+  const { channelId, channelName } = route.params || {};
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Create Canvas Modal States
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [modalStep, setModalStep] = useState('choice'); // 'choice' | 'templates_list' | 'customize' | 'existing_list'
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  
+  // Customization States
+  const [newCanvasTitle, setNewCanvasTitle] = useState('');
+  const [selectedCoverIndex, setSelectedCoverIndex] = useState(0);
+  const [variableValues, setVariableValues] = useState({});
+  const [prefillVars, setPrefillVars] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Existing Canvases List States
+  const [existingSearch, setExistingSearch] = useState('');
+  const [existingCanvases, setExistingCanvases] = useState([]);
+  const [isLoadingExisting, setIsLoadingExisting] = useState(false);
+
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const { colors } = useThemeStore();
+
+  const {
+    canvasesByChannel,
+    savedCanvasIds,
+    isLoading,
+    fetchChannelCanvases,
+    createCanvas,
+    toggleSaveForLater,
+    deleteCanvas,
+    duplicateCanvas,
+    loadCanvas,
+  } = useCanvasStore();
+
+  const canvases = canvasesByChannel[channelId] || [];
+
+  useEffect(() => {
+    if (channelId) {
+      fetchChannelCanvases(channelId);
+    }
+  }, [channelId]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchChannelCanvases(channelId);
+    setIsRefreshing(false);
+  };
+
+  // ── Create Modal Actions ──────────────────────────────────────────────────
+  const openCreateModal = useCallback(() => {
+    setSelectedTemplate(null);
+    setModalStep('choice');
+    setTemplateSearch('');
+    setSelectedCategory('All');
+    setNewCanvasTitle('');
+    setSelectedCoverIndex(0);
+    setVariableValues({});
+    setPrefillVars(false);
+    setExistingSearch('');
+    setCreateModalVisible(true);
+    
+    Animated.spring(slideAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 65,
+      friction: 11,
+    }).start();
+  }, [slideAnim]);
+
+  const closeCreateModal = useCallback(() => {
+    Animated.timing(slideAnim, {
+      toValue: SCREEN_HEIGHT,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setCreateModalVisible(false);
+    });
+  }, [slideAnim]);
+
+  const handleCreateBlank = useCallback(async () => {
+    if (isCreating) return;
+    setIsCreating(true);
+    try {
+      const newCanvas = await createCanvas(channelId, {
+        title: "Untitled canvas",
+        content: { type: "doc", content: [{ type: "paragraph" }] },
+      });
+      closeCreateModal();
+      if (newCanvas?._id) {
+        navigation.navigate('CanvasEditor', {
+          canvasId: newCanvas._id,
+          channelId,
+        });
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to create blank canvas.');
+    } finally {
+      setIsCreating(false);
+    }
+  }, [channelId, createCanvas, isCreating, closeCreateModal, navigation]);
+
+  const handleSelectTemplate = useCallback((template) => {
+    setSelectedTemplate(template);
+    setNewCanvasTitle(template.label);
+    setSelectedCoverIndex(0);
+    
+    // Init variables
+    const vars = {};
+    (template.variables || []).forEach((v) => {
+      vars[v.name] = '';
+    });
+    setVariableValues(vars);
+    setPrefillVars(false);
+    
+    setModalStep('customize');
+  }, []);
+
+  const handleLoadExistingList = useCallback(async () => {
+    setIsLoadingExisting(true);
+    setModalStep('existing_list');
+    try {
+      // In a real flow we can fetch all channels canvases or general ones
+      await fetchChannelCanvases(channelId);
+      const list = canvasesByChannel[channelId] || [];
+      setExistingCanvases(list);
+    } catch (err) {
+      console.warn("Failed to load existing canvases list:", err);
+    } finally {
+      setIsLoadingExisting(false);
+    }
+  }, [channelId, fetchChannelCanvases, canvasesByChannel]);
+
+  const handleSelectExistingCanvas = useCallback(async (canvas) => {
+    try {
+      await loadCanvas(canvas._id);
+      closeCreateModal();
+      navigation.navigate('CanvasEditor', {
+        canvasId: canvas._id,
+        channelId,
+      });
+    } catch (err) {
+      Alert.alert('Error', 'Failed to load selected canvas.');
+    }
+  }, [loadCanvas, closeCreateModal, navigation, channelId]);
+
+  const handleTogglePrefill = useCallback((checked) => {
+    setPrefillVars(checked);
+    if (!selectedTemplate) return;
+    const next = { ...variableValues };
+    (selectedTemplate.variables || []).forEach((v) => {
+      next[v.name] = checked ? v.example || '' : '';
+    });
+    setVariableValues(next);
+  }, [selectedTemplate, variableValues]);
+
+  const handleCreateCanvas = useCallback(async () => {
+    if (isCreating) return;
+    setIsCreating(true);
+
+    const template = selectedTemplate;
+    const title = newCanvasTitle.trim() || template.label || 'Untitled Canvas';
+
+    // Map template to valid Mongoose canvas schema type enum
+    const mapTemplateToType = (tplId) => {
+      const meetingIds = ['meeting_notes', 'weekly_sync', 'agenda', 'weekly_1_1', 'meeting'];
+      const brainstormIds = ['brainstorm', 'monthly_newsletter'];
+      const projectIds = ['sprint_planning', 'technical_specifications', 'todo_list', 'product_brief', 'out_of_office', 'company_handbook', 'sales_enablement_hub', 'sprint', 'docs', 'okr', 'retro'];
+      
+      if (meetingIds.includes(tplId)) return 'meeting';
+      if (brainstormIds.includes(tplId)) return 'brainstorm';
+      if (projectIds.includes(tplId)) return 'project';
+      return 'notes';
+    };
+
+    // 1. Build template content
+    let content = buildTemplateContent(template);
+
+    // 2. Replace variables in content JSON if any
+    if (template.variables && template.variables.length > 0) {
+      const vars = prefillVars ? variableValues : variableValues;
+      const applyVariablesToDoc = (doc, vValues) => {
+        if (!vValues || Object.keys(vValues).length === 0) return doc;
+        
+        const replaceText = (text) => {
+          if (!text || typeof text !== 'string') return text;
+          let out = text.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (m, p1) => (vValues[p1] != null && vValues[p1] !== '' ? vValues[p1] : m));
+          out = out.replace(/\[([^\]]+)\]/g, (m, p1) => (vValues[p1] != null && vValues[p1] !== '' ? vValues[p1] : m));
+          return out;
+        };
+
+        const walk = (node) => {
+          if (!node) return node;
+          if (node.type === 'text' && typeof node.text === 'string') {
+            return { ...node, text: replaceText(node.text) };
+          }
+          if (node.content && Array.isArray(node.content)) {
+            return { ...node, content: node.content.map(walk) };
+          }
+          return node;
+        };
+
+        return { ...doc, content: (doc.content || []).map(walk) };
+      };
+
+      content = applyVariablesToDoc(content, vars);
+    }
+
+    // 3. Cover configuration
+    let canvasCover = null;
+    if (template.cover) {
+      const variations = Array.isArray(template.cover) 
+        ? template.cover 
+        : (template.cover.variations || [template.cover]);
+      
+      const variation = variations[selectedCoverIndex] || variations[0];
+      if (variation) {
+        if (variation.url) {
+          canvasCover = { type: 'image', value: variation.url };
+        } else if (variation.colorPalette) {
+          const p = variation.colorPalette;
+          const a = p[0] || '#eef2ff';
+          const b = p[1] || a;
+          canvasCover = { type: 'gradient', value: `linear-gradient(135deg, ${a}, ${b})` };
+        }
+      }
+    }
+
+    const payload = {
+      title,
+      type: mapTemplateToType(template.id),
+      content,
+    };
+
+    if (canvasCover) {
+      payload.cover = canvasCover;
+    }
+
+    try {
+      const newCanvas = await createCanvas(channelId, payload);
+      closeCreateModal();
+      if (newCanvas?._id) {
+        navigation.navigate('CanvasEditor', {
+          canvasId: newCanvas._id,
+          channelId,
+        });
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to create canvas. Please try again.');
+    } finally {
+      setIsCreating(false);
+    }
+  }, [isCreating, selectedTemplate, newCanvasTitle, selectedCoverIndex, variableValues, prefillVars, channelId, createCanvas, closeCreateModal, navigation]);
+
+  const handleSelect = (canvas) => {
+    navigation.navigate('CanvasEditor', {
+      canvasId: canvas._id,
+      channelId,
+    });
+  };
+
+  const handleCardOptions = (canvas) => {
+    Alert.alert(
+      canvas.title || 'Canvas Options',
+      'Select an action:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Duplicate',
+          onPress: async () => {
+            const dup = await duplicateCanvas(canvas._id);
+            if (dup) {
+              Alert.alert('Success', 'Canvas duplicated successfully.');
+              fetchChannelCanvases(channelId);
+            }
+          },
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Delete Canvas',
+              'Are you sure you want to delete this canvas? This action cannot be undone.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: () => deleteCanvas(canvas._id),
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
+
+  // Filter primary canvases list
+  const filteredCanvases = canvases.filter((c) =>
+    (c.title || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Filter templates list in modal
+  const filteredTemplates = useMemo(() => {
+    const q = templateSearch.trim().toLowerCase();
+    return TEMPLATES.filter((t) => {
+      const matchesSearch =
+        (t.label || '').toLowerCase().includes(q) ||
+        (t.description || '').toLowerCase().includes(q) ||
+        ((t.tags || []).join(' ') || '').toLowerCase().includes(q);
+      const matchesCategory =
+        selectedCategory === 'All' ||
+        (t.category || '').toLowerCase() === selectedCategory.toLowerCase();
+      return matchesSearch && matchesCategory;
+    });
+  }, [templateSearch, selectedCategory]);
+
+  // Filter existing canvases list in modal
+  const filteredExisting = useMemo(() => {
+    const q = existingSearch.trim().toLowerCase();
+    return existingCanvases.filter((c) =>
+      (c.title || 'Untitled canvas').toLowerCase().includes(q)
+    );
+  }, [existingSearch, existingCanvases]);
+
+  // ── Template List Render Item ──────────────────────────────────────────────
+  const renderTemplateRow = ({ item: template }) => {
+    const IconComponent = template.icon || FileText;
+    return (
+      <TouchableOpacity
+        style={[styles.templateRow, { backgroundColor: colors.background, borderColor: colors.border }]}
+        onPress={() => handleSelectTemplate(template)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.templateRowIconWrap, { backgroundColor: template.iconBg || 'rgba(107,114,128,0.08)' }]}>
+          <IconComponent size={20} color={template.iconColor || colors.textSecondary} />
+        </View>
+        <View style={styles.templateRowText}>
+          <Text style={[styles.templateRowLabel, { color: colors.textPrimary }]}>{template.label}</Text>
+          <Text style={[styles.templateRowDesc, { color: colors.textTertiary }]} numberOfLines={1}>
+            {template.subtitle || template.description}
+          </Text>
+        </View>
+        <ChevronRight size={18} color={colors.textTertiary} />
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <ArrowLeft size={22} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Canvas Documents</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>#{channelName || 'channel'}</Text>
+        </View>
+        <TouchableOpacity style={[styles.createBtn, { backgroundColor: colors.primary }]} onPress={openCreateModal}>
+          <Plus size={20} color="#ffffff" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Search Primary Canvases */}
+      <View style={[styles.searchBarContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Search size={18} color={colors.textTertiary} style={styles.searchIcon} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.textPrimary }]}
+          placeholder="Search canvas..."
+          placeholderTextColor={colors.textTertiary}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          clearButtonMode="while-editing"
+        />
+      </View>
+
+      {/* Canvases List */}
+      {isLoading && canvases.length === 0 ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : filteredCanvases.length === 0 ? (
+        <View style={styles.empty}>
+          <FileText size={48} color={colors.border} />
+          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No canvases found</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+            {searchQuery ? 'Try adjusting your search filter' : 'Create a canvas to get started!'}
+          </Text>
+          {!searchQuery && (
+            <TouchableOpacity
+              style={[styles.emptyCreateBtn, { backgroundColor: colors.primary }]}
+              onPress={openCreateModal}
+            >
+              <Plus size={16} color="#ffffff" />
+              <Text style={styles.emptyCreateBtnText}>New Canvas</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : (
+        <FlatList
+          data={filteredCanvases}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={styles.list}
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          renderItem={({ item }) => (
+            <CanvasCard
+              canvas={item}
+              isSaved={savedCanvasIds.has(item._id)}
+              onSelect={handleSelect}
+              onSaveToggle={toggleSaveForLater}
+              onOptionsPress={handleCardOptions}
+            />
+          )}
+        />
+      )}
+
+      {/* ── CREATE CANVAS & TEMPLATE SELECTOR MODAL ───────────────────────── */}
+      <Modal
+        visible={createModalVisible}
+        transparent
+        animationType="none"
+        onRequestClose={closeCreateModal}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} onPress={closeCreateModal} activeOpacity={1} />
+          <Animated.View
+            style={[
+              styles.modalContent,
+              {
+                backgroundColor: colors.card,
+                transform: [{ translateY: slideAnim }],
+              },
+            ]}
+          >
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+              style={{ flex: 1 }}
+            >
+              {/* Modal Drag Handle */}
+              <View style={styles.modalDragHandle} />
+
+              {/* ── STEP 1: CHOICE INTENT SELECTOR (Blank / Template / Link) ── */}
+              {modalStep === 'choice' && (
+                <View style={{ flex: 1, padding: 20 }}>
+                  <View style={styles.modalChoiceHeader}>
+                    <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Create canvas</Text>
+                    <TouchableOpacity onPress={closeCreateModal} style={styles.modalCloseBtn}>
+                      <X size={20} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.choiceOptionsList}>
+                    {/* Option 1: Blank Canvas */}
+                    <TouchableOpacity
+                      style={[styles.choiceCard, { backgroundColor: colors.background, borderColor: colors.border }]}
+                      onPress={handleCreateBlank}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.choiceIconWrap, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
+                        <Plus size={22} color={colors.primary} />
+                      </View>
+                      <View style={styles.choiceTextWrap}>
+                        <Text style={[styles.choiceLabel, { color: colors.textPrimary }]}>Blank canvas</Text>
+                        <Text style={[styles.choiceDesc, { color: colors.textTertiary }]}>Start with a blank document</Text>
+                      </View>
+                      <ChevronRight size={18} color={colors.textTertiary} />
+                    </TouchableOpacity>
+
+                    {/* Option 2: From Template */}
+                    <TouchableOpacity
+                      style={[styles.choiceCard, { backgroundColor: colors.background, borderColor: colors.border }]}
+                      onPress={() => setModalStep('templates_list')}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.choiceIconWrap, { backgroundColor: 'rgba(124, 58, 237, 0.1)' }]}>
+                        <Copy size={20} color="#7c3aed" />
+                      </View>
+                      <View style={styles.choiceTextWrap}>
+                        <Text style={[styles.choiceLabel, { color: colors.textPrimary }]}>From template</Text>
+                        <Text style={[styles.choiceDesc, { color: colors.textTertiary }]}>Use a predefined template</Text>
+                      </View>
+                      <ChevronRight size={18} color={colors.textTertiary} />
+                    </TouchableOpacity>
+
+                    {/* Option 3: Link Existing */}
+                    <TouchableOpacity
+                      style={[styles.choiceCard, { backgroundColor: colors.background, borderColor: colors.border }]}
+                      onPress={handleLoadExistingList}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.choiceIconWrap, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+                        <LinkIcon size={20} color="#10b981" />
+                      </View>
+                      <View style={styles.choiceTextWrap}>
+                        <Text style={[styles.choiceLabel, { color: colors.textPrimary }]}>Link existing</Text>
+                        <Text style={[styles.choiceDesc, { color: colors.textTertiary }]}>Link a canvas from this workspace</Text>
+                      </View>
+                      <ChevronRight size={18} color={colors.textTertiary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={[styles.choiceFooterText, { color: colors.textTertiary }]}>
+                    Changes sync in real-time with other collaborators.
+                  </Text>
+                </View>
+              )}
+
+              {/* ── STEP 2: TEMPLATE LIST VIEW ──────────────────────────────── */}
+              {modalStep === 'templates_list' && (
+                <View style={{ flex: 1 }}>
+                  <View style={[styles.modalHeaderRow, { borderBottomColor: colors.border }]}>
+                    <TouchableOpacity onPress={() => setModalStep('choice')} style={styles.modalBackIconBtn}>
+                      <ChevronLeft size={22} color={colors.textPrimary} />
+                    </TouchableOpacity>
+                    <Text style={[styles.modalTitle, { color: colors.textPrimary, flex: 1, marginLeft: 8 }]}>
+                      From template
+                    </Text>
+                    <TouchableOpacity onPress={closeCreateModal} style={styles.modalCloseBtn}>
+                      <X size={20} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Template Search Bar */}
+                  <View style={[styles.modalSearchContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                    <Search size={16} color={colors.textTertiary} style={styles.searchIcon} />
+                    <TextInput
+                      style={[styles.modalSearchInput, { color: colors.textPrimary }]}
+                      placeholder="Search templates..."
+                      placeholderTextColor={colors.textTertiary}
+                      value={templateSearch}
+                      onChangeText={setTemplateSearch}
+                      clearButtonMode="while-editing"
+                    />
+                  </View>
+
+                  {/* Category Scroll tabs */}
+                  <View style={{ height: 44, marginVertical: 4 }}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.categoryScroll}
+                    >
+                      {CATEGORIES.map((cat) => {
+                        const isSelected = selectedCategory === cat;
+                        return (
+                          <TouchableOpacity
+                            key={cat}
+                            onPress={() => setSelectedCategory(cat)}
+                            style={[
+                              styles.categoryTab,
+                              {
+                                backgroundColor: isSelected ? colors.primary : colors.background,
+                                borderColor: isSelected ? colors.primary : colors.border,
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.categoryTabText, { color: isSelected ? '#ffffff' : colors.textSecondary }]}>
+                              {cat}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+
+                  {/* Templates flat list */}
+                  <FlatList
+                    data={filteredTemplates}
+                    keyExtractor={(item) => item.id}
+                    renderItem={renderTemplateRow}
+                    contentContainerStyle={styles.templateListScroll}
+                    showsVerticalScrollIndicator={false}
+                  />
+                </View>
+              )}
+
+              {/* ── STEP 3: CUSTOMIZE VIEW ──────────────────────────────────── */}
+              {modalStep === 'customize' && selectedTemplate && (
+                <View style={{ flex: 1 }}>
+                  <View style={[styles.modalHeaderRow, { borderBottomColor: colors.border }]}>
+                    <TouchableOpacity onPress={() => setModalStep('templates_list')} style={styles.modalBackIconBtn}>
+                      <ChevronLeft size={22} color={colors.textPrimary} />
+                    </TouchableOpacity>
+                    <Text style={[styles.modalTitle, { color: colors.textPrimary, flex: 1, marginLeft: 8 }]}>
+                      Configure Template
+                    </Text>
+                    <TouchableOpacity onPress={closeCreateModal} style={styles.modalCloseBtn}>
+                      <X size={20} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                    <View style={styles.customizeContainer}>
+                      <View style={styles.selectedBadgeRow}>
+                        <View style={[styles.templateRowIconWrap, { backgroundColor: selectedTemplate.iconBg }]}>
+                          {React.createElement(selectedTemplate.icon || FileText, { size: 18, color: selectedTemplate.iconColor })}
+                        </View>
+                        <View style={{ marginLeft: 12, flex: 1 }}>
+                          <Text style={[styles.selectedTemplateLabel, { color: colors.textPrimary }]}>{selectedTemplate.label}</Text>
+                          <Text style={[styles.selectedTemplateCategory, { color: colors.textSecondary }]}>{selectedTemplate.category || 'General'}</Text>
+                        </View>
+                      </View>
+
+                      {/* Canvas Title */}
+                      <View style={styles.formGroup}>
+                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Canvas Title</Text>
+                        <TextInput
+                          style={[styles.customTitleInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                          value={newCanvasTitle}
+                          onChangeText={setNewCanvasTitle}
+                          placeholder="e.g. Project Specs"
+                          placeholderTextColor={colors.textTertiary}
+                        />
+                      </View>
+
+                      {/* Cover selection */}
+                      {selectedTemplate.cover && (
+                        <View style={styles.formGroup}>
+                          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Select Cover Variation</Text>
+                          <View style={styles.coverSelectorRow}>
+                            {((Array.isArray(selectedTemplate.cover) ? selectedTemplate.cover : (selectedTemplate.cover.variations || [selectedTemplate.cover]))).map((cov, index) => {
+                              const isSelected = selectedCoverIndex === index;
+                              const isGradient = cov.type === 'gradient';
+                              return (
+                                <TouchableOpacity
+                                  key={index}
+                                  onPress={() => setSelectedCoverIndex(index)}
+                                  style={[
+                                    styles.coverOptionBtn,
+                                    {
+                                      borderColor: isSelected ? colors.primary : colors.border,
+                                      borderWidth: isSelected ? 2 : 1,
+                                    },
+                                  ]}
+                                >
+                                  {isGradient ? (
+                                    <View style={[styles.coverOptionPreview, { backgroundColor: cov.colorPalette?.[0] || '#4f46e5' }]}>
+                                      <Text style={styles.coverOptionText}>Gradient</Text>
+                                    </View>
+                                  ) : (
+                                    <View style={[styles.coverOptionPreview, { backgroundColor: '#f3f4f6' }]}>
+                                      <ImageIcon size={14} color="#6b7280" />
+                                      <Text style={[styles.coverOptionText, { color: '#4b5563' }]}>Photo</Text>
+                                    </View>
+                                  )}
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        </View>
+                      )}
+
+                      {/* Variables Form */}
+                      {selectedTemplate.variables && selectedTemplate.variables.length > 0 && (
+                        <View style={styles.formGroup}>
+                          <View style={styles.prefillToggleRow}>
+                            <Text style={[styles.inputLabel, { color: colors.textSecondary, marginBottom: 0 }]}>
+                              Auto-Fill Variables
+                            </Text>
+                            <Switch
+                              value={prefillVars}
+                              onValueChange={handleTogglePrefill}
+                              trackColor={{ false: '#767577', true: colors.primary + '80' }}
+                              thumbColor={prefillVars ? colors.primary : '#f4f3f4'}
+                            />
+                          </View>
+                          
+                          <View style={styles.variablesInputsList}>
+                            {selectedTemplate.variables.map((v) => (
+                              <View key={v.name} style={styles.variableRow}>
+                                <Text style={[styles.variableName, { color: colors.textSecondary }]}>
+                                  {v.name.replace(/_/g, ' ')}
+                                </Text>
+                                <TextInput
+                                  style={[styles.variableInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                                  value={variableValues[v.name] || ''}
+                                  onChangeText={(val) => {
+                                    setVariableValues((prev) => ({ ...prev, [v.name]: val }));
+                                  }}
+                                  placeholder={v.example || 'Value...'}
+                                  placeholderTextColor={colors.textTertiary}
+                                />
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  </ScrollView>
+
+                  <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
+                    <TouchableOpacity
+                      style={[
+                        styles.createCanvasBtn,
+                        {
+                          backgroundColor: isCreating ? colors.primary + '80' : colors.primary,
+                        },
+                      ]}
+                      onPress={handleCreateCanvas}
+                      disabled={isCreating}
+                    >
+                      {isCreating ? (
+                        <ActivityIndicator size="small" color="#ffffff" />
+                      ) : (
+                        <>
+                          <Sparkles size={18} color="#ffffff" />
+                          <Text style={styles.createCanvasBtnText}>Create Document</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* ── STEP 4: LINK EXISTING CANVASES LIST ─────────────────────── */}
+              {modalStep === 'existing_list' && (
+                <View style={{ flex: 1 }}>
+                  <View style={[styles.modalHeaderRow, { borderBottomColor: colors.border }]}>
+                    <TouchableOpacity onPress={() => setModalStep('choice')} style={styles.modalBackIconBtn}>
+                      <ChevronLeft size={22} color={colors.textPrimary} />
+                    </TouchableOpacity>
+                    <Text style={[styles.modalTitle, { color: colors.textPrimary, flex: 1, marginLeft: 8 }]}>
+                      Link existing canvas
+                    </Text>
+                    <TouchableOpacity onPress={closeCreateModal} style={styles.modalCloseBtn}>
+                      <X size={20} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Search Bar for Existing Canvases */}
+                  <View style={[styles.modalSearchContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                    <Search size={16} color={colors.textTertiary} style={styles.searchIcon} />
+                    <TextInput
+                      style={[styles.modalSearchInput, { color: colors.textPrimary }]}
+                      placeholder="Search canvases..."
+                      placeholderTextColor={colors.textTertiary}
+                      value={existingSearch}
+                      onChangeText={setExistingSearch}
+                      clearButtonMode="while-editing"
+                    />
+                  </View>
+
+                  {isLoadingExisting ? (
+                    <View style={styles.centered}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    </View>
+                  ) : filteredExisting.length === 0 ? (
+                    <View style={styles.empty}>
+                      <FileText size={32} color={colors.border} />
+                      <Text style={[styles.emptyTitle, { color: colors.textPrimary, fontSize: 14 }]}>
+                        No canvases found
+                      </Text>
+                    </View>
+                  ) : (
+                    <FlatList
+                      data={filteredExisting}
+                      keyExtractor={(item) => item._id}
+                      contentContainerStyle={styles.templateListScroll}
+                      renderItem={({ item }) => (
+                        <TouchableOpacity
+                          style={[styles.templateRow, { backgroundColor: colors.background, borderColor: colors.border }]}
+                          onPress={() => handleSelectExistingCanvas(item)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={[styles.templateRowIconWrap, { backgroundColor: 'rgba(59, 130, 246, 0.08)' }]}>
+                            <FileText size={18} color={colors.primary} />
+                          </View>
+                          <View style={styles.templateRowText}>
+                            <Text style={[styles.templateRowLabel, { color: colors.textPrimary }]} numberOfLines={1}>
+                              {item.title || 'Untitled canvas'}
+                            </Text>
+                            {item.updatedAt && (
+                              <View style={styles.timeInfoRow}>
+                                <Clock size={10} color={colors.textTertiary} />
+                                <Text style={[styles.timeText, { color: colors.textTertiary, marginLeft: 4 }]}>
+                                  {new Date(item.updatedAt).toLocaleDateString(undefined, {
+                                    month: 'short',
+                                    day: 'numeric',
+                                  })}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                          <ChevronRight size={18} color={colors.textTertiary} />
+                        </TouchableOpacity>
+                      )}
+                    />
+                  )}
+                </View>
+              )}
+            </KeyboardAvoidingView>
+          </Animated.View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  backBtn: {
+    marginRight: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+  },
+  headerTitleContainer: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  subtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  createBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: 40,
+    fontSize: 14,
+  },
+  list: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  empty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 16,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  emptyCreateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 20,
+    gap: 6,
+  },
+  emptyCreateBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // ── Modal Styles ───────────────────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: SCREEN_HEIGHT * 0.85,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalDragHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#e5e7eb',
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+  },
+  modalChoiceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 20,
+  },
+  modalBackIconBtn: {
+    padding: 4,
+    marginRight: 4,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalCloseBtn: {
+    padding: 6,
+  },
+  // Choice Layout
+  choiceOptionsList: {
+    marginVertical: 20,
+    gap: 12,
+    flex: 1,
+  },
+  choiceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  choiceIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  choiceTextWrap: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  choiceLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  choiceDesc: {
+    fontSize: 12,
+    marginTop: 3,
+  },
+  choiceFooterText: {
+    fontSize: 11,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  // Template/Search Styles
+  modalSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginTop: 14,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    height: 38,
+  },
+  modalSearchInput: {
+    flex: 1,
+    fontSize: 13,
+    paddingVertical: 0,
+  },
+  categoryScroll: {
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    gap: 8,
+  },
+  categoryTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  categoryTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  templateListScroll: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 32,
+  },
+  templateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  templateRowIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  templateRowText: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
+  },
+  templateRowLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  templateRowDesc: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  timeInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  timeText: {
+    fontSize: 11,
+  },
+  // ── Customization Layout ───────────────────────────────────────────────────
+  customizeContainer: {
+    padding: 20,
+  },
+  selectedBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  selectedTemplateLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  selectedTemplateCategory: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  customTitleInput: {
+    height: 44,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    fontSize: 14,
+  },
+  coverSelectorRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  coverOptionBtn: {
+    flex: 1,
+    height: 54,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  coverOptionPreview: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  coverOptionText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  prefillToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  variablesInputsList: {
+    gap: 10,
+  },
+  variableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  variableName: {
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
+    textTransform: 'capitalize',
+  },
+  variableInput: {
+    width: SCREEN_WIDTH * 0.5,
+    height: 38,
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    fontSize: 13,
+  },
+  modalFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+  },
+  createCanvasBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 46,
+    borderRadius: 10,
+    gap: 8,
+  },
+  createCanvasBtnText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+});

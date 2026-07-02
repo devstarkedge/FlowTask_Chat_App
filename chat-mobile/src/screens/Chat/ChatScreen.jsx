@@ -13,6 +13,7 @@ import {
   Image,
   Linking,
   ScrollView,
+  Modal,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useShallow } from 'zustand/react/shallow';
@@ -23,7 +24,7 @@ import { useThemeStore } from "../../stores/themeStore";
 import { useLaterStore } from "../../stores/laterStore";
 import { laterAPI, pinsAPI } from "../../services/api";
 import { emitTyping } from "../../services/socket";
-import { AppAvatar, AppScreen } from "../../components/common";
+import { AppAvatar, AppScreen, MobileFileCard } from "../../components/common";
 import RichText from "../../components/RichText";
 import ReactionBar from "../../components/ReactionBar";
 import EmojiPickerModal from "../../components/EmojiPickerModal";
@@ -63,6 +64,29 @@ const getAuthorId = (msg) => {
   if (!msg) return null;
   if (typeof msg.authorId === "string") return msg.authorId;
   return msg.authorId?._id || msg.senderSnapshot?._id || null;
+};
+
+const getMessageAttachments = (msg) => {
+  if (!msg) return [];
+  const refs = msg.fileReferences || [];
+  if (refs.length > 0) {
+    return refs
+      .map((ref) => {
+        if (!ref.fileId) return null;
+        const file = ref.fileId;
+        return {
+          _id: file._id,
+          name: file.originalName || file.fileName || file.name || 'File',
+          fileName: file.originalName || file.fileName || file.name || 'File',
+          url: file.url || file.secureUrl,
+          thumbnailUrl: file.thumbnailUrl,
+          mimeType: file.mimeType,
+          fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
+        };
+      })
+      .filter(Boolean);
+  }
+  return msg.attachments || msg.files || [];
 };
 
 const isSameDay = (d1, d2) => {
@@ -105,7 +129,7 @@ const isImageUrl = (url) => {
 // ─── ChatScreen ──────────────────────────────────────────────────────────────
 
 const ChatScreen = ({ route, navigation }) => {
-  const { channelId, channelName, initialTab, canvasId: deepLinkCanvasId } = route.params;
+  const { channelId, channelName, initialTab, canvasId: deepLinkCanvasId, messageId: targetMessageId } = route.params || {};
 
   // Granular store subscriptions — prevent unnecessary re-renders
   const messages = useChatStore(useShallow((s) => s.messagesByChannel[channelId] || []));
@@ -133,6 +157,7 @@ const ChatScreen = ({ route, navigation }) => {
   const channels = useChannelStore(useShallow((s) => s.channels));
   const membersByChannel = useChannelStore(useShallow((s) => s.membersByChannel));
   const fetchMembers = useChannelStore((s) => s.fetchMembers);
+  const markAsRead = useChannelStore((s) => s.markAsRead);
   const { colors } = useThemeStore(useShallow((s) => ({ colors: s.colors })));
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const toggleSaveMessage = useLaterStore((s) => s.toggleSaveMessage);
@@ -148,9 +173,39 @@ const ChatScreen = ({ route, navigation }) => {
   const [replyingTo, setReplyingTo] = useState(null); // message object or null
   const [editingMessage, setEditingMessage] = useState(null); // message object or null
   const [reminderTarget, setReminderTarget] = useState(null); // messageId or null
+  const [actionMenuTarget, setActionMenuTarget] = useState(null); // message object or null
+  const [scrolledToMessageId, setScrolledToMessageId] = useState(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
 
-  // Tab navigation — supports 'messages' and 'canvas'; deep-linked via initialTab param
-  const [activeTab, setActiveTab] = useState(initialTab === 'canvas' ? 'canvas' : 'messages');
+  // Redirection: if initialTab param is 'canvas', navigate directly to CanvasList screen
+  useEffect(() => {
+    if (initialTab === 'canvas') {
+      navigation.navigate("CanvasList", { channelId, channelName });
+    }
+  }, [initialTab, channelId, channelName]);
+
+  // Scrolling and highlighting target message from Later Panel
+  useEffect(() => {
+    if (targetMessageId && displayedMessages.length > 0 && scrolledToMessageId !== targetMessageId) {
+      const index = displayedMessages.findIndex(m => m._id === targetMessageId);
+      if (index !== -1) {
+        setScrolledToMessageId(targetMessageId);
+        setHighlightedMessageId(targetMessageId);
+
+        setTimeout(() => {
+          flatListRef.current?.scrollToIndex({
+            index,
+            animated: true,
+            viewPosition: 0.5,
+          });
+        }, 400);
+
+        setTimeout(() => {
+          setHighlightedMessageId(null);
+        }, 2500);
+      }
+    }
+  }, [targetMessageId, displayedMessages, scrolledToMessageId]);
 
   const displayedMessages = useMemo(() => [...messages].reverse(), [messages]);
 
@@ -197,21 +252,23 @@ const ChatScreen = ({ route, navigation }) => {
     };
   }, [isDM, channelMembers, channel, user, channelName]);
 
+  const channelNameToShow = useMemo(() => {
+    if (isDM && dmUser) return dmUser.name;
+    return channel?.name || channelName || 'Channel';
+  }, [channel, channelName, isDM, dmUser]);
+
   const flatListRef = useRef(null);
-  const canvasScrollRef = useRef(null);
 
   useEffect(() => {
     fetchMessages(channelId);
     fetchMembers(channelId);
   }, [channelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When opened from Later Panel with a specific canvasId, scroll to that canvas item
-  const [highlightedCanvasId, setHighlightedCanvasId] = useState(deepLinkCanvasId || null);
   useEffect(() => {
-    if (activeTab === 'canvas' && deepLinkCanvasId) {
-      setHighlightedCanvasId(deepLinkCanvasId);
+    if (channelId) {
+      markAsRead(channelId);
     }
-  }, [activeTab, deepLinkCanvasId]);
+  }, [channelId, messages.length, markAsRead]);
 
   // Debounced search — avoid re-running on every displayedMessages change
   const searchTimeoutRef = useRef(null);
@@ -277,99 +334,9 @@ const ChatScreen = ({ route, navigation }) => {
   // ─── Long-Press Context Menu ──────────────────────────────────────────────
   const showMessageActions = useCallback(
     (item) => {
-      const isMe =
-        item.authorId?._id === user?._id || item.authorId === user?._id;
-      const saved = isMessageSaved?.(item._id);
-      const pinned = item.isPinned;
-
-      const buttons = [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Copy",
-          onPress: () => {
-            Clipboard.setStringAsync(item.content || "");
-          },
-        },
-        {
-          text: "Reply",
-          onPress: () => {
-            setReplyingTo(item);
-            setEditingMessage(null);
-          },
-        },
-        {
-          text: "React",
-          onPress: () => setEmojiPickerTarget(item._id),
-        },
-        {
-          text: saved ? "Unsave" : "Save & Remind",
-          onPress: () => {
-            toggleSaveMessage?.(item._id);
-            if (!saved) setReminderTarget(item._id);
-          },
-        },
-        {
-          text: pinned ? "Unpin" : "Pin",
-          onPress: async () => {
-            try {
-              if (pinned) await pinsAPI.unpin(item._id);
-              else await pinsAPI.pin(item._id);
-            } catch (err) {
-              logger.error('Pin action failed:', err);
-              Alert.alert('Error', 'Could not update pin status.');
-            }
-          },
-        },
-        {
-          text: "View Thread",
-          onPress: () => {
-            navigation.navigate("ThreadDetail", {
-              rootMessageId: item._id,
-              channelId,
-              channelName,
-              rootContent: item.content,
-              rootHtmlContent: item.htmlContent,
-              replyCount: item.replyCount || 0,
-              rootAuthor: item.senderSnapshot || item.authorId,
-            });
-          },
-        },
-      ];
-
-      if (isMe) {
-        buttons.push({
-          text: "Edit",
-          onPress: () => {
-            setEditingMessage(item);
-            setReplyingTo(null);
-            setText(item.content || "");
-          },
-        });
-        buttons.push({
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            Alert.alert("Delete Message", "Are you sure?", [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Delete",
-                style: "destructive",
-                onPress: () => deleteMessage(item._id, channelId),
-              },
-            ]);
-          },
-        });
-      }
-
-      if (Platform.OS === "ios" || Platform.OS === "android") {
-        Alert.alert(
-          "Message Actions",
-          item.content?.slice(0, 80) || "",
-          buttons
-        );
-      }
+      setActionMenuTarget(item);
     },
-    [user, channelId, channelName, navigation, toggleSaveMessage, isMessageSaved, deleteMessage]
+    []
   );
 
   // ─── Render: Date Separator ───────────────────────────────────────────────
@@ -387,6 +354,25 @@ const ChatScreen = ({ route, navigation }) => {
   const renderMessage = useCallback(({ item, index }) => {
     const isMe =
       item.authorId?._id === user?._id || item.authorId === user?._id;
+    const isSystem = item.contentType === "system" && !item.activityMeta;
+
+    if (isSystem) {
+      return (
+        <View style={styles.systemMessageContainer} key={item._id}>
+          <View style={[styles.systemMessageLine, { backgroundColor: colors.border }]} />
+          <Text style={[styles.systemMessageText, { color: colors.textSecondary }]}>
+            {item.content}
+          </Text>
+          <View style={[styles.systemMessageLine, { backgroundColor: colors.border }]} />
+        </View>
+      );
+    }
+
+    const isDeleted = item.isDeleted === true;
+    const deletedText = isMe
+      ? "You deleted this message"
+      : "This message was deleted";
+
     const isMatch =
       searchQuery &&
       item?.content &&
@@ -396,8 +382,8 @@ const ChatScreen = ({ route, navigation }) => {
 
     const messageSender = item.senderSnapshot || item.authorId;
 
-    // Message grouping: compact if same author and within 5 minutes of prev message
-    const prevItem = displayedMessages[index + 1]; // inverted list, so +1 is previous
+    // Message grouping: compact if same author and within 5 minutes of prev message (older)
+    const prevItem = displayedMessages[index + 1]; // inverted list, so +1 is previous chronologically
     const isCompact =
       prevItem &&
       getAuthorId(item) === getAuthorId(prevItem) &&
@@ -405,6 +391,50 @@ const ChatScreen = ({ route, navigation }) => {
       !prevItem.isActivity &&
       Math.abs(new Date(item.createdAt) - new Date(prevItem.createdAt)) <
         5 * 60 * 1000;
+
+    // Last in group: true if the NEXT chronologically message (index - 1) is not by the same author or is not within 5 mins
+    const nextItem = displayedMessages[index - 1]; // inverted list, so -1 is next chronologically
+    const sameAsNext =
+      nextItem &&
+      getAuthorId(item) === getAuthorId(nextItem) &&
+      !item.isActivity &&
+      !nextItem.isActivity &&
+      Math.abs(new Date(nextItem.createdAt) - new Date(item.createdAt)) <
+        5 * 60 * 1000;
+    const isLastInGroup = !sameAsNext;
+
+    const groupPos =
+      !isCompact && isLastInGroup
+        ? "solo"
+        : !isCompact
+          ? "first"
+          : isLastInGroup
+            ? "last"
+            : "middle";
+
+    // Dynamic border radius matching web index.css (SENT and RECEIVED)
+    let bubbleRadiusStyle = {};
+    if (isMe) {
+      if (groupPos === 'first') {
+        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomRightRadius: 4, borderBottomLeftRadius: 18 };
+      } else if (groupPos === 'middle') {
+        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 4, borderBottomRightRadius: 4, borderBottomLeftRadius: 18 };
+      } else if (groupPos === 'last') {
+        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 4, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
+      } else { // solo
+        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
+      }
+    } else {
+      if (groupPos === 'first') {
+        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 4 };
+      } else if (groupPos === 'middle') {
+        bubbleRadiusStyle = { borderTopLeftRadius: 4, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 4 };
+      } else if (groupPos === 'last') {
+        bubbleRadiusStyle = { borderTopLeftRadius: 4, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
+      } else { // solo
+        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
+      }
+    }
 
     // Date separator: show if date differs from previous message
     const showDateSep =
@@ -414,20 +444,14 @@ const ChatScreen = ({ route, navigation }) => {
     const hasThread = (item.replyCount || 0) > 0;
 
     // File attachments
-    const attachments = item.attachments || item.files || [];
-    const imageAttachments = attachments.filter(
-      (f) => f.mimeType?.startsWith("image/") || isImageUrl(f.url)
-    );
-    const fileAttachments = attachments.filter(
-      (f) => !f.mimeType?.startsWith("image/") && !isImageUrl(f.url)
-    );
+    const attachments = getMessageAttachments(item);
 
     const contentColor = isMe
       ? colors.messageTextSent
       : colors.messageTextReceived;
 
     return (
-      <View>
+      <View key={item._id} style={highlightedMessageId === item._id ? { backgroundColor: colors.primary + '20', borderRadius: 8, paddingVertical: 4 } : null}>
         {showDateSep && renderDateSeparator(item.createdAt)}
 
         <TouchableOpacity
@@ -491,6 +515,7 @@ const ChatScreen = ({ route, navigation }) => {
             <View
               style={[
                 styles.bubble,
+                bubbleRadiusStyle,
                 {
                   backgroundColor: isMe
                     ? colors.messageBubbleSent
@@ -502,8 +527,36 @@ const ChatScreen = ({ route, navigation }) => {
                 },
               ]}
             >
+              {/* Forwarded indicator */}
+              {item.forwardMeta?.isForwarded && (
+                <View
+                  style={[
+                    styles.forwardedRow,
+                    { borderBottomColor: colors.border },
+                  ]}
+                >
+                  <Reply size={12} color={contentColor} style={{ marginRight: 4, transform: [{ scaleX: -1 }] }} />
+                  <Text style={[styles.forwardedText, { color: contentColor, opacity: 0.8 }]}>
+                    Forwarded from{" "}
+                    <Text style={{ fontWeight: "700" }}>
+                      {item.forwardMeta.originalChannelName
+                        ? (item.forwardMeta.originalChannelType === "dm"
+                            ? item.forwardMeta.originalChannelName
+                            : `#${item.forwardMeta.originalChannelName}`)
+                        : item.forwardMeta.originalSenderName || "Unknown"}
+                    </Text>
+                  </Text>
+                </View>
+              )}
+
               {/* Content — rich text or plain */}
-              {item.htmlContent ? (
+              {isDeleted ? (
+                <Text
+                  style={[styles.messageText, { color: colors.textTertiary, fontStyle: "italic" }]}
+                >
+                  {deletedText}
+                </Text>
+              ) : item.htmlContent ? (
                 <RichText
                   html={item.htmlContent}
                   text={item.content}
@@ -528,51 +581,18 @@ const ChatScreen = ({ route, navigation }) => {
                 </Text>
               )}
 
-              {/* Image attachments */}
-              {imageAttachments.length > 0 && (
-                <View style={styles.attachmentRow}>
-                  {imageAttachments.map((file, i) => (
-                    <TouchableOpacity
+              {/* Attachment cards */}
+              {!isDeleted && attachments.length > 0 && (
+                <View style={{ marginTop: 4, width: '100%', gap: 4 }}>
+                  {attachments.map((file, i) => (
+                    <MobileFileCard
                       key={file._id || i}
-                      onPress={() => {
-                        if (file.url) Linking.openURL(file.url);
-                      }}
-                    >
-                      <Image
-                        source={{
-                          uri: file.thumbnailUrl || file.url,
-                        }}
-                        style={styles.imageAttachment}
-                        resizeMode="cover"
-                      />
-                    </TouchableOpacity>
+                      file={file}
+                      colors={colors}
+                    />
                   ))}
                 </View>
               )}
-
-              {/* File attachments */}
-              {fileAttachments.length > 0 &&
-                fileAttachments.map((file, i) => (
-                  <TouchableOpacity
-                    key={file._id || i}
-                    style={[
-                      styles.fileAttachment,
-                      { backgroundColor: isMe ? colors.surfaceOverlay : colors.cardBackground },
-                    ]}
-                    onPress={() => {
-                      if (file.url) Linking.openURL(file.url);
-                    }}
-                  >
-                    <FileText size={16} color={contentColor} />
-                    <Text
-                      style={{ color: contentColor, fontSize: 13, flex: 1 }}
-                      numberOfLines={1}
-                    >
-                      {file.fileName || file.name || "File"}
-                    </Text>
-                    <ExternalLink size={14} color={contentColor} />
-                  </TouchableOpacity>
-                ))}
 
               {/* Timestamp row */}
               <View style={styles.timestampRow}>
@@ -589,7 +609,7 @@ const ChatScreen = ({ route, navigation }) => {
                 >
                   {formatTime(item.createdAt)}
                 </Text>
-                {item.isEdited && (
+                {item.isEdited && !isDeleted && (
                   <Text
                     style={[
                       styles.editedLabel,
@@ -710,11 +730,11 @@ const ChatScreen = ({ route, navigation }) => {
             ) : (
               <Hash size={20} color={colors.textSecondary} />
             )}
-            <Text
+             <Text
               style={[styles.headerTitle, { color: colors.textPrimary }]}
               numberOfLines={1}
             >
-              {channelName}
+              {channelNameToShow}
             </Text>
           </View>
           {!isDM && (
@@ -785,6 +805,7 @@ const ChatScreen = ({ route, navigation }) => {
             onPress={() => {
               setShowOptions(false);
               navigation.navigate("ChannelDetails", {
+                channelId,
                 channelName,
                 memberCount,
               });
@@ -807,6 +828,20 @@ const ChatScreen = ({ route, navigation }) => {
               Files
             </Text>
           </TouchableOpacity>
+          {!isDM && (
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => {
+                setShowOptions(false);
+                navigation.navigate("CanvasList", { channelId, channelName });
+              }}
+            >
+              <FileText size={18} color={colors.textSecondary} />
+              <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+                Canvas Documents
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.optionItem}
             onPress={() => {
@@ -846,79 +881,12 @@ const ChatScreen = ({ route, navigation }) => {
         </View>
       )}
 
-      {/* Tab Bar — Messages / Canvas */}
-      <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'messages' && styles.tabItemActive]}
-          onPress={() => setActiveTab('messages')}
-          activeOpacity={0.7}
-        >
-          <MessageSquare
-            size={15}
-            color={activeTab === 'messages' ? colors.primary : colors.textSecondary}
-          />
-          <Text style={[
-            styles.tabLabel,
-            { color: activeTab === 'messages' ? colors.primary : colors.textSecondary },
-            activeTab === 'messages' && styles.tabLabelActive,
-          ]}>
-            Messages
-          </Text>
-          {activeTab === 'messages' && (
-            <View style={[styles.tabUnderline, { backgroundColor: colors.primary }]} />
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'canvas' && styles.tabItemActive]}
-          onPress={() => setActiveTab('canvas')}
-          activeOpacity={0.7}
-        >
-          <FileText
-            size={15}
-            color={activeTab === 'canvas' ? colors.primary : colors.textSecondary}
-          />
-          <Text style={[
-            styles.tabLabel,
-            { color: activeTab === 'canvas' ? colors.primary : colors.textSecondary },
-            activeTab === 'canvas' && styles.tabLabelActive,
-          ]}>
-            Canvas
-          </Text>
-          {activeTab === 'canvas' && (
-            <View style={[styles.tabUnderline, { backgroundColor: colors.primary }]} />
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Canvas Tab Panel */}
-      {activeTab === 'canvas' && (
-        <ScrollView
-          ref={canvasScrollRef}
-          style={{ flex: 1 }}
-          contentContainerStyle={styles.canvasTabContent}
-        >
-          <View style={[styles.canvasPlaceholder, { borderColor: colors.border, backgroundColor: colors.backgroundSecondary }]}>
-            <FileText size={40} color={colors.textTertiary} />
-            <Text style={[styles.canvasPlaceholderTitle, { color: colors.textPrimary }]}>
-              Canvas
-            </Text>
-            <Text style={[styles.canvasPlaceholderText, { color: colors.textSecondary }]}>
-              {deepLinkCanvasId
-                ? `Opening canvas ${deepLinkCanvasId}…`
-                : 'Canvases for this channel will appear here.'}
-            </Text>
-          </View>
-        </ScrollView>
-      )}
-
-      {/* Messages Tab — KeyboardAvoidingView + FlatList */}
-      {activeTab === 'messages' && (
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-        >
+      {/* Messages View — KeyboardAvoidingView + FlatList */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={0}
+      >
         <FlatList
           ref={flatListRef}
           data={displayedMessages}
@@ -943,6 +911,15 @@ const ChatScreen = ({ route, navigation }) => {
                 style={{ margin: 10 }}
                 color={colors.primary}
               />
+            ) : null
+          }
+          ListEmptyComponent={
+            !isLoadingMessages ? (
+              <View style={styles.emptyContainer}>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                  No messages yet
+                </Text>
+              </View>
             ) : null
           }
         />
@@ -998,7 +975,6 @@ const ChatScreen = ({ route, navigation }) => {
           onCancelEdit={() => { setEditingMessage(null); setText(""); }}
         />
       </KeyboardAvoidingView>
-      )} {/* end activeTab === 'messages' */}
 
       {/* Reminder Modal */}
       <ReminderModal
@@ -1028,6 +1004,156 @@ const ChatScreen = ({ route, navigation }) => {
         }}
         colors={colors}
       />
+
+      {/* Custom Message Actions Modal (solves Android Alert button limit) */}
+      <Modal
+        visible={!!actionMenuTarget}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActionMenuTarget(null)}
+      >
+        <TouchableOpacity
+          style={styles.actionsOverlay}
+          activeOpacity={1}
+          onPress={() => setActionMenuTarget(null)}
+        >
+          <View style={[styles.actionsSheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <View style={[styles.actionsHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.actionsTitle, { color: colors.textPrimary }]}>Message Actions</Text>
+              <Text style={[styles.actionsSnippet, { color: colors.textSecondary }]} numberOfLines={1}>
+                {actionMenuTarget?.content || "Message"}
+              </Text>
+            </View>
+
+            {/* Actions list */}
+            <ScrollView style={styles.actionsList}>
+              <TouchableOpacity
+                style={styles.actionItem}
+                onPress={() => {
+                  Clipboard.setStringAsync(actionMenuTarget?.content || "");
+                  setActionMenuTarget(null);
+                }}
+              >
+                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>Copy Text</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionItem}
+                onPress={() => {
+                  setReplyingTo(actionMenuTarget);
+                  setEditingMessage(null);
+                  setActionMenuTarget(null);
+                }}
+              >
+                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>Reply in Thread</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionItem}
+                onPress={() => {
+                  setActionMenuTarget(null);
+                  setTimeout(() => {
+                    setEmojiPickerTarget(actionMenuTarget?._id);
+                  }, 150);
+                }}
+              >
+                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>React to Message</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionItem}
+                onPress={() => {
+                  const saved = isMessageSaved?.(actionMenuTarget?._id);
+                  toggleSaveMessage?.(actionMenuTarget?._id);
+                  setActionMenuTarget(null);
+                  if (!saved) {
+                    setTimeout(() => {
+                      setReminderTarget(actionMenuTarget?._id);
+                    }, 200);
+                  }
+                }}
+              >
+                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>
+                  {isMessageSaved?.(actionMenuTarget?._id) ? "Unsave Message" : "Save & Remind"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionItem}
+                onPress={async () => {
+                  const pinned = actionMenuTarget?.isPinned;
+                  setActionMenuTarget(null);
+                  try {
+                    if (pinned) await pinsAPI.unpin(actionMenuTarget?._id);
+                    else await pinsAPI.pin(actionMenuTarget?._id);
+                  } catch (err) {
+                    logger.error('Pin action failed:', err);
+                  }
+                }}
+              >
+                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>
+                  {actionMenuTarget?.isPinned ? "Unpin Message" : "Pin Message"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionItem}
+                onPress={() => {
+                  setActionMenuTarget(null);
+                  navigation.navigate("ThreadDetail", {
+                    rootMessageId: actionMenuTarget?._id,
+                    channelId,
+                    channelName,
+                    rootContent: actionMenuTarget?.content,
+                    rootHtmlContent: actionMenuTarget?.htmlContent,
+                    replyCount: actionMenuTarget?.replyCount || 0,
+                    rootAuthor: actionMenuTarget?.senderSnapshot || actionMenuTarget?.authorId,
+                  });
+                }}
+              >
+                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>View Thread</Text>
+              </TouchableOpacity>
+
+              {/* Owner actions */}
+              {actionMenuTarget && (actionMenuTarget.authorId?._id === user?._id || actionMenuTarget.authorId === user?._id) && (
+                <>
+                  <TouchableOpacity
+                    style={styles.actionItem}
+                    onPress={() => {
+                      setEditingMessage(actionMenuTarget);
+                      setReplyingTo(null);
+                      setText(actionMenuTarget.content || "");
+                      setActionMenuTarget(null);
+                    }}
+                  >
+                    <Text style={[styles.actionItemText, { color: colors.primary }]}>Edit Message</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionItem, { borderBottomWidth: 0 }]}
+                    onPress={() => {
+                      const msgId = actionMenuTarget._id;
+                      setActionMenuTarget(null);
+                      setTimeout(() => {
+                        Alert.alert("Delete Message", "Are you sure?", [
+                          { text: "Cancel", style: "cancel" },
+                          {
+                            text: "Delete",
+                            style: "destructive",
+                            onPress: () => deleteMessage(msgId, channelId),
+                          },
+                        ]);
+                      }, 200);
+                    }}
+                  >
+                    <Text style={[styles.actionItemText, { color: colors.danger || "#ef4444" }]}>Delete Message</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
       </AppScreen>
   );
 };
@@ -1227,6 +1353,34 @@ const createStyles = (colors) =>
       fontWeight: "600",
       paddingHorizontal: 12,
     },
+    systemMessageContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginVertical: 12,
+      paddingHorizontal: 16,
+      gap: 12,
+    },
+    systemMessageLine: {
+      flex: 1,
+      height: StyleSheet.hairlineWidth,
+    },
+    systemMessageText: {
+      fontSize: 12,
+      fontStyle: "italic",
+      textAlign: "center",
+    },
+    forwardedRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      paddingBottom: 4,
+      marginBottom: 6,
+      gap: 4,
+    },
+    forwardedText: {
+      fontSize: 12,
+      fontStyle: "italic",
+    },
     composerBanner: {
       flexDirection: "row",
       alignItems: "center",
@@ -1343,6 +1497,63 @@ const createStyles = (colors) =>
       borderRadius: 20,
       justifyContent: "center",
       alignItems: "center",
+    },
+    actionsOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 24,
+    },
+    actionsSheet: {
+      borderRadius: 16,
+      width: '100%',
+      maxWidth: 300,
+      paddingVertical: 12,
+      borderWidth: 1,
+      maxHeight: '80%',
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 10,
+      elevation: 5,
+    },
+    actionsHeader: {
+      paddingHorizontal: 20,
+      paddingBottom: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      gap: 4,
+    },
+    actionsTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    actionsSnippet: {
+      fontSize: 13,
+    },
+    actionsList: {
+      paddingHorizontal: 8,
+    },
+    actionItem: {
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: 'rgba(0,0,0,0.05)',
+    },
+    actionItemText: {
+      fontSize: 15,
+      fontWeight: '500',
+    },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingVertical: 80,
+      transform: [{ scaleY: -1 }],
+    },
+    emptyText: {
+      fontSize: 15,
+      textAlign: "center",
     },
   });
 

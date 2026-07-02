@@ -88,7 +88,7 @@ const FormattingToolbar = React.memo(function FormattingToolbar({
   const btnStyle = [styles.button, { borderColor: colors.border }];
 
   return (
-    <View style={[styles.container, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+    <View style={[styles.container, { borderTopColor: colors.border, borderBottomColor: colors.border, backgroundColor: colors.background }]}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -165,27 +165,28 @@ const FormattingToolbar = React.memo(function FormattingToolbar({
 
 const styles = StyleSheet.create({
   container: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 4,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    paddingVertical: 6,
   },
   scrollContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    gap: 2,
+    paddingHorizontal: 12,
+    gap: 6,
   },
   button: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
   },
   divider: {
-    width: StyleSheet.hairlineWidth,
-    height: 20,
-    marginHorizontal: 4,
+    width: 1,
+    height: 22,
+    marginHorizontal: 6,
+    opacity: 0.7,
   },
 });
 

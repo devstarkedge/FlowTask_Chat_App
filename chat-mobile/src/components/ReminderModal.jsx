@@ -58,6 +58,7 @@ const ReminderModal = React.memo(function ReminderModal({
   onClose,
   onSetReminder,
   colors,
+  hasReminder,
 }) {
   const quickOptions = useMemo(() => getQuickOptions(), [visible]);
   const [showCustom, setShowCustom] = useState(false);
@@ -121,6 +122,20 @@ const ReminderModal = React.memo(function ReminderModal({
                   </TouchableOpacity>
                 );
               })}
+
+              {/* Remove reminder option if already set */}
+              {hasReminder && (
+                <TouchableOpacity
+                  style={[styles.optionRow, { borderBottomColor: colors.border }]}
+                  onPress={() => handleQuickSelect(null)}
+                  activeOpacity={0.7}
+                >
+                  <X size={18} color="#ef4444" />
+                  <Text style={[styles.optionText, { color: '#ef4444', fontWeight: '600' }]}>
+                    Remove reminder
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               {/* Custom date toggle */}
               <TouchableOpacity

@@ -443,6 +443,7 @@ const DrawerNavigation = ({ navigation }) => {
           <NavItem label="Profile" onPress={() => navigateAndClose("Profile")} colors={colors} />
           <NavItem label="Preferences" onPress={() => navigateAndClose("Preferences")} colors={colors} />
           <NavItem label="People" onPress={() => navigateAndClose("People")} colors={colors} />
+          <NavItem label="Invite people" onPress={() => navigateAndClose("InviteManagement")} colors={colors} />
           <NavItem label="Saved items" onPress={() => navigateAndClose("Later")} colors={colors} />
 
           <View style={[styles.sep, { backgroundColor: colors.primaryOverlayLight }]} />

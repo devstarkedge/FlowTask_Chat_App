@@ -30,21 +30,33 @@ const DMItem = React.memo(({ channel, onPress, isSelf }) => {
   const { colors } = useThemeStore();
   const unreads = useChannelStore((s) => s.unreads) || {};
   const unreadCount = unreads[channel._id] || 0;
+  const currentUser = useAuthStore((s) => s.user);
+
+  const displayName = React.useMemo(() => {
+    if (isSelf) return "You";
+    if (channel.dmRecipientName) return channel.dmRecipientName;
+    if (channel.name) {
+      const parts = channel.name.split(',').map(p => p.trim());
+      if (parts.length === 2) {
+        const other = parts.find(p => p.toLowerCase() !== currentUser?.name?.toLowerCase());
+        if (other) return other;
+      }
+    }
+    return channel.name || "Direct Message";
+  }, [channel, currentUser, isSelf]);
 
   const dmUser = {
+    ...channel,
     _id: channel.dmRecipientId,
-    name: channel.name,
+    name: displayName,
     avatar: channel.avatar,
     onlineStatus: channel.onlineStatus || "offline",
   };
 
-  const lastMsg = channel.lastMessage || channel.latestMessage || channel.recentMessage;
-  const preview = lastMsg?.content
-    ? lastMsg.content.replace(/<[^>]*>/g, '').trim().substring(0, 60)
-    : channel.lastMessagePreview || "No messages yet";
+  const preview = channel.lastMessagePreview || "No messages yet";
 
-  const timeStr = lastMsg?.createdAt || channel.lastMessageAt
-    ? new Date(lastMsg?.createdAt || channel.lastMessageAt).toLocaleTimeString([], {
+  const timeStr = channel.lastMessageAt
+    ? new Date(channel.lastMessageAt).toLocaleTimeString([], {
         hour: "numeric",
         minute: "2-digit",
       })
@@ -69,7 +81,7 @@ const DMItem = React.memo(({ channel, onPress, isSelf }) => {
             ]}
             numberOfLines={1}
           >
-            {isSelf ? "You" : channel.name}
+            {displayName}
           </Text>
           {timeStr ? (
             <Text style={[dmItem.time, { color: colors.textTertiary }]}>{timeStr}</Text>
@@ -139,8 +151,6 @@ const dmItem = StyleSheet.create({
     fontWeight: "700",
   },
 });
-
-// ─── New DM Modal (Slack-style: simple user picker) ─────────────────────────
 
 const NewDMModal = ({ visible, onClose, navigation }) => {
   const { colors } = useThemeStore();

@@ -6,12 +6,14 @@ import {
   FlatList,
   RefreshControl,
   TouchableOpacity,
+  Image,
 } from 'react-native';
 import { useLaterStore } from '../stores/laterStore';
 import { useThemeStore } from '../stores/themeStore';
 import { formatRelativeTime } from '../utils/dateUtils';
 import { ScreenLayout, ScreenHeader, FilterTabs, LoadingState, EmptyState } from '../components/common';
 import RichText from '../components/RichText';
+import ReminderModal from '../components/ReminderModal';
 import { 
   Bookmark,
   FileText,
@@ -19,8 +21,32 @@ import {
   CheckCircle2,
   Archive,
   X,
+  FileImage,
+  Video,
+  FileCode,
 } from 'lucide-react-native';
 import logger from '../utils/logger';
+
+const getAttachments = (msg) => {
+  if (!msg) return [];
+  const refs = msg.fileReferences || [];
+  if (refs.length > 0) {
+    return refs
+      .map((ref) => {
+        if (!ref.fileId) return null;
+        const file = ref.fileId;
+        return {
+          _id: file._id,
+          name: file.originalName || file.fileName || file.name || 'File',
+          url: file.url || file.secureUrl,
+          thumbnailUrl: file.thumbnailUrl,
+          mimeType: file.mimeType,
+        };
+      })
+      .filter(Boolean);
+  }
+  return msg.attachments || msg.files || [];
+};
 
 const LaterScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
@@ -29,8 +55,11 @@ const LaterScreen = ({ navigation }) => {
   const fetchSavedMessages = useLaterStore(state => state.fetchSavedMessages);
   const updateStatus = useLaterStore(state => state.updateStatus);
   const toggleSaveMessage = useLaterStore(state => state.toggleSaveMessage);
+  const updateReminder = useLaterStore(state => state.updateReminder);
+  
   const [filter, setFilter] = useState('all'); // all, message, canvas, file
   const [refreshing, setRefreshing] = useState(false);
+  const [reminderTarget, setReminderTarget] = useState(null); // item object or null
 
   const fetchSavedMessagesRef = useRef(fetchSavedMessages);
   fetchSavedMessagesRef.current = fetchSavedMessages;
@@ -47,20 +76,19 @@ const LaterScreen = ({ navigation }) => {
 
   const filteredMessages = useMemo(() => savedMessages.filter(msg => {
     if (filter === 'all') return true;
-    // Legacy items with no type field are treated as messages
     const itemType = msg.type || 'message';
     return itemType === filter;
   }), [savedMessages, filter]);
 
   const handleMessagePress = useCallback((savedMessage) => {
-    const channelId = savedMessage.channelId?._id;
+    const channelId = savedMessage.channelId?._id || savedMessage.channelId;
     if (!channelId) return;
 
     if (savedMessage.type === 'canvas') {
-      // Navigate to the Canvas tab of ChatScreen
-      const params = { channelId, initialTab: 'canvas' };
-      if (savedMessage.canvasId) params.canvasId = savedMessage.canvasId;
-      navigation.navigate('Chat', params);
+      navigation.navigate('CanvasEditor', {
+        canvasId: savedMessage.canvasId?._id || savedMessage.canvasId,
+        channelId,
+      });
     } else if (savedMessage.messageId) {
       // Default: navigate to the message in the Messages tab
       navigation.navigate('Chat', {
@@ -86,15 +114,32 @@ const LaterScreen = ({ navigation }) => {
     }
   }, [toggleSaveMessage]);
 
+  const handleSetReminder = useCallback(async (date) => {
+    if (!reminderTarget) return;
+    const targetId = reminderTarget.messageId?._id || reminderTarget.messageId || reminderTarget._id;
+    try {
+      await updateReminder(targetId, date);
+    } catch (error) {
+      logger.error('Failed to set reminder:', error);
+    }
+  }, [reminderTarget, updateReminder]);
+
   const renderSavedItem = useCallback(({ item }) => {
     const message = item.messageId;
     const channel = item.channelId;
     const isCanvas = item.type === 'canvas';
+    const canvasObj = item.canvasId || {};
 
     // Determine the content to render
     const htmlContent = message?.htmlContent || item.htmlContent || null;
     const textContent = message?.content || item.content || null;
     const hasContent = htmlContent || textContent;
+
+    // Attachments
+    const attachments = getAttachments(message);
+    const images = attachments.filter(a => a.mimeType?.startsWith('image/'));
+    const videos = attachments.filter(a => a.mimeType?.startsWith('video/'));
+    const otherFiles = attachments.filter(a => !a.mimeType?.startsWith('image/') && !a.mimeType?.startsWith('video/'));
 
     return (
       <TouchableOpacity
@@ -104,32 +149,55 @@ const LaterScreen = ({ navigation }) => {
       >
         <View style={styles.savedHeader}>
           <View style={styles.savedIconContainer}>
-            {isCanvas
-              ? <FileText size={16} color={colors.primary} />
-              : <Bookmark size={16} color={colors.warning} fill={colors.warning} />
-            }
+            {isCanvas ? (
+              <View style={[styles.canvasIconWrapper, { backgroundColor: colors.primary + '15' }]}>
+                <FileText size={16} color={colors.primary} />
+              </View>
+            ) : (
+              <View style={[styles.canvasIconWrapper, { backgroundColor: colors.warning + '15' }]}>
+                <Bookmark size={16} color={colors.warning} fill={colors.warning} />
+              </View>
+            )}
           </View>
           <View style={styles.savedInfo}>
             <Text style={[styles.channelName, { color: colors.textSecondary }]} numberOfLines={1}>
               #{channel?.name || 'channel'}
             </Text>
-            {message?.authorId && (
+            {isCanvas ? (
               <Text style={[styles.authorName, { color: colors.textPrimary }]} numberOfLines={1}>
-                {message.authorId.name}
+                {canvasObj.title || item.title || 'Untitled Canvas'}
               </Text>
+            ) : (
+              message?.authorId && (
+                <Text style={[styles.authorName, { color: colors.textPrimary }]} numberOfLines={1}>
+                  {message.authorId.name}
+                </Text>
+              )
             )}
           </View>
           <TouchableOpacity
             style={styles.removeButton}
-            onPress={() => handleRemove(message?._id || item._id)}
+            onPress={() => handleRemove(message?._id || item.messageId?._id || item._id)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <X size={18} color={colors.textTertiary} />
           </TouchableOpacity>
         </View>
 
+        {/* Canvas preview */}
+        {isCanvas && (
+          <View style={[styles.canvasPreviewContainer, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
+            <Text style={[styles.canvasPreviewTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+              {canvasObj.title || 'Canvas Document'}
+            </Text>
+            <Text style={[styles.canvasPreviewText, { color: colors.textSecondary }]} numberOfLines={2}>
+              {canvasObj.summary || 'Tap to view and edit this document.'}
+            </Text>
+          </View>
+        )}
+
         {/* Rich-text content preview — clipped to 3 lines via style */}
-        {hasContent && (
+        {!isCanvas && hasContent && (
           <View style={styles.contentPreview} pointerEvents="none">
             <RichText
               html={htmlContent}
@@ -137,6 +205,29 @@ const LaterScreen = ({ navigation }) => {
               colors={colors}
               baseStyle={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20 }}
             />
+          </View>
+        )}
+
+        {/* Media & file previews */}
+        {!isCanvas && attachments.length > 0 && (
+          <View style={styles.mediaContainer}>
+            {images.map((img) => (
+              <View key={img._id || img.url} style={styles.mediaFrame}>
+                <Image source={{ uri: img.url }} style={styles.previewImage} />
+              </View>
+            ))}
+            {videos.map((vid) => (
+              <View key={vid._id || vid.url} style={[styles.mediaFrame, styles.videoFrame, { backgroundColor: colors.backgroundTertiary }]}>
+                <Video size={20} color={colors.textSecondary} />
+                <Text style={[styles.fileNameText, { color: colors.textSecondary }]} numberOfLines={1}>{vid.name}</Text>
+              </View>
+            ))}
+            {otherFiles.map((file) => (
+              <View key={file._id || file.url} style={[styles.fileRow, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
+                <FileCode size={18} color={colors.textSecondary} />
+                <Text style={[styles.fileNameText, { color: colors.textPrimary }]} numberOfLines={1}>{file.name}</Text>
+              </View>
+            ))}
           </View>
         )}
 
@@ -165,12 +256,25 @@ const LaterScreen = ({ navigation }) => {
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: colors.backgroundTertiary }]}
-            onPress={() => handleStatusChange(item._id, 'completed')}
-          ><CheckCircle2 size={14} color={colors.success} /><Text style={[styles.actionText, { color: colors.textSecondary }]}>Complete</Text></TouchableOpacity>
+            onPress={() => handleStatusChange(message?._id || item.messageId?._id || item._id, 'completed')}
+          >
+            <CheckCircle2 size={14} color={colors.success} />
+            <Text style={[styles.actionText, { color: colors.textSecondary }]}>Complete</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: colors.backgroundTertiary }]}
-            onPress={() => handleStatusChange(item._id, 'archived')}
-          ><Archive size={14} color={colors.textSecondary} /><Text style={[styles.actionText, { color: colors.textSecondary }]}>Archive</Text></TouchableOpacity>
+            onPress={() => handleStatusChange(message?._id || item.messageId?._id || item._id, 'archived')}
+          >
+            <Archive size={14} color={colors.textSecondary} />
+            <Text style={[styles.actionText, { color: colors.textSecondary }]}>Archive</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: colors.backgroundTertiary }]}
+            onPress={() => setReminderTarget(item)}
+          >
+            <Clock size={14} color={colors.warning} />
+            <Text style={[styles.actionText, { color: colors.textSecondary }]}>Reminder</Text>
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
@@ -214,6 +318,15 @@ const LaterScreen = ({ navigation }) => {
           }
         />
       )}
+
+      {/* ReminderModal for setting reminders */}
+      <ReminderModal
+        visible={!!reminderTarget}
+        onClose={() => setReminderTarget(null)}
+        onSetReminder={handleSetReminder}
+        colors={colors}
+        hasReminder={!!reminderTarget?.reminderAt}
+      />
     </ScreenLayout>
   );
 };
@@ -239,6 +352,13 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  canvasIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   savedInfo: {
     flex: 1,
   },
@@ -253,13 +373,56 @@ const createStyles = (colors) => StyleSheet.create({
   removeButton: {
     padding: 4,
   },
-  messageContent: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
   contentPreview: {
-    maxHeight: 66, // ~3 lines at lineHeight 20 + spacing
+    maxHeight: 66, // ~3 lines
     overflow: 'hidden',
+  },
+  canvasPreviewContainer: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 4,
+  },
+  canvasPreviewTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  canvasPreviewText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  mediaContainer: {
+    gap: 8,
+    marginTop: 4,
+  },
+  mediaFrame: {
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  videoFrame: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    gap: 8,
+  },
+  previewImage: {
+    width: '100%',
+    height: 150,
+    borderRadius: 8,
+    resizeMode: 'cover',
+  },
+  fileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+  },
+  fileNameText: {
+    fontSize: 12,
+    fontWeight: '500',
+    flex: 1,
   },
   noteContainer: {
     padding: 12,

@@ -1,0 +1,342 @@
+export const EDITOR_HTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Canvas Editor</title>
+  <style>
+    :root {
+      --bg-color: #ffffff;
+      --text-color: #1f2937;
+      --border-color: #e5e7eb;
+      --placeholder-color: #9ca3af;
+      --accent-color: #4f46e5;
+      --callout-bg: #f9fafb;
+      --callout-border: #d1d5db;
+    }
+
+    body.dark {
+      --bg-color: #111827;
+      --text-color: #f9fafb;
+      --border-color: #374151;
+      --placeholder-color: #4b5563;
+      --accent-color: #6366f1;
+      --callout-bg: #1f2937;
+      --callout-border: #4b5563;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      transition: background-color 0.2s, color 0.2s;
+      min-height: 100vh;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .ProseMirror {
+      outline: none;
+      min-height: 200px;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .ProseMirror p {
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+
+    .ProseMirror h1, .ProseMirror h2, .ProseMirror h3 {
+      font-weight: 700;
+      margin-top: 24px;
+      margin-bottom: 8px;
+      line-height: 1.25;
+    }
+
+    .ProseMirror h1 { font-size: 1.5em; }
+    .ProseMirror h2 { font-size: 1.3em; }
+    .ProseMirror h3 { font-size: 1.1em; }
+
+    .ProseMirror ul, .ProseMirror ol {
+      padding-left: 20px;
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+
+    .ProseMirror blockquote {
+      border-left: 4px solid var(--accent-color);
+      padding-left: 12px;
+      margin: 12px 0;
+      color: #6b7280;
+      font-style: italic;
+    }
+
+    body.dark .ProseMirror blockquote {
+      color: #9ca3af;
+    }
+
+    .ProseMirror table {
+      border-collapse: collapse;
+      table-layout: fixed;
+      width: 100%;
+      margin: 16px 0;
+      overflow: hidden;
+    }
+
+    .ProseMirror td, .ProseMirror th {
+      min-width: 1em;
+      border: 1px solid var(--border-color);
+      padding: 6px 8px;
+      vertical-align: top;
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    .ProseMirror th {
+      font-weight: bold;
+      text-align: left;
+      background-color: var(--callout-bg);
+    }
+
+    .callout-block {
+      display: flex;
+      padding: 12px;
+      border: 1px solid var(--callout-border);
+      border-left: 4px solid var(--accent-color);
+      background-color: var(--callout-bg);
+      border-radius: 6px;
+      margin: 16px 0;
+    }
+
+    .callout-icon {
+      font-size: 20px;
+      margin-right: 12px;
+      user-select: none;
+    }
+
+    .callout-content {
+      flex: 1;
+    }
+
+    .ProseMirror p.is-editor-empty:first-child::before {
+      color: var(--placeholder-color);
+      content: attr(data-placeholder);
+      float: left;
+      height: 0;
+      pointer-events: none;
+    }
+
+    ::selection {
+      background-color: rgba(79, 70, 229, 0.2);
+    }
+
+    .mention-tag {
+      background-color: rgba(79, 70, 229, 0.1);
+      color: var(--accent-color);
+      border-radius: 4px;
+      padding: 1px 4px;
+      font-weight: 500;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <div id="editor"></div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "@tiptap/core": "https://esm.sh/@tiptap/core@2.1.13",
+        "@tiptap/starter-kit": "https://esm.sh/@tiptap/starter-kit@2.1.13",
+        "@tiptap/extension-placeholder": "https://esm.sh/@tiptap/extension-placeholder@2.1.13",
+        "@tiptap/extension-underline": "https://esm.sh/@tiptap/extension-underline@2.1.13",
+        "@tiptap/extension-highlight": "https://esm.sh/@tiptap/extension-highlight@2.1.13",
+        "@tiptap/extension-link": "https://esm.sh/@tiptap/extension-link@2.1.13",
+        "@tiptap/extension-table": "https://esm.sh/@tiptap/extension-table@2.1.13",
+        "@tiptap/extension-table-row": "https://esm.sh/@tiptap/extension-table-row@2.1.13",
+        "@tiptap/extension-table-cell": "https://esm.sh/@tiptap/extension-table-cell@2.1.13",
+        "@tiptap/extension-table-header": "https://esm.sh/@tiptap/extension-table-header@2.1.13",
+        "@tiptap/extension-task-list": "https://esm.sh/@tiptap/extension-task-list@2.1.13",
+        "@tiptap/extension-task-item": "https://esm.sh/@tiptap/extension-task-item@2.1.13"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import { Editor } from '@tiptap/core';
+    import StarterKit from '@tiptap/starter-kit';
+    import Placeholder from '@tiptap/extension-placeholder';
+    import Underline from '@tiptap/extension-underline';
+    import Highlight from '@tiptap/extension-highlight';
+    import Link from '@tiptap/extension-link';
+    import Table from '@tiptap/extension-table';
+    import TableRow from '@tiptap/extension-table-row';
+    import TableCell from '@tiptap/extension-table-cell';
+    import TableHeader from '@tiptap/extension-table-header';
+    import TaskList from '@tiptap/extension-task-list';
+    import TaskItem from '@tiptap/extension-task-item';
+
+    let editor = null;
+
+    function sendToRN(type, payload = {}) {
+      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type, ...payload }));
+      }
+    }
+
+    try {
+      editor = new Editor({
+        element: document.querySelector('#editor'),
+        extensions: [
+          StarterKit.configure({
+            history: true
+          }),
+          Placeholder.configure({
+            placeholder: 'Type something or "/" for commands...',
+          }),
+          Underline,
+          Highlight.configure({ multicolor: true }),
+          Link.configure({
+            openOnClick: false,
+            HTMLAttributes: {
+              target: '_blank',
+              rel: 'noopener noreferrer'
+            }
+          }),
+          Table.configure({
+            resizable: true,
+          }),
+          TableRow,
+          TableHeader,
+          TableCell,
+          TaskList,
+          TaskItem.configure({
+            nested: true,
+          })
+        ],
+        content: '',
+        onUpdate: ({ editor }) => {
+          sendToRN('update', {
+            html: editor.getHTML(),
+            json: editor.getJSON(),
+            text: editor.getText()
+          });
+        },
+        onSelectionUpdate: ({ editor }) => {
+          const state = {
+            bold: editor.isActive('bold'),
+            italic: editor.isActive('italic'),
+            underline: editor.isActive('underline'),
+            strike: editor.isActive('strike'),
+            code: editor.isActive('code'),
+            blockquote: editor.isActive('blockquote'),
+            bulletList: editor.isActive('bulletList'),
+            orderedList: editor.isActive('orderedList'),
+            taskList: editor.isActive('taskList'),
+            heading: editor.isActive('heading') ? editor.getAttributes('heading').level : null,
+            canUndo: editor.can().undo(),
+            canRedo: editor.can().redo()
+          };
+          sendToRN('selection', state);
+        },
+        onFocus: () => {
+          sendToRN('focus');
+        },
+        onBlur: () => {
+          sendToRN('blur');
+        }
+      });
+
+      sendToRN('ready');
+    } catch (e) {
+      sendToRN('error', { message: e.message });
+    }
+
+    window.addEventListener('message', (event) => {
+      let data = {};
+      try {
+        data = JSON.parse(event.data);
+      } catch (err) {
+        return;
+      }
+
+      if (!editor) return;
+
+      const { command, value } = data;
+
+      switch (command) {
+        case 'setContent':
+          editor.commands.setContent(value || '');
+          break;
+        case 'setEditable':
+          editor.setEditable(!!value);
+          break;
+        case 'setTheme':
+          if (value === 'dark') {
+            document.body.classList.add('dark');
+          } else {
+            document.body.classList.remove('dark');
+          }
+          break;
+        case 'toggleBold':
+          editor.chain().focus().toggleBold().run();
+          break;
+        case 'toggleItalic':
+          editor.chain().focus().toggleItalic().run();
+          break;
+        case 'toggleUnderline':
+          editor.chain().focus().toggleUnderline().run();
+          break;
+        case 'toggleStrike':
+          editor.chain().focus().toggleStrike().run();
+          break;
+        case 'toggleCode':
+          editor.chain().focus().toggleCode().run();
+          break;
+        case 'toggleBlockquote':
+          editor.chain().focus().toggleBlockquote().run();
+          break;
+        case 'toggleBulletList':
+          editor.chain().focus().toggleBulletList().run();
+          break;
+        case 'toggleOrderedList':
+          editor.chain().focus().toggleOrderedList().run();
+          break;
+        case 'toggleTaskList':
+          editor.chain().focus().toggleTaskList().run();
+          break;
+        case 'setHeading':
+          if (value) {
+            editor.chain().focus().toggleHeading({ level: value }).run();
+          } else {
+            editor.chain().focus().setParagraph().run();
+          }
+          break;
+        case 'insertTable':
+          editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+          break;
+        case 'insertHorizontalRule':
+          editor.chain().focus().setHorizontalRule().run();
+          break;
+        case 'undo':
+          editor.chain().focus().undo().run();
+          break;
+        case 'redo':
+          editor.chain().focus().redo().run();
+          break;
+        case 'insertImage':
+          editor.chain().focus().setImage({ src: value }).run();
+          break;
+      }
+    });
+  </script>
+</body>
+</html>
+`;

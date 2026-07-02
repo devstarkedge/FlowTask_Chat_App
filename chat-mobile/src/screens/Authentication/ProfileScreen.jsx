@@ -38,7 +38,7 @@ const ProfileScreen = ({ navigation }) => {
       <StatusBar barStyle={colors.effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
       
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border, paddingTop: insets.top + 8 }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border, paddingTop: 12 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <CircleChevronLeft size={24} color={colors.textPrimary} />
         </TouchableOpacity>

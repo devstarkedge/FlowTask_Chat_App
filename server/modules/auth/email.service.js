@@ -27,6 +27,7 @@ function getTransporter() {
       connectionTimeout: 8000, // 8 seconds
       greetingTimeout: 8000,   // 8 seconds
       socketTimeout: 12000,    // 12 seconds
+      family: 4,               // Force IPv4 only (avoids ENETUNREACH on IPv6)
     });
     logger.info('Email service configured with SMTP transport', { host: env.SMTP_HOST });
   } else {

@@ -511,17 +511,6 @@ class WorkspaceService {
     // Generate token and hash upfront — only the hash is stored in DB
     const { token: plainToken, tokenHash } = WorkspaceInvite.generateTokenPair();
 
-    // Create invite record
-    const invite = await WorkspaceInvite.create({
-      workspaceId,
-      email: email.toLowerCase(),
-      role,
-      inviteType,
-      invitedBy,
-      channels: filteredChannels,
-      tokenHash,
-    });
-
     // Get inviter name
     const inviter = await ChatUser.findById(invitedBy).lean();
     const inviterName = inviter?.name || 'A team member';
@@ -535,11 +524,20 @@ class WorkspaceService {
         plainToken,
       );
     } catch (emailErr) {
-      // Email failed — mark invite as email_failed so it doesn't appear as pending
       logger.error(`Invite email failed for ${email} (workspace ${workspace.slug})`, { error: emailErr.message });
-      await WorkspaceInvite.findByIdAndUpdate(invite._id, { status: 'email_failed' });
-      throw new Error(`Invitation created but email delivery failed: ${emailErr.message}`);
+      throw new Error(`Failed to send invite email: ${emailErr.message}`);
     }
+
+    // Create invite record ONLY after successful email delivery
+    const invite = await WorkspaceInvite.create({
+      workspaceId,
+      email: email.toLowerCase(),
+      role,
+      inviteType,
+      invitedBy,
+      channels: filteredChannels,
+      tokenHash,
+    });
 
     // Non-blocking audit log — never fails the invitation flow
     this._safeAudit(() => auditLogService.logInviteCreated(invite, invitedBy, inviterName, workspaceId));

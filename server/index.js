@@ -74,7 +74,15 @@ const corsOptions = {
     if (!incomingOrigin) return callback(null, true);
     // Normalise the incoming origin exactly as we do our config (no trailing slash)
     const normalized = incomingOrigin.replace(/\/+$/, '');
-    if (effectiveOrigins.includes(normalized)) {
+    if (
+      effectiveOrigins.includes(normalized) ||
+      normalized.startsWith('exp://') ||
+      normalized.includes('localhost') ||
+      normalized.includes('127.0.0.1') ||
+      /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}/.test(normalized) ||
+      /^http:\/\/172\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(normalized) ||
+      /^http:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(normalized)
+    ) {
       callback(null, true);
     } else {
       logger.warn('CORS: blocked request from unlisted origin', {

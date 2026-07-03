@@ -152,7 +152,8 @@ export const workspaceAPI = {
   mine: () => api.get('/workspaces/mine'),
   create: (data) => api.post('/workspaces', data),
   joinByInviteCode: (inviteCode) => api.post('/workspaces/join', { inviteCode }),
-  inviteByEmail: (workspaceId, payload) => api.post(`/workspaces/${workspaceId}/invite-email`, payload),
+  inviteByEmail: (workspaceId, payload) =>
+    api.post(`/workspaces/${workspaceId}/invite-email`, payload, { timeout: 45000 }),
   leave: (workspaceId) => api.post(`/workspaces/${workspaceId}/leave`),
 
   // ── Invite management ──

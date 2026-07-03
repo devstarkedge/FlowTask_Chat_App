@@ -112,12 +112,14 @@ export default function InviteManagementScreen({ navigation }) {
   }, [channels, channelSearch]);
 
   const toggleChannel = (channelId) => {
+    if (!channelId) return;
     const id = String(channelId);
-    setSelectedChannels((prev) =>
-      prev.includes(id)
-        ? prev.filter((prevId) => prevId !== id)
-        : [...prev, id]
-    );
+    setSelectedChannels((prev) => {
+      const prevStrings = prev.map((x) => String(x));
+      return prevStrings.includes(id)
+        ? prevStrings.filter((prevId) => prevId !== id)
+        : [...prevStrings, id];
+    });
   };
 
   const copyInviteLink = async () => {
@@ -179,13 +181,14 @@ export default function InviteManagementScreen({ navigation }) {
         setEmailInput("");
         // Reset but keep default channels
         const generalCh = channels.find(c => c.name.toLowerCase() === "general");
-        setSelectedChannels(generalCh ? [generalCh._id] : []);
+        setSelectedChannels(generalCh ? [String(generalCh._id)] : []);
         navigation.goBack();
       }
 
       if (rejected.length > 0) {
         rejected.forEach((r) => {
-          const msg = r.reason?.response?.data?.error?.message || "Failed to invite";
+          console.error("Invitation failed error details:", r.reason?.response?.data || r.reason?.message || r.reason);
+          const msg = r.reason?.response?.data?.error?.message || r.reason?.response?.data?.message || r.reason?.message || "Failed to invite";
           Toast.show({ type: "error", text1: "Invite failed", text2: msg });
         });
       }
@@ -201,8 +204,9 @@ export default function InviteManagementScreen({ navigation }) {
   const guestAccess = PLAN_FEATURES[plan]?.guestAccess ?? false;
 
   const selectedChannelsNames = useMemo(() => {
+    const stringSelected = selectedChannels.map((x) => String(x));
     return channels
-      .filter((ch) => selectedChannels.includes(ch._id))
+      .filter((ch) => stringSelected.includes(String(ch._id)))
       .map((ch) => `#${ch.name}`)
       .join(", ");
   }, [channels, selectedChannels]);
@@ -222,9 +226,9 @@ export default function InviteManagementScreen({ navigation }) {
           style={[styles.sendBtn, (emails.length === 0 && !emailInput.trim()) && { opacity: 0.4 }]}
         >
           {sending ? (
-            <ActivityIndicator size="small" color={colors.accent} />
+            <ActivityIndicator size="small" color={colors.primary} />
           ) : (
-            <Text style={[styles.sendText, { color: colors.accent }]}>Invite</Text>
+            <Text style={[styles.sendText, { color: colors.primary }]}>Invite</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -290,8 +294,8 @@ export default function InviteManagementScreen({ navigation }) {
                 setIsGuest(val);
                 if (val) setIsAdmin(false);
               }}
-              trackColor={{ false: "#767577", true: colors.accent + "80" }}
-              thumbColor={isGuest ? colors.accent : "#f4f3f4"}
+              trackColor={{ false: "#767577", true: colors.primary + "80" }}
+              thumbColor={isGuest ? colors.primary : "#f4f3f4"}
             />
           </View>
         )}
@@ -308,8 +312,8 @@ export default function InviteManagementScreen({ navigation }) {
             <Switch
               value={isAdmin}
               onValueChange={setIsAdmin}
-              trackColor={{ false: "#767577", true: colors.accent + "80" }}
-              thumbColor={isAdmin ? colors.accent : "#f4f3f4"}
+              trackColor={{ false: "#767577", true: colors.primary + "80" }}
+              thumbColor={isAdmin ? colors.primary : "#f4f3f4"}
             />
           </View>
         )}
@@ -322,7 +326,7 @@ export default function InviteManagementScreen({ navigation }) {
             onPress={copyInviteLink}
             activeOpacity={0.7}
           >
-            <Copy size={16} color={colors.accent} />
+            <Copy size={16} color={colors.primary} />
             <Text style={[styles.linkText, { color: colors.textPrimary }]} numberOfLines={1}>
               {inviteLink}
             </Text>
@@ -346,7 +350,7 @@ export default function InviteManagementScreen({ navigation }) {
           </TouchableOpacity>
           <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Select Channels</Text>
           <TouchableOpacity onPress={() => setChannelModalVisible(false)} style={styles.modalHeaderBtn}>
-            <Text style={[styles.doneText, { color: colors.accent }]}>Done</Text>
+            <Text style={[styles.doneText, { color: colors.primary }]}>Done</Text>
           </TouchableOpacity>
         </View>
 
@@ -367,7 +371,7 @@ export default function InviteManagementScreen({ navigation }) {
         {/* Modal Channels List */}
         <ScrollView keyboardShouldPersistTaps="handled">
           {filteredChannels.map((item) => {
-            const isSelected = selectedChannels.includes(String(item._id));
+            const isSelected = selectedChannels.map((x) => String(x)).includes(String(item._id));
             return (
               <TouchableOpacity
                 key={String(item._id)}
@@ -377,7 +381,7 @@ export default function InviteManagementScreen({ navigation }) {
               >
                 <Hash size={18} color={colors.textSecondary} style={{ marginRight: 10 }} />
                 <Text style={[styles.channelItemName, { color: colors.textPrimary }]}>{item.name}</Text>
-                <View style={[styles.checkOuter, { borderColor: colors.border }, isSelected && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+                <View style={[styles.checkOuter, { borderColor: colors.border }, isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
                   {isSelected && <Check size={12} color="#fff" />}
                 </View>
               </TouchableOpacity>

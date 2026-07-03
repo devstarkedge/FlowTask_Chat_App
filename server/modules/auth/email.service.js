@@ -24,6 +24,9 @@ function getTransporter() {
         user: env.SMTP_USER,
         pass: env.SMTP_PASS,
       },
+      connectionTimeout: 8000, // 8 seconds
+      greetingTimeout: 8000,   // 8 seconds
+      socketTimeout: 12000,    // 12 seconds
     });
     logger.info('Email service configured with SMTP transport', { host: env.SMTP_HOST });
   } else {

@@ -5,6 +5,13 @@ import { resolveWorkspace } from "../../middleware/workspaceContext.js";
 
 const router = express.Router();
 
+// ── Public / No Workspace Required ──────────────────────────────────────────
+router.get(
+  "/templates",
+  protect,
+  canvasController.getTemplates
+);
+
 // All canvas routes require authentication + workspace context
 router.use(protect, resolveWorkspace);
 

@@ -1,0 +1,240 @@
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  FlatList,
+  Image,
+} from 'react-native';
+import { Camera, Image as ImageIcon, Mic, Video, FileText, Smile, Layers, Clock, X } from 'lucide-react-native';
+import * as MediaLibrary from 'expo-media-library';
+import * as ImagePicker from 'expo-image-picker';
+
+export default function MediaPickerSheet({
+  visible,
+  onClose,
+  colors,
+  onPickFiles,
+  onOpenGifPicker,
+  onOpenRecentCanvases,
+  onOpenRecentFiles
+}) {
+  const [photos, setPhotos] = useState([]);
+  const [permissionResponse, requestPermission] = MediaLibrary.usePermissions();
+
+  useEffect(() => {
+    if (visible && (!permissionResponse || permissionResponse.status !== 'granted')) {
+      requestPermission();
+    }
+  }, [visible, permissionResponse]);
+
+  useEffect(() => {
+    if (visible && permissionResponse?.status === 'granted') {
+      loadRecentPhotos();
+    }
+  }, [visible, permissionResponse]);
+
+  const loadRecentPhotos = async () => {
+    try {
+      const { assets } = await MediaLibrary.getAssetsAsync({
+        first: 20,
+        mediaType: ['photo', 'video'],
+        sortBy: [[MediaLibrary.SortBy.creationTime, false]],
+      });
+      setPhotos(assets);
+    } catch (e) {
+      console.log('Error loading photos', e);
+    }
+  };
+
+  const handleLaunchCamera = async (mediaTypes = ImagePicker.MediaTypeOptions.Images) => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      alert('Camera permission is required.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes,
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      onPickFiles(result.assets);
+      onClose();
+    }
+  };
+
+  const handleLaunchLibrary = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsMultipleSelection: true,
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+    });
+    if (!result.canceled) {
+      onPickFiles(result.assets);
+      onClose();
+    }
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const DocumentPicker = require('expo-document-picker');
+      const result = await DocumentPicker.getDocumentAsync({
+        multiple: true,
+        type: '*/*',
+      });
+      if (!result.canceled) {
+        onPickFiles(result.assets);
+        onClose();
+      }
+    } catch (e) {
+      console.log('Doc picker error', e);
+    }
+  };
+
+  const handlePhotoSelect = (asset) => {
+    onPickFiles([{
+      uri: asset.uri,
+      name: asset.filename,
+      type: asset.mediaType === 'video' ? 'video/mp4' : 'image/jpeg',
+      size: 0 
+    }]);
+    onClose();
+  };
+
+  const renderPhotoItem = ({ item }) => {
+    if (item.isCameraBtn) {
+      return (
+        <TouchableOpacity
+          style={[styles.cameraBtn, { borderColor: colors.border }]}
+          onPress={() => handleLaunchCamera()}
+        >
+          <Camera size={28} color={colors.textSecondary} />
+        </TouchableOpacity>
+      );
+    }
+    return (
+      <TouchableOpacity
+        style={styles.photoThumb}
+        onPress={() => handlePhotoSelect(item)}
+      >
+        <Image source={{ uri: item.uri }} style={styles.photoImg} />
+      </TouchableOpacity>
+    );
+  };
+
+  const data = [{ id: 'camera', isCameraBtn: true }, ...photos];
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+        
+        <View style={[styles.sheet, { backgroundColor: colors.background }]}>
+          <View style={styles.dragHandleContainer}>
+            <View style={[styles.dragHandle, { backgroundColor: colors.borderDark }]} />
+          </View>
+          
+          <View style={styles.header}>
+            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Photos & Videos</Text>
+            <TouchableOpacity onPress={handleLaunchLibrary}>
+              <Text style={[styles.headerAction, { color: colors.primary }]}>View Library</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.photoStripContainer}>
+            <FlatList
+              horizontal
+              data={data}
+              keyExtractor={(item) => item.id}
+              renderItem={renderPhotoItem}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.photoStripList}
+            />
+          </View>
+
+          <View style={styles.optionsList}>
+            <OptionRow
+              icon={Mic}
+              label="Record an Audio Clip"
+              colors={colors}
+              onPress={() => { alert('Audio recording coming soon'); onClose(); }}
+            />
+            <OptionRow
+              icon={Video}
+              label="Record a Video Clip"
+              colors={colors}
+              onPress={() => handleLaunchCamera(ImagePicker.MediaTypeOptions.Videos)}
+            />
+            <OptionRow
+              icon={FileText}
+              label="Upload a File"
+              colors={colors}
+              onPress={handlePickDocument}
+            />
+            <OptionRow
+              icon={Smile}
+              label="Add a GIF"
+              colors={colors}
+              onPress={() => { onClose(); onOpenGifPicker(); }}
+            />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <OptionRow
+              icon={Layers}
+              label="Recent Canvases"
+              colors={colors}
+              onPress={() => {
+                onClose();
+                onOpenRecentCanvases?.();
+              }}
+            />
+            <OptionRow
+              icon={Clock}
+              label="Recent Files"
+              colors={colors}
+              onPress={() => {
+                onClose();
+                onOpenRecentFiles?.();
+              }}
+            />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const OptionRow = ({ icon: Icon, label, colors, onPress }) => (
+  <TouchableOpacity style={styles.optionRow} onPress={onPress}>
+    <View style={styles.optionIcon}>
+      <Icon size={20} color={colors.textPrimary} strokeWidth={1.5} />
+    </View>
+    <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>{label}</Text>
+  </TouchableOpacity>
+);
+
+const styles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+  sheet: { borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 24, maxHeight: '90%' },
+  dragHandleContainer: { alignItems: 'center', paddingVertical: 12 },
+  dragHandle: { width: 40, height: 4, borderRadius: 2 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 12, alignItems: 'center' },
+  headerTitle: { fontSize: 16, fontWeight: '700' },
+  headerAction: { fontSize: 14, fontWeight: '600' },
+  photoStripContainer: { height: 100, marginBottom: 16 },
+  photoStripList: { paddingHorizontal: 16, gap: 8 },
+  cameraBtn: { width: 100, height: 100, borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center', borderStyle: 'dashed' },
+  photoThumb: { width: 100, height: 100, borderRadius: 12, overflow: 'hidden' },
+  photoImg: { width: '100%', height: '100%' },
+  optionsList: { paddingHorizontal: 16 },
+  optionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+  optionIcon: { width: 32, alignItems: 'center', marginRight: 12 },
+  optionLabel: { fontSize: 16, fontWeight: '500' },
+  divider: { height: 1, marginVertical: 8, marginHorizontal: 8 }
+});

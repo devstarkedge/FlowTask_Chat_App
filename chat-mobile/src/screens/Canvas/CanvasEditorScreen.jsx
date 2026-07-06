@@ -7,11 +7,15 @@ import {
   Platform,
   SafeAreaView,
   Alert,
+  FlatList,
+  TouchableOpacity,
+  Text,
+  Image,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
 import { useCanvasStore } from '../../stores/canvasStore';
-import { fileAPI } from '../../services/api';
+import { fileAPI, directoriesAPI } from '../../services/api';
 import CanvasHeader from '../../components/canvas/CanvasHeader';
 import CanvasFormatToolbar from '../../components/canvas/CanvasFormatToolbar';
 import CanvasInsertSheet from '../../components/canvas/CanvasInsertSheet';
@@ -25,6 +29,11 @@ export default function CanvasEditorScreen({ route, navigation }) {
   const webviewRef = useRef(null);
   const [editorReady, setEditorReady] = useState(false);
   const [selectionState, setSelectionState] = useState({});
+
+  // Mentions
+  const [allUsers, setAllUsers] = useState([]);
+  const [mentionSearch, setMentionSearch] = useState(null);
+  const [filteredUsers, setFilteredUsers] = useState([]);
 
   // Sheets visibility
   const [insertVisible, setInsertVisible] = useState(false);
@@ -50,6 +59,11 @@ export default function CanvasEditorScreen({ route, navigation }) {
   } = useCanvasStore();
 
   useEffect(() => {
+    // Fetch users for mentions
+    directoriesAPI.getUsers().then((res) => {
+      setAllUsers(res.data?.data || []);
+    }).catch(() => {});
+
     if (canvasId) {
       loadCanvas(canvasId);
       fetchHistory(canvasId);
@@ -97,6 +111,12 @@ export default function CanvasEditorScreen({ route, navigation }) {
           updateCanvas(canvasId, { content: data.json });
         }
         break;
+      case 'mentionQuery':
+        setMentionSearch(data.query || '');
+        break;
+      case 'mentionClose':
+        setMentionSearch(null);
+        break;
       case 'error':
         console.warn('[CanvasEditor] WebView error:', data.message);
         break;
@@ -107,6 +127,21 @@ export default function CanvasEditorScreen({ route, navigation }) {
     if (canvasId && newTitle) {
       updateCanvas(canvasId, { title: newTitle });
     }
+  };
+
+  useEffect(() => {
+    if (mentionSearch === null) return;
+    const query = mentionSearch.toLowerCase();
+    const matches = allUsers.filter(u => 
+      u.username.toLowerCase().includes(query) || 
+      (u.fullName && u.fullName.toLowerCase().includes(query))
+    ).slice(0, 5);
+    setFilteredUsers(matches);
+  }, [mentionSearch, allUsers]);
+
+  const handleInsertMention = (user) => {
+    sendEditorCommand('insertMention', { id: user._id, label: user.username });
+    setMentionSearch(null);
   };
 
   const handleInsertOption = async (optionType) => {
@@ -163,7 +198,10 @@ export default function CanvasEditorScreen({ route, navigation }) {
         onBack={() => navigation.goBack()}
         onTitleChange={handleTitleChange}
         onCommentsPress={() => setCommentsVisible(true)}
-        onHistoryPress={() => setHistoryVisible(true)}
+        onHistoryPress={() => {
+          fetchHistory(canvasId);
+          setHistoryVisible(true);
+        }}
         onOptionsPress={() => setShareVisible(true)}
       />
 
@@ -180,7 +218,7 @@ export default function CanvasEditorScreen({ route, navigation }) {
           )}
           <WebView
             ref={webviewRef}
-            source={{ html: EDITOR_HTML }}
+            source={{ html: EDITOR_HTML, baseUrl: '' }}
             originWhitelist={['*']}
             style={styles.webview}
             onMessage={handleMessage}
@@ -188,6 +226,28 @@ export default function CanvasEditorScreen({ route, navigation }) {
             javaScriptEnabled
             domStorageEnabled
           />
+          {mentionSearch !== null && (
+            <View style={styles.mentionPopup}>
+              <FlatList
+                data={filteredUsers}
+                keyExtractor={(item) => item._id}
+                keyboardShouldPersistTaps="always"
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.mentionItem}
+                    onPress={() => handleInsertMention(item)}
+                  >
+                    {item.avatarUrl ? (
+                      <Image source={{ uri: item.avatarUrl }} style={styles.mentionAvatar} />
+                    ) : (
+                      <View style={[styles.mentionAvatar, { backgroundColor: '#e2e8f0' }]} />
+                    )}
+                    <Text style={styles.mentionName}>{item.username}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          )}
         </View>
 
         <CanvasFormatToolbar
@@ -249,5 +309,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 100,
+  },
+  mentionPopup: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    maxHeight: 200,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 50,
+  },
+  mentionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  mentionAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  mentionName: {
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '500',
   },
 });

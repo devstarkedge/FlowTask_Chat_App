@@ -72,9 +72,9 @@ export const useChannelStore = create(
         }
       },
 
-      createChannel: async ({ name, visibility = 'public', topic = '' }) => {
+      createChannel: async ({ name, visibility = 'public', topic = '', memberIds = [] }) => {
         try {
-          const { data } = await channelAPI.create({ name, visibility, topic });
+          const { data } = await channelAPI.create({ name, visibility, topic, memberIds });
           const channel = data.data?.channel || data.data;
           if (channel) {
             set((state) => ({

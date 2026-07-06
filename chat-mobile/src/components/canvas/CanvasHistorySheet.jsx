@@ -89,10 +89,10 @@ export default function CanvasHistorySheet({ visible, onClose, history = [], onR
                   <View style={styles.historyRow}>
                     <View style={styles.historyInfo}>
                       <Text style={styles.historyUser}>
-                        {item.authorName || 'Collaborator'}
+                        {item.editorId?.name || 'Collaborator'}
                       </Text>
                       <Text style={styles.historyTime}>
-                        {formatTime(item.createdAt)}
+                        {formatTime(item.timestamp)}
                       </Text>
                     </View>
                     <TouchableOpacity

@@ -1,0 +1,601 @@
+[
+  {
+    "id": "out_of_office",
+    "label": "Out of Office Coverage Plan",
+    "subtitle": "Quick handover & emergency contacts",
+    "description": "Structured checklist for coverage, backups, handover notes, and escalation.",
+    "category": "HR",
+    "tags": [
+      "ooo",
+      "handover",
+      "support"
+    ],
+    "cover": {
+      "variations": [
+        {
+          "id": "v1",
+          "type": "illustration",
+          "prompt": "flat illustration: calendar, suitcase, clipboard; soft blue gradient background; center composition; no text; generous negative space for title overlay; 16:9",
+          "url": "https://picsum.photos/seed/ooo-illustration/1200/400",
+          "colorPalette": [
+            "#0EA5A4",
+            "#60A5FA"
+          ]
+        },
+        {
+          "id": "v2",
+          "type": "gradient",
+          "colorPalette": [
+            "#60A5FA",
+            "#A78BFA"
+          ],
+          "safeZone": "center-left"
+        },
+        {
+          "id": "v3",
+          "type": "photo",
+          "prompt": "desktop with calendar and passport; shallow depth; warm tones; no text",
+          "url": "https://picsum.photos/seed/ooo-photo/1200/400"
+        }
+      ]
+    },
+    "sections": [
+      {
+        "id": "ooo-details",
+        "title": "OOO Details",
+        "icon": "📌",
+        "type": "rich_text",
+        "contentMarkdown": "**Dates offline:** [start] — [end]\n\n**Availability:** Completely offline / Checking occasionally?"
+      },
+      {
+        "id": "project-coverage",
+        "title": "Project Coverage",
+        "icon": "🔁",
+        "type": "list",
+        "contentMarkdown": "- Primary backup: [name]\n- Secondary backup: [name]\n- Handover notes"
+      },
+      {
+        "id": "emergency-contacts",
+        "title": "Emergency Contacts",
+        "icon": "📞",
+        "type": "list",
+        "contentMarkdown": "- Escalation contact\n- Support channel link"
+      }
+    ],
+    "variables": [
+      {
+        "name": "start_date",
+        "description": "First OOO date",
+        "example": "2026-06-01"
+      },
+      {
+        "name": "primary_backup",
+        "description": "Primary backup person",
+        "example": "Alex"
+      }
+    ],
+    "previewHtml": "<h3>Out of Office Coverage Plan</h3><p>Dates offline: ...</p>",
+    "actions": [
+      "use",
+      "preview",
+      "edit",
+      "duplicate"
+    ],
+    "createdBy": "system",
+    "createdAt": "2026-05-22T00:00:00Z"
+  },
+  {
+    "id": "monthly_newsletter",
+    "label": "Monthly Newsletter",
+    "subtitle": "Team updates, highlights, and events",
+    "description": "Layout for publishing team updates and spotlight stories",
+    "category": "Communications",
+    "tags": [
+      "newsletter",
+      "communications"
+    ],
+    "cover": {
+      "variations": [
+        {
+          "id": "v1",
+          "type": "photo",
+          "prompt": "desk with newsletter layout, flat-lay, soft light; no text",
+          "url": "https://picsum.photos/seed/newsletter/1200/400",
+          "colorPalette": [
+            "#10B981",
+            "#34D399"
+          ]
+        },
+        {
+          "id": "v2",
+          "type": "gradient",
+          "colorPalette": [
+            "#FDE68A",
+            "#FCA5A5"
+          ]
+        },
+        {
+          "id": "v3",
+          "type": "illustration",
+          "prompt": "minimal editorial icons and cards; neutral background; centered composition"
+        }
+      ]
+    },
+    "sections": [
+      {
+        "id": "hero",
+        "title": "Hero/Intro",
+        "icon": "✨",
+        "type": "rich_text",
+        "contentMarkdown": "Short intro paragraph and link to full stories."
+      },
+      {
+        "id": "spotlight",
+        "title": "Monthly Spotlight",
+        "icon": "⭐",
+        "type": "list",
+        "contentMarkdown": "- Team achievements\n- Customer wins\n- Product highlights"
+      }
+    ],
+    "variables": [
+      {
+        "name": "editor_name",
+        "description": "Newsletter editor / author",
+        "example": "Riya"
+      }
+    ],
+    "previewHtml": "<h3>Monthly Newsletter</h3><p>Highlights and stories</p>",
+    "actions": [
+      "use",
+      "preview",
+      "edit",
+      "duplicate"
+    ],
+    "createdBy": "system",
+    "createdAt": "2026-05-22T00:00:00Z"
+  },
+  {
+    "id": "product_brief",
+    "label": "Product Brief",
+    "subtitle": "One-page scope, goals & audience",
+    "description": "High-level overview, target audience and requirements",
+    "category": "Product",
+    "tags": [
+      "product",
+      "brief"
+    ],
+    "cover": {
+      "variations": [
+        {
+          "id": "v1",
+          "type": "gradient",
+          "colorPalette": [
+            "#6366F1",
+            "#60A5FA"
+          ]
+        },
+        {
+          "id": "v2",
+          "type": "photo",
+          "url": "https://picsum.photos/seed/product/1200/400"
+        },
+        {
+          "id": "v3",
+          "type": "illustration",
+          "prompt": "feature-centric flat illustration; center composition"
+        }
+      ]
+    },
+    "sections": [
+      {
+        "id": "overview",
+        "title": "Overview",
+        "icon": "📌",
+        "type": "rich_text",
+        "contentMarkdown": "One-paragraph summary"
+      },
+      {
+        "id": "goals",
+        "title": "Goals",
+        "icon": "🎯",
+        "type": "list",
+        "contentMarkdown": "- Goal 1\n- Goal 2"
+      }
+    ],
+    "variables": [],
+    "previewHtml": "<h3>Product Brief</h3>",
+    "actions": [
+      "use",
+      "preview",
+      "edit"
+    ],
+    "createdBy": "system",
+    "createdAt": "2026-05-22T00:00:00Z"
+  },
+  {
+    "id": "technical_specifications",
+    "label": "Technical Specifications",
+    "subtitle": "API, data model, architecture and constraints",
+    "description": "Enterprise-ready technical spec template: architecture, APIs, schema, risks and timeline.",
+    "category": "Engineering",
+    "tags": [
+      "technical",
+      "specs",
+      "api",
+      "architecture",
+      "database"
+    ],
+    "cover": {
+      "variations": [
+        {
+          "id": "v1",
+          "type": "gradient",
+          "colorPalette": [
+            "#0EA5A4",
+            "#06B6D4"
+          ]
+        },
+        {
+          "id": "v2",
+          "type": "photo",
+          "url": "https://images.unsplash.com/photo-1526378721623-4d2b4f6f4d4e?auto=format&fit=crop&q=80&w=1200&h=400"
+        },
+        {
+          "id": "v3",
+          "type": "illustration",
+          "prompt": "dark tech gradient with abstract architecture lines; center composition; no text"
+        }
+      ]
+    },
+    "sections": [
+      {
+        "id": "overview",
+        "title": "Overview",
+        "icon": "🧾",
+        "type": "rich_text",
+        "contentMarkdown": "Purpose: Provide a concise overview of the system, scope, and design decisions.\n\nScope: Covers API surface, data model, architecture, scaling considerations and security notes."
+      },
+      {
+        "id": "metadata",
+        "title": "Metadata",
+        "icon": "📋",
+        "type": "rich_text",
+        "contentMarkdown": "**Owner:** @platform-team\n**Status:** Planned\n**Priority:** High\n**Reviewers:** @infra, @security\n**Created:** 2026-05-01"
+      },
+      {
+        "id": "architecture",
+        "title": "Architecture",
+        "icon": "🏗️",
+        "type": "rich_text",
+        "contentMarkdown": "High-level architecture: Frontend → API Gateway → Services → Redis / Primary DB. Include a diagram and callouts for critical components."
+      },
+      {
+        "id": "architecture-diagram",
+        "title": "Architecture Diagram",
+        "icon": "🖼️",
+        "type": "rich_text",
+        "contentMarkdown": "![Architecture diagram](https://picsum.photos/seed/technical-arch/1200/360)"
+      },
+      {
+        "id": "system-flow",
+        "title": "System Flow",
+        "icon": "🔁",
+        "type": "rich_text",
+        "contentMarkdown": "Frontend -> API Gateway -> Auth Service -> Canvas Service -> Redis (pub/sub) -> Primary DB\n\nNotes: Use horizontal scaling for stateless services and Redis for realtime fan-out."
+      },
+      {
+        "id": "api",
+        "title": "API Endpoints",
+        "icon": "🔗",
+        "type": "list",
+        "contentMarkdown": "- `POST /api/canvas/create` — Create a new canvas (returns canvas id)\n- `GET /api/templates` — List production templates\n- `PATCH /api/canvas/:id` — Patch canvas content (optimistic patch)\n- `GET /api/canvas/:id` — Fetch canvas with metadata"
+      },
+      {
+        "id": "database_schema",
+        "title": "Database Schema",
+        "icon": "🧱",
+        "type": "code",
+        "contentMarkdown": "```sql\nCREATE TABLE canvases (\n  id UUID PRIMARY KEY,\n  workspace_id UUID NOT NULL,\n  channel_id UUID NULL,\n  created_by UUID NOT NULL,\n  permissions JSONB DEFAULT '{}'::jsonb,\n  content JSONB NOT NULL,\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE INDEX idx_canvases_workspace ON canvases(workspace_id);\n```"
+      },
+      {
+        "id": "components",
+        "title": "Components",
+        "icon": "🧩",
+        "type": "list",
+        "contentMarkdown": "- Editor Service (Web, client integration)\n- Collaboration Service (Yjs + WebSocket)\n- API Gateway (auth, rate limiting)\n- Storage (Primary DB, S3 for attachments)\n- Redis (pub/sub and caching)"
+      },
+      {
+        "id": "risks",
+        "title": "Risks & Mitigations",
+        "icon": "⚠️",
+        "type": "rich_text",
+        "contentMarkdown": "**Risk:** Redis scaling limits may cause delayed fan-out.\n**Mitigation:** Shard channels, add backpressure and fallbacks to polling.\n\n**Risk:** Large canvas payloads cause slow writes.\n**Mitigation:** Store deltas and snapshots, avoid full payload writes on every edit."
+      },
+      {
+        "id": "timeline",
+        "title": "Timeline & Milestones",
+        "icon": "🗓️",
+        "type": "list",
+        "contentMarkdown": "- Milestone 1 — Design (2 weeks)\n- Milestone 2 — Implementation (6 weeks)\n- Milestone 3 — Beta & Monitoring (2 weeks)"
+      },
+      {
+        "id": "notes",
+        "title": "Notes",
+        "icon": "📝",
+        "type": "rich_text",
+        "contentMarkdown": "Security: All write endpoints are rate limited and require auth tokens. Use signed URLs for large uploads.\n\nObservability: Export traces for canvas edits and instrument pub/sub latency."
+      }
+    ],
+    "variables": [],
+    "previewHtml": "<h3>Technical Specifications</h3><p>Architecture, APIs and data model</p>",
+    "actions": [
+      "use",
+      "preview",
+      "edit",
+      "duplicate"
+    ],
+    "createdBy": "system",
+    "createdAt": "2026-05-22T00:00:00Z"
+  },
+  {
+    "id": "sales_enablement_hub",
+    "label": "Sales Enablement Hub",
+    "subtitle": "Collateral, playbooks, and contact points",
+    "description": "Central hub for sales materials and quick links",
+    "category": "Sales",
+    "tags": [
+      "sales",
+      "enablement"
+    ],
+    "cover": {
+      "variations": [
+        {
+          "id": "v1",
+          "type": "photo",
+          "url": "https://picsum.photos/seed/sales/1200/400"
+        },
+        {
+          "id": "v2",
+          "type": "gradient",
+          "colorPalette": [
+            "#F97316",
+            "#FB7185"
+          ]
+        }
+      ]
+    },
+    "sections": [
+      {
+        "id": "collateral",
+        "title": "Collateral",
+        "icon": "📁",
+        "type": "list",
+        "contentMarkdown": "- One-pager\n- Case study\n- Pricing sheet"
+      },
+      {
+        "id": "contacts",
+        "title": "Contacts",
+        "icon": "📇",
+        "type": "list",
+        "contentMarkdown": "- Sales lead: [name]"
+      }
+    ],
+    "variables": [],
+    "previewHtml": "<h3>Sales Enablement Hub</h3>",
+    "actions": [
+      "use",
+      "preview",
+      "edit"
+    ],
+    "createdBy": "system",
+    "createdAt": "2026-05-22T00:00:00Z"
+  },
+  {
+    "id": "weekly_sync",
+    "label": "Weekly Sync",
+    "subtitle": "Standup notes and blockers",
+    "description": "A simple weekly sync template to capture updates",
+    "category": "Meetings",
+    "tags": [
+      "weekly",
+      "sync"
+    ],
+    "cover": {
+      "variations": [
+        {
+          "id": "v1",
+          "type": "gradient",
+          "colorPalette": [
+            "#60A5FA",
+            "#A78BFA"
+          ]
+        }
+      ]
+    },
+    "sections": [
+      {
+        "id": "updates",
+        "title": "Updates",
+        "icon": "🔄",
+        "type": "list",
+        "contentMarkdown": "- What I did\n- What I'm doing\n- Blockers"
+      }
+    ],
+    "variables": [],
+    "previewHtml": "<h3>Weekly Sync</h3>",
+    "actions": [
+      "use",
+      "preview"
+    ],
+    "createdBy": "system",
+    "createdAt": "2026-05-22T00:00:00Z"
+  },
+  {
+    "id": "agenda",
+    "label": "Agenda",
+    "subtitle": "Meeting agenda & objectives",
+    "description": "Structured agenda for efficient meetings",
+    "category": "Meetings",
+    "tags": [
+      "agenda",
+      "meetings"
+    ],
+    "cover": {
+      "variations": [
+        {
+          "id": "v1",
+          "type": "gradient",
+          "colorPalette": [
+            "#FDE68A",
+            "#FDBA74"
+          ]
+        }
+      ]
+    },
+    "sections": [
+      {
+        "id": "agenda-items",
+        "title": "Agenda Items",
+        "icon": "🗂️",
+        "type": "list",
+        "contentMarkdown": "- Topic 1\n- Topic 2\n- Timebox"
+      }
+    ],
+    "variables": [],
+    "previewHtml": "<h3>Agenda</h3>",
+    "actions": [
+      "use",
+      "preview",
+      "edit"
+    ],
+    "createdBy": "system",
+    "createdAt": "2026-05-22T00:00:00Z"
+  },
+  {
+    "id": "todo_list",
+    "label": "To-do list",
+    "subtitle": "Personal or team checklist",
+    "description": "Simple actionable checklist for tasks",
+    "category": "General",
+    "tags": [
+      "todo",
+      "checklist"
+    ],
+    "cover": {
+      "variations": [
+        {
+          "id": "v1",
+          "type": "gradient",
+          "colorPalette": [
+            "#34D399",
+            "#86EFAC"
+          ]
+        }
+      ]
+    },
+    "sections": [
+      {
+        "id": "tasks",
+        "title": "Tasks",
+        "icon": "✅",
+        "type": "taskList",
+        "contentMarkdown": "- [ ] Task 1\n- [ ] Task 2"
+      }
+    ],
+    "variables": [],
+    "previewHtml": "<h3>To-do list</h3>",
+    "actions": [
+      "use",
+      "preview",
+      "edit"
+    ],
+    "createdBy": "system",
+    "createdAt": "2026-05-22T00:00:00Z"
+  },
+  {
+    "id": "weekly_1_1",
+    "label": "Weekly 1:1",
+    "subtitle": "Structure for regular check-ins",
+    "description": "Discussion guide for manager/enginee 1:1s",
+    "category": "People",
+    "tags": [
+      "1:1",
+      "people"
+    ],
+    "cover": {
+      "variations": [
+        {
+          "id": "v1",
+          "type": "photo",
+          "url": "https://picsum.photos/seed/oneonone/1200/400"
+        }
+      ]
+    },
+    "sections": [
+      {
+        "id": "checkin",
+        "title": "Check-in",
+        "icon": "🗣️",
+        "type": "rich_text",
+        "contentMarkdown": "Quick personal check-in and wins."
+      }
+    ],
+    "variables": [],
+    "previewHtml": "<h3>Weekly 1:1</h3>",
+    "actions": [
+      "use",
+      "preview",
+      "edit"
+    ],
+    "createdBy": "system",
+    "createdAt": "2026-05-22T00:00:00Z"
+  },
+  {
+    "id": "company_handbook",
+    "label": "Company Handbook",
+    "subtitle": "Policies, mission, and ways of working",
+    "description": "Comprehensive handbook for employees",
+    "category": "HR",
+    "tags": [
+      "handbook",
+      "policies"
+    ],
+    "cover": {
+      "variations": [
+        {
+          "id": "v1",
+          "type": "gradient",
+          "colorPalette": [
+            "#0EA5A4",
+            "#34D399"
+          ]
+        }
+      ]
+    },
+    "sections": [
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "icon": "🏢",
+        "type": "rich_text",
+        "contentMarkdown": "Company mission and values."
+      },
+      {
+        "id": "policies",
+        "title": "Policies",
+        "icon": "📜",
+        "type": "list",
+        "contentMarkdown": "- Code of conduct\n- Leave policy\n- Security"
+      }
+    ],
+    "variables": [],
+    "previewHtml": "<h3>Company Handbook</h3>",
+    "actions": [
+      "use",
+      "preview",
+      "edit"
+    ],
+    "createdBy": "system",
+    "createdAt": "2026-05-22T00:00:00Z"
+  }
+]

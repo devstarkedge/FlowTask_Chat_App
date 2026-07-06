@@ -1,6 +1,15 @@
 import canvasService from "./canvas.service.js";
 import asyncHandler from "../../middleware/asyncHandler.js";
 
+// ── Get Templates
+const getTemplates = asyncHandler(async (req, res) => {
+  const templates = await canvasService.getTemplates();
+  return res.status(200).json({
+    success: true,
+    data: templates,
+  });
+});
+
 // ── Get Canvas metadata (returns existing canvas or null; no auto-create)
 const getCanvas = asyncHandler(async (req, res) => {
   const { channelId } = req.params;
@@ -211,6 +220,7 @@ const getMyCanvases = asyncHandler(async (req, res) => {
 
 export default {
   getCanvas,
+  getTemplates,
   getCanvasById,
   createCanvas,
   updateCanvas,

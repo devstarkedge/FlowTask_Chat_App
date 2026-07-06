@@ -14,7 +14,25 @@ import {
 } from "../../middleware/errorHandler.js";
 import { MENTION_TYPES } from "../../config/constants.js";
 
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 class CanvasService {
+  async getTemplates() {
+    try {
+      const filePath = path.join(__dirname, "templates.data.json");
+      const data = await fs.promises.readFile(filePath, "utf8");
+      return JSON.parse(data);
+    } catch (err) {
+      logger.error("Error reading templates", { error: err.message || err.toString() });
+      return [];
+    }
+  }
+
   normalizeContent(content) {
     if (!content || typeof content !== "object") {
       return { type: "doc", content: [{ type: "paragraph" }] };

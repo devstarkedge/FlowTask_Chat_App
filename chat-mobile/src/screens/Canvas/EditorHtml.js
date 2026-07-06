@@ -145,6 +145,24 @@ export const EDITOR_HTML = `
       font-weight: 500;
       display: inline-block;
     }
+
+    .file-node, .video-node, .audio-node {
+      display: flex;
+      align-items: center;
+      padding: 12px;
+      margin: 8px 0;
+      background: var(--callout-bg);
+      border: 1px solid var(--callout-border);
+      border-radius: 6px;
+      font-family: monospace;
+      color: var(--text-color);
+    }
+    
+    img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
   </style>
 </head>
 <body>
@@ -164,7 +182,9 @@ export const EDITOR_HTML = `
         "@tiptap/extension-table-cell": "https://esm.sh/@tiptap/extension-table-cell@2.1.13",
         "@tiptap/extension-table-header": "https://esm.sh/@tiptap/extension-table-header@2.1.13",
         "@tiptap/extension-task-list": "https://esm.sh/@tiptap/extension-task-list@2.1.13",
-        "@tiptap/extension-task-item": "https://esm.sh/@tiptap/extension-task-item@2.1.13"
+        "@tiptap/extension-task-item": "https://esm.sh/@tiptap/extension-task-item@2.1.13",
+        "@tiptap/extension-image": "https://esm.sh/@tiptap/extension-image@2.1.13",
+        "@tiptap/extension-mention": "https://esm.sh/@tiptap/extension-mention@2.1.13"
       }
     }
   </script>
@@ -182,14 +202,104 @@ export const EDITOR_HTML = `
     import TableHeader from '@tiptap/extension-table-header';
     import TaskList from '@tiptap/extension-task-list';
     import TaskItem from '@tiptap/extension-task-item';
+    import Image from '@tiptap/extension-image';
+    import Mention from '@tiptap/extension-mention';
+    import { Node, mergeAttributes } from '@tiptap/core';
 
     let editor = null;
+    let insertMentionCommand = null;
 
     function sendToRN(type, payload = {}) {
       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
         window.ReactNativeWebView.postMessage(JSON.stringify({ type, ...payload }));
       }
     }
+
+    // ── Custom Node Definitions ──────────────────────────────────────────────
+    const CalloutNode = Node.create({
+      name: 'callout',
+      group: 'block',
+      content: 'inline*',
+      defining: true,
+      addAttributes() {
+        return { type: { default: 'info' }, emoji: { default: '💡' } };
+      },
+      parseHTML() { return [{ tag: 'div[data-type="callout"]' }]; },
+      renderHTML({ node, HTMLAttributes }) {
+        return [
+          'div', mergeAttributes(HTMLAttributes, { 'data-type': 'callout', class: \`callout-block callout-\${node.attrs.type}\` }),
+          ['span', { class: 'callout-icon', contenteditable: 'false' }, node.attrs.emoji],
+          ['div', { class: 'callout-content' }, 0],
+        ];
+      }
+    });
+
+    const FileNode = Node.create({
+      name: 'file',
+      group: 'block',
+      atom: true,
+      addAttributes() {
+        return { fileId: { default: null }, fileName: { default: '' }, fileSize: { default: 0 }, url: { default: '' } };
+      },
+      parseHTML() { return [{ tag: 'div[data-type="file"]' }]; },
+      renderHTML({ node }) {
+        return ['div', { 'data-type': 'file', class: 'file-node' }, \`📎 File: \${node.attrs.fileName || 'Unknown'}\`];
+      }
+    });
+
+    const VideoNode = Node.create({
+      name: 'video',
+      group: 'block',
+      atom: true,
+      addAttributes() { return { fileId: { default: null }, url: { default: '' }, fileName: { default: '' } }; },
+      parseHTML() { return [{ tag: 'div[data-type="video"]' }]; },
+      renderHTML({ node }) {
+        return ['div', { 'data-type': 'video', class: 'video-node' }, \`🎥 Video: \${node.attrs.fileName || 'Unknown'}\`];
+      }
+    });
+
+    const AudioNode = Node.create({
+      name: 'audio',
+      group: 'block',
+      atom: true,
+      addAttributes() { return { fileId: { default: null }, url: { default: '' }, fileName: { default: '' } }; },
+      parseHTML() { return [{ tag: 'div[data-type="audio"]' }]; },
+      renderHTML({ node }) {
+        return ['div', { 'data-type': 'audio', class: 'audio-node' }, \`🎵 Audio: \${node.attrs.fileName || 'Unknown'}\`];
+      }
+    });
+
+    const ColumnsNode = Node.create({
+      name: 'columns',
+      group: 'block',
+      content: 'column+',
+      parseHTML() { return [{ tag: 'div[data-type="columns"]' }]; },
+      renderHTML({ HTMLAttributes }) {
+        return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'columns', style: 'display: flex; gap: 16px; margin: 16px 0;' }), 0];
+      }
+    });
+
+    const ColumnNode = Node.create({
+      name: 'column',
+      content: 'block+',
+      parseHTML() { return [{ tag: 'div[data-type="column"]' }]; },
+      renderHTML({ HTMLAttributes }) {
+        return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'column', style: 'flex: 1; min-width: 0;' }), 0];
+      }
+    });
+
+    const TemplateVariableNode = Node.create({
+      name: 'templateVariable',
+      group: 'inline',
+      inline: true,
+      selectable: false,
+      atom: true,
+      addAttributes() { return { name: { default: '' }, placeholder: { default: '' } }; },
+      parseHTML() { return [{ tag: 'span[data-type="templateVariable"]' }]; },
+      renderHTML({ node, HTMLAttributes }) {
+        return ['span', mergeAttributes(HTMLAttributes, { 'data-type': 'templateVariable', style: 'background: rgba(0,0,0,0.1); border-radius: 3px; padding: 0 4px;' }), \`{\${node.attrs.name}}\`];
+      }
+    });
 
     try {
       editor = new Editor({
@@ -219,7 +329,53 @@ export const EDITOR_HTML = `
           TaskList,
           TaskItem.configure({
             nested: true,
-          })
+          }),
+          Image.configure({
+            inline: true,
+            allowBase64: true,
+          }),
+          CalloutNode,
+          FileNode,
+          VideoNode,
+          AudioNode,
+          ColumnsNode,
+          ColumnNode,
+          Mention.configure({
+            HTMLAttributes: { class: 'mention-tag' },
+            suggestion: {
+              char: '@',
+              startOfLine: false,
+              command: ({ editor, range, props }) => {
+                editor.chain().focus().insertContentAt(range, [
+                  { type: 'mention', attrs: props }
+                ]).insertContent(' ').run();
+              },
+              render: () => {
+                let currentQuery = null;
+                return {
+                  onStart: (props) => {
+                    currentQuery = props.query;
+                    insertMentionCommand = props.command;
+                    sendToRN('mentionQuery', { query: props.query });
+                  },
+                  onUpdate: (props) => {
+                    currentQuery = props.query;
+                    insertMentionCommand = props.command;
+                    sendToRN('mentionQuery', { query: props.query });
+                  },
+                  onKeyDown: (props) => {
+                    return false;
+                  },
+                  onExit: () => {
+                    currentQuery = null;
+                    insertMentionCommand = null;
+                    sendToRN('mentionClose');
+                  },
+                };
+              }
+            }
+          }),
+          TemplateVariableNode
         ],
         content: '',
         onUpdate: ({ editor }) => {
@@ -333,6 +489,12 @@ export const EDITOR_HTML = `
           break;
         case 'insertImage':
           editor.chain().focus().setImage({ src: value }).run();
+          break;
+        case 'insertMention':
+          if (insertMentionCommand && value) {
+            insertMentionCommand(value);
+            insertMentionCommand = null;
+          }
           break;
       }
     });

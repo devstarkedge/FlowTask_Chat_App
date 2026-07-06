@@ -6,3 +6,4 @@ export { default as FilterTabs } from './FilterTabs';
 export { default as LoadingState } from './LoadingState';
 export { default as EmptyState } from './EmptyState';
 export { default as MobileFileCard } from './MobileFileCard';
+export { default as HomeHeaderLoader } from './HomeHeaderLoader';

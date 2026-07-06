@@ -9,15 +9,20 @@ import {
   Switch,
   Alert,
   FlatList,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
 import { useAuthStore } from '../stores/authStore';
-import { Hash, Users, Pin, Bell, Settings, LogOut, ArrowLeft, FolderOpen, FileText, Clock, User, Mail, Briefcase } from 'lucide-react-native';
-import { channelAPI, notificationPrefAPI, usersAPI } from '../services/api';
+import { Hash, Users, Pin, Bell, Settings, LogOut, ArrowLeft, FolderOpen, FileText, Clock, User, Mail, Briefcase, UserPlus, X, Search, Plus } from 'lucide-react-native';
+import { channelAPI, notificationPrefAPI, usersAPI, directoriesAPI } from '../services/api';
 import { AppAvatar } from '../components/common';
 import logger from '../utils/logger';
+import Toast from 'react-native-toast-message';
 
 const ChannelDetailsScreen = ({ route, navigation }) => {
   const { channelId, channelName, memberCount: initialMemberCount = 0 } = route.params || {};
@@ -35,6 +40,63 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
   const [showMembersList, setShowMembersList] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isMuteLoading, setIsMuteLoading] = useState(false);
+
+  // Add Member Modal State
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const [memberSearchResults, setMemberSearchResults] = useState([]);
+  const [isSearchingMembers, setIsSearchingMembers] = useState(false);
+  const [addingMemberId, setAddingMemberId] = useState(null);
+
+  useEffect(() => {
+    if (!showAddMemberModal) return;
+    const fetchSearchMembers = async () => {
+      setIsSearchingMembers(true);
+      try {
+        const query = memberSearchQuery.trim();
+        const { data } = await usersAPI.getDMContacts(query);
+        const contacts = data.data?.contacts || [];
+        
+        // Filter out existing members
+        const existingIds = new Set(members.map(m => m._id));
+        
+        const filtered = contacts
+          .map(u => ({
+            _id: u._id || u.chatUserId || u.flowTaskUserId,
+            name: u.name || u.displayName,
+            email: u.email,
+            avatar: u.avatar
+          }))
+          .filter(u => u._id && u._id !== currentUser?._id && !existingIds.has(u._id));
+        setMemberSearchResults(filtered);
+      } catch (err) {
+        logger.error("Failed to search members:", err);
+      } finally {
+        setIsSearchingMembers(false);
+      }
+    };
+
+    const timer = setTimeout(fetchSearchMembers, memberSearchQuery ? 350 : 50);
+    return () => clearTimeout(timer);
+  }, [memberSearchQuery, showAddMemberModal, members, currentUser]);
+
+  const handleAddMemberToChannel = async (userId, userName) => {
+    try {
+      setAddingMemberId(userId);
+      await channelAPI.addMember(channelId, userId);
+      Toast.show({ type: 'success', text1: `${userName} added to channel` });
+      // Refresh members
+      fetchMembers();
+      // Remove from search results locally
+      setMemberSearchResults(prev => prev.filter(m => m._id !== userId));
+    } catch (err) {
+      logger.error('Failed to add member:', err);
+      const msg = err.response?.data?.message || 'Failed to add member';
+      Toast.show({ type: 'error', text1: msg });
+    } finally {
+      setAddingMemberId(null);
+    }
+  };
 
   const handleMemberPress = async (member) => {
     try {
@@ -199,14 +261,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
                   <Text style={{ fontSize: 15, color: colors.textPrimary, marginTop: 2, textTransform: 'capitalize' }}>{dmRole}</Text>
                 </View>
               </View>
-
-              <View style={[styles.infoRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
-                <Clock size={18} color={colors.textSecondary} style={{ marginRight: 12 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>Local Time</Text>
-                  <Text style={{ fontSize: 15, color: colors.textPrimary, marginTop: 2 }}>{dmTimezone}</Text>
-                </View>
-              </View>
+              
             </View>
           </View>
 
@@ -291,6 +346,14 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
 
         <View style={styles.section}>
           <DetailItem
+            icon={UserPlus}
+            label="Add Members"
+            onPress={() => {
+              setMemberSearchQuery("");
+              setShowAddMemberModal(true);
+            }}
+          />
+          <DetailItem
             icon={Users}
             label="View Members"
             onPress={() => setShowMembersList(!showMembersList)}
@@ -355,6 +418,72 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
           />
         </View>
       </ScrollView>
+
+      {/* Add Members Modal */}
+      <Modal visible={showAddMemberModal} animationType="slide" transparent>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Add Members</Text>
+              <TouchableOpacity onPress={() => setShowAddMemberModal(false)} style={styles.modalCloseBtn}>
+                <X size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ padding: 16, flex: 1 }}>
+              <View style={[styles.searchInputRow, { borderColor: colors.border, backgroundColor: colors.inputBackground }]}>
+                <Search size={18} color={colors.textTertiary} />
+                <TextInput
+                  style={[styles.searchInput, { color: colors.inputText }]}
+                  placeholder="Search people..."
+                  placeholderTextColor={colors.inputPlaceholder}
+                  value={memberSearchQuery}
+                  onChangeText={setMemberSearchQuery}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {isSearchingMembers && <ActivityIndicator size="small" color={colors.primary} />}
+              </View>
+
+              <ScrollView 
+                style={[styles.searchResultsContainer, { borderColor: colors.border, backgroundColor: colors.inputBackground }]}
+                keyboardShouldPersistTaps="handled"
+              >
+                {memberSearchResults.length === 0 ? (
+                  <Text style={[styles.noResultsText, { color: colors.textTertiary }]}>
+                    {isSearchingMembers ? "Loading..." : "No people found to add"}
+                  </Text>
+                ) : (
+                  memberSearchResults.map((m) => (
+                    <TouchableOpacity
+                      key={m._id}
+                      style={[styles.searchResultItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}
+                      onPress={() => handleAddMemberToChannel(m._id, m.name)}
+                      disabled={addingMemberId === m._id}
+                    >
+                      <AppAvatar user={m} size={32} />
+                      <View style={styles.searchResultInfo}>
+                        <Text style={[styles.searchResultName, { color: colors.textPrimary }]}>{m.name}</Text>
+                        <Text style={[styles.searchResultEmail, { color: colors.textTertiary }]}>{m.email}</Text>
+                      </View>
+                      <View style={[
+                        styles.searchResultAddBtn, 
+                        { borderColor: colors.primary }
+                      ]}>
+                        {addingMemberId === m._id ? (
+                          <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                          <Plus size={14} color={colors.primary} />
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -494,6 +623,83 @@ const styles = StyleSheet.create({
     fontSize: 13,
     paddingVertical: 8,
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalContainer: {
+    height: "80%",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: "hidden",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  searchInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 12,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    padding: 0,
+  },
+  searchResultsContainer: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  noResultsText: {
+    padding: 20,
+    textAlign: "center",
+    fontSize: 14,
+  },
+  searchResultItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  searchResultInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  searchResultName: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  searchResultEmail: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  searchResultAddBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 

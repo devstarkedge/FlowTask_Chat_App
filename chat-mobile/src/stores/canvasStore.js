@@ -73,11 +73,42 @@ function removeCanvasFromAllState(state, canvasId) {
   };
 }
 
+// ── Helper to convert blocks to TipTap JSON ──────────────────────────────────
+function convertBlocksToTipTap(blocks) {
+  if (!blocks || !blocks.length) return null;
+  const content = blocks.map((block) => {
+    if (block.type === 'heading-1') {
+      return { type: 'heading', attrs: { level: 1 }, content: block.content ? [{ type: 'text', text: block.content }] : [] };
+    } else if (block.type === 'heading-2') {
+      return { type: 'heading', attrs: { level: 2 }, content: block.content ? [{ type: 'text', text: block.content }] : [] };
+    } else if (block.type === 'heading-3') {
+      return { type: 'heading', attrs: { level: 3 }, content: block.content ? [{ type: 'text', text: block.content }] : [] };
+    } else if (block.type === 'paragraph') {
+      return { type: 'paragraph', content: block.content ? [{ type: 'text', text: block.content }] : [] };
+    } else if (block.type === 'checklist') {
+      return {
+        type: 'taskList',
+        content: [
+          {
+            type: 'taskItem',
+            attrs: { checked: block.content?.checked || false },
+            content: [{ type: 'paragraph', content: block.content?.text ? [{ type: 'text', text: block.content.text }] : [] }],
+          },
+        ],
+      };
+    }
+    return { type: 'paragraph', content: typeof block.content === 'string' && block.content ? [{ type: 'text', text: block.content }] : [] };
+  });
+
+  return { type: 'doc', content };
+}
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 export const useCanvasStore = create((set, get) => ({
   // ── State ──────────────────────────────────────────────────────────────────
   isLoading: false,
   canvasesByChannel: {},       // { [channelId]: Canvas[] }
+  templates: [],               // Templates fetched from backend
   activeCanvas: null,          // currently open canvas object
   comments: [],                // CanvasComment[] for the open canvas
   history: [],                 // CanvasHistory[] for the open canvas
@@ -122,7 +153,20 @@ export const useCanvasStore = create((set, get) => ({
     }
   },
 
-  // ── Load a specific canvas by ID (REST + socket join) ──────────────────────
+  // ── Fetch templates ────────────────────────────────────────────────────────
+  fetchTemplates: async () => {
+    try {
+      const res = await canvasAPI.getTemplates();
+      const list = res.data?.data || [];
+      set({ templates: list });
+      return list;
+    } catch (err) {
+      logger.error('[CanvasStore] fetchTemplates:', err.message);
+      return [];
+    }
+  },
+
+  // ── Fetch all user canvases (for "Link existing" flow) ──────────────────────
   loadCanvas: async (canvasId) => {
     if (!canvasId) return;
     set({ isLoading: true });
@@ -135,15 +179,27 @@ export const useCanvasStore = create((set, get) => ({
 
       const res = await canvasAPI.getById(canvasId);
       if (res.data?.success) {
-        const { canvas, comments } = res.data.data;
+        const { canvas, blocks, comments } = res.data.data;
+        
+        let activeCanvas = { ...canvas };
+        
+        const isBlank = !canvas.content || 
+                       !canvas.content.content || 
+                       (canvas.content.content.length === 0) ||
+                       (canvas.content.content.length === 1 && (!canvas.content.content[0].content || canvas.content.content[0].content.length === 0) && canvas.content.content[0].type === 'paragraph');
+
+        if (isBlank && blocks && blocks.length > 0) {
+          activeCanvas.content = convertBlocksToTipTap(blocks);
+        }
+
         set((s) => {
           const nextActiveIds = {
             ...s.activeCanvasIdByChannel,
-            [canvas.channelId]: canvas._id,
+            [activeCanvas.channelId]: activeCanvas._id,
           };
           persistActiveIds(nextActiveIds);
           return {
-            activeCanvas: canvas,
+            activeCanvas,
             comments: comments || [],
             activeCanvasIdByChannel: nextActiveIds,
           };

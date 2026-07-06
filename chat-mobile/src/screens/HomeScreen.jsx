@@ -13,7 +13,7 @@ import {
   Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AppAvatar } from "../components/common";
+import { AppAvatar, HomeHeaderLoader } from "../components/common";
 import AccountDrawer from "../components/AccountDrawer";
 import CustomizeHomeModal from "../components/CustomizeHomeModal";
 import CreateNewBottomSheet from "../components/CreateNewBottomSheet";
@@ -44,6 +44,21 @@ import {
   Clock,
 } from "lucide-react-native";
 import CreateChannelModal from "../components/CreateChannelModal";
+
+const SkeletonCard = ({ colors }) => (
+  <View style={[qcStyles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
+    <View style={[{ width: 20, height: 20, borderRadius: 10, opacity: 0.5, backgroundColor: colors.border }]} />
+    <View style={[{ width: 50, height: 10, borderRadius: 4, opacity: 0.5, backgroundColor: colors.border }]} />
+    <View style={[{ width: 30, height: 8, borderRadius: 4, opacity: 0.5, backgroundColor: colors.border }]} />
+  </View>
+);
+
+const SkeletonRow = ({ colors }) => (
+  <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 6, gap: 8, minHeight: 36 }}>
+    <View style={[{ width: 16, height: 16, borderRadius: 4, opacity: 0.5, backgroundColor: colors.border }]} />
+    <View style={[{ width: 120, height: 14, borderRadius: 4, opacity: 0.5, backgroundColor: colors.border }]} />
+  </View>
+);
 
 // ─── Quick Access Card ──────────────────────────────────────────────────────
 
@@ -322,8 +337,10 @@ const HomeScreen = ({ navigation }) => {
     (s) => s.fetchScheduledMessages,
   );
 
+  const isChannelsLoading = useChannelStore((s) => s.isLoading);
+  const isThreadsLoading = useThreadStore((s) => s.isLoading);
+
   const [refreshing, setRefreshing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [sectionsExpanded, setSectionsExpanded] = useState({
     unreads: true,
     channels: true,
@@ -334,26 +351,15 @@ const HomeScreen = ({ navigation }) => {
   const [customizeModalVisible, setCustomizeModalVisible] = useState(false);
   const [createNewVisible, setCreateNewVisible] = useState(false);
 
-  const loadData = useCallback(async () => {
-    if (!activeWorkspace?._id) {
-      setIsLoading(false);
-      return;
-    }
-    try {
-      setIsLoading(true);
-      setError(null);
-      await Promise.all([
-        fetchChannels?.() || Promise.resolve(),
-        fetchThreads?.() || Promise.resolve(),
-        fetchSavedMessages?.() || Promise.resolve(),
-        fetchDrafts?.(activeWorkspace?._id) || Promise.resolve(),
-        fetchScheduledMessages?.() || Promise.resolve(),
-      ]);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
+  const loadData = useCallback(() => {
+    if (!activeWorkspace?._id) return;
+    setError(null);
+    // Fetch independently without blocking
+    fetchChannels?.().catch((err) => setError(err.message));
+    fetchThreads?.().catch(console.error);
+    fetchSavedMessages?.().catch(console.error);
+    fetchDrafts?.(activeWorkspace?._id).catch(console.error);
+    fetchScheduledMessages?.().catch(console.error);
   }, [
     activeWorkspace?._id,
     fetchChannels,
@@ -427,6 +433,13 @@ const HomeScreen = ({ navigation }) => {
 
   const sections = useMemo(() => {
     const result = [];
+    
+    // Inject skeletons for Channels & DMs if loading and empty
+    const showSkeletons = isChannelsLoading && channels.length === 0;
+    const skeletonData = showSkeletons 
+      ? [{ _id: "skel1", isSkeleton: true }, { _id: "skel2", isSkeleton: true }, { _id: "skel3", isSkeleton: true }] 
+      : [];
+
     if (unreadConversations.length > 0) {
       result.push({
         key: "unreads",
@@ -441,7 +454,7 @@ const HomeScreen = ({ navigation }) => {
       key: "channels",
       title: "Channels",
       icon: Hash,
-      data: sectionsExpanded.channels ? regularChannels : [],
+      data: sectionsExpanded.channels ? (showSkeletons ? skeletonData : regularChannels) : [],
       type: "channel",
       showAddChannel: true,
     });
@@ -449,12 +462,12 @@ const HomeScreen = ({ navigation }) => {
       key: "dms",
       title: "Direct Messages",
       icon: null,
-      data: sectionsExpanded.dms ? regularDMs : [],
+      data: sectionsExpanded.dms ? (showSkeletons ? skeletonData : regularDMs) : [],
       type: "dm",
       showAddChannel: false,
     });
     return result;
-  }, [unreadConversations, regularChannels, regularDMs, sectionsExpanded]);
+  }, [unreadConversations, regularChannels, regularDMs, sectionsExpanded, isChannelsLoading, channels.length]);
 
   const renderSectionHeader = useCallback(
     ({ section }) => (
@@ -486,6 +499,9 @@ const HomeScreen = ({ navigation }) => {
 
   const renderItem = useCallback(
     ({ item, section }) => {
+      if (item.isSkeleton) {
+        return <SkeletonRow colors={colors} />;
+      }
       const unreadCount = unreads[item._id] || 0;
       if (section.type === "dm" || (section.type === "mixed" && item.type === "dm")) {
         const isSelf = item.dmRecipientId === user?._id;
@@ -517,6 +533,16 @@ const HomeScreen = ({ navigation }) => {
 
   // Filter cards based on user preferences
   const visibleCards = useMemo(() => {
+    const isLoadingCards = isThreadsLoading && quickCardsTotal === 0;
+    if (isLoadingCards) {
+      return [
+        { key: "skel1", isSkeleton: true },
+        { key: "skel2", isSkeleton: true },
+        { key: "skel3", isSkeleton: true },
+        { key: "skel4", isSkeleton: true },
+      ];
+    }
+
     const cards = [];
     if (enabledHomeCards.catchUp !== false) {
       cards.push({
@@ -590,6 +616,7 @@ const HomeScreen = ({ navigation }) => {
     draftCount,
     scheduledCount,
     navigation,
+    isThreadsLoading,
   ]);
 
   const ListHeader = useMemo(
@@ -602,16 +629,20 @@ const HomeScreen = ({ navigation }) => {
             contentContainerStyle={styles.cardsRow}
             style={{ backgroundColor: colors.backgroundSecondary }}
           >
-            {visibleCards.map((card) => (
-              <QuickCard
-                key={card.key}
-                icon={card.icon}
-                label={card.label}
-                subtitle={card.subtitle}
-                onPress={card.onPress}
-                colors={colors}
-              />
-            ))}
+            {visibleCards.map((card) =>
+              card.isSkeleton ? (
+                <SkeletonCard key={card.key} colors={colors} />
+              ) : (
+                <QuickCard
+                  key={card.key}
+                  icon={card.icon}
+                  label={card.label}
+                  subtitle={card.subtitle}
+                  onPress={card.onPress}
+                  colors={colors}
+                />
+              )
+            )}
           </ScrollView>
         )}
       </View>
@@ -683,37 +714,38 @@ const HomeScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Dynamic Header Loader */}
+        {(isChannelsLoading || isThreadsLoading || refreshing) && (
+          <HomeHeaderLoader colors={colors} />
+        )}
       </SafeAreaView>
 
-      {isLoading ? (
-        <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : (
-        <SectionList
-          sections={sections}
-          keyExtractor={(item) => item._id}
-          renderItem={renderItem}
-          renderSectionHeader={renderSectionHeader}
-          renderSectionFooter={renderSectionFooter}
-          ListHeaderComponent={ListHeader}
-          ListFooterComponent={<View style={{ height: 100 }} />}
-          showsVerticalScrollIndicator={false}
-          stickySectionHeadersEnabled={false}
-          initialNumToRender={20}
-          maxToRenderPerBatch={10}
-          windowSize={11}
-          removeClippedSubviews={Platform.OS !== "web"}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-            />
-          }
-          style={{ backgroundColor: colors.backgroundSecondary }}
-        />
-      )}
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => item._id}
+        renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
+        renderSectionFooter={renderSectionFooter}
+        ListHeaderComponent={ListHeader}
+        ListFooterComponent={<View style={{ height: 100 }} />}
+        showsVerticalScrollIndicator={false}
+        stickySectionHeadersEnabled={false}
+        initialNumToRender={20}
+        maxToRenderPerBatch={10}
+        windowSize={11}
+        removeClippedSubviews={Platform.OS !== "web"}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="transparent"
+            colors={["transparent"]}
+            progressBackgroundColor="transparent"
+          />
+        }
+        style={{ backgroundColor: colors.backgroundSecondary }}
+      />
 
       {/* Floating "+" button for create new menu */}
       <TouchableOpacity

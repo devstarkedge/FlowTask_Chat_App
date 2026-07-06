@@ -37,7 +37,7 @@ import {
 } from "react-native";
 import {
   Send,
-  Image as ImageIcon,
+  Plus,
   Smile,
   Clock,
   X,
@@ -56,6 +56,10 @@ import EmojiPickerModal from "./EmojiPickerModal";
 import ScheduleModal from "./ScheduleModal";
 import MentionDropdown from "./MentionDropdown";
 import FormattingToolbar from "./FormattingToolbar";
+import MediaPickerSheet from "./MediaPickerSheet";
+import GifPickerModal from "./GifPickerModal";
+import RecentCanvasesModal from "./RecentCanvasesModal";
+import RecentFilesModal from "./RecentFilesModal";
 
 /**
  * Convert markdown-style formatting to HTML for backend compatibility.
@@ -153,6 +157,10 @@ const MessageComposer = React.memo(function MessageComposer({
   const { setDraft, getDraft, clearDraft } = useDraftStore();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [showRecentCanvases, setShowRecentCanvases] = useState(false);
+  const [showRecentFiles, setShowRecentFiles] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
   const [showToolbar, setShowToolbar] = useState(false);
   const [mentionVisible, setMentionVisible] = useState(false);
@@ -338,10 +346,26 @@ const MessageComposer = React.memo(function MessageComposer({
       try {
         const formData = new FormData();
         pickedFiles.forEach((file) => {
+          // Normalize properties from various pickers (ImagePicker, DocumentPicker, MediaLibrary)
+          let name = file.name || file.fileName || file.filename || `file_${Date.now()}.jpg`;
+          if (!name.includes('.')) name += '.jpg';
+          
+          let type = file.mimeType || file.type;
+          if (!type || type === 'image' || type === 'video' || type === 'application/octet-stream') {
+            const ext = name.split('.').pop().toLowerCase();
+            if (ext === 'jpg' || ext === 'jpeg') type = 'image/jpeg';
+            else if (ext === 'png') type = 'image/png';
+            else if (ext === 'gif') type = 'image/gif';
+            else if (ext === 'webp') type = 'image/webp';
+            else if (ext === 'mp4') type = 'video/mp4';
+            else if (ext === 'pdf') type = 'application/pdf';
+            else type = 'image/jpeg'; // Safe default for mobile uploads if completely unknown
+          }
+          
           formData.append("files", {
-            uri: file.uri,
-            name: file.name,
-            type: file.type || "application/octet-stream",
+            uri: Platform.OS === 'android' ? file.uri : file.uri.replace('file://', ''),
+            name,
+            type,
           });
         });
 
@@ -406,49 +430,16 @@ const MessageComposer = React.memo(function MessageComposer({
     [channelId],
   );
 
-  const handleAttach = useCallback(async () => {
-    let pickedFiles = [];
-    try {
-      const DocumentPicker = require("expo-document-picker");
-      const result = await DocumentPicker.getDocumentAsync({
-        multiple: true,
-        type: "*/*",
-      });
-      if (result.canceled) return;
-      pickedFiles = result.assets.map((asset) => ({
-        uri: asset.uri,
-        name: asset.name || asset.fileName,
-        type: asset.mimeType || asset.type,
-        size: asset.size,
-      }));
-    } catch (err) {
-      try {
-        const ImagePicker = require("expo-image-picker");
-        const result = await ImagePicker.launchImageLibraryAsync({
-          allowsMultipleSelection: true,
-          mediaTypes: ["images", "videos"],
-        });
-        if (result.canceled) return;
-        pickedFiles = result.assets.map((asset) => ({
-          uri: asset.uri,
-          name: asset.fileName || "image",
-          type: asset.mimeType || "image/jpeg",
-          size: asset.fileSize,
-        }));
-      } catch (innerErr) {
-        Alert.alert(
-          "Error",
-          "Unable to pick files. Make sure expo-document-picker or expo-image-picker is installed.",
-        );
-        return;
-      }
-    }
+  const handleAttach = useCallback(() => {
+    setShowMediaPicker(true);
+  }, []);
 
-    if (!pickedFiles.length) return;
+  const handleFilesSelected = useCallback(async (pickedFiles) => {
+    if (!pickedFiles || !pickedFiles.length) return;
 
     // Add local files as "uploading" pending entries
     const localEntries = pickedFiles.map((f) => ({
-      name: f.name,
+      name: f.name || "attachment",
       uploading: true,
       uploadFailed: false,
     }));
@@ -585,7 +576,7 @@ const MessageComposer = React.memo(function MessageComposer({
         ]}
       >
         <TouchableOpacity style={styles.iconButton} onPress={handleAttach}>
-          <ImageIcon size={22} color={colors.textSecondary} />
+          <Plus size={24} color={colors.textSecondary} />
         </TouchableOpacity>
 
         {/* Toolbar toggle */}
@@ -646,6 +637,57 @@ const MessageComposer = React.memo(function MessageComposer({
         onClose={() => setShowEmojiPicker(false)}
         onSelect={handleEmojiSelect}
         colors={colors}
+      />
+
+      {/* Media Picker Sheet */}
+      <MediaPickerSheet
+        visible={showMediaPicker}
+        onClose={() => setShowMediaPicker(false)}
+        colors={colors}
+        onPickFiles={handleFilesSelected}
+        onOpenGifPicker={() => setShowGifPicker(true)}
+        onOpenRecentCanvases={() => setShowRecentCanvases(true)}
+        onOpenRecentFiles={() => setShowRecentFiles(true)}
+      />
+
+      {/* Recent Canvases Modal */}
+      <RecentCanvasesModal
+        visible={showRecentCanvases}
+        onClose={() => setShowRecentCanvases(false)}
+        colors={colors}
+        onSelectCanvas={(canvas) => {
+          const md = `[📄 ${canvas.title || 'Untitled Canvas'}](/canvas/${canvas._id})`;
+          onChangeText(text ? `${text}\n${md}` : md);
+        }}
+      />
+
+      {/* Recent Files Modal */}
+      <RecentFilesModal
+        visible={showRecentFiles}
+        onClose={() => setShowRecentFiles(false)}
+        colors={colors}
+        onSelectFile={(file) => {
+          setPendingFiles((prev) => [...prev, {
+            _id: file._id,
+            name: file.originalName || file.fileName || file.name || 'Unknown',
+            url: file.url || file.secureUrl,
+            thumbnailUrl: file.thumbnailUrl,
+            mimeType: file.mimeType,
+            fileSize: file.fileSize,
+            uploading: false,
+          }]);
+        }}
+      />
+
+      {/* GIF Picker Modal */}
+      <GifPickerModal
+        visible={showGifPicker}
+        onClose={() => setShowGifPicker(false)}
+        colors={colors}
+        onSelectGif={(gif) => {
+          const gifMarkdown = `![GIF](${gif.url})`;
+          onChangeText(text ? `${text}\n${gifMarkdown}` : gifMarkdown);
+        }}
       />
 
       {/* Schedule Modal */}

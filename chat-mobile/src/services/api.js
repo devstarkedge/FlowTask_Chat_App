@@ -11,7 +11,7 @@ logger.info('[API] Active BASE_URL:', BASE_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  timeout: 45000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -230,9 +230,11 @@ export const fileAPI = {
   deleteFromChannel: (channelId, fileId) => api.delete(`/channels/${channelId}/files/${fileId}`),
   uploadFiles: (channelId, formData, onProgress) =>
     api.post(`/channels/${channelId}/upload`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 60000,
       onUploadProgress: onProgress,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
     }),
 };
 
@@ -241,6 +243,7 @@ export const usersAPI = {
   setPresence: (status) => api.put('/users/presence', { status }),
   setCustomStatus: (data) => api.put('/users/status', data),
   getChannelMembers: (channelId) => api.get(`/channels/${channelId}/members`),
+  getDMContacts: (search) => api.get('/users/dm-contacts', { params: { search } }),
 };
 
 // Read Receipts API
@@ -295,6 +298,7 @@ export const notificationPrefAPI = {
 
 // ─── Canvas API ───────────────────────────────────────────────────────────────
 export const canvasAPI = {
+  getTemplates: () => api.get(`/canvas/templates`),
   getById: (canvasId) => api.get(`/canvas/by-id/${canvasId}`),
   getAllForChannel: (channelId) => api.get(`/canvas/channel/all/${channelId}`),
   getMy: () => api.get(`/canvas/my/all`),

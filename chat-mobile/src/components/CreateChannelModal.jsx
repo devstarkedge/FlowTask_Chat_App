@@ -10,10 +10,14 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from "react-native";
 import { useThemeStore } from "../stores/themeStore";
 import { useChannelStore } from "../stores/channelStore";
-import { X, Hash, Lock } from "lucide-react-native";
+import { X, Hash, Lock, Search, Check, Plus } from "lucide-react-native";
+import { usersAPI } from "../services/api";
+import { useAuthStore } from "../stores/authStore";
+import { AppAvatar } from "./common";
 
 /**
  * CreateChannelModal — Slack-like modal for creating a new channel.
@@ -21,12 +25,58 @@ import { X, Hash, Lock } from "lucide-react-native";
 const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
   const { colors } = useThemeStore();
   const createChannel = useChannelStore((s) => s.createChannel);
+  const user = useAuthStore((s) => s.user);
 
   const [name, setName] = useState("");
   const [topic, setTopic] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const [memberSearchResults, setMemberSearchResults] = useState([]);
+  const [selectedMembers, setSelectedMembers] = useState([]);
+  const [isSearchingMembers, setIsSearchingMembers] = useState(false);
+
+  React.useEffect(() => {
+    if (!isPrivate) return;
+    const fetchMembers = async () => {
+      setIsSearchingMembers(true);
+      try {
+        const query = memberSearchQuery.trim();
+        const { data } = await usersAPI.getDMContacts(query);
+        const contacts = data.data?.contacts || [];
+        const filtered = contacts
+          .map(u => ({
+            _id: u._id || u.chatUserId || u.flowTaskUserId,
+            name: u.name || u.displayName,
+            email: u.email,
+            avatar: u.avatar
+          }))
+          .filter(u => u._id && u._id !== user?._id);
+        setMemberSearchResults(filtered);
+      } catch (err) {
+        console.error("Failed to search members:", err);
+      } finally {
+        setIsSearchingMembers(false);
+      }
+    };
+
+    const timer = setTimeout(fetchMembers, memberSearchQuery ? 350 : 50);
+    return () => clearTimeout(timer);
+  }, [memberSearchQuery, isPrivate, user]);
+
+  const handleToggleMember = (member) => {
+    setSelectedMembers((prev) => {
+      const exists = prev.some((m) => m._id === member._id);
+      if (exists) return prev.filter((m) => m._id !== member._id);
+      return [...prev, member];
+    });
+  };
+
+  const handleRemoveMember = (memberId) => {
+    setSelectedMembers((prev) => prev.filter((m) => m._id !== memberId));
+  };
 
   const handleSubmit = async () => {
     const trimmedName = name.trim().toLowerCase().replace(/\s+/g, "-");
@@ -42,6 +92,7 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
         name: trimmedName,
         visibility: isPrivate ? "private" : "public",
         topic: topic.trim(),
+        memberIds: isPrivate ? selectedMembers.map(m => m._id) : [],
       });
       // Reset form
       setName("");
@@ -68,6 +119,8 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
     setTopic("");
     setIsPrivate(false);
     setError(null);
+    setMemberSearchQuery("");
+    setSelectedMembers([]);
     onClose();
   };
 
@@ -104,7 +157,11 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
           </View>
 
           {/* Form */}
-          <View style={styles.form}>
+          <ScrollView 
+            style={styles.form} 
+            contentContainerStyle={{ paddingBottom: 40 }}
+            keyboardShouldPersistTaps="handled"
+          >
             {/* Channel name */}
             <Text style={[styles.label, { color: colors.textSecondary }]}>
               Channel name
@@ -117,7 +174,9 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
                 placeholderTextColor={colors.inputPlaceholder}
                 value={name}
                 onChangeText={(text) => {
-                  setName(text.toLowerCase().replace(/[^a-z0-9-_]/g, ""));
+                  let newText = text.toLowerCase().replace(/\s/g, "-");
+                  newText = newText.replace(/[^a-z0-9-_]/g, "");
+                  setName(newText);
                   setError(null);
                 }}
                 autoCapitalize="none"
@@ -177,7 +236,83 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
                 thumbColor="#fff"
               />
             </View>
-          </View>
+
+            {/* Add Members (Private only) */}
+            {isPrivate && (
+              <View style={styles.membersSection}>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>
+                  Add Members (optional)
+                </Text>
+
+                {selectedMembers.length > 0 && (
+                  <View style={styles.selectedMembersContainer}>
+                    {selectedMembers.map((m) => (
+                      <View key={m._id} style={[styles.selectedChip, { backgroundColor: colors.primary + '20', borderColor: colors.primary + '40' }]}>
+                        <AppAvatar user={m} size={20} />
+                        <Text style={[styles.selectedChipName, { color: colors.textPrimary }]} numberOfLines={1}>
+                          {m.name}
+                        </Text>
+                        <TouchableOpacity onPress={() => handleRemoveMember(m._id)} style={styles.removeChipBtn}>
+                          <X size={12} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                <View style={[styles.inputRow, { borderColor: colors.border, backgroundColor: colors.inputBackground, marginTop: 8 }]}>
+                  <Search size={18} color={colors.textTertiary} />
+                  <TextInput
+                    style={[styles.input, { color: colors.inputText }]}
+                    placeholder="Search people..."
+                    placeholderTextColor={colors.inputPlaceholder}
+                    value={memberSearchQuery}
+                    onChangeText={setMemberSearchQuery}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {isSearchingMembers && <ActivityIndicator size="small" color={colors.primary} />}
+                </View>
+
+                {/* Search Results */}
+                <ScrollView 
+                  style={[styles.searchResultsContainer, { borderColor: colors.border, backgroundColor: colors.inputBackground }]}
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled={true}
+                >
+                  {memberSearchResults.length === 0 ? (
+                    <Text style={[styles.noResultsText, { color: colors.textTertiary }]}>
+                      {isSearchingMembers ? "Loading..." : "No people found"}
+                    </Text>
+                  ) : (
+                    memberSearchResults.map((m) => {
+                      const isSelected = selectedMembers.some((sm) => sm._id === m._id);
+                      return (
+                        <TouchableOpacity
+                          key={m._id}
+                          style={[styles.searchResultItem, isSelected && { backgroundColor: colors.primary + '10' }]}
+                          onPress={() => handleToggleMember(m)}
+                        >
+                          <AppAvatar user={m} size={32} />
+                          <View style={styles.searchResultInfo}>
+                            <Text style={[styles.searchResultName, { color: colors.textPrimary }]}>{m.name}</Text>
+                            <Text style={[styles.searchResultEmail, { color: colors.textTertiary }]}>{m.email}</Text>
+                          </View>
+                          <View style={[
+                            styles.searchResultCheck, 
+                            { borderColor: isSelected ? colors.primary : colors.border },
+                            isSelected && { backgroundColor: colors.primary }
+                          ]}>
+                            {isSelected ? <Check size={12} color="#fff" strokeWidth={3} /> : <Plus size={12} color={colors.textTertiary} />}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                </ScrollView>
+              </View>
+            )}
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -278,6 +413,71 @@ const styles = StyleSheet.create({
   toggleHint: {
     fontSize: 12,
     marginTop: 2,
+  },
+  membersSection: {
+    marginTop: 24,
+  },
+  selectedMembersContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  selectedChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+  },
+  selectedChipName: {
+    fontSize: 12,
+    fontWeight: "600",
+    maxWidth: 100,
+  },
+  removeChipBtn: {
+    padding: 2,
+  },
+  searchResultsContainer: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+    maxHeight: 180,
+    overflow: "hidden",
+  },
+  noResultsText: {
+    padding: 12,
+    textAlign: "center",
+    fontSize: 13,
+  },
+  searchResultItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  searchResultInfo: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  searchResultName: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  searchResultEmail: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  searchResultCheck: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 

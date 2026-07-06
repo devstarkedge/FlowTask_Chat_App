@@ -35,7 +35,7 @@ import {
 import { useCanvasStore } from '../../stores/canvasStore';
 import { useThemeStore } from '../../stores/themeStore';
 import CanvasCard from '../../components/canvas/CanvasCard';
-import { TEMPLATES, CATEGORIES, buildTemplateContent } from '../../utils/templates';
+import { CATEGORIES, TEMPLATES, buildTemplateContent } from '../../utils/templates';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -76,9 +76,15 @@ export default function CanvasListScreen({ route, navigation }) {
     deleteCanvas,
     duplicateCanvas,
     loadCanvas,
+    templates,
+    fetchTemplates,
   } = useCanvasStore();
 
   const canvases = canvasesByChannel[channelId] || [];
+
+  useEffect(() => {
+    fetchTemplates();
+  }, [fetchTemplates]);
 
   useEffect(() => {
     if (channelId) {
@@ -347,10 +353,11 @@ export default function CanvasListScreen({ route, navigation }) {
     (c.title || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Filter templates list in modal
+  // Filter templates list in modal (fallback to local TEMPLATES if store is empty)
   const filteredTemplates = useMemo(() => {
     const q = templateSearch.trim().toLowerCase();
-    return TEMPLATES.filter((t) => {
+    const listToFilter = (templates && templates.length > 0) ? templates : TEMPLATES;
+    return listToFilter.filter((t) => {
       const matchesSearch =
         (t.label || '').toLowerCase().includes(q) ||
         (t.description || '').toLowerCase().includes(q) ||
@@ -360,7 +367,7 @@ export default function CanvasListScreen({ route, navigation }) {
         (t.category || '').toLowerCase() === selectedCategory.toLowerCase();
       return matchesSearch && matchesCategory;
     });
-  }, [templateSearch, selectedCategory]);
+  }, [templates, templateSearch, selectedCategory]);
 
   // Filter existing canvases list in modal
   const filteredExisting = useMemo(() => {

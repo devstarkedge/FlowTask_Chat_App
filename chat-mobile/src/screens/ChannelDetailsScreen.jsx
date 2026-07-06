@@ -54,16 +54,18 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
       setIsSearchingMembers(true);
       try {
         const query = memberSearchQuery.trim();
-        const { data } = await usersAPI.getDMContacts(query);
-        const contacts = data.data?.contacts || [];
+        const params = { limit: 100 };
+        if (query) params.search = query;
+        const { data } = await directoriesAPI.getUsers(params);
+        const contacts = data.data || data;
         
         // Filter out existing members
         const existingIds = new Set(members.map(m => m._id));
         
-        const filtered = contacts
+        const filtered = (Array.isArray(contacts) ? contacts : contacts?.users || [])
           .map(u => ({
-            _id: u._id || u.chatUserId || u.flowTaskUserId,
-            name: u.name || u.displayName,
+            _id: u._id || u.chatUserId,
+            name: u.name,
             email: u.email,
             avatar: u.avatar
           }))
@@ -448,6 +450,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               <ScrollView 
                 style={[styles.searchResultsContainer, { borderColor: colors.border, backgroundColor: colors.inputBackground }]}
                 keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled={true}
               >
                 {memberSearchResults.length === 0 ? (
                   <Text style={[styles.noResultsText, { color: colors.textTertiary }]}>

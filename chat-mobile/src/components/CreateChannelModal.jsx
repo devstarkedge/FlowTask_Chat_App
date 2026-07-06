@@ -15,7 +15,7 @@ import {
 import { useThemeStore } from "../stores/themeStore";
 import { useChannelStore } from "../stores/channelStore";
 import { X, Hash, Lock, Search, Check, Plus } from "lucide-react-native";
-import { usersAPI } from "../services/api";
+import { directoriesAPI } from "../services/api";
 import { useAuthStore } from "../stores/authStore";
 import { AppAvatar } from "./common";
 
@@ -44,12 +44,14 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
       setIsSearchingMembers(true);
       try {
         const query = memberSearchQuery.trim();
-        const { data } = await usersAPI.getDMContacts(query);
-        const contacts = data.data?.contacts || [];
-        const filtered = contacts
+        const params = { limit: 100 };
+        if (query) params.search = query;
+        const { data } = await directoriesAPI.getUsers(params);
+        const contacts = data.data || data; // Handle depending on exact payload structure
+        const filtered = (Array.isArray(contacts) ? contacts : contacts?.users || [])
           .map(u => ({
-            _id: u._id || u.chatUserId || u.flowTaskUserId,
-            name: u.name || u.displayName,
+            _id: u._id || u.chatUserId,
+            name: u.name,
             email: u.email,
             avatar: u.avatar
           }))

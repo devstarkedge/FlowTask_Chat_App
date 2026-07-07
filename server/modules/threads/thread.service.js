@@ -49,18 +49,22 @@ class ThreadService {
     const thread = await threadRepository.create(threadData);
 
     // Fetch fully populated thread for socket event
-    let populatedThread = await threadRepository.findById(thread._id);
-    if (!populatedThread) populatedThread = thread;
-    else {
-      // populate channelId manually if repository findById doesn't
-      if (!populatedThread.populated('channelId')) {
-        await populatedThread.populate('channelId', 'name slug type dmParticipants');
-      }
-      if (!populatedThread.populated('rootMessageId')) {
-        await populatedThread.populate({
-          path: 'rootMessageId',
-          populate: { path: 'authorId', select: 'name email avatar onlineStatus' }
-        });
+    let populatedThread = await import('./Thread.model.js').then(m => m.default)
+      .findById(thread._id)
+      .populate('channelId', 'name slug type dmParticipants')
+      .populate({
+        path: 'rootMessageId',
+        populate: { path: 'authorId', select: 'name email avatar onlineStatus' }
+      })
+      .lean();
+
+    if (!populatedThread) populatedThread = thread.toObject ? thread.toObject() : thread;
+
+    // Decorate the channel for DM naming if it's a DM
+    if (populatedThread.channelId && populatedThread.channelId.type === 'dm') {
+      const decorated = await channelService._decorateDMChannels([populatedThread.channelId], authorId, workspaceId);
+      if (decorated && decorated.length > 0) {
+        populatedThread.channelId = decorated[0];
       }
     }
 

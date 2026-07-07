@@ -10,7 +10,7 @@ import {
 import { useThreadStore } from '../stores/threadStore';
 import { useThemeStore } from '../stores/themeStore';
 import { formatRelativeTimeLong } from '../utils/dateUtils';
-import { ScreenLayout, ScreenHeader, LoadingState, EmptyState } from '../components/common';
+import { ScreenLayout, ScreenHeader, LoadingState, EmptyState, MobileFileCard } from '../components/common';
 import AppAvatar from '../components/common/AppAvatar';
 import RichText from '../components/RichText';
 import { MessageSquare } from 'lucide-react-native';
@@ -24,6 +24,14 @@ const ThreadsScreen = ({ navigation }) => {
   const fetchThreads = useThreadStore(state => state.fetchThreads);
   const [refreshing, setRefreshing] = useState(false);
   const currentUser = useAuthStore(state => state.user);
+
+  const getAttachments = useCallback((msg) => {
+    if (!msg) return [];
+    if (msg.fileReferences && msg.fileReferences.length > 0 && typeof msg.fileReferences[0] === 'object') {
+      return msg.fileReferences;
+    }
+    return msg.attachments || msg.files || [];
+  }, []);
 
   const fetchThreadsRef = useRef(fetchThreads);
   fetchThreadsRef.current = fetchThreads;
@@ -51,12 +59,13 @@ const ThreadsScreen = ({ navigation }) => {
       rootMessageId: thread.rootMessageId?._id || thread.rootMessageId,
       channelId: thread.channelId?._id || thread.channelId,
       channelName: thread.channelId?.name || 'Unknown Channel',
-      rootContent: thread.rootMessageId?.content || 'Thread started',
+      rootContent: thread.rootMessageId?.content || '',
       rootHtmlContent: thread.rootMessageId?.htmlContent || '',
+      rootAttachments: getAttachments(thread.rootMessageId),
       replyCount: thread.replyCount || 0,
       rootAuthor: author,
     });
-  }, [navigation]);
+  }, [navigation, getAttachments]);
 
   const renderMessage = useCallback((msg, isRoot = false) => {
     if (!msg) return null;
@@ -70,6 +79,7 @@ const ThreadsScreen = ({ navigation }) => {
     }
     
     const name = author.name || 'Unknown';
+    const attachments = getAttachments(msg);
     
     return (
       <View style={styles.messageRow}>
@@ -82,17 +92,31 @@ const ThreadsScreen = ({ navigation }) => {
             </Text>
           </View>
           <View style={{ maxHeight: 80, overflow: 'hidden' }}>
-            <RichText
-              html={msg.htmlContent || (/<[a-z][\s\S]*>/i.test(msg.content) ? msg.content : undefined)}
-              text={msg.content}
-              colors={{ ...colors, textPrimary: colors.textPrimary }}
-              baseStyle={{ color: colors.textPrimary, fontSize: 15, lineHeight: 22 }}
-            />
+            {!!(msg.htmlContent || msg.content) && (
+              <RichText
+                html={msg.htmlContent || (/<[a-z][\s\S]*>/i.test(msg.content) ? msg.content : undefined)}
+                text={msg.content}
+                colors={{ ...colors, textPrimary: colors.textPrimary }}
+                baseStyle={{ color: colors.textPrimary, fontSize: 15, lineHeight: 22 }}
+              />
+            )}
+            {(!msg.htmlContent && !msg.content && attachments.length > 0) && (
+              <Text style={{ color: colors.textSecondary, fontStyle: 'italic', fontSize: 14 }}>
+                [Media attached]
+              </Text>
+            )}
           </View>
+          {attachments.length > 0 && (
+             <View style={{ marginTop: 4, width: '100%', gap: 4 }}>
+                {attachments.map((file, i) => (
+                  <MobileFileCard key={file._id || i} file={file} colors={colors} />
+                ))}
+             </View>
+          )}
         </View>
       </View>
     );
-  }, [colors]);
+  }, [colors, getAttachments]);
 
   const renderThreadItem = useCallback(({ item }) => {
     const channelName = item.channelId?.name || 'Unknown';

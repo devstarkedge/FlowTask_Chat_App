@@ -27,7 +27,7 @@ const threadSchema = new Schema({
   workspaceId: {
     type: Schema.Types.ObjectId,
     ref: 'Workspace',
-    required: true,
+    required: false,
     index: true,
   },
 
@@ -65,7 +65,7 @@ const threadSchema = new Schema({
   },
   lastReplyAt: {
     type: Date,
-    default: null,
+    default: Date.now,
   },
   lastReplyBy: {
     type: Schema.Types.ObjectId,

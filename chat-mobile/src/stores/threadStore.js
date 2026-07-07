@@ -69,16 +69,22 @@ export const useThreadStore = create(
 
         set((state) => {
           const isActive = threadId === state.activeThreadId;
-          const threads = state.threads.map((t) =>
-            t._id === threadId
-              ? {
-                  ...t,
-                  replyCount: (t.replyCount || 0) + 1,
-                  lastReplyAt: reply.createdAt,
-                  hasUnread: !isActive,
-                }
-              : t
-          );
+          const threads = [...state.threads];
+          const threadIndex = threads.findIndex((t) => t._id === threadId);
+          
+          if (threadIndex > -1) {
+            const thread = threads[threadIndex];
+            threads[threadIndex] = {
+              ...thread,
+              replyCount: (thread.replyCount || 0) + 1,
+              lastReplyAt: reply.createdAt,
+              hasUnread: !isActive,
+            };
+            
+            // Move to top
+            const [updatedThread] = threads.splice(threadIndex, 1);
+            threads.unshift(updatedThread);
+          }
 
           const unreadCount = threads.filter(t => t.hasUnread).length;
           return { threads, unreadThreadCount: unreadCount };

@@ -14,7 +14,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useChatStore } from '../stores/chatStore';
 import { formatRelativeTimeLong } from '../utils/dateUtils';
-import { ScreenLayout, AppAvatar } from '../components/common';
+import { ScreenLayout, AppAvatar, MobileFileCard } from '../components/common';
 import RichText from '../components/RichText';
 import ReactionBar from '../components/ReactionBar';
 import EmojiPickerModal from '../components/EmojiPickerModal';
@@ -37,6 +37,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     channelName,
     rootContent,
     rootHtmlContent,
+    rootAttachments,
     replyCount: initialReplyCount,
     rootAuthor,
   } = route.params;
@@ -55,6 +56,14 @@ const ThreadDetailScreen = ({ route, navigation }) => {
   const [replyText, setReplyText] = useState('');
   const [emojiPickerTarget, setEmojiPickerTarget] = useState(null);
   const flatListRef = useRef(null);
+
+  const getAttachments = useCallback((msg) => {
+    if (!msg) return [];
+    if (msg.fileReferences && msg.fileReferences.length > 0 && typeof msg.fileReferences[0] === 'object') {
+      return msg.fileReferences;
+    }
+    return msg.attachments || msg.files || [];
+  }, []);
 
   const replies = threadRepliesByRoot[rootMessageId] || [];
 
@@ -78,6 +87,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     _id: rootMessageId,
     content: rootContent,
     htmlContent: rootHtmlContent,
+    attachments: rootAttachments || [],
     senderSnapshot: rootAuthor,
     authorId: rootAuthor,
     createdAt: rootMessage?.createdAt || new Date().toISOString(),
@@ -100,6 +110,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     }
     const name = sender?.name || 'Unknown';
     const isMe = getAuthorId(item) === user?._id;
+    const itemAttachments = getAttachments(item);
 
     // Show date separator if message is on a different day
     const prevItem = replies[index - 1];
@@ -129,18 +140,32 @@ const ThreadDetailScreen = ({ route, navigation }) => {
               </Text>
             </View>
             <View style={{ maxHeight: 250, overflow: 'hidden' }}>
-              <RichText
-                html={item.htmlContent || (/<[a-z][\s\S]*>/i.test(item.content) ? item.content : undefined)}
-                text={item.content}
-                colors={{ ...colors, textPrimary: colors.textPrimary }}
-                baseStyle={{ color: colors.textPrimary, fontSize: 15, lineHeight: 22 }}
-              />
+              {!!(item.htmlContent || item.content) && (
+                <RichText
+                  html={item.htmlContent || (/<[a-z][\s\S]*>/i.test(item.content) ? item.content : undefined)}
+                  text={item.content}
+                  colors={{ ...colors, textPrimary: colors.textPrimary }}
+                  baseStyle={{ color: colors.textPrimary, fontSize: 15, lineHeight: 22 }}
+                />
+              )}
+              {(!item.htmlContent && !item.content && itemAttachments.length > 0) && (
+                <Text style={{ color: colors.textSecondary, fontStyle: 'italic', fontSize: 14 }}>
+                  [Media attached]
+                </Text>
+              )}
             </View>
+            {itemAttachments.length > 0 && (
+               <View style={{ marginTop: 4, width: '100%', gap: 4 }}>
+                  {itemAttachments.map((file, i) => (
+                    <MobileFileCard key={file._id || i} file={file} colors={colors} />
+                  ))}
+               </View>
+            )}
           </View>
         </View>
       </View>
     );
-  }, [colors, user, replies]);
+  }, [colors, user, replies, getAttachments]);
 
   const styles = createStyles(colors);
   
@@ -153,6 +178,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
   }
   const rootDateStr = new Date(effectiveRoot.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const rootTimeStr = new Date(effectiveRoot.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const effectiveRootAttachments = getAttachments(effectiveRoot);
 
   return (
     <ScreenLayout>
@@ -213,13 +239,27 @@ const ThreadDetailScreen = ({ route, navigation }) => {
               </View>
 
               <View style={styles.rootTextContainer}>
-                <RichText
-                  html={effectiveRoot.htmlContent || (/<[a-z][\s\S]*>/i.test(effectiveRoot.content) ? effectiveRoot.content : undefined)}
-                  text={effectiveRoot.content}
-                  colors={{ ...colors, textPrimary: colors.textPrimary }}
-                  baseStyle={{ color: colors.textPrimary, fontSize: 16, lineHeight: 24 }}
-                />
+                {!!(effectiveRoot.htmlContent || effectiveRoot.content) && (
+                  <RichText
+                    html={effectiveRoot.htmlContent || (/<[a-z][\s\S]*>/i.test(effectiveRoot.content) ? effectiveRoot.content : undefined)}
+                    text={effectiveRoot.content}
+                    colors={{ ...colors, textPrimary: colors.textPrimary }}
+                    baseStyle={{ color: colors.textPrimary, fontSize: 16, lineHeight: 24 }}
+                  />
+                )}
+                {(!effectiveRoot.htmlContent && !effectiveRoot.content && effectiveRootAttachments.length > 0) && (
+                  <Text style={{ color: colors.textSecondary, fontStyle: 'italic', fontSize: 15 }}>
+                    [Media attached]
+                  </Text>
+                )}
               </View>
+              {effectiveRootAttachments.length > 0 && (
+                 <View style={{ marginTop: 8, width: '100%', gap: 4, paddingHorizontal: 16 }}>
+                    {effectiveRootAttachments.map((file, i) => (
+                      <MobileFileCard key={file._id || i} file={file} colors={colors} />
+                    ))}
+                 </View>
+              )}
 
               <TouchableOpacity style={[styles.reactionPill, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => setEmojiPickerTarget(effectiveRoot._id)}>
                 <SmilePlus size={16} color={colors.textSecondary} />

@@ -42,7 +42,7 @@ class ThreadRepository {
       return null;
     }
 
-    const idFilter = injectWorkspaceFilterRequired({ _id: id }, workspaceId, 'thread lookup by id');
+    const idFilter = injectWorkspaceFilter({ _id: id }, workspaceId);
     let query = Thread.findOne(idFilter);
     if (populate) {
       query.populate('participantIds', 'name email avatar flowTaskUserId');
@@ -55,7 +55,7 @@ class ThreadRepository {
     // This supports the frontend passing the message ID to open a thread
     if (!thread) {
       query = Thread.findOne(
-        injectWorkspaceFilterRequired({ rootMessageId: id }, workspaceId, 'thread lookup by root message'),
+        injectWorkspaceFilter({ rootMessageId: id }, workspaceId),
       );
       if (populate) {
         query.populate('participantIds', 'name email avatar flowTaskUserId');
@@ -194,7 +194,7 @@ class ThreadRepository {
    * @returns {Promise<Thread[]>}
    */
   async getUserThreads(userId, { limit = 20, workspaceId } = {}) {
-    const filter = injectWorkspaceFilterRequired({ participantIds: userId }, workspaceId, 'user threads query');
+    const filter = injectWorkspaceFilter({ participantIds: userId }, workspaceId);
     return Thread.find(filter)
       .sort({ lastReplyAt: -1 })
       .limit(limit)

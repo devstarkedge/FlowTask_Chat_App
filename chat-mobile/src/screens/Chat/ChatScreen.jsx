@@ -1106,6 +1106,7 @@ const ChatScreen = ({ route, navigation }) => {
                     channelName,
                     rootContent: actionMenuTarget?.content,
                     rootHtmlContent: actionMenuTarget?.htmlContent,
+                    rootAttachments: actionMenuTarget ? getMessageAttachments(actionMenuTarget) : [],
                     replyCount: actionMenuTarget?.replyCount || 0,
                     rootAuthor: actionMenuTarget?.senderSnapshot?.name ? actionMenuTarget?.senderSnapshot : actionMenuTarget?.authorId,
                   });

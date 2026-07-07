@@ -28,6 +28,26 @@ export const formatRelativeTime = (value) => {
   return date.toLocaleDateString();
 };
 
+export const formatRelativeTimeLong = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '–';
+
+  const now = new Date();
+  const diff = now - date;
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+
+  if (minutes < 1) return 'Just now';
+  if (minutes === 1) return '1 minute ago';
+  if (minutes < 60) return `${minutes} minutes ago`;
+  if (hours === 1) return '1 hour ago';
+  if (hours < 24) return `${hours} hours ago`;
+  if (days === 1) return '1 day ago';
+  if (days < 7) return `${days} days ago`;
+  return date.toLocaleDateString();
+};
+
 /**
  * Format a date for scheduled message display (e.g., "Today at 3:00 PM", "Tomorrow at 9:30 AM").
  *

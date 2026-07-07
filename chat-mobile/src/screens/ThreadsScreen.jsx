@@ -9,26 +9,21 @@ import {
 } from 'react-native';
 import { useThreadStore } from '../stores/threadStore';
 import { useThemeStore } from '../stores/themeStore';
-import { formatRelativeTime } from '../utils/dateUtils';
-import { ScreenLayout, ScreenHeader, FilterTabs, LoadingState, EmptyState } from '../components/common';
-import { 
-  MessageSquare,
-  CheckCircle2,
-  Circle,
-  Lock,
-  Hash,
-} from 'lucide-react-native';
+import { formatRelativeTimeLong } from '../utils/dateUtils';
+import { ScreenLayout, ScreenHeader, LoadingState, EmptyState } from '../components/common';
+import AppAvatar from '../components/common/AppAvatar';
+import RichText from '../components/RichText';
+import { MessageSquare } from 'lucide-react-native';
 import logger from '../utils/logger';
+import { useAuthStore } from '../stores/authStore';
 
 const ThreadsScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
   const threads = useThreadStore(state => state.threads);
   const isLoading = useThreadStore(state => state.isLoading);
   const fetchThreads = useThreadStore(state => state.fetchThreads);
-  const resolveThread = useThreadStore(state => state.resolveThread);
-  const unresolveThread = useThreadStore(state => state.unresolveThread);
-  const [filter, setFilter] = useState('all'); // all, unread, resolved
   const [refreshing, setRefreshing] = useState(false);
+  const currentUser = useAuthStore(state => state.user);
 
   const fetchThreadsRef = useRef(fetchThreads);
   fetchThreadsRef.current = fetchThreads;
@@ -43,126 +38,128 @@ const ThreadsScreen = ({ navigation }) => {
     setRefreshing(false);
   }, [fetchThreads]);
 
-  const filteredThreads = useMemo(() => threads.filter(thread => {
-    if (filter === 'unread') return thread.hasUnread;
-    if (filter === 'resolved') return thread.isResolved;
-    return true;
-  }), [threads, filter]);
-
   const handleThreadPress = useCallback((thread) => {
+    let author = typeof thread.rootMessageId?.authorId === 'object' ? thread.rootMessageId.authorId : null;
+    if (!author && thread.rootMessageId?.senderSnapshot) {
+      author = thread.rootMessageId.senderSnapshot;
+    }
+    if (!author) {
+      author = thread.rootMessageId?.authorId;
+    }
+
     navigation.navigate('ThreadDetail', { 
-      threadId: thread._id,
-      channelId: thread.channelId,
+      rootMessageId: thread.rootMessageId?._id || thread.rootMessageId,
+      channelId: thread.channelId?._id || thread.channelId,
+      channelName: thread.channelId?.name || 'Unknown Channel',
+      rootContent: thread.rootMessageId?.content || 'Thread started',
+      rootHtmlContent: thread.rootMessageId?.htmlContent || '',
+      replyCount: thread.replyCount || 0,
+      rootAuthor: author,
     });
   }, [navigation]);
 
-  const handleToggleResolve = useCallback(async (thread) => {
-    try {
-      if (thread.isResolved) {
-        await unresolveThread(thread._id);
-      } else {
-        await resolveThread(thread._id);
-      }
-    } catch (error) {
-      logger.error('Failed to toggle resolve:', error);
+  const renderMessage = useCallback((msg, isRoot = false) => {
+    if (!msg) return null;
+    
+    let author = typeof msg.authorId === 'object' && msg.authorId?.name ? msg.authorId : null;
+    if (!author && msg.senderSnapshot?.name) {
+      author = msg.senderSnapshot;
     }
-  }, [resolveThread, unresolveThread]);
-
-  const renderThreadItem = useCallback(({ item }) => {
-    const hasUnread = item.hasUnread;
-    const isResolved = item.isResolved;
+    if (!author) {
+      author = { _id: typeof msg.authorId === 'string' ? msg.authorId : msg.authorId?._id };
+    }
+    
+    const name = author.name || 'Unknown';
     
     return (
-      <TouchableOpacity
-        style={[styles.threadItem, { backgroundColor: colors.card }]}
-        onPress={() => handleThreadPress(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.threadHeader}>
-          <View style={styles.threadIconContainer}>
-            {item.channelId?.type === 'private' ? (
-              <Lock size={16} color={colors.textSecondary} />
-            ) : (
-              <Hash size={16} color={colors.textSecondary} />
-            )}
-          </View>
-          <View style={styles.threadInfo}>
-            <Text 
-              style={[
-                styles.threadTitle, 
-                { color: hasUnread ? colors.textPrimary : colors.textSecondary },
-                hasUnread && styles.unreadTitle
-              ]}
-              numberOfLines={1}
-            >
-              {item.title || 'Thread'}
-            </Text>
-            <Text style={[styles.channelName, { color: colors.textTertiary }]} numberOfLines={1}>
-              #{item.channelId?.name || 'channel'}
+      <View style={styles.messageRow}>
+        <AppAvatar user={author} size={36} showStatus={false} />
+        <View style={styles.messageContent}>
+          <View style={styles.messageHeader}>
+            <Text style={[styles.authorName, { color: colors.textPrimary }]}>{name}</Text>
+            <Text style={[styles.timeText, { color: colors.textTertiary }]}>
+              {formatRelativeTimeLong(msg.createdAt)}
             </Text>
           </View>
-          <TouchableOpacity
-            style={styles.resolveButton}
-            onPress={() => handleToggleResolve(item)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            {isResolved ? (
-              <CheckCircle2 size={20} color={colors.success} />
-            ) : (
-              <Circle size={20} color={colors.textTertiary} />
-            )}
-          </TouchableOpacity>
+          <View style={{ maxHeight: 80, overflow: 'hidden' }}>
+            <RichText
+              html={msg.htmlContent || (/<[a-z][\s\S]*>/i.test(msg.content) ? msg.content : undefined)}
+              text={msg.content}
+              colors={{ ...colors, textPrimary: colors.textPrimary }}
+              baseStyle={{ color: colors.textPrimary, fontSize: 15, lineHeight: 22 }}
+            />
+          </View>
         </View>
+      </View>
+    );
+  }, [colors]);
 
-        <View style={styles.threadMeta}>
-          <View style={styles.metaItem}>
-            <MessageSquare size={14} color={colors.textTertiary} />
-            <Text style={[styles.metaText, { color: colors.textTertiary }]}>
-              {item.replyCount || 0} {item.replyCount === 1 ? 'reply' : 'replies'}
-            </Text>
-          </View>
-          {item.lastReplyAt && (
-            <Text style={[styles.metaText, { color: colors.textTertiary }]}>
-              {formatRelativeTime(item.lastReplyAt)}
+  const renderThreadItem = useCallback(({ item }) => {
+    const channelName = item.channelId?.name || 'Unknown';
+    const isDM = item.channelId?.type === 'direct';
+    const dmLabel = isDM ? (channelName.includes(currentUser?.name) ? 'Just you' : 'Direct message') : '';
+
+    return (
+      <View style={styles.threadGroup}>
+        {/* Thread Header (Channel Name) */}
+        <View style={styles.threadChannelHeader}>
+          <Text style={[styles.channelTitle, { color: colors.textPrimary }]}>
+            ● {channelName}
+          </Text>
+          {!!dmLabel && (
+            <Text style={[styles.channelSubtitle, { color: colors.textTertiary }]}>
+              {dmLabel}
             </Text>
           )}
         </View>
 
-        {hasUnread && (
-          <View style={[styles.unreadIndicator, { backgroundColor: colors.primary }]} />
-        )}
-      </TouchableOpacity>
+        {/* Root Message */}
+        {renderMessage(item.rootMessageId, true)}
+
+        {/* Latest Replies */}
+        {(item.latestReplies || []).map((reply) => (
+          <View key={reply._id} style={styles.replyWrapper}>
+            {renderMessage(reply, false)}
+          </View>
+        ))}
+
+        {/* Reply Button */}
+        <View style={styles.replyButtonContainer}>
+          <TouchableOpacity 
+            style={[styles.replyButton, { borderColor: colors.border }]} 
+            onPress={() => handleThreadPress(item)}
+          >
+            <Text style={[styles.replyButtonText, { color: colors.textPrimary }]}>Reply</Text>
+          </TouchableOpacity>
+        </View>
+        
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+      </View>
     );
-  }, [colors, handleThreadPress, handleToggleResolve]);
+  }, [colors, currentUser, handleThreadPress, renderMessage]);
 
   const styles = createStyles(colors);
-  const filterTabs = [
-    { key: 'all', label: 'All' },
-    { key: 'unread', label: 'Unread' },
-    { key: 'resolved', label: 'Resolved' },
-  ];
 
   return (
     <ScreenLayout>
       <ScreenHeader title="Threads" onBack={() => navigation.goBack()} />
-      <FilterTabs tabs={filterTabs} activeTab={filter} onTabChange={setFilter} />
 
       {/* Content */}
+      <View style={[styles.subHeader, { backgroundColor: colors.background }]}>
+        <Text style={[styles.subHeaderText, { color: colors.textSecondary }]}>No new replies</Text>
+      </View>
+
       {isLoading ? (
         <LoadingState />
-      ) : filteredThreads.length === 0 ? (
+      ) : threads.length === 0 ? (
         <EmptyState icon={MessageSquare} title="No threads found" />
       ) : (
         <FlatList
-          data={filteredThreads}
+          data={threads}
           renderItem={renderThreadItem}
           keyExtractor={(item) => item._id}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          removeClippedSubviews
           refreshControl={
             <RefreshControl 
               refreshing={refreshing} 
@@ -178,66 +175,85 @@ const ThreadsScreen = ({ navigation }) => {
 
 const createStyles = (colors) => StyleSheet.create({
   listContainer: {
-    padding: 16,
-    gap: 12,
+    paddingBottom: 40,
   },
-  threadItem: {
-    padding: 16,
-    borderRadius: 12,
-    position: 'relative',
+  subHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginBottom: 16,
   },
-  threadHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 8,
-  },
-  threadIconContainer: {
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  threadInfo: {
-    flex: 1,
-  },
-  threadTitle: {
-    fontSize: 15,
+  subHeaderText: {
+    fontSize: 14,
     fontWeight: '500',
-    marginBottom: 4,
   },
-  unreadTitle: {
+  threadGroup: {
+    marginBottom: 16,
+  },
+  threadChannelHeader: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  channelTitle: {
+    fontSize: 16,
     fontWeight: '700',
+    marginBottom: 2,
   },
-  channelName: {
+  channelSubtitle: {
     fontSize: 13,
   },
-  resolveButton: {
-    padding: 4,
-  },
-  threadMeta: {
+  messageRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingLeft: 44,
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
-  metaItem: {
+  messageContent: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  messageHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    alignItems: 'baseline',
+    marginBottom: 4,
   },
-  metaText: {
+  authorName: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginRight: 8,
+  },
+  timeText: {
     fontSize: 12,
   },
-  unreadIndicator: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    borderTopLeftRadius: 12,
-    borderBottomLeftRadius: 12,
+  messageText: {
+    fontSize: 15,
+    lineHeight: 22,
   },
+  replyWrapper: {
+    marginTop: 4,
+  },
+  replyButtonContainer: {
+    paddingHorizontal: 16,
+    paddingLeft: 62, // align with text
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  replyButton: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    alignSelf: 'flex-start',
+  },
+  replyButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  divider: {
+    height: 1,
+    width: '100%',
+    marginTop: 8,
+  }
 });
 
 export default ThreadsScreen;

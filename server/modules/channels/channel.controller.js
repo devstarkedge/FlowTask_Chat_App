@@ -38,9 +38,15 @@ export const getChannel = asyncHandler(async (req, res) => {
     req.workspaceId,
   );
 
+  let decoratedChannel = channel;
+  if (channel && channel.type === 'dm') {
+    const decorated = await channelService._decorateDMChannels([channel], req.user._id, req.workspaceId);
+    decoratedChannel = decorated[0];
+  }
+
   res.json({
     success: true,
-    data: { channel },
+    data: { channel: decoratedChannel },
   });
 });
 
@@ -169,9 +175,11 @@ export const createDM = asyncHandler(async (req, res) => {
       workspaceId,
     );
 
+    const decorated = await channelService._decorateDMChannels([channel], senderId, workspaceId);
+
     res.status(200).json({
       success: true,
-      data: { channel },
+      data: { channel: decorated[0] },
     });
   } catch (error) {
     // Surface user-friendly forbidden errors to the client

@@ -198,8 +198,14 @@ class ThreadRepository {
     return Thread.find(filter)
       .sort({ lastReplyAt: -1 })
       .limit(limit)
-      .populate('channelId', 'name slug type')
-      .populate('rootMessageId')
+      .populate('channelId', 'name slug type dmParticipants')
+      .populate({
+        path: 'rootMessageId',
+        populate: {
+          path: 'authorId',
+          select: 'name email avatar onlineStatus'
+        }
+      })
       .lean();
   }
 }

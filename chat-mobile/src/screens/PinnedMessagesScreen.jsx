@@ -110,7 +110,7 @@ const PinnedMessagesScreen = ({ route, navigation }) => {
   }, [navigation, channelId, channelName]);
 
   const renderItem = useCallback(({ item }) => {
-    const author = item.senderSnapshot || item.authorId || {};
+    const author = item.senderSnapshot?.name ? item.senderSnapshot : (item.authorId || {});
     const authorName = typeof author === 'string' ? 'Unknown' : (author.name || 'Unknown');
 
     // Attachments

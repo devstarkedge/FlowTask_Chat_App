@@ -380,7 +380,7 @@ const ChatScreen = ({ route, navigation }) => {
     const isHighlighted =
       isMatch && searchResults.length && searchResults[currentMatch] === index;
 
-    const messageSender = item.senderSnapshot || item.authorId;
+    const messageSender = item.senderSnapshot?.name ? item.senderSnapshot : item.authorId;
 
     // Message grouping: compact if same author and within 5 minutes of prev message (older)
     const prevItem = displayedMessages[index + 1]; // inverted list, so +1 is previous chronologically
@@ -665,7 +665,7 @@ const ChatScreen = ({ route, navigation }) => {
                     rootContent: item.content,
                     rootHtmlContent: item.htmlContent,
                     replyCount: item.replyCount || 0,
-                    rootAuthor: item.senderSnapshot || item.authorId,
+                    rootAuthor: item.senderSnapshot?.name ? item.senderSnapshot : item.authorId,
                   });
                 }}
                 activeOpacity={0.7}
@@ -1045,7 +1045,7 @@ const ChatScreen = ({ route, navigation }) => {
                   setActionMenuTarget(null);
                 }}
               >
-                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>Reply in Thread</Text>
+                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>Reply</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1107,11 +1107,11 @@ const ChatScreen = ({ route, navigation }) => {
                     rootContent: actionMenuTarget?.content,
                     rootHtmlContent: actionMenuTarget?.htmlContent,
                     replyCount: actionMenuTarget?.replyCount || 0,
-                    rootAuthor: actionMenuTarget?.senderSnapshot || actionMenuTarget?.authorId,
+                    rootAuthor: actionMenuTarget?.senderSnapshot?.name ? actionMenuTarget?.senderSnapshot : actionMenuTarget?.authorId,
                   });
                 }}
               >
-                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>View Thread</Text>
+                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>Reply in Thread</Text>
               </TouchableOpacity>
 
               {/* Owner actions */}

@@ -1,6 +1,7 @@
 import threadRepository from './thread.repository.js';
 import messageRepository from '../messages/message.repository.js';
 import channelRepository from '../channels/channel.repository.js';
+import channelService from '../channels/channel.service.js';
 import { emitToChannel } from '../../sockets/socketManager.js';
 import { sanitizeHtml } from '../../utils/sanitize.js';
 import { parsePagination, cursorPaginationResponse, buildCursorFilter } from '../../utils/pagination.js';
@@ -47,8 +48,24 @@ class ThreadService {
 
     const thread = await threadRepository.create(threadData);
 
+    // Fetch fully populated thread for socket event
+    let populatedThread = await threadRepository.findById(thread._id);
+    if (!populatedThread) populatedThread = thread;
+    else {
+      // populate channelId manually if repository findById doesn't
+      if (!populatedThread.populated('channelId')) {
+        await populatedThread.populate('channelId', 'name slug type dmParticipants');
+      }
+      if (!populatedThread.populated('rootMessageId')) {
+        await populatedThread.populate({
+          path: 'rootMessageId',
+          populate: { path: 'authorId', select: 'name email avatar onlineStatus' }
+        });
+      }
+    }
+
     emitToChannel(channelId.toString(), SOCKET_EVENTS.THREAD_CREATED, {
-      thread,
+      thread: populatedThread,
       rootMessage,
     }, workspaceId?.toString());
 
@@ -122,7 +139,21 @@ class ThreadService {
    */
   async getUserThreads(userId, query = {}, workspaceId) {
     const { limit } = parsePagination(query);
-    return threadRepository.getUserThreads(userId, { limit, workspaceId });
+    const threads = await threadRepository.getUserThreads(userId, { limit, workspaceId });
+    
+    // Extract and decorate channelIds
+    const channels = threads.map(t => t.channelId).filter(Boolean);
+    const decoratedChannels = await channelService._decorateDMChannels(channels, userId, workspaceId);
+    
+    const channelMap = new Map(decoratedChannels.map(c => [c._id?.toString() || c.id, c]));
+    
+    return threads.map(t => {
+      const channelIdStr = t.channelId?._id?.toString() || t.channelId?.toString();
+      return {
+        ...t,
+        channelId: channelMap.get(channelIdStr) || t.channelId
+      };
+    });
   }
 
   /**

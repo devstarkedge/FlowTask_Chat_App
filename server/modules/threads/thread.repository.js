@@ -1,5 +1,6 @@
 import Thread from './Thread.model.js';
 import { injectWorkspaceFilter, injectWorkspaceFilterRequired } from '../../middleware/workspaceContext.js';
+import mongoose from 'mongoose';
 
 /**
  * Thread Repository — data access layer for Thread documents.
@@ -37,6 +38,10 @@ class ThreadRepository {
    * @returns {Promise<Thread|null>}
    */
   async findById(id, { populate = false, workspaceId } = {}) {
+    if (!mongoose.isValidObjectId(id)) {
+      return null;
+    }
+
     const idFilter = injectWorkspaceFilterRequired({ _id: id }, workspaceId, 'thread lookup by id');
     let query = Thread.findOne(idFilter);
     if (populate) {

@@ -56,6 +56,10 @@ class MessageRepository {
    * @returns {Promise<Message|null>}
    */
   async findById(id, { populate = true, workspaceId } = {}) {
+    if (!mongoose.isValidObjectId(id)) {
+      return null;
+    }
+
     const query = Message.findOne(injectWorkspaceFilter({ _id: id }, workspaceId));
     if (populate) {
       query.populate('authorId', 'name email avatar flowTaskUserId onlineStatus');
@@ -102,7 +106,7 @@ class MessageRepository {
     ];
   }
 
-  if (cursor) {
+  if (cursor && mongoose.isValidObjectId(cursor)) {
     filter._id = direction === 'before'
       ? { $lt: cursor }
       : { $gt: cursor };
@@ -255,7 +259,7 @@ class MessageRepository {
       'thread replies query',
     );
 
-    if (cursor) {
+    if (cursor && mongoose.isValidObjectId(cursor)) {
       filter._id = { $gt: cursor };
     }
 

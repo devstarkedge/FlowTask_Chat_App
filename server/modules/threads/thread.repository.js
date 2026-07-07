@@ -190,23 +190,38 @@ class ThreadRepository {
    * Get user's threads across all channels.
    * @param {string} userId - ChatUser _id
    * @param {number} [limit=20]
+   * @param {number} [skip=0]
    * @param {string} [workspaceId]
    * @returns {Promise<Thread[]>}
    */
-  async getUserThreads(userId, { limit = 20, workspaceId } = {}) {
+  async getUserThreads(userId, { limit = 20, skip = 0, workspaceId } = {}) {
     const filter = injectWorkspaceFilter({ participantIds: userId }, workspaceId);
-    return Thread.find(filter)
+    const threads = await Thread.find(filter)
       .sort({ lastReplyAt: -1 })
+      .skip(skip)
       .limit(limit)
       .populate('channelId', 'name slug type dmParticipants')
       .populate({
         path: 'rootMessageId',
-        populate: {
-          path: 'authorId',
-          select: 'name email avatar onlineStatus'
-        }
+        populate: { path: 'authorId', select: 'name email avatar onlineStatus' }
       })
       .lean();
+
+    // Attach up to 3 latest replies per thread
+    const Message = (await import('../messages/Message.model.js')).default;
+    await Promise.all(threads.map(async (thread) => {
+      const threadId = thread._id;
+      const replies = await Message.find(
+        { threadId, isDeleted: { $ne: true }, ...(workspaceId && { workspaceId }) }
+      )
+        .sort({ createdAt: -1 })
+        .limit(3)
+        .populate('authorId', 'name email avatar onlineStatus')
+        .lean();
+      thread.latestReplies = replies.reverse();
+    }));
+
+    return threads;
   }
 }
 

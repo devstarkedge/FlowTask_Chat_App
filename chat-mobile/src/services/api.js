@@ -215,6 +215,7 @@ export const scheduledAPI = {
 // Messages API (partial) — add helper for proxying file assets
 export const messageAPI = {
   getFileProxyUrl: (assetId) => `${api.defaults.baseURL}/messages/files/${encodeURIComponent(assetId)}/proxy`,
+  forward: (messageId, data) => api.post(`/messages/${messageId}/forward`, data),
 };
 
 // Reactions API

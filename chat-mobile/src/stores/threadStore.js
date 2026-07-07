@@ -14,15 +14,41 @@ export const useThreadStore = create(
       unreadThreadCount: 0,
       isLoading: false,
 
-      fetchThreads: async () => {
-        set({ isLoading: true });
+      threadsPage: 1,
+      threadsHasMore: true,
+
+      fetchThreads: async (page = 1) => {
+        // Only show global loading on first page
+        if (page === 1) set({ isLoading: true });
         try {
-          const { data } = await threadAPI.getMyThreads();
-          const threads = data.data?.threads || [];
-          const unreadCount = threads.filter(t => t.hasUnread).length;
-          set({ threads, unreadThreadCount: unreadCount, isLoading: false });
+          const { data } = await threadAPI.getMyThreads({ page, limit: 20 });
+          const raw = data.data?.threads || [];
+          
+          set((state) => {
+            const existing = page === 1 ? [] : state.threads;
+            const merged = [...existing, ...raw];
+            // Deduplicate and ensure sorted by lastReplyAt descending
+            const threads = Array.from(new Map(merged.map(t => [t._id, t])).values())
+              .sort((a, b) => {
+                const dateA = new Date(a.lastReplyAt || a.createdAt);
+                const dateB = new Date(b.lastReplyAt || b.createdAt);
+                return dateB - dateA;
+              });
+            const unreadCount = threads.filter(t => t.hasUnread).length;
+            
+            return { 
+              threads, 
+              unreadThreadCount: unreadCount, 
+              threadsPage: page,
+              threadsHasMore: raw.length >= 20, // If we got 20 or more, assume there's more
+              isLoading: false 
+            };
+          });
         } catch (error) {
-          set({ isLoading: false, threads: [], unreadThreadCount: 0 });
+          set({ isLoading: false });
+          if (page === 1) {
+            set({ threads: [], unreadThreadCount: 0 });
+          }
           logger.error('Failed to fetch threads:', error);
         }
       },
@@ -153,13 +179,15 @@ export const useThreadStore = create(
       addThreadReply: (rootMessageId, reply) => {
         set((state) => {
           const existing = state.threadRepliesByRoot[rootMessageId] || [];
-          if (existing.some(r => r._id === reply._id)) return state;
+          // Dedup by _id AND by tempId to prevent socket + optimistic duplicates
+          if (existing.some(r => r._id === reply._id || (reply.tempId && r._id === reply.tempId))) return state;
+          const merged = [...existing, reply];
+          const unique = Array.from(new Map(merged.map(r => [r._id, r])).values())
+            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
           return {
             threadRepliesByRoot: {
               ...state.threadRepliesByRoot,
-              [rootMessageId]: [...existing, reply].sort(
-                (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-              ),
+              [rootMessageId]: unique,
             },
           };
         });
@@ -189,15 +217,17 @@ export const useThreadStore = create(
             tempId,
           });
           const serverReply = data.data?.message || data.data;
-          // Replace temp with server reply
-          set((state) => ({
-            threadRepliesByRoot: {
-              ...state.threadRepliesByRoot,
-              [rootMessageId]: (state.threadRepliesByRoot[rootMessageId] || []).map(r =>
-                r._id === tempId ? { ...serverReply, pending: false } : r
-              ),
-            },
-          }));
+          // Replace temp with server reply, then dedup (socket may have already added it)
+          set((state) => {
+            const replaced = (state.threadRepliesByRoot[rootMessageId] || []).map(r =>
+              r._id === tempId ? { ...serverReply, pending: false } : r
+            );
+            const unique = Array.from(new Map(replaced.map(r => [r._id, r])).values())
+              .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            return {
+              threadRepliesByRoot: { ...state.threadRepliesByRoot, [rootMessageId]: unique },
+            };
+          });
           return serverReply;
         } catch (error) {
           logger.error('Failed to send thread reply:', error);

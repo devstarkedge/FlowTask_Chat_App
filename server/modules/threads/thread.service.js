@@ -142,8 +142,8 @@ class ThreadService {
    * Get threads the user participates in.
    */
   async getUserThreads(userId, query = {}, workspaceId) {
-    const { limit } = parsePagination(query);
-    const threads = await threadRepository.getUserThreads(userId, { limit, workspaceId });
+    const { limit, skip } = parsePagination(query);
+    const threads = await threadRepository.getUserThreads(userId, { limit, skip, workspaceId });
     
     // Extract and decorate channelIds
     const channels = threads.map(t => t.channelId).filter(Boolean);

@@ -21,8 +21,11 @@ const ThreadsScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
   const threads = useThreadStore(state => state.threads);
   const isLoading = useThreadStore(state => state.isLoading);
+  const threadsPage = useThreadStore(state => state.threadsPage);
+  const threadsHasMore = useThreadStore(state => state.threadsHasMore);
   const fetchThreads = useThreadStore(state => state.fetchThreads);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const currentUser = useAuthStore(state => state.user);
 
   const getAttachments = useCallback((msg) => {
@@ -42,43 +45,45 @@ const ThreadsScreen = ({ navigation }) => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchThreads();
+    await fetchThreads(1);
     setRefreshing(false);
   }, [fetchThreads]);
 
-  const handleThreadPress = useCallback((thread) => {
-    let author = typeof thread.rootMessageId?.authorId === 'object' ? thread.rootMessageId.authorId : null;
-    if (!author && thread.rootMessageId?.senderSnapshot) {
-      author = thread.rootMessageId.senderSnapshot;
-    }
-    if (!author) {
-      author = thread.rootMessageId?.authorId;
-    }
+  const handleLoadMore = useCallback(async () => {
+    if (!threadsHasMore || loadingMore || isLoading) return;
+    setLoadingMore(true);
+    await fetchThreads(threadsPage + 1);
+    setLoadingMore(false);
+  }, [threadsHasMore, loadingMore, isLoading, threadsPage, fetchThreads]);
 
+  const handleThreadPress = useCallback((thread) => {
+    const rootMsg = thread.rootMessageId || {};
+    const author = rootMsg.senderSnapshot?.name ? rootMsg.senderSnapshot : rootMsg.authorId;
     navigation.navigate('ThreadDetail', { 
-      rootMessageId: thread.rootMessageId?._id || thread.rootMessageId,
+      rootMessageId: rootMsg._id || rootMsg,
       channelId: thread.channelId?._id || thread.channelId,
       channelName: thread.channelId?.name || 'Unknown Channel',
-      rootContent: thread.rootMessageId?.content || '',
-      rootHtmlContent: thread.rootMessageId?.htmlContent || '',
-      rootAttachments: getAttachments(thread.rootMessageId),
+      rootContent: rootMsg.content || '',
+      rootHtmlContent: rootMsg.htmlContent || '',
+      rootAttachments: getAttachments(rootMsg),
       replyCount: thread.replyCount || 0,
       rootAuthor: author,
+      rootCreatedAt: rootMsg.createdAt,
     });
   }, [navigation, getAttachments]);
 
+  const resolveAuthor = useCallback((msg) => {
+    if (!msg) return { _id: null };
+    const a = msg.authorId;
+    if (a && typeof a === 'object' && (a.name || a.email || a.avatar)) return a;
+    if (msg.senderSnapshot?.name) return msg.senderSnapshot;
+    return { _id: typeof a === 'string' ? a : a?._id };
+  }, []);
+
   const renderMessage = useCallback((msg, isRoot = false) => {
     if (!msg) return null;
-    
-    let author = typeof msg.authorId === 'object' && msg.authorId?.name ? msg.authorId : null;
-    if (!author && msg.senderSnapshot?.name) {
-      author = msg.senderSnapshot;
-    }
-    if (!author) {
-      author = { _id: typeof msg.authorId === 'string' ? msg.authorId : msg.authorId?._id };
-    }
-    
-    const name = author.name || 'Unknown';
+    const author = resolveAuthor(msg);
+    const name = author.name || author.email || 'Unknown';
     const attachments = getAttachments(msg);
     
     return (
@@ -181,9 +186,12 @@ const ThreadsScreen = ({ navigation }) => {
         <FlatList
           data={threads}
           renderItem={renderThreadItem}
-          keyExtractor={(item) => item._id}
+          keyExtractor={(item, index) => item._id ?? String(index)}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={loadingMore ? <LoadingState /> : null}
           refreshControl={
             <RefreshControl 
               refreshing={refreshing} 

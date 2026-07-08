@@ -324,28 +324,77 @@ class NotificationService {
 
   /**
    * Mark a single notification as read.
+   * Emits socket events for cross-device sync and unread count update.
    */
   async markAsRead(notificationId, recipientId, workspaceId) {
     const notification = await Notification.markRead(notificationId, recipientId, workspaceId);
     if (!notification) {
       logger.warn('Notification not found or not owned by user', { notificationId, recipientId, workspaceId });
+      return null;
     }
+
+    // Get updated unread count for this user in this workspace
+    const unreadCount = await Notification.getUnreadCount(recipientId, workspaceId);
+
+    // Emit NOTIFICATION_READ_SYNC to sync read state across all connected devices
+    emitToUser(recipientId.toString(), SOCKET_EVENTS.NOTIFICATION_READ_SYNC, {
+      notificationId: notification._id,
+      channelId: notification.channelId,
+      workspaceId: workspaceId?.toString(),
+    }, workspaceId?.toString());
+
+    // Emit updated unread count so notification badges update in real-time
+    emitToUser(recipientId.toString(), SOCKET_EVENTS.NOTIFICATION_UNREAD_UPDATED, {
+      unreadCount,
+      workspaceId: workspaceId?.toString(),
+    }, workspaceId?.toString());
+
     return notification;
   }
 
   /**
    * Mark all notifications as read for a user in a workspace.
+   * Emits socket events for cross-device sync and unread count update.
    */
   async markAllAsRead(recipientId, workspaceId) {
     const result = await Notification.markAllRead(recipientId, workspaceId);
+
+    // Emit NOTIFICATION_READ_SYNC to sync read state across all devices
+    emitToUser(recipientId.toString(), SOCKET_EVENTS.NOTIFICATION_READ_SYNC, {
+      notificationId: null, // null = mark all as read
+      allRead: true,
+      channelId: null,
+      workspaceId: workspaceId?.toString(),
+    }, workspaceId?.toString());
+
+    // Emit updated unread count (should be 0)
+    emitToUser(recipientId.toString(), SOCKET_EVENTS.NOTIFICATION_UNREAD_UPDATED, {
+      unreadCount: 0,
+      workspaceId: workspaceId?.toString(),
+    }, workspaceId?.toString());
+
     return { modifiedCount: result.modifiedCount };
   }
 
   /**
    * Delete a single notification.
+   * Emits socket events for cross-device sync and unread count update.
    */
   async deleteNotification(notificationId, recipientId, workspaceId) {
-    return Notification.findOneAndDelete({ _id: notificationId, recipientId, workspaceId });
+    const notification = await Notification.findOneAndDelete({ _id: notificationId, recipientId, workspaceId });
+
+    if (notification) {
+      // Get updated unread count
+      const unreadCount = await Notification.getUnreadCount(recipientId, workspaceId);
+
+      // Emit updated unread count
+      emitToUser(recipientId.toString(), SOCKET_EVENTS.NOTIFICATION_UNREAD_UPDATED, {
+        unreadCount,
+        workspaceId: workspaceId?.toString(),
+      }, workspaceId?.toString());
+    }
+
+    return notification;
   }
 }
 

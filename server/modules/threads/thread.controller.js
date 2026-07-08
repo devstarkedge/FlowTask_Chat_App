@@ -1,5 +1,5 @@
 import threadService from './thread.service.js';
-import Thread from './thread.model.js';
+import Thread from './Thread.model.js';
 import asyncHandler from '../../middleware/asyncHandler.js';
 
 /**

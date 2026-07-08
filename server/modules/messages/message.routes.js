@@ -17,6 +17,7 @@ import {
   getChannelFiles,
   deleteChannelFile,
   markDMSeen,
+  markUnread,
   toggleSaveMessage,
   getSavedMessages,
   updateSavedMessageStatus,
@@ -131,5 +132,6 @@ channelMessageRouter.get('/files', getChannelFiles);
 channelMessageRouter.delete('/files/:fileId', deleteChannelFile);
 channelMessageRouter.get('/pins', getPinnedMessages);
 channelMessageRouter.post('/seen', markDMSeen);
+channelMessageRouter.post('/:messageId/mark-unread', markUnread);
 channelMessageRouter.post('/scheduled-messages', validate({ body: scheduleMessageSchema }), scheduleMessage);
 

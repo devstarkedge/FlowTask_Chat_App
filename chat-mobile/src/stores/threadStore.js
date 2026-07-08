@@ -193,7 +193,8 @@ export const useThreadStore = create(
         });
       },
 
-      sendThreadReply: async (rootMessageId, channelId, content, htmlContent) => {
+      sendThreadReply: async (rootMessageId, channelId, content, options = {}) => {
+        const { htmlContent, fileReferences, mentions } = options;
         const user = useAuthStore.getState().user;
         const tempId = `temp-reply-${Date.now()}`;
 
@@ -205,6 +206,8 @@ export const useThreadStore = create(
           senderSnapshot: { name: user?.name, avatar: user?.avatar },
           createdAt: new Date().toISOString(),
           pending: true,
+          fileReferences: fileReferences || [],
+          mentions: mentions || [],
         };
 
         get().addThreadReply(rootMessageId, optimisticReply);
@@ -214,6 +217,8 @@ export const useThreadStore = create(
             content,
             htmlContent,
             threadId: rootMessageId,
+            fileReferences,
+            mentions,
             tempId,
           });
           const serverReply = data.data?.message || data.data;

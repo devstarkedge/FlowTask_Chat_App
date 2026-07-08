@@ -12,7 +12,9 @@ import botService from "../bot/bot.service.js";
 import channelRepository from "../channels/channel.repository.js";
 import { enqueueScheduledMessage } from '../../services/scheduledMessages.service.js';
 import { emitToUser } from '../../sockets/socketManager.js';
-import { SOCKET_EVENTS } from '../../config/constants.js';
+import { SOCKET_EVENTS, MESSAGE_CONTENT_TYPES } from '../../config/constants.js';
+import readReceiptRepository from '../readReceipts/readReceipt.repository.js';
+import Message from "./message.model.js";
 
 
 /**
@@ -245,8 +247,72 @@ export const markDMSeen = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
   await messageService.markDMMessagesAsSeen(channelId, userId, req.workspaceId);
-
   res.json({ success: true, data: { channelId, status: "seen" } });
+});
+
+/**
+ * @desc    Mark a message as unread
+ * @route   POST /api/chat/channels/:channelId/messages/:messageId/mark-unread
+ * @access  Private
+ */
+export const markUnread = asyncHandler(async (req, res) => {
+  const { messageId } = req.params;
+  const userId = req.user._id;
+  const workspaceId = req.workspaceId;
+
+  const message = await Message.findOne({ _id: messageId, workspaceId, isDeleted: false });
+  if (!message) {
+    throw new NotFoundError('Message not found');
+  }
+  
+  const channelId = message.channelId;
+
+  // Find the message immediately preceding this one to set as lastReadMessageId
+  const previousMessage = await Message.findOne({
+    channelId,
+    workspaceId,
+    isDeleted: false,
+    createdAt: { $lt: message.createdAt },
+  }).sort({ createdAt: -1 });
+
+  const lastReadMessageId = previousMessage ? previousMessage._id : null;
+
+  // Calculate new unread count (all messages on or after this message)
+  const unreadCount = await Message.countDocuments({
+    channelId,
+    workspaceId,
+    isDeleted: false,
+    createdAt: { $gte: message.createdAt },
+    authorId: { $ne: userId } // Don't count own messages
+  });
+
+  // Update read receipt
+  await readReceiptRepository.model.findOneAndUpdate(
+    { userId, channelId, workspaceId },
+    { 
+      $set: { 
+        lastReadMessageId,
+        unreadCount,
+        // We could approximate unread mentions here if needed, but 0 is safe for now
+      } 
+    },
+    { new: true, upsert: true }
+  );
+
+  // Emit updated unread count to user
+  emitToUser(userId.toString(), SOCKET_EVENTS.UNREAD_UPDATED, {
+    channelId,
+    unreadCount,
+    unreadMentionCount: 0 // Optional: fetch exact mention count if necessary
+  }, workspaceId?.toString());
+
+  res.json({
+    success: true,
+    data: {
+      lastReadMessageId,
+      unreadCount
+    }
+  });
 });
 
 /**

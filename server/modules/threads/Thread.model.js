@@ -98,6 +98,11 @@ const threadSchema = new Schema({
     ref: 'ChatUser',
     default: null,
   },
+  // Users who have muted this thread (won't get notifications)
+  mutedBy: [{
+    type: Schema.Types.ObjectId,
+    ref: 'ChatUser',
+  }],
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -152,6 +157,6 @@ threadSchema.statics.findByTaskId = function (taskId, workspaceId) {
   return this.findOne(filter);
 };
 
-const Thread = model('Thread', threadSchema);
+const Thread = mongoose.models.Thread || model('Thread', threadSchema);
 
 export default Thread;

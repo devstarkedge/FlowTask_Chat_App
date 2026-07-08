@@ -418,11 +418,6 @@ export default function MobileFileCard({ file, colors }) {
             style={ms.imgThumb}
             resizeMode="cover"
           />
-          {/* Overlay name strip */}
-          <View style={ms.imgThumbOverlay}>
-            <Text style={ms.imgThumbName} numberOfLines={1}>{name}</Text>
-            {size > 0 && <Text style={ms.imgThumbSize}>{formatFileSize(size)}</Text>}
-          </View>
         </TouchableOpacity>
 
         <ImageViewer
@@ -457,11 +452,6 @@ export default function MobileFileCard({ file, colors }) {
             <View style={ms.vidPlayCircle}>
               <Play size={22} color="#fff" style={{ marginLeft: 3 }} />
             </View>
-          </View>
-          {/* Footer strip */}
-          <View style={ms.vidFooterStrip}>
-            <Text style={ms.vidName} numberOfLines={1}>{name}</Text>
-            {size > 0 && <Text style={ms.vidSize}>{formatFileSize(size)}</Text>}
           </View>
         </TouchableOpacity>
 
@@ -534,14 +524,15 @@ export default function MobileFileCard({ file, colors }) {
 const ms = StyleSheet.create({
   // ── Image thumbnail (inline in bubble) ──
   imgThumbContainer: {
-    width: Math.min(240, SCREEN_WIDTH * 0.6),
+    width: '100%',
+    maxWidth: 340,
     borderRadius: 12,
     overflow: 'hidden',
     marginVertical: 4,
   },
   imgThumb: {
     width: '100%',
-    height: 180,
+    height: 220,
     backgroundColor: '#111',
   },
   imgThumbOverlay: {
@@ -578,15 +569,16 @@ const ms = StyleSheet.create({
 
   // ── Video poster card ──
   vidPoster: {
-    width: Math.min(260, SCREEN_WIDTH * 0.65),
+    width: '100%',
+    maxWidth: 340,
     borderRadius: 12,
     overflow: 'hidden',
     marginVertical: 4,
   },
-  vidPosterImg: { width: '100%', height: 150 },
+  vidPosterImg: { width: '100%', height: 220 },
   vidPosterPlaceholder: {
     width: '100%',
-    height: 150,
+    height: 220,
     justifyContent: 'center',
     alignItems: 'center',
   },

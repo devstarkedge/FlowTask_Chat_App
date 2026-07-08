@@ -19,7 +19,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useChatStore } from '../stores/chatStore';
 import { useLaterStore } from '../stores/laterStore';
-import { laterAPI, pinsAPI } from '../services/api';
+import { laterAPI, messageAPI, threadAPI } from '../services/api';
 import { formatRelativeTimeLong } from '../utils/dateUtils';
 import { ScreenLayout, AppAvatar, MobileFileCard } from '../components/common';
 import RichText from '../components/RichText';
@@ -27,18 +27,14 @@ import ReactionBar from '../components/ReactionBar';
 import EmojiPickerModal from '../components/EmojiPickerModal';
 import ReminderModal from '../components/ReminderModal';
 import ForwardMessageModal from '../components/ForwardMessageModal';
-import LoadingState from '../components/common/LoadingState';
+import MessageActionSheet from '../components/MessageActionSheet';
+import MessageComposer from '../components/MessageComposer';
 import {
   ArrowLeft,
   Headphones,
   Bookmark,
   Share,
   MoreVertical,
-  Plus,
-  Mic,
-  SmilePlus,
-  Pin,
-  Reply
 } from 'lucide-react-native';
 
 const ThreadDetailScreen = ({ route, navigation }) => {
@@ -62,6 +58,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     sendThreadReply,
     isLoadingReplies,
     threadHasMore,
+    deleteMessage,
   } = useThreadStore();
   const { addReaction, removeReaction } = useChatStore();
   const toggleSaveMessage = useLaterStore((s) => s.toggleSaveMessage);
@@ -80,8 +77,23 @@ const ThreadDetailScreen = ({ route, navigation }) => {
 
   const getAttachments = useCallback((msg) => {
     if (!msg) return [];
-    if (msg.fileReferences && msg.fileReferences.length > 0 && typeof msg.fileReferences[0] === 'object') {
-      return msg.fileReferences;
+    const refs = msg.fileReferences || [];
+    if (refs.length > 0) {
+      return refs
+        .map((ref) => {
+          if (!ref.fileId) return null;
+          const file = ref.fileId;
+          return {
+            _id: file._id,
+            name: file.originalName || file.fileName || file.name || 'File',
+            fileName: file.originalName || file.fileName || file.name || 'File',
+            url: file.url || file.secureUrl,
+            thumbnailUrl: file.thumbnailUrl,
+            mimeType: file.mimeType,
+            fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
+          };
+        })
+        .filter(Boolean);
     }
     return msg.attachments || msg.files || [];
   }, []);
@@ -92,10 +104,13 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     fetchThreadReplies(rootMessageId);
   }, [rootMessageId]);
 
-  const handleSendReply = () => {
-    if (!replyText.trim()) return;
-    sendThreadReply(rootMessageId, channelId, replyText.trim());
-    setReplyText('');
+  const handleSendReply = async (content, options) => {
+    try {
+      await sendThreadReply(rootMessageId, channelId, content, options);
+    } catch (err) {
+      console.error('Failed to send reply:', err);
+      Toast.show({ type: 'error', text1: 'Failed to send reply' });
+    }
   };
 
   const rootMessage = (() => {
@@ -135,7 +150,6 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     const isMe = getAuthorId(item) === user?._id;
     const itemAttachments = getAttachments(item);
 
-    // Show date separator if message is on a different day
     const prevItem = replies[index - 1];
     let showToday = false;
     if (!prevItem && new Date(item.createdAt).toDateString() === new Date().toDateString()) {
@@ -189,7 +203,6 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                   ))}
                </View>
             )}
-            {/* Reactions */}
             <ReactionBar
               reactions={item.reactions}
               messageId={item._id}
@@ -217,7 +230,6 @@ const ThreadDetailScreen = ({ route, navigation }) => {
 
   return (
     <ScreenLayout>
-      {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <ArrowLeft size={24} color={colors.textPrimary} />
@@ -332,30 +344,15 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         />
 
         {/* Input */}
-        <View style={[styles.inputBar, { backgroundColor: colors.background }]}>
-          <View style={[styles.inputContainer, { borderColor: colors.border, backgroundColor: colors.inputBackground }]}>
-            <TouchableOpacity style={styles.plusButton}>
-              <Plus size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-            <TextInput
-              style={[styles.input, { color: colors.textPrimary }]}
-              placeholder="Add a reply"
-              placeholderTextColor={colors.textSecondary}
-              value={replyText}
-              onChangeText={setReplyText}
-              multiline
-            />
-            {replyText.trim() ? (
-              <TouchableOpacity style={styles.sendButton} onPress={handleSendReply}>
-                <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Send</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={styles.micButton}>
-                <Mic size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
+        {/* Input using MessageComposer */}
+        <MessageComposer
+          channelId={channelId}
+          channelName={channelName}
+          colors={colors}
+          text={replyText}
+          onChangeText={setReplyText}
+          onSend={handleSendReply}
+        />
       </KeyboardAvoidingView>
 
       <EmojiPickerModal
@@ -387,97 +384,60 @@ const ThreadDetailScreen = ({ route, navigation }) => {
       />
 
       {/* Custom Message Actions Modal */}
-      <Modal
+      <MessageActionSheet
         visible={!!actionMenuTarget}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setActionMenuTarget(null)}
-      >
-        <TouchableOpacity
-          style={styles.actionsOverlay}
-          activeOpacity={1}
-          onPress={() => setActionMenuTarget(null)}
-        >
-          <View style={[styles.actionsSheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
-            <View style={[styles.actionsHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.actionsTitle, { color: colors.textPrimary }]}>Message Actions</Text>
-              <Text style={[styles.actionsSnippet, { color: colors.textSecondary }]} numberOfLines={1}>
-                {actionMenuTarget?.content || "Message"}
-              </Text>
-            </View>
-
-            <ScrollView style={styles.actionsList}>
-              <TouchableOpacity
-                style={styles.actionItem}
-                onPress={() => {
-                  Clipboard.setStringAsync(actionMenuTarget?.content || "");
-                  setActionMenuTarget(null);
-                }}
-              >
-                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>Copy Text</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionItem}
-                onPress={() => {
-                  setActionMenuTarget(null);
-                  setTimeout(() => {
-                    setEmojiPickerTarget(actionMenuTarget?._id);
-                  }, 150);
-                }}
-              >
-                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>React to Message</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionItem}
-                onPress={() => {
-                  const saved = isMessageSaved?.(actionMenuTarget?._id);
-                  toggleSaveMessage?.(actionMenuTarget?._id);
-                  setActionMenuTarget(null);
-                  if (!saved) {
-                    setTimeout(() => {
-                      setReminderTarget(actionMenuTarget?._id);
-                    }, 200);
-                  }
-                }}
-              >
-                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>
-                  {isMessageSaved?.(actionMenuTarget?._id) ? "Unsave Message" : "Save & Remind"}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionItem}
-                onPress={async () => {
-                  const pinned = actionMenuTarget?.isPinned;
-                  setActionMenuTarget(null);
-                  try {
-                    if (pinned) await pinsAPI.unpin(actionMenuTarget?._id);
-                    else await pinsAPI.pin(actionMenuTarget?._id);
-                  } catch (err) {
-                    console.error('Pin action failed:', err);
-                  }
-                }}
-              >
-                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>
-                  {actionMenuTarget?.isPinned ? "Unpin Message" : "Pin Message"}
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.actionItem}
-                onPress={() => {
-                  setForwardTarget(actionMenuTarget);
-                  setActionMenuTarget(null);
-                }}
-              >
-                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>Forward Message</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+        onClose={() => setActionMenuTarget(null)}
+        message={actionMenuTarget}
+        colors={colors}
+        user={user}
+        isSaved={isMessageSaved?.(actionMenuTarget?._id)}
+        onReact={(emoji) => {
+          if (actionMenuTarget) addReaction(actionMenuTarget._id, emoji);
+        }}
+        onOpenEmojiPicker={() => setEmojiPickerTarget(actionMenuTarget?._id)}
+        onForward={() => setForwardTarget(actionMenuTarget)}
+        onSave={() => toggleSaveMessage?.(actionMenuTarget?._id)}
+        onRemind={() => setReminderTarget(actionMenuTarget?._id)}
+        onEdit={() => {
+          // Editing thread messages is not fully supported in this screen yet,
+          // but we can close the menu for now.
+          setActionMenuTarget(null);
+        }}
+        onDelete={() => {
+          setTimeout(() => {
+            Alert.alert("Delete Message", "Are you sure?", [
+              { text: "Cancel", style: "cancel" },
+              { text: "Delete", style: "destructive", onPress: () => {
+                if(deleteMessage) deleteMessage(actionMenuTarget._id);
+                setActionMenuTarget(null);
+              }}
+            ]);
+          }, 200);
+        }}
+        onCopyLink={async () => {
+          const url = `flowtask://chat/${channelId}/${actionMenuTarget?._id}`;
+          await Clipboard.setStringAsync(url);
+          Toast.show({ type: 'success', text1: 'Link copied to clipboard' });
+        }}
+        onMarkUnread={async () => {
+          try {
+            await messageAPI.markUnread(channelId, actionMenuTarget._id);
+            Toast.show({ type: 'success', text1: 'Marked as unread' });
+            navigation.navigate("Main", { screen: "ChannelsTab" });
+          } catch (error) {
+            Toast.show({ type: 'error', text1: 'Failed to mark unread' });
+          }
+        }}
+        onToggleNotifications={async () => {
+          try {
+            const tId = actionMenuTarget.threadId || actionMenuTarget._id;
+            await threadAPI.mute(tId);
+            Toast.show({ type: 'success', text1: 'Notifications muted for this thread' });
+          } catch (error) {
+            Toast.show({ type: 'error', text1: 'Failed to mute notifications' });
+          }
+        }}
+      />
 
       {/* Forward Message Modal */}
       <ForwardMessageModal

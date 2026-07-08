@@ -30,8 +30,23 @@ const ThreadsScreen = ({ navigation }) => {
 
   const getAttachments = useCallback((msg) => {
     if (!msg) return [];
-    if (msg.fileReferences && msg.fileReferences.length > 0 && typeof msg.fileReferences[0] === 'object') {
-      return msg.fileReferences;
+    const refs = msg.fileReferences || [];
+    if (refs.length > 0) {
+      return refs
+        .map((ref) => {
+          if (!ref.fileId) return null;
+          const file = ref.fileId;
+          return {
+            _id: file._id,
+            name: file.originalName || file.fileName || file.name || 'File',
+            fileName: file.originalName || file.fileName || file.name || 'File',
+            url: file.url || file.secureUrl,
+            thumbnailUrl: file.thumbnailUrl,
+            mimeType: file.mimeType,
+            fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
+          };
+        })
+        .filter(Boolean);
     }
     return msg.attachments || msg.files || [];
   }, []);

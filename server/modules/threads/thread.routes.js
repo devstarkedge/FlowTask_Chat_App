@@ -9,6 +9,8 @@ import {
   lockThread,
   resolveThread,
   updateThreadTitle,
+  muteThread,
+  unmuteThread,
 } from './thread.controller.js';
 import { protect } from '../auth/auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
@@ -39,6 +41,8 @@ router.get('/:id/replies', getThreadReplies);
 router.post('/:id/lock', lockThread);
 router.post('/:id/resolve', resolveThread);
 router.put('/:id/title', updateThreadTitle);
+router.post('/:id/mute', muteThread);
+router.post('/:id/unmute', unmuteThread);
 
 export default router;
 

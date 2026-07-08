@@ -14,12 +14,13 @@ import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Modal,
+  Platform,
 } from 'react-native';
 import { X, Clock, Bell, Calendar } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 function getQuickOptions() {
   const now = new Date();
@@ -62,16 +63,19 @@ const ReminderModal = React.memo(function ReminderModal({
 }) {
   const quickOptions = useMemo(() => getQuickOptions(), [visible]);
   const [showCustom, setShowCustom] = useState(false);
-  const [customDate, setCustomDate] = useState('');
+  const [customDate, setCustomDate] = useState(new Date());
 
   const handleCustomSubmit = () => {
-    if (!customDate) return;
-    const date = new Date(customDate);
-    if (isNaN(date.getTime()) || date <= new Date()) return;
-    onSetReminder(date.toISOString());
-    setCustomDate('');
+    if (customDate <= new Date()) return;
+    onSetReminder(customDate.toISOString());
     setShowCustom(false);
     onClose();
+  };
+
+  const handleDateChange = (event, selectedDate) => {
+    if (selectedDate) {
+      setCustomDate(selectedDate);
+    }
   };
 
   const handleQuickSelect = (date) => {
@@ -164,25 +168,22 @@ const ReminderModal = React.memo(function ReminderModal({
                 </Text>
               </View>
 
-              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                <TextInput
-                  style={[styles.dateInput, {
-                    color: colors.inputText,
-                    backgroundColor: colors.inputBackground,
-                    borderColor: colors.border,
-                  }]}
-                  placeholder="YYYY-MM-DDThh:mm"
-                  placeholderTextColor={colors.inputPlaceholder}
+              <View style={{ gap: 16, alignItems: 'center' }}>
+                <DateTimePicker
                   value={customDate}
-                  onChangeText={setCustomDate}
-                  autoCapitalize="none"
+                  mode="datetime"
+                  display="default"
+                  onChange={handleDateChange}
+                  style={{ width: '100%', height: 120 }}
+                  textColor={colors.textPrimary}
+                  themeVariant={colors.background === '#ffffff' ? 'light' : 'dark'}
                 />
+                
                 <TouchableOpacity
-                  style={[styles.setButton, { backgroundColor: colors.primary }]}
+                  style={[styles.setButton, { backgroundColor: colors.primary, width: '100%', alignItems: 'center' }]}
                   onPress={handleCustomSubmit}
-                  disabled={!customDate}
                 >
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Set</Text>
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Set Reminder</Text>
                 </TouchableOpacity>
               </View>
             </View>

@@ -15,6 +15,7 @@ import { useThemeStore } from "../stores/themeStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useChannelStore } from "../stores/channelStore";
 import { workspaceAPI } from "../services/api";
+import ENV from "../config/environment";
 import * as Clipboard from "expo-clipboard";
 import Toast from "react-native-toast-message";
 import {
@@ -82,7 +83,7 @@ export default function InviteManagementScreen({ navigation }) {
   // Invite Link
   const inviteLink = useMemo(() => {
     const inviteCode = activeWorkspace?.inviteCode || activeWorkspaceId;
-    return `https://chat-app-api-cyyl.onrender.com/invite?code=${inviteCode}`;
+    return `${ENV.SOCKET_URL}/invite?code=${inviteCode}`;
   }, [activeWorkspace, activeWorkspaceId]);
 
   const addEmailChip = () => {

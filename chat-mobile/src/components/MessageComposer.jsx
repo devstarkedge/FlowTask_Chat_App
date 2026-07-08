@@ -45,6 +45,7 @@ import {
   AtSign,
   CaseSensitive,
   Loader2,
+  Mic,
 } from "lucide-react-native";
 import logger from '../utils/logger';
 import { useDraftStore } from "../stores/draftStore";
@@ -363,7 +364,7 @@ const MessageComposer = React.memo(function MessageComposer({
           }
           
           formData.append("files", {
-            uri: Platform.OS === 'android' ? file.uri : file.uri.replace('file://', ''),
+            uri: file.uri,
             name,
             type,
           });
@@ -569,33 +570,17 @@ const MessageComposer = React.memo(function MessageComposer({
       )}
 
       {/* Input bar */}
-      <View
-        style={[
-          styles.inputBar,
-          { borderTopColor: colors.border, backgroundColor: colors.background },
-        ]}
-      >
-        <TouchableOpacity style={styles.iconButton} onPress={handleAttach}>
-          <Plus size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
+      <View style={[styles.inputBar, { backgroundColor: colors.background }]}>
+        <View style={[styles.inputContainer, { borderColor: colors.border, backgroundColor: colors.inputBackground }]}>
+          
+          <TouchableOpacity style={styles.iconButton} onPress={handleAttach}>
+            <Plus size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
 
-        {/* Toolbar toggle */}
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => setShowToolbar((v) => !v)}
-        >
-          <CaseSensitive
-            size={20}
-            color={showToolbar ? colors.primary : colors.textSecondary}
-          />
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={() => setShowToolbar((v) => !v)}>
+            <CaseSensitive size={18} color={showToolbar ? colors.primary : colors.textSecondary} />
+          </TouchableOpacity>
 
-        <View
-          style={[
-            styles.inputContainer,
-            { backgroundColor: colors.inputBackground },
-          ]}
-        >
           <TextInput
             ref={inputRef}
             style={[styles.input, { color: colors.inputText }]}
@@ -610,25 +595,27 @@ const MessageComposer = React.memo(function MessageComposer({
             }}
             multiline
           />
-          <TouchableOpacity onPress={() => setShowEmojiPicker(true)}>
-            <Smile size={22} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
 
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            { backgroundColor: text.trim() ? colors.primary : colors.border },
-          ]}
-          onPress={handleSend}
-          onLongPress={() => {
-            if (text.trim()) setShowScheduleModal(true);
-          }}
-          disabled={!text.trim()}
-          delayLongPress={500}
-        >
-          <Send size={18} color={colors.textInverse} />
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={() => setShowEmojiPicker(true)}>
+            <Smile size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          {text.trim() ? (
+            <TouchableOpacity
+              style={styles.sendButton}
+              onPress={handleSend}
+              onLongPress={() => setShowScheduleModal(true)}
+              delayLongPress={500}
+            >
+              <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 15 }}>Send</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.iconButton}>
+              <Mic size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+
+        </View>
       </View>
 
       {/* Emoji Picker */}
@@ -740,40 +727,34 @@ const createStyles = (colors) =>
       flexShrink: 1,
     },
     inputBar: {
-      flexDirection: "row",
-      alignItems: "center",
       paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderTopWidth: 1,
-      gap: 8,
+      paddingVertical: 10,
+      paddingBottom: 24, // safe area padding
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: 24,
+      borderWidth: 1,
+      paddingHorizontal: 4,
+      minHeight: 48,
     },
     iconButton: {
       padding: 8,
     },
-    inputContainer: {
-      flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
-      borderRadius: 20,
-      paddingHorizontal: 12,
-      paddingVertical: 4,
-    },
     input: {
       flex: 1,
-      fontSize: 15,
+      fontSize: 16,
       maxHeight: 100,
       paddingVertical: Platform.OS === 'android' ? 6 : 8,
-      paddingHorizontal: Platform.OS === 'android' ? 4 : 0,
+      paddingHorizontal: Platform.OS === 'android' ? 4 : 4,
       textAlignVertical: 'center',
       letterSpacing: 0,
       ...(Platform.OS === "web" && { outlineWidth: 0, outlineStyle: "none" }),
     },
     sendButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      justifyContent: "center",
-      alignItems: "center",
+      padding: 8,
+      paddingHorizontal: 12,
     },
   });
 

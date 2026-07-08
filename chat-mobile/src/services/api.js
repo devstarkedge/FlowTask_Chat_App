@@ -193,6 +193,8 @@ export const threadAPI = {
   getReplies: (id, params) => api.get(`/threads/${id}/replies`, { params }),
   resolve: (id) => api.post(`/threads/${id}/resolve`),
   unresolve: (id) => api.post(`/threads/${id}/unresolve`),
+  mute: (id) => api.post(`/threads/${id}/mute`),
+  unmute: (id) => api.post(`/threads/${id}/unmute`),
 };
 
 // Later (Saved Messages) API — endpoints match server routes: /messages/:id/save/*
@@ -216,6 +218,8 @@ export const scheduledAPI = {
 export const messageAPI = {
   getFileProxyUrl: (assetId) => `${api.defaults.baseURL}/messages/files/${encodeURIComponent(assetId)}/proxy`,
   forward: (messageId, data) => api.post(`/messages/${messageId}/forward`, data),
+  forwardToNewGroup: (messageId, data) => api.post(`/messages/${messageId}/forward-group`, data),
+  markUnread: (channelId, messageId) => api.post(`/channels/${channelId}/messages/${messageId}/mark-unread`),
 };
 
 // Reactions API

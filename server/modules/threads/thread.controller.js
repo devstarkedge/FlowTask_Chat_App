@@ -1,4 +1,5 @@
 import threadService from './thread.service.js';
+import Thread from './thread.model.js';
 import asyncHandler from '../../middleware/asyncHandler.js';
 
 /**
@@ -117,4 +118,44 @@ export const updateThreadTitle = asyncHandler(async (req, res) => {
     req.workspaceId,
   );
   res.json({ success: true, data: { thread } });
+});
+
+/**
+ * @desc    Mute a thread (disable reply notifications)
+ * @route   POST /api/chat/threads/:id/mute
+ * @access  Private
+ */
+export const muteThread = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user._id;
+  
+  const thread = await Thread.findOneAndUpdate(
+    { _id: id, workspaceId: req.workspaceId },
+    { $addToSet: { mutedBy: userId } },
+    { new: true }
+  );
+  
+  if (!thread) throw new Error('Thread not found');
+
+  res.json({ success: true, message: 'Thread muted', data: thread });
+});
+
+/**
+ * @desc    Unmute a thread (enable reply notifications)
+ * @route   POST /api/chat/threads/:id/unmute
+ * @access  Private
+ */
+export const unmuteThread = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user._id;
+  
+  const thread = await Thread.findOneAndUpdate(
+    { _id: id, workspaceId: req.workspaceId },
+    { $pull: { mutedBy: userId } },
+    { new: true }
+  );
+  
+  if (!thread) throw new Error('Thread not found');
+
+  res.json({ success: true, message: 'Thread unmuted', data: thread });
 });

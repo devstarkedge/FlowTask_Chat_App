@@ -203,7 +203,10 @@ class ThreadRepository {
       .populate('channelId', 'name slug type dmParticipants')
       .populate({
         path: 'rootMessageId',
-        populate: { path: 'authorId', select: 'name email avatar onlineStatus' }
+        populate: [
+          { path: 'authorId', select: 'name email avatar onlineStatus' },
+          { path: 'fileReferences', populate: { path: 'fileId' } }
+        ]
       })
       .lean();
 
@@ -217,6 +220,7 @@ class ThreadRepository {
         .sort({ createdAt: -1 })
         .limit(3)
         .populate('authorId', 'name email avatar onlineStatus')
+        .populate({ path: 'fileReferences', populate: { path: 'fileId' } })
         .lean();
       thread.latestReplies = replies.reverse();
     }));

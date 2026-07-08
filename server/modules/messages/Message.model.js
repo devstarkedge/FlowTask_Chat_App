@@ -366,6 +366,6 @@ messageSchema.methods.removeReaction = function (emoji, userId) {
   return this;
 };
 
-const Message = model('Message', messageSchema);
+const Message = mongoose.models.Message || model('Message', messageSchema);
 
 export default Message;

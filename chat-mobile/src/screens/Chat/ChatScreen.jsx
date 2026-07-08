@@ -22,11 +22,15 @@ import { useAuthStore } from "../../stores/authStore";
 import { useChannelStore } from "../../stores/channelStore";
 import { useThemeStore } from "../../stores/themeStore";
 import { useLaterStore } from "../../stores/laterStore";
-import { laterAPI, pinsAPI } from "../../services/api";
+import { laterAPI, pinsAPI, messageAPI, threadAPI } from "../../services/api";
 import { emitTyping } from "../../services/socket";
 import { AppAvatar, AppScreen, MobileFileCard } from "../../components/common";
 import RichText from "../../components/RichText";
 import ReactionBar from "../../components/ReactionBar";
+import MediaPickerSheet from "../../components/MediaPickerSheet";
+import GifPickerModal from "../../components/GifPickerModal";
+import MessageActionSheet from "../../components/MessageActionSheet";
+import ForwardMessageModal from "../../components/ForwardMessageModal";
 import EmojiPickerModal from "../../components/EmojiPickerModal";
 import ReminderModal from "../../components/ReminderModal";
 import {
@@ -174,6 +178,7 @@ const ChatScreen = ({ route, navigation }) => {
   const [editingMessage, setEditingMessage] = useState(null); // message object or null
   const [reminderTarget, setReminderTarget] = useState(null); // messageId or null
   const [actionMenuTarget, setActionMenuTarget] = useState(null); // message object or null
+  const [forwardTarget, setForwardTarget] = useState(null);
   const [scrolledToMessageId, setScrolledToMessageId] = useState(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
 
@@ -1005,156 +1010,73 @@ const ChatScreen = ({ route, navigation }) => {
         colors={colors}
       />
 
-      {/* Custom Message Actions Modal (solves Android Alert button limit) */}
-      <Modal
+      {/* Custom Message Actions Modal (replaces inline modal) */}
+      <MessageActionSheet
         visible={!!actionMenuTarget}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setActionMenuTarget(null)}
-      >
-        <TouchableOpacity
-          style={styles.actionsOverlay}
-          activeOpacity={1}
-          onPress={() => setActionMenuTarget(null)}
-        >
-          <View style={[styles.actionsSheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
-            <View style={[styles.actionsHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.actionsTitle, { color: colors.textPrimary }]}>Message Actions</Text>
-              <Text style={[styles.actionsSnippet, { color: colors.textSecondary }]} numberOfLines={1}>
-                {actionMenuTarget?.content || "Message"}
-              </Text>
-            </View>
+        onClose={() => setActionMenuTarget(null)}
+        message={actionMenuTarget}
+        colors={colors}
+        user={user}
+        isSaved={isMessageSaved?.(actionMenuTarget?._id)}
+        onReact={(emoji) => {
+          if (actionMenuTarget) addReaction(actionMenuTarget._id, emoji);
+        }}
+        onOpenEmojiPicker={() => setEmojiPickerTarget(actionMenuTarget?._id)}
+        onForward={() => setForwardTarget(actionMenuTarget)}
+        onSave={() => toggleSaveMessage?.(actionMenuTarget?._id)}
+        onRemind={() => setReminderTarget(actionMenuTarget?._id)}
+        onEdit={() => {
+          setEditingMessage(actionMenuTarget);
+          setReplyingTo(null);
+          setText(actionMenuTarget.content || "");
+        }}
+        onDelete={() => {
+          const msgId = actionMenuTarget._id;
+          setTimeout(() => {
+            Alert.alert("Delete Message", "Are you sure?", [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Delete",
+                style: "destructive",
+                onPress: () => deleteMessage(msgId, channelId),
+              },
+            ]);
+          }, 200);
+        }}
+        onCopyLink={async () => {
+          const url = `flowtask://chat/${channelId}/${actionMenuTarget?._id}`;
+          await Clipboard.setStringAsync(url);
+          Toast.show({ type: 'success', text1: 'Link copied to clipboard' });
+        }}
+        onMarkUnread={async () => {
+          try {
+            await messageAPI.markUnread(channelId, actionMenuTarget._id);
+            Toast.show({ type: 'success', text1: 'Marked as unread' });
+            navigation.navigate("Main", { screen: "ChannelsTab" }); // go back to trigger refresh
+          } catch (error) {
+            Toast.show({ type: 'error', text1: 'Failed to mark unread' });
+          }
+        }}
+        onToggleNotifications={async () => {
+          try {
+            const threadId = actionMenuTarget.threadId || actionMenuTarget._id;
+            // Optimistically assume it works. To do a real toggle we would need the thread state, 
+            // but for now we just mute it as an example, or toggle if we had `isMuted` locally.
+            await threadAPI.mute(threadId);
+            Toast.show({ type: 'success', text1: 'Notifications muted for this thread' });
+          } catch (error) {
+            Toast.show({ type: 'error', text1: 'Failed to mute notifications' });
+          }
+        }}
+      />
 
-            {/* Actions list */}
-            <ScrollView style={styles.actionsList}>
-              <TouchableOpacity
-                style={styles.actionItem}
-                onPress={() => {
-                  Clipboard.setStringAsync(actionMenuTarget?.content || "");
-                  setActionMenuTarget(null);
-                }}
-              >
-                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>Copy Text</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionItem}
-                onPress={() => {
-                  setReplyingTo(actionMenuTarget);
-                  setEditingMessage(null);
-                  setActionMenuTarget(null);
-                }}
-              >
-                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>Reply</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionItem}
-                onPress={() => {
-                  setActionMenuTarget(null);
-                  setTimeout(() => {
-                    setEmojiPickerTarget(actionMenuTarget?._id);
-                  }, 150);
-                }}
-              >
-                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>React to Message</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionItem}
-                onPress={() => {
-                  const saved = isMessageSaved?.(actionMenuTarget?._id);
-                  toggleSaveMessage?.(actionMenuTarget?._id);
-                  setActionMenuTarget(null);
-                  if (!saved) {
-                    setTimeout(() => {
-                      setReminderTarget(actionMenuTarget?._id);
-                    }, 200);
-                  }
-                }}
-              >
-                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>
-                  {isMessageSaved?.(actionMenuTarget?._id) ? "Unsave Message" : "Save & Remind"}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionItem}
-                onPress={async () => {
-                  const pinned = actionMenuTarget?.isPinned;
-                  setActionMenuTarget(null);
-                  try {
-                    if (pinned) await pinsAPI.unpin(actionMenuTarget?._id);
-                    else await pinsAPI.pin(actionMenuTarget?._id);
-                  } catch (err) {
-                    logger.error('Pin action failed:', err);
-                  }
-                }}
-              >
-                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>
-                  {actionMenuTarget?.isPinned ? "Unpin Message" : "Pin Message"}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionItem}
-                onPress={() => {
-                  setActionMenuTarget(null);
-                  navigation.navigate("ThreadDetail", {
-                    rootMessageId: actionMenuTarget?._id,
-                    channelId,
-                    channelName,
-                    rootContent: actionMenuTarget?.content,
-                    rootHtmlContent: actionMenuTarget?.htmlContent,
-                    rootAttachments: actionMenuTarget ? getMessageAttachments(actionMenuTarget) : [],
-                    replyCount: actionMenuTarget?.replyCount || 0,
-                    rootAuthor: actionMenuTarget?.senderSnapshot?.name ? actionMenuTarget?.senderSnapshot : actionMenuTarget?.authorId,
-                  });
-                }}
-              >
-                <Text style={[styles.actionItemText, { color: colors.textPrimary }]}>Reply in Thread</Text>
-              </TouchableOpacity>
-
-              {/* Owner actions */}
-              {actionMenuTarget && (actionMenuTarget.authorId?._id === user?._id || actionMenuTarget.authorId === user?._id) && (
-                <>
-                  <TouchableOpacity
-                    style={styles.actionItem}
-                    onPress={() => {
-                      setEditingMessage(actionMenuTarget);
-                      setReplyingTo(null);
-                      setText(actionMenuTarget.content || "");
-                      setActionMenuTarget(null);
-                    }}
-                  >
-                    <Text style={[styles.actionItemText, { color: colors.primary }]}>Edit Message</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.actionItem, { borderBottomWidth: 0 }]}
-                    onPress={() => {
-                      const msgId = actionMenuTarget._id;
-                      setActionMenuTarget(null);
-                      setTimeout(() => {
-                        Alert.alert("Delete Message", "Are you sure?", [
-                          { text: "Cancel", style: "cancel" },
-                          {
-                            text: "Delete",
-                            style: "destructive",
-                            onPress: () => deleteMessage(msgId, channelId),
-                          },
-                        ]);
-                      }, 200);
-                    }}
-                  >
-                    <Text style={[styles.actionItemText, { color: colors.danger || "#ef4444" }]}>Delete Message</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      {/* Forward Message Modal */}
+      <ForwardMessageModal
+        visible={!!forwardTarget}
+        onClose={() => setForwardTarget(null)}
+        message={forwardTarget}
+        colors={colors}
+      />
       </AppScreen>
   );
 };

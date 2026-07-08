@@ -9,7 +9,9 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useChannelStore } from '../stores/channelStore';
 import { useAuthStore } from '../stores/authStore';
@@ -22,6 +24,8 @@ const ForwardMessageModal = ({ visible, onClose, message, colors }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [isSending, setIsSending] = useState(false);
+  
+  const navigation = useNavigation();
 
   const channels = useChannelStore((s) => s.channels) || [];
   const { user } = useAuthStore();
@@ -38,18 +42,83 @@ const ForwardMessageModal = ({ visible, onClose, message, colors }) => {
     );
   };
 
-  const handleSend = async () => {
-    if (!message?._id || selectedIds.length === 0) return;
+  const executeForward = async (destinationIds) => {
     setIsSending(true);
     try {
-      await messageAPI.forward(message._id, { destinationIds: selectedIds });
+      await messageAPI.forward(message._id, { destinationIds });
       Toast.show({ type: 'success', text1: 'Message forwarded successfully' });
       handleClose();
+      
+      // Auto-navigate if a single chat was selected
+      if (destinationIds.length === 1) {
+        const channelId = destinationIds[0];
+        const channel = channels.find(c => c._id === channelId);
+        if (channel && navigation?.navigate) {
+          navigation.navigate('Chat', {
+            channelId: channel._id,
+            channelName: channel.name,
+            channelType: channel.type,
+          });
+        }
+      }
     } catch (error) {
       console.error('Failed to forward message:', error);
       Toast.show({ type: 'error', text1: 'Failed to forward message' });
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const executeGroupForward = async (memberIds) => {
+    setIsSending(true);
+    try {
+      await messageAPI.forwardToNewGroup(message._id, { memberIds, groupName: "Group Chat" });
+      Toast.show({ type: 'success', text1: 'Message forwarded to new group' });
+      handleClose();
+    } catch (error) {
+      console.error('Failed to forward to group:', error);
+      Toast.show({ type: 'error', text1: 'Failed to forward message' });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleSend = () => {
+    if (!message?._id || selectedIds.length === 0) return;
+    
+    if (selectedIds.length === 1) {
+      executeForward(selectedIds);
+      return;
+    }
+
+    // Multiple selections
+    // Check if all selected items are DMs
+    const selectedItems = channels.filter(c => selectedIds.includes(c._id));
+    const allAreDMs = selectedItems.every(c => c.type === 'dm');
+
+    if (allAreDMs) {
+      Alert.alert(
+        "Forward Message",
+        "How would you like to send this message?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Send Separately", 
+            onPress: () => executeForward(selectedIds) 
+          },
+          { 
+            text: "Send in Group", 
+            onPress: () => {
+              const memberIds = selectedItems.map(c => c.dmRecipientId).filter(Boolean);
+              if (memberIds.length > 0) {
+                executeGroupForward(memberIds);
+              }
+            }
+          }
+        ]
+      );
+    } else {
+      executeForward(selectedIds);
     }
   };
 

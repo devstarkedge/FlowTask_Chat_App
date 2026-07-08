@@ -256,6 +256,104 @@ export const useThreadStore = create(
           ),
         }));
       },
+
+      editThreadReply: async (rootMessageId, replyId, content) => {
+        try {
+          const { data } = await api.put(`/messages/${replyId}`, { content });
+          const updated = data.data?.message || data.data;
+          set((state) => ({
+            threadRepliesByRoot: {
+              ...state.threadRepliesByRoot,
+              [rootMessageId]: (state.threadRepliesByRoot[rootMessageId] || []).map(r =>
+                r._id === replyId ? { ...r, ...updated, isEdited: true } : r
+              ),
+            },
+          }));
+        } catch (error) {
+          logger.error('Failed to edit thread reply:', error);
+          throw error;
+        }
+      },
+
+      deleteThreadReply: async (rootMessageId, replyId) => {
+        try {
+          await api.delete(`/messages/${replyId}`);
+          set((state) => ({
+            threadRepliesByRoot: {
+              ...state.threadRepliesByRoot,
+              [rootMessageId]: (state.threadRepliesByRoot[rootMessageId] || []).filter(r => r._id !== replyId),
+            },
+          }));
+        } catch (error) {
+          logger.error('Failed to delete thread reply:', error);
+          throw error;
+        }
+      },
+
+      // Real-time socket handlers for thread replies
+      updateThreadReply: (replyId, updates) => {
+        set((state) => {
+          const updated = {};
+          for (const [rootId, replies] of Object.entries(state.threadRepliesByRoot)) {
+            updated[rootId] = replies.map(r =>
+              r._id === replyId ? { ...r, ...updates } : r
+            );
+          }
+          return { threadRepliesByRoot: updated };
+        });
+      },
+
+      removeThreadReply: (replyId, channelId) => {
+        set((state) => {
+          const updated = {};
+          for (const [rootId, replies] of Object.entries(state.threadRepliesByRoot)) {
+            updated[rootId] = replies.filter(r => r._id !== replyId);
+          }
+          return { threadRepliesByRoot: updated };
+        });
+      },
+
+      addReactionToReply: (replyId, emoji, user) => {
+        set((state) => {
+          const updated = {};
+          for (const [rootId, replies] of Object.entries(state.threadRepliesByRoot)) {
+            updated[rootId] = replies.map(r => {
+              if (r._id !== replyId) return r;
+              const reactions = [...(r.reactions || [])];
+              const existing = reactions.find(rx => rx.emoji === emoji);
+              if (existing) {
+                if (existing.userIds?.includes(user._id)) return r;
+                existing.users = [...(existing.users || []), user];
+                existing.userIds = [...(existing.userIds || []), user._id];
+                existing.count = (existing.count || 0) + 1;
+              } else {
+                reactions.push({ emoji, users: [user], userIds: [user._id], count: 1 });
+              }
+              return { ...r, reactions };
+            });
+          }
+          return { threadRepliesByRoot: updated };
+        });
+      },
+
+      removeReactionFromReply: (replyId, emoji, userId) => {
+        set((state) => {
+          const updated = {};
+          for (const [rootId, replies] of Object.entries(state.threadRepliesByRoot)) {
+            updated[rootId] = replies.map(r => {
+              if (r._id !== replyId) return r;
+              const reactions = (r.reactions || []).map(rx => {
+                if (rx.emoji !== emoji) return rx;
+                const users = (rx.users || []).filter(u => u._id !== userId);
+                const userIds = (rx.userIds || []).filter(id => id !== userId);
+                return { ...rx, users, userIds, count: users.length };
+              }).filter(rx => rx.count > 0);
+              return { ...r, reactions };
+            });
+          }
+          return { threadRepliesByRoot: updated };
+        });
+      },
     }),
     {
       name: 'flowtask-thread-storage',

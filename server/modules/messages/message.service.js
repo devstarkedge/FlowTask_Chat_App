@@ -494,11 +494,11 @@ class MessageService {
       throw new ForbiddenError('Cannot edit a deleted message');
     }
 
-    // Enforce edit time window
-    const messageAge = Date.now() - new Date(message.createdAt).getTime();
-    if (messageAge > MESSAGE_EDIT_WINDOW_MS) {
-      throw new ForbiddenError('Edit window expired. Messages can only be edited within 10 minutes.');
-    }
+    // Enforce edit time window (disabled based on user request)
+    // const messageAge = Date.now() - new Date(message.createdAt).getTime();
+    // if (messageAge > MESSAGE_EDIT_WINDOW_MS) {
+    //   throw new ForbiddenError('Edit window expired. Messages can only be edited within 10 minutes.');
+    // }
 
     const sanitizedContent = sanitizeHtml(newContent);
     if (!sanitizedContent) {

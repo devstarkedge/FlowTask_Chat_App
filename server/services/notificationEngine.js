@@ -204,12 +204,20 @@ class NotificationEngine {
     let priority = NOTIFICATION_PRIORITIES.LOW;
     let category = NOTIFICATION_CATEGORIES.CHANNEL_MESSAGE;
 
-    if (isDM) {
-      // DMs always notify (highest priority)
+    if (isDM && !isThreadReply) {
+      // DMs always notify (highest priority) — but NOT for thread replies
       shouldNotify = true;
       notificationType = NOTIFICATION_TYPES.DM;
       priority = NOTIFICATION_PRIORITIES.HIGH;
       category = NOTIFICATION_CATEGORIES.DM;
+    } else if (isThreadReply) {
+      // Thread reply — notify root message author AND all thread participants
+      shouldNotify = await this._isThreadParticipantOrAuthor(recipientIdStr, threadId, message, workspaceId);
+      if (shouldNotify) {
+        notificationType = NOTIFICATION_TYPES.THREAD_REPLY;
+        priority = NOTIFICATION_PRIORITIES.MEDIUM;
+        category = NOTIFICATION_CATEGORIES.THREAD_REPLY;
+      }
     } else if (isMentioned) {
       // Direct @mention
       shouldNotify = true;
@@ -230,14 +238,6 @@ class NotificationEngine {
         notificationType = NOTIFICATION_TYPES.MENTION;
         priority = NOTIFICATION_PRIORITIES.MEDIUM;
         category = NOTIFICATION_CATEGORIES.MENTION;
-      }
-    } else if (isThreadReply) {
-      // Thread reply — check if recipient participated in thread
-      shouldNotify = await this._isThreadParticipant(recipientIdStr, threadId, workspaceId);
-      if (shouldNotify) {
-        notificationType = NOTIFICATION_TYPES.THREAD_REPLY;
-        priority = NOTIFICATION_PRIORITIES.MEDIUM;
-        category = NOTIFICATION_CATEGORIES.THREAD_REPLY;
       }
     } else if (channelLevel.level === 'all') {
       // User opted into all messages for this channel
@@ -440,6 +440,36 @@ class NotificationEngine {
         channelId: channel._id, error: error.message,
       });
       return [];
+    }
+  }
+
+  /**
+   * Check if a user participated in a thread (posted a reply) OR authored the root message.
+   * This ensures the root message author always gets notified when someone replies.
+   * @private
+   */
+  async _isThreadParticipantOrAuthor(userId, threadId, message, workspaceId) {
+    try {
+      const { default: threadRepository } = await import('../modules/threads/thread.repository.js');
+      const thread = await threadRepository.findById(threadId, { workspaceId });
+      if (!thread) return false;
+
+      // Check if user is a thread participant (has replied)
+      const isParticipant = thread.participantIds?.some((id) => id.toString() === userId);
+      if (isParticipant) return true;
+
+      // Check if user is the root message author
+      const { default: messageRepository } = await import('../modules/messages/message.repository.js');
+      const rootMessage = await messageRepository.findById(
+        thread.rootMessageId?.toString() || thread.rootMessageId,
+        { workspaceId }
+      );
+      if (!rootMessage) return false;
+
+      const rootAuthorId = (rootMessage.authorId?._id || rootMessage.authorId)?.toString();
+      return rootAuthorId === userId;
+    } catch {
+      return false;
     }
   }
 

@@ -14,7 +14,7 @@ import { enqueueScheduledMessage } from '../../services/scheduledMessages.servic
 import { emitToUser } from '../../sockets/socketManager.js';
 import { SOCKET_EVENTS, MESSAGE_CONTENT_TYPES } from '../../config/constants.js';
 import readReceiptRepository from '../readReceipts/readReceipt.repository.js';
-import Message from "./message.model.js";
+import Message from "./Message.model.js";
 
 
 /**

@@ -865,7 +865,13 @@ export const updateSavedMessageReminder = asyncHandler(async (req, res) => {
     })
     .populate('channelId', 'name type')
     .lean();
-  emitToUser(req.user._id, SOCKET_EVENTS.SAVED_MESSAGE_ADDED, { savedMessage: populated }, req.workspaceId);
+ 
+     
+    
+  // Stringify to convert BSON ObjectIds and Dates to plain JSON primitives
+  // This prevents 'parse error' disconnects in the socket.io-client
+  const safePayload = JSON.parse(JSON.stringify(populated));
+  emitToUser(req.user._id, SOCKET_EVENTS.SAVED_MESSAGE_ADDED, { savedMessage: safePayload }, req.workspaceId);
 
   // Create activity notification for reminder
   if (reminderAt) {

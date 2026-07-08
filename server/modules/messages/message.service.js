@@ -486,6 +486,7 @@ class MessageService {
 
     const authorIdStr = message.authorId?._id?.toString() || message.authorId?.toString();
     if (authorIdStr !== userId.toString()) {
+      console.error(`[editMessage] 403: authorIdStr (${authorIdStr}) !== userId (${userId.toString()})`);
       throw new ForbiddenError('Can only edit your own messages');
     }
 
@@ -542,6 +543,7 @@ class MessageService {
 
     const authorIdStr = message.authorId?._id?.toString() || message.authorId?.toString();
     if (authorIdStr !== userId.toString() && !isAdmin) {
+      console.error(`[deleteMessage] 403: authorIdStr (${authorIdStr}) !== userId (${userId.toString()}), isAdmin=${isAdmin}`);
       throw new ForbiddenError('Can only delete your own messages');
     }
 

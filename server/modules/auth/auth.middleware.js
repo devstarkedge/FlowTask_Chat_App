@@ -160,13 +160,16 @@ export function requireChannelAccess() {
         return next();
       }
 
-      // DM channels: allow access if user is a participant, even if
-      // embedded members[] is out of sync with ChannelMember.
+      const isEmbeddedMember = channel.hasMember(req.user._id);
+
+      // DM channels: must be participant
       if (channel.type === 'dm') {
         const userIdStr = req.user._id.toString();
-        const isMember = channel.hasMember(req.user._id);
-        const isParticipant = channel.dmParticipants?.some((id) => id.toString() === userIdStr);
-        if (!isMember && !isParticipant) {
+        const flowTaskId = req.user.flowTaskUserId;
+        const isParticipant = channel.dmParticipants?.some(
+          (id) => id.toString() === userIdStr || id.toString() === flowTaskId
+        );
+        if (!isEmbeddedMember && !isParticipant) {
           return next(new ForbiddenError('Not a participant of this DM channel'));
         }
         req.channel = channel;
@@ -196,25 +199,30 @@ export function requireChannelAccess() {
  * Loads the message, resolves its channelId, then checks membership.
  * Attaches req.message and req.channel on success.
  */
-export function requireMessageAccess() {
+export function requireMessageAccess(options = { allowMissing: false }) {
   return async (req, res, next) => {
     try {
       if (!req.workspaceId) {
         return next(new ForbiddenError('Workspace context is required'));
       }
 
-      const messageId = req.params.id || req.params.messageId;
+      const messageId = req.params.messageId || req.params.id;
       if (!messageId) {
         return next(new ForbiddenError('Message ID required'));
       }
 
-      const { default: messageRepository } = await import('../messages/message.repository.js');
+      // Import here to avoid circular dependencies
       const { default: channelRepository } = await import('../channels/channel.repository.js');
+      const { default: messageRepository } = await import('../messages/message.repository.js');
 
       const message = await messageRepository.findById(messageId, {
         workspaceId: req.workspaceId,
       });
+
       if (!message) {
+        if (options.allowMissing) {
+          return next();
+        }
         const { NotFoundError } = await import('../../middleware/errorHandler.js');
         return next(new NotFoundError('Message not found'));
       }
@@ -243,6 +251,23 @@ export function requireMessageAccess() {
         return next();
       }
 
+      // DM channels: allow access if user is a participant
+      if (channel.type === 'dm') {
+        const userIdStr = req.user._id.toString();
+        const flowTaskId = req.user.flowTaskUserId;
+        const isMember = channel.hasMember(req.user._id);
+        const isParticipant = channel.dmParticipants?.some(
+          (id) => id.toString() === userIdStr || id.toString() === flowTaskId
+        );
+        if (!isMember && !isParticipant) {
+          console.error(`[requireMessageAccess] 403: Not a participant of DM channel. channelId=${channelId}, userIdStr=${userIdStr}, flowTaskId=${flowTaskId}, dmParticipants=${channel.dmParticipants}`);
+          return next(new ForbiddenError('Not a participant of this DM channel'));
+        }
+        req.message = message;
+        req.channel = channel;
+        return next();
+      }
+
       // Check membership with embedded-members fallback to ChannelMember source of truth
       const channelId = message.channelId?._id?.toString?.() || message.channelId?.toString?.() || null;
       const isEmbeddedMember = channel.hasMember(req.user._id);
@@ -253,6 +278,7 @@ export function requireMessageAccess() {
           : false;
 
       if (!isPersistedMember) {
+        console.error(`[requireMessageAccess] 403: Not a member of this channel. channelId=${channelId}, userId=${req.user._id}, isEmbedded=${isEmbeddedMember}`);
         return next(new ForbiddenError('Not a member of this channel'));
       }
 

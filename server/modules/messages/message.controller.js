@@ -842,7 +842,19 @@ export const updateSavedMessageReminder = asyncHandler(async (req, res) => {
   }
 
   if (!saved) {
-    return res.status(404).json({ success: false, error: { message: 'Saved message not found' } });
+    // If the message is not saved yet, auto-save it now to attach the reminder
+    if (req.message) {
+      saved = await SavedMessage.create({
+        userId: req.user._id,
+        messageId: req.message._id,
+        channelId: req.message.channelId,
+        workspaceId: req.workspaceId,
+        type: 'saved_message',
+        ...updateData
+      });
+    } else {
+      return res.status(404).json({ success: false, error: { message: 'Saved message not found' } });
+    }
   }
 
   // Sync reminder update across devices

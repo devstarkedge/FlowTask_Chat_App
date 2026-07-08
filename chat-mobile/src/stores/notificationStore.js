@@ -21,6 +21,10 @@ export const useNotificationStore = create((set, get) => ({
     try {
       const params = { limit: 30 };
       if (cursor) params.cursor = cursor;
+      const currentFilter = get().activeFilter;
+      if (currentFilter && currentFilter !== 'all') {
+        params.filter = currentFilter;
+      }
       const { data } = await api.get('/notifications', { params });
 
       // Server returns { success, notifications, hasMore, nextCursor } at top level
@@ -100,7 +104,7 @@ export const useNotificationStore = create((set, get) => ({
 
   setUnreadCount: (count) => set({ unreadCount: count }),
 
-  setFilter: (filter) => set({ activeFilter: filter }),
+  setFilter: (filter) => set({ activeFilter: filter, notifications: [], cursor: null, hasMore: false, _lastFetchAt: 0 }),
 
   getFilteredNotifications: () => {
     const { notifications, activeFilter } = get();

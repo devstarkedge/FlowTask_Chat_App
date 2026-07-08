@@ -8,25 +8,25 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from "react-native";
+import { MessageSquare, AtSign, MessageCircle } from 'lucide-react-native';
 import { useNotificationStore } from "../../stores/notificationStore";
 import { useThemeStore } from "../../stores/themeStore";
 import { AppAvatar, AppScreen } from "../../components/common";
 
 const FILTERS = [
   { key: "all", label: "All" },
+  { key: "dms", label: "DMs" },
   { key: "mentions", label: "Mentions" },
-  { key: "replies", label: "Replies" },
+  { key: "threads", label: "Threads" },
 ];
 
-// ─── Activity Row (Slack mobile: blue unread bar, avatar, text, time) ────────
 
-const ActivityRow = React.memo(({ item, colors }) => {
+const ActivityRow = React.memo(({ item, colors, navigation }) => {
   const senderName = item.senderName || item.sender?.name || "Someone";
   const sender = { name: senderName, avatar: item.senderAvatar || item.sender?.avatar };
-  const isUnread = !item.read && !item.isRead;
-
+  
   const channelName = item.channelName || item.channel?.name || "";
-  const body = item.body || item.content || item.message || "";
+  const body = item.body || item.content || item.message || item.messagePreview || "";
 
   // Time formatting
   const timeStr = useMemo(() => {
@@ -41,92 +41,137 @@ const ActivityRow = React.memo(({ item, colors }) => {
     if (diffMin < 1) return "now";
     if (diffMin < 60) return `${diffMin}m`;
     if (diffHrs < 24) return `${diffHrs}h`;
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays < 7) return `${diffDays}d`;
+    if (diffDays === 1) return "1d ago";
+    if (diffDays < 7) return `${diffDays}d ago`;
     return date.toLocaleDateString([], { month: "short", day: "numeric" });
   }, [item.createdAt]);
 
-  const typeLabel = item.type === "mention" ? "mentioned you"
-    : item.type === "reaction" ? "reacted to your message"
-    : item.type === "reply" ? "replied to your thread"
-    : item.type === "dm" ? "sent you a DM"
-    : "posted";
+  const isThread = item.type === "thread_reply" || item.type?.includes("thread");
+  const isDM = item.type === "dm" || item.type?.includes("direct");
+  const isMention = item.type === "mention";
+
+  const contextStr = isThread && isDM ? "Thread in Direct Message" 
+    : isThread ? `Thread in #${channelName || 'channel'}`
+    : isDM ? "Direct Message"
+    : isMention ? `Mention in #${channelName || 'channel'}`
+    : channelName ? `channel in #${channelName}`
+    : "Notification";
+
+  const handlePress = () => {
+    const { deepLink, sourceId } = item;
+    const tId = deepLink?.threadId || item.threadId;
+    const cId = deepLink?.channelId || item.channelId || item.conversationId;
+    const mId = deepLink?.messageId || sourceId;
+
+    if (isThread || tId) {
+      navigation.navigate('ThreadDetail', { threadId: tId, highlightedMessageId: mId });
+    } else if (cId) {
+      navigation.navigate('Chat', { channelId: cId, messageId: mId });
+    }
+  };
 
   return (
-    <View style={arStyles.container}>
-      {/* Unread indicator (thin blue bar) */}
-      {isUnread && (
-        <View style={[arStyles.unreadBar, { backgroundColor: colors.primary }]} />
-      )}
-      <View style={arStyles.row}>
-        <AppAvatar user={sender} size={28} showStatus={false} />
-        <View style={arStyles.textCol}>
-          <Text style={arStyles.body} numberOfLines={2}>
-            <Text style={{ fontWeight: "700", color: colors.textPrimary }}>
-              {sender.name}{" "}
-            </Text>
-            <Text style={{ color: colors.textSecondary }}>
-              {typeLabel}
-            </Text>
-            {channelName ? (
-              <Text style={{ color: colors.textSecondary }}>
-                {" "}in{" "}
-                <Text style={{ fontWeight: "600", color: colors.textPrimary }}>
-                  #{channelName}
-                </Text>
-              </Text>
-            ) : null}
-          </Text>
-          {body ? (
-            <Text style={[arStyles.preview, { color: colors.textTertiary }]} numberOfLines={1}>
-              {body}
-            </Text>
-          ) : null}
+    <TouchableOpacity onPress={handlePress} style={[arStyles.container, !item.isRead && !item.read && { backgroundColor: colors.backgroundSecondary || (colors.primary + '08') }]} activeOpacity={0.7}>
+      <View style={arStyles.avatarContainer}>
+        <AppAvatar user={sender} size={40} showStatus={false} />
+        <View style={[arStyles.badge, { backgroundColor: colors.background, borderColor: colors.background }]}>
+          {isMention ? <AtSign size={10} color={colors.textPrimary} />
+            : isThread ? <MessageSquare size={10} color={colors.textPrimary} />
+            : <MessageCircle size={10} color={colors.textPrimary} />
+          }
         </View>
-        <Text style={[arStyles.time, { color: colors.textTertiary }]}>{timeStr}</Text>
       </View>
-    </View>
+
+      <View style={arStyles.textCol}>
+        <View style={arStyles.headerRow}>
+          <Text style={[arStyles.nameText, { color: colors.textPrimary }]} numberOfLines={1}>
+            {sender.name} {isDM && isThread ? "and you" : ""}
+          </Text>
+          <View style={arStyles.timeRow}>
+            <Text style={[arStyles.time, { color: colors.textTertiary }]}>{timeStr}</Text>
+            {isThread && (
+              <View style={[arStyles.repliedBadge, { backgroundColor: '#dcfce7' }]}>
+                <Text style={[arStyles.repliedText, { color: '#166534' }]}>Replied</Text>
+              </View>
+            )}
+          </View>
+        </View>
+        <Text style={[arStyles.context, { color: colors.textSecondary }]}>{contextStr}</Text>
+        
+        {body ? (
+          <Text style={[arStyles.preview, { color: colors.textPrimary }]} numberOfLines={2}>
+            {body}
+          </Text>
+        ) : null}
+      </View>
+    </TouchableOpacity>
   );
 });
 
 const arStyles = StyleSheet.create({
   container: {
     flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
   },
-  unreadBar: {
-    width: 3,
-    alignSelf: "stretch",
-    borderRadius: 2,
-    marginVertical: 4,
-    marginLeft: 8,
+  avatarContainer: {
+    position: 'relative',
+    width: 40,
+    height: 40,
   },
-  row: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
+  badge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
   },
   textCol: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
-  body: {
-    fontSize: 14,
-    lineHeight: 19,
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  preview: {
-    fontSize: 13,
-    lineHeight: 17,
+  nameText: {
+    fontSize: 15,
+    fontWeight: "700",
+    flex: 1,
+  },
+  timeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   time: {
     fontSize: 12,
-    marginTop: 2,
+  },
+  repliedBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  repliedText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  context: {
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  preview: {
+    fontSize: 15,
+    lineHeight: 20,
   },
 });
 
-// ─── Main Component ──────────────────────────────────────────────────────────
 
 const ActivityScreen = ({ navigation }) => {
   if (!navigation) navigation = { navigate: () => {} };
@@ -172,7 +217,7 @@ const ActivityScreen = ({ navigation }) => {
   );
 
   const renderItem = useCallback(
-    ({ item }) => <ActivityRow item={item} colors={colors} />,
+    ({ item }) => <ActivityRow item={item} colors={colors} navigation={navigation} />,
     [colors]
   );
 
@@ -199,7 +244,8 @@ const ActivityScreen = ({ navigation }) => {
               key={f.key}
               style={[
                 styles.tab,
-                isActive && [styles.tabActive, { borderBottomColor: colors.primary }],
+                isActive ? [styles.tabActive, { backgroundColor: colors.primary, borderColor: colors.primary }] 
+                         : [styles.tabInactive, { backgroundColor: colors.background, borderColor: colors.border }],
               ]}
               onPress={() => handleFilterChange(f.key)}
             >
@@ -207,8 +253,8 @@ const ActivityScreen = ({ navigation }) => {
                 style={[
                   styles.tabText,
                   {
-                    color: isActive ? colors.primary : colors.textTertiary,
-                    fontWeight: isActive ? "700" : "500",
+                    color: isActive ? '#FFFFFF' : colors.textSecondary,
+                    fontWeight: isActive ? "600" : "500",
                   },
                 ]}
               >
@@ -251,6 +297,7 @@ const ActivityScreen = ({ navigation }) => {
   );
 };
 
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
@@ -272,23 +319,20 @@ const styles = StyleSheet.create({
   tabs: {
     flexDirection: "row",
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 12,
+    gap: 8,
   },
   tab: {
     paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
-  },
-  tabActive: {
-    borderBottomWidth: 2,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
   },
   tabText: {
     fontSize: 13,
   },
   separator: {
     height: 1,
-    marginLeft: 56,
   },
   empty: {
     alignItems: "center",

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -12,18 +12,57 @@ import {
   Forward,
   Bookmark,
   Clock,
-  BellOff,
   Edit2,
   Link as LinkIcon,
-  MoreHorizontal,
+  Copy,
   Trash2,
-  Mail,
   SmilePlus,
+  MessageSquare,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
 
 const QUICK_EMOJIS = ['🎉', '👍', '😂', '🙂', '✅'];
+
+// ─── Message content type detection ─────────────────────────────────────────
+
+const URL_REGEX = /https?:\/\/[^\s()]+/i;
+const URL_REGEX_GLOBAL = /https?:\/\/[^\s()]+/ig;
+const MD_IMAGE_REGEX_GLOBAL = /!\[.*?\]\(.*?\)/ig;
+
+const hasText = (msg) => {
+  let text = msg?.content || '';
+  text = text.replace(MD_IMAGE_REGEX_GLOBAL, '');
+  // Strip URLs from content — if anything remains, it has plain text
+  return text.replace(URL_REGEX_GLOBAL, '').trim().length > 0;
+};
+
+const hasLink = (msg) => {
+  let text = msg?.content || '';
+  text = text.replace(MD_IMAGE_REGEX_GLOBAL, '');
+  return URL_REGEX.test(text);
+};
+
+const hasImageOnly = (msg) => {
+  if (!msg) return false;
+  let text = msg?.content || '';
+  const hasMdImages = /!\[.*?\]\(.*?\)/i.test(text);
+  const textWithoutImages = text.replace(MD_IMAGE_REGEX_GLOBAL, '').trim();
+
+  const attachments = msg.fileReferences?.length
+    ? msg.fileReferences.map(r => r.fileId).filter(Boolean)
+    : msg.attachments || msg.files || [];
+  const hasImages = attachments.some(f => {
+    const mime = f?.mimeType || '';
+    const name = f?.originalName || f?.fileName || f?.name || '';
+    return mime.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(name);
+  });
+  
+  // It's image only if there's an image AND no actual text
+  return (hasImages || hasMdImages) && textWithoutImages.length === 0;
+};
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 const MessageActionSheet = ({
   visible,
@@ -40,16 +79,30 @@ const MessageActionSheet = ({
   onEdit,
   onDelete,
   onCopyLink,
+  onReply,
   onMarkUnread,
   onToggleNotifications,
 }) => {
   if (!message) return null;
 
-  const isAuthor = message.authorId?._id === user?._id || message.authorId === user?._id;
+  const isAuthor =
+    message.authorId?._id === user?._id || message.authorId === user?._id;
+
+  const imageOnly = hasImageOnly(message);
+  const showCopyText = !imageOnly && hasText(message);
+  const showCopyLink = !imageOnly && hasLink(message);
 
   const handleCopyText = async () => {
     await Clipboard.setStringAsync(message.content || '');
     Toast.show({ type: 'success', text1: 'Text copied to clipboard' });
+    onClose();
+  };
+
+  const handleCopyLink = async () => {
+    const textWithoutImages = (message.content || '').replace(MD_IMAGE_REGEX_GLOBAL, '');
+    const url = textWithoutImages.match(URL_REGEX)?.[0] || '';
+    await Clipboard.setStringAsync(url);
+    Toast.show({ type: 'success', text1: 'Link copied to clipboard' });
     onClose();
   };
 
@@ -65,39 +118,27 @@ const MessageActionSheet = ({
         activeOpacity={1}
         onPress={onClose}
       >
-        <View
-          style={[
-            styles.sheetContainer,
-            { backgroundColor: colors.background }
-          ]}
-        >
-          {/* Top Pill / Indicator */}
+        <View style={[styles.sheetContainer, { backgroundColor: colors.background }]}>
+          {/* Drag indicator */}
           <View style={styles.indicatorContainer}>
             <View style={[styles.indicator, { backgroundColor: colors.border }]} />
           </View>
 
-          {/* Quick Emojis Row */}
+          {/* Quick Emoji Row */}
           <View style={styles.emojisRow}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.emojisScroll}>
               {QUICK_EMOJIS.map((emoji) => (
                 <TouchableOpacity
                   key={emoji}
                   style={[styles.emojiCircle, { backgroundColor: colors.backgroundSecondary }]}
-                  onPress={() => {
-                    onReact(emoji);
-                    onClose();
-                  }}
+                  onPress={() => { onReact(emoji); onClose(); }}
                 >
                   <Text style={styles.emojiText}>{emoji}</Text>
                 </TouchableOpacity>
               ))}
               <TouchableOpacity
                 style={[styles.emojiCircle, { backgroundColor: colors.backgroundSecondary }]}
-                onPress={() => {
-                  onClose();
-                  // Give modal time to close before opening picker on some devices
-                  setTimeout(() => onOpenEmojiPicker(), 150);
-                }}
+                onPress={() => { onClose(); setTimeout(() => onOpenEmojiPicker(), 150); }}
               >
                 <SmilePlus size={24} color={colors.textSecondary} />
               </TouchableOpacity>
@@ -108,10 +149,7 @@ const MessageActionSheet = ({
           <View style={styles.bigActionsRow}>
             <TouchableOpacity
               style={[styles.bigActionBtn, { backgroundColor: colors.backgroundSecondary }]}
-              onPress={() => {
-                onClose();
-                setTimeout(() => onForward(), 100);
-              }}
+              onPress={() => { onClose(); setTimeout(() => onForward(), 100); }}
             >
               <Forward size={24} color={colors.textPrimary} style={{ marginBottom: 8 }} />
               <Text style={[styles.bigActionText, { color: colors.textPrimary }]}>Forward</Text>
@@ -119,54 +157,44 @@ const MessageActionSheet = ({
 
             <TouchableOpacity
               style={[styles.bigActionBtn, { backgroundColor: colors.backgroundSecondary }]}
-              onPress={() => {
-                onSave();
-                onClose();
-              }}
+              onPress={() => { onSave(); onClose(); }}
             >
-              <Bookmark size={24} color={colors.textPrimary} style={{ marginBottom: 8 }} fill={isSaved ? colors.textPrimary : 'transparent'} />
+              <Bookmark
+                size={24}
+                color={colors.textPrimary}
+                style={{ marginBottom: 8 }}
+                fill={isSaved ? colors.textPrimary : 'transparent'}
+              />
               <Text style={[styles.bigActionText, { color: colors.textPrimary }]}>
                 {isSaved ? 'Unsave' : 'Save'}
               </Text>
             </TouchableOpacity>
+
+            {!!onReply && (
+              <TouchableOpacity
+                style={[styles.bigActionBtn, { backgroundColor: colors.backgroundSecondary }]}
+                onPress={() => { onClose(); setTimeout(() => onReply(message), 100); }}
+              >
+                <MessageSquare size={24} color={colors.textPrimary} style={{ marginBottom: 8 }} />
+                <Text style={[styles.bigActionText, { color: colors.textPrimary }]}>Reply</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* List Actions */}
           <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
-            <TouchableOpacity style={styles.listItem} onPress={() => {
-              onMarkUnread();
-              onClose();
-            }}>
-              <Mail size={20} color={colors.textPrimary} />
-              <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Mark Unread</Text>
-            </TouchableOpacity>
-
             <TouchableOpacity
               style={styles.listItem}
-              onPress={() => {
-                onClose();
-                setTimeout(() => onRemind(), 100);
-              }}
+              onPress={() => { onClose(); setTimeout(() => onRemind(), 100); }}
             >
               <Clock size={20} color={colors.textPrimary} />
               <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Remind Me</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.listItem} onPress={() => {
-              onToggleNotifications();
-              onClose();
-            }}>
-              <BellOff size={20} color={colors.textPrimary} />
-              <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Don't Get Reply Notifications</Text>
-            </TouchableOpacity>
-
             {isAuthor && (
               <TouchableOpacity
                 style={styles.listItem}
-                onPress={() => {
-                  onClose();
-                  setTimeout(() => onEdit(), 100);
-                }}
+                onPress={() => { onClose(); setTimeout(() => onEdit(), 100); }}
               >
                 <Edit2 size={20} color={colors.textPrimary} />
                 <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Edit Message</Text>
@@ -175,34 +203,33 @@ const MessageActionSheet = ({
 
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-            <TouchableOpacity style={styles.listItem} onPress={() => {
-              onCopyLink();
-              onClose();
-            }}>
-              <LinkIcon size={20} color={colors.textPrimary} />
-              <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Copy Link to Message</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.listItem} onPress={handleCopyText}>
-              <Text style={[styles.listItemText, { color: colors.textPrimary, marginLeft: 36 }]}>Copy Text</Text>
-            </TouchableOpacity>
-            
-            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-            {isAuthor && (
-              <TouchableOpacity
-                style={styles.listItem}
-                onPress={() => {
-                  onClose();
-                  setTimeout(() => onDelete(), 100);
-                }}
-              >
-                <Trash2 size={20} color="#ef4444" />
-                <Text style={[styles.listItemText, { color: "#ef4444" }]}>Delete Message</Text>
+            {showCopyText && (
+              <TouchableOpacity style={styles.listItem} onPress={handleCopyText}>
+                <Copy size={20} color={colors.textPrimary} />
+                <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Copy Text</Text>
               </TouchableOpacity>
             )}
-            
-            {/* Bottom padding for safety */}
+
+            {showCopyLink && (
+              <TouchableOpacity style={styles.listItem} onPress={handleCopyLink}>
+                <LinkIcon size={20} color={colors.primary} />
+                <Text style={[styles.listItemText, { color: colors.primary }]}>Copy Link</Text>
+              </TouchableOpacity>
+            )}
+
+            {isAuthor && (
+              <>
+                <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                <TouchableOpacity
+                  style={styles.listItem}
+                  onPress={() => { onClose(); setTimeout(() => onDelete(), 100); }}
+                >
+                  <Trash2 size={20} color={colors.error} />
+                  <Text style={[styles.listItemText, { color: colors.error }]}>Delete Message</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
             <View style={{ height: 24 }} />
           </ScrollView>
         </View>
@@ -264,7 +291,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bigActionText: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600',
   },
   listContainer: {

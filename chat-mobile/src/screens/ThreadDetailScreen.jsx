@@ -11,6 +11,7 @@ import {
   Modal,
   ScrollView,
   Share as RNShare,
+  Alert,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
@@ -48,6 +49,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     replyCount: initialReplyCount,
     rootAuthor,
     rootCreatedAt,
+    highlightedMessageId,
   } = route.params;
 
   const { colors } = useThemeStore();
@@ -58,13 +60,17 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     sendThreadReply,
     isLoadingReplies,
     threadHasMore,
-    deleteMessage,
   } = useThreadStore();
   const { addReaction, removeReaction } = useChatStore();
+  // Also subscribe to chatStore messages so root message reactions update in real time
+  const rootMessageLive = useChatStore((s) =>
+    (s.messagesByChannel[channelId] || []).find(m => m._id === rootMessageId)
+  );
   const toggleSaveMessage = useLaterStore((s) => s.toggleSaveMessage);
   const isMessageSaved = useLaterStore((s) => s.isMessageSaved);
 
   const [replyText, setReplyText] = useState('');
+  const [editingMessage, setEditingMessage] = useState(null);
   const [emojiPickerTarget, setEmojiPickerTarget] = useState(null);
   const [actionMenuTarget, setActionMenuTarget] = useState(null);
   const [reminderTarget, setReminderTarget] = useState(null);
@@ -98,35 +104,59 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     return msg.attachments || msg.files || [];
   }, []);
 
-  const replies = threadRepliesByRoot[rootMessageId] || [];
+  // Subscribe to real-time reply updates
+  const rawReplies = useThreadStore((s) => s.threadRepliesByRoot[rootMessageId]);
+  const replies = rawReplies || [];
 
   useEffect(() => {
     fetchThreadReplies(rootMessageId);
   }, [rootMessageId]);
 
+  useEffect(() => {
+    if (highlightedMessageId && replies.length > 0) {
+      const index = replies.findIndex((r) => r._id === highlightedMessageId);
+      if (index !== -1 && flatListRef.current) {
+        // Delay to allow layout
+        setTimeout(() => {
+          try {
+            flatListRef.current.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+          } catch (e) {
+            console.log("Could not scroll to reply:", e);
+          }
+        }, 500);
+      }
+    }
+  }, [highlightedMessageId, replies.length > 0]);
+
   const handleSendReply = async (content, options) => {
     try {
-      await sendThreadReply(rootMessageId, channelId, content, options);
+      if (editingMessage) {
+        if (editingMessage._id === rootMessageId) {
+          // Editing root message
+          const { editMessage } = useChatStore.getState();
+          await editMessage(rootMessageId, channelId, content);
+        } else {
+          // Editing reply
+          await useThreadStore.getState().editThreadReply(rootMessageId, editingMessage._id, content);
+        }
+        setEditingMessage(null);
+      } else {
+        await sendThreadReply(rootMessageId, channelId, content, options);
+      }
     } catch (err) {
       console.error('Failed to send reply:', err);
       Toast.show({ type: 'error', text1: 'Failed to send reply' });
     }
   };
 
-  const rootMessage = (() => {
-    const messagesByChannel = useChatStore.getState().messagesByChannel;
-    const channelMessages = messagesByChannel[channelId] || [];
-    return channelMessages.find(m => m._id === rootMessageId);
-  })();
-
-  const effectiveRoot = rootMessage || {
+  const effectiveRoot = rootMessageLive || {
     _id: rootMessageId,
     content: rootContent,
     htmlContent: rootHtmlContent,
     attachments: rootAttachments || [],
     senderSnapshot: rootAuthor,
     authorId: rootAuthor,
-    createdAt: rootMessage?.createdAt || rootCreatedAt || new Date().toISOString(),
+    createdAt: rootCreatedAt || new Date().toISOString(),
     replyCount: initialReplyCount,
   };
 
@@ -149,6 +179,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     const name = sender?.name || sender?.email || 'Unknown';
     const isMe = getAuthorId(item) === user?._id;
     const itemAttachments = getAttachments(item);
+    const isHighlighted = item._id === highlightedMessageId;
 
     const prevItem = replies[index - 1];
     let showToday = false;
@@ -168,7 +199,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           </View>
         )}
         <TouchableOpacity 
-          style={styles.messageRow}
+          style={[styles.messageRow, isHighlighted && { backgroundColor: colors.primary + '20' }]}
           onLongPress={() => showMessageActions(item)}
           activeOpacity={0.85}
           delayLongPress={300}
@@ -235,17 +266,14 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           <ArrowLeft size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Thread</Text>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+            Thread
+          </Text>
           <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-            {channelName.includes(user?.name) ? 'Direct message' : channelName}
+            {channelName ? `#${channelName}` : 'Message'}
           </Text>
         </View>
-        <View style={styles.headerRight}>
-          <View style={styles.headerRightIcon}><AppAvatar user={user} size={24} /></View>
-          <TouchableOpacity style={styles.headerRightIcon}>
-            <Headphones size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
+        <View style={styles.headerRight} />
       </View>
 
       <KeyboardAvoidingView
@@ -255,6 +283,11 @@ const ThreadDetailScreen = ({ route, navigation }) => {
       >
         <FlatList
           ref={flatListRef}
+          onScrollToIndexFailed={(info) => {
+            setTimeout(() => {
+              flatListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 });
+            }, 500);
+          }}
           data={replies}
           renderItem={renderReply}
           keyExtractor={(item, index) => item._id ?? String(index)}
@@ -267,7 +300,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
             }
           }}
           ListHeaderComponent={
-            <View style={styles.rootSection}>
+            <View style={[styles.rootSection, highlightedMessageId === effectiveRoot._id && { backgroundColor: colors.primary + '20' }]}>
               <View style={styles.rootMessageRow}>
                 <AppAvatar user={effectiveRootSender} size={42} showStatus={false} />
                 <View style={styles.rootMessageContent}>
@@ -352,6 +385,8 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           text={replyText}
           onChangeText={setReplyText}
           onSend={handleSendReply}
+          editingMessage={editingMessage}
+          onCancelEdit={() => { setEditingMessage(null); setReplyText(''); }}
         />
       </KeyboardAvoidingView>
 
@@ -399,18 +434,34 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         onSave={() => toggleSaveMessage?.(actionMenuTarget?._id)}
         onRemind={() => setReminderTarget(actionMenuTarget?._id)}
         onEdit={() => {
-          // Editing thread messages is not fully supported in this screen yet,
-          // but we can close the menu for now.
+          setEditingMessage(actionMenuTarget);
+          setReplyText(actionMenuTarget.content || '');
           setActionMenuTarget(null);
         }}
         onDelete={() => {
+          const targetId = actionMenuTarget._id;
+          const isRoot = targetId === rootMessageId;
           setTimeout(() => {
-            Alert.alert("Delete Message", "Are you sure?", [
-              { text: "Cancel", style: "cancel" },
-              { text: "Delete", style: "destructive", onPress: () => {
-                if(deleteMessage) deleteMessage(actionMenuTarget._id);
-                setActionMenuTarget(null);
-              }}
+            Alert.alert('Delete Message', 'Are you sure you want to delete this message?', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: async () => {
+                  setActionMenuTarget(null);
+                  try {
+                    if (isRoot) {
+                      const { deleteMessage: del } = useChatStore.getState();
+                      await del(targetId, channelId);
+                      navigation.goBack();
+                    } else {
+                      await useThreadStore.getState().deleteThreadReply(rootMessageId, targetId);
+                    }
+                  } catch (err) {
+                    Toast.show({ type: 'error', text1: 'Failed to delete message' });
+                  }
+                },
+              },
             ]);
           }, 200);
         }}
@@ -419,15 +470,15 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           await Clipboard.setStringAsync(url);
           Toast.show({ type: 'success', text1: 'Link copied to clipboard' });
         }}
-        onMarkUnread={async () => {
-          try {
-            await messageAPI.markUnread(channelId, actionMenuTarget._id);
-            Toast.show({ type: 'success', text1: 'Marked as unread' });
-            navigation.navigate("Main", { screen: "ChannelsTab" });
-          } catch (error) {
-            Toast.show({ type: 'error', text1: 'Failed to mark unread' });
-          }
-        }}
+        // onMarkUnread={async () => {
+        //   try {
+        //     await messageAPI.markUnread(channelId, actionMenuTarget._id);
+        //     Toast.show({ type: 'success', text1: 'Marked as unread' });
+        //     navigation.navigate("Main", { screen: "ChannelsTab" });
+        //   } catch (error) {
+        //     Toast.show({ type: 'error', text1: 'Failed to mark unread' });
+        //   }
+        // }}
         onToggleNotifications={async () => {
           try {
             const tId = actionMenuTarget.threadId || actionMenuTarget._id;

@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { X, Clock, Bell, Calendar } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 
 function getQuickOptions() {
   const now = new Date();
@@ -54,6 +55,8 @@ function getQuickOptions() {
   return options;
 }
 
+
+
 const ReminderModal = React.memo(function ReminderModal({
   visible,
   onClose,
@@ -82,6 +85,38 @@ const ReminderModal = React.memo(function ReminderModal({
     onSetReminder(date);
     onClose();
   };
+
+  const openCustomPicker = () => {
+    if (Platform.OS === 'android') {
+      onClose(); // Hide the modal immediately to avoid overlap
+      setTimeout(() => {
+        DateTimePickerAndroid.open({
+          value: customDate,
+          mode: 'date',
+          onChange: (event, date) => {
+            if (event.type === 'set' && date) {
+              DateTimePickerAndroid.open({
+                value: date,
+                mode: 'time',
+                onChange: (tEvent, time) => {
+                  if (tEvent.type === 'set' && time) {
+                    onSetReminder(time.toISOString());
+                  }
+                },
+              });
+            }
+          },
+        });
+      }, 100);
+    } else {
+      setShowCustom(true);
+    }
+  };
+
+  // Reset view when modal closes
+  React.useEffect(() => {
+    if (!visible) setShowCustom(false);
+  }, [visible]);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -144,7 +179,7 @@ const ReminderModal = React.memo(function ReminderModal({
               {/* Custom date toggle */}
               <TouchableOpacity
                 style={[styles.optionRow, { borderBottomColor: 'transparent' }]}
-                onPress={() => setShowCustom(true)}
+                onPress={openCustomPicker}
                 activeOpacity={0.7}
               >
                 <Calendar size={18} color={colors.primary} />
@@ -172,7 +207,7 @@ const ReminderModal = React.memo(function ReminderModal({
                 <DateTimePicker
                   value={customDate}
                   mode="datetime"
-                  display="default"
+                  display="spinner"
                   onChange={handleDateChange}
                   style={{ width: '100%', height: 120 }}
                   textColor={colors.textPrimary}

@@ -176,9 +176,9 @@ export const lightTheme = {
   card: '#F9FAFB',
   
   // Message
-  messageBubbleSent: '#6366F1',
+  messageBubbleSent: '#F3F4F6',
   messageBubbleReceived: '#F3F4F6',
-  messageTextSent: '#FFFFFF',
+  messageTextSent: '#111827',
   messageTextReceived: '#111827',
   
   // Badge
@@ -275,9 +275,9 @@ export const darkTheme = {
   card: '#374151',
   
   // Message
-  messageBubbleSent: '#6366F1',
+  messageBubbleSent: '#374151',
   messageBubbleReceived: '#374151',
-  messageTextSent: '#FFFFFF',
+  messageTextSent: '#F9FAFB',
   messageTextReceived: '#F9FAFB',
   
   // Badge
@@ -377,17 +377,11 @@ export const getTheme = (mode = 'light', accentColor = 'blue', customColor = nul
     primaryOverlayBorder: withAlpha(finalPrimary, mode === 'dark' ? 0.08 : 0.05),
   };
 
-  // Message bubble sent should follow accent
-  const messageOverrides = {
-    messageBubbleSent: finalPrimary,
-  };
-
   return {
     ...base,
     ...accent,
     ...workspace,
     ...primaryOverlays,
-    ...messageOverrides,
     effectiveTheme: mode,
     fontSizes,
     fontWeights,

@@ -136,6 +136,10 @@ export const connectSocket = async () => {
 
   socket.on('message:update', ({ message }) => {
     useChatStore.getState().updateMessage(message);
+    // Also update if it's a thread reply
+    if (message?.threadId) {
+      useThreadStore.getState().updateThreadReply(message._id, message);
+    }
   });
 
   socket.on('message:delete', ({ messageId, channelId, isDeleted }) => {
@@ -144,6 +148,8 @@ export const connectSocket = async () => {
     } else {
       useChatStore.getState().removeMessage(messageId, channelId);
     }
+    // Also remove from thread replies
+    useThreadStore.getState().removeThreadReply(messageId, channelId);
   });
 
   socket.on('message:pinned', (payload) => {
@@ -276,13 +282,14 @@ export const connectSocket = async () => {
   // Reaction Events (server sends userId as string, not user object)
   socket.on('reaction:add', ({ messageId, userId, emoji, channelId }) => {
     const user = useAuthStore.getState().user;
-    // Build a user-like object from userId for local store
     const reactionUser = userId === user?._id ? { _id: user._id, name: user.name } : { _id: userId };
     useChatStore.getState().addReactionLocal(messageId, emoji, reactionUser);
+    useThreadStore.getState().addReactionToReply(messageId, emoji, reactionUser);
   });
 
   socket.on('reaction:remove', ({ messageId, userId, emoji, channelId }) => {
     useChatStore.getState().removeReactionLocal(messageId, emoji, userId);
+    useThreadStore.getState().removeReactionFromReply(messageId, emoji, userId);
   });
 
   // Notification Events

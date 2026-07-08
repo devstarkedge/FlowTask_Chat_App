@@ -525,6 +525,7 @@ const ms = StyleSheet.create({
   // ── Image thumbnail (inline in bubble) ──
   imgThumbContainer: {
     width: '100%',
+    minWidth: 240,
     maxWidth: 340,
     borderRadius: 12,
     overflow: 'hidden',
@@ -570,6 +571,7 @@ const ms = StyleSheet.create({
   // ── Video poster card ──
   vidPoster: {
     width: '100%',
+    minWidth: 240,
     maxWidth: 340,
     borderRadius: 12,
     overflow: 'hidden',

@@ -10,11 +10,11 @@ import asyncHandler from '../../middleware/asyncHandler.js';
  * Get user's notifications with cursor-based pagination.
  */
 export const getNotifications = asyncHandler(async (req, res) => {
-  const { cursor, limit } = req.query;
+  const { cursor, limit, filter } = req.query;
   const result = await notificationService.getNotifications(
     req.user._id,
     req.workspaceId,
-    { cursor, limit: parseInt(limit, 10) || 30 },
+    { cursor, limit: parseInt(limit, 10) || 30, filter },
   );
 
   res.json({ success: true, ...result });

@@ -61,6 +61,7 @@ import SearchBar from "../../components/SearchBar";
 import MessageComposer from "../../components/MessageComposer";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import logger from '../../utils/logger';
+import Toast from 'react-native-toast-message';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -456,7 +457,12 @@ const ChatScreen = ({ route, navigation }) => {
       : colors.messageTextReceived;
 
     return (
-      <View key={item._id} style={highlightedMessageId === item._id ? { backgroundColor: colors.primary + '20', borderRadius: 8, paddingVertical: 4 } : null}>
+      <View 
+        key={item._id} 
+        style={highlightedMessageId === item._id 
+          ? { backgroundColor: colors.primary + '20', marginHorizontal: -12, paddingHorizontal: 12, paddingVertical: 4 } 
+          : null}
+      >
         {showDateSep && renderDateSeparator(item.createdAt)}
 
         <TouchableOpacity
@@ -1029,6 +1035,19 @@ const ChatScreen = ({ route, navigation }) => {
           setEditingMessage(actionMenuTarget);
           setReplyingTo(null);
           setText(actionMenuTarget.content || "");
+        }}
+        onReply={(msg) => {
+          navigation.navigate('ThreadDetail', {
+            rootMessageId: msg._id,
+            channelId,
+            channelName,
+            rootContent: msg.content,
+            rootHtmlContent: msg.htmlContent,
+            replyCount: msg.replyCount || 0,
+            rootAuthor: msg.senderSnapshot?.name ? msg.senderSnapshot : msg.authorId,
+            rootCreatedAt: msg.createdAt,
+          });
+          setActionMenuTarget(null);
         }}
         onDelete={() => {
           const msgId = actionMenuTarget._id;

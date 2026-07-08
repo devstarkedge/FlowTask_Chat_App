@@ -171,12 +171,21 @@ notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 /**
  * Get notifications for a user with cursor-based pagination.
  */
-notificationSchema.statics.getForUser = function (recipientId, workspaceId, { cursor, limit = 30 } = {}) {
-  const filter = { recipientId, workspaceId };
+notificationSchema.statics.getForUser = function (recipientId, workspaceId, { cursor, limit = 30, filter } = {}) {
+  const query = { recipientId, workspaceId };
   if (cursor) {
-    filter._id = { $lt: cursor };
+    query._id = { $lt: cursor };
   }
-  return this.find(filter)
+  
+  if (filter === 'mentions') {
+    query.type = 'mention';
+  } else if (filter === 'threads') {
+    query.type = { $in: ['thread_reply'] };
+  } else if (filter === 'dms' || filter === 'dm') {
+    query.type = 'dm';
+  }
+
+  return this.find(query)
     .sort({ createdAt: -1 })
     .limit(limit + 1)
     .lean();

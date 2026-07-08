@@ -294,8 +294,8 @@ class NotificationService {
   /**
    * Get notifications for a user with cursor-based pagination.
    */
-  async getNotifications(recipientId, workspaceId, { cursor, limit = 30 } = {}) {
-    const notifications = await Notification.getForUser(recipientId, workspaceId, { cursor, limit });
+  async getNotifications(recipientId, workspaceId, { cursor, limit = 30, filter } = {}) {
+    const notifications = await Notification.getForUser(recipientId, workspaceId, { cursor, limit, filter });
     const hasMore = notifications.length > limit;
     if (hasMore) notifications.pop();
 

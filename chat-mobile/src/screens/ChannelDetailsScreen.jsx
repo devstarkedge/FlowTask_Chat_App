@@ -93,7 +93,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
       setMemberSearchResults(prev => prev.filter(m => m._id !== userId));
     } catch (err) {
       logger.error('Failed to add member:', err);
-      const msg = err.response?.data?.message || 'Failed to add member';
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to add member';
       Toast.show({ type: 'error', text1: msg });
     } finally {
       setAddingMemberId(null);
@@ -347,14 +347,16 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
         </View>
 
         <View style={styles.section}>
-          <DetailItem
-            icon={UserPlus}
-            label="Add Members"
-            onPress={() => {
-              setMemberSearchQuery("");
-              setShowAddMemberModal(true);
-            }}
-          />
+          {!(channel?.type === 'project' && channel?.systemManaged) && (
+            <DetailItem
+              icon={UserPlus}
+              label="Add Members"
+              onPress={() => {
+                setMemberSearchQuery("");
+                setShowAddMemberModal(true);
+              }}
+            />
+          )}
           <DetailItem
             icon={Users}
             label="View Members"

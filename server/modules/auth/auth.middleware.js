@@ -177,7 +177,6 @@ export function requireChannelAccess() {
       }
 
       // Other private channels: require membership
-      const isEmbeddedMember = channel.hasMember(req.user._id);
       const isPersistedMember = isEmbeddedMember
         ? true
         : await ChannelMember.isMember(channelId, req.user._id);

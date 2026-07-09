@@ -257,9 +257,11 @@ export const useThreadStore = create(
         }));
       },
 
-      editThreadReply: async (rootMessageId, replyId, content) => {
+      editThreadReply: async (rootMessageId, replyId, content, htmlContent) => {
         try {
-          const { data } = await api.put(`/messages/${replyId}`, { content });
+          const payload = { content };
+          if (htmlContent) payload.htmlContent = htmlContent;
+          const { data } = await api.put(`/messages/${replyId}`, payload);
           const updated = data.data?.message || data.data;
           set((state) => ({
             threadRepliesByRoot: {

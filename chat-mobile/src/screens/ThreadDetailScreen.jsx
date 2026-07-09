@@ -134,10 +134,10 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         if (editingMessage._id === rootMessageId) {
           // Editing root message
           const { editMessage } = useChatStore.getState();
-          await editMessage(rootMessageId, channelId, content);
+          await editMessage(rootMessageId, channelId, content, options?.htmlContent);
         } else {
           // Editing reply
-          await useThreadStore.getState().editThreadReply(rootMessageId, editingMessage._id, content);
+          await useThreadStore.getState().editThreadReply(rootMessageId, editingMessage._id, content, options?.htmlContent);
         }
         setEditingMessage(null);
       } else {
@@ -277,7 +277,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
         keyboardVerticalOffset={0}
       >
@@ -435,7 +435,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         onRemind={() => setReminderTarget(actionMenuTarget?._id)}
         onEdit={() => {
           setEditingMessage(actionMenuTarget);
-          setReplyText(actionMenuTarget.content || '');
+          setReplyText(actionMenuTarget.htmlContent || actionMenuTarget.content || '');
           setActionMenuTarget(null);
         }}
         onDelete={() => {

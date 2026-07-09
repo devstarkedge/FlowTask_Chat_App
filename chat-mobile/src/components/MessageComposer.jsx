@@ -63,6 +63,7 @@ import MediaPickerSheet from "./MediaPickerSheet";
 import GifPickerModal from "./GifPickerModal";
 import RecentCanvasesModal from "./RecentCanvasesModal";
 import RecentFilesModal from "./RecentFilesModal";
+import { pellToTipTap } from "../utils/formatConverter";
 
 /**
  * Convert markdown-style formatting to HTML for backend compatibility.
@@ -211,7 +212,7 @@ const MessageComposer = React.memo(function MessageComposer({
       if (plainContent) {
         setDraft(
           channelId,
-          rawHtml.includes('<') ? rawHtml : markdownToHtml(rawHtml),
+          rawHtml.includes('<') ? pellToTipTap(rawHtml) : markdownToHtml(rawHtml),
           plainContent,
           activeWorkspaceId,
           null,
@@ -303,7 +304,7 @@ const MessageComposer = React.memo(function MessageComposer({
       return; // Still uploading, prevent send
     }
 
-    const htmlContent = rawHtml.includes('<') ? rawHtml : markdownToHtml(rawHtml);
+    const htmlContent = rawHtml.includes('<') ? pellToTipTap(rawHtml) : markdownToHtml(rawHtml);
     const mentionPayload =
       pendingMentions.length > 0 ? pendingMentions : undefined;
 

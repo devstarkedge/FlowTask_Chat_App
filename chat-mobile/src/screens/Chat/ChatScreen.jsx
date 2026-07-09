@@ -854,7 +854,7 @@ const ChatScreen = ({ route, navigation }) => {
               <>
                 <Text style={[styles.memberCount, { color: colors.textSecondary }]}> • </Text>
                 <Text style={[styles.memberCount, { color: colors.textSecondary }]}>
-                  {1 + (channel?.canvasTabs?.length || 0)} Tabs
+                  {1 + (channel?.canvasTabs?.length || 0)} Tab
                 </Text>
               </>
             </View>
@@ -990,7 +990,7 @@ const ChatScreen = ({ route, navigation }) => {
 
       {/* Messages View — KeyboardAvoidingView + FlatList */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
         keyboardVerticalOffset={0}
       >
@@ -1583,7 +1583,7 @@ const createStyles = (colors) =>
       justifyContent: "center",
       alignItems: "center",
       paddingVertical: 80,
-      transform: [{ scaleY: -1 }],
+      transform: Platform.OS === 'android' ? [{ scaleY: -1 }, { scaleX: -1 }] : [{ scaleY: -1 }],
     },
     emptyText: {
       fontSize: 15,

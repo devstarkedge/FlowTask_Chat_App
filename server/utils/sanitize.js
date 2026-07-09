@@ -13,7 +13,6 @@ const ALLOWED_TAGS = [
   'p', 'br', 'strong', 'em', 'u', 's', 'code', 'pre',
   'blockquote', 'ul', 'ol', 'li', 'a', 'span',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-  'div', 'b', 'i', 'strike', 'del',
 ];
 
 const ALLOWED_ATTRS = ['href', 'target', 'rel', 'class', 'data-mention-id', 'data-mention-type'];

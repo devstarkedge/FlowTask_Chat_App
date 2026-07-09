@@ -24,6 +24,8 @@ const FILTERS = [
 const ActivityRow = React.memo(({ item, colors, navigation }) => {
   const senderName = item.senderName || item.sender?.name || "Someone";
   const sender = { name: senderName, avatar: item.senderAvatar || item.sender?.avatar };
+
+  const markAsRead = React.useRef(useNotificationStore.getState().markAsRead).current;
   
   const channelName = item.channelName || item.channel?.name || "";
   const body = item.body || item.content || item.message || item.messagePreview || "";
@@ -58,13 +60,31 @@ const ActivityRow = React.memo(({ item, colors, navigation }) => {
     : "Notification";
 
   const handlePress = () => {
-    const { deepLink, sourceId } = item;
-    const tId = deepLink?.threadId || item.threadId;
+    // Mark notification as read immediately
+    if (!item.isRead && !item.read && markAsRead) {
+      markAsRead(item._id);
+    }
+
+    const { deepLink, sourceId, messageId } = item;
+    let tId = deepLink?.threadId || item.threadId;
     const cId = deepLink?.channelId || item.channelId || item.conversationId;
-    const mId = deepLink?.messageId || sourceId;
+    const mId = deepLink?.messageId || sourceId || messageId;
+
+    if (isThread && !tId) {
+      tId = messageId || sourceId;
+    }
 
     if (isThread || tId) {
-      navigation.navigate('ThreadDetail', { threadId: tId, highlightedMessageId: mId });
+      // Navigate to Chat first to load channel context + messages into store,
+      // then auto-navigate to ThreadDetail from ChatScreen.
+      // This ensures ThreadDetailScreen has the channel messages available
+      // for the rootMessageLive lookup and MessageComposer works correctly.
+      navigation.navigate('Chat', {
+        channelId: cId,
+        channelName: item.channelName || item.channel?.name || '',
+        threadId: tId,
+        highlightedMessageId: mId,
+      });
     } else if (cId) {
       navigation.navigate('Chat', { channelId: cId, messageId: mId });
     }

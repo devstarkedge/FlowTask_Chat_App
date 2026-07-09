@@ -42,6 +42,7 @@ export const useChatStore = create((set, get) => ({
     } catch (error) {
       set({ isLoadingMessages: false });
       logger.error('Failed to fetch messages:', error);
+      return { error: true, status: error.response?.status };
     }
   },
 
@@ -226,10 +227,12 @@ export const useChatStore = create((set, get) => ({
   },
 
   // ─── Edit / Delete Message ──────────────────────────────────────────────────
-  editMessage: async (messageId, channelId, content) => {
+  editMessage: async (messageId, channelId, content, htmlContent) => {
     try {
-      // Server editMessageSchema only accepts { content } — do NOT send htmlContent
-      const { data } = await api.put(`/messages/${messageId}`, { content });
+      const payload = { content };
+      if (htmlContent) payload.htmlContent = htmlContent;
+
+      const { data } = await api.put(`/messages/${messageId}`, payload);
       const updated = data.data?.message || data.data;
       set((state) => ({
         messagesByChannel: {

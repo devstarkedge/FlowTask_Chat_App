@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
 import { useAuthStore } from '../stores/authStore';
-import { Hash, Users, Pin, Bell, Settings, LogOut, ArrowLeft, FolderOpen, FileText, Clock, User, Mail, Briefcase, UserPlus, X, Search, Plus } from 'lucide-react-native';
+import { Hash, Users, Pin, Bell, Settings, LogOut, ArrowLeft, FolderOpen, FileText, Clock, User, Mail, Briefcase, UserPlus, X, Search, Plus, Lock } from 'lucide-react-native';
 import { channelAPI, notificationPrefAPI, usersAPI, directoriesAPI } from '../services/api';
 import { AppAvatar } from '../components/common';
 import logger from '../utils/logger';
@@ -338,9 +338,15 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
       <ScrollView>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <View style={[styles.channelIcon, { backgroundColor: colors.primary + '15' }]}>
-            <Hash size={36} color={colors.primary} />
+            {(channel?.visibility === 'private' || channel?.type === 'private') ? (
+              <Lock size={36} color={colors.primary} />
+            ) : (
+              <Hash size={36} color={colors.primary} />
+            )}
           </View>
-          <Text style={[styles.channelName, { color: colors.textPrimary }]}>#{channelName}</Text>
+          <Text style={[styles.channelName, { color: colors.textPrimary }]}>
+            {channelName}
+          </Text>
           <Text style={[styles.memberCount, { color: colors.textSecondary }]}>
             {members.length || initialMemberCount} members
           </Text>
@@ -391,6 +397,21 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               )}
             </View>
           )}
+
+          <DetailItem
+            icon={FolderOpen}
+            label="Files"
+            onPress={() => navigation.navigate('Files', { channelId, channelName })}
+          />
+
+          {channel?.canvasTabs?.map((tab, idx) => (
+            <DetailItem
+              key={tab.canvasId || idx}
+              icon={FileText}
+              label={tab.title || 'Canvas'}
+              onPress={() => navigation.navigate('CanvasList', { channelId, channelName })}
+            />
+          ))}
 
           <DetailItem
             icon={Pin}

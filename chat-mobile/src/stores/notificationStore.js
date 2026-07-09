@@ -104,6 +104,30 @@ export const useNotificationStore = create((set, get) => ({
 
   setUnreadCount: (count) => set({ unreadCount: count }),
 
+  /**
+   * Mark a single notification as read locally (without API call).
+   * Used for cross-device sync via socket events.
+   */
+  markAsReadLocal: (notificationId) => {
+    set((state) => ({
+      notifications: state.notifications.map((n) =>
+        n._id === notificationId ? { ...n, read: true, isRead: true } : n
+      ),
+      unreadCount: Math.max(0, state.unreadCount - (state.notifications.find((n) => n._id === notificationId && !n.isRead && !n.read) ? 1 : 0)),
+    }));
+  },
+
+  /**
+   * Mark all notifications as read locally (without API call).
+   * Used for cross-device sync via socket events.
+   */
+  markAllAsReadLocal: () => {
+    set((state) => ({
+      notifications: state.notifications.map((n) => ({ ...n, read: true, isRead: true })),
+      unreadCount: 0,
+    }));
+  },
+
   setFilter: (filter) => set({ activeFilter: filter, notifications: [], cursor: null, hasMore: false, _lastFetchAt: 0 }),
 
   getFilteredNotifications: () => {

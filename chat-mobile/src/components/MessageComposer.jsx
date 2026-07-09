@@ -25,9 +25,11 @@
  *   text            – current input text
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { RichEditor, actions } from 'react-native-pell-rich-editor';
 import {
   View,
   Text,
+  Keyboard,
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -172,7 +174,8 @@ const MessageComposer = React.memo(function MessageComposer({
   const [selEnd, setSelEnd] = useState(0);
   const draftTimerRef = useRef(null);
   const lastSavedRef = useRef("");
-  const inputRef = useRef(null);
+  const richText = useRef(null);
+  const [isEditorReady, setIsEditorReady] = useState(false);
 
   const activeWorkspaceId =
     workspaceId || useWorkspaceStore.getState().activeWorkspaceId;
@@ -202,15 +205,18 @@ const MessageComposer = React.memo(function MessageComposer({
     if (signature === lastSavedRef.current) return;
 
     draftTimerRef.current = setTimeout(() => {
-      if (text.trim()) {
+      const rawHtml = text;
+      const plainContent = rawHtml.replace(/<[^>]*>?/gm, "").replace(/&nbsp;/g, " ").trim();
+      
+      if (plainContent) {
         setDraft(
           channelId,
-          markdownToHtml(text),
-          text,
+          rawHtml.includes('<') ? rawHtml : markdownToHtml(rawHtml),
+          plainContent,
           activeWorkspaceId,
           null,
         );
-        lastSavedRef.current = text.trim();
+        lastSavedRef.current = plainContent;
       } else {
         clearDraft(channelId, activeWorkspaceId, null);
         lastSavedRef.current = "";
@@ -228,11 +234,15 @@ const MessageComposer = React.memo(function MessageComposer({
       onChangeText(val);
       emitTyping(channelId, val.length > 0);
 
+      // Strip HTML to get raw text cursor context
+      const plainContent = val.replace(/<[^>]*>?/gm, "").replace(/&nbsp;/g, " ");
+      
       // Detect @mention trigger
-      const match = val.slice(0, val.length).match(/@([^\s@]*)$/);
+      const match = plainContent.match(/@([^\s@]*)$/);
       if (match) {
         setMentionQuery(match[1]);
-        setMentionRangeStart(val.length - match[0].length);
+        // For HTML, accurate range is hard. We can just append the mention string at the end.
+        setMentionRangeStart(val.length - 1); 
         setMentionVisible(true);
       } else {
         setMentionVisible(false);
@@ -244,12 +254,15 @@ const MessageComposer = React.memo(function MessageComposer({
   // ─── Mention select ───────────────────────────────────────────────────────
   const handleMentionSelect = useCallback(
     (member) => {
-      if (mentionRangeStart < 0) return;
-      const before = text.slice(0, mentionRangeStart);
-      const after = text.slice(text.length);
-      const mentionText = `@${member.name}`;
-      const newText = `${before}${mentionText} ${after}`;
+      // It's tricky to remove the typed query safely in HTML string, so we'll 
+      // replace the last @... pattern in the rawHtml.
+      const rawHtml = text;
+      const mentionText = `<strong>@${member.name}</strong>&nbsp;`;
+      const newText = rawHtml.replace(/@([^\s@<]*)(?!.*@)/, mentionText);
+      
       onChangeText(newText);
+      richText.current?.setContentHTML(newText);
+      
       setPendingMentions((prev) => [
         ...prev,
         { userId: member._id, username: member.name, type: "user" },
@@ -260,9 +273,25 @@ const MessageComposer = React.memo(function MessageComposer({
     [text, mentionRangeStart, onChangeText],
   );
 
+  useEffect(() => {
+    if (text === "" && isEditorReady && richText.current) {
+      richText.current?.setContentHTML("");
+    }
+  }, [text, isEditorReady]);
+
+  useEffect(() => {
+    if (editingMessage && isEditorReady && richText.current) {
+      richText.current?.setContentHTML(text);
+    }
+  }, [editingMessage, isEditorReady]);
+
   // ─── Send ──────────────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
-    if (!text.trim()) return;
+    const rawHtml = text;
+    // Strip simple HTML tags for plain text fallback
+    const plainContent = rawHtml.replace(/<[^>]*>?/gm, "").replace(/&nbsp;/g, " ").trim();
+
+    if (!plainContent && pendingFiles.length === 0) return;
 
     // Filter to only successfully uploaded files
     const uploadedFiles = pendingFiles.filter((f) => f._id);
@@ -274,11 +303,11 @@ const MessageComposer = React.memo(function MessageComposer({
       return; // Still uploading, prevent send
     }
 
-    const htmlContent = markdownToHtml(text);
+    const htmlContent = rawHtml.includes('<') ? rawHtml : markdownToHtml(rawHtml);
     const mentionPayload =
       pendingMentions.length > 0 ? pendingMentions : undefined;
 
-    onSend(text.trim(), {
+    onSend(plainContent, {
       htmlContent,
       threadId: replyingTo?._id || null,
       fileReferences: uploadedFiles.map((f) => f._id),
@@ -510,17 +539,28 @@ const MessageComposer = React.memo(function MessageComposer({
       {/* Formatting Toolbar */}
       {showToolbar && (
         <FormattingToolbar
-          text={text}
-          onChangeText={onChangeText}
           colors={colors}
-          selectionStart={selStart}
-          selectionEnd={selEnd}
           onInsertMention={() => {
             const newText = text + "@";
             onChangeText(newText);
             setMentionRangeStart(newText.length - 1);
             setMentionQuery("");
             setMentionVisible(true);
+          }}
+          onFormat={(format) => {
+            if (!richText.current) return;
+            switch(format) {
+              case 'bold': richText.current.sendAction(actions.setBold, 'result'); break;
+              case 'italic': richText.current.sendAction(actions.setItalic, 'result'); break;
+              case 'underline': richText.current.sendAction(actions.setUnderline, 'result'); break;
+              case 'strikethrough': richText.current.sendAction(actions.setStrikethrough, 'result'); break;
+              case 'unorderedList': richText.current.sendAction(actions.insertBulletsList, 'result'); break;
+              case 'orderedList': richText.current.sendAction(actions.insertOrderedList, 'result'); break;
+              case 'blockquote': richText.current.sendAction(actions.setBlockQuote, 'result'); break;
+              case 'code': richText.current.sendAction(actions.code, 'result'); break;
+              case 'codeBlock': richText.current.sendAction(actions.code, 'result'); break;
+              case 'link': richText.current.sendAction(actions.insertLink, 'Add Link', 'https://'); break;
+            }
           }}
         />
       )}
@@ -581,20 +621,24 @@ const MessageComposer = React.memo(function MessageComposer({
             <CaseSensitive size={18} color={showToolbar ? colors.primary : colors.textSecondary} />
           </TouchableOpacity>
 
-          <TextInput
-            ref={inputRef}
-            style={[styles.input, { color: colors.inputText }]}
-            placeholder={editingMessage ? "Edit message..." : "Message..."}
-            placeholderTextColor={colors.inputPlaceholder}
-            value={text}
-            onChangeText={handleTextChange}
-            onSelectionChange={(e) => {
-              const { start, end } = e.nativeEvent.selection;
-              setSelStart(start);
-              setSelEnd(end);
-            }}
-            multiline
-          />
+          <View style={{ flex: 1, minHeight: 40, maxHeight: 120 }}>
+            <RichEditor
+              ref={richText}
+              style={{ flex: 1 }}
+              placeholder={editingMessage ? "Edit message..." : "Message..."}
+              initialContentHTML={text}
+              editorStyle={{
+                backgroundColor: colors.inputBackground,
+                color: colors.inputText,
+                placeholderColor: colors.inputPlaceholder,
+                contentCSSText: 'font-size: 15px; font-family: sans-serif;',
+              }}
+              onChange={(html) => {
+                handleTextChange(html);
+              }}
+              editorInitializedCallback={() => setIsEditorReady(true)}
+            />
+          </View>
 
           <TouchableOpacity style={styles.iconButton} onPress={() => setShowEmojiPicker(true)}>
             <Smile size={20} color={colors.textSecondary} />

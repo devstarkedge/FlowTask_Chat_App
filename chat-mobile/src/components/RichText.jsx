@@ -129,6 +129,7 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
   };
 
   switch (node.tag) {
+    case 'div':
     case 'p': {
       // Paragraph — wrap children in Text with margin
       return (

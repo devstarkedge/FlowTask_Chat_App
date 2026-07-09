@@ -326,6 +326,34 @@ export const connectSocket = async () => {
     useNotificationStore.getState().fetchUnreadCount();
   });
 
+  // ─── Notification Sync Events (cross-device) ─────────────────────────
+  socket.on('notification:read:sync', ({ notificationId, channelId, workspaceId }) => {
+    try {
+      const { useNotificationStore } = require('../stores/notificationStore');
+      if (notificationId) {
+        // Mark single notification as read locally
+        useNotificationStore.getState().markAsReadLocal(notificationId);
+      } else {
+        // notificationId === null means "mark all as read"
+        useNotificationStore.getState().markAllAsReadLocal();
+      }
+    } catch (err) {
+      logger.error('[Socket] notification:read:sync handler error:', err.message);
+    }
+  });
+
+  // Sync global unread count updates
+  socket.on('notification:unread:updated', ({ unreadCount, workspaceId }) => {
+    try {
+      const { useNotificationStore } = require('../stores/notificationStore');
+      if (unreadCount !== undefined) {
+        useNotificationStore.getState().setUnreadCount(unreadCount);
+      }
+    } catch (err) {
+      logger.error('[Socket] notification:unread:updated handler error:', err.message);
+    }
+  });
+
   // ─── Presence Events ──────────────────────────────────────────────────────
   socket.on('presence:online', ({ userId, name }) => {
     // Lightweight: could be extended with a presenceStore

@@ -479,7 +479,7 @@ class MessageService {
   /**
    * Edit a message. Only the author can edit. Stores edit history.
    */
-  async editMessage(messageId, userId, newContent, workspaceId) {
+  async editMessage(messageId, userId, newContent, workspaceId, htmlContent) {
     const message = await messageRepository.findById(messageId, { workspaceId });
     if (!message) throw new NotFoundError('Message not found');
     this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
@@ -494,20 +494,16 @@ class MessageService {
       throw new ForbiddenError('Cannot edit a deleted message');
     }
 
-    // Enforce edit time window (disabled based on user request)
-    // const messageAge = Date.now() - new Date(message.createdAt).getTime();
-    // if (messageAge > MESSAGE_EDIT_WINDOW_MS) {
-    //   throw new ForbiddenError('Edit window expired. Messages can only be edited within 10 minutes.');
-    // }
-
     const sanitizedContent = sanitizeHtml(newContent);
     if (!sanitizedContent) {
       throw new ValidationError('Content cannot be empty');
     }
 
+    const sanitizedHtml = htmlContent ? sanitizeHtml(htmlContent) : sanitizedContent;
+
     const updatedMessage = await messageRepository.update(messageId, {
       content: sanitizedContent,
-      htmlContent: sanitizedContent,
+      htmlContent: sanitizedHtml,
       isEdited: true,
       $push: {
         editHistory: {

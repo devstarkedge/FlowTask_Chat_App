@@ -47,44 +47,28 @@ const wrapSelection = (text, prefix, suffix, selectionStart, selectionEnd) => {
     const after = text.slice(selectionEnd);
     return `${before}${prefix}${selected}${suffix}${after}`;
   }
-  // No selection: append a template placeholder at the end
-  if (text && !text.endsWith(' ')) {
-    return `${text} ${prefix}text${suffix}`;
+  
+  // If no selection, but they have typed something, let's wrap the LAST WORD they typed
+  if (text && text.trim().length > 0 && !text.endsWith(' ')) {
+    const match = text.match(/(\S+)(\s*)$/);
+    if (match) {
+      const word = match[1];
+      const trailingSpace = match[2];
+      const before = text.slice(0, match.index);
+      return `${before}${prefix}${word}${suffix}${trailingSpace}`;
+    }
   }
-  return `${text}${prefix}text${suffix}`;
+
+  // No selection and no preceding word: just append the format tags
+  const space = text && !text.endsWith(' ') ? ' ' : '';
+  return `${text}${space}${prefix}${suffix}`;
 };
 
 const FormattingToolbar = React.memo(function FormattingToolbar({
-  text,
-  onChangeText,
   colors,
   onInsertMention,
-  selectionStart,
-  selectionEnd,
+  onFormat,
 }) {
-  const handleFormat = useCallback((prefix, suffix = prefix) => {
-    const newText = wrapSelection(text, prefix, suffix, selectionStart, selectionEnd);
-    onChangeText(newText);
-  }, [text, onChangeText, selectionStart, selectionEnd]);
-
-  const handleBlockFormat = useCallback((marker) => {
-    // For block-level formats, add on a new line
-    const needsNewline = text && !text.endsWith('\n');
-    const newText = `${text}${needsNewline ? '\n' : ''}${marker} `;
-    onChangeText(newText);
-  }, [text, onChangeText]);
-
-  const handleCodeBlock = useCallback(() => {
-    const needsNewline = text && !text.endsWith('\n');
-    const newText = `${text}${needsNewline ? '\n' : ''}\`\`\`\ncode here\n\`\`\``;
-    onChangeText(newText);
-  }, [text, onChangeText]);
-
-  const handleLink = useCallback(() => {
-    const newText = `${text}[link text](https://)`;
-    onChangeText(newText);
-  }, [text, onChangeText]);
-
   const btnStyle = [styles.button, { borderColor: colors.border }];
 
   return (
@@ -96,22 +80,22 @@ const FormattingToolbar = React.memo(function FormattingToolbar({
         keyboardShouldPersistTaps="handled"
       >
         {/* Bold */}
-        <TouchableOpacity style={btnStyle} onPress={() => handleFormat('**')} activeOpacity={0.7}>
+        <TouchableOpacity style={btnStyle} onPress={() => onFormat('bold')} activeOpacity={0.7}>
           <Bold size={16} color={colors.textSecondary} />
         </TouchableOpacity>
 
         {/* Italic */}
-        <TouchableOpacity style={btnStyle} onPress={() => handleFormat('*')} activeOpacity={0.7}>
+        <TouchableOpacity style={btnStyle} onPress={() => onFormat('italic')} activeOpacity={0.7}>
           <Italic size={16} color={colors.textSecondary} />
         </TouchableOpacity>
 
         {/* Underline */}
-        <TouchableOpacity style={btnStyle} onPress={() => handleFormat('__')} activeOpacity={0.7}>
+        <TouchableOpacity style={btnStyle} onPress={() => onFormat('underline')} activeOpacity={0.7}>
           <Underline size={16} color={colors.textSecondary} />
         </TouchableOpacity>
 
         {/* Strikethrough */}
-        <TouchableOpacity style={btnStyle} onPress={() => handleFormat('~~')} activeOpacity={0.7}>
+        <TouchableOpacity style={btnStyle} onPress={() => onFormat('strikethrough')} activeOpacity={0.7}>
           <Strikethrough size={16} color={colors.textSecondary} />
         </TouchableOpacity>
 
@@ -119,17 +103,17 @@ const FormattingToolbar = React.memo(function FormattingToolbar({
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
         {/* Bullet List */}
-        <TouchableOpacity style={btnStyle} onPress={() => handleBlockFormat('-')} activeOpacity={0.7}>
+        <TouchableOpacity style={btnStyle} onPress={() => onFormat('unorderedList')} activeOpacity={0.7}>
           <List size={16} color={colors.textSecondary} />
         </TouchableOpacity>
 
         {/* Numbered List */}
-        <TouchableOpacity style={btnStyle} onPress={() => handleBlockFormat('1.')} activeOpacity={0.7}>
+        <TouchableOpacity style={btnStyle} onPress={() => onFormat('orderedList')} activeOpacity={0.7}>
           <ListOrdered size={16} color={colors.textSecondary} />
         </TouchableOpacity>
 
         {/* Blockquote */}
-        <TouchableOpacity style={btnStyle} onPress={() => handleBlockFormat('>')} activeOpacity={0.7}>
+        <TouchableOpacity style={btnStyle} onPress={() => onFormat('blockquote')} activeOpacity={0.7}>
           <Quote size={16} color={colors.textSecondary} />
         </TouchableOpacity>
 
@@ -137,22 +121,22 @@ const FormattingToolbar = React.memo(function FormattingToolbar({
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
         {/* Inline Code */}
-        <TouchableOpacity style={btnStyle} onPress={() => handleFormat('`')} activeOpacity={0.7}>
+        <TouchableOpacity style={btnStyle} onPress={() => onFormat('code')} activeOpacity={0.7}>
           <Code size={16} color={colors.textSecondary} />
         </TouchableOpacity>
 
         {/* Code Block */}
-        <TouchableOpacity style={btnStyle} onPress={handleCodeBlock} activeOpacity={0.7}>
+        <TouchableOpacity style={btnStyle} onPress={() => onFormat('codeBlock')} activeOpacity={0.7}>
           <FileCode size={16} color={colors.textSecondary} />
-        </TouchableOpacity>
-
-        {/* Link */}
-        <TouchableOpacity style={btnStyle} onPress={handleLink} activeOpacity={0.7}>
-          <Link2 size={16} color={colors.textSecondary} />
         </TouchableOpacity>
 
         {/* Divider */}
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+        {/* Link */}
+        <TouchableOpacity style={btnStyle} onPress={() => onFormat('link')} activeOpacity={0.7}>
+          <Link2 size={16} color={colors.textSecondary} />
+        </TouchableOpacity>
 
         {/* Mention */}
         <TouchableOpacity style={btnStyle} onPress={onInsertMention} activeOpacity={0.7}>
@@ -167,25 +151,20 @@ const styles = StyleSheet.create({
   container: {
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   scrollContent: {
-    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 8,
     alignItems: 'center',
-    paddingHorizontal: 12,
-    gap: 6,
   },
   button: {
-    width: 36,
-    height: 36,
+    padding: 8,
     borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderWidth: 1,
   },
   divider: {
     width: 1,
-    height: 22,
-    marginHorizontal: 6,
     opacity: 0.7,
   },
 });

@@ -67,6 +67,7 @@ export const sendMessageSchema = z
 
 export const editMessageSchema = z.object({
   content: z.string().min(1, "Content cannot be empty").max(10000),
+  htmlContent: z.string().max(50000).optional().default(""),
 });
 
 export const reactionSchema = z.object({

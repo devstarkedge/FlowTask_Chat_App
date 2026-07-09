@@ -119,7 +119,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         // Delay to allow layout
         setTimeout(() => {
           try {
-            flatListRef.current.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+            flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
           } catch (e) {
             console.log("Could not scroll to reply:", e);
           }

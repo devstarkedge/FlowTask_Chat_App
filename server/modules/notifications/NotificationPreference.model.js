@@ -71,7 +71,7 @@ const notificationPreferenceSchema = new Schema({
     defaultLevel: {
       type: String,
       enum: ['all', 'mentions', 'nothing'],
-      default: 'mentions',
+      default: 'all',
     },
     overrides: {
       type: Map,
@@ -303,7 +303,7 @@ notificationPreferenceSchema.statics.getChannelLevel = async function (
 
   if (!pref) {
     // Default behavior when no preferences exist
-    return { level: channelType === 'dm' ? 'all' : 'mentions', muted: false, shouldNotify: true };
+    return { level: 'all', muted: false, shouldNotify: true };
   }
 
   const channelIdStr = channelId.toString();
@@ -341,13 +341,13 @@ notificationPreferenceSchema.statics.getChannelLevel = async function (
   if (override) {
     if (override.muted) {
       if (override.muteUntil && new Date(override.muteUntil) <= new Date()) {
-        return { level: pref.channels?.defaultLevel || 'mentions', muted: false, shouldNotify: true };
+        return { level: pref.channels?.defaultLevel || 'all', muted: false, shouldNotify: true };
       }
       return { level: override.level || 'nothing', muted: true, shouldNotify: false };
     }
-    return { level: override.level || pref.channels?.defaultLevel || 'mentions', muted: false, shouldNotify: true };
+    return { level: override.level || pref.channels?.defaultLevel || 'all', muted: false, shouldNotify: true };
   }
-  return { level: pref.channels?.defaultLevel || 'mentions', muted: false, shouldNotify: true };
+  return { level: pref.channels?.defaultLevel || 'all', muted: false, shouldNotify: true };
 };
 
 const NotificationPreference = model('NotificationPreference', notificationPreferenceSchema);

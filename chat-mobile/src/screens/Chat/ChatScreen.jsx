@@ -22,7 +22,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { useChannelStore } from "../../stores/channelStore";
 import { useThemeStore } from "../../stores/themeStore";
 import { useLaterStore } from "../../stores/laterStore";
-import { laterAPI, pinsAPI, messageAPI, threadAPI } from "../../services/api";
+import { laterAPI, pinsAPI, messageAPI, threadAPI, channelAPI } from "../../services/api";
 import { emitTyping } from "../../services/socket";
 import { AppAvatar, AppScreen, MobileFileCard } from "../../components/common";
 import RichText from "../../components/RichText";
@@ -183,12 +183,91 @@ const ChatScreen = ({ route, navigation }) => {
   const [scrolledToMessageId, setScrolledToMessageId] = useState(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
 
+   
+
+    
+   
+  
+  // Thread deep-link from Activity/Notifications: auto-navigate to ThreadDetail
+  // once messages are loaded. Extract threadId + highlightedMessageId from route.
+  const threadId = route.params?.threadId;
+  const highlightedMessageIdFromParam = route.params?.highlightedMessageId;
+  const hasAutoNavigatedThread = useRef(false);
+
   // Redirection: if initialTab param is 'canvas', navigate directly to CanvasList screen
   useEffect(() => {
     if (initialTab === 'canvas') {
       navigation.navigate("CanvasList", { channelId, channelName });
     }
   }, [initialTab, channelId, channelName]);
+
+  // Reset hasAutoNavigatedThread when threadId changes
+  useEffect(() => {
+    hasAutoNavigatedThread.current = false;
+  }, [threadId]);
+
+  // Thread deep-link auto-navigation: wait for messages to load, then navigate to ThreadDetail
+  useEffect(() => {
+    if (!threadId) return;
+    if (hasAutoNavigatedThread.current) return;
+    if (isLoadingMessages) return;
+
+    const loadThreadAndNavigate = async () => {
+      hasAutoNavigatedThread.current = true;
+      let rootMessage = messages.find(m => m._id === threadId);
+
+      if (!rootMessage) {
+        try {
+          const { data } = await messageAPI.get(threadId);
+          rootMessage = data?.data?.message || data?.data;
+        } catch (err) {
+          // Fallback: If 404, it might be a Thread document ID from a notification payload.
+          try {
+            const { data: threadRes } = await threadAPI.getThread(threadId);
+            const resolvedRootId = threadRes?.data?.thread?.rootMessageId;
+            // threadAPI might also return rootMessage data directly in some cases
+            if (resolvedRootId && typeof resolvedRootId === 'string') {
+              const { data: rootMsgRes } = await messageAPI.get(resolvedRootId);
+              rootMessage = rootMsgRes?.data?.message || rootMsgRes?.data;
+            } else if (resolvedRootId && typeof resolvedRootId === 'object') {
+              rootMessage = resolvedRootId;
+            }
+          } catch (err2) {
+            console.error('Failed to fetch thread root message fallback:', err2);
+          }
+        }
+      }
+
+      if (!rootMessage) {
+        navigation.navigate('ThreadDetail', {
+          rootMessageId: threadId,
+          channelId,
+          channelName: channelName || route.params?.channelName || '',
+          rootContent: '',
+          rootHtmlContent: '',
+          replyCount: 0,
+          rootAuthor: null,
+          highlightedMessageId: highlightedMessageIdFromParam || null,
+        });
+        return;
+      }
+
+      navigation.navigate('ThreadDetail', {
+        rootMessageId: threadId,
+        channelId,
+        channelName: channelName || route.params?.channelName || '',
+        rootContent: rootMessage.content || '',
+        rootHtmlContent: rootMessage.htmlContent || '',
+        rootAttachments: rootMessage.attachments || rootMessage.files || undefined,
+        replyCount: rootMessage.replyCount || 0,
+        rootAuthor: rootMessage.senderSnapshot?.name ? rootMessage.senderSnapshot : rootMessage.authorId,
+        rootCreatedAt: rootMessage.createdAt,
+        highlightedMessageId: highlightedMessageIdFromParam || null,
+      });
+    };
+
+    loadThreadAndNavigate();
+  }, [threadId, isLoadingMessages, messages, channelId, channelName, navigation, highlightedMessageIdFromParam, route.params]);
 
   // Scrolling and highlighting target message from Later Panel
   useEffect(() => {
@@ -266,8 +345,24 @@ const ChatScreen = ({ route, navigation }) => {
   const flatListRef = useRef(null);
 
   useEffect(() => {
-    fetchMessages(channelId);
-    fetchMembers(channelId);
+    const initData = async () => {
+      if (!channelId) return;
+      const res = await fetchMessages(channelId);
+      if (res?.error && res.status === 403) {
+        try {
+          const currentUser = useAuthStore.getState().user;
+          await channelAPI.addMember(channelId, currentUser._id);
+          Toast.show({ type: 'success', text1: `Joined ${channelName || 'channel'}` });
+          await fetchMessages(channelId);
+          fetchMembers(channelId);
+        } catch (err) {
+          logger.error('Failed to auto-join channel:', err);
+        }
+      } else {
+        fetchMembers(channelId);
+      }
+    };
+    initData();
   }, [channelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -692,7 +787,7 @@ const ChatScreen = ({ route, navigation }) => {
                     />
                   ))}
                 </View>
-                <MessageSquare size={14} color={colors.primary} />
+                {/* <MessageSquare size={14} color={colors.primary} /> */}
                 <Text style={[styles.threadText, { color: colors.primary }]}>
                   {item.replyCount}{" "}
                   {item.replyCount === 1 ? "reply" : "replies"}
@@ -726,7 +821,10 @@ const ChatScreen = ({ route, navigation }) => {
           <CircleChevronLeft size={24} color={colors.textPrimary} />
         </TouchableOpacity>
 
-        <View style={styles.headerCenter}>
+        <TouchableOpacity 
+          style={styles.headerCenter}
+          onPress={() => navigation.navigate("ChannelDetails", { channelId, channelName, memberCount })}
+        >
           <View style={styles.headerTitleRow}>
             {isDM ? (
               <AppAvatar
@@ -750,17 +848,15 @@ const ChatScreen = ({ route, navigation }) => {
           </View>
           {!isDM && (
             <View style={styles.headerSubtitle}>
-              <Text
-                style={[styles.memberCount, { color: colors.textSecondary }]}
-              >
+              <Text style={[styles.memberCount, { color: colors.textSecondary }]}>
                 {memberCount} Members
               </Text>
-              <View
-                style={[styles.onlineDot, { backgroundColor: colors.online }]}
-              />
-              <Text style={[styles.onlineCount, { color: colors.online }]}>
-                {onlineCount} Online
-              </Text>
+              <>
+                <Text style={[styles.memberCount, { color: colors.textSecondary }]}> • </Text>
+                <Text style={[styles.memberCount, { color: colors.textSecondary }]}>
+                  {1 + (channel?.canvasTabs?.length || 0)} Tabs
+                </Text>
+              </>
             </View>
           )}
           {isDM && dmUser && (
@@ -778,7 +874,7 @@ const ChatScreen = ({ route, navigation }) => {
               {dmUser.onlineStatus === "online" ? "Online" : "Offline"}
             </Text>
           )}
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.headerActions}>
           {isDM && (
@@ -973,7 +1069,7 @@ const ChatScreen = ({ route, navigation }) => {
           members={membersByChannel[channelId] || []}
           onSend={(content, options) => {
             if (editingMessage) {
-              editMessage(editingMessage._id, channelId, content);
+              editMessage(editingMessage._id, channelId, content, options?.htmlContent);
               setEditingMessage(null);
             } else {
               sendMessage(channelId, content, options);
@@ -1034,7 +1130,7 @@ const ChatScreen = ({ route, navigation }) => {
         onEdit={() => {
           setEditingMessage(actionMenuTarget);
           setReplyingTo(null);
-          setText(actionMenuTarget.content || "");
+          setText(actionMenuTarget.htmlContent || actionMenuTarget.content || "");
         }}
         onReply={(msg) => {
           navigation.navigate('ThreadDetail', {
@@ -1071,7 +1167,7 @@ const ChatScreen = ({ route, navigation }) => {
           try {
             await messageAPI.markUnread(channelId, actionMenuTarget._id);
             Toast.show({ type: 'success', text1: 'Marked as unread' });
-            navigation.navigate("Main", { screen: "ChannelsTab" }); // go back to trigger refresh
+            navigation.navigate("Main", { screen: "ChannelsTab" });
           } catch (error) {
             Toast.show({ type: 'error', text1: 'Failed to mark unread' });
           }
@@ -1079,8 +1175,6 @@ const ChatScreen = ({ route, navigation }) => {
         onToggleNotifications={async () => {
           try {
             const threadId = actionMenuTarget.threadId || actionMenuTarget._id;
-            // Optimistically assume it works. To do a real toggle we would need the thread state, 
-            // but for now we just mute it as an example, or toggle if we had `isMuted` locally.
             await threadAPI.mute(threadId);
             Toast.show({ type: 'success', text1: 'Notifications muted for this thread' });
           } catch (error) {
@@ -1347,7 +1441,6 @@ const createStyles = (colors) =>
       fontSize: 12,
       fontStyle: "italic",
     },
-    // ─── Tab bar ───────────────────────────────────────────────────────────
     tabBar: {
       flexDirection: 'row',
       borderBottomWidth: StyleSheet.hairlineWidth,
@@ -1377,7 +1470,6 @@ const createStyles = (colors) =>
       height: 2,
       borderRadius: 1,
     },
-    // ─── Canvas tab placeholder ────────────────────────────────────────────
     canvasTabContent: {
       flexGrow: 1,
       padding: 24,

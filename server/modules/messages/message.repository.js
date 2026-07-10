@@ -538,9 +538,16 @@ async findByFlowTaskRef(entityType, entityId, workspaceId) {
    * @param {string} channelId
    * @returns {Promise<Message|null>}
    */
-  async getLatestInChannel(channelId) {
-    return Message.findOne({ channelId, isDeleted: false })
+  async getLatestInChannel(channelId, workspaceId) {
+    const filter = { channelId, isDeleted: false };
+    if (workspaceId) filter.workspaceId = workspaceId;
+
+    return Message.findOne(filter)
       .sort({ createdAt: -1 })
+      .populate({
+        path: 'fileReferences',
+        populate: { path: 'fileId' }
+      })
       .lean();
   }
 

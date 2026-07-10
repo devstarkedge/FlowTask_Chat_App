@@ -552,6 +552,29 @@ class MessageService {
       wsId = ch?.workspaceId?.toString();
     }
 
+    // ── Recalculate channel's last message to handle UI cleanup ──
+    const latestMessage = await messageRepository.getLatestInChannel(message.channelId, workspaceId);
+    let newPreview = "";
+    let newLastMessageAt = null;
+
+    if (latestMessage) {
+      const textPreview = truncate(stripHtml(latestMessage.content || latestMessage.htmlContent), 100);
+      const attachmentPreview = getAttachmentPreview(latestMessage);
+      newPreview = textPreview || attachmentPreview || "";
+      newLastMessageAt = latestMessage.createdAt;
+    }
+
+    await channelRepository.updateLastMessage(message.channelId, newPreview, newLastMessageAt, wsId).catch(() => {});
+
+    // Emit channel updated event so all clients remove the stale preview immediately
+    emitToChannel(message.channelId.toString(), SOCKET_EVENTS.CHANNEL_UPDATED, {
+      channelId: message.channelId.toString(),
+      updates: {
+        lastMessagePreview: newPreview,
+        lastMessageAt: newLastMessageAt ? newLastMessageAt.toISOString() : null,
+      },
+    }, wsId);
+
     // Emit soft-delete event with isDeleted flag so clients render tombstone
     emitToChannel(message.channelId.toString(), SOCKET_EVENTS.MESSAGE_DELETE, {
       messageId: messageId.toString(),

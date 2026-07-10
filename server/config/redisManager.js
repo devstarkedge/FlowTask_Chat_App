@@ -36,6 +36,7 @@ class RedisManager {
         maxRetriesPerRequest: 3,
         retryDelayOnFailover: 100,
         lazyConnect: true,
+        keepAlive: 10000, // Forces TCP keepalive probes so dead connections drop quickly
       });
 
       this.sharedClient.on('error', (err) => {

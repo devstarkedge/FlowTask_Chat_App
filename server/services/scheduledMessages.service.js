@@ -144,23 +144,22 @@ export async function enqueueScheduledMessage(scheduledMessage) {
   });
 }
 
+// Register the BullMQ delayed jobs queue globally (runs before initQueues in index.js).
+// If Redis is not configured, registerQueue provides a sync fallback.
+// In sync mode, addJob ignores jobs with a delay > 0 so polling picks them up instead.
+try {
+  registerQueue(QUEUE_NAME, bullMQProcessor, { concurrency: 5 });
+} catch (err) {
+  logger.warn('Failed to register scheduled-messages queue', { error: err.message });
+}
+
 export function startScheduledMessageProcessor() {
-  // Only enable BullMQ delayed jobs when Redis is actually configured.
-  // When Redis is absent, registerQueue() registers a sync-mode fallback that
-  // executes addJob() *immediately* — which would bypass the scheduled delay
-  // and send the message instantly. The polling interval handles the no-Redis
-  // path correctly, so we must keep bullMQEnabled = false in that case.
+  // Check if Redis is actually configured.
   const redisAvailable = !!env.REDIS_URL;
 
   if (redisAvailable) {
-    try {
-      registerQueue(QUEUE_NAME, bullMQProcessor, { concurrency: 5 });
-      bullMQEnabled = true;
-      logger.info('Scheduled message processor started with BullMQ (Redis-backed delayed jobs)');
-    } catch (err) {
-      bullMQEnabled = false;
-      logger.warn('BullMQ registration failed — falling back to polling only', { error: err.message });
-    }
+    bullMQEnabled = true;
+    logger.info('Scheduled message processor started with BullMQ (Redis-backed delayed jobs)');
   } else {
     bullMQEnabled = false;
     logger.info('Scheduled message processor started in polling-only mode (REDIS_URL not configured)');

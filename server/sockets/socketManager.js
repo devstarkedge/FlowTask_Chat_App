@@ -38,6 +38,8 @@ const TYPING_THROTTLE_MS = 2000;
 // ─── Socket Rate Limiting ────────────────────────────────────────────────────
 // Redis-backed when available; local Map fallback for single-instance
 let _redisClient = null;
+let adapterPubClient = null;
+let adapterSubClient = null;
 const socketRateLimits = new Map(); // Fallback Map<socketId, { count, windowStart }>
 const RATE_LIMIT_WINDOW_MS = 60000;  // 1 minute
 const RATE_LIMIT_MAX_EVENTS = 30;    // Max events per window per socket
@@ -130,14 +132,14 @@ export async function initializeSocket(httpServer, corsOptions) {
       const { createAdapter } = await import('@socket.io/redis-adapter');
       const { createClient } = await import('redis');
 
-      const pubClient = createClient({ url: env.REDIS_URL });
-      const subClient = pubClient.duplicate();
+      adapterPubClient = createClient({ url: env.REDIS_URL });
+      adapterSubClient = adapterPubClient.duplicate();
 
-      pubClient.on('error', (err) => logger.error('Redis pubClient error', { error: err.message }));
-      subClient.on('error', (err) => logger.error('Redis subClient error', { error: err.message }));
+      adapterPubClient.on('error', (err) => logger.error('Redis pubClient error', { error: err.message }));
+      adapterSubClient.on('error', (err) => logger.error('Redis subClient error', { error: err.message }));
 
-      await Promise.all([pubClient.connect(), subClient.connect()]);
-      io.adapter(createAdapter(pubClient, subClient));
+      await Promise.all([adapterPubClient.connect(), adapterSubClient.connect()]);
+      io.adapter(createAdapter(adapterPubClient, adapterSubClient));
 
       logger.info('Socket.IO Redis adapter initialized', {
         metric: 'socket_lifecycle',
@@ -1041,6 +1043,16 @@ export function cleanupSocketResources() {
   if (_redisClient) {
     _redisClient.quit().catch(() => {});
     _redisClient = null;
+  }
+  
+  // Close Redis adapter clients
+  if (adapterPubClient) {
+    adapterPubClient.quit().catch(() => {});
+    adapterPubClient = null;
+  }
+  if (adapterSubClient) {
+    adapterSubClient.quit().catch(() => {});
+    adapterSubClient = null;
   }
 
   logger.info('Socket resources cleaned up', {

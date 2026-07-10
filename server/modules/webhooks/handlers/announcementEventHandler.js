@@ -27,6 +27,13 @@ async function getRedisClient() {
   }
 }
 
+export async function cleanupAnnouncementRedis() {
+  if (_redisClient) {
+    await _redisClient.quit().catch(() => {});
+    _redisClient = null;
+  }
+}
+
 /**
  * Announcement Event Handler — sync FlowTask announcements with ChatApp
  *

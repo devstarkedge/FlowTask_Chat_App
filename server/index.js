@@ -414,6 +414,37 @@ async function shutdown(signal) {
     // Socket may not be initialized
   }
 
+  // 2b. Close global Redis clients
+  try {
+    const { default: configRedisClient } = await import('./config/redis.js');
+    if (configRedisClient) {
+      await configRedisClient.quit().catch(() => {});
+      logger.info('Config Redis client closed');
+    }
+  } catch {}
+
+  try {
+    const { default: utilsRedisClient } = await import('./utils/redisClient.js');
+    if (utilsRedisClient) {
+      await utilsRedisClient.quit().catch(() => {});
+      logger.info('Utils Redis client closed');
+    }
+  } catch {}
+
+  try {
+    const { cleanupAnnouncementRedis } = await import('./modules/webhooks/handlers/announcementEventHandler.js');
+    await cleanupAnnouncementRedis();
+    logger.info('Announcement Redis client closed');
+  } catch {}
+
+  try {
+    const { default: cacheService } = await import('./services/cache.service.js');
+    if (cacheService) {
+      await cacheService.quit();
+      logger.info('Cache Redis client closed');
+    }
+  } catch {}
+
   // 3. Stop cron jobs
   stopDeadlineWarningCron();
   stopDNDScheduler();
@@ -475,6 +506,12 @@ async function shutdown(signal) {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+// Nodemon graceful restart
+process.once('SIGUSR2', async () => {
+  await shutdown('SIGUSR2');
+  process.kill(process.pid, 'SIGUSR2');
+});
 
 // Unhandled rejections / uncaught exceptions
 process.on('unhandledRejection', (reason) => {

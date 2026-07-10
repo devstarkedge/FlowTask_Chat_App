@@ -54,6 +54,11 @@ class MemoryRedisMock {
     }
     return deleted;
   }
+
+  async quit() {
+    this.store.clear();
+    return "OK";
+  }
 }
 
 let redisClient = null;

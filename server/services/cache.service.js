@@ -210,6 +210,14 @@ class CacheService {
     return;
   }
 
+  async quit() {
+    if (this.type === 'redis' && this.backend?.client) {
+      await this.backend.client.quit().catch(() => {});
+    }
+    this.backend = null;
+    this.type = 'none';
+  }
+
   getStatus() {
     return {
       type: this.type,

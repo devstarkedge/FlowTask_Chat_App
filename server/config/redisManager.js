@@ -33,7 +33,7 @@ class RedisManager {
       
       // 1. Create Shared Client
       this.sharedClient = new Redis(env.REDIS_URL, {
-        maxRetriesPerRequest: 3,
+        maxRetriesPerRequest: null,
         retryDelayOnFailover: 100,
         lazyConnect: true,
         keepAlive: 10000, // Forces TCP keepalive probes so dead connections drop quickly

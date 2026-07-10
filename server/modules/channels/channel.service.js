@@ -7,6 +7,7 @@ import flowtaskService from "../flowtask/flowtask.service.js";
 import workspaceRepository from "../workspaces/workspace.repository.js";
 import WorkspaceMembership from "../workspaces/WorkspaceMembership.model.js";
 import directMessageService from "../dms/directMessage.service.js";
+import messageRepository from "../messages/message.repository.js";
 import {
   emitToChannel,
   emitToUser,
@@ -981,11 +982,35 @@ class ChannelService {
     const pins = await ChannelPin.getPinsForUser(userId, workspaceId);
     const pinMap = new Map(pins.map((p) => [p.channelId.toString(), p]));
 
+    // Fetch the actual latest messages for these channels to handle stale previews
+    // caused by direct database manipulation (bypassing the API).
+    const channelIdsStr = decorated.map((c) => (c._id?.toString ? c._id.toString() : String(c._id)));
+    const latestMessagesMap = await messageRepository.getLatestMessagesForChannels(channelIdsStr, workspaceId).catch(() => new Map());
+
     const withPins = decorated.map((ch) => {
       const raw = ch.toObject ? ch.toObject() : ch;
       const pin = pinMap.get(raw._id.toString());
+      
+      // If the channel has a preview but actually has no non-deleted messages left,
+      // return lastMessageAt: null and lastMessagePreview: "" to clear it on the client.
+      const hasPreview = !!raw.lastMessagePreview;
+      const actuallyHasMessage = latestMessagesMap.has(raw._id.toString());
+      
+      let safePreview = raw.lastMessagePreview;
+      let safeTimestamp = raw.lastMessageAt;
+      
+      if (hasPreview && !actuallyHasMessage) {
+        safePreview = '';
+        safeTimestamp = null;
+        
+        // Fire-and-forget fix the DB record to prevent future stale state
+        channelRepository.updateLastMessage(raw._id.toString(), '', null, workspaceId?.toString()).catch(() => {});
+      }
+      
       return {
         ...raw,
+        lastMessagePreview: safePreview,
+        lastMessageAt: safeTimestamp,
         isPinned: pin?.isPinned || false,
         isStarred: pin?.isStarred || false,
         pinnedOrder: pin?.pinnedOrder || 0,

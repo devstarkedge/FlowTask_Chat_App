@@ -552,6 +552,31 @@ async findByFlowTaskRef(entityType, entityId, workspaceId) {
   }
 
   /**
+   * Get the latest non-deleted message for multiple channels efficiently.
+   * @param {string[]} channelIds
+   * @param {string} [workspaceId]
+   * @returns {Promise<Map<string, object>>} Map of channelId -> message object
+   */
+  async getLatestMessagesForChannels(channelIds, workspaceId) {
+    if (!channelIds || channelIds.length === 0) return new Map();
+
+    const filter = { channelId: { $in: channelIds.map(id => new mongoose.Types.ObjectId(id)) }, isDeleted: false };
+    if (workspaceId) filter.workspaceId = new mongoose.Types.ObjectId(workspaceId);
+
+    const latestMessages = await Message.aggregate([
+      { $match: filter },
+      { $sort: { createdAt: -1 } },
+      { $group: { _id: '$channelId', latest: { $first: '$$ROOT' } } }
+    ]);
+
+    const result = new Map();
+    for (const item of latestMessages) {
+      result.set(item._id.toString(), item.latest);
+    }
+    return result;
+  }
+
+  /**
    * Increment reply count on a root message.
    * @param {string} messageId
    * @returns {Promise<void>}

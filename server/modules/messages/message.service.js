@@ -1274,7 +1274,10 @@ class MessageService {
         const populated = await messageRepository.findById(forwarded._id, { workspaceId });
 
         // Update destination channel's lastMessage
-        const preview = truncate(stripHtml(messageData.content || messageData.htmlContent), 100);
+        const textPreview = truncate(stripHtml(messageData.content || messageData.htmlContent), 100);
+        const attachmentPreview = getAttachmentPreview(populated);
+        const preview = textPreview || attachmentPreview || '';
+
         const lastMessageAt = new Date();
         const wsId = workspaceId?.toString();
         channelRepository.updateLastMessage(destChannelId, preview, lastMessageAt, wsId)

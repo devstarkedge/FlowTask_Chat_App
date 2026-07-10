@@ -991,20 +991,22 @@ class ChannelService {
       const raw = ch.toObject ? ch.toObject() : ch;
       const pin = pinMap.get(raw._id.toString());
       
-      // If the channel has a preview but actually has no non-deleted messages left,
-      // return lastMessageAt: null and lastMessagePreview: "" to clear it on the client.
-      const hasPreview = !!raw.lastMessagePreview;
       const actuallyHasMessage = latestMessagesMap.has(raw._id.toString());
       
       let safePreview = raw.lastMessagePreview;
       let safeTimestamp = raw.lastMessageAt;
       
-      if (hasPreview && !actuallyHasMessage) {
+      // If the channel has NO valid messages left in the database,
+      // forcefully scrub both the preview and the timestamp so the client
+      // renders a clean "No messages yet" state without stale dates.
+      if (!actuallyHasMessage) {
         safePreview = '';
         safeTimestamp = null;
         
         // Fire-and-forget fix the DB record to prevent future stale state
-        channelRepository.updateLastMessage(raw._id.toString(), '', null, workspaceId?.toString()).catch(() => {});
+        if (raw.lastMessagePreview || raw.lastMessageAt) {
+          channelRepository.updateLastMessage(raw._id.toString(), '', null, workspaceId?.toString()).catch(() => {});
+        }
       }
       
       return {

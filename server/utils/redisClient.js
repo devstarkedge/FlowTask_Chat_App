@@ -61,30 +61,19 @@ class MemoryRedisMock {
   }
 }
 
-let redisClient = null;
+import redisManager from '../config/redisManager.js';
 
-if (env.REDIS_URL) {
-  try {
-    const Redis = (await import("ioredis")).default;
-    redisClient = new Redis(env.REDIS_URL, {
-      maxRetriesPerRequest: 3,
-      retryDelayOnFailover: 100,
-      lazyConnect: true,
-    });
+let redisClientFallback = new MemoryRedisMock();
 
-    redisClient.on("error", (err) => {
-      logger.error("[REDIS CLIENT] Redis connection error", { error: err.message });
-    });
-
-    await redisClient.connect();
-    logger.info("[REDIS CLIENT] Central Redis client connected successfully");
-  } catch (err) {
-    logger.warn("[REDIS CLIENT] Redis client initialization failed, falling back to in-memory mock", { error: err.message });
-    redisClient = new MemoryRedisMock();
+export default new Proxy({}, {
+  get(target, prop) {
+    const client = redisManager.getSharedClient();
+    
+    if (client) {
+      return typeof client[prop] === 'function' ? client[prop].bind(client) : client[prop];
+    }
+    
+    // Fallback to in-memory mock if no global redis
+    return typeof redisClientFallback[prop] === 'function' ? redisClientFallback[prop].bind(redisClientFallback) : redisClientFallback[prop];
   }
-} else {
-  logger.info("[REDIS CLIENT] Central Redis using in-memory mock (no REDIS_URL configured)");
-  redisClient = new MemoryRedisMock();
-}
-
-export default redisClient;
+});

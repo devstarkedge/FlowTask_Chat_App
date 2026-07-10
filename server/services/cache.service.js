@@ -123,22 +123,16 @@ class CacheService {
 
     if (env.REDIS_URL) {
       try {
-        const Redis = (await import('ioredis')).default;
-        const client = new Redis(env.REDIS_URL, {
-          maxRetriesPerRequest: 3,
-          retryDelayOnFailover: 100,
-          lazyConnect: true,
-        });
-
-        client.on('error', (err) => {
-          logger.error('Redis cache error', { error: err.message });
-        });
-
-        await client.connect();
-
-        this.backend = new RedisCacheWrapper(client);
-        this.type = 'redis';
-        logger.info('Cache service initialized with Redis');
+        const { default: redisManager } = await import('../config/redisManager.js');
+        const client = redisManager.getSharedClient();
+        
+        if (client) {
+          this.backend = new RedisCacheWrapper(client);
+          this.type = 'redis';
+          logger.info('Cache service initialized with Redis (shared singleton)');
+        } else {
+          throw new Error("Shared Redis client not available");
+        }
       } catch (err) {
         logger.warn('Redis unavailable, falling back to in-memory cache', { error: err.message });
         this.backend = new InMemoryLRUCache(1000);
@@ -211,9 +205,6 @@ class CacheService {
   }
 
   async quit() {
-    if (this.type === 'redis' && this.backend?.client) {
-      await this.backend.client.quit().catch(() => {});
-    }
     this.backend = null;
     this.type = 'none';
   }

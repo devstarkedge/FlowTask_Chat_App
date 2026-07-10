@@ -14,17 +14,17 @@ async function initRedisStoreOnce() {
   _redisInitPromise = (async () => {
     try {
       const { RedisStore } = await import('rate-limit-redis');
-      const { createClient } = await import('redis');
-      const client = createClient({ url: env.REDIS_URL });
-      client.on('error', (err) => logger.error('Rate limiter Redis error', { error: err.message }));
-      await client.connect();
+      const { default: redisManager } = await import('../config/redisManager.js');
+      const client = redisManager.getSharedClient();
+      if (!client) throw new Error('Shared Redis client not available');
+
       _redisStoreConstructor = (prefix) =>
         new RedisStore({
-          sendCommand: (...args) => client.sendCommand(args),
+          sendCommand: (...args) => client.call(...args),
           prefix: `rl:${prefix}:`,
           resetExpiryOnChange: false,
         });
-      logger.info('Rate limiter Redis store initialized');
+      logger.info('Rate limiter Redis store initialized with shared client');
     } catch (err) {
       logger.warn('Redis rate-limit store unavailable, using in-memory', { error: err.message });
       _redisStoreConstructor = null;

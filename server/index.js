@@ -307,7 +307,14 @@ async function startServer() {
     await connectDatabase();
 
     // 1b. Initialize Cache Service (loads Redis if configured)
+    const { default: redisManager } = await import('./config/redisManager.js');
+    await redisManager.init();
+
     await cache.initialize();
+
+    // 1c. Initialize BullMQ queues AFTER Redis is ready
+    const { initQueues } = await import('./services/jobQueue.service.js');
+    await initQueues();
 
     // 2. Register webhook event handlers (only when FlowTask is enabled)
     if (env.FLOWTASK_ENABLED) {
@@ -414,36 +421,13 @@ async function shutdown(signal) {
     // Socket may not be initialized
   }
 
-  // 2b. Close global Redis clients
+  // 2b. Close global Redis clients using the unified manager
   try {
-    const { default: configRedisClient } = await import('./config/redis.js');
-    if (configRedisClient) {
-      await configRedisClient.quit().catch(() => {});
-      logger.info('Config Redis client closed');
-    }
-  } catch {}
-
-  try {
-    const { default: utilsRedisClient } = await import('./utils/redisClient.js');
-    if (utilsRedisClient) {
-      await utilsRedisClient.quit().catch(() => {});
-      logger.info('Utils Redis client closed');
-    }
-  } catch {}
-
-  try {
-    const { cleanupAnnouncementRedis } = await import('./modules/webhooks/handlers/announcementEventHandler.js');
-    await cleanupAnnouncementRedis();
-    logger.info('Announcement Redis client closed');
-  } catch {}
-
-  try {
-    const { default: cacheService } = await import('./services/cache.service.js');
-    if (cacheService) {
-      await cacheService.quit();
-      logger.info('Cache Redis client closed');
-    }
-  } catch {}
+    const { default: redisManager } = await import('./config/redisManager.js');
+    await redisManager.closeAll();
+  } catch (err) {
+    logger.warn('Failed to cleanly close redisManager', { error: err.message });
+  }
 
   // 3. Stop cron jobs
   stopDeadlineWarningCron();

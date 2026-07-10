@@ -10,28 +10,19 @@ import { emitToChannel, emitToUser } from '../../../sockets/socketManager.js';
 import env from '../../../config/environment.js';
 
 // Optional Redis-backed idempotency (uses REDIS_URL when available)
-let _redisClient = null;
 async function getRedisClient() {
-  if (_redisClient) return _redisClient;
   if (!env.REDIS_URL) return null;
   try {
-    const Redis = (await import('ioredis')).default;
-    _redisClient = new Redis(env.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 3 });
-    _redisClient.on('error', (err) => logger.warn('Redis client error', err?.message || err));
-    await _redisClient.connect();
-    return _redisClient;
+    const { default: redisManager } = await import('../../../config/redisManager.js');
+    return redisManager.getSharedClient();
   } catch (err) {
-    logger.warn('Failed to initialize Redis client for idempotency, continuing with in-memory fallback', err?.message || err);
-    _redisClient = null;
+    logger.warn('Failed to get singleton Redis client for idempotency, continuing with in-memory fallback', err?.message || err);
     return null;
   }
 }
 
 export async function cleanupAnnouncementRedis() {
-  if (_redisClient) {
-    await _redisClient.quit().catch(() => {});
-    _redisClient = null;
-  }
+  // Client is managed by redisManager, no-op
 }
 
 /**

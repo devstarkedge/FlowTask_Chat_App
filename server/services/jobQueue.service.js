@@ -10,59 +10,59 @@ import logger from '../utils/logger.js';
 const queues = {};
 const workers = {};
 
-function getConnection() {
-  if (!env.REDIS_URL) return null;
-  // Parse REDIS_URL into ioredis connection options
-  return { url: env.REDIS_URL };
+const pendingRegistrations = [];
+
+export function registerQueue(name, processor, opts = {}) {
+  pendingRegistrations.push({ name, processor, opts });
+  logger.debug(`Queue "${name}" registered (pending initialization)`);
 }
 
-/**
- * Register a named queue with a processor function.
- * @param {string} name - Queue name
- * @param {Function} processor - async (job) => result
- * @param {Object} [opts] - Worker options (concurrency, etc.)
- */
-export function registerQueue(name, processor, opts = {}) {
-  const connection = getConnection();
+export async function initQueues() {
+  const { default: redisManager } = await import('../config/redisManager.js');
+  const connection = redisManager.getSharedClient();
 
-  if (!connection) {
-    // No Redis — store processor for synchronous fallback
-    queues[name] = { processor, sync: true };
-    logger.info(`Queue "${name}" registered (sync fallback, no Redis)`);
-    return;
+  for (const { name, processor, opts } of pendingRegistrations) {
+    if (!connection) {
+      queues[name] = { processor, sync: true };
+      logger.info(`Queue "${name}" initialized (sync fallback, no Redis)`);
+      continue;
+    }
+
+    const queue = new Queue(name, {
+      connection,
+      defaultJobOptions: {
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 50 },
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+      },
+    });
+
+    const worker = new Worker(name, processor, {
+      connection,
+      concurrency: opts.concurrency || 3,
+      limiter: opts.limiter || undefined,
+    });
+
+    worker.on('failed', (job, err) => {
+      logger.error(`Job failed: ${name}/${job?.id}`, { error: err.message, data: job?.data });
+    });
+
+    worker.on('error', (err) => {
+      logger.error(`Worker error: ${name}`, { error: err.message });
+    });
+
+    worker.on('completed', (job) => {
+      logger.debug(`Job completed: ${name}/${job.id}`);
+    });
+
+    queues[name] = { queue, sync: false };
+    workers[name] = worker;
+    logger.info(`Queue "${name}" initialized with BullMQ (concurrency: ${opts.concurrency || 3})`);
   }
-
-  const queue = new Queue(name, {
-    connection,
-    defaultJobOptions: {
-      removeOnComplete: { count: 100 },
-      removeOnFail: { count: 50 },
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 2000 },
-    },
-  });
-
-  const worker = new Worker(name, processor, {
-    connection,
-    concurrency: opts.concurrency || 3,
-    limiter: opts.limiter || undefined,
-  });
-
-  worker.on('failed', (job, err) => {
-    logger.error(`Job failed: ${name}/${job?.id}`, { error: err.message, data: job?.data });
-  });
-
-  worker.on('error', (err) => {
-    logger.error(`Worker error: ${name}`, { error: err.message });
-  });
-
-  worker.on('completed', (job) => {
-    logger.debug(`Job completed: ${name}/${job.id}`);
-  });
-
-  queues[name] = { queue, sync: false };
-  workers[name] = worker;
-  logger.info(`Queue "${name}" registered with BullMQ (concurrency: ${opts.concurrency || 3})`);
+  
+  // Clear pending array
+  pendingRegistrations.length = 0;
 }
 
 /**
@@ -126,4 +126,4 @@ export async function shutdownQueues() {
   }
 }
 
-export default { registerQueue, addJob, shutdownQueues };
+export default { registerQueue, initQueues, addJob, shutdownQueues };

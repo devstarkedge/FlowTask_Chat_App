@@ -9,6 +9,7 @@ import tokenService from "../auth/token.service.js";
 import userRepository from "../users/user.repository.js";
 import WorkspaceMembership from "../workspaces/WorkspaceMembership.model.js";
 import Canvas from "./canvas.model.js";
+import redisManager from "../../config/redisManager.js";
 
 let collaborationServer = null;
 let collaborationRedis = null;
@@ -282,10 +283,12 @@ async function storeCanvasDocument({ documentName, document, lastContext }) {
 function buildRedisExtensions() {
   if (!env.REDIS_URL) return [];
 
-  collaborationRedis = new IORedis(env.REDIS_URL, {
-    maxRetriesPerRequest: 3,
-    lazyConnect: false,
-  });
+  collaborationRedis = redisManager.getSharedClient();
+  
+  if (!collaborationRedis) {
+    logger.warn('[CANVAS COLLAB] Shared Redis client not available, running without Redis extension');
+    return [];
+  }
 
   return [
     new Redis({

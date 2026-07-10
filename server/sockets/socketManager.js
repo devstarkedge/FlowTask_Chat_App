@@ -37,7 +37,6 @@ const TYPING_THROTTLE_MS = 2000;
 
 // ─── Socket Rate Limiting ────────────────────────────────────────────────────
 // Redis-backed when available; local Map fallback for single-instance
-let _redisClient = null;
 let adapterPubClient = null;
 let adapterSubClient = null;
 const socketRateLimits = new Map(); // Fallback Map<socketId, { count, windowStart }>
@@ -54,32 +53,17 @@ let rateLimitCleanupTimer = null;
 let tokenHeartbeatTimer = null;
 
 /**
- * Get or initialize Redis client for socket rate limiting.
- */
-async function getRedisClient() {
-  if (_redisClient) return _redisClient;
-  if (!env.REDIS_URL) return null;
-  try {
-    const { createClient } = await import('redis');
-    _redisClient = createClient({ url: env.REDIS_URL });
-    _redisClient.on('error', (err) => {
-      logger.error('Redis client error (socket rate limit)', { error: err.message });
-    });
-    await _redisClient.connect();
-    return _redisClient;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Check if a socket has exceeded its event rate limit.
  * Uses Redis INCR for multi-instance safety when available.
  * @param {string} socketId
  * @returns {Promise<boolean>} true if rate limited
  */
 async function isSocketRateLimited(socketId) {
-  const redis = await getRedisClient();
+  let redis = null;
+  try {
+    const { default: redisManager } = await import('../config/redisManager.js');
+    redis = redisManager.getSharedClient();
+  } catch (err) {}
   if (redis) {
     try {
       const key = `sock_rl:${socketId}`;
@@ -130,21 +114,20 @@ export async function initializeSocket(httpServer, corsOptions) {
   if (env.REDIS_URL) {
     try {
       const { createAdapter } = await import('@socket.io/redis-adapter');
-      const { createClient } = await import('redis');
+      const { default: redisManager } = await import('../config/redisManager.js');
+      
+      const pubClient = redisManager.getSharedClient();
+      const subClient = redisManager.getSubscriberClient();
 
-      adapterPubClient = createClient({ url: env.REDIS_URL });
-      adapterSubClient = adapterPubClient.duplicate();
-
-      adapterPubClient.on('error', (err) => logger.error('Redis pubClient error', { error: err.message }));
-      adapterSubClient.on('error', (err) => logger.error('Redis subClient error', { error: err.message }));
-
-      await Promise.all([adapterPubClient.connect(), adapterSubClient.connect()]);
-      io.adapter(createAdapter(adapterPubClient, adapterSubClient));
-
-      logger.info('Socket.IO Redis adapter initialized', {
-        metric: 'socket_lifecycle',
-        event: 'redis_adapter_connected',
-      });
+      if (pubClient && subClient) {
+        io.adapter(createAdapter(pubClient, subClient));
+        logger.info('Socket.IO Redis adapter initialized with shared clients', {
+          metric: 'socket_lifecycle',
+          event: 'redis_adapter_connected',
+        });
+      } else {
+        throw new Error("Shared Redis clients not available");
+      }
     } catch (error) {
       logger.warn('Redis adapter failed, falling back to in-memory adapter', {
         metric: 'socket_lifecycle',
@@ -1039,21 +1022,9 @@ export function cleanupSocketResources() {
   typingThrottleMap.clear();
   socketRateLimits.clear();
 
-  // Close Redis rate-limit client if initialized
-  if (_redisClient) {
-    _redisClient.quit().catch(() => {});
-    _redisClient = null;
-  }
-  
-  // Close Redis adapter clients
-  if (adapterPubClient) {
-    adapterPubClient.quit().catch(() => {});
-    adapterPubClient = null;
-  }
-  if (adapterSubClient) {
-    adapterSubClient.quit().catch(() => {});
-    adapterSubClient = null;
-  }
+  // Close Redis adapter clients (now managed globally, so just nullify references if any)
+  adapterPubClient = null;
+  adapterSubClient = null;
 
   logger.info('Socket resources cleaned up', {
     metric: 'socket_lifecycle',

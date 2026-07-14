@@ -160,7 +160,7 @@ export default function CanvasEditorScreen({ route, navigation }) {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         quality: 0.8,
       });
@@ -168,8 +168,8 @@ export default function CanvasEditorScreen({ route, navigation }) {
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
         const formData = new FormData();
-        formData.append('file', {
-          uri: asset.uri,
+        formData.append('files', {
+          uri: Platform.OS === 'ios' ? asset.uri.replace('file://', '') : asset.uri,
           name: asset.fileName || 'upload.jpg',
           type: asset.mimeType || 'image/jpeg',
         });

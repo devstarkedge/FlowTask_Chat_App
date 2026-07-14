@@ -95,7 +95,7 @@ const ThreadsScreen = ({ navigation }) => {
     return { _id: typeof a === 'string' ? a : a?._id };
   }, []);
 
-  const renderMessage = useCallback((msg, isRoot = false) => {
+  const renderMessage = useCallback((msg, isRoot = false, channelId = null) => {
     if (!msg) return null;
     const author = resolveAuthor(msg);
     const name = author.name || author.email || 'Unknown';
@@ -116,6 +116,10 @@ const ThreadsScreen = ({ navigation }) => {
               <RichText
                 html={msg.htmlContent || (/<[a-z][\s\S]*>/i.test(msg.content) ? msg.content : undefined)}
                 text={msg.content}
+                mentions={msg.mentions}
+                onMentionPress={(userId) => {
+                  navigation.navigate('UserProfile', { user: { _id: userId }, channelId });
+                }}
                 colors={{ ...colors, textPrimary: colors.textPrimary }}
                 baseStyle={{ color: colors.textPrimary, fontSize: 15, lineHeight: 22 }}
               />
@@ -158,12 +162,12 @@ const ThreadsScreen = ({ navigation }) => {
         </View>
 
         {/* Root Message */}
-        {renderMessage(item.rootMessageId, true)}
+        {renderMessage(item.rootMessageId, true, item.channelId?._id || item.channelId)}
 
         {/* Latest Replies */}
         {(item.latestReplies || []).map((reply) => (
           <View key={reply._id} style={styles.replyWrapper}>
-            {renderMessage(reply, false)}
+            {renderMessage(reply, false, item.channelId?._id || item.channelId)}
           </View>
         ))}
 

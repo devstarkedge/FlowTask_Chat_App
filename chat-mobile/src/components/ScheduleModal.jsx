@@ -18,6 +18,8 @@ import {
   Platform,
 } from 'react-native';
 import { X, Clock, Calendar, Sun, Briefcase } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { formatMessageTime } from '../utils/dateUtils';
 
 function getQuickOptions() {
   const now = new Date();
@@ -28,7 +30,7 @@ function getQuickOptions() {
   laterToday.setHours(16, 0, 0, 0);
   if (laterToday > now) {
     options.push({
-      label: `Today at ${laterToday.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
+      label: `Today at ${formatMessageTime(laterToday)}`,
       icon: Sun,
       date: laterToday.toISOString(),
     });
@@ -65,16 +67,17 @@ const ScheduleModal = React.memo(function ScheduleModal({
   colors,
 }) {
   const quickOptions = useMemo(() => getQuickOptions(), [visible]);
-  const [customDate, setCustomDate] = useState('');
+  const [customDate, setCustomDate] = useState(new Date());
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState('date');
 
   const handleCustomSubmit = () => {
     if (!customDate) return;
-    const date = new Date(customDate);
-    if (isNaN(date.getTime()) || date <= new Date()) {
+    if (isNaN(customDate.getTime()) || customDate <= new Date()) {
       return;
     }
-    onSchedule(date.toISOString());
-    setCustomDate('');
+    onSchedule(customDate.toISOString());
+    setCustomDate(new Date());
   };
 
   return (
@@ -131,28 +134,77 @@ const ScheduleModal = React.memo(function ScheduleModal({
                 Custom date & time
               </Text>
             </View>
-            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-              <TextInput
-                style={[styles.dateInput, {
-                  color: colors.inputText,
-                  backgroundColor: colors.inputBackground,
-                  borderColor: colors.border,
-                }]}
-                placeholder="YYYY-MM-DDThh:mm"
-                placeholderTextColor={colors.inputPlaceholder}
-                value={customDate}
-                onChangeText={setCustomDate}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity
-                style={[styles.scheduleButton, { backgroundColor: colors.primary }]}
-                onPress={handleCustomSubmit}
-                disabled={!customDate}
-              >
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
-                  Schedule
-                </Text>
-              </TouchableOpacity>
+            <View style={{ flexDirection: 'column', gap: 12 }}>
+              <View style={{ flexDirection: 'column', gap: 12 }}>
+                {Platform.OS === 'ios' ? (
+                  <View style={{ alignItems: 'flex-start' }}>
+                    <DateTimePicker
+                      value={customDate}
+                      mode="datetime"
+                      display="default"
+                      minimumDate={new Date()}
+                      onChange={(event, selectedDate) => {
+                        if (selectedDate) setCustomDate(selectedDate);
+                      }}
+                    />
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      style={[styles.dateInput, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+                      onPress={() => {
+                        setPickerMode('date');
+                        setShowPicker(true);
+                      }}
+                    >
+                      <Text style={{ color: colors.inputText, fontSize: 14 }}>
+                        {customDate.toLocaleDateString()}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.dateInput, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+                      onPress={() => {
+                        setPickerMode('time');
+                        setShowPicker(true);
+                      }}
+                    >
+                      <Text style={{ color: colors.inputText, fontSize: 14 }}>
+                        {formatMessageTime(customDate)}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={[styles.scheduleButton, { backgroundColor: colors.primary, alignItems: 'center' }]}
+                  onPress={handleCustomSubmit}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                    Schedule
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {Platform.OS === 'android' && showPicker && (
+                <DateTimePicker
+                  value={customDate}
+                  mode={pickerMode}
+                  display="default"
+                  minimumDate={new Date()}
+                  onChange={(event, selectedDate) => {
+                    setShowPicker(false);
+                    if (selectedDate) {
+                      setCustomDate(selectedDate);
+                      // If date was just picked, optionally show time picker next
+                      if (pickerMode === 'date') {
+                        setTimeout(() => {
+                          setPickerMode('time');
+                          setShowPicker(true);
+                        }, 100);
+                      }
+                    }
+                  }}
+                />
+              )}
             </View>
           </View>
         </TouchableOpacity>

@@ -18,6 +18,7 @@ import { workspaceAPI } from "../services/api";
 import ENV from "../config/environment";
 import * as Clipboard from "expo-clipboard";
 import Toast from "react-native-toast-message";
+import { HeaderBackButton } from '../components/common';
 import {
   ArrowLeft,
   Mail,
@@ -217,9 +218,7 @@ export default function InviteManagementScreen({ navigation }) {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top"]}>
       {/* Slack Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
-          <X size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <HeaderBackButton onPress={() => navigation.goBack()} />
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Add Members</Text>
         <TouchableOpacity
           onPress={handleSend}

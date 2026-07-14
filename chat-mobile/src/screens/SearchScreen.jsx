@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Alert, Platform, KeyboardAvoidingView, Keyboard } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { searchAPI } from '../services/api';
 import storage from '../services/storage';
 import { Search, X, Hash, Lock, MessageSquare, Clock, FileText, FileImage, FileVideo, FileAudio, Settings, Star, Users, Bell, AtSign, Link as LinkIcon, Bookmark, Pin, Brush, User as UserIcon } from 'lucide-react-native';
-import { AppAvatar } from '../components/common';
+import { AppAvatar , HeaderBackButton } from '../components/common';
 import Toast from 'react-native-toast-message';
 import logger from '../utils/logger';
 import { useAuthStore } from '../stores/authStore';
@@ -366,26 +368,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: moderateScale(22),
     fontWeight: '700',
   },
   keyboardView: {
     flex: 1,
   },
-  resultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-  resultIcon: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  resultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: verticalScale(10) },
+  resultIcon: { width: scale(32), height: scale(32), borderRadius: moderateScale(8), justifyContent: 'center', alignItems: 'center' },
   floatingSearchContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingHorizontal: scale(16),
+    paddingTop: verticalScale(12),
     alignItems: 'center',
     gap: 12,
   },
@@ -393,27 +395,27 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    height: 52,
-    shadowOffset: { width: 0, height: 2 },
+    borderRadius: moderateScale(999),
+    paddingHorizontal: scale(16),
+    height: scale(52),
+    shadowOffset: { width: scale(0), height: scale(2) },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 5,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 12,
-    fontSize: 16,
+    marginLeft: scale(12),
+    fontSize: moderateScale(16),
     height: '100%',
   },
   closeButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: scale(52),
+    height: scale(52),
+    borderRadius: moderateScale(26),
     justifyContent: 'center',
     alignItems: 'center',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: scale(0), height: scale(2) },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 5,

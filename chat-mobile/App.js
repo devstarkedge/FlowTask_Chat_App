@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from "./src/navigation/AppNavigation";
 import { useAuthStore } from "./src/stores/authStore";
 import { useThemeStore } from "./src/stores/themeStore";
+import { usePreferencesStore } from "./src/stores/preferencesStore";
 import { useWorkspaceStore } from "./src/stores/workspaceStore";
 import { connectSocket, disconnectSocket } from "./src/services/socket";
 import { registerForPushNotifications, setNavigationRef } from "./src/services/pushNotificationService";
@@ -16,6 +17,7 @@ const navigationRef = createNavigationContainerRef();
 export default function App() {
   const init = useAuthStore((state) => state.init);
   const initTheme = useThemeStore((state) => state.init);
+  const initPrefs = usePreferencesStore((state) => state.init);
   const accessToken = useAuthStore((state) => state.accessToken);
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
   const themeSubscriptionRef = useRef(null);
@@ -29,6 +31,7 @@ export default function App() {
       if (cancelled) return;
       // 2. Now safe to init theme (API call requires auth token)
       const subscription = await initTheme();
+      await initPrefs();
       if (cancelled) {
         subscription?.remove();
         return;

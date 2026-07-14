@@ -16,12 +16,15 @@ import {
 } from 'react-native';
 import { X, Search } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { usePreferencesStore } from '../stores/preferencesStore';
+import { applySkinTone } from '../utils/emojiUtils';
 
 // Comprehensive categorized emoji dataset matching emoji-picker-react categories
 const EMOJI_CATEGORIES = [
   {
     key: 'smileys_people',
     label: 'Smileys',
+    icon: '😀',
     emojis: [
       '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '🥴', '😵', '🤯', '🤠', '🥳', '🥸', '😎', '🤓', '🧐', '😕', '😟', '🙁', '☹️', '😮', '😯', '😲', '😳', '🥺', '😦', '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣', '😞', '😓', '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡', '👹', '👺', '👻', '👽', '👾', '🤖', '👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻', '👃', '🧠', '🫀', '🫁', '🦷', '🦴', '👀', '👁️', '👅', '👄', '💋', '🩸'
     ]
@@ -29,6 +32,7 @@ const EMOJI_CATEGORIES = [
   {
     key: 'animals_nature',
     label: 'Nature',
+    icon: '🐻',
     emojis: [
       '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐻‍❄️', '🐨', '🐯', '🦁', '🐮', '🐷', '🐽', '🐸', '🐵', '🙈', '🙉', '🙊', '🐒', '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🦆', '🦢', '🦅', '🦉', '🦤', '🦩', '🦚', ' parrot', '🦧', '🦍', '🐕', '🐈', '🐈‍⬛', '🐇', '🐹', '🐿️', '🦫', '🦬', '🐃', '🐂', '🐄', '🐏', '🐑', '🐐', '🦌', '🐎', '🦄', '🐆', '🐅', '🐃', '🐘', '🦣', '🦏', '🦛', '🐪', '🐫', '🦙', '🦒', '🦘', '🦬', '🐃', '🐏', '🐑', '🐐', '🦌', '🐕', '🐩', '🐈', '🐈‍⬛', '🐓', '🦃', '🦚', '🦜', '🦢', '🦩', '🐇', '🐿️', '🦫', '🦔', '🦇', '🐻', '🐨', '🐼', '🦥', '🦦', '🦨', '🦘', '🦡', '🐾', '🐉', '🐉', '🐲', '🌵', '🎄', '🌲', '🌳', '🌴', '🌱', '🌿', '☘️', '🍀', '🍁', '🍂', '🍃'
     ]
@@ -36,6 +40,7 @@ const EMOJI_CATEGORIES = [
   {
     key: 'food_drink',
     label: 'Food',
+    icon: '🍔',
     emojis: [
       '🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶', '🫑', '🌽', '🥕', '🫒', '🧄', '🧅', '🥔', '🍠', '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🥞', ' waffle', '🥓', '🥩', '🍗', '🍖', '🌭', '🍔', '🍟', '🍕', '🥪', '🥙', '🌮', '🌯', '🥫', '🍱', '🍘', '🍙', '🍚', '🍛', '🍜', '🍝', '🍠', '🍢', '🍣', '🍤', '🍥', '🥮', '🍡', '🥟', '🥠', '🥡', '🦀', '🦞', '🦐', '🦑', '🦪', '🍨', '🍧', '🍦', '🍩', '🍪', '🎂', '🍰', '🧁', '🥧', '🍫', '🍬', '🍭', '🍮', '🍯', '🍼', '🥛', '☕', '🍵', '🍶', '🥂', '🍷', '🍸', '🍹', '🍺', '🍻', '🥃', '🥤', '🧃', '🧉', '🧊'
     ]
@@ -43,6 +48,7 @@ const EMOJI_CATEGORIES = [
   {
     key: 'activities',
     label: 'Activity',
+    icon: '⚽',
     emojis: [
       '⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', '🪀', '🏓', '📯', '🏒', '🏑', '🥍', '🏏', '🥅', '⛳', '🪁', '🏹', '🎣', '🤿', '🥊', '🥋', '🎽', '🛹', '🛼', '🛷', '⛸️', '🏋️', '🤺', '🤼', '🤸', '⛹️', '🤾', '🧗', '🧘', '🚴', '🚵', '🏆', '🥇', '🥈', '🥉', '🏅', '🎖️', '🎫', '🎟️', '🎭', '🎨', '🎬', '🎤', '🎧', '🎼', '🎹', '🥁', '🎷', '🎺', '🎸', '🎮', '🕹️', '👾', '🎲', '🎯', '🎳'
     ]
@@ -50,6 +56,7 @@ const EMOJI_CATEGORIES = [
   {
     key: 'travel_places',
     label: 'Travel',
+    icon: '🚗',
     emojis: [
       '🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🚲', '🛴', '🛹', '🛺', '🏍️', '🛵', '🚂', '🚊', '🚇', '🚄', '🚀', '🛸', '🚁', '✈️', '🛶', '⛵', '🛥️', '🚢', '⚓', '⛽', '🗺️', '🧭', '🏔️', '⛰️', '🌋', '🗻', '🏕️', '🏖️', '🏜️', '🏝️', '🌌', '🏙️', '🌆', '🌇', '🎆', '🎇', '🎡', '🎢', '⛲', '🏯', '🏰'
     ]
@@ -57,6 +64,7 @@ const EMOJI_CATEGORIES = [
   {
     key: 'objects',
     label: 'Objects',
+    icon: '💡',
     emojis: [
       '⌚', '📱', '📲', '💻', ' Keyboard', ' Mouse', '🖨️', '🖥️', '💾', '💿', '📀', '📼', '📷', '📸', '📹', '🎥', '📽️', '🎞️', '📞', '☎️', '📟', '📠', '电视', '📻', '🎙️', '🎚️', '🎛️', '🧭', '⏱️', '⏲️', '⏰', '⏳', '🔌', '🔋', ' Candle', '💡', ' Flashlight', ' Lantern', '💵', '🪙', '💸', '💳', '🧾', '💎', '⚖️', '🧱', '⚙️', '🔧', '🔨', '🛠️', '⛏️', '🪓', '🔩', '🪜', '⛓️', '🧲', '🧪', '🧫', '🔬', ' Telescope', ' Satellite', '💉', '🩺', ' Pill', '🩹', ' Notepad', ' Pencil', ' Folder', ' Calendar', ' Window', '🔑', '🗝️', ' Door', ' Couch', ' Bed', ' Shower', ' Toilet', ' Broom', ' Sponge', ' Soap', ' Toothbrush', '🧯', '🛒', '🚬', ' Coffin', ' Urn', '🏺'
     ]
@@ -64,6 +72,7 @@ const EMOJI_CATEGORIES = [
   {
     key: 'symbols',
     label: 'Symbols',
+    icon: '💖',
     emojis: [
       '💘', '💝', '💖', '💗', '💓', '💞', '💕', '💟', '❣', '💔', '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💯', '💢', '💬', '💭', '🗯️', '💤', '🌐', '🌀', '🏁', '🚩', '🎌', '🏴', '🏳️', '🏳️‍🌈', '🏳️‍⚧️', '☮️', '✝️', '☪️', '🕉️', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐', '⛎', '♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓', '🔀', '🔁', '🔂', '▶️', '⏩', '◀️', '⏪', '🔼', '🔽', '⏹️', '⏏️', '🎦', '📶', '📳', '📴', '♀️', '♂️', '⚧️', '✖️', '➕', '➖', '➗', '♾️', '❓', '❔', '❕', '❗', '〰️', '💱', '💲', '⚕️', '♻️', '⚜️', '🔱', '📛', '🔰', '⭕', '✅', '☑️', '✔️', '❌', '❎', '➿', '〽️', '✳️', '✴️', '❇️', '🔘', '⚪', '⚫', '🔴', '🔵', '🔺', '🔻', '🔸', '🔹', '🔶', '🔷'
     ]
@@ -71,6 +80,7 @@ const EMOJI_CATEGORIES = [
   {
     key: 'flags',
     label: 'Flags',
+    icon: '🎌',
     emojis: [
       '🏁', '🚩', '🎌', '🏴', '🏳️', '🏳️‍🌈', '🏳️‍⚧️', '🏴‍☠️', '🇦🇨', '🇦🇩', '🇦🇪', '🇦🇫', '🇦🇬', '🇦🇮', '🇦🇱', '🇦🇲', '🇦🇴', '🇦🇶', '🇦🇷', '🇦🇸', '🇦🇹', '🇦🇺', '🇦🇼', '🇦🇽', '🇦🇿', '🇧🇦', '🇧🇧', '🇧🇩', '🇧🇪', '🇧🇫', '🇧🇬', '🇧🇭', '🇧🇮', '🇧🇯', '🇧🇱', '🇧🇲', '🇧🇳', '🇧🇴', '🇧🇶', '🇧🇷', '🇧🇸', '🇧🇹', '🇧🇻', '🇧🇼', '🇧🇾', '🇧🇿', '🇨🇦', '🇨🇨', '🇨🇩', '🇨🇫', '🇨🇬', '🇨🇭', '🇨🇮', '🇨🇰', '🇨🇱', '🇨🇲', '🇨🇳', '🇨🇴', '🇨🇵', '🇨🇷', '🇨🇺', '🇨🇻', '🇨🇼', '🇨🇽', '🇨🇾', '🇨🇿', '🇩🇪', '🇩🇬', '🇩🇯', '🇩🇰', '🇩🇲', '🇩🇴', '🇩🇿', '🇪🇦', '🇪🇨', '🇪🇪', '🇪🇬', '🇪🇭', '🇪🇷', '🇪🇸', '🇪🇹', '🇪🇺', '🇫🇮', '🇫🇯', '🇫🇰', '🇫🇲', '🇫🇴', '🇫🇷', '🇬🇦', '🇬🇧', '🇬🇩', '🇬🇪', '🇬🇫', '🇬🇬', '🇬🇭', '🇬🇮', '🇬🇱', '🇬🇲', '🇬🇳', '🇬🇵', '🇬🇶', '🇬🇷', '🇬🇸', '🇬🇹', '🇬🇺', '🇬🇼', '🇬🇾', '🇭🇰', '🇭🇲', '🇭🇳', '🇭🇷', '🇭🇹', '🇭🇺', '🇮🇨', '🇮🇩', '🇮🇪', '🇮🇱', '🇮🇲', '🇮🇳', '🇮🇴', '🇮🇶', '🇮🇷', '🇮🇸', '🇮🇹', '🇯🇪', '🇯🇲', '🇯🇴', '🇯🇵', '🇰🇪', '🇰🇬', '🇰🇭', '🇰🇮', '🇰🇲', '🇰🇳', '🇰🇵', '🇰🇷', '🇰🇼', '🇰🇾', '🇰🇿', '🇱🇦', '🇱🇧', '🇱🇨', '🇱🇮', '🇱🇰', '🇱🇷', '🇱🇸', '🇱🇹', '🇱🇺', '🇱🇻', '🇱🇾', '🇲🇦', '🇲🇨', '🇲🇩', '🇲🇪', '🇲🇫', '🇲🇬', '🇲🇭', '🇲🇰', '🇲🇱', '🇲🇲', '🇲🇳', '🇲🇴', '🇲🇵', '🇲🇶', '🇲🇷', '🇲🇸', '🇲🇹', '🇲🇺', '🇲🇻', '🇲🇼', '🇲🇽', '🇲🇾', '🇲🇿', '🇳🇦', '🇳🇨', '🇳🇪', '🇳🇫', '🇳🇬', '🇳🇮', '🇳🇱', '🇳🇴', '🇳🇵', '🇳🇷', '🇳🇺', '🇳🇿', '🇴🇲', '🇵🇦', '🇵🇪', '🇵🇫', '🇵🇬', '🇵🇭', '🇵🇰', '🇵🇱', '🇵🇲', '🇵🇳', '🇵🇷', '🇵🇸', '🇵🇹', '🇵🇼', '🇵🇾', '🇶🇦', '🇷🇪', '🇷🇴', '🇷🇸', '🇷🇺', '🇷🇼', '🇸🇦', '🇸🇧', '🇸🇨', '🇸🇩', '🇸🇪', '🇸🇬', '🇸🇭', '🇸🇮', '🇸🇯', '🇸🇰', '🇸🇱', '🇸🇲', '🇸🇳', '🇸🇴', '🇸🇷', '🇸🇸', '🇸🇹', '🇸🇻', '🇸🇽', '🇸🇾', '🇸🇿', '🇹🇦', '🇹🇨', '🇹🇩', '🇹🇫', '🇹🇬', '🇹🇭', '🇹🇯', '🇹🇰', '🇹🇱', '🇹🇲', '🇹🇳', '🇹🇴', '🇹🇷', '🇹🇹', '🇹🇻', '🇹🇼', '🇹🇿', '🇺🇦', '🇺🇬', '🇺🇲', '🇺🇳', '🇺🇸', '🇺🇾', '🇺🇿', '🇻🇦', '🇻🇨', '🇻🇪', '🇻🇬', '🇻🇮', '🇻🇳', '🇻🇺', '🇼🇫', '🇩🇿', '🇦🇴', '🇲🇦', '🇿🇦', '🇿🇲', '🇿🇼'
     ]
@@ -80,20 +90,24 @@ const EMOJI_CATEGORIES = [
 const ASYNC_RECENT_KEY = '@flowtask/recent_emojis';
 const POPULAR_DEFAULT = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '✅'];
 
-const EmojiItem = React.memo(({ emoji, onPress }) => (
-  <TouchableOpacity
-    style={styles.emojiButton}
-    onPress={() => onPress(emoji)}
-    activeOpacity={0.5}
-  >
-    <Text style={styles.emojiText}>{emoji}</Text>
-  </TouchableOpacity>
-));
+const EmojiItem = React.memo(({ emoji, onPress, skinTone }) => {
+  const modifiedEmoji = applySkinTone(emoji, skinTone);
+  return (
+    <TouchableOpacity
+      style={styles.emojiButton}
+      onPress={() => onPress(modifiedEmoji)}
+      activeOpacity={0.5}
+    >
+      <Text style={styles.emojiText}>{modifiedEmoji}</Text>
+    </TouchableOpacity>
+  );
+});
 
 export default function EmojiPickerModal({ visible, onClose, onSelect, colors }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('smileys_people');
   const [recentEmojis, setRecentEmojis] = useState(POPULAR_DEFAULT);
+  const { emojiSkinTone } = usePreferencesStore();
 
   // Load recents on mount
   useEffect(() => {
@@ -141,7 +155,7 @@ export default function EmojiPickerModal({ visible, onClose, onSelect, colors })
   // Categories list including Recents
   const categoriesList = useMemo(() => {
     return [
-      { key: 'recent', label: 'Recent' },
+      { key: 'recent', label: 'Recent', icon: '🕒' },
       ...EMOJI_CATEGORIES
     ];
   }, []);
@@ -154,7 +168,7 @@ export default function EmojiPickerModal({ visible, onClose, onSelect, colors })
   }, [activeCategory, recentEmojis]);
 
   const renderCategoryItem = ({ item }) => (
-    <EmojiItem emoji={item} onPress={handleSelect} />
+    <EmojiItem emoji={item} onPress={handleSelect} skinTone={emojiSkinTone} />
   );
 
   return (
@@ -222,9 +236,9 @@ export default function EmojiPickerModal({ visible, onClose, onSelect, colors })
                     >
                       <Text style={[
                         styles.tabLabel,
-                        { color: isActive ? colors.primary : colors.textSecondary }
+                        { color: isActive ? colors.primary : colors.textSecondary, fontSize: 18 }
                       ]}>
-                        {item.label}
+                        {item.icon}
                       </Text>
                     </TouchableOpacity>
                   );

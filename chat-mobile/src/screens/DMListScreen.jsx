@@ -1,4 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 import {
   View,
   Text,
@@ -11,18 +13,25 @@ import {
   Platform,
 } from "react-native";
 import { AppAvatar, AppScreen } from "../components/common";
+import AccountDrawer from "../components/AccountDrawer";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useChannelStore } from "../stores/channelStore";
 import { useAuthStore } from "../stores/authStore";
 import { useUIStore } from "../stores/uiStore";
 import { useThemeStore } from "../stores/themeStore";
+import { useWorkspaceStore } from "../stores/workspaceStore";
 import { directoriesAPI } from "../services/api";
 import {
   Edit3,
   Search,
   X,
+  Plus,
+  MessageSquare,
+  Building2,
+  CheckSquare
 } from "lucide-react-native";
 import logger from '../utils/logger';
+import { formatRelativeTime } from '../utils/dateUtils';
 
 // ─── DM Item (Slack mobile: avatar + name + preview + time, flat) ────────────
 
@@ -31,6 +40,9 @@ const DMItem = React.memo(({ channel, onPress, isSelf }) => {
   const unreads = useChannelStore((s) => s.unreads) || {};
   const unreadCount = unreads[channel._id] || 0;
   const currentUser = useAuthStore((s) => s.user);
+  const members = useWorkspaceStore((s) => s.members) || [];
+  const liveMember = members.find(m => m._id === channel.dmRecipientId || m.userId?._id === channel.dmRecipientId);
+  const liveOnlineStatus = liveMember?.onlineStatus || liveMember?.userId?.onlineStatus || channel.onlineStatus || 'offline';
 
   const displayName = React.useMemo(() => {
     if (isSelf) return "You";
@@ -50,17 +62,16 @@ const DMItem = React.memo(({ channel, onPress, isSelf }) => {
     _id: channel.dmRecipientId,
     name: displayName,
     avatar: channel.avatar,
-    onlineStatus: channel.onlineStatus || "offline",
+    onlineStatus: liveOnlineStatus,
   };
 
-  const preview = channel.lastMessagePreview || "No messages yet";
+  const previewPrefix = channel.lastMessage?.senderId === currentUser?._id ? "You: " : "";
+  let preview = channel.lastMessagePreview || "No messages yet";
+  if (channel.lastMessagePreview && channel.lastMessage?.senderId === currentUser?._id) {
+    preview = `${previewPrefix}${preview}`;
+  }
 
-  const timeStr = channel.lastMessageAt
-    ? new Date(channel.lastMessageAt).toLocaleTimeString([], {
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : "";
+  const timeStr = channel.lastMessageAt ? formatRelativeTime(channel.lastMessageAt) : "";
 
   return (
     <TouchableOpacity
@@ -68,7 +79,7 @@ const DMItem = React.memo(({ channel, onPress, isSelf }) => {
       onPress={() => onPress(channel)}
       activeOpacity={0.5}
     >
-      <AppAvatar user={dmUser} size={36} showStatus={true} statusSize={8} />
+      <AppAvatar user={dmUser} size={40} showStatus={true} statusSize={10} style={{ borderRadius: 8 }} />
       <View style={dmItem.textCol}>
         <View style={dmItem.topRow}>
           <Text
@@ -76,7 +87,7 @@ const DMItem = React.memo(({ channel, onPress, isSelf }) => {
               dmItem.name,
               {
                 color: colors.textPrimary,
-                fontWeight: unreadCount > 0 ? "700" : "500",
+                fontWeight: unreadCount > 0 ? "700" : "600",
               },
             ]}
             numberOfLines={1}
@@ -95,7 +106,7 @@ const DMItem = React.memo(({ channel, onPress, isSelf }) => {
               fontWeight: unreadCount > 0 ? "600" : "400",
             },
           ]}
-          numberOfLines={1}
+          numberOfLines={2}
         >
           {preview}
         </Text>
@@ -113,13 +124,13 @@ const dmItem = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 10,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(10),
+    gap: 12,
   },
   textCol: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
   topRow: {
     flexDirection: "row",
@@ -127,27 +138,28 @@ const dmItem = StyleSheet.create({
     justifyContent: "space-between",
   },
   name: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     flex: 1,
   },
   time: {
-    fontSize: 12,
-    marginLeft: 8,
+    fontSize: moderateScale(11),
+    marginLeft: scale(8),
   },
   preview: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
+    lineHeight: moderateScale(20),
   },
   badge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 5,
+    minWidth: scale(18),
+    height: scale(18),
+    borderRadius: moderateScale(9),
+    paddingHorizontal: scale(5),
     justifyContent: "center",
     alignItems: "center",
   },
   badgeText: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: "700",
   },
 });
@@ -215,7 +227,7 @@ const NewDMModal = ({ visible, onClose, navigation }) => {
             <X size={22} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={[ndmStyles.title, { color: colors.textPrimary }]}>New message</Text>
-          <View style={{ width: 22 }} />
+          <View style={{ width: scale(22) }} />
         </View>
 
         {/* To field */}
@@ -233,7 +245,7 @@ const NewDMModal = ({ visible, onClose, navigation }) => {
 
         {/* User list */}
         {loadingUsers ? (
-          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: verticalScale(40) }} />
         ) : (
           <FlatList
             data={filteredUsers.filter((u) => u._id !== currentUser?._id)}
@@ -268,43 +280,43 @@ const ndmStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: 1,
   },
   title: {
-    fontSize: 17,
+    fontSize: moderateScale(17),
     fontWeight: "600",
   },
   toRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(10),
     gap: 8,
     borderBottomWidth: 1,
   },
   toLabel: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
   },
   toInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: moderateScale(15),
     padding: 0,
   },
   userRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(10),
     gap: 10,
   },
   userName: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: "500",
   },
   userEmail: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
   },
 });
 
@@ -316,33 +328,38 @@ const DMListScreen = ({ navigation }) => {
   const { colors, effectiveTheme } = useThemeStore();
   const { openDrawer } = useUIStore();
   const channels = useChannelStore((s) => s.channels) || [];
+  const unreads = useChannelStore((s) => s.unreads) || {};
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
   const { user: currentUser } = useAuthStore();
 
   const [newDMVisible, setNewDMVisible] = useState(false);
+  const [accountDrawerVisible, setAccountDrawerVisible] = useState(false);
   const [filterQuery, setFilterQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState("all");
 
   const dmChannels = useMemo(() => {
     let dms = channels.filter((c) => c.type === "dm");
+    
+    if (activeFilter === "unreads") {
+      dms = dms.filter(c => (unreads[c._id] || 0) > 0);
+    } else if (activeFilter === "external") {
+      // Assuming external means they are not in our primary domain or there's an isExternal flag
+      dms = dms.filter(c => c.isExternal);
+    }
+
     if (filterQuery.trim()) {
       const q = filterQuery.toLowerCase();
       dms = dms.filter((c) => c.name?.toLowerCase().includes(q));
     }
     
     dms.sort((a, b) => {
-      const aIsSelf = a.dmRecipientId === currentUser?._id;
-      const bIsSelf = b.dmRecipientId === currentUser?._id;
-      
-      if (aIsSelf && !bIsSelf) return -1;
-      if (!aIsSelf && bIsSelf) return 1;
-      
       const aTime = new Date(a.lastMessageAt || a.lastMessage?.createdAt || 0).getTime();
       const bTime = new Date(b.lastMessageAt || b.lastMessage?.createdAt || 0).getTime();
       return bTime - aTime;
     });
     
     return dms;
-  }, [channels, filterQuery, currentUser]);
+  }, [channels, filterQuery, activeFilter, unreads]);
 
   const handlePress = useCallback(
     (channel) => {
@@ -360,36 +377,94 @@ const DMListScreen = ({ navigation }) => {
     [handlePress, currentUser]
   );
 
+  const renderRecentItem = useCallback(
+    ({ item }) => {
+      const isSelf = item.dmRecipientId === currentUser?._id;
+      let displayName = item.dmRecipientName || item.name || "User";
+      const members = useWorkspaceStore.getState().members || [];
+      const liveMember = members.find(m => m._id === item.dmRecipientId || m.userId?._id === item.dmRecipientId);
+      const liveOnlineStatus = liveMember?.onlineStatus || liveMember?.userId?.onlineStatus || item.onlineStatus || 'offline';
+      if (isSelf) displayName = "You";
+      // Get first name
+      const firstName = displayName.split(' ')[0];
+      
+      const dmUser = {
+        ...item,
+        _id: item.dmRecipientId,
+        name: displayName,
+        avatar: item.avatar,
+        onlineStatus: liveOnlineStatus,
+      };
+
+      return (
+        <TouchableOpacity style={styles.recentItem} onPress={() => handlePress(item)}>
+          <AppAvatar user={dmUser} size={64} showStatus={true} statusSize={14} style={{ borderRadius: 18 }} />
+          <Text style={[styles.recentName, { color: colors.textPrimary }]} numberOfLines={1}>{firstName}</Text>
+        </TouchableOpacity>
+      );
+    },
+    [handlePress, currentUser, colors.textPrimary]
+  );
+
+  // Hardcoded Slackbot
+  const slackbot = {
+    _id: 'slackbot',
+    name: 'Slackbot',
+    dmRecipientId: 'slackbot',
+    dmRecipientName: 'Slackbot',
+    onlineStatus: 'online',
+    avatar: 'https://ca.slack-edge.com/T00000000-U00000000-g00000000000-512'
+  };
+
   return (
-    <AppScreen style={[styles.container, { backgroundColor: colors.background }]} edges={["top"]}>
-      {/* Header: "DMs" title + compose */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>DMs</Text>
-        {/* <TouchableOpacity
-          onPress={() => setNewDMVisible(true)}
-          style={styles.composeBtn}
-          hitSlop={8}
-        >
-          <Edit3 size={18} color={colors.primary} />
-        </TouchableOpacity> */}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header Area */}
+      <View style={[styles.header, { backgroundColor: colors.primary }]}>
+        <SafeAreaView edges={['top']} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: scale(16), paddingBottom: verticalScale(12), paddingTop: verticalScale(12) }}>
+          <Text style={[styles.title, { color: '#ffffff' }]}>DMs</Text>
+          <TouchableOpacity onPress={() => setAccountDrawerVisible(true)}>
+            <AppAvatar user={currentUser} size={30} showStatus={true} statusSize={8} />
+          </TouchableOpacity>
+        </SafeAreaView>
       </View>
 
-      {/* Search */}
-      <View style={[styles.searchBar, { backgroundColor: colors.inputBackground }]}>
-        <Search size={14} color={colors.inputPlaceholder} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.inputText }]}
-          placeholder="Search DMs"
-          placeholderTextColor={colors.inputPlaceholder}
-          value={filterQuery}
-          onChangeText={setFilterQuery}
-          autoCorrect={false}
+      {/* Recent List */}
+      <View style={styles.recentContainer}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={[slackbot, ...dmChannels.slice(0, 10)]}
+          keyExtractor={(item) => item._id}
+          renderItem={renderRecentItem}
+          contentContainerStyle={{ paddingHorizontal: scale(16), paddingVertical: verticalScale(16), gap: 16 }}
         />
-        {filterQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setFilterQuery("")} hitSlop={8}>
-            <X size={14} color={colors.textTertiary} />
-          </TouchableOpacity>
-        )}
+      </View>
+
+      {/* Filter Pills */}
+      <View style={styles.pillsContainer}>
+        <TouchableOpacity 
+          onPress={() => setActiveFilter('all')}
+          style={[styles.pill, activeFilter === 'all' ? [styles.pillActive, { backgroundColor: colors.primary, borderColor: colors.primary }] : { borderColor: colors.border }]}
+        >
+          <MessageSquare size={14} color={activeFilter === 'all' ? '#fff' : colors.textSecondary} style={{ marginRight: 6 }} />
+          <Text style={[styles.pillText, { color: activeFilter === 'all' ? '#fff' : colors.textSecondary, fontWeight: activeFilter === 'all' ? '600' : '500' }]}>All</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          onPress={() => setActiveFilter('unreads')}
+          style={[styles.pill, activeFilter === 'unreads' ? [styles.pillActive, { backgroundColor: colors.primary, borderColor: colors.primary }] : { borderColor: colors.border }]}
+        >
+          <CheckSquare size={14} color={activeFilter === 'unreads' ? '#fff' : colors.textSecondary} style={{ marginRight: 6 }} />
+          <Text style={[styles.pillText, { color: activeFilter === 'unreads' ? '#fff' : colors.textSecondary, fontWeight: activeFilter === 'unreads' ? '600' : '500' }]}>Unreads</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          onPress={() => setActiveFilter('external')}
+          style={[styles.pill, activeFilter === 'external' ? [styles.pillActive, { backgroundColor: colors.primary, borderColor: colors.primary }] : { borderColor: colors.border }]}
+        >
+          <Building2 size={14} color={activeFilter === 'external' ? '#fff' : colors.textSecondary} style={{ marginRight: 6 }} />
+          <Text style={[styles.pillText, { color: activeFilter === 'external' ? '#fff' : colors.textSecondary, fontWeight: activeFilter === 'external' ? '600' : '500' }]}>External</Text>
+        </TouchableOpacity>
       </View>
 
       {/* List */}
@@ -398,7 +473,7 @@ const DMListScreen = ({ navigation }) => {
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: 4 }}
+        contentContainerStyle={{ paddingTop: verticalScale(4), paddingBottom: verticalScale(80) }}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No direct messages yet</Text>
@@ -409,59 +484,102 @@ const DMListScreen = ({ navigation }) => {
         }
       />
 
+      {/* FAB */}
+      <TouchableOpacity 
+        style={[styles.fab, { backgroundColor: colors.primary }]} 
+        activeOpacity={0.8}
+        onPress={() => setNewDMVisible(true)}
+      >
+        <Plus size={28} color="#fff" />
+      </TouchableOpacity>
+
       <NewDMModal
         visible={newDMVisible}
         onClose={() => setNewDMVisible(false)}
         navigation={navigation}
       />
-      </AppScreen>
+
+      <AccountDrawer 
+        visible={accountDrawerVisible}
+        onClose={() => setAccountDrawerVisible(false)}
+        navigation={navigation}
+      />
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
   },
   title: {
-    fontSize: 17,
+    fontSize: moderateScale(20),
     fontWeight: "800",
   },
-  composeBtn: {
-    padding: 4,
+  recentContainer: {
   },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: 16,
-    marginVertical: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    gap: 6,
+  recentItem: {
+    alignItems: 'center',
+    width: scale(72),
+    gap: 8,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    padding: 0,
+  recentName: {
+    fontSize: moderateScale(12),
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  pillsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(8),
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(6),
+    borderRadius: moderateScale(16),
+    borderWidth: 1,
+  },
+  pillActive: {
+  },
+  pillText: {
+    fontSize: moderateScale(13),
+    fontWeight: '500',
   },
   empty: {
     alignItems: "center",
-    paddingTop: 60,
+    paddingTop: verticalScale(60),
     gap: 12,
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
   },
   emptyLink: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: "600",
   },
+  fab: {
+    position: 'absolute',
+    bottom: verticalScale(20),
+    right: scale(20),
+    width: scale(56),
+    height: scale(56),
+    borderRadius: scale(28),
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
+  }
 });
 
 export default DMListScreen;

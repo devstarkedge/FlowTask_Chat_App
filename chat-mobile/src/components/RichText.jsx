@@ -106,11 +106,108 @@ const HEADING_SIZES = { h1: 22, h2: 20, h3: 18, h4: 16, h5: 15, h6: 14 };
 
 let keyCounter = 0;
 
-function renderNode(node, colors, parentStyles = {}, depth = 0) {
+function renderTextWithLinksAndMentions(text, baseKey, parentStyles, ctx) {
+  const { colors, mentions, onMentionPress } = ctx;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  
+  const mentionNames = (mentions || []).map(m => (m.username || m.name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).filter(Boolean);
+  const regexStr = `(https?:\\/\\/[^\\s]+)|(www\\.[^\\s]+)` + (mentionNames.length > 0 ? `|(@(?:${mentionNames.join('|')}))` : '');
+  const combinedRegex = new RegExp(regexStr, 'gi');
+
+  let i = 0;
+  while ((match = combinedRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(<Text key={`${baseKey}-t${i++}`} style={parentStyles}>{text.slice(lastIndex, match.index)}</Text>);
+    }
+    
+    const matchedText = match[0];
+    if (matchedText.toLowerCase().startsWith('http') || matchedText.toLowerCase().startsWith('www')) {
+      const href = matchedText.toLowerCase().startsWith('http') ? matchedText : `https://${matchedText}`;
+      parts.push(
+        <Text 
+          key={`${baseKey}-l${i++}`} 
+          style={[parentStyles, { color: colors.info, textDecorationLine: 'underline' }]}
+          onPress={() => Linking.openURL(href).catch(() => {})}
+        >
+          {matchedText}
+        </Text>
+      );
+    } else if (matchedText.startsWith('@')) {
+      const nameMatch = matchedText.slice(1).toLowerCase();
+      const mentionObj = (mentions || []).find(m => (m.username || m.name || '').toLowerCase() === nameMatch);
+      if (mentionObj) {
+        parts.push(
+          <Text 
+            key={`${baseKey}-m${i++}`} 
+            style={[
+              parentStyles,
+              {
+                backgroundColor: colors.primaryLight,
+                color: colors.primary,
+                borderRadius: 4,
+                paddingHorizontal: 4,
+                fontWeight: '600',
+                fontSize: (parentStyles.fontSize || 15) * 0.92,
+                overflow: 'hidden',
+              }
+            ]}
+            onPress={() => onMentionPress && onMentionPress(mentionObj.userId || mentionObj._id)}
+          >
+            {matchedText}
+          </Text>
+        );
+      } else {
+         parts.push(<Text key={`${baseKey}-t${i++}`} style={parentStyles}>{matchedText}</Text>);
+      }
+    }
+    lastIndex = combinedRegex.lastIndex;
+  }
+  
+  if (lastIndex < text.length) {
+    parts.push(<Text key={`${baseKey}-t${i++}`} style={parentStyles}>{text.slice(lastIndex)}</Text>);
+  }
+
+  return parts.length > 0 ? parts : <Text key={baseKey} style={parentStyles}>{text}</Text>;
+}
+
+function renderChildren(children, ctx, parentStyles, depth) {
+  const result = [];
+  let currentInlineGroup = [];
+
+  const flushInline = () => {
+    if (currentInlineGroup.length > 0) {
+      result.push(
+        <Text key={`inline-${keyCounter++}`} style={[styles.paragraphText, parentStyles]}>
+          {currentInlineGroup.map(c => renderNode(c, ctx, parentStyles, depth))}
+        </Text>
+      );
+      currentInlineGroup = [];
+    }
+  };
+
+  const blockTags = ['div', 'p', 'ul', 'ol', 'li', 'pre', 'blockquote', 'hr'];
+  
+  (children || []).forEach(c => {
+    if (blockTags.includes(c.tag)) {
+      flushInline();
+      result.push(renderNode(c, ctx, parentStyles, depth));
+    } else {
+      currentInlineGroup.push(c);
+    }
+  });
+  flushInline();
+  
+  return result;
+}
+
+function renderNode(node, ctx, parentStyles = {}, depth = 0) {
+  const { colors, mentions, onMentionPress } = ctx;
   const key = `rt-${keyCounter++}`;
 
   if (node.tag === '#text') {
-    return <Text key={key} style={parentStyles}>{node.text}</Text>;
+    return renderTextWithLinksAndMentions(node.text, key, parentStyles, ctx);
   }
 
   if (node.tag === 'br') {
@@ -120,22 +217,22 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
   // Recursively render children as inline content (Text-compatible)
   const renderInlineChildren = (extraStyles = {}) => {
     const merged = { ...parentStyles, ...extraStyles };
-    return node.children.map((c, i) => renderNode(c, colors, merged, depth));
+    return node.children.map((c, i) => renderNode(c, ctx, merged, depth));
   };
 
   // Render children that may contain block elements
   const renderBlockChildren = () => {
-    return node.children.map((c, i) => renderNode(c, colors, parentStyles, depth));
+    return node.children.map((c, i) => renderNode(c, ctx, parentStyles, depth));
   };
 
   switch (node.tag) {
     case 'div':
     case 'p': {
-      // Paragraph — wrap children in Text with margin
+      // Paragraph — wrap block children safely, grouping inline elements
       return (
-        <Text key={key} style={[styles.paragraph, parentStyles]}>
-          {node.children.map((c, i) => renderNode(c, colors, parentStyles, depth))}
-        </Text>
+        <View key={key} style={styles.paragraphView}>
+          {renderChildren(node.children, ctx, parentStyles, depth)}
+        </View>
       );
     }
 
@@ -156,7 +253,7 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
       if (parentStyles._inCodeBlock) {
         return (
           <Text key={key} style={parentStyles}>
-            {node.children.map((c, i) => renderNode(c, colors, parentStyles, depth))}
+            {node.children.map((c, i) => renderNode(c, ctx, parentStyles, depth))}
           </Text>
         );
       }
@@ -174,7 +271,7 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
             overflow: 'hidden',
           }
         ]}>
-          {node.children.map((c, i) => renderNode(c, colors, { ...parentStyles }, depth))}
+          {node.children.map((c, i) => renderNode(c, ctx, { ...parentStyles }, depth))}
         </Text>
       );
     }
@@ -201,9 +298,7 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
         <View key={key} style={[styles.blockquote, {
           borderLeftColor: colors.primary,
         }]}>
-          <Text style={[styles.blockquoteText, { color: colors.textSecondary }]}>
-            {node.children.map((c, i) => renderNode(c, colors, { fontStyle: 'italic', color: colors.textSecondary }, depth))}
-          </Text>
+          {renderChildren(node.children, ctx, { ...parentStyles, fontStyle: 'italic', color: colors.textSecondary }, depth)}
         </View>
       );
     }
@@ -211,7 +306,7 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
     case 'ul': {
       return (
         <View key={key} style={{ paddingLeft: depth === 0 ? 20 : 16, marginVertical: 2 }}>
-          {node.children.map((c, i) => renderNode(c, colors, parentStyles, depth + 1))}
+          {node.children.map((c, i) => renderNode(c, ctx, parentStyles, depth + 1))}
         </View>
       );
     }
@@ -223,9 +318,9 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
             return (
               <View key={`oli-${keyCounter++}`} style={styles.listItem}>
                 <Text style={[parentStyles, { color: colors.textPrimary, fontSize: 15 }]}>{`${i + 1}. `}</Text>
-                <Text style={[parentStyles, { flex: 1, color: colors.textPrimary, fontSize: 15 }]}>
-                  {c.children.map((cc, j) => renderNode(cc, colors, { ...parentStyles, color: colors.textPrimary, fontSize: 15 }, depth + 1))}
-                </Text>
+                <View style={{ flexShrink: 1 }}>
+                  {renderChildren(c.children, ctx, { ...parentStyles, color: colors.textPrimary, fontSize: 15 }, depth + 1)}
+                </View>
               </View>
             );
           })}
@@ -240,9 +335,9 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
       return (
         <View key={key} style={styles.listItem}>
           <Text style={[parentStyles, { color: colors.textPrimary, fontSize: 15 }]}>{marker}  </Text>
-          <Text style={[parentStyles, { flex: 1, color: colors.textPrimary, fontSize: 15 }]}>
-            {node.children.map((c, i) => renderNode(c, colors, { ...parentStyles, color: colors.textPrimary, fontSize: 15 }, depth))}
-          </Text>
+          <View style={{ flexShrink: 1 }}>
+            {renderChildren(node.children, ctx, { ...parentStyles, color: colors.textPrimary, fontSize: 15 }, depth)}
+          </View>
         </View>
       );
     }
@@ -251,7 +346,7 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
       const size = HEADING_SIZES[node.tag] || 15;
       return (
         <Text key={key} style={[parentStyles, { fontSize: size, fontWeight: '700', marginVertical: 3, lineHeight: size * 1.3 }]}>
-          {node.children.map((c, i) => renderNode(c, colors, { ...parentStyles, fontWeight: '700', fontSize: size }, depth))}
+          {node.children.map((c, i) => renderNode(c, ctx, { ...parentStyles, fontWeight: '700', fontSize: size }, depth))}
         </Text>
       );
     }
@@ -264,7 +359,7 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
           style={[parentStyles, { color: colors.info, textDecorationLine: 'underline' }]}
           onPress={() => { if (href) Linking.openURL(href).catch(() => {}); }}
         >
-          {node.children.map((c, i) => renderNode(c, colors, { ...parentStyles, color: colors.info, textDecorationLine: 'underline' }, depth))}
+          {node.children.map((c, i) => renderNode(c, ctx, { ...parentStyles, color: colors.info, textDecorationLine: 'underline' }, depth))}
         </Text>
       );
     }
@@ -272,21 +367,27 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
     case 'span': {
       // Check for mention tag
       const cls = node.attrs?.class || '';
-      if (cls.includes('mention-tag')) {
+      const dataType = node.attrs?.['data-type'] || '';
+      if (cls.includes('mention') || dataType === 'mention') {
         const text = extractText(node);
+        const userId = node.attrs?.['data-id'];
         return (
-          <Text key={key} style={[
-            parentStyles,
-            {
-              backgroundColor: colors.primaryLight,
-              color: colors.primary,
-              borderRadius: 4,
-              paddingHorizontal: 4,
-              fontWeight: '600',
-              fontSize: (parentStyles.fontSize || 15) * 0.92,
-              overflow: 'hidden',
-            }
-          ]}>
+          <Text 
+            key={key} 
+            style={[
+              parentStyles,
+              {
+                backgroundColor: colors.primaryLight,
+                color: colors.primary,
+                borderRadius: 4,
+                paddingHorizontal: 4,
+                fontWeight: '600',
+                fontSize: (parentStyles.fontSize || 15) * 0.92,
+                overflow: 'hidden',
+              }
+            ]}
+            onPress={() => onMentionPress && onMentionPress(userId)}
+          >
             {text}
           </Text>
         );
@@ -309,7 +410,7 @@ function renderNode(node, colors, parentStyles = {}, depth = 0) {
       if (node.children && node.children.length > 0) {
         return (
           <Text key={key} style={parentStyles}>
-            {node.children.map((c, i) => renderNode(c, colors, parentStyles, depth))}
+            {node.children.map((c, i) => renderNode(c, ctx, parentStyles, depth))}
           </Text>
         );
       }
@@ -385,10 +486,12 @@ function markdownToHtml(text) {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-const RichText = React.memo(function RichText({ html, text, colors, baseStyle }) {
+const RichText = React.memo(function RichText({ html, text, colors, baseStyle, mentions = [], onMentionPress }) {
   const elements = useMemo(() => {
     keyCounter = 0; // reset key counter per render
     if (!html && !text) return null;
+
+    const ctx = { colors: colors || {}, mentions, onMentionPress };
 
     // Use HTML directly if available, otherwise compile Markdown fallback to HTML
     const targetHtml = (html && html.trim() && html.trim() !== '<p></p>')
@@ -399,7 +502,7 @@ const RichText = React.memo(function RichText({ html, text, colors, baseStyle })
       try {
         const tokens = tokenize(targetHtml);
         const ast = buildAST(tokens);
-        return ast.children.map((node, i) => renderNode(node, colors || {}, baseStyle || {}));
+        return renderChildren(ast.children, ctx, baseStyle || {}, 0);
       } catch (e) {
         // Fallback to plain text on parse error
         return <Text style={baseStyle}>{text || html}</Text>;
@@ -407,7 +510,7 @@ const RichText = React.memo(function RichText({ html, text, colors, baseStyle })
     }
 
     return null;
-  }, [html, text, colors, baseStyle]);
+  }, [html, text, colors, baseStyle, mentions, onMentionPress]);
 
   return <View style={styles.container}>{elements}</View>;
 });
@@ -416,8 +519,10 @@ const styles = StyleSheet.create({
   container: {
     flexShrink: 1,
   },
-  paragraph: {
+  paragraphView: {
     marginVertical: 1,
+  },
+  paragraphText: {
     fontSize: 15,
     lineHeight: 22,
   },

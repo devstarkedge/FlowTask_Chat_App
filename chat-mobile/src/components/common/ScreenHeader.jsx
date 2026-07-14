@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { ArrowLeft } from 'lucide-react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useThemeStore } from '../../stores/themeStore';
+import HeaderBackButton from './HeaderBackButton';
 
 /**
  * ScreenHeader — standardized back-button + title + optional right action.
@@ -17,9 +17,7 @@ const ScreenHeader = React.memo(({ title, onBack, rightAction, subtitle }) => {
 
   return (
     <View style={[styles.header, { borderBottomColor: colors.border }]}>
-      <TouchableOpacity style={styles.backButton} onPress={onBack} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <ArrowLeft size={22} color={colors.textPrimary} />
-      </TouchableOpacity>
+      <HeaderBackButton onPress={onBack} />
 
       <View style={styles.titleContainer}>
         <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>
@@ -44,10 +42,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    gap: 12,
-  },
-  backButton: {
-    padding: 4,
+    gap: 16,
   },
   titleContainer: {
     flex: 1,

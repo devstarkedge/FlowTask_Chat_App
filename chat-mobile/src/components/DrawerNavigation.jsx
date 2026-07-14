@@ -155,7 +155,12 @@ const chRow = StyleSheet.create({
 
 const DMRow = React.memo(({ channel, unreadCount, onPress, colors }) => {
   const otherUser = channel.members?.find((m) => m._id !== channel.selfId) || channel.otherUser;
-  const isOnline = otherUser?.presence === "online" || otherUser?.isOnline || channel.onlineStatus === "online";
+  const targetId = otherUser?._id || channel.dmRecipientId;
+  const liveMember = useWorkspaceStore(s => 
+    s.members.find(m => (m.userId?._id || m.userId || m._id) === targetId)
+  );
+  
+  const isOnline = liveMember?.onlineStatus === 'online' || liveMember?.userId?.onlineStatus === 'online' || otherUser?.presence === "online" || otherUser?.isOnline || channel.onlineStatus === "online";
   const displayName = channel.name || otherUser?.name || "DM";
 
   return (

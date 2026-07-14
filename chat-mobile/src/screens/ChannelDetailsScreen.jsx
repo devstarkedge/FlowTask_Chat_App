@@ -18,9 +18,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
 import { useAuthStore } from '../stores/authStore';
-import { Hash, Users, Pin, Bell, Settings, LogOut, ArrowLeft, FolderOpen, FileText, Clock, User, Mail, Briefcase, UserPlus, X, Search, Plus, Lock } from 'lucide-react-native';
+import { Hash, Users, Pin, Bell, Settings, LogOut, ArrowLeft, FolderOpen, FileText, Clock, User, Mail, Briefcase, UserPlus, X, Search, Plus, Lock, MoreHorizontal } from 'lucide-react-native';
 import { channelAPI, notificationPrefAPI, usersAPI, directoriesAPI } from '../services/api';
-import { AppAvatar } from '../components/common';
+import { AppAvatar, HeaderBackButton } from '../components/common';
 import logger from '../utils/logger';
 import Toast from 'react-native-toast-message';
 
@@ -179,7 +179,8 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               navigation.navigate('Main');
             } catch (err) {
               logger.error('Failed to leave channel:', err);
-              Alert.alert('Error', 'Failed to leave the channel.');
+              const msg = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to leave the channel.';
+              Alert.alert('Error', msg);
             }
           },
         },
@@ -199,126 +200,79 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
 
   if (isOneToOneDM) {
     const otherUser = members.find(m => m._id !== currentUser?._id);
-    const dmName = otherUser?.name || channelName;
-    const dmStatus = otherUser?.onlineStatus || channel?.onlineStatus || 'offline';
-    const dmCustomStatusText = otherUser?.customStatus?.text || '';
-    const dmCustomStatusEmoji = otherUser?.customStatus?.emoji || '';
-    const dmEmail = otherUser?.email || '';
-    const dmRole = otherUser?.role || 'Member';
-    const dmTimezone = otherUser?.chatPreferences?.dndSchedule?.timezone || 'UTC';
+
+    if (!otherUser && isLoadingMembers) {
+      return (
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]} edges={['top', 'bottom']}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </SafeAreaView>
+      );
+    }
+
+    const displayUser = otherUser || currentUser;
+    const dmName = displayUser?.name || channelName;
+    const username = `@${dmName.replace(/\s+/g, '')}`;
 
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
         {/* Header Bar */}
-        <View style={[styles.navHeader, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <ArrowLeft size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <Text style={[styles.navTitle, { color: colors.textPrimary }]}>Member Profile</Text>
-          <View style={{ width: 40 }} />
+        <View style={[styles.dmNavHeader, { borderBottomColor: 'transparent' }]}>
+          <HeaderBackButton onPress={() => navigation.goBack()} />
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
-          {/* User Info Header */}
-          <View style={[styles.profileHeader, { borderBottomColor: colors.border }]}>
-            <View style={{ marginBottom: 12 }}>
-              <AppAvatar user={otherUser || { name: dmName, avatar: channel?.avatar }} size={90} showStatus statusSize={18} />
+          {/* User Info Profile Box */}
+          <View style={[styles.dmProfileHeader, { borderBottomColor: colors.border }]}>
+            <View style={styles.dmAvatarWrapper}>
+              <AppAvatar user={otherUser || { name: dmName, avatar: channel?.avatar }} size={64} showStatus statusSize={16} />
             </View>
-            <Text style={[styles.channelName, { color: colors.textPrimary }]}>{dmName}</Text>
-            <Text style={[styles.presenceText, { color: dmStatus === 'online' ? colors.online : colors.textTertiary }]}>
-              {dmStatus === 'online' ? 'Active' : 'Away'}
-            </Text>
+            <Text style={[styles.dmName, { color: colors.textPrimary }]}>{dmName}</Text>
+            <Text style={[styles.dmUsername, { color: colors.textSecondary }]}>{username}</Text>
 
-            {/* Custom Status */}
-            {(dmCustomStatusEmoji || dmCustomStatusText) && (
-              <View style={[styles.customStatusContainer, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
-                {dmCustomStatusEmoji && <Text style={styles.customStatusEmoji}>{dmCustomStatusEmoji}</Text>}
-                {dmCustomStatusText && (
-                  <Text style={[styles.customStatusText, { color: colors.textPrimary }]} numberOfLines={1}>
-                    {dmCustomStatusText}
-                  </Text>
-                )}
+            {/* <TouchableOpacity style={{ marginTop: 16 }}>
+              <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '500' }}>Add Topic</Text>
+            </TouchableOpacity> */}
+
+            <TouchableOpacity style={{ marginTop: 16, marginBottom: 12 }} onPress={() => navigation.navigate('UserProfile', { user: displayUser, channelId })}>
+              <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '500' }}>View Full Profile</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Settings Section */}
+          <View style={styles.dmSection}>
+            <Text style={[styles.dmSectionTitle, { color: colors.textPrimary }]}>Settings</Text>
+            
+            <View style={styles.dmSettingRow}>
+              <Bell size={24} color={colors.textPrimary} style={{ marginRight: 16, marginTop: 4 }} />
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={{ fontSize: 16, color: colors.textPrimary }}>Mute</Text>
+                <Text style={{ fontSize: 14, color: colors.textSecondary, marginTop: 4, lineHeight: 20 }}>
+                  Muted conversations will always appear read and you won't receive any notifications from them.
+                </Text>
               </View>
-            )}
-          </View>
-
-          {/* About Section */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ABOUT</Text>
-            <View style={[styles.card, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
-              {dmEmail ? (
-                <View style={styles.infoRow}>
-                  <Mail size={18} color={colors.textSecondary} style={{ marginRight: 12 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 12, color: colors.textSecondary }}>Email Address</Text>
-                    <Text style={{ fontSize: 15, color: colors.textPrimary, marginTop: 2 }}>{dmEmail}</Text>
-                  </View>
-                </View>
-              ) : null}
-
-              <View style={[styles.infoRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
-                <Briefcase size={18} color={colors.textSecondary} style={{ marginRight: 12 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>Role</Text>
-                  <Text style={{ fontSize: 15, color: colors.textPrimary, marginTop: 2, textTransform: 'capitalize' }}>{dmRole}</Text>
-                </View>
-              </View>
-              
+              {isMuteLoading ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Switch
+                  value={isMuted}
+                  onValueChange={handleToggleMute}
+                  trackColor={{ false: '#767577', true: colors.primary }}
+                  thumbColor={isMuted ? '#fff' : '#f4f3f4'}
+                />
+              )}
             </View>
           </View>
 
-          {/* Shared Content Section */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SHARED CONTENT</Text>
-            <View style={[styles.card, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
-              <TouchableOpacity
-                style={styles.actionRow}
-                onPress={() => navigation.navigate('PinnedMessages', { channelId, channelName })}
-              >
-                <Pin size={18} color={colors.textSecondary} style={{ marginRight: 12 }} />
-                <Text style={{ fontSize: 15, color: colors.textPrimary, flex: 1 }}>Pinned Messages</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
-                onPress={() => navigation.navigate('Files', { channelId, channelName })}
-              >
-                <FolderOpen size={18} color={colors.textSecondary} style={{ marginRight: 12 }} />
-                <Text style={{ fontSize: 15, color: colors.textPrimary, flex: 1 }}>Shared Files</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
-                onPress={() => navigation.navigate('CanvasList', { channelId, channelName })}
-              >
-                <FileText size={18} color={colors.textSecondary} style={{ marginRight: 12 }} />
-                <Text style={{ fontSize: 15, color: colors.textPrimary, flex: 1 }}>Shared Canvases</Text>
-              </TouchableOpacity>
-            </View>
+          {/* Close Conversation Button */}
+          <View style={{ paddingHorizontal: 16, marginTop: 32, paddingBottom: 40 }}>
+            <TouchableOpacity 
+              style={styles.closeConversationBtn} 
+              onPress={handleLeaveChannel}
+            >
+              <LogOut size={20} color="#E53E3E" style={{ marginRight: 8, transform: [{ rotate: '180deg' }] }} />
+              <Text style={{ color: '#E53E3E', fontSize: 16, fontWeight: '600' }}>Close Conversation</Text>
+            </TouchableOpacity>
           </View>
-
-          {/* Action Row */}
-          <View style={styles.section}>
-            <View style={[styles.card, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
-              <DetailItem
-                icon={Bell}
-                label="Mute Notifications"
-                onPress={null}
-              >
-                {isMuteLoading ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Switch
-                    value={isMuted}
-                    onValueChange={handleToggleMute}
-                    trackColor={{ false: '#767577', true: colors.primary + '80' }}
-                    thumbColor={isMuted ? colors.primary : '#f4f3f4'}
-                  />
-                )}
-              </DetailItem>
-            </View>
-          </View>
-          <View style={{ height: 40 }} />
         </ScrollView>
       </SafeAreaView>
     );
@@ -328,9 +282,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       {/* Header Bar */}
       <View style={[styles.navHeader, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <ArrowLeft size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <HeaderBackButton onPress={() => navigation.goBack()} />
         <Text style={[styles.navTitle, { color: colors.textPrimary }]}>Details</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -727,6 +679,61 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  dmNavHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  dmBackButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dmProfileHeader: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    alignItems: 'flex-start',
+    borderBottomWidth: 1,
+  },
+  dmAvatarWrapper: {
+    marginBottom: 16,
+  },
+  dmName: {
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  dmRole: {
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  dmUsername: {
+    fontSize: 15,
+  },
+  dmSection: {
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+  },
+  dmSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+  dmSettingRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  closeConversationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+  }
 });
 
 export default ChannelDetailsScreen;

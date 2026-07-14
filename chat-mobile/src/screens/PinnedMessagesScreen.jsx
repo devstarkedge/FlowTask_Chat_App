@@ -19,7 +19,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { useAuthStore } from '../stores/authStore';
 import { pinsAPI } from '../services/api';
 import logger from '../utils/logger';
-import { ScreenLayout, ScreenHeader, LoadingState, EmptyState, AppAvatar } from '../components/common';
+import { ScreenLayout, ScreenHeader, LoadingState, EmptyState, AppAvatar, HeaderBackButton } from '../components/common';
 import RichText from '../components/RichText';
 
 const formatTime = (dateStr) => {
@@ -149,6 +149,10 @@ const PinnedMessagesScreen = ({ route, navigation }) => {
               html={item.htmlContent}
               text={item.content}
               colors={colors}
+              mentions={item.mentions}
+              onMentionPress={(userId) => {
+                navigation.navigate('UserProfile', { user: { _id: userId }, channelId });
+              }}
               baseStyle={{ fontSize: 14, lineHeight: 20 }}
             />
           ) : item.content ? (
@@ -236,9 +240,7 @@ const PinnedMessagesScreen = ({ route, navigation }) => {
     <ScreenLayout>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <CircleChevronLeft size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <HeaderBackButton onPress={() => navigation.goBack()} />
         <View style={{ flex: 1 }}>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
             Pinned Messages

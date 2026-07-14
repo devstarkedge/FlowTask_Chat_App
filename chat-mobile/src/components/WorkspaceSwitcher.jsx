@@ -21,6 +21,7 @@ import {
   HelpCircle,
   MoreVertical,
   X,
+  LogOut,
 } from "lucide-react-native";
 import WorkspaceAvatar from "./WorkspaceAvatar";
 import AddWorkspaceScreen from "./workspace/AddWorkspaceScreen";
@@ -35,6 +36,7 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
     activeWorkspace,
     switchWorkspace,
     fetchWorkspaces,
+    leaveWorkspace,
     isLoading,
     error,
   } = useWorkspaceStore();
@@ -77,6 +79,28 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
     if (workspaceId === activeWorkspace?._id) { onClose(); return; }
     switchWorkspace(workspaceId);
     onClose();
+  };
+
+  const handleSignOut = (ws) => {
+    setActionMenuVisible(null);
+    Alert.alert(
+      "Sign Out of Workspace",
+      `Are you sure you want to sign out of ${ws.name}? You will need an invite to rejoin.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign Out",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await leaveWorkspace(ws._id);
+            } catch (err) {
+              Alert.alert("Error", err.message || "Failed to sign out of workspace");
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (!visible) return null;
@@ -158,6 +182,16 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
                         >
                           <Plus size={16} color={colors.primary} />
                           <Text style={[styles.dropdownText, { color: colors.textPrimary }]}>Invite Members</Text>
+                        </TouchableOpacity>
+
+                        <View style={[styles.dropdownDivider, { backgroundColor: colors.border }]} />
+
+                        <TouchableOpacity
+                          style={styles.dropdownItem}
+                          onPress={() => handleSignOut(ws)}
+                        >
+                          <LogOut size={16} color={colors.error} />
+                          <Text style={[styles.dropdownText, { color: colors.error }]}>Sign Out</Text>
                         </TouchableOpacity>
                       </View>
                     )}
@@ -317,15 +351,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginHorizontal: 16,
     marginVertical: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 12,
   },
   dropdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    flex: 1,
+  },
+  dropdownDivider: {
+    height: StyleSheet.hairlineWidth,
+    width: '100%',
   },
   dropdownText: {
     fontSize: 14,

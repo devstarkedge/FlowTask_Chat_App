@@ -19,9 +19,12 @@ import {
   Modal,
   Platform,
 } from 'react-native';
-import { X, Clock, Bell, Calendar } from 'lucide-react-native';
+import { X, Clock, Bell, Calendar, Repeat as RepeatIcon } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { formatMessageTime } from '../utils/dateUtils';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+
+const RECURRENCE_OPTIONS = ['None', 'Daily', 'Weekly', 'Monthly', 'Yearly'];
 
 function getQuickOptions() {
   const now = new Date();
@@ -67,10 +70,12 @@ const ReminderModal = React.memo(function ReminderModal({
   const quickOptions = useMemo(() => getQuickOptions(), [visible]);
   const [showCustom, setShowCustom] = useState(false);
   const [customDate, setCustomDate] = useState(new Date());
+  const [recurrence, setRecurrence] = useState('None');
+  const [showRecurrencePicker, setShowRecurrencePicker] = useState(false);
 
   const handleCustomSubmit = () => {
     if (customDate <= new Date()) return;
-    onSetReminder(customDate.toISOString());
+    onSetReminder(customDate.toISOString(), recurrence);
     setShowCustom(false);
     onClose();
   };
@@ -82,35 +87,25 @@ const ReminderModal = React.memo(function ReminderModal({
   };
 
   const handleQuickSelect = (date) => {
-    onSetReminder(date);
+    onSetReminder(date, 'None');
     onClose();
   };
 
+  const [showAndroidDatePicker, setShowAndroidDatePicker] = useState(false);
+  const [showAndroidTimePicker, setShowAndroidTimePicker] = useState(false);
+
   const openCustomPicker = () => {
-    if (Platform.OS === 'android') {
-      onClose(); // Hide the modal immediately to avoid overlap
-      setTimeout(() => {
-        DateTimePickerAndroid.open({
-          value: customDate,
-          mode: 'date',
-          onChange: (event, date) => {
-            if (event.type === 'set' && date) {
-              DateTimePickerAndroid.open({
-                value: date,
-                mode: 'time',
-                onChange: (tEvent, time) => {
-                  if (tEvent.type === 'set' && time) {
-                    onSetReminder(time.toISOString());
-                  }
-                },
-              });
-            }
-          },
-        });
-      }, 100);
-    } else {
-      setShowCustom(true);
-    }
+    setShowCustom(true);
+  };
+
+  const handleAndroidDateChange = (event, selectedDate) => {
+    setShowAndroidDatePicker(false);
+    if (selectedDate) setCustomDate(selectedDate);
+  };
+
+  const handleAndroidTimeChange = (event, selectedTime) => {
+    setShowAndroidTimePicker(false);
+    if (selectedTime) setCustomDate(selectedTime);
   };
 
   // Reset view when modal closes
@@ -204,15 +199,57 @@ const ReminderModal = React.memo(function ReminderModal({
               </View>
 
               <View style={{ gap: 16, alignItems: 'center' }}>
-                <DateTimePicker
-                  value={customDate}
-                  mode="datetime"
-                  display="spinner"
-                  onChange={handleDateChange}
-                  style={{ width: '100%', height: 120 }}
-                  textColor={colors.textPrimary}
-                  themeVariant={colors.background === '#ffffff' ? 'light' : 'dark'}
-                />
+                {Platform.OS === 'ios' ? (
+                  <DateTimePicker
+                    value={customDate}
+                    mode="datetime"
+                    display="spinner"
+                    onChange={handleDateChange}
+                    style={{ width: '100%', height: 120 }}
+                    textColor={colors.textPrimary}
+                    themeVariant={colors.effectiveTheme === 'dark' ? 'dark' : 'light'}
+                  />
+                ) : (
+                  <View style={{ width: '100%', gap: 12 }}>
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.backgroundSecondary, borderRadius: 8 }}
+                      onPress={() => setShowAndroidDatePicker(true)}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Calendar size={16} color={colors.textPrimary} />
+                        <Text style={{ color: colors.textPrimary, fontSize: 14 }}>Date</Text>
+                      </View>
+                      <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}>
+                        {customDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.backgroundSecondary, borderRadius: 8 }}
+                      onPress={() => setShowAndroidTimePicker(true)}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Clock size={16} color={colors.textPrimary} />
+                        <Text style={{ color: colors.textPrimary, fontSize: 14 }}>Time</Text>
+                      </View>
+                      <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}>
+                        {formatMessageTime(customDate)}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Repeat Button */}
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.backgroundSecondary, borderRadius: 8 }}
+                  onPress={() => setShowRecurrencePicker(true)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <RepeatIcon size={16} color={colors.textPrimary} />
+                    <Text style={{ color: colors.textPrimary, fontSize: 14 }}>Repeat</Text>
+                  </View>
+                  <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}>{recurrence}</Text>
+                </TouchableOpacity>
                 
                 <TouchableOpacity
                   style={[styles.setButton, { backgroundColor: colors.primary, width: '100%', alignItems: 'center' }]}
@@ -225,6 +262,49 @@ const ReminderModal = React.memo(function ReminderModal({
           )}
         </TouchableOpacity>
       </TouchableOpacity>
+
+      {/* Recurrence Picker Modal */}
+      {showRecurrencePicker && (
+        <Modal transparent animationType="fade">
+          <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowRecurrencePicker(false)}>
+            <View style={[styles.container, { backgroundColor: colors.background, paddingBottom: 16 }]}>
+              <View style={[styles.header, { borderBottomColor: colors.border, justifyContent: 'center' }]}>
+                <Text style={{ fontSize: 16, fontWeight: '600', color: colors.textPrimary }}>Repeat</Text>
+              </View>
+              {RECURRENCE_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt}
+                  style={{ paddingVertical: 16, paddingHorizontal: 24, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}
+                  onPress={() => {
+                    setRecurrence(opt);
+                    setShowRecurrencePicker(false);
+                  }}
+                >
+                  <Text style={{ fontSize: 16, color: recurrence === opt ? colors.primary : colors.textPrimary }}>{opt}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Android Date Pickers */}
+      {Platform.OS !== 'ios' && showAndroidDatePicker && (
+        <DateTimePicker
+          value={customDate}
+          mode="date"
+          display="default"
+          onChange={handleAndroidDateChange}
+        />
+      )}
+      {Platform.OS !== 'ios' && showAndroidTimePicker && (
+        <DateTimePicker
+          value={customDate}
+          mode="time"
+          display="default"
+          onChange={handleAndroidTimeChange}
+        />
+      )}
     </Modal>
   );
 });

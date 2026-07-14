@@ -104,10 +104,33 @@ export const useWorkspaceStore = create(
           set({ isLoading: false });
           return workspace;
         } catch (error) {
-          const msg = error.response?.data?.message || error.userMessage || 'Failed to join workspace';
+          const msg = error.response?.data?.error?.message || error.response?.data?.message || error.userMessage || 'Failed to join workspace';
           set({ isLoading: false, error: msg });
           logger.error('[WorkspaceStore] Join error:', msg);
-          throw error;
+          throw new Error(msg);
+        }
+      },
+
+      leaveWorkspace: async (workspaceId) => {
+        set({ isLoading: true, error: null });
+        try {
+          await workspaceAPI.leave(workspaceId);
+          const { workspaces, activeWorkspaceId } = get();
+          const updatedWorkspaces = workspaces.filter(w => w._id !== workspaceId);
+          set({ workspaces: updatedWorkspaces, isLoading: false });
+          
+          if (activeWorkspaceId === workspaceId) {
+            if (updatedWorkspaces.length > 0) {
+              await get().switchWorkspace(updatedWorkspaces[0]._id);
+            } else {
+              get().clearWorkspaceState();
+            }
+          }
+        } catch (error) {
+          const msg = error.response?.data?.error?.message || error.response?.data?.message || error.userMessage || 'Failed to leave workspace';
+          set({ isLoading: false, error: msg });
+          logger.error('[WorkspaceStore] Leave error:', msg);
+          throw new Error(msg);
         }
       },
 

@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
 import { useNewMessageSearch } from '../hooks/useNewMessageSearch';
-import { AppAvatar } from '../components/common';
+import { AppAvatar , HeaderBackButton } from '../components/common';
 import { X, Hash, Lock, Volume2, Search } from 'lucide-react-native';
 
 // ─── Channel List Item ──────────────────────────────────────────────────────

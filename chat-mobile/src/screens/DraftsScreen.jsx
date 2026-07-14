@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useDraftStore, getWorkspaceDrafts } from '../stores/draftStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useChatStore } from '../stores/chatStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
 import { formatRelativeTime } from '../utils/dateUtils';
@@ -18,7 +19,78 @@ import {
   Hash,
   MessageSquare,
   Trash2,
+  Clock,
+  Send,
 } from 'lucide-react-native';
+import ScheduleModal from '../components/ScheduleModal';
+import { AppAvatar } from '../components/common';
+import { useConversationDetails } from '../hooks/useConversationDetails';
+import { Alert } from 'react-native';
+
+const DraftItem = React.memo(({ item, onPress, onSchedule, onDelete, onSend, colors }) => {
+  const isThread = item.threadId && item.threadId !== 'root';
+  const { isDM, icon: IconComponent, dmUser, displayName } = useConversationDetails(item.channelId);
+  const styles = createStyles(colors);
+
+  return (
+    <TouchableOpacity
+      style={[styles.draftItem, { backgroundColor: colors.card }]}
+      onPress={() => onPress(item)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.draftHeader}>
+        <View style={styles.draftIconContainer}>
+          {isThread ? (
+            <MessageSquare size={16} color={colors.info} />
+          ) : isDM && dmUser ? (
+            <AppAvatar user={dmUser} size={20} showStatus={true} statusSize={6} />
+          ) : IconComponent ? (
+            <IconComponent size={16} color={colors.textSecondary} />
+          ) : null}
+        </View>
+        <View style={styles.draftInfo}>
+          <Text style={[styles.draftLabel, { color: colors.textTertiary }]} numberOfLines={1}>
+            {isThread ? `Thread reply in ${isDM ? '' : ''}${displayName}` : `${isDM ? '' : ''}${displayName}`}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => onSend(item)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Send size={18} color={colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => onSchedule(item)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Clock size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => onDelete(item)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Trash2 size={18} color={colors.error} />
+        </TouchableOpacity>
+      </View>
+
+      <Text 
+        style={[styles.draftContent, { color: colors.textPrimary }]} 
+        numberOfLines={3}
+      >
+        {item.text || item.html?.replace(/<[^>]*>/g, '') || 'Empty draft'}
+      </Text>
+
+      <View style={styles.draftMeta}>
+        <Text style={[styles.metaText, { color: colors.textTertiary }]}>
+          {formatRelativeTime(item.timestamp)}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 const DraftsScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
@@ -27,7 +99,9 @@ const DraftsScreen = ({ navigation }) => {
   const fetchDrafts = useDraftStore(state => state.fetchDrafts);
   const { activeWorkspace } = useWorkspaceStore();
   const { channels } = useChannelStore();
+  const sendMessage = useChatStore((s) => s.sendMessage);
   const [refreshing, setRefreshing] = useState(false);
+  const [scheduleDraft, setScheduleDraft] = useState(null);
 
   const fetchDraftsRef = useRef(fetchDrafts);
   fetchDraftsRef.current = fetchDrafts;
@@ -58,54 +132,56 @@ const DraftsScreen = ({ navigation }) => {
     clearDraft(draft.channelId, draft.workspaceId, draft.threadId);
   }, [clearDraft]);
 
+  const handleScheduleSend = useCallback(async (scheduledAt) => {
+    if (!scheduleDraft) return;
+    try {
+      await sendMessage(scheduleDraft.channelId, scheduleDraft.text, {
+        htmlContent: scheduleDraft.html,
+        threadId: scheduleDraft.threadId === 'root' ? null : scheduleDraft.threadId,
+        scheduledAt,
+      });
+      clearDraft(scheduleDraft.channelId, scheduleDraft.workspaceId, scheduleDraft.threadId);
+      setScheduleDraft(null);
+      fetchDrafts(activeWorkspace?._id);
+    } catch (err) {
+      console.error('Failed to schedule draft', err);
+      Alert.alert('Error', 'Failed to schedule message');
+    }
+  }, [scheduleDraft, clearDraft, activeWorkspace?._id, fetchDrafts, sendMessage]);
+
+  const handleSendDraft = useCallback(async (draft) => {
+    try {
+      const result = await sendMessage(draft.channelId, draft.text, {
+        htmlContent: draft.html,
+        threadId: draft.threadId === 'root' ? null : draft.threadId,
+      });
+      
+      if (result && result.error) {
+        throw new Error('Failed to send message via API');
+      }
+
+      clearDraft(draft.channelId, draft.workspaceId, draft.threadId);
+      fetchDrafts(activeWorkspace?._id);
+    } catch (err) {
+      console.error('Failed to send draft', err);
+      Alert.alert('Error', 'Failed to send message');
+    }
+  }, [clearDraft, activeWorkspace?._id, fetchDrafts, sendMessage]);
+
   const renderDraftItem = useCallback(({ item }) => {
-    const isThread = item.threadId && item.threadId !== 'root';
-    
     return (
-      <TouchableOpacity
-        style={[styles.draftItem, { backgroundColor: colors.card }]}
-        onPress={() => handleDraftPress(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.draftHeader}>
-          <View style={styles.draftIconContainer}>
-            {isThread ? (
-              <MessageSquare size={16} color={colors.info} />
-            ) : (
-              <Hash size={16} color={colors.textSecondary} />
-            )}
-          </View>
-          <View style={styles.draftInfo}>
-            <Text style={[styles.draftLabel, { color: colors.textTertiary }]}>
-              {isThread ? 'Thread draft' : 'Channel draft'}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => handleDeleteDraft(item)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Trash2 size={18} color={colors.error} />
-          </TouchableOpacity>
-        </View>
-
-        <Text 
-          style={[styles.draftContent, { color: colors.textPrimary }]} 
-          numberOfLines={3}
-        >
-          {item.text || item.html?.replace(/<[^>]*>/g, '') || 'Empty draft'}
-        </Text>
-
-        <View style={styles.draftMeta}>
-          <Text style={[styles.metaText, { color: colors.textTertiary }]}>
-            {formatRelativeTime(item.timestamp)}
-          </Text>
-        </View>
-      </TouchableOpacity>
+      <DraftItem
+        item={item}
+        onPress={handleDraftPress}
+        onSchedule={setScheduleDraft}
+        onDelete={handleDeleteDraft}
+        onSend={handleSendDraft}
+        colors={colors}
+      />
     );
-  }, [colors, handleDraftPress, handleDeleteDraft]);
+  }, [handleDraftPress, handleDeleteDraft, handleSendDraft, colors]);
 
-  const styles = createStyles(colors);
+  const stylesObj = createStyles(colors);
 
   return (
     <ScreenLayout>
@@ -119,7 +195,7 @@ const DraftsScreen = ({ navigation }) => {
           data={workspaceDrafts}
           renderItem={renderDraftItem}
           keyExtractor={(item) => item._key}
-          contentContainerStyle={styles.listContainer}
+          contentContainerStyle={stylesObj.listContainer}
           showsVerticalScrollIndicator={false}
           initialNumToRender={10}
           maxToRenderPerBatch={10}
@@ -134,6 +210,13 @@ const DraftsScreen = ({ navigation }) => {
           }
         />
       )}
+
+      <ScheduleModal
+        visible={!!scheduleDraft}
+        onClose={() => setScheduleDraft(null)}
+        onSchedule={handleScheduleSend}
+        colors={colors}
+      />
     </ScreenLayout>
   );
 };
@@ -167,7 +250,7 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
   },
-  deleteButton: {
+  actionButton: {
     padding: 4,
   },
   draftContent: {

@@ -5,6 +5,14 @@ import { channelAPI, usersAPI, readReceiptAPI } from '../services/api';
 import { getSocket } from '../services/socket';
 import logger from '../utils/logger';
 import Toast from 'react-native-toast-message';
+// Lazy getter to avoid circular deps (channelStore <- chatStore <- authStore)
+const getAuthUser = () => {
+  try {
+    return require('./authStore').useAuthStore.getState().user;
+  } catch {
+    return null;
+  }
+};
 
 export const useChannelStore = create(
   persist(
@@ -26,6 +34,23 @@ export const useChannelStore = create(
           const starredIds = channels.filter(c => c.isStarred || c.starred).map(c => c._id);
           const pinnedIds = channels.filter(c => c.isPinned || c.pinned).map(c => c._id);
           set({ channels, starredIds, pinnedIds, isLoading: false });
+
+          // ── Join channel rooms AFTER channels are loaded ──────────────────
+          // The socket connect handler runs before fetchChannels resolves, so channels
+          // is always [] at connect time. We must join rooms here so the mobile app
+          // receives channel:updated events (which carry lastMessagePreview from server).
+          try {
+            const socket = getSocket();
+            if (socket && socket.connected) {
+              channels.forEach(ch => {
+                const cid = ch._id?.toString ? ch._id.toString() : ch._id;
+                if (cid) socket.emit('channel:join', cid);
+              });
+            }
+          } catch (socketErr) {
+            logger.warn('[ChannelStore] Failed to join channel rooms after fetch:', socketErr);
+          }
+
           get().fetchUnreads();
         } catch (error) {
           set({ isLoading: false });
@@ -37,15 +62,55 @@ export const useChannelStore = create(
         try {
           const { data } = await readReceiptAPI.getUnread();
           const unreads = {};
+          // Collect channel-level updates from populated channelId objects
+          // (mirrors web app behaviour: server populates lastMessageAt + lastMessagePreview
+          //  so we can refresh the sidebar preview without a separate API call).
+          const channelUpdates = {};
+
           if (data?.data?.unreads) {
             for (const item of data.data.unreads) {
-              const cid = item.channelId?._id || item.channelId;
-              if (cid) {
-                unreads[cid] = item.unreadCount || 0;
+              const channelObj = item.channelId;
+              // channelId may be a string ID or a populated object
+              const cid =
+                typeof channelObj === 'object' && channelObj !== null
+                  ? channelObj._id
+                  : channelObj;
+
+              if (!cid) continue;
+              const cidStr = cid.toString ? cid.toString() : cid;
+
+              unreads[cidStr] = item.unreadCount || 0;
+
+              // If the server populated the channel document, extract fresh preview data
+              if (
+                typeof channelObj === 'object' &&
+                channelObj !== null &&
+                (channelObj.lastMessageAt || channelObj.lastMessagePreview)
+              ) {
+                channelUpdates[cidStr] = {
+                  ...(channelObj.lastMessageAt && { lastMessageAt: channelObj.lastMessageAt }),
+                  ...(channelObj.lastMessagePreview !== undefined && {
+                    lastMessagePreview: channelObj.lastMessagePreview,
+                  }),
+                };
               }
             }
           }
-          set({ unreads });
+
+          set((state) => {
+            // Merge fresh lastMessagePreview/lastMessageAt into channels where available
+            const updatedChannels =
+              Object.keys(channelUpdates).length > 0
+                ? state.channels.map((c) => {
+                    const cid = c._id?.toString ? c._id.toString() : c._id;
+                    return channelUpdates[cid]
+                      ? { ...c, ...channelUpdates[cid] }
+                      : c;
+                  })
+                : state.channels;
+
+            return { unreads, channels: updatedChannels };
+          });
         } catch (error) {
           logger.error('Failed to fetch unreads:', error);
         }
@@ -157,24 +222,38 @@ export const useChannelStore = create(
       },
 
       addChannel: (channel) => {
+        const newCid = channel._id?.toString ? channel._id.toString() : channel._id;
         set((state) => {
-          if (state.channels.some((c) => c._id === channel._id)) return state;
+          if (state.channels.some((c) => {
+            const cId = c._id?.toString ? c._id.toString() : c._id;
+            return cId === newCid;
+          })) return state;
           return { channels: [...state.channels, channel] };
         });
       },
 
       removeChannel: (channelId) => {
+        const cidStr = channelId?.toString ? channelId.toString() : channelId;
         set((state) => ({
-          channels: state.channels.filter((c) => c._id !== channelId),
-          activeChannelId: state.activeChannelId === channelId ? null : state.activeChannelId,
+          channels: state.channels.filter((c) => {
+            const cId = c._id?.toString ? c._id.toString() : c._id;
+            return cId !== cidStr;
+          }),
+          activeChannelId: (() => {
+            const activeStr = state.activeChannelId?.toString ? state.activeChannelId.toString() : state.activeChannelId;
+            return activeStr === cidStr ? null : state.activeChannelId;
+          })(),
         }));
       },
 
       updateChannel: (channelId, updates) => {
+        // Normalise to string so ObjectId !== string mismatches never cause silent failures
+        const cidStr = channelId?.toString ? channelId.toString() : channelId;
         set((state) => ({
-          channels: state.channels.map((c) =>
-            c._id === channelId ? { ...c, ...updates } : c,
-          ),
+          channels: state.channels.map((c) => {
+            const cId = c._id?.toString ? c._id.toString() : c._id;
+            return cId === cidStr ? { ...c, ...updates } : c;
+          }),
         }));
       },
 
@@ -185,49 +264,43 @@ export const useChannelStore = create(
       },
 
       handleNewMessage: (message) => {
-        const { channelId, content, createdAt, attachments, files, fileReferences } = message;
+        const { channelId, content, createdAt, authorId } = message;
         if (!channelId) return;
 
+        // Normalise channelId to a string so it reliably matches stored channel._id strings
+        const channelIdStr = channelId?.toString ? channelId.toString() : channelId;
+
+        // Build plain-text preview (strip HTML, cap at 80 chars — mirrors web app)
         const rawText = (content || '').replace(/<[^>]*>/g, '').trim();
-        let preview = '';
-        if (rawText) {
-          preview = rawText.length > 50 ? rawText.substring(0, 50) + '...' : rawText;
-        } else {
-          const allAttachments = attachments || files || fileReferences || [];
-          if (allAttachments.length > 0) {
-            const first = allAttachments[0];
-            const mime = first.mimeType || first.type || '';
-            if (mime.startsWith('image/')) {
-              preview = 'Sent an image';
-            } else if (mime.startsWith('video/')) {
-              preview = 'Sent a video';
-            } else {
-              preview = 'Sent a file';
-            }
-          } else {
-            preview = '';
-          }
-        }
+        const preview = rawText.length > 80 ? rawText.substring(0, 80) + '\u2026' : rawText;
         const timestamp = createdAt || new Date().toISOString();
 
-        set((state) => {
-          const isActive = channelId === state.activeChannelId;
-          const channels = state.channels.map((c) =>
-            c._id === channelId
-              ? { ...c, lastMessageAt: timestamp, lastMessagePreview: preview }
-              : c
-          );
+        const currentUser = getAuthUser();
+        const messageAuthorId = typeof authorId === 'object' ? authorId?._id : authorId;
+        const isSelf = messageAuthorId === currentUser?._id;
 
-          // Sort channels by lastMessageAt descending (most recent first)
+        set((state) => {
+          const isActive = channelIdStr === state.activeChannelId;
+          const channels = state.channels.map((c) => {
+            const cId = c._id?.toString ? c._id.toString() : c._id;
+            if (cId !== channelIdStr) return c;
+            
+            // Note: We deliberately do NOT prepend "You: " or handle media parsing here.
+            // This strictly mirrors the Web App behavior. Media previews ("📷 Photo", etc.)
+            // will arrive moments later via the server-authoritative 'channel:updated' event.
+            return { ...c, lastMessageAt: timestamp, lastMessagePreview: preview };
+          });
+
+          // Keep DM channels sorted by most-recent message (mirrors DMListScreen sort)
           channels.sort((a, b) => {
             const aTime = new Date(a.lastMessageAt || 0).getTime();
             const bTime = new Date(b.lastMessageAt || 0).getTime();
             return bTime - aTime;
           });
 
-          const unreads = isActive
+          const unreads = isActive || isSelf
             ? state.unreads
-            : { ...state.unreads, [channelId]: (state.unreads[channelId] || 0) + 1 };
+            : { ...state.unreads, [channelIdStr]: (state.unreads[channelIdStr] || 0) + 1 };
 
           return { channels, unreads };
         });

@@ -49,7 +49,7 @@ export default function MediaPickerSheet({
     }
   };
 
-  const handleLaunchCamera = async (mediaTypes = ImagePicker.MediaTypeOptions.Images) => {
+  const handleLaunchCamera = async (mediaTypes = ['images']) => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       alert('Camera permission is required.');
@@ -68,7 +68,7 @@ export default function MediaPickerSheet({
   const handleLaunchLibrary = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsMultipleSelection: true,
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ['images', 'videos'],
     });
     if (!result.canceled) {
       onPickFiles(result.assets);
@@ -169,7 +169,7 @@ export default function MediaPickerSheet({
               icon={Video}
               label="Record a Video Clip"
               colors={colors}
-              onPress={() => handleLaunchCamera(ImagePicker.MediaTypeOptions.Videos)}
+              onPress={() => handleLaunchCamera(['videos'])}
             />
             <OptionRow
               icon={FileText}

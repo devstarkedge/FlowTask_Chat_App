@@ -123,6 +123,12 @@ export const accentColors = {
     primaryLight: '#FEE2E2',
     headerGradient: ['#EF4444', '#DC2626'],
   },
+  yellow: {
+    primary: '#F59E0B',
+    primaryHover: '#D97706',
+    primaryLight: '#FEF3C7',
+    headerGradient: ['#F59E0B', '#D97706'],
+  }
 };
 
 export const lightTheme = {

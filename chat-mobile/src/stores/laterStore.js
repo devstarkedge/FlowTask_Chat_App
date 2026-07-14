@@ -82,17 +82,21 @@ export const useLaterStore = create(
         }
       },
 
-      updateReminder: async (messageId, reminderAt) => {
+      updateReminder: async (messageId, reminderData) => {
         try {
+          const reminderAt = typeof reminderData === 'string' ? reminderData : (reminderData?.date || null);
+          const rawRecurrence = typeof reminderData === 'object' ? (reminderData.recurrence || 'None') : 'None';
+          const recurrence = rawRecurrence.toLowerCase();
+
           set((state) => ({
             savedMessages: state.savedMessages.map((m) =>
               (m._id === messageId || m.messageId?._id === messageId)
-                ? { ...m, reminderAt }
+                ? { ...m, reminderAt, recurrence }
                 : m
             ),
           }));
           const targetId = messageId;
-          await laterAPI.updateReminder(targetId, { reminderAt });
+          await laterAPI.updateReminder(targetId, { reminderAt, recurrence });
         } catch (error) {
           get().fetchSavedMessages();
           logger.error('Failed to update reminder:', error);
@@ -135,6 +139,27 @@ export const useLaterStore = create(
             savedCount: newMessages.length,
           };
         });
+      },
+
+      addCustomReminder: async (reminder) => {
+        try {
+          const { activeWorkspaceId } = require('./workspaceStore').useWorkspaceStore.getState();
+          if (!activeWorkspaceId) throw new Error('No active workspace');
+          
+          await laterAPI.createStandaloneReminder({
+            title: reminder.description || 'Custom Reminder',
+            reminderAt: reminder.date,
+            recurrence: (reminder.recurrence || 'none').toLowerCase(),
+          }, {
+            headers: { 'X-Workspace-Id': activeWorkspaceId }
+          });
+          
+          // No need to update local state immediately; the backend will emit 
+          // a 'savedMessage:added' socket event which will automatically add it.
+        } catch (error) {
+          logger.error('Failed to create custom reminder:', error);
+          throw error;
+        }
       },
 
       removeSavedMessage: (messageId) => {

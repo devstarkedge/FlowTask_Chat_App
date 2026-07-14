@@ -69,7 +69,6 @@ export const connectSocket = async () => {
       token,
       workspaceId,
     },
-    transports: ['websocket'],
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
@@ -184,10 +183,17 @@ export const connectSocket = async () => {
   });
 
   socket.on('channel:updated', ({ channelId, updates }) => {
+    // Normalise channelId to a string — socket events carry ObjectId-serialised strings
+    // but channel._id in the store may be stored differently depending on how it was fetched.
+    const cidStr = channelId?.toString ? channelId.toString() : channelId;
     const store = useChannelStore.getState();
-    const exists = store.channels.some((c) => c._id === channelId);
+    const exists = store.channels.some((c) => {
+      const cId = c._id?.toString ? c._id.toString() : c._id;
+      return cId === cidStr;
+    });
     if (exists) {
-      store.updateChannel(channelId, updates);
+      // Use normalised string ID so updateChannel (which also normalises) always finds the channel.
+      store.updateChannel(cidStr, updates);
     } else if (updates?.visibility !== undefined) {
       store.fetchChannels();
     }
@@ -356,15 +362,21 @@ export const connectSocket = async () => {
 
   // ─── Presence Events ──────────────────────────────────────────────────────
   socket.on('presence:online', ({ userId, name }) => {
-    // Lightweight: could be extended with a presenceStore
+    import('../stores/workspaceStore').then(({ useWorkspaceStore }) => {
+      useWorkspaceStore.getState().updateMemberProfile(userId, { onlineStatus: 'online' });
+    });
   });
 
   socket.on('presence:offline', ({ userId }) => {
-    // Lightweight: could be extended with a presenceStore
+    import('../stores/workspaceStore').then(({ useWorkspaceStore }) => {
+      useWorkspaceStore.getState().updateMemberProfile(userId, { onlineStatus: 'offline' });
+    });
   });
 
   socket.on('presence:away', ({ userId }) => {
-    // Lightweight: could be extended with a presenceStore
+    import('../stores/workspaceStore').then(({ useWorkspaceStore }) => {
+      useWorkspaceStore.getState().updateMemberProfile(userId, { onlineStatus: 'away' });
+    });
   });
 
   // ─── Draft Sync Events (cross-device) ──────────────────────────────────

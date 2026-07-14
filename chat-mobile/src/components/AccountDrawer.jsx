@@ -8,9 +8,10 @@ import {
   Pressable,
   Animated,
   Platform,
+  TouchableWithoutFeedback,
 } from "react-native";
 import AccessibleModal from "./AccessibleModal";
-import { AppAvatar } from "./common";
+import AppAvatar from "./common/AppAvatar";
 import { useThemeStore } from "../stores/themeStore";
 import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
@@ -20,6 +21,9 @@ import { useDraftStore } from "../stores/draftStore";
 import { useScheduledStore } from "../stores/scheduledStore";
 import { disconnectSocket } from "../services/socket";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+ 
+ 
+ import { useTranslation } from "../utils/i18n";
 import StatusModal from "./StatusModal";
 import PauseNotificationsModal from "./PauseNotificationsModal";
 import PresenceModal from "./PresenceModal";
@@ -42,19 +46,21 @@ import {
   FileText,
   Send,
   LogOut,
-  CircleChevronRight ,
+  CircleChevronRight,
   Smile,
+  LogOut as LogOutIcon,
 } from "lucide-react-native";
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 
 const AccountDrawer = ({ visible, onClose, navigation }) => {
   const { colors } = useThemeStore();
   const { user, logout } = useAuthStore();
-  const { activeWorkspace } = useWorkspaceStore();
+  const { activeWorkspace, leaveWorkspace } = useWorkspaceStore();
   const { savedCount = 0 } = useLaterStore();
   const { unreadThreadCount = 0 } = useThreadStore();
   const { draftCount = 0 } = useDraftStore();
   const { scheduledCount = 0 } = useScheduledStore();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [slideAnim] = useState(new Animated.Value(0));
   const [statusModalVisible, setStatusModalVisible] = useState(false);
@@ -110,6 +116,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
     onPress,
     badge,
     showChevron = true,
+    color,
   }) => {
     const [pressed, setPressed] = useState(false);
 
@@ -124,9 +131,9 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
         onPressOut={() => setPressed(false)}
       >
         <View style={styles.menuIconContainer}>
-          <Icon size={22} color={colors.primary} strokeWidth={1.8} />
+          <Icon size={22} color={color || colors.primary} strokeWidth={1.8} />
         </View>
-        <Text style={[styles.menuLabel, { color: colors.textPrimary }]}>
+        <Text style={[styles.menuLabel, { color: color || colors.textPrimary }]}>
           {label}
         </Text>
         {badge && (
@@ -156,24 +163,25 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Animated.View
-          style={[
-            styles.drawer,
-            {
-              backgroundColor: colors.background,
-              transform: [{ translateY }],
-            },
-          ]}
-          onStartShouldSetResponder={() => true}
-        >
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={styles.overlay}>
+          <TouchableWithoutFeedback onPress={() => {}}>
+            <Animated.View
+              style={[
+                styles.drawer,
+                {
+                  backgroundColor: colors.background,
+                  transform: [{ translateY }],
+                },
+              ]}
+            >
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <X size={24} color={colors.textPrimary} strokeWidth={2} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-              You
+              {t("You")}
             </Text>
             <View style={{ width: 40 }} />
           </View>
@@ -199,7 +207,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
                     <Text
                       style={[styles.statusText, { color: colors.textSecondary }]}
                     >
-                      Active
+                      {t("Active")}
                     </Text>
                   </View>
                 </View>
@@ -233,7 +241,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
                     { color: colors.textSecondary },
                   ]}
                 >
-                  What's your status?
+                  {t("What's your status?")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -244,7 +252,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
             <View style={styles.section}>
               <MenuItem
                 icon={BellOff}
-                label="Pause notifications"
+                label={t("Pause notifications")}
                 onPress={() => {
                   if (Platform.OS === "web") {
                     document.activeElement?.blur();
@@ -256,7 +264,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
               />
               <MenuItem
                 icon={Activity}
-                label="Set yourself as away"
+                label={t("Set yourself as away")}
                 onPress={() => {
                   if (Platform.OS === "web") {
                     document.activeElement?.blur();
@@ -274,43 +282,40 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
             <View style={styles.section}>
               <MenuItem
                 icon={UserPlus}
-                label="Invite members"
-                onPress={() => {}}
+                label={t("Invite members")}
+                onPress={() => navigateTo("InviteManagement")}
               />
 
               <MenuItem
                 icon={User}
-                label="View profile"
+                label={t("View profile")}
                 onPress={() => navigateTo("Profile")}
               />
               <MenuItem
-                icon={Bell}
-                label="Notification settings"
-                onPress={() => navigateTo("Notifications")}
-              />
-              <MenuItem
                 icon={Settings}
-                label="Preferences"
+                label={t("Preferences")}
                 onPress={() => navigateTo("Preferences")}
               />
             </View>
 
-            {/* <SectionDivider /> */}
+            <SectionDivider />
 
-            {/* Logout Section */}
-            {/* <View style={styles.section}>
+            <View style={styles.section}>
               <MenuItem
                 icon={LogOut}
-                label="Sign out"
+                label={t("Sign out")}
                 onPress={handleLogout}
                 showChevron={false}
+                color={colors.error}
               />
-            </View> */}
+            </View>
 
             <View style={{ height: Math.max(insets.bottom, 20) }} />
           </ScrollView>
-        </Animated.View>
-      </Pressable>
+            </Animated.View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
 
       {/* Modals */}
       <StatusModal

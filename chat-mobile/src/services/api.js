@@ -202,16 +202,20 @@ export const laterAPI = {
   list: (status) => api.get('/messages/saved', { params: { status } }),
   toggle: (messageId) => api.post(`/messages/${messageId}/save`),
   updateStatus: (messageId, status) => api.patch(`/messages/${messageId}/save/status`, { status }),
-  updateReminder: (messageId, reminderData) => api.patch(`/messages/${messageId}/save/reminder`, reminderData),
+  updateReminder: (messageId, data) => api.patch(`/messages/${messageId}/save/reminder`, data),
+  snoozeReminder: (messageId, minutes) => api.patch(`/messages/${messageId}/save/reminder/snooze`, { minutes }),
+  createStandaloneReminder: (data, headers) => api.post('/messages/reminders/standalone', data, headers),
   delete: (messageId) => api.delete(`/messages/${messageId}/save`),
 };
 
 // Scheduled Messages API
 export const scheduledAPI = {
   list: () => api.get('/messages/scheduled'),
-  create: (data) => api.post('/messages/schedule', data),
+  create: (channelId, data) => api.post(`/channels/${channelId}/scheduled-messages`, data),
   cancel: (id) => api.delete(`/messages/scheduled/${id}`),
+  reschedule: (id, scheduledAt) => api.patch(`/messages/reschedule/${id}`, { scheduledAt }),
   update: (id, data) => api.patch(`/messages/scheduled/${id}`, data),
+  sendNow: (id) => api.post(`/messages/send-now/${id}`),
 };
 
 // Messages API (partial) — add helper for proxying file assets
@@ -241,6 +245,7 @@ export const fileAPI = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      transformRequest: [(data) => data],
     }),
 };
 

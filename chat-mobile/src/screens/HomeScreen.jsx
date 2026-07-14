@@ -1,4 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 import {
   View,
   Text,
@@ -44,6 +46,7 @@ import {
   Clock,
 } from "lucide-react-native";
 import CreateChannelModal from "../components/CreateChannelModal";
+import { useTranslation } from "../utils/i18n";
 
 const SkeletonCard = ({ colors }) => (
   <View style={[qcStyles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
@@ -85,22 +88,22 @@ const QuickCard = React.memo(
 
 const qcStyles = StyleSheet.create({
   card: {
-    width: 88,
-    height: 80,
-    borderRadius: 10,
+    width: scale(88),
+    height: scale(80),
+    borderRadius: moderateScale(10),
     borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 6,
+    paddingHorizontal: scale(6),
     gap: 3,
   },
   label: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: "700",
     textAlign: "center",
   },
   subtitle: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     textAlign: "center",
   },
 });
@@ -134,9 +137,9 @@ const shStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 6,
+    paddingHorizontal: scale(16),
+    paddingTop: verticalScale(18),
+    paddingBottom: verticalScale(6),
   },
   left: {
     flexDirection: "row",
@@ -144,7 +147,7 @@ const shStyles = StyleSheet.create({
     gap: 6,
   },
   title: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: "800",
   },
 });
@@ -195,24 +198,24 @@ const chStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(6),
     gap: 8,
-    minHeight: 36,
+    minHeight: verticalScale(36),
   },
   name: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
   },
   badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 6,
+    minWidth: scale(20),
+    height: scale(20),
+    borderRadius: moderateScale(10),
+    paddingHorizontal: scale(6),
     justifyContent: "center",
     alignItems: "center",
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: "700",
   },
 });
@@ -232,12 +235,12 @@ const addStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(8),
     gap: 8,
   },
   text: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
 });
 
@@ -289,24 +292,24 @@ const dmStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(6),
     gap: 8,
-    minHeight: 40,
+    minHeight: verticalScale(40),
   },
   name: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
   },
   badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 6,
+    minWidth: scale(20),
+    height: scale(20),
+    borderRadius: moderateScale(10),
+    paddingHorizontal: scale(6),
     justifyContent: "center",
     alignItems: "center",
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: "700",
   },
 });
@@ -318,7 +321,8 @@ const HomeScreen = ({ navigation }) => {
 
   const { colors, effectiveTheme } = useThemeStore();
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
-  const { user } = useAuthStore();
+  const { user, preferences } = useAuthStore();
+  const { t } = useTranslation();
   const { enabledHomeCards, toggleHomeCard } = useUIStore();
   const channels = useChannelStore((s) => s.channels) || [];
   const fetchChannels = useChannelStore((s) => s.fetchChannels);
@@ -443,7 +447,7 @@ const HomeScreen = ({ navigation }) => {
     if (unreadConversations.length > 0) {
       result.push({
         key: "unreads",
-        title: "Unreads",
+        title: t("Unreads"),
         icon: null,
         data: sectionsExpanded.unreads ? unreadConversations : [],
         type: "mixed",
@@ -452,7 +456,7 @@ const HomeScreen = ({ navigation }) => {
     }
     result.push({
       key: "channels",
-      title: "Channels",
+      title: t("Channels"),
       icon: Hash,
       data: sectionsExpanded.channels ? (showSkeletons ? skeletonData : regularChannels) : [],
       type: "channel",
@@ -460,14 +464,14 @@ const HomeScreen = ({ navigation }) => {
     });
     result.push({
       key: "dms",
-      title: "Direct Messages",
+      title: t("Direct Messages"),
       icon: null,
       data: sectionsExpanded.dms ? (showSkeletons ? skeletonData : regularDMs) : [],
       type: "dm",
       showAddChannel: false,
     });
     return result;
-  }, [unreadConversations, regularChannels, regularDMs, sectionsExpanded, isChannelsLoading, channels.length]);
+  }, [unreadConversations, regularChannels, regularDMs, sectionsExpanded, isChannelsLoading, channels.length, t]);
 
   const renderSectionHeader = useCallback(
     ({ section }) => (
@@ -548,7 +552,7 @@ const HomeScreen = ({ navigation }) => {
       cards.push({
         key: "catchUp",
         icon: Layers,
-        label: "Catch Up",
+        label: t("Catch Up"),
         subtitle: `${quickCardsTotal} new`,
         onPress: () => navigation.navigate("Threads"),
       });
@@ -557,7 +561,7 @@ const HomeScreen = ({ navigation }) => {
       cards.push({
         key: "threads",
         icon: MessageSquare,
-        label: "Threads",
+        label: t("Threads"),
         subtitle: `${unreadThreadCount} new`,
         onPress: () => navigation.navigate("Threads"),
       });
@@ -566,8 +570,8 @@ const HomeScreen = ({ navigation }) => {
       cards.push({
         key: "huddles",
         icon: Headphones,
-        label: "Huddles",
-        subtitle: "0 live",
+        label: t("Huddles"),
+        subtitle: t("0 live"),
         onPress: () => {},
       });
     }
@@ -575,7 +579,7 @@ const HomeScreen = ({ navigation }) => {
       cards.push({
         key: "later",
         icon: Bookmark,
-        label: "Later",
+        label: t("Later"),
         subtitle: `${savedCount} items`,
         onPress: () => navigation.navigate("Later"),
       });
@@ -584,7 +588,7 @@ const HomeScreen = ({ navigation }) => {
       cards.push({
         key: "drafts",
         icon: Edit3,
-        label: "Drafts",
+        label: t("Drafts"),
         subtitle: `${draftCount} items`,
         onPress: () => navigation.navigate("Drafts"),
       });
@@ -593,7 +597,7 @@ const HomeScreen = ({ navigation }) => {
       cards.push({
         key: "scheduled",
         icon: Clock,
-        label: "Scheduled",
+        label: t("Scheduled"),
         subtitle: `${scheduledCount} items`,
         onPress: () => navigation.navigate("Scheduled"),
       });
@@ -602,8 +606,8 @@ const HomeScreen = ({ navigation }) => {
       cards.push({
         key: "settings",
         icon: Settings,
-        label: "Settings",
-        subtitle: "Customize",
+        label: t("Settings"),
+        subtitle: t("Customize"),
         onPress: () => setCustomizeModalVisible(true),
       });
     }
@@ -617,6 +621,7 @@ const HomeScreen = ({ navigation }) => {
     scheduledCount,
     navigation,
     isThreadsLoading,
+    t,
   ]);
 
   const ListHeader = useMemo(
@@ -657,14 +662,14 @@ const HomeScreen = ({ navigation }) => {
       >
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: colors.textPrimary }]}>
-            Error loading data
+            {t("Error loading data")}
           </Text>
           <TouchableOpacity
             style={[styles.errorBtn, { backgroundColor: colors.primary }]}
             onPress={loadData}
           >
             <Text style={{ color: colors.textInverse, fontWeight: "600" }}>
-              Try Again
+              {t("Try Again")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -704,7 +709,7 @@ const HomeScreen = ({ navigation }) => {
               style={[styles.wsName, { color: colors.textOnPrimary }]}
               numberOfLines={1}
             >
-              {activeWorkspace?.name || "Workspace"}
+              {activeWorkspace?.name || t("Workspace")}
             </Text>
           </TouchableOpacity>
 
@@ -728,7 +733,7 @@ const HomeScreen = ({ navigation }) => {
         renderSectionHeader={renderSectionHeader}
         renderSectionFooter={renderSectionFooter}
         ListHeaderComponent={ListHeader}
-        ListFooterComponent={<View style={{ height: 100 }} />}
+        ListFooterComponent={<View style={{ height: scale(100) }} />}
         showsVerticalScrollIndicator={false}
         stickySectionHeadersEnabled={false}
         initialNumToRender={20}
@@ -799,8 +804,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(10),
   },
   headerLeft: {
     flexDirection: "row",
@@ -809,23 +814,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   wsLogo: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
+    width: scale(28),
+    height: scale(28),
+    borderRadius: moderateScale(6),
     justifyContent: "center",
     alignItems: "center",
   },
   logo: {
-    width: 22,
-    height: 22,
+    width: scale(22),
+    height: scale(22),
     resizeMode: "contain",
   },
   wsLogoText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "800",
   },
   wsName: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: "800",
     flex: 1,
   },
@@ -838,14 +843,14 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   menuBtn: {
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderRadius: moderateScale(16),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(6),
   },
   cardsRow: {
     flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
     gap: 10,
   },
   loaderContainer: {
@@ -860,23 +865,23 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 12,
   },
-  errorText: { fontSize: 16, fontWeight: "600" },
+  errorText: { fontSize: moderateScale(16), fontWeight: "600" },
   errorBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 6,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(10),
+    borderRadius: moderateScale(6),
   },
   fab: {
     position: "absolute",
     right: 20,
     bottom: 20,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: scale(52),
+    height: scale(52),
+    borderRadius: moderateScale(26),
     justifyContent: "center",
     alignItems: "center",
     elevation: 6,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: scale(0), height: scale(2) },
     shadowOpacity: 0.25,
     shadowRadius: 4,
   },

@@ -7,6 +7,7 @@ import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useThemeStore } from "../stores/themeStore";
 import { useNotificationStore } from "../stores/notificationStore";
+import { useTranslation } from "../utils/i18n";
 import {
   Hash,
   MessageSquare,
@@ -30,6 +31,7 @@ import DMListScreen from "../screens/DMListScreen";
 import ActivityScreen from "../screens/Activity/ActivityScreen";
 import YouScreen from "../screens/YouScreen";
 import ProfileScreen from "../screens/Authentication/ProfileScreen";
+import UserProfileScreen from "../screens/UserProfileScreen";
 import ChatScreen from "../screens/Chat/ChatScreen";
 import ChannelDetailsScreen from "../screens/ChannelDetailsScreen";
 import CreateWorkspaceScreen from "../screens/Add-Workspace/CreateWorkspaceScreen";
@@ -40,6 +42,14 @@ import DraftsScreen from "../screens/DraftsScreen";
 import ScheduledScreen from "../screens/ScheduledScreen";
 import NotificationsScreen from "../screens/NotificationsScreen";
 import PreferencesScreen from "../screens/PreferencesScreen";
+import ColorModeScreen from "../screens/Preferences/ColorModeScreen";
+import NotificationsPreferencesScreen from "../screens/Preferences/NotificationsPreferencesScreen";
+import EmojiSkinToneScreen from "../screens/Preferences/EmojiSkinToneScreen";
+import SwipeActionsScreen from "../screens/Preferences/SwipeActionsScreen";
+import HuddlesScreen from "../screens/Preferences/HuddlesScreen";
+import LanguageScreen from "../screens/Preferences/LanguageScreen";
+import TimeScreen from "../screens/Preferences/TimeScreen";
+import AccentColorScreen from "../screens/Preferences/AccentColorScreen";
 import FilesScreen from "../screens/FilesScreen";
 import SearchScreen from "../screens/SearchScreen";
 import PinnedMessagesScreen from "../screens/PinnedMessagesScreen";
@@ -102,6 +112,7 @@ function BottomTabs({ navigation }) {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const unreadCount = useNotificationStore((s) => s.unreadCount) || 0;
+  const { t } = useTranslation();
 
   return (
     <>
@@ -132,7 +143,7 @@ function BottomTabs({ navigation }) {
           name="HomeTab"
           component={HomeScreen}
           options={{
-            tabBarLabel: "Home",
+            tabBarLabel: t("Home"),
             tabBarIcon: ({ color }) => (
               <Home size={22} color={color} />
             ),
@@ -142,7 +153,7 @@ function BottomTabs({ navigation }) {
           name="DMsTab"
           component={DMListScreen}
           options={{
-            tabBarLabel: "DMs",
+            tabBarLabel: t("DMs"),
             tabBarIcon: ({ color }) => (
               <MessageSquare size={22} color={color} />
             ),
@@ -152,7 +163,7 @@ function BottomTabs({ navigation }) {
           name="ActivityTab"
           component={ActivityScreen}
           options={{
-            tabBarLabel: "Activity",
+            tabBarLabel: t("Activity"),
             tabBarIcon: ({ color }) => (
               <View>
                 <Bell size={22} color={color} />
@@ -165,7 +176,7 @@ function BottomTabs({ navigation }) {
           name="MoreTab"
           component={YouScreen}
           options={{
-            tabBarLabel: "More",
+            tabBarLabel: t("More"),
             tabBarIcon: ({ color }) => (
               <MoreHorizontal size={22} color={color} />
             ),
@@ -304,8 +315,53 @@ export default function AppNavigation() {
             options={{ headerShown: false }}
           />
           <Stack.Screen
+            name="ColorMode"
+            component={ColorModeScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="NotificationsPreferences"
+            component={NotificationsPreferencesScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="EmojiSkinTone"
+            component={EmojiSkinToneScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="SwipeActions"
+            component={SwipeActionsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Huddles"
+            component={HuddlesScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Language"
+            component={LanguageScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Time"
+            component={TimeScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="AccentColor"
+            component={AccentColorScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
             name="Profile"
             component={ProfileScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="UserProfile"
+            component={UserProfileScreen}
             options={{ headerShown: false }}
           />
           <Stack.Screen

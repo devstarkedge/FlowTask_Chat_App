@@ -21,6 +21,8 @@ import {
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
+import { usePreferencesStore } from '../stores/preferencesStore';
+import { applySkinTone } from '../utils/emojiUtils';
 
 const QUICK_EMOJIS = ['🎉', '👍', '😂', '🙂', '✅'];
 
@@ -83,6 +85,7 @@ const MessageActionSheet = ({
   onMarkUnread,
   onToggleNotifications,
 }) => {
+  const { emojiSkinTone } = usePreferencesStore();
   if (!message) return null;
 
   const isAuthor =
@@ -127,15 +130,18 @@ const MessageActionSheet = ({
           {/* Quick Emoji Row */}
           <View style={styles.emojisRow}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.emojisScroll}>
-              {QUICK_EMOJIS.map((emoji) => (
-                <TouchableOpacity
-                  key={emoji}
-                  style={[styles.emojiCircle, { backgroundColor: colors.backgroundSecondary }]}
-                  onPress={() => { onReact(emoji); onClose(); }}
-                >
-                  <Text style={styles.emojiText}>{emoji}</Text>
-                </TouchableOpacity>
-              ))}
+              {QUICK_EMOJIS.map((emoji) => {
+                const displayEmoji = applySkinTone(emoji, emojiSkinTone);
+                return (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={[styles.emojiCircle, { backgroundColor: colors.backgroundSecondary }]}
+                    onPress={() => { onReact(displayEmoji); onClose(); }}
+                  >
+                    <Text style={styles.emojiText}>{displayEmoji}</Text>
+                  </TouchableOpacity>
+                );
+              })}
               <TouchableOpacity
                 style={[styles.emojiCircle, { backgroundColor: colors.backgroundSecondary }]}
                 onPress={() => { onClose(); setTimeout(() => onOpenEmojiPicker(), 150); }}

@@ -4,6 +4,7 @@ import { useChannelStore } from './channelStore';
 import { reactionAPI } from '../services/api';
 import api from '../services/api';
 import logger from '../utils/logger';
+import { useScheduledStore } from './scheduledStore';
 
 export const useChatStore = create((set, get) => ({
   messagesByChannel: {},
@@ -51,6 +52,22 @@ export const useChatStore = create((set, get) => ({
     const tempId = `temp-${Date.now()}`;
     const { htmlContent, threadId, fileReferences, mentions, scheduledAt } = options;
     
+    // If scheduledAt is present, delegate to scheduledStore
+    if (scheduledAt) {
+      try {
+        const payload = { content, scheduledAt };
+        if (htmlContent) payload.htmlContent = htmlContent;
+        if (threadId) payload.threadId = threadId;
+        if (fileReferences?.length) payload.fileReferences = fileReferences;
+        if (mentions?.length) payload.mentions = mentions;
+        
+        return await useScheduledStore.getState().createScheduledMessage(channelId, payload);
+      } catch (error) {
+        logger.error('Failed to schedule message:', error);
+        throw error;
+      }
+    }
+
     // Optimistic message
     const optimisticMessage = {
       _id: tempId,
@@ -68,26 +85,22 @@ export const useChatStore = create((set, get) => ({
     };
 
     // Add locally (don't add to channel list if scheduled)
-    if (!scheduledAt) {
-      get().addMessage(optimisticMessage);
-      useChannelStore.getState().handleNewMessage(optimisticMessage);
-    }
+    get().addMessage(optimisticMessage);
+    useChannelStore.getState().handleNewMessage(optimisticMessage);
 
     try {
       const payload = { content, tempId };
       if (htmlContent) payload.htmlContent = htmlContent;
       if (threadId) payload.threadId = threadId;
-      if (fileReferences?.length) payload.files = fileReferences;
+      if (fileReferences?.length) payload.fileReferences = fileReferences;
       if (mentions?.length) payload.mentions = mentions;
-      if (scheduledAt) payload.scheduledAt = scheduledAt;
 
       const { data } = await api.post(`/channels/${channelId}/messages`, payload);
       const serverMessage = data.data.message;
       
       // Reconcile
-      if (!scheduledAt) {
-        get().reconcileMessage(tempId, serverMessage);
-      }
+      get().reconcileMessage(tempId, serverMessage);
+      
       return serverMessage;
     } catch (error) {
       logger.error('Failed to send message:', error);
@@ -126,14 +139,28 @@ export const useChatStore = create((set, get) => ({
 
   reconcileMessage: (tempId, serverMessage) => {
     const channelId = serverMessage.channelId;
-    set((state) => ({
-      messagesByChannel: {
-        ...state.messagesByChannel,
-        [channelId]: (state.messagesByChannel[channelId] || []).map(m => 
+    set((state) => {
+      const messages = state.messagesByChannel[channelId] || [];
+      const alreadyHasServerMessage = messages.some(m => m._id === serverMessage._id);
+      
+      let updatedMessages;
+      if (alreadyHasServerMessage) {
+        // If the real message was already added via socket event, just remove the temp one
+        updatedMessages = messages.filter(m => m._id !== tempId);
+      } else {
+        // Otherwise replace the temp one with the real one
+        updatedMessages = messages.map(m => 
           m._id === tempId ? { ...serverMessage, pending: false } : m
-        )
+        );
       }
-    }));
+
+      return {
+        messagesByChannel: {
+          ...state.messagesByChannel,
+          [channelId]: updatedMessages
+        }
+      };
+    });
   },
 
   setConnectionStatus: (status) => set({ connectionStatus: status }),

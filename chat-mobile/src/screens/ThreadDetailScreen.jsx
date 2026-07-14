@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 import {
   View,
   Text,
@@ -21,8 +23,8 @@ import { useThemeStore } from '../stores/themeStore';
 import { useChatStore } from '../stores/chatStore';
 import { useLaterStore } from '../stores/laterStore';
 import { laterAPI, messageAPI, threadAPI } from '../services/api';
-import { formatRelativeTimeLong } from '../utils/dateUtils';
-import { ScreenLayout, AppAvatar, MobileFileCard } from '../components/common';
+import { formatRelativeTimeLong, formatMessageTime } from '../utils/dateUtils';
+import { ScreenLayout, AppAvatar, HeaderBackButton, MobileFileCard } from '../components/common';
 import RichText from '../components/RichText';
 import ReactionBar from '../components/ReactionBar';
 import EmojiPickerModal from '../components/EmojiPickerModal';
@@ -217,6 +219,10 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                 <RichText
                   html={item.htmlContent || (/<[a-z][\s\S]*>/i.test(item.content) ? item.content : undefined)}
                   text={item.content}
+                  mentions={item.mentions}
+                  onMentionPress={(userId) => {
+                    navigation.navigate('UserProfile', { user: { _id: userId }, channelId });
+                  }}
                   colors={{ ...colors, textPrimary: colors.textPrimary }}
                   baseStyle={{ color: colors.textPrimary, fontSize: 15, lineHeight: 22 }}
                 />
@@ -256,15 +262,13 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     effectiveRootSender = resolveAuthor({ authorId: rootAuthor, senderSnapshot: rootAuthor });
   }
   const rootDateStr = new Date(effectiveRoot.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const rootTimeStr = new Date(effectiveRoot.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const rootTimeStr = formatMessageTime(effectiveRoot.createdAt);
   const effectiveRootAttachments = getAttachments(effectiveRoot);
 
   return (
     <ScreenLayout>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <ArrowLeft size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <HeaderBackButton onPress={() => navigation.goBack()} />
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
             Thread
@@ -329,6 +333,10 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                   <RichText
                     html={effectiveRoot.htmlContent || (/<[a-z][\s\S]*>/i.test(effectiveRoot.content) ? effectiveRoot.content : undefined)}
                     text={effectiveRoot.content}
+                    mentions={effectiveRoot.mentions}
+                    onMentionPress={(userId) => {
+                      navigation.navigate('UserProfile', { user: { _id: userId }, channelId });
+                    }}
                     colors={{ ...colors, textPrimary: colors.textPrimary }}
                     baseStyle={{ color: colors.textPrimary, fontSize: 16, lineHeight: 24 }}
                   />
@@ -505,24 +513,24 @@ const createStyles = (colors) => StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: 1,
   },
   backButton: {
     padding: 8,
-    marginRight: 8,
+    marginRight: scale(8),
   },
   headerCenter: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   headerSubtitle: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(2),
   },
   headerRight: {
     flexDirection: 'row',
@@ -533,19 +541,19 @@ const createStyles = (colors) => StyleSheet.create({
     padding: 4,
   },
   repliesList: {
-    paddingBottom: 24,
+    paddingBottom: verticalScale(24),
   },
   rootSection: {
-    paddingTop: 16,
+    paddingTop: verticalScale(16),
   },
   rootMessageRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    paddingHorizontal: scale(16),
+    marginBottom: verticalScale(12),
   },
   rootMessageContent: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: scale(12),
   },
   rootMessageHeaderLine: {
     flexDirection: 'row',
@@ -553,41 +561,41 @@ const createStyles = (colors) => StyleSheet.create({
     alignItems: 'flex-start',
   },
   rootAuthorName: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
   },
   rootDateTime: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(2),
   },
   rootTextContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    paddingHorizontal: scale(16),
+    marginBottom: verticalScale(12),
   },
   rootText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     lineHeight: 24,
   },
   reactionPill: {
-    marginLeft: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    marginLeft: scale(16),
+    width: scale(36),
+    height: scale(36),
+    borderRadius: moderateScale(18),
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
   },
   repliesDivider: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
   },
   repliesCount: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '700',
   },
   dividerActions: {
@@ -600,79 +608,79 @@ const createStyles = (colors) => StyleSheet.create({
   dateSeparator: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 16,
-    paddingHorizontal: 16,
+    marginVertical: verticalScale(16),
+    paddingHorizontal: scale(16),
   },
   dateLine: {
     flex: 1,
-    height: 1,
+    height: scale(1),
   },
   datePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(4),
+    borderRadius: moderateScale(12),
     borderWidth: 1,
-    marginHorizontal: 12,
+    marginHorizontal: scale(12),
   },
   dateText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '600',
   },
   messageRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    paddingHorizontal: scale(16),
+    marginBottom: verticalScale(16),
   },
   messageContent: {
     flex: 1,
-    marginLeft: 10,
+    marginLeft: scale(10),
   },
   messageHeader: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   authorName: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '700',
-    marginRight: 8,
+    marginRight: scale(8),
   },
   timeText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
   },
   messageText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     lineHeight: 22,
   },
   inputBar: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    paddingBottom: 24, // safe area padding
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(10),
+    paddingBottom: verticalScale(24), // safe area padding
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 24,
+    borderRadius: moderateScale(24),
     borderWidth: 1,
-    paddingHorizontal: 12,
-    minHeight: 48,
+    paddingHorizontal: scale(12),
+    minHeight: verticalScale(48),
   },
   plusButton: {
     padding: 8,
-    marginRight: 4,
+    marginRight: scale(4),
   },
   input: {
     flex: 1,
-    fontSize: 16,
-    maxHeight: 100,
-    paddingVertical: 10,
+    fontSize: moderateScale(16),
+    maxHeight: verticalScale(100),
+    paddingVertical: verticalScale(10),
   },
   micButton: {
     padding: 8,
   },
   sendButton: {
     padding: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: scale(12),
   },
   actionsOverlay: {
     flex: 1,
@@ -683,30 +691,30 @@ const createStyles = (colors) => StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     borderTopWidth: 1,
-    paddingBottom: 24, // safe area
+    paddingBottom: verticalScale(24), // safe area
   },
   actionsHeader: {
     padding: 16,
     borderBottomWidth: 1,
   },
   actionsTitle: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
   },
   actionsSnippet: {
-    fontSize: 14,
-    marginTop: 4,
+    fontSize: moderateScale(14),
+    marginTop: verticalScale(4),
   },
   actionsList: {
-    paddingTop: 8,
-    maxHeight: 300,
+    paddingTop: verticalScale(8),
+    maxHeight: verticalScale(300),
   },
   actionItem: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: verticalScale(14),
+    paddingHorizontal: scale(16),
   },
   actionItemText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
   }
 });
 

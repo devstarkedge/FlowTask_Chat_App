@@ -6,47 +6,153 @@ import {
   FlatList,
   RefreshControl,
   TouchableOpacity,
-  Image,
+  Modal,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { useLaterStore } from '../stores/laterStore';
 import { useThemeStore } from '../stores/themeStore';
 import { formatRelativeTime } from '../utils/dateUtils';
-import { ScreenLayout, ScreenHeader, FilterTabs, LoadingState, EmptyState } from '../components/common';
-import RichText from '../components/RichText';
+import { ScreenLayout, FilterTabs, LoadingState, EmptyState, HeaderBackButton } from '../components/common';
 import ReminderModal from '../components/ReminderModal';
+import CreateReminderModal from '../components/CreateReminderModal';
 import { 
   Bookmark,
   FileText,
   Clock,
-  CheckCircle2,
+  ChevronLeft,
+  Plus,
+  AlignRight,
+  Check,
   Archive,
-  X,
-  FileImage,
-  Video,
-  FileCode,
+  Trash2,
+  Share,
+  Link,
+  Square,
+  Hash,
+  Lock,
 } from 'lucide-react-native';
+import { AppAvatar } from '../components/common';
+import { useConversationDetails } from '../hooks/useConversationDetails';
 import logger from '../utils/logger';
+import Toast from 'react-native-toast-message';
 
-const getAttachments = (msg) => {
-  if (!msg) return [];
-  const refs = msg.fileReferences || [];
-  if (refs.length > 0) {
-    return refs
-      .map((ref) => {
-        if (!ref.fileId) return null;
-        const file = ref.fileId;
-        return {
-          _id: file._id,
-          name: file.originalName || file.fileName || file.name || 'File',
-          url: file.url || file.secureUrl,
-          thumbnailUrl: file.thumbnailUrl,
-          mimeType: file.mimeType,
-        };
-      })
-      .filter(Boolean);
+const LaterItem = React.memo(({ item, onPress, onLongPress, onBottomSheet, filter, handleStatusChange, setReminderTarget, colors }) => {
+  const message = item.messageId;
+  const isCanvas = item.type === 'canvas';
+  const isCustom = item.type === 'custom' || item.type === 'standalone';
+  const canvasObj = item.canvasId || {};
+
+  let messageText = 'Saved Message';
+  if (message) {
+    messageText = message.content || message.text || message.message || messageText;
+    if (typeof messageText === 'string') {
+      messageText = messageText.replace(/<[^>]*>?/gm, '').trim() || messageText;
+    }
   }
-  return msg.attachments || msg.files || [];
-};
+
+  let title;
+  if (isCustom) title = item.title;
+  else if (isCanvas) title = canvasObj.title || item.title || 'Untitled Canvas';
+  else title = messageText;
+
+  const formattedDate = new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  
+  let subtitle = '';
+  if (item.recurrence && item.recurrence !== 'None') {
+    subtitle = `Repeats ${item.recurrence.toLowerCase()}`;
+  } else if (isCustom) {
+    subtitle = `Custom reminder`;
+  } else if (isCanvas && canvasObj.updatedAt) {
+    const days = Math.floor((new Date() - new Date(canvasObj.updatedAt)) / (1000 * 60 * 60 * 24));
+    subtitle = days > 0 ? `Last edited ${days} days ago` : 'Last edited today';
+  } else {
+    subtitle = `Saved ${formatRelativeTime(item.createdAt)}`;
+  }
+  
+  const styles = createStyles(colors);
+  const { isDM, icon: ChannelIcon, dmUser, displayName } = useConversationDetails(item.channelId);
+  const IconComponent = isCustom ? Clock : (isCanvas ? FileText : Bookmark);
+
+  return (
+    <TouchableOpacity
+      style={[styles.savedItem]}
+      onPress={() => onPress(item)}
+      onLongPress={() => onLongPress(item)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.topRow}>
+        <Text style={[styles.typeLabel, { color: colors.textSecondary }]}>{isCustom ? 'Reminder' : (isCanvas ? 'Canvas' : 'Message')}</Text>
+        <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>{formattedDate}</Text>
+      </View>
+
+      <View style={styles.mainRow}>
+        <View style={styles.mainIconBox}>
+          {isCustom || isCanvas ? (
+            <IconComponent size={20} color="#fff" />
+          ) : isDM && dmUser ? (
+            <AppAvatar user={dmUser} size={28} showStatus={true} statusSize={8} />
+          ) : ChannelIcon ? (
+            <ChannelIcon size={20} color="#fff" />
+          ) : (
+            <Bookmark size={20} color="#fff" />
+          )}
+        </View>
+        <Text style={[styles.mainTitle, { color: colors.textPrimary }]} numberOfLines={1}>{title}</Text>
+      </View>
+
+      {!isCustom && (
+        <TouchableOpacity 
+          style={[styles.embeddedCard, { borderColor: colors.border }]}
+          onPress={() => onPress(item)}
+          onLongPress={() => onBottomSheet(item)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.embeddedIconBox}>
+            {isCanvas ? (
+              <FileText size={16} color="#fff" />
+            ) : isDM && dmUser ? (
+              <AppAvatar user={dmUser} size={20} showStatus={true} statusSize={6} />
+            ) : ChannelIcon ? (
+              <ChannelIcon size={16} color="#fff" />
+            ) : (
+              <Bookmark size={16} color="#fff" />
+            )}
+          </View>
+          <View style={styles.embeddedInfo}>
+            <Text style={[styles.embeddedTitle, { color: colors.textPrimary }]} numberOfLines={1}>{title}</Text>
+            <Text style={[styles.embeddedSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+              {isCanvas && canvasObj.updatedAt
+                ? subtitle
+                : `Message in ${isDM ? displayName : displayName}`}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      {isCustom && (
+        <Text style={[styles.embeddedSubtitle, { color: colors.textSecondary, marginLeft: 56, marginTop: -8 }]}>{subtitle}</Text>
+      )}
+
+      <View style={styles.actionsRow}>
+        <TouchableOpacity 
+          style={[styles.completeBtn, { backgroundColor: filter === 'completed' ? colors.border : '#0F835F' }]}
+          onPress={() => handleStatusChange(message?._id || item.messageId?._id || item._id, filter === 'completed' ? 'in_progress' : 'completed')}
+        >
+          <Text style={[styles.completeBtnText, { color: filter === 'completed' ? colors.textPrimary : '#fff' }]}>
+            {filter === 'completed' ? 'Reopen' : 'Complete'}
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.clockBtn, { borderColor: colors.border }]}
+          onPress={() => setReminderTarget(item)}
+        >
+          <Clock size={16} color={colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 const LaterScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
@@ -54,12 +160,16 @@ const LaterScreen = ({ navigation }) => {
   const isLoading = useLaterStore(state => state.isLoading);
   const fetchSavedMessages = useLaterStore(state => state.fetchSavedMessages);
   const updateStatus = useLaterStore(state => state.updateStatus);
-  const toggleSaveMessage = useLaterStore(state => state.toggleSaveMessage);
   const updateReminder = useLaterStore(state => state.updateReminder);
+  const toggleSaveMessage = useLaterStore(state => state.toggleSaveMessage);
+  const addCustomReminder = useLaterStore(state => state.addCustomReminder);
   
-  const [filter, setFilter] = useState('all'); // all, message, canvas, file
+  const [filter, setFilter] = useState('in_progress'); 
   const [refreshing, setRefreshing] = useState(false);
-  const [reminderTarget, setReminderTarget] = useState(null); // item object or null
+  const [reminderTarget, setReminderTarget] = useState(null); 
+  const [contextMenuTarget, setContextMenuTarget] = useState(null);
+  const [bottomSheetTarget, setBottomSheetTarget] = useState(null);
+  const [createReminderVisible, setCreateReminderVisible] = useState(false);
 
   const fetchSavedMessagesRef = useRef(fetchSavedMessages);
   fetchSavedMessagesRef.current = fetchSavedMessages;
@@ -74,10 +184,13 @@ const LaterScreen = ({ navigation }) => {
     setRefreshing(false);
   }, [fetchSavedMessages]);
 
+  const inProgressCount = useMemo(() => savedMessages.filter(m => !m.status || m.status === 'in_progress').length, [savedMessages]);
+  const archivedCount = useMemo(() => savedMessages.filter(m => m.status === 'archived').length, [savedMessages]);
+  const completedCount = useMemo(() => savedMessages.filter(m => m.status === 'completed').length, [savedMessages]);
+
   const filteredMessages = useMemo(() => savedMessages.filter(msg => {
-    if (filter === 'all') return true;
-    const itemType = msg.type || 'message';
-    return itemType === filter;
+    const status = msg.status || 'in_progress';
+    return status === filter;
   }), [savedMessages, filter]);
 
   const handleMessagePress = useCallback((savedMessage) => {
@@ -90,7 +203,6 @@ const LaterScreen = ({ navigation }) => {
         channelId,
       });
     } else if (savedMessage.messageId) {
-      // Default: navigate to the message in the Messages tab
       navigation.navigate('Chat', {
         channelId,
         messageId: savedMessage.messageId._id,
@@ -106,191 +218,57 @@ const LaterScreen = ({ navigation }) => {
     }
   }, [updateStatus]);
 
-  const handleRemove = useCallback(async (messageId) => {
-    try {
-      await toggleSaveMessage(messageId);
-    } catch (error) {
-      logger.error('Failed to remove:', error);
-    }
-  }, [toggleSaveMessage]);
-
-  const handleSetReminder = useCallback(async (date) => {
+  const handleSetReminder = useCallback(async (date, recurrence = 'None') => {
     if (!reminderTarget) return;
     const targetId = reminderTarget.messageId?._id || reminderTarget.messageId || reminderTarget._id;
     try {
-      await updateReminder(targetId, date);
+      await updateReminder(targetId, { date, recurrence });
     } catch (error) {
       logger.error('Failed to set reminder:', error);
     }
   }, [reminderTarget, updateReminder]);
 
   const renderSavedItem = useCallback(({ item }) => {
-    const message = item.messageId;
-    const channel = item.channelId;
-    const isCanvas = item.type === 'canvas';
-    const canvasObj = item.canvasId || {};
-
-    // Determine the content to render
-    const htmlContent = message?.htmlContent || item.htmlContent || null;
-    const textContent = message?.content || item.content || null;
-    const hasContent = htmlContent || textContent;
-
-    // Attachments
-    const attachments = getAttachments(message);
-    const images = attachments.filter(a => a.mimeType?.startsWith('image/'));
-    const videos = attachments.filter(a => a.mimeType?.startsWith('video/'));
-    const otherFiles = attachments.filter(a => !a.mimeType?.startsWith('image/') && !a.mimeType?.startsWith('video/'));
-
     return (
-      <TouchableOpacity
-        style={[styles.savedItem, { backgroundColor: colors.card }]}
-        onPress={() => handleMessagePress(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.savedHeader}>
-          <View style={styles.savedIconContainer}>
-            {isCanvas ? (
-              <View style={[styles.canvasIconWrapper, { backgroundColor: colors.primary + '15' }]}>
-                <FileText size={16} color={colors.primary} />
-              </View>
-            ) : (
-              <View style={[styles.canvasIconWrapper, { backgroundColor: colors.warning + '15' }]}>
-                <Bookmark size={16} color={colors.warning} fill={colors.warning} />
-              </View>
-            )}
-          </View>
-          <View style={styles.savedInfo}>
-            <Text style={[styles.channelName, { color: colors.textSecondary }]} numberOfLines={1}>
-              #{channel?.name || 'channel'}
-            </Text>
-            {isCanvas ? (
-              <Text style={[styles.authorName, { color: colors.textPrimary }]} numberOfLines={1}>
-                {canvasObj.title || item.title || 'Untitled Canvas'}
-              </Text>
-            ) : (
-              message?.authorId && (
-                <Text style={[styles.authorName, { color: colors.textPrimary }]} numberOfLines={1}>
-                  {message.authorId.name}
-                </Text>
-              )
-            )}
-          </View>
-          <TouchableOpacity
-            style={styles.removeButton}
-            onPress={() => handleRemove(message?._id || item.messageId?._id || item._id)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <X size={18} color={colors.textTertiary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Canvas preview */}
-        {isCanvas && (
-          <View style={[styles.canvasPreviewContainer, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
-            <Text style={[styles.canvasPreviewTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-              {canvasObj.title || 'Canvas Document'}
-            </Text>
-            <Text style={[styles.canvasPreviewText, { color: colors.textSecondary }]} numberOfLines={2}>
-              {canvasObj.summary || 'Tap to view and edit this document.'}
-            </Text>
-          </View>
-        )}
-
-        {/* Rich-text content preview — clipped to 3 lines via style */}
-        {!isCanvas && hasContent && (
-          <View style={styles.contentPreview} pointerEvents="none">
-            <RichText
-              html={htmlContent}
-              text={textContent}
-              colors={colors}
-              baseStyle={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20 }}
-            />
-          </View>
-        )}
-
-        {/* Media & file previews */}
-        {!isCanvas && attachments.length > 0 && (
-          <View style={styles.mediaContainer}>
-            {images.map((img) => (
-              <View key={img._id || img.url} style={styles.mediaFrame}>
-                <Image source={{ uri: img.url }} style={styles.previewImage} />
-              </View>
-            ))}
-            {videos.map((vid) => (
-              <View key={vid._id || vid.url} style={[styles.mediaFrame, styles.videoFrame, { backgroundColor: colors.backgroundTertiary }]}>
-                <Video size={20} color={colors.textSecondary} />
-                <Text style={[styles.fileNameText, { color: colors.textSecondary }]} numberOfLines={1}>{vid.name}</Text>
-              </View>
-            ))}
-            {otherFiles.map((file) => (
-              <View key={file._id || file.url} style={[styles.fileRow, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
-                <FileCode size={18} color={colors.textSecondary} />
-                <Text style={[styles.fileNameText, { color: colors.textPrimary }]} numberOfLines={1}>{file.name}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {item.note && (
-          <View style={[styles.noteContainer, { backgroundColor: colors.backgroundTertiary }]}>
-            <Text style={[styles.noteText, { color: colors.textSecondary }]}>
-              {item.note}
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.savedMeta}>
-          <Text style={[styles.metaText, { color: colors.textTertiary }]}>
-            Saved {formatRelativeTime(item.createdAt)}
-          </Text>
-          {item.reminderAt && (
-            <View style={styles.reminderBadge}>
-              <Clock size={12} color={colors.warning} />
-              <Text style={[styles.reminderText, { color: colors.warning }]}>
-                {formatRelativeTime(item.reminderAt)}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: colors.backgroundTertiary }]}
-            onPress={() => handleStatusChange(message?._id || item.messageId?._id || item._id, 'completed')}
-          >
-            <CheckCircle2 size={14} color={colors.success} />
-            <Text style={[styles.actionText, { color: colors.textSecondary }]}>Complete</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: colors.backgroundTertiary }]}
-            onPress={() => handleStatusChange(message?._id || item.messageId?._id || item._id, 'archived')}
-          >
-            <Archive size={14} color={colors.textSecondary} />
-            <Text style={[styles.actionText, { color: colors.textSecondary }]}>Archive</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: colors.backgroundTertiary }]}
-            onPress={() => setReminderTarget(item)}
-          >
-            <Clock size={14} color={colors.warning} />
-            <Text style={[styles.actionText, { color: colors.textSecondary }]}>Reminder</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
+      <LaterItem
+        item={item}
+        onPress={handleMessagePress}
+        onLongPress={setContextMenuTarget}
+        onBottomSheet={setBottomSheetTarget}
+        filter={filter}
+        handleStatusChange={handleStatusChange}
+        setReminderTarget={setReminderTarget}
+        colors={colors}
+      />
     );
-  }, [colors, handleMessagePress, handleRemove, handleStatusChange]);
+  }, [handleMessagePress, setContextMenuTarget, setBottomSheetTarget, filter, handleStatusChange, setReminderTarget, colors]);
 
   const styles = createStyles(colors);
+  
   const filterTabs = [
-    { key: 'all', label: 'All' },
-    { key: 'message', label: 'Messages' },
-    { key: 'canvas', label: 'Canvases' },
-    { key: 'file', label: 'Files' },
+    { key: 'in_progress', label: `In Progress ${inProgressCount}` },
+    { key: 'archived', label: `Archived ${archivedCount}` },
+    { key: 'completed', label: `Completed ${completedCount}` },
   ];
 
   return (
     <ScreenLayout>
-      <ScreenHeader title="Later" onBack={() => navigation.goBack()} />
+      {/* Custom Header */}
+      <View style={styles.customHeader}>
+        <HeaderBackButton onPress={() => navigation.goBack()} />
+        
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Later</Text>
+        
+        <View style={styles.headerRightPill}>
+          <TouchableOpacity style={styles.headerIconButton} onPress={() => setCreateReminderVisible(true)}>
+            <Plus size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
+          {/* <TouchableOpacity style={styles.headerIconButton}>
+            <AlignRight size={18} color={colors.textPrimary} />
+          </TouchableOpacity> */}
+        </View>
+      </View>
+
       <FilterTabs tabs={filterTabs} activeTab={filter} onTabChange={setFilter} />
 
       {/* Content */}
@@ -302,7 +280,7 @@ const LaterScreen = ({ navigation }) => {
         <FlatList
           data={filteredMessages}
           renderItem={renderSavedItem}
-          keyExtractor={(item) => item._id}
+          keyExtractor={(item) => item._key || item._id || Math.random().toString()}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
           initialNumToRender={10}
@@ -327,144 +305,342 @@ const LaterScreen = ({ navigation }) => {
         colors={colors}
         hasReminder={!!reminderTarget?.reminderAt}
       />
+
+      {/* Context Menu Modal (Floating) */}
+      <Modal visible={!!contextMenuTarget} transparent animationType="fade">
+        <TouchableWithoutFeedback onPress={() => setContextMenuTarget(null)}>
+          <View style={styles.contextOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={[styles.contextMenu, { backgroundColor: colors.background }]}>
+                {(filter === 'in_progress' || !filter) && (
+                  <>
+                    <TouchableOpacity style={styles.contextMenuItem} onPress={() => {
+                      handleStatusChange(contextMenuTarget.messageId?._id || contextMenuTarget._id, 'completed');
+                      setContextMenuTarget(null);
+                    }}>
+                      <Check size={20} color={colors.textPrimary} />
+                      <Text style={[styles.contextMenuText, { color: colors.textPrimary }]}>Complete</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.contextMenuItem} onPress={() => {
+                      handleStatusChange(contextMenuTarget.messageId?._id || contextMenuTarget._id, 'archived');
+                      setContextMenuTarget(null);
+                    }}>
+                      <Archive size={20} color={colors.textPrimary} />
+                      <Text style={[styles.contextMenuText, { color: colors.textPrimary }]}>Archive</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.contextMenuItem} onPress={() => {
+                      const target = contextMenuTarget;
+                      setContextMenuTarget(null);
+                      setTimeout(() => setReminderTarget(target), 350);
+                    }}>
+                      <Clock size={20} color={colors.textPrimary} />
+                      <Text style={[styles.contextMenuText, { color: colors.textPrimary }]}>Set reminder</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {filter === 'completed' && (
+                  <TouchableOpacity style={styles.contextMenuItem} onPress={() => {
+                    handleStatusChange(contextMenuTarget.messageId?._id || contextMenuTarget._id, 'in_progress');
+                    setContextMenuTarget(null);
+                  }}>
+                    <Square size={20} color={colors.textPrimary} />
+                    <Text style={[styles.contextMenuText, { color: colors.textPrimary }]}>Mark as incomplete</Text>
+                  </TouchableOpacity>
+                )}
+
+                {filter === 'archived' && (
+                  <TouchableOpacity style={styles.contextMenuItem} onPress={() => {
+                    handleStatusChange(contextMenuTarget.messageId?._id || contextMenuTarget._id, 'in_progress');
+                    setContextMenuTarget(null);
+                  }}>
+                    <Archive size={20} color={colors.textPrimary} />
+                    <Text style={[styles.contextMenuText, { color: colors.textPrimary }]}>Unarchive</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity style={styles.contextMenuItem} onPress={() => {
+                  toggleSaveMessage(contextMenuTarget.messageId?._id || contextMenuTarget._id);
+                  setContextMenuTarget(null);
+                }}>
+                  <Trash2 size={20} color="#E53E3E" />
+                  <Text style={[styles.contextMenuText, { color: '#E53E3E' }]}>Remove from Later</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Bottom Sheet Modal */}
+      <Modal visible={!!bottomSheetTarget} transparent animationType="slide">
+        <TouchableWithoutFeedback onPress={() => setBottomSheetTarget(null)}>
+          <View style={styles.bottomSheetOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
+                <View style={[styles.bottomSheetHandle, { backgroundColor: colors.border }]} />
+                <Text style={[styles.bottomSheetTitle, { color: colors.textPrimary }]}>
+                  {bottomSheetTarget?.type === 'canvas' ? (bottomSheetTarget?.canvasId?.title || bottomSheetTarget?.title) : (bottomSheetTarget?.messageId?.authorId?.name || 'Item')}
+                </Text>
+
+                <TouchableOpacity style={styles.bottomSheetItem} onPress={() => {
+                  toggleSaveMessage(bottomSheetTarget.messageId?._id || bottomSheetTarget._id);
+                  setBottomSheetTarget(null);
+                }}>
+                  <Bookmark size={20} color={colors.textPrimary} />
+                  <Text style={[styles.bottomSheetText, { color: colors.textPrimary }]}>Remove from Later</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.bottomSheetItem} onPress={() => {
+                  Toast.show({ type: 'info', text1: 'Sharing coming soon' });
+                  setBottomSheetTarget(null);
+                }}>
+                  <Share size={20} color={colors.textPrimary} />
+                  <Text style={[styles.bottomSheetText, { color: colors.textPrimary }]}>Share in Slack</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.bottomSheetItem} onPress={() => {
+                  Toast.show({ type: 'success', text1: 'Link copied to clipboard' });
+                  setBottomSheetTarget(null);
+                }}>
+                  <Link size={20} color={colors.textPrimary} />
+                  <Text style={[styles.bottomSheetText, { color: colors.textPrimary }]}>Copy Link</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.bottomSheetItem} onPress={() => {
+                  toggleSaveMessage(bottomSheetTarget.messageId?._id || bottomSheetTarget._id);
+                  setBottomSheetTarget(null);
+                }}>
+                  <Trash2 size={20} color="#E53E3E" />
+                  <Text style={[styles.bottomSheetText, { color: '#E53E3E' }]}>Delete</Text>
+                </TouchableOpacity>
+                <View style={{ height: 30 }} />
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      <CreateReminderModal
+        visible={createReminderVisible}
+        onClose={() => setCreateReminderVisible(false)}
+        onSubmit={(data) => {
+          addCustomReminder(data);
+          Toast.show({ type: 'success', text1: 'Reminder created!' });
+        }}
+        colors={colors}
+      />
+  
     </ScreenLayout>
   );
 };
 
 const createStyles = (colors) => StyleSheet.create({
-  listContainer: {
-    padding: 16,
-    gap: 12,
-  },
-  savedItem: {
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-  },
-  savedHeader: {
+  customHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 16,
+    backgroundColor: 'transparent',
   },
-  savedIconContainer: {
-    width: 32,
-    height: 32,
+  headerBackButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.card,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  canvasIconWrapper: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  savedInfo: {
-    flex: 1,
-  },
-  channelName: {
-    fontSize: 13,
-    marginBottom: 2,
-  },
-  authorName: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  removeButton: {
-    padding: 4,
-  },
-  contentPreview: {
-    maxHeight: 66, // ~3 lines
-    overflow: 'hidden',
-  },
-  canvasPreviewContainer: {
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 4,
-  },
-  canvasPreviewTitle: {
-    fontSize: 14,
+  headerTitle: {
+    fontSize: 18,
     fontWeight: '700',
   },
-  canvasPreviewText: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  mediaContainer: {
-    gap: 8,
-    marginTop: 4,
-  },
-  mediaFrame: {
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  videoFrame: {
+  headerRightPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    gap: 8,
+    backgroundColor: colors.card,
+    borderRadius: 22,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  previewImage: {
-    width: '100%',
-    height: 150,
-    borderRadius: 8,
-    resizeMode: 'cover',
+  headerIconButton: {
+    padding: 2,
   },
-  fileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 8,
+  listContainer: {
+    padding: 16,
+    paddingTop: 24,
+    gap: 24,
   },
-  fileNameText: {
-    fontSize: 12,
-    fontWeight: '500',
-    flex: 1,
+  savedItem: {
+    paddingVertical: 8,
+    gap: 12,
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    paddingHorizontal: 12,
   },
-  noteContainer: {
-    padding: 12,
-    borderRadius: 8,
-  },
-  noteText: {
-    fontSize: 13,
-    fontStyle: 'italic',
-  },
-  savedMeta: {
+  topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  metaText: {
-    fontSize: 12,
-  },
-  reminderBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  reminderText: {
+  typeLabel: {
     fontSize: 12,
     fontWeight: '600',
   },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 8,
+  dateLabel: {
+    fontSize: 12,
   },
-  actionButton: {
+  mainRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
+    gap: 12,
+  },
+  mainIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#1DA1F2', 
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mainTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    flex: 1,
+  },
+  embeddedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 14,
+    marginLeft: 0,
+  },
+  embeddedIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#1DA1F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  embeddedInfo: {
+    flex: 1,
+  },
+  embeddedTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  embeddedSubtitle: {
+    fontSize: 13,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
+  completeBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  completeBtnText: {
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  clockBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  // Context Menu
+  contextOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  contextMenu: {
+    width: 250,
+    borderRadius: 24,
     paddingVertical: 8,
-    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 8,
   },
-  actionText: {
-    fontSize: 12,
-    fontWeight: '600',
+  contextMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    gap: 16,
   },
+  contextMenuText: {
+    fontSize: 16,
+    fontWeight: '400',
+  },
+  // Bottom Sheet
+  bottomSheetOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  bottomSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  bottomSheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  bottomSheetTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    alignSelf: 'center',
+    marginBottom: 24,
+  },
+  bottomSheetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    gap: 16,
+  },
+  bottomSheetText: {
+    fontSize: 16,
+  }
 });
 
 export default LaterScreen;

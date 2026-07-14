@@ -36,6 +36,20 @@ export const useScheduledStore = create(
         }
       },
 
+      createScheduledMessage: async (channelId, payload) => {
+        try {
+          const { data } = await scheduledAPI.create(channelId, payload);
+          const message = data?.data?.scheduledMessage || data?.data;
+          if (message) {
+            get().addScheduledMessage(message);
+          }
+          return message;
+        } catch (error) {
+          logger.error('Failed to create scheduled message:', error);
+          throw error;
+        }
+      },
+
       addScheduledMessage: (message) => {
         set((state) => {
           const newMessages = [message, ...state.scheduledMessages];
@@ -70,6 +84,44 @@ export const useScheduledStore = create(
           get().removeScheduledMessage(id);
         } catch (error) {
           logger.error('Failed to cancel scheduled message:', error);
+          throw error;
+        }
+      },
+
+      rescheduleMessage: async (id, scheduledAt) => {
+        try {
+          const { data } = await scheduledAPI.reschedule(id, scheduledAt);
+          const updated = data?.data?.scheduledMessage || data?.data?.message || data?.data;
+          if (updated) {
+            get().updateScheduledMessage(id, updated);
+          }
+        } catch (error) {
+          logger.error('Failed to reschedule message:', error);
+          throw error;
+        }
+      },
+
+      editScheduledMessageText: async (id, content, htmlContent) => {
+        try {
+          const payload = { content };
+          if (htmlContent) payload.htmlContent = htmlContent;
+          const { data } = await scheduledAPI.update(id, payload);
+          const updated = data?.data?.scheduledMessage || data?.data?.message || data?.data;
+          if (updated) {
+            get().updateScheduledMessage(id, updated);
+          }
+        } catch (error) {
+          logger.error('Failed to edit scheduled message:', error);
+          throw error;
+        }
+      },
+
+      sendNowScheduledMessage: async (id) => {
+        try {
+          await scheduledAPI.sendNow(id);
+          get().removeScheduledMessage(id);
+        } catch (error) {
+          logger.error('Failed to send scheduled message now:', error);
           throw error;
         }
       },

@@ -25,7 +25,7 @@
  *   text            – current input text
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { RichEditor, actions } from 'react-native-pell-rich-editor';
+import { RichEditor, actions } from "react-native-pell-rich-editor";
 import {
   View,
   Text,
@@ -36,6 +36,7 @@ import {
   Platform,
   Alert,
   Image,
+  Dimensions,
 } from "react-native";
 import {
   Send,
@@ -49,7 +50,8 @@ import {
   Loader2,
   Mic,
 } from "lucide-react-native";
-import logger from '../utils/logger';
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import logger from "../utils/logger";
 import { useDraftStore } from "../stores/draftStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useScheduledStore } from "../stores/scheduledStore";
@@ -64,6 +66,15 @@ import GifPickerModal from "./GifPickerModal";
 import RecentCanvasesModal from "./RecentCanvasesModal";
 import RecentFilesModal from "./RecentFilesModal";
 import { pellToTipTap } from "../utils/formatConverter";
+import { scale, verticalScale } from "../utils/responsive";
+
+const stripHtml = (html) => {
+  if (!html) return "";
+  return html
+    .replace(/<[^>]*>?/gm, "")
+    .replace(/&nbsp;/g, " ")
+    .trim();
+};
 
 /**
  * Convert markdown-style formatting to HTML for backend compatibility.
@@ -111,19 +122,27 @@ const markdownToHtml = (text) => {
 
   // Bullet list blocks (consecutive lines starting with - or *)
   html = html.replace(/(?:^[-*]\s+.*(?:\r?\n|$))+/gm, (match) => {
-    const items = match.trim().split('\n').map(line => {
-      const content = line.replace(/^[-*]\s+/, '');
-      return `<li>${content}</li>`;
-    }).join('');
+    const items = match
+      .trim()
+      .split("\n")
+      .map((line) => {
+        const content = line.replace(/^[-*]\s+/, "");
+        return `<li>${content}</li>`;
+      })
+      .join("");
     return `<ul>${items}</ul>`;
   });
 
   // Numbered list blocks (consecutive lines starting with digits)
   html = html.replace(/(?:^\d+\.\s+.*(?:\r?\n|$))+/gm, (match) => {
-    const items = match.trim().split('\n').map(line => {
-      const content = line.replace(/^\d+\.\s+/, '');
-      return `<li>${content}</li>`;
-    }).join('');
+    const items = match
+      .trim()
+      .split("\n")
+      .map((line) => {
+        const content = line.replace(/^\d+\.\s+/, "");
+        return `<li>${content}</li>`;
+      })
+      .join("");
     return `<ol>${items}</ol>`;
   });
 
@@ -177,6 +196,36 @@ const MessageComposer = React.memo(function MessageComposer({
   const lastSavedRef = useRef("");
   const richText = useRef(null);
   const [isEditorReady, setIsEditorReady] = useState(false);
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [editorHeight, setEditorHeight] = useState(40);
+  const insets = useSafeAreaInsets();
+  
+  const { height: screenHeight } = Dimensions.get("window");
+  const maxComposerHeight = Math.floor(screenHeight * 0.3);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setKeyboardVisible(true),
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        setKeyboardVisible(false);
+        richText.current?.blurContentEditor();
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const bottomPadding = isKeyboardVisible
+    ? Platform.OS === "ios"
+      ? 8
+      : 8
+    : Math.max(insets.bottom, 8);
 
   const activeWorkspaceId =
     workspaceId || useWorkspaceStore.getState().activeWorkspaceId;
@@ -207,12 +256,17 @@ const MessageComposer = React.memo(function MessageComposer({
 
     draftTimerRef.current = setTimeout(() => {
       const rawHtml = text;
-      const plainContent = rawHtml.replace(/<[^>]*>?/gm, "").replace(/&nbsp;/g, " ").trim();
-      
+      const plainContent = rawHtml
+        .replace(/<[^>]*>?/gm, "")
+        .replace(/&nbsp;/g, " ")
+        .trim();
+
       if (plainContent) {
         setDraft(
           channelId,
-          rawHtml.includes('<') ? pellToTipTap(rawHtml) : markdownToHtml(rawHtml),
+          rawHtml.includes("<")
+            ? pellToTipTap(rawHtml)
+            : markdownToHtml(rawHtml),
           plainContent,
           activeWorkspaceId,
           null,
@@ -236,14 +290,16 @@ const MessageComposer = React.memo(function MessageComposer({
       emitTyping(channelId, val.length > 0);
 
       // Strip HTML to get raw text cursor context
-      const plainContent = val.replace(/<[^>]*>?/gm, "").replace(/&nbsp;/g, " ");
-      
+      const plainContent = val
+        .replace(/<[^>]*>?/gm, "")
+        .replace(/&nbsp;/g, " ");
+
       // Detect @mention trigger
       const match = plainContent.match(/@([^\s@]*)$/);
       if (match) {
         setMentionQuery(match[1]);
         // For HTML, accurate range is hard. We can just append the mention string at the end.
-        setMentionRangeStart(val.length - 1); 
+        setMentionRangeStart(val.length - 1);
         setMentionVisible(true);
       } else {
         setMentionVisible(false);
@@ -255,15 +311,15 @@ const MessageComposer = React.memo(function MessageComposer({
   // ─── Mention select ───────────────────────────────────────────────────────
   const handleMentionSelect = useCallback(
     (member) => {
-      // It's tricky to remove the typed query safely in HTML string, so we'll 
+      // It's tricky to remove the typed query safely in HTML string, so we'll
       // replace the last @... pattern in the rawHtml.
       const rawHtml = text;
-      const mentionText = `<strong>@${member.name}</strong>&nbsp;`;
+      const mentionText = `<span data-type="mention" class="mention" data-id="${member._id}">@${member.name}</span>&nbsp;`;
       const newText = rawHtml.replace(/@([^\s@<]*)(?!.*@)/, mentionText);
-      
+
       onChangeText(newText);
       richText.current?.setContentHTML(newText);
-      
+
       setPendingMentions((prev) => [
         ...prev,
         { userId: member._id, username: member.name, type: "user" },
@@ -290,7 +346,10 @@ const MessageComposer = React.memo(function MessageComposer({
   const handleSend = useCallback(() => {
     const rawHtml = text;
     // Strip simple HTML tags for plain text fallback
-    const plainContent = rawHtml.replace(/<[^>]*>?/gm, "").replace(/&nbsp;/g, " ").trim();
+    const plainContent = rawHtml
+      .replace(/<[^>]*>?/gm, "")
+      .replace(/&nbsp;/g, " ")
+      .trim();
 
     if (!plainContent && pendingFiles.length === 0) return;
 
@@ -304,7 +363,9 @@ const MessageComposer = React.memo(function MessageComposer({
       return; // Still uploading, prevent send
     }
 
-    const htmlContent = rawHtml.includes('<') ? pellToTipTap(rawHtml) : markdownToHtml(rawHtml);
+    const htmlContent = rawHtml.includes("<")
+      ? pellToTipTap(rawHtml)
+      : markdownToHtml(rawHtml);
     const mentionPayload =
       pendingMentions.length > 0 ? pendingMentions : undefined;
 
@@ -336,10 +397,18 @@ const MessageComposer = React.memo(function MessageComposer({
   // ─── Schedule send ─────────────────────────────────────────────────────────
   const handleScheduleSend = useCallback(
     (scheduledAt) => {
-      if (!text.trim() || !scheduledAt) return;
+      const rawHtml = text;
+      const plainContent = rawHtml
+        .replace(/<[^>]*>?/gm, "")
+        .replace(/&nbsp;/g, " ")
+        .trim();
 
-      const htmlContent = markdownToHtml(text);
-      onSend(text.trim(), {
+      if (!scheduledAt || (!plainContent && pendingFiles.length === 0)) return;
+
+      const htmlContent = rawHtml.includes("<")
+        ? pellToTipTap(rawHtml)
+        : markdownToHtml(rawHtml);
+      onSend(plainContent, {
         htmlContent,
         scheduledAt,
         fileReferences: pendingFiles.filter((f) => f._id).map((f) => f._id),
@@ -373,28 +442,36 @@ const MessageComposer = React.memo(function MessageComposer({
 
   // ─── File attachment — pick and upload to server ──────────────────────────
   const uploadFilesToServer = useCallback(
-    async (pickedFiles) => {
+    async (pickedFiles, localEntries) => {
       try {
         const formData = new FormData();
-        pickedFiles.forEach((file) => {
-          // Normalize properties from various pickers (ImagePicker, DocumentPicker, MediaLibrary)
-          let name = file.name || file.fileName || file.filename || `file_${Date.now()}.jpg`;
-          if (!name.includes('.')) name += '.jpg';
-          
+        pickedFiles.forEach((file, index) => {
+          // Use the exact name resolved in localEntries
+          let name = localEntries[index].name;
+          if (!name.includes(".")) name += ".jpg";
+
           let type = file.mimeType || file.type;
-          if (!type || type === 'image' || type === 'video' || type === 'application/octet-stream') {
-            const ext = name.split('.').pop().toLowerCase();
-            if (ext === 'jpg' || ext === 'jpeg') type = 'image/jpeg';
-            else if (ext === 'png') type = 'image/png';
-            else if (ext === 'gif') type = 'image/gif';
-            else if (ext === 'webp') type = 'image/webp';
-            else if (ext === 'mp4') type = 'video/mp4';
-            else if (ext === 'pdf') type = 'application/pdf';
-            else type = 'image/jpeg'; // Safe default for mobile uploads if completely unknown
+          if (
+            !type ||
+            type === "image" ||
+            type === "video" ||
+            type === "application/octet-stream"
+          ) {
+            const ext = name.split(".").pop().toLowerCase();
+            if (ext === "jpg" || ext === "jpeg") type = "image/jpeg";
+            else if (ext === "png") type = "image/png";
+            else if (ext === "gif") type = "image/gif";
+            else if (ext === "webp") type = "image/webp";
+            else if (ext === "mp4") type = "video/mp4";
+            else if (ext === "pdf") type = "application/pdf";
+            else type = "image/jpeg"; // Safe default for mobile uploads if completely unknown
           }
-          
+
           formData.append("files", {
-            uri: file.uri,
+            uri:
+              Platform.OS === "ios"
+                ? file.uri.replace("file://", "")
+                : file.uri,
             name,
             type,
           });
@@ -403,15 +480,20 @@ const MessageComposer = React.memo(function MessageComposer({
         const { data } = await fileAPI.uploadFiles(channelId, formData);
         const uploadedFiles = data.data?.files || [];
 
-        // Replace pending local file entries with server file objects
+        // Replace pending local file entries with server file objects using exact matching
         setPendingFiles((prev) => {
           const result = [...prev];
-          uploadedFiles.forEach((serverFile) => {
+          uploadedFiles.forEach((serverFile, i) => {
+            // Find the pending item by matching the temporary URI or name
+            const sourceLocalEntry = localEntries[i];
             const localIdx = result.findIndex(
               (f) =>
+                f._tempUri === sourceLocalEntry?._tempUri ||
+                f.name === sourceLocalEntry?.name ||
                 f.name === serverFile.originalName ||
                 f.name === serverFile.fileName,
             );
+
             if (localIdx >= 0) {
               result[localIdx] = {
                 _id: serverFile._id,
@@ -465,20 +547,24 @@ const MessageComposer = React.memo(function MessageComposer({
     setShowMediaPicker(true);
   }, []);
 
-  const handleFilesSelected = useCallback(async (pickedFiles) => {
-    if (!pickedFiles || !pickedFiles.length) return;
+  const handleFilesSelected = useCallback(
+    async (pickedFiles) => {
+      if (!pickedFiles || !pickedFiles.length) return;
 
-    // Add local files as "uploading" pending entries
-    const localEntries = pickedFiles.map((f) => ({
-      name: f.name || "attachment",
-      uploading: true,
-      uploadFailed: false,
-    }));
-    setPendingFiles((prev) => [...prev, ...localEntries]);
+      // Add local files as "uploading" pending entries
+      const localEntries = pickedFiles.map((f) => ({
+        name: f.name || f.fileName || f.filename || `file_${Date.now()}.jpg`,
+        uploading: true,
+        uploadFailed: false,
+        _tempUri: f.uri, // Use URI as a reliable matching fallback
+      }));
+      setPendingFiles((prev) => [...prev, ...localEntries]);
 
-    // Upload to server
-    await uploadFilesToServer(pickedFiles);
-  }, [uploadFilesToServer]);
+      // Upload to server
+      await uploadFilesToServer(pickedFiles, localEntries);
+    },
+    [uploadFilesToServer],
+  );
 
   const removePendingFile = useCallback((index) => {
     setPendingFiles((prev) => prev.filter((_, i) => i !== index));
@@ -495,9 +581,7 @@ const MessageComposer = React.memo(function MessageComposer({
             styles.banner,
             {
               backgroundColor: colors.card,
-              borderLeftColor: editingMessage
-                ? colors.warning
-                : colors.primary,
+              borderLeftColor: editingMessage ? colors.warning : colors.primary,
             },
           ]}
         >
@@ -550,17 +634,47 @@ const MessageComposer = React.memo(function MessageComposer({
           }}
           onFormat={(format) => {
             if (!richText.current) return;
-            switch(format) {
-              case 'bold': richText.current.sendAction(actions.setBold, 'result'); break;
-              case 'italic': richText.current.sendAction(actions.setItalic, 'result'); break;
-              case 'underline': richText.current.sendAction(actions.setUnderline, 'result'); break;
-              case 'strikethrough': richText.current.sendAction(actions.setStrikethrough, 'result'); break;
-              case 'unorderedList': richText.current.sendAction(actions.insertBulletsList, 'result'); break;
-              case 'orderedList': richText.current.sendAction(actions.insertOrderedList, 'result'); break;
-              case 'blockquote': richText.current.sendAction(actions.setBlockQuote, 'result'); break;
-              case 'code': richText.current.sendAction(actions.code, 'result'); break;
-              case 'codeBlock': richText.current.sendAction(actions.code, 'result'); break;
-              case 'link': richText.current.sendAction(actions.insertLink, 'Add Link', 'https://'); break;
+            switch (format) {
+              case "bold":
+                richText.current.sendAction(actions.setBold, "result");
+                break;
+              case "italic":
+                richText.current.sendAction(actions.setItalic, "result");
+                break;
+              case "underline":
+                richText.current.sendAction(actions.setUnderline, "result");
+                break;
+              case "strikethrough":
+                richText.current.sendAction(actions.setStrikethrough, "result");
+                break;
+              case "unorderedList":
+                richText.current.sendAction(
+                  actions.insertBulletsList,
+                  "result",
+                );
+                break;
+              case "orderedList":
+                richText.current.sendAction(
+                  actions.insertOrderedList,
+                  "result",
+                );
+                break;
+              case "blockquote":
+                richText.current.sendAction(actions.setBlockQuote, "result");
+                break;
+              case "code":
+                richText.current.sendAction(actions.code, "result");
+                break;
+              case "codeBlock":
+                richText.current.sendAction(actions.code, "result");
+                break;
+              case "link":
+                richText.current.sendAction(
+                  actions.insertLink,
+                  "Add Link",
+                  "https://",
+                );
+                break;
             }
           }}
         />
@@ -611,28 +725,50 @@ const MessageComposer = React.memo(function MessageComposer({
       )}
 
       {/* Input bar */}
-      <View style={[styles.inputBar, { backgroundColor: colors.background }]}>
-        <View style={[styles.inputContainer, { borderColor: colors.border, backgroundColor: colors.inputBackground }]}>
-          
-          <TouchableOpacity style={styles.iconButton} onPress={handleAttach}>
+      <View
+        style={[
+          styles.inputBar,
+          { backgroundColor: colors.background, paddingBottom: bottomPadding },
+        ]}
+      >
+        <View
+          style={[
+            styles.inputContainer,
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.inputBackground,
+              alignItems: "flex-end", // Align icons to bottom as it expands
+            },
+          ]}
+        >
+          <TouchableOpacity style={[styles.iconButton, { marginBottom: 4 }]} onPress={handleAttach}>
             <Plus size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.iconButton} onPress={() => setShowToolbar((v) => !v)}>
-            <CaseSensitive size={18} color={showToolbar ? colors.primary : colors.textSecondary} />
+          <TouchableOpacity
+            style={[styles.iconButton, { marginBottom: 4 }]}
+            onPress={() => setShowToolbar((v) => !v)}
+          >
+            <CaseSensitive
+              size={18}
+              color={showToolbar ? colors.primary : colors.textSecondary}
+            />
           </TouchableOpacity>
 
-          <View style={{ flex: 1, minHeight: 40, maxHeight: 120 }}>
+          <View style={{ flex: 1, minHeight: 40, height: Math.min(maxComposerHeight, Math.max(40, editorHeight)) }}>
             <RichEditor
               ref={richText}
+              useContainer={false}
+              onHeightChange={(height) => setEditorHeight(height)}
               style={{ flex: 1 }}
+              scrollEnabled={true}
               placeholder={editingMessage ? "Edit message..." : "Message..."}
               initialContentHTML={text}
               editorStyle={{
                 backgroundColor: colors.inputBackground,
                 color: colors.inputText,
                 placeholderColor: colors.inputPlaceholder,
-                contentCSSText: 'font-size: 15px; font-family: sans-serif;',
+                contentCSSText: "font-size: 15px; font-family: sans-serif; overflow-y: auto !important; ul, ol { padding-left: 24px !important; margin: 0 !important; margin-top: 4px !important; margin-bottom: 4px !important; } li { margin: 0 !important; padding: 0 !important; list-style-position: outside !important; }",
               }}
               onChange={(html) => {
                 handleTextChange(html);
@@ -641,25 +777,40 @@ const MessageComposer = React.memo(function MessageComposer({
             />
           </View>
 
-          <TouchableOpacity style={styles.iconButton} onPress={() => setShowEmojiPicker(true)}>
+          {/* <TouchableOpacity style={styles.iconButton} onPress={() => setShowEmojiPicker(true)}>
             <Smile size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
 
-          {text.trim() ? (
-            <TouchableOpacity
-              style={styles.sendButton}
-              onPress={handleSend}
-              onLongPress={() => setShowScheduleModal(true)}
-              delayLongPress={500}
-            >
-              <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 15 }}>Send</Text>
-            </TouchableOpacity>
+          {stripHtml(text) || pendingFiles.length > 0 ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() => setShowScheduleModal(true)}
+              >
+                <Clock size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.sendButton}
+                onPress={handleSend}
+                onLongPress={() => setShowScheduleModal(true)}
+                delayLongPress={500}
+              >
+                <Text
+                  style={{
+                    color: colors.primary,
+                    fontWeight: "bold",
+                    fontSize: 15,
+                  }}
+                >
+                  Send
+                </Text>
+              </TouchableOpacity>
+            </View>
           ) : (
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity style={[styles.iconButton, { marginBottom: 4 }]}>
               <Mic size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
-
         </View>
       </View>
 
@@ -688,7 +839,7 @@ const MessageComposer = React.memo(function MessageComposer({
         onClose={() => setShowRecentCanvases(false)}
         colors={colors}
         onSelectCanvas={(canvas) => {
-          const md = `[📄 ${canvas.title || 'Untitled Canvas'}](/canvas/${canvas._id})`;
+          const md = `[📄 ${canvas.title || "Untitled Canvas"}](/canvas/${canvas._id})`;
           onChangeText(text ? `${text}\n${md}` : md);
         }}
       />
@@ -699,15 +850,19 @@ const MessageComposer = React.memo(function MessageComposer({
         onClose={() => setShowRecentFiles(false)}
         colors={colors}
         onSelectFile={(file) => {
-          setPendingFiles((prev) => [...prev, {
-            _id: file._id,
-            name: file.originalName || file.fileName || file.name || 'Unknown',
-            url: file.url || file.secureUrl,
-            thumbnailUrl: file.thumbnailUrl,
-            mimeType: file.mimeType,
-            fileSize: file.fileSize,
-            uploading: false,
-          }]);
+          setPendingFiles((prev) => [
+            ...prev,
+            {
+              _id: file._id,
+              name:
+                file.originalName || file.fileName || file.name || "Unknown",
+              url: file.url || file.secureUrl,
+              thumbnailUrl: file.thumbnailUrl,
+              mimeType: file.mimeType,
+              fileSize: file.fileSize,
+              uploading: false,
+            },
+          ]);
         }}
       />
 
@@ -774,11 +929,10 @@ const createStyles = (colors) =>
     inputBar: {
       paddingHorizontal: 12,
       paddingVertical: 10,
-      paddingBottom: 24, // safe area padding
     },
     inputContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       borderRadius: 24,
       borderWidth: 1,
       paddingHorizontal: 4,
@@ -791,9 +945,9 @@ const createStyles = (colors) =>
       flex: 1,
       fontSize: 16,
       maxHeight: 100,
-      paddingVertical: Platform.OS === 'android' ? 6 : 8,
-      paddingHorizontal: Platform.OS === 'android' ? 4 : 4,
-      textAlignVertical: 'center',
+      paddingVertical: Platform.OS === "android" ? 6 : 8,
+      paddingHorizontal: Platform.OS === "android" ? 4 : 4,
+      textAlignVertical: "center",
       letterSpacing: 0,
       ...(Platform.OS === "web" && { outlineWidth: 0, outlineStyle: "none" }),
     },

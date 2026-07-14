@@ -4,6 +4,8 @@
  * LaterScreen, DraftsScreen, ScheduledScreen, and FilesScreen.
  */
 
+import { usePreferencesStore } from '../stores/preferencesStore';
+
 /**
  * Format a date/timestamp as a relative time string (e.g., "5m ago", "2h ago", "3d ago").
  * Falls back to locale date string for dates older than 7 days.
@@ -65,10 +67,12 @@ export const formatScheduledDate = (value) => {
   const isToday = date.toDateString() === now.toDateString();
   const isTomorrow = date.toDateString() === tomorrow.toDateString();
 
+  const { time24Hour } = usePreferencesStore.getState();
+
   const timeStr = date.toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
-    hour12: true,
+    hour12: !time24Hour,
   });
 
   if (isToday) return `Today at ${timeStr}`;
@@ -79,7 +83,7 @@ export const formatScheduledDate = (value) => {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-    hour12: true,
+    hour12: !time24Hour,
   });
 };
 
@@ -104,5 +108,6 @@ export const formatLocaleDate = (value) => {
 export const formatMessageTime = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const { time24Hour } = usePreferencesStore.getState();
+  return date.toLocaleTimeString([], { hour: time24Hour ? '2-digit' : 'numeric', minute: '2-digit', hour12: !time24Hour });
 };

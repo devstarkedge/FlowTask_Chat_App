@@ -90,8 +90,11 @@ export const useThreadStore = create(
       },
 
       handleNewThreadReply: (reply) => {
-        const { threadId } = reply;
+        const { threadId, authorId } = reply;
         if (!threadId) return;
+
+        const currentUser = useAuthStore.getState().user;
+        const isSelf = authorId === currentUser?._id;
 
         set((state) => {
           const isActive = threadId === state.activeThreadId;
@@ -104,7 +107,7 @@ export const useThreadStore = create(
               ...thread,
               replyCount: (thread.replyCount || 0) + 1,
               lastReplyAt: reply.createdAt,
-              hasUnread: !isActive,
+              hasUnread: !isActive && !isSelf,
             };
             
             // Move to top

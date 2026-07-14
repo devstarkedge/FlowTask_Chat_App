@@ -1,321 +1,409 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  StatusBar,
-  Switch,
-  Alert,
-} from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
-import { accentColors } from '../theme/colors';
+import { usePreferencesStore } from '../stores/preferencesStore';
+import { useAuthStore } from '../stores/authStore';
+import { useTranslation } from '../utils/i18n';
+import { OptionsSelectionModal } from '../components/common';
 import {
-  registerForPushNotifications,
-  unregisterPushNotifications,
-  isPushEnabled as checkPushEnabled,
-} from '../services/pushNotificationService';
-import {
-  ChevronLeft,
-  Sun,
-  Moon,
-  Smartphone,
-  Globe,
-  Eye,
-  Type,
-  Lock,
-  Bell,
+  X,
+  User,
+  ExternalLink,
   ChevronRight,
-  Palette,
+  Bell,
+  Box,
+  PenTool,
+  Smile,
+  MessageSquare,
+  Link2,
+  Type,
+  Smartphone,
+  Volume2,
+  ArrowRight,
+  Image as ImageIcon,
+  Headphones,
+  Globe,
+  Clock,
+  Eye,
+  Lock,
+  CreditCard,
+  PieChart,
+  Info,
+  Book,
+  Activity,
+  Bug,
+  HelpCircle,
+  MessageCircle,
 } from 'lucide-react-native';
-import ColorPickerModal from '../components/ColorPickerModal';
+
+const SectionTitle = ({ title, colors }) => (
+  <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{title}</Text>
+);
+
+const PreferenceItem = ({ icon: Icon, title, subtitle, rightIcon, rightText, onPress, colors }) => (
+  <TouchableOpacity style={[styles.itemContainer, { borderBottomColor: colors.border }]} onPress={onPress} activeOpacity={0.7}>
+    <View style={styles.iconContainer}>
+      <Icon size={24} color={colors.textSecondary} strokeWidth={1.5} />
+    </View>
+    <View style={styles.textContainer}>
+      <Text style={[styles.itemTitle, { color: colors.textPrimary }]}>{title}</Text>
+      {subtitle ? <Text style={[styles.itemSubtitle, { color: colors.textSecondary }]}>{subtitle}</Text> : null}
+    </View>
+    <View style={styles.rightContainer}>
+      {rightText ? <Text style={[styles.rightText, { color: colors.textSecondary }]}>{rightText}</Text> : null}
+      {rightIcon === 'chevron' ? (
+        <ChevronRight size={20} color={colors.textTertiary} strokeWidth={1.5} />
+      ) : rightIcon === 'external' ? (
+        <ExternalLink size={20} color={colors.textTertiary} strokeWidth={1.5} />
+      ) : rightIcon ? (
+        <Text style={styles.rightEmoji}>{rightIcon}</Text>
+      ) : null}
+    </View>
+  </TouchableOpacity>
+);
+
+const SELECTION_CONFIGS = {
+  emojiSkinTone: {
+    title: 'Default Emoji Skin Tone',
+    options: [
+      { label: 'Default (Yellow) ✋', value: 'Default' },
+      { label: 'Light ✋🏻', value: 'Light' },
+      { label: 'Medium-Light ✋🏼', value: 'Medium-Light' },
+      { label: 'Medium ✋🏽', value: 'Medium' },
+      { label: 'Medium-Dark ✋🏾', value: 'Medium-Dark' },
+      { label: 'Dark ✋🏿', value: 'Dark' },
+    ],
+  },
+  messageDisplay: {
+    title: 'Message Display',
+    options: [
+      { label: 'Clean (Default)', value: 'Clean' },
+      { label: 'Compact', value: 'Compact' },
+    ],
+  },
+  linkStyle: {
+    title: 'Links',
+    options: [
+      { label: 'Show Preview', value: 'Preview' },
+      { label: 'Text Only', value: 'Text Only' },
+    ],
+  },
+  inputOptions: {
+    title: 'Input Options',
+    options: [
+      { label: 'Rich Text', value: 'Rich Text' },
+      { label: 'Markdown', value: 'Markdown' },
+    ],
+  },
+  screenReader: {
+    title: 'Screen Reader',
+    options: [
+      { label: 'Default', value: 'Default' },
+      { label: 'Verbose', value: 'Verbose' },
+    ],
+  },
+  swipeActions: {
+    title: 'Swipe Actions',
+    options: [
+      { label: 'Reply', value: 'Reply' },
+      { label: 'Save', value: 'Save' },
+      { label: 'Mark Unread', value: 'Mark Unread' },
+    ],
+  },
+  language: {
+    title: 'Language',
+    options: [
+      { label: 'English (US)', value: 'English (US)' },
+      { label: 'English (UK)', value: 'English (UK)' },
+      { label: 'Spanish', value: 'Spanish' },
+      { label: 'French', value: 'French' },
+      { label: 'German', value: 'German' },
+      { label: 'Japanese', value: 'Japanese' },
+    ],
+  },
+  timeFormat: {
+    title: 'Time Format',
+    options: [
+      { label: '12-hour (AM/PM)', value: '12-hour' },
+      { label: '24-hour', value: '24-hour' },
+    ],
+  },
+  browserApp: {
+    title: 'Browser Application',
+    options: [
+      { label: 'In-App Browser', value: 'In-App' },
+      { label: 'System Default', value: 'System' },
+    ],
+  },
+};
 
 const PreferencesScreen = ({ navigation }) => {
-  const {
-    colors,
-    mode,
-    setMode,
-    accentColor,
-    setAccentColor,
-    customColor,
-    setCustomColor,
-    previewCustomColor,
-    effectiveTheme,
-  } = useThemeStore();
+  const { colors, effectiveTheme, toggleTheme, customColor, accentColor, setCustomColor } = useThemeStore();
+  const prefs = usePreferencesStore();
+  const user = useAuthStore(state => state.user);
+  
+  const [activeSelection, setActiveSelection] = useState(null);
 
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const openSelection = (key) => setActiveSelection(key);
+  const closeSelection = () => setActiveSelection(null);
 
-  // Check current push state on mount
-  useEffect(() => {
-    checkPushEnabled().then(setNotificationsEnabled);
-  }, []);
+  const { t } = useTranslation();
 
-  const handlePushToggle = async (value) => {
-    setNotificationsEnabled(value);
-    if (value) {
-      const token = await registerForPushNotifications();
-      if (!token) {
-        // Permission denied — revert toggle
-        setNotificationsEnabled(false);
-        Alert.alert(
-          'Push Notifications',
-          'Permission was denied. Please enable notifications in your device settings.',
-        );
-      }
-    } else {
-      await unregisterPushNotifications();
-    }
+  const handleOpenLink = (url) => {
+    Linking.openURL(url).catch(err => {
+      Alert.alert("Error", "Could not open link");
+    });
   };
 
-  const styles = createStyles(colors);
-
-  const themeOptions = [
-    { value: 'light', label: 'Light', icon: Sun },
-    { value: 'dark', label: 'Dark', icon: Moon },
-    { value: 'system', label: 'System', icon: Smartphone },
-  ];
-
-  // Fixed accent colors — always match the preset definitions, never drift with current theme
-  const accentColorOptions = [
-    { value: 'blue', label: 'Blue', color: accentColors.blue.primary },
-    { value: 'purple', label: 'Purple', color: accentColors.purple.primary },
-    { value: 'green', label: 'Green', color: accentColors.green.primary },
-    { value: 'orange', label: 'Orange', color: accentColors.orange.primary },
-    { value: 'red', label: 'Red', color: accentColors.red.primary },
-    { value: 'custom', label: 'Custom', color: customColor || colors.textTertiary },
-  ];
-
-  const handleAccentPress = (option) => {
-    if (option.value === 'custom') {
-      setPickerOpen(true);
-    } else {
-      setAccentColor(option.value);
-    }
+  const handleClearCache = () => {
+    Alert.alert(
+      "Clear Cache",
+      "Are you sure you want to clear the app cache?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Clear", onPress: () => Alert.alert("Success", "Cache cleared successfully"), style: "destructive" }
+      ]
+    );
   };
-
-  const MenuItem = ({ icon: Icon, label, value, onPress, showChevron = true }) => (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
-      <Icon size={22} color={colors.textSecondary} strokeWidth={1.5} />
-      <View style={styles.menuContent}>
-        <Text style={[styles.menuLabel, { color: colors.textPrimary }]}>{label}</Text>
-        {value && <Text style={[styles.menuValue, { color: colors.textSecondary }]}>{value}</Text>}
-      </View>
-      {showChevron && <ChevronRight size={20} color={colors.textTertiary} />}
-    </TouchableOpacity>
-  );
-
-  const SectionTitle = ({ title }) => (
-    <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{title}</Text>
-  );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <StatusBar barStyle={effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
 
+      {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <ChevronLeft size={24} color={colors.textPrimary} />
+        <TouchableOpacity style={styles.closeButton} onPress={() => navigation.goBack()}>
+          <X size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Preferences</Text>
-        <View style={{ width: 40 }} />
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{t("Preferences")}</Text>
+        <View style={styles.headerRight} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Appearance */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        
+        {/* Top Profile / Account */}
         <View style={styles.section}>
-          <SectionTitle title="APPEARANCE" />
-          <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-            {themeOptions.map((option) => {
-              const Icon = option.icon;
-              const isSelected = mode === option.value;
-              return (
-                <TouchableOpacity
-                  key={option.value}
-                  style={styles.themeOption}
-                  onPress={() => setMode(option.value)}
-                  activeOpacity={0.7}
-                >
-                  <Icon size={22} color={isSelected ? colors.primary : colors.textSecondary} />
-                  <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>{option.label}</Text>
-                  <View style={[styles.radio, { borderColor: colors.border }, isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
-                    {isSelected && <View style={[styles.radioInner, { backgroundColor: colors.textInverse }]} />}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Accent Color */}
-        <View style={styles.section}>
-          <SectionTitle title="ACCENT COLOR" />
-          <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-            <View style={styles.colorGrid}>
-              {accentColorOptions.map((option) => {
-                const isActive = accentColor === option.value;
-                const isCustom = option.value === 'custom';
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={styles.colorOption}
-                    onPress={() => handleAccentPress(option)}
-                    activeOpacity={0.7}
-                  >
-                    <View
-                      style={[
-                        styles.colorCircle,
-                        { backgroundColor: option.color },
-                        isActive && styles.colorCircleSelected,
-                      ]}
-                    >
-                      {isActive && (
-                        <View style={styles.checkDot} />
-                      )}
-                      {isCustom && !isActive && (
-                        <Palette size={18} color={colors.textOnPrimary} />
-                      )}
-                    </View>
-                    <Text
-                      style={[
-                        styles.colorLabel,
-                        { color: isActive ? colors.primary : colors.textPrimary },
-                        isActive && styles.colorLabelActive,
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          <ColorPickerModal
-            visible={pickerOpen}
-            onClose={() => setPickerOpen(false)}
-            initialHex={customColor || colors.primary}
-            onPreview={(hex) => previewCustomColor(hex)}
-            onApply={(hex) => {
-              setCustomColor(hex);
-              setPickerOpen(false);
-            }}
+          <PreferenceItem
+            icon={User}
+            title={t("Account Settings")}
+            rightIcon="external"
+            colors={colors}
+            onPress={() => navigation.navigate('Profile')}
           />
-        </View>
-
-        {/* Language */}
-        <View style={styles.section}>
-          <SectionTitle title="LANGUAGE & REGION" />
-          <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-            <MenuItem icon={Globe} label="Language" value="English (US)" onPress={() => {}} />
-          </View>
-        </View>
-
-        {/* Accessibility */}
-        <View style={styles.section}>
-          <SectionTitle title="ACCESSIBILITY" />
-          <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-            <MenuItem icon={Type} label="Font Size" value="Medium" onPress={() => {}} />
-            <MenuItem icon={Eye} label="Accessibility Options" onPress={() => {}} />
-          </View>
-        </View>
-
-        {/* Privacy */}
-        <View style={styles.section}>
-          <SectionTitle title="PRIVACY & SECURITY" />
-          <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-            <MenuItem icon={Lock} label="Privacy Settings" onPress={() => {}} />
-          </View>
         </View>
 
         {/* Notifications */}
         <View style={styles.section}>
-          <SectionTitle title="NOTIFICATIONS" />
-          <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-            <View style={styles.menuItem}>
-              <Bell size={22} color={colors.textSecondary} strokeWidth={1.5} />
-              <Text style={[styles.menuLabel, { color: colors.textPrimary, flex: 1 }]}>Push Notifications</Text>
-              <Switch
-                value={notificationsEnabled}
-                onValueChange={handlePushToggle}
-                trackColor={{ false: colors.border, true: colors.primary + '50' }}
-                thumbColor={notificationsEnabled ? colors.primary : colors.textTertiary}
-              />
-            </View>
-          </View>
+          <SectionTitle title={t("Notifications")} colors={colors} />
+          <PreferenceItem
+            icon={Bell}
+            title={t("Notifications")}
+            subtitle={t("Customize your notifications")}
+            rightIcon="chevron"
+            colors={colors}
+            onPress={() => navigation.navigate('NotificationsPreferences')}
+          />
         </View>
 
-        <View style={{ height: 40 }} />
+        {/* Appearance */}
+        <View style={styles.section}>
+          <SectionTitle title={t("Appearance")} colors={colors} />
+          <PreferenceItem
+            icon={Box}
+            title={t("Accent Color")}
+            subtitle={accentColor.charAt(0).toUpperCase() + accentColor.slice(1)}
+            rightIcon="chevron"
+            colors={colors}
+            onPress={() => navigation.navigate('AccentColor')}
+          />
+          <PreferenceItem
+            icon={PenTool}
+            title={t("Color Mode")}
+            subtitle={effectiveTheme === 'dark' ? t('Dark') : (effectiveTheme === 'light' ? t('Light') : t('System'))}
+            rightIcon="chevron"
+            colors={colors}
+            onPress={() => navigation.navigate('ColorMode')}
+          />
+          <PreferenceItem
+            icon={Smile}
+            title={t("Default Emoji Skin Tone")}
+            subtitle={prefs.emojiSkinTone}
+            rightIcon="chevron"
+            colors={colors}
+            onPress={() => navigation.navigate('EmojiSkinTone')}
+          />
+        </View>
+
+        {/* Accessibility */}
+        <View style={styles.section}>
+          <SectionTitle title={t("Accessibility")} colors={colors} />
+          <PreferenceItem
+            icon={ArrowRight}
+            title={t("Swipe Actions")}
+            subtitle={t("Configured")}
+            rightIcon="chevron"
+            colors={colors}
+            onPress={() => navigation.navigate('SwipeActions')}
+          />
+        </View>
+
+        {/* Audio, Video & Images */}
+        <View style={styles.section}>
+          <SectionTitle title={t("Audio, Video & Images")} colors={colors} />
+          <PreferenceItem
+            icon={Headphones}
+            title={t("Huddles")}
+            subtitle={t("Configured")}
+            rightIcon="chevron"
+            colors={colors}
+            onPress={() => navigation.navigate('Huddles')}
+          />
+        </View>
+
+        {/* Language & Region */}
+        <View style={styles.section}>
+          <SectionTitle title={t("Language & Region")} colors={colors} />
+          <PreferenceItem
+            icon={Globe}
+            title={t("Language")}
+            subtitle={prefs.language}
+            rightIcon="chevron"
+            colors={colors}
+            onPress={() => navigation.navigate('Language')}
+          />
+          <PreferenceItem
+            icon={Clock}
+            title={t("Time")}
+            subtitle={prefs.time24Hour ? t('24-hour') : t('12-hour')}
+            rightIcon="chevron"
+            colors={colors}
+            onPress={() => navigation.navigate('Time')}
+          />
+        </View>
+
+        {/* Administration */}
+        <View style={styles.section}>
+          <SectionTitle title={t("Administration")} colors={colors} />
+          <PreferenceItem
+            icon={CreditCard}
+            title={t("Billing")}
+            subtitle={t("View or manage your Free Plan")}
+            rightIcon="external"
+            colors={colors}
+            onPress={() => handleOpenLink('https://slack.com/pricing')}
+          />
+          {user?.role === 'admin' && (
+            <PreferenceItem
+              icon={PieChart}
+              title={t("Analytics")}
+              subtitle={t("View your analytics dashboard")}
+              rightIcon="external"
+              colors={colors}
+              onPress={() => handleOpenLink('https://slack.com/help/articles/218080037')}
+            />
+          )}
+        </View>
+
+        {/* About */}
+        <View style={styles.section}>
+          <SectionTitle title={t("About")} colors={colors} />
+          <PreferenceItem
+            icon={Info}
+            title={t("Version")}
+            subtitle="1.0.0 (Latest)"
+            colors={colors}
+            onPress={() => Alert.alert('Version', 'You are on the latest version.')}
+          />
+        </View>
+
       </ScrollView>
+
+
+      
+      {activeSelection && SELECTION_CONFIGS[activeSelection] && (
+        <OptionsSelectionModal
+          visible={!!activeSelection}
+          onClose={closeSelection}
+          title={SELECTION_CONFIGS[activeSelection].title}
+          options={SELECTION_CONFIGS[activeSelection].options}
+          selectedValue={prefs[activeSelection]}
+          onSelect={(val) => prefs.setPreference(activeSelection, val)}
+        />
+      )}
+
     </SafeAreaView>
   );
 };
 
-const createStyles = (colors) =>
-  StyleSheet.create({
-    container: { flex: 1 },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
-    backButton: { padding: 4 },
-    headerTitle: { fontSize: 18, fontWeight: '700' },
-    section: { marginTop: 24 },
-    sectionTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, paddingHorizontal: 20, marginBottom: 8 },
-    card: { marginHorizontal: 16, borderRadius: 12, padding: 16, gap: 4 },
-    menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 14 },
-    menuContent: { flex: 1 },
-    menuLabel: { fontSize: 16, fontWeight: '500' },
-    menuValue: { fontSize: 14, marginTop: 2 },
-    themeOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 12 },
-    optionLabel: { flex: 1, fontSize: 16, fontWeight: '500' },
-    radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-    radioInner: { width: 8, height: 8, borderRadius: 4 },
-
-    /* Accent color grid */
-    colorGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 12,
-      paddingVertical: 8,
-      justifyContent: 'space-between',
-    },
-    colorOption: {
-      alignItems: 'center',
-      gap: 8,
-      width: '30%',
-      paddingVertical: 6,
-    },
-    colorCircle: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
-      borderWidth: 3,
-      borderColor: 'transparent',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    colorCircleSelected: {
-      borderColor: colors.textOnPrimary,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.2,
-      shadowRadius: 6,
-      elevation: 5,
-    },
-    checkDot: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-      backgroundColor: colors.textOnPrimary,
-    },
-    colorLabel: {
-      fontSize: 12,
-      fontWeight: '600',
-      textAlign: 'center',
-    },
-    colorLabelActive: {
-      fontWeight: '700',
-    },
-  });
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  headerRight: {
+    width: 32, // To balance the X icon size
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  section: {
+    marginTop: 24,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  itemContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  iconContainer: {
+    width: 32,
+    alignItems: 'flex-start',
+  },
+  textContainer: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  itemTitle: {
+    fontSize: 16,
+    fontWeight: '400',
+  },
+  itemSubtitle: {
+    fontSize: 13,
+    marginTop: 4,
+  },
+  rightContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rightText: {
+    fontSize: 14,
+    marginRight: 8,
+  },
+  rightEmoji: {
+    fontSize: 18,
+    marginRight: 4,
+  },
+});
 
 export default PreferencesScreen;

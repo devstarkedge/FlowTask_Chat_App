@@ -1,229 +1,177 @@
-import React, { useState, useCallback } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
-  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "../stores/authStore";
 import { useThemeStore } from "../stores/themeStore";
-import { useNotificationStore } from "../stores/notificationStore";
-import { useLaterStore } from "../stores/laterStore";
-import { useDraftStore } from "../stores/draftStore";
-import { useThreadStore } from "../stores/threadStore";
-import { disconnectSocket } from "../services/socket";
-import { AppAvatar } from "../components/common";
-import StatusModal from "../components/StatusModal";
+import CreateNewBottomSheet from "../components/CreateNewBottomSheet";
 import {
-  Bookmark,
-  MessageSquare,
-  Edit3,
-  Clock,
-  FileText,
-  Bell,
-  Settings,
+  Files,
   Users,
-  User,
-  LogOut,
-  ChevronRight,
-  Smile,
+  Building2,
+  Plus
 } from "lucide-react-native";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
-// ─── Row (Slack-style: icon + label + badge + chevron) ───────────────────────
-
-const YouRow = ({ icon: Icon, label, badge, onPress, colors, danger }) => (
-  <TouchableOpacity
-    style={youRowStyles.row}
-    onPress={onPress}
-    activeOpacity={0.5}
-  >
-    <Icon size={18} color={danger ? colors.danger : colors.textSecondary} />
-    <Text
-      style={[
-        youRowStyles.label,
-        {
-          color: danger ? colors.danger : colors.textPrimary,
-        },
-      ]}
-    >
-      {label}
-    </Text>
-    {badge > 0 && (
-      <Text style={[youRowStyles.badge, { color: colors.primary }]}>
-        {badge > 99 ? "99+" : badge}
-      </Text>
+const MoreItem = ({ icon: Icon, title, subtitle, showProBadge, onPress, colors }) => (
+  <TouchableOpacity style={[styles.itemContainer, { borderBottomColor: colors.border }]} onPress={onPress} activeOpacity={0.7}>
+    <View style={styles.iconContainer}>
+      <Icon size={22} color={colors.textPrimary} strokeWidth={1.5} />
+    </View>
+    <View style={styles.textContainer}>
+      <Text style={[styles.itemTitle, { color: colors.textPrimary }]}>{title}</Text>
+      <Text style={[styles.itemSubtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
+    </View>
+    {showProBadge && (
+      <View style={styles.badgeContainer}>
+        <Text style={styles.badgeText}>PRO</Text>
+      </View>
     )}
-    <View style={{ flex: 1 }} />
-    <ChevronRight size={16} color={colors.textTertiary} />
   </TouchableOpacity>
 );
 
-const youRowStyles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  label: {
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  badge: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-});
-
-// ─── Main Component ──────────────────────────────────────────────────────────
-
-const YouScreen = ({ navigation }) => {
-  if (!navigation) navigation = { navigate: () => {} };
-
+const MoreScreen = ({ navigation }) => {
   const { colors, effectiveTheme } = useThemeStore();
-  const { user, logout } = useAuthStore();
-  const { unreadCount } = useNotificationStore();
-  const { savedCount } = useLaterStore();
-  const { draftCount } = useDraftStore();
-  const { unreadThreadCount } = useThreadStore();
-
-  const [statusModalVisible, setStatusModalVisible] = useState(false);
-
-  const handleLogout = useCallback(async () => {
-    disconnectSocket();
-    await logout();
-  }, [logout]);
+  const currentUser = useAuthStore((s) => s.user);
+  const [bottomSheetVisible, setBottomSheetVisible] = useState(false);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top"]}>
+    <SafeAreaView edges={["top"]} style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle="light-content" />
+
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>You</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>More</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Profile section — flat, no card */}
-        <View style={styles.profileCard}>
-          <AppAvatar user={user} size={64} showStatus statusSize={12} />
-          <Text style={[styles.profileName, { color: colors.textPrimary }]}>
-            {user?.name || "Unknown"}
-          </Text>
-          <Text style={[styles.profileEmail, { color: colors.textTertiary }]}>
-            {user?.email || ""}
-          </Text>
-          <TouchableOpacity
-            style={[styles.statusBtn, { borderColor: colors.border }]}
-            onPress={() => setStatusModalVisible(true)}
-          >
-            <Smile size={14} color={colors.textTertiary} />
-            <Text style={[styles.statusBtnText, { color: colors.textTertiary }]}>
-              {user?.customStatus?.text || "Set a status"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Saved & Drafts */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: colors.textTertiary }]}>
-            SAVED & DRAFTS
-          </Text>
-          <YouRow icon={Bookmark} label="Saved items" badge={savedCount} onPress={() => navigation.navigate("Later")} colors={colors} />
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <YouRow icon={MessageSquare} label="Threads" badge={unreadThreadCount} onPress={() => navigation.navigate("Threads")} colors={colors} />
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <YouRow icon={Edit3} label="Drafts" badge={draftCount} onPress={() => navigation.navigate("Drafts")} colors={colors} />
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <YouRow icon={Clock} label="Scheduled" onPress={() => navigation.navigate("Scheduled")} colors={colors} />
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <YouRow icon={FileText} label="Files" onPress={() => navigation.navigate("Files")} colors={colors} />
-        </View>
-
-        {/* Settings */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: colors.textTertiary }]}>
-            SETTINGS
-          </Text>
-          <YouRow icon={Bell} label="Notifications" badge={unreadCount} onPress={() => navigation.navigate("Notifications")} colors={colors} />
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <YouRow icon={Settings} label="Preferences" onPress={() => navigation.navigate("Preferences")} colors={colors} />
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <YouRow icon={Users} label="People" onPress={() => navigation.navigate("People")} colors={colors} />
-        </View>
-
-        {/* Account */}
-        <View style={[styles.section, { marginBottom: 40 }]}>
-          <Text style={[styles.sectionLabel, { color: colors.textTertiary }]}>
-            ACCOUNT
-          </Text>
-          <YouRow icon={User} label="View profile" onPress={() => navigation.navigate("Profile")} colors={colors} />
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <YouRow icon={LogOut} label="Sign out" onPress={handleLogout} colors={colors} danger />
-        </View>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <MoreItem
+          icon={Files}
+          title="Files"
+          subtitle="Browse your canvases, lists and attachments"
+          colors={colors}
+          onPress={() => navigation.navigate("Files")}
+        />
+        <MoreItem
+          icon={Users}
+          title="Assigned to you"
+          subtitle="Tick off your tasks"
+          showProBadge={true}
+          colors={colors}
+          onPress={() => Alert.alert("Coming soon", "This feature will be available soon.")}
+        />
+        <MoreItem
+          icon={Building2}
+          title="External connections"
+          subtitle="Work with people from other organisations"
+          showProBadge={true}
+          colors={colors}
+          onPress={() => Alert.alert("Coming soon", "This feature will be available soon.")}
+        />
       </ScrollView>
 
-      <StatusModal
-        visible={statusModalVisible}
-        onClose={() => setStatusModalVisible(false)}
+      {/* Floating "+" button for create new menu */}
+      <TouchableOpacity 
+        style={[
+          styles.fab,
+          {
+            backgroundColor: colors.primary,
+            shadowColor: colors.shadow || "#000",
+          },
+        ]} 
+        activeOpacity={0.8}
+        onPress={() => setBottomSheetVisible(true)}
+      >
+        <Plus size={24} color={colors.textOnPrimary} strokeWidth={2.5} />
+      </TouchableOpacity>
+
+      <CreateNewBottomSheet 
+        visible={bottomSheetVisible} 
+        onClose={() => setBottomSheetVisible(false)} 
+        navigation={navigation} 
       />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { 
+    flex: 1 
+  },
   header: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: 1,
   },
   title: {
-    fontSize: 17,
+    fontSize: moderateScale(22),
     fontWeight: "800",
+    color: '#ffffff',
   },
-  profileCard: {
-    alignItems: "center",
-    paddingVertical: 20,
-    paddingHorizontal: 20,
-    gap: 4,
+  scrollContent: {
+    paddingBottom: 100,
   },
-  profileName: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginTop: 8,
+  itemContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: verticalScale(16),
+    paddingHorizontal: scale(16),
+    borderBottomWidth: 1,
   },
-  profileEmail: {
-    fontSize: 13,
+  iconContainer: {
+    width: scale(32),
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    marginRight: scale(12),
   },
-  statusBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 0,
-    borderRadius: 0,
-    borderWidth: 0,
-    gap: 6,
+  textContainer: {
+    flex: 1,
+    paddingRight: scale(16),
+    justifyContent: 'center',
   },
-  statusBtnText: {
-    fontSize: 13,
+  itemTitle: {
+    fontSize: moderateScale(16),
+    fontWeight: '400',
   },
-  section: {
-    paddingTop: 16,
+  itemSubtitle: {
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(4),
   },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: "700",
+  badgeContainer: {
+    backgroundColor: '#8B428B', // Purple PRO badge color
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(3),
+    borderRadius: moderateScale(4),
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontSize: moderateScale(10),
+    fontWeight: '700',
     letterSpacing: 0.5,
-    paddingHorizontal: 16,
-    paddingBottom: 6,
   },
-  divider: {
-    height: 1,
-    marginLeft: 46,
-  },
+  fab: {
+    position: "absolute",
+    right: 20,
+    bottom: 20,
+    width: scale(52),
+    height: scale(52),
+    borderRadius: moderateScale(26),
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 6,
+    shadowOffset: { width: scale(0), height: scale(2) },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  }
 });
 
-export default YouScreen;
+export default MoreScreen;

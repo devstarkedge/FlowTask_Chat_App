@@ -20,7 +20,7 @@ const PresenceModal = ({ visible, onClose }) => {
   const presenceOptions = [
     {
       label: "Active",
-      value: "active",
+      value: "online",
       color: colors.online,
       description: "Let people know you're available",
     },
@@ -31,16 +31,10 @@ const PresenceModal = ({ visible, onClose }) => {
       description: "You're away from your device",
     },
     {
-      label: "Busy",
-      value: "busy",
+      label: "Do not disturb",
+      value: "dnd",
       color: colors.busy,
       description: "Do not disturb mode",
-    },
-    {
-      label: "Invisible",
-      value: "invisible",
-      color: colors.offline,
-      description: "Appear offline to others",
     },
   ];
 

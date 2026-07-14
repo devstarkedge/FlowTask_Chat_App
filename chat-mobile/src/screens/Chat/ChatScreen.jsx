@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 import {
   View,
   Text,
@@ -7,6 +9,7 @@ import {
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ActivityIndicator,
   Alert,
@@ -24,7 +27,7 @@ import { useThemeStore } from "../../stores/themeStore";
 import { useLaterStore } from "../../stores/laterStore";
 import { laterAPI, pinsAPI, messageAPI, threadAPI, channelAPI } from "../../services/api";
 import { emitTyping } from "../../services/socket";
-import { AppAvatar, AppScreen, MobileFileCard } from "../../components/common";
+import { AppAvatar, AppScreen, HeaderBackButton, MobileFileCard } from "../../components/common";
 import RichText from "../../components/RichText";
 import ReactionBar from "../../components/ReactionBar";
 import MediaPickerSheet from "../../components/MediaPickerSheet";
@@ -60,6 +63,8 @@ import {
 import SearchBar from "../../components/SearchBar";
 import MessageComposer from "../../components/MessageComposer";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { usePreferencesStore } from '../../stores/preferencesStore';
+import { formatMessageTime } from '../../utils/dateUtils';
 import logger from '../../utils/logger';
 import Toast from 'react-native-toast-message';
 
@@ -120,10 +125,7 @@ const formatDateSeparator = (dateStr) => {
 };
 
 const formatTime = (dateStr) => {
-  return new Date(dateStr).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatMessageTime(dateStr);
 };
 
 const isImageUrl = (url) => {
@@ -141,6 +143,7 @@ const ChatScreen = ({ route, navigation }) => {
   const isLoadingMessages = useChatStore((s) => s.isLoadingMessages);
   const typingByChannel = useChatStore((s) => s.typingByChannel);
   const channelHasMore = useChatStore((s) => s.hasMore[channelId]);
+  const savedMessageIds = useLaterStore((s) => s.savedMessageIds);
   const {
     fetchMessages,
     sendMessage,
@@ -544,6 +547,8 @@ const ChatScreen = ({ route, navigation }) => {
     // Thread indicator
     const hasThread = (item.replyCount || 0) > 0;
 
+    const isSaved = savedMessageIds.includes(item._id);
+
     // File attachments
     const attachments = getMessageAttachments(item);
 
@@ -666,6 +671,12 @@ const ChatScreen = ({ route, navigation }) => {
                 <RichText
                   html={item.htmlContent}
                   text={item.content}
+                  mentions={item.mentions}
+                  onMentionPress={(userId) => {
+                    const members = membersByChannel[channelId] || [];
+                    const user = members.find((m) => m._id === userId) || { _id: userId };
+                    navigation.navigate("UserProfile", { user, channelId });
+                  }}
                   colors={{
                     ...colors,
                     textPrimary: contentColor,
@@ -685,6 +696,12 @@ const ChatScreen = ({ route, navigation }) => {
                 >
                   {item.content}
                 </Text>
+              )}
+
+              {isSaved && !isDeleted && (
+                <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: colors.card, borderRadius: 10, padding: 2, elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } }}>
+                  <Bookmark size={10} color={colors.primary} fill={colors.primary} />
+                </View>
               )}
 
               {/* Attachment cards */}
@@ -805,7 +822,7 @@ const ChatScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </View>
     );
-  }, [user, colors, searchQuery, searchResults, currentMatch, displayedMessages, showMessageActions, addReaction, removeReaction, navigation, channelId, channelName]);
+  }, [user, colors, searchQuery, searchResults, currentMatch, displayedMessages, showMessageActions, addReaction, removeReaction, navigation, channelId, channelName, savedMessageIds]);
 
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -814,12 +831,7 @@ const ChatScreen = ({ route, navigation }) => {
 
       {/* Custom Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <CircleChevronLeft size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <HeaderBackButton onPress={() => navigation.goBack()} />
 
         <TouchableOpacity 
           style={styles.headerCenter}
@@ -1000,6 +1012,9 @@ const ChatScreen = ({ route, navigation }) => {
           renderItem={renderMessage}
           keyExtractor={(item) => item._id}
           inverted
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          onTouchStart={() => Keyboard.dismiss()}
           contentContainerStyle={styles.messageList}
           onEndReached={() => {
             if (channelHasMore && !isLoadingMessages) {
@@ -1202,8 +1217,8 @@ const createStyles = (colors) =>
     header: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 12,
-      paddingVertical: 12,
+      paddingHorizontal: scale(12),
+      paddingVertical: verticalScale(12),
       borderBottomWidth: 1,
       gap: 8,
     },
@@ -1219,7 +1234,7 @@ const createStyles = (colors) =>
       gap: 8,
     },
     headerTitle: {
-      fontSize: 17,
+      fontSize: moderateScale(17),
       fontWeight: "700",
       flex: 1,
     },
@@ -1227,24 +1242,24 @@ const createStyles = (colors) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
-      marginTop: 2,
-      marginLeft: 28,
+      marginTop: verticalScale(2),
+      marginLeft: scale(28),
     },
     memberCount: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
     },
     onlineDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
+      width: scale(6),
+      height: scale(6),
+      borderRadius: moderateScale(3),
     },
     onlineCount: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
     },
     dmStatusText: {
-      fontSize: 12,
-      marginTop: 2,
-      marginLeft: 40,
+      fontSize: moderateScale(12),
+      marginTop: verticalScale(2),
+      marginLeft: scale(40),
     },
     headerActions: {
       flexDirection: "row",
@@ -1255,30 +1270,30 @@ const createStyles = (colors) =>
     },
     optionsMenu: {
       borderBottomWidth: 1,
-      paddingVertical: 8,
+      paddingVertical: verticalScale(8),
     },
     optionItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingHorizontal: scale(16),
+      paddingVertical: verticalScale(12),
       gap: 12,
     },
     optionText: {
-      fontSize: 15,
+      fontSize: moderateScale(15),
     },
     messageList: {
-      paddingHorizontal: 12,
-      paddingVertical: 12,
+      paddingHorizontal: scale(12),
+      paddingVertical: verticalScale(12),
     },
     messageContainer: {
       flexDirection: "row",
-      marginBottom: 4,
+      marginBottom: verticalScale(4),
       maxWidth: "85%",
       gap: 8,
     },
     messageCompact: {
-      marginBottom: 1,
+      marginBottom: verticalScale(1),
     },
     myMessage: {
       alignSelf: "flex-end",
@@ -1287,78 +1302,78 @@ const createStyles = (colors) =>
       alignSelf: "flex-start",
     },
     bubble: {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 18,
+      paddingHorizontal: scale(12),
+      paddingVertical: verticalScale(8),
+      borderRadius: moderateScale(18),
       maxWidth: "100%",
     },
     senderRow: {
       flexDirection: "row",
       alignItems: "baseline",
       gap: 8,
-      marginBottom: 2,
-      marginLeft: 4,
+      marginBottom: verticalScale(2),
+      marginLeft: scale(4),
     },
     senderName: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
       fontWeight: "700",
     },
     messageText: {
-      fontSize: 15,
+      fontSize: moderateScale(15),
       lineHeight: 22,
     },
     timestamp: {
-      fontSize: 10,
+      fontSize: moderateScale(10),
     },
     timestampRow: {
       flexDirection: "row",
       alignItems: "center",
-      marginTop: 4,
+      marginTop: verticalScale(4),
       alignSelf: "flex-end",
     },
     editedLabel: {
-      fontSize: 10,
+      fontSize: moderateScale(10),
       fontStyle: "italic",
     },
     replyPreview: {
       flexDirection: "row",
       alignItems: "center",
       borderLeftWidth: 3,
-      paddingLeft: 8,
-      marginBottom: 4,
-      marginLeft: 4,
+      paddingLeft: scale(8),
+      marginBottom: verticalScale(4),
+      marginLeft: scale(4),
       gap: 4,
     },
     replyPreviewText: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
       flex: 1,
     },
     attachmentRow: {
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 6,
-      marginTop: 6,
+      marginTop: verticalScale(6),
     },
     imageAttachment: {
-      width: 200,
-      height: 150,
-      borderRadius: 8,
+      width: scale(200),
+      height: scale(150),
+      borderRadius: moderateScale(8),
     },
     fileAttachment: {
       flexDirection: "row",
       alignItems: "center",
       padding: 8,
-      borderRadius: 8,
-      marginTop: 4,
+      borderRadius: moderateScale(8),
+      marginTop: verticalScale(4),
       gap: 8,
     },
     threadIndicator: {
       flexDirection: "row",
       alignItems: "center",
-      marginTop: 4,
-      paddingHorizontal: 8,
-      paddingVertical: 6,
-      borderRadius: 8,
+      marginTop: verticalScale(4),
+      paddingHorizontal: scale(8),
+      paddingVertical: verticalScale(6),
+      borderRadius: moderateScale(8),
       borderWidth: 1,
       gap: 6,
     },
@@ -1367,33 +1382,33 @@ const createStyles = (colors) =>
       alignItems: "center",
     },
     threadText: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
       fontWeight: "600",
     },
     threadTime: {
-      fontSize: 11,
+      fontSize: moderateScale(11),
       marginLeft: "auto",
     },
     dateSeparatorContainer: {
       flexDirection: "row",
       alignItems: "center",
-      marginVertical: 12,
-      paddingHorizontal: 8,
+      marginVertical: verticalScale(12),
+      paddingHorizontal: scale(8),
     },
     dateSeparatorLine: {
       flex: 1,
       height: StyleSheet.hairlineWidth,
     },
     dateSeparatorText: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
       fontWeight: "600",
-      paddingHorizontal: 12,
+      paddingHorizontal: scale(12),
     },
     systemMessageContainer: {
       flexDirection: "row",
       alignItems: "center",
-      marginVertical: 12,
-      paddingHorizontal: 16,
+      marginVertical: verticalScale(12),
+      paddingHorizontal: scale(16),
       gap: 12,
     },
     systemMessageLine: {
@@ -1401,7 +1416,7 @@ const createStyles = (colors) =>
       height: StyleSheet.hairlineWidth,
     },
     systemMessageText: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
       fontStyle: "italic",
       textAlign: "center",
     },
@@ -1409,36 +1424,36 @@ const createStyles = (colors) =>
       flexDirection: "row",
       alignItems: "center",
       borderBottomWidth: StyleSheet.hairlineWidth,
-      paddingBottom: 4,
-      marginBottom: 6,
+      paddingBottom: verticalScale(4),
+      marginBottom: verticalScale(6),
       gap: 4,
     },
     forwardedText: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
       fontStyle: "italic",
     },
     composerBanner: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 16,
-      paddingVertical: 8,
+      paddingHorizontal: scale(16),
+      paddingVertical: verticalScale(8),
       borderLeftWidth: 3,
       gap: 8,
     },
     composerBannerLabel: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
       fontWeight: "600",
     },
     composerBannerText: {
-      fontSize: 13,
-      marginTop: 1,
+      fontSize: moderateScale(13),
+      marginTop: verticalScale(1),
     },
     typingIndicator: {
-      paddingHorizontal: 20,
-      paddingVertical: 4,
+      paddingHorizontal: scale(20),
+      paddingVertical: verticalScale(4),
     },
     typingText: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
       fontStyle: "italic",
     },
     tabBar: {
@@ -1450,13 +1465,13 @@ const createStyles = (colors) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 10,
+      paddingVertical: verticalScale(10),
       gap: 6,
       position: 'relative',
     },
     tabItemActive: {},
     tabLabel: {
-      fontSize: 13,
+      fontSize: moderateScale(13),
       fontWeight: '500',
     },
     tabLabelActive: {
@@ -1467,8 +1482,8 @@ const createStyles = (colors) =>
       bottom: 0,
       left: 12,
       right: 12,
-      height: 2,
-      borderRadius: 1,
+      height: scale(2),
+      borderRadius: moderateScale(1),
     },
     canvasTabContent: {
       flexGrow: 1,
@@ -1478,29 +1493,29 @@ const createStyles = (colors) =>
     },
     canvasPlaceholder: {
       width: '100%',
-      borderRadius: 16,
+      borderRadius: moderateScale(16),
       borderWidth: 1,
       borderStyle: 'dashed',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 48,
-      paddingHorizontal: 24,
+      paddingVertical: verticalScale(48),
+      paddingHorizontal: scale(24),
       gap: 12,
     },
     canvasPlaceholderTitle: {
-      fontSize: 18,
+      fontSize: moderateScale(18),
       fontWeight: '700',
     },
     canvasPlaceholderText: {
-      fontSize: 14,
+      fontSize: moderateScale(14),
       textAlign: 'center',
       lineHeight: 20,
     },
     inputBar: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: scale(12),
+      paddingVertical: verticalScale(8),
       borderTopWidth: 1,
       gap: 8,
     },
@@ -1511,24 +1526,24 @@ const createStyles = (colors) =>
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
-      borderRadius: 20,
-      paddingHorizontal: 12,
-      paddingVertical: 4,
+      borderRadius: moderateScale(20),
+      paddingHorizontal: scale(12),
+      paddingVertical: verticalScale(4),
     },
     input: {
       flex: 1,
-      fontSize: 15,
-      maxHeight: 100,
-      paddingVertical: 8,
+      fontSize: moderateScale(15),
+      maxHeight: verticalScale(100),
+      paddingVertical: verticalScale(8),
       ...(Platform.OS === "web" && {
         outlineWidth: 0,
         outlineStyle: "none",
       }),
     },
     sendButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: scale(40),
+      height: scale(40),
+      borderRadius: moderateScale(20),
       justifyContent: "center",
       alignItems: "center",
     },
@@ -1540,53 +1555,53 @@ const createStyles = (colors) =>
       padding: 24,
     },
     actionsSheet: {
-      borderRadius: 16,
+      borderRadius: moderateScale(16),
       width: '100%',
-      maxWidth: 300,
-      paddingVertical: 12,
+      maxWidth: scale(300),
+      paddingVertical: verticalScale(12),
       borderWidth: 1,
       maxHeight: '80%',
       shadowColor: '#000000',
-      shadowOffset: { width: 0, height: 4 },
+      shadowOffset: { width: scale(0), height: scale(4) },
       shadowOpacity: 0.15,
       shadowRadius: 10,
       elevation: 5,
     },
     actionsHeader: {
-      paddingHorizontal: 20,
-      paddingBottom: 12,
+      paddingHorizontal: scale(20),
+      paddingBottom: verticalScale(12),
       borderBottomWidth: StyleSheet.hairlineWidth,
       gap: 4,
     },
     actionsTitle: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
       fontWeight: '700',
     },
     actionsSnippet: {
-      fontSize: 13,
+      fontSize: moderateScale(13),
     },
     actionsList: {
-      paddingHorizontal: 8,
+      paddingHorizontal: scale(8),
     },
     actionItem: {
-      paddingVertical: 14,
-      paddingHorizontal: 16,
+      paddingVertical: verticalScale(14),
+      paddingHorizontal: scale(16),
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderColor: 'rgba(0,0,0,0.05)',
     },
     actionItemText: {
-      fontSize: 15,
+      fontSize: moderateScale(15),
       fontWeight: '500',
     },
     emptyContainer: {
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
-      paddingVertical: 80,
+      paddingVertical: verticalScale(80),
       transform: Platform.OS === 'android' ? [{ scaleY: -1 }, { scaleX: -1 }] : [{ scaleY: -1 }],
     },
     emptyText: {
-      fontSize: 15,
+      fontSize: moderateScale(15),
       textAlign: "center",
     },
   });

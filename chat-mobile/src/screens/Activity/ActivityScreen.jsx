@@ -1,4 +1,6 @@
 import React, { useCallback, useState, useMemo } from "react";
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 import {
   View,
   Text,
@@ -131,22 +133,22 @@ const ActivityRow = React.memo(({ item, colors, navigation }) => {
 const arStyles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     gap: 12,
   },
   avatarContainer: {
     position: 'relative',
-    width: 40,
-    height: 40,
+    width: scale(40),
+    height: scale(40),
   },
   badge: {
     position: 'absolute',
     bottom: -2,
     right: -2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: scale(18),
+    height: scale(18),
+    borderRadius: moderateScale(9),
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -161,7 +163,7 @@ const arStyles = StyleSheet.create({
     alignItems: "center",
   },
   nameText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: "700",
     flex: 1,
   },
@@ -171,23 +173,23 @@ const arStyles = StyleSheet.create({
     gap: 6,
   },
   time: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
   },
   repliedBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(2),
+    borderRadius: moderateScale(4),
   },
   repliedText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: "600",
   },
   context: {
-    fontSize: 13,
-    marginBottom: 2,
+    fontSize: moderateScale(13),
+    marginBottom: verticalScale(2),
   },
   preview: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     lineHeight: 20,
   },
 });
@@ -293,7 +295,7 @@ const ActivityScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         onEndReached={loadMore}
         onEndReachedThreshold={0.3}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: verticalScale(40) }}
         ItemSeparatorComponent={<View style={[styles.separator, { backgroundColor: colors.border }]} />}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
@@ -309,7 +311,7 @@ const ActivityScreen = ({ navigation }) => {
         }
         ListFooterComponent={
           isLoading && !refreshing ? (
-            <ActivityIndicator size="small" color={colors.primary} style={{ paddingVertical: 20 }} />
+            <ActivityIndicator size="small" color={colors.primary} style={{ paddingVertical: verticalScale(20) }} />
           ) : null
         }
       />
@@ -324,42 +326,42 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: 1,
   },
   title: {
-    fontSize: 17,
+    fontSize: moderateScale(17),
     fontWeight: "800",
   },
   markRead: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "600",
   },
   tabs: {
     flexDirection: "row",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(12),
     gap: 8,
   },
   tab: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 16,
+    paddingVertical: verticalScale(6),
+    paddingHorizontal: scale(14),
+    borderRadius: moderateScale(16),
     borderWidth: 1,
   },
   tabText: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
   },
   separator: {
-    height: 1,
+    height: scale(1),
   },
   empty: {
     alignItems: "center",
-    paddingTop: 60,
+    paddingTop: verticalScale(60),
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
   },
 });
 

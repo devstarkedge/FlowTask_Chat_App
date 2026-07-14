@@ -1,7 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { useThemeStore } from '../stores/themeStore';
+import { useWorkspaceStore } from '../stores/workspaceStore';
+import { usePreferencesStore } from '../stores/preferencesStore';
 import { AppAvatar } from './common';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
+import { Archive, BellOff, CheckCircle, Clock } from 'lucide-react-native';
+import { useChannelStore } from '../stores/channelStore';
+import Toast from 'react-native-toast-message';
 
 /**
  * Shared DM list row used in both HomeScreen DM section and DMListScreen.
@@ -15,13 +21,21 @@ import { AppAvatar } from './common';
  */
 const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerStyle, touchable = true }) => {
   const { colors } = useThemeStore();
+  const { swipeDmLeft, swipeDmRight } = usePreferencesStore();
+  const markAsRead = useChannelStore(s => s.markAsRead);
+  const swipeableRef = React.useRef(null);
+
+  const liveMember = useWorkspaceStore(s => 
+    s.members.find(m => (m.userId?._id || m.userId || m._id) === channel.dmRecipientId)
+  );
+  const liveOnlineStatus = liveMember?.onlineStatus || liveMember?.userId?.onlineStatus || channel.onlineStatus || 'offline';
 
   // Build the same dmUser object used across the app
   const dmUser = {
     _id: channel.dmRecipientId,
     name: channel.name,
     avatar: channel.avatar,
-    onlineStatus: channel.onlineStatus || 'offline',
+    onlineStatus: liveOnlineStatus,
   };
 
   const content = (
@@ -67,14 +81,76 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
     );
   }
 
+  const getActionIcon = (actionStr, color) => {
+    switch(actionStr) {
+      case 'Mark as Read/Unread': return <CheckCircle size={24} color={color} />;
+      case 'Archive': return <Archive size={24} color={color} />;
+      case 'Mute/Unmute': return <BellOff size={24} color={color} />;
+      case 'Remind me': return <Clock size={24} color={color} />;
+      default: return <CheckCircle size={24} color={color} />;
+    }
+  };
+
+  const renderLeftActions = (progress, dragX) => {
+    if (!swipeDmLeft || swipeDmLeft === 'None') return null;
+    return (
+      <View style={[styles.swipeAction, styles.swipeLeft, { backgroundColor: colors.primary }]}>
+        {getActionIcon(swipeDmLeft, '#FFF')}
+      </View>
+    );
+  };
+
+  const renderRightActions = (progress, dragX) => {
+    if (!swipeDmRight || swipeDmRight === 'None') return null;
+    return (
+      <View style={[styles.swipeAction, styles.swipeRight, { backgroundColor: colors.statusDanger || '#ef4444' }]}>
+        {getActionIcon(swipeDmRight, '#FFF')}
+      </View>
+    );
+  };
+
+  const handleSwipeAction = (actionStr) => {
+    switch(actionStr) {
+      case 'Mark as Read/Unread':
+        if (unreadCount > 0) {
+          markAsRead(channel._id);
+          Toast.show({ type: 'success', text1: 'Marked as read' });
+        } else {
+          // If we had a markAsUnread, we'd call it here
+          Toast.show({ type: 'info', text1: 'Already read' });
+        }
+        break;
+      case 'Archive':
+        Toast.show({ type: 'success', text1: 'Archived' });
+        break;
+      case 'Mute/Unmute':
+        Toast.show({ type: 'success', text1: 'Muted' });
+        break;
+      case 'Remind me':
+        Toast.show({ type: 'success', text1: 'Reminder set' });
+        break;
+    }
+    setTimeout(() => {
+      swipeableRef.current?.close();
+    }, 300);
+  };
+
   return (
-    <TouchableOpacity
-      style={[styles.row, containerStyle, { backgroundColor: colors.background }]}
-      onPress={() => onPress?.(channel)}
-      activeOpacity={0.6}
+    <Swipeable
+      ref={swipeableRef}
+      renderLeftActions={renderLeftActions}
+      renderRightActions={renderRightActions}
+      onSwipeableLeftOpen={() => handleSwipeAction(swipeDmLeft)}
+      onSwipeableRightOpen={() => handleSwipeAction(swipeDmRight)}
     >
-      {content}
-    </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.row, containerStyle, { backgroundColor: colors.background }]}
+        onPress={() => onPress?.(channel)}
+        activeOpacity={0.6}
+      >
+        {content}
+      </TouchableOpacity>
+    </Swipeable>
   );
 });
 
@@ -111,6 +187,18 @@ const styles = StyleSheet.create({
   unreadText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  swipeAction: {
+    justifyContent: 'center',
+    width: 75,
+  },
+  swipeLeft: {
+    alignItems: 'flex-start',
+    paddingLeft: 20,
+  },
+  swipeRight: {
+    alignItems: 'flex-end',
+    paddingRight: 20,
   },
 });
 

@@ -16,7 +16,16 @@ export const gifsController = {
         });
       }
 
+      if (!process.env.KLIPY_API_KEY) {
+        console.warn('GIF search: KLIPY_API_KEY not set in environment');
+        return res.status(503).json({
+          status: 'error',
+          error: { message: 'GIF service is not configured (missing API key)' }
+        });
+      }
+
       const results = await gifsService.search(q, offset, parseInt(limit, 10));
+      console.info(`GIF search "${q}": returned ${results.data?.length ?? 0} items`);
       
       return res.status(200).json({
         status: 'success',
@@ -38,8 +47,17 @@ export const gifsController = {
   async getTrending(req, res) {
     try {
       const { offset = 0, limit = 20 } = req.query;
+
+      if (!process.env.KLIPY_API_KEY) {
+        console.warn('GIF trending: KLIPY_API_KEY not set in environment');
+        return res.status(503).json({
+          status: 'error',
+          error: { message: 'GIF service is not configured (missing API key)' }
+        });
+      }
       
       const results = await gifsService.getTrending(offset, parseInt(limit, 10));
+      console.info(`GIF trending: returned ${results.data?.length ?? 0} items`);
       
       return res.status(200).json({
         status: 'success',

@@ -398,7 +398,8 @@ export const useChatStore = create((set, get) => ({
         channelId,
         content,
         htmlContent: options.htmlContent || content,
-        contentType: "text",
+        contentType: options.contentType || "text",
+        gifMeta: options.gifMeta || null,
         authorId: user,
         senderSnapshot: {
           name: user?.name || "You",

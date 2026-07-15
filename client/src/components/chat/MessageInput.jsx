@@ -6,13 +6,14 @@ import { messageAPI } from "../../services/api";
 import { emitTypingStart, emitTypingStop } from "../../services/socket";
 import useDraftAutoSave from "../../hooks/useDraftAutoSave";
 import useMentions from "../../hooks/useMentions";
-import { Send, Paperclip, Smile, Bold, Plus, AtSign, ChevronDown, Clock, X } from 'lucide-react';
+import { Send, Paperclip, Smile, Bold, Plus, AtSign, ChevronDown, Clock, X, Image as ImageIcon } from 'lucide-react';
 import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import EmojiPickerPortal from "./EmojiPickerPortal";
 import MentionDropdown from "./MentionDropdown";
 import RichTextEditor from "./RichTextEditor";
 import ScheduleMessageModal from "./ScheduleMessageModal";
+import GifPickerModal from "./GifPickerModal";
 import { getFileKind, KindIcon, formatFileSize } from "./SlackFileCard";
 // Shared toolbar — adjust import path to match your project structure
 import FormattingToolbar, { ToolbarBtn } from "./FormattingToolbar";
@@ -175,6 +176,8 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   });
 
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const gifButtonRef = useRef(null);
 
   const sendMessage = useChatStore((s) => s.sendMessage);
   const { clearDraft } = useDraftStore();
@@ -679,6 +682,15 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     setShowEmoji(false);
   }, []);
 
+  const handleGifSelect = useCallback((gif) => {
+    sendMessage(channelId, '', {
+      threadId,
+      contentType: 'gif',
+      gifMeta: gif,
+    });
+    setShowGifPicker(false);
+  }, [channelId, threadId, sendMessage]);
+
   // ─── Auto focus ───────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -877,6 +889,15 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
                 size={18}
               />
             </span>
+            <span ref={gifButtonRef}>
+              <ToolbarButton
+                icon={ImageIcon}
+                title="Send a GIF"
+                onClick={() => setShowGifPicker(!showGifPicker)}
+                active={showGifPicker}
+                size={18}
+              />
+            </span>
             <ToolbarButton
               icon={AtSign}
               title="Mention someone"
@@ -979,6 +1000,14 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
         onSelect={insertEmoji}
         position="top-start"
         zIndex={1050}
+      />
+
+      {/* GIF Picker Modal */}
+      <GifPickerModal
+        isOpen={showGifPicker}
+        onClose={() => setShowGifPicker(false)}
+        onSelectGif={handleGifSelect}
+        anchorRef={gifButtonRef}
       />
 
       <p className="slack-composer-hint">

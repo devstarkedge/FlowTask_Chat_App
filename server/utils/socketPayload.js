@@ -32,6 +32,7 @@ export function messageSocketPayload(message, extras = {}) {
     flowTaskRef: message.flowTaskRef || null,
     activityMeta: message.activityMeta || null,
     forwardMeta: message.forwardMeta || null,
+    gifMeta: message.gifMeta || null,
     createdAt: message.createdAt,
     updatedAt: message.updatedAt,
     ...extras,

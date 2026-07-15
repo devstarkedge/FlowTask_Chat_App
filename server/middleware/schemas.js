@@ -17,7 +17,7 @@ export const sendMessageSchema = z
     content: z.string().max(10000).optional().default(""),
     htmlContent: z.string().max(50000).optional(),
     contentType: z
-      .enum(["text", "system", "bot", "file", "task_update"])
+      .enum(["text", "system", "bot", "file", "gif", "task_update", "activity"])
       .optional(),
     attachments: z
       .array(
@@ -56,13 +56,25 @@ export const sendMessageSchema = z
       )
       .max(50)
       .optional(),
+    gifMeta: z
+      .object({
+        provider: z.string(),
+        providerId: z.string(),
+        gifUrl: z.string().url(),
+        previewUrl: z.string().url(),
+        width: z.number(),
+        height: z.number(),
+        title: z.string().optional(),
+      })
+      .optional(),
   })
   .refine(
     (data) =>
       data.content ||
       (data.attachments && data.attachments.length > 0) ||
-      (data.fileReferences && data.fileReferences.length > 0),
-    { message: "Message must have content or attachments" },
+      (data.fileReferences && data.fileReferences.length > 0) ||
+      data.gifMeta,
+    { message: "Message must have content, attachments, or a GIF" },
   );
 
 export const editMessageSchema = z.object({

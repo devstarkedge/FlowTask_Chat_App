@@ -535,7 +535,8 @@ const MessageItem = memo(
       isOwn &&
       !isDeleted &&
       Date.now() - new Date(message.createdAt).getTime() <
-        MESSAGE_EDIT_WINDOW_MS;
+        MESSAGE_EDIT_WINDOW_MS &&
+      message.contentType !== 'gif';
 
     const authorName =
       message.senderSnapshot?.name || message.authorId?.name || "FlowTask Bot";
@@ -740,6 +741,34 @@ const MessageItem = memo(
             style={{ color: deletedTextColor }}
           >
             {deletedText}
+          </div>
+        );
+      }
+
+      // GIF Message
+      if (message.contentType === 'gif' && message.gifMeta) {
+        return (
+          <div className="message-content">
+            {message.content ? (
+              <div
+                className="rich-message-content text-[14px] leading-relaxed break-words mb-2"
+                style={{ color: "inherit" }}
+                dangerouslySetInnerHTML={{
+                  __html: sanitizeHtml(message.htmlContent || message.content),
+                }}
+              />
+            ) : null}
+            <img 
+              src={message.gifUrl || message.gifMeta.gifUrl || message.gifMeta.previewUrl} 
+              alt={message.gifMeta.title || 'GIF'} 
+              style={{
+                borderRadius: '8px',
+                maxWidth: '100%',
+                maxHeight: '250px',
+                objectFit: 'cover'
+              }}
+              loading="lazy"
+            />
           </div>
         );
       }

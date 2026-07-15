@@ -54,7 +54,7 @@ class MessageService {
    * Supports optimistic UI via tempId — client generates a temporary ID,
    * server includes it in the ACK so the client can reconcile.
    */
-  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, tempId, workspaceId, mentions }) {
+  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, tempId, workspaceId, mentions, gifMeta }) {
     const startTime = performance.now();
 
     // Validate channel exists and is not archived
@@ -66,8 +66,8 @@ class MessageService {
     const sanitizedContent = content ? sanitizeHtml(content) : '';
     const sanitizedHtml = htmlContent ? sanitizeHtml(htmlContent) : sanitizedContent;
 
-    if (!sanitizedContent && (!attachments || attachments.length === 0) && (!fileReferences || fileReferences.length === 0)) {
-      throw new ValidationError('Message must have content or attachments');
+    if (!sanitizedContent && (!attachments || attachments.length === 0) && (!fileReferences || fileReferences.length === 0) && !gifMeta) {
+      throw new ValidationError('Message must have content, attachments, or a GIF');
     }
 
     // Process structured mentions or fallback to extracting from HTML
@@ -103,6 +103,7 @@ class MessageService {
       contentType: contentType || MESSAGE_CONTENT_TYPES.TEXT,
       mentions: processedMentions,
       attachments: attachments || [],
+      gifMeta: gifMeta || undefined,
       senderSnapshot,
       ...(workspaceId && { workspaceId }),
     };

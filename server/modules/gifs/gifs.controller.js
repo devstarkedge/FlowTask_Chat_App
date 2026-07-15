@@ -16,7 +16,7 @@ export const gifsController = {
         });
       }
 
-      const results = await gifsService.search(q, parseInt(offset, 10), parseInt(limit, 10));
+      const results = await gifsService.search(q, offset, parseInt(limit, 10));
       
       return res.status(200).json({
         status: 'success',
@@ -39,7 +39,7 @@ export const gifsController = {
     try {
       const { offset = 0, limit = 20 } = req.query;
       
-      const results = await gifsService.getTrending(parseInt(offset, 10), parseInt(limit, 10));
+      const results = await gifsService.getTrending(offset, parseInt(limit, 10));
       
       return res.status(200).json({
         status: 'success',

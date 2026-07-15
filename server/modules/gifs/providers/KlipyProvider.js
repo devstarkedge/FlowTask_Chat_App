@@ -11,7 +11,7 @@ export class KlipyProvider extends GifProvider {
     super();
     // Use the provided API key or a fallback development key if necessary
     this.apiKey = process.env.KLIPY_API_KEY || 'development_key';
-    this.baseUrl = 'https://api.klipy.co/v1'; // Standard Klipy API base url
+    this.baseUrl = 'https://api.klipy.com/v2'; // Klipy v2 (Tenor drop-in)
   }
 
   /**
@@ -25,8 +25,8 @@ export class KlipyProvider extends GifProvider {
     return klipyData.map((item) => {
       // Klipy typically returns media arrays or direct object URLs
       // Adjust extraction logic based on exact Klipy response schema
-      const originalUrl = item.media?.gif?.url || item.url || item.images?.original?.url;
-      const previewUrl = item.media?.preview?.url || item.images?.preview?.url || originalUrl;
+      const originalUrl = item.media_formats?.gif?.url || item.media?.gif?.url || item.url || item.images?.original?.url;
+      const previewUrl = item.media_formats?.tinygif?.url || item.media_formats?.gifpreview?.url || item.media?.preview?.url || item.images?.preview?.url || originalUrl;
 
       // Force HTTPS to prevent Mixed Content errors on production servers
       const enforceHttps = (url) => url ? url.replace(/^http:\/\//i, 'https://') : url;
@@ -38,8 +38,8 @@ export class KlipyProvider extends GifProvider {
         title: item.title || item.name || '',
         gifUrl: enforceHttps(originalUrl),
         previewUrl: enforceHttps(previewUrl),
-        width: parseInt(item.width || item.media?.gif?.width || 0, 10),
-        height: parseInt(item.height || item.media?.gif?.height || 0, 10),
+        width: parseInt(item.media_formats?.gif?.dims?.[0] || item.width || item.media?.gif?.width || 0, 10),
+        height: parseInt(item.media_formats?.gif?.dims?.[1] || item.height || item.media?.gif?.height || 0, 10),
       };
     });
   }
@@ -52,23 +52,23 @@ export class KlipyProvider extends GifProvider {
     try {
       const response = await axios.get(`${this.baseUrl}/search`, {
         params: {
-          api_key: this.apiKey,
+          key: this.apiKey, // v2 uses 'key'
           q: query,
           limit,
-          offset,
+          pos: offset || undefined, // v2 uses 'pos' for next cursor
         },
         headers: {
           'Accept': 'application/json'
         },
       });
 
-      // Klipy pagination might use next_cursor or similar, mapping it back to generic pagination
+      // Klipy v2 uses 'next' for cursor pagination
       return {
-        data: this._formatResponse(response.data.data || response.data.results),
+        data: this._formatResponse(response.data.results || response.data.data),
         pagination: {
-          offset,
-          count: response.data.data?.length || response.data.results?.length || 0,
-          total_count: response.data.total || 1000 // Mock total if not provided
+          offset: response.data.next || offset,
+          count: response.data.results?.length || response.data.data?.length || 0,
+          total_count: 1000 // Klipy v2 doesn't return total_count
         },
       };
     } catch (error) {
@@ -83,11 +83,11 @@ export class KlipyProvider extends GifProvider {
     }
 
     try {
-      const response = await axios.get(`${this.baseUrl}/trending-gifs`, {
+      const response = await axios.get(`${this.baseUrl}/featured`, {
         params: {
-          api_key: this.apiKey,
+          key: this.apiKey, // v2 uses 'key'
           limit,
-          offset,
+          pos: offset || undefined,
         },
         headers: {
           'Accept': 'application/json'
@@ -95,11 +95,11 @@ export class KlipyProvider extends GifProvider {
       });
 
       return {
-        data: this._formatResponse(response.data.data || response.data.results),
+        data: this._formatResponse(response.data.results || response.data.data),
         pagination: {
-          offset,
-          count: response.data.data?.length || response.data.results?.length || 0,
-          total_count: response.data.total || 1000
+          offset: response.data.next || offset,
+          count: response.data.results?.length || response.data.data?.length || 0,
+          total_count: 1000
         },
       };
     } catch (error) {
@@ -116,20 +116,20 @@ export class KlipyProvider extends GifProvider {
     try {
       const response = await axios.get(`${this.baseUrl}/categories`, {
         params: {
-          api_key: this.apiKey,
+          key: this.apiKey,
         },
         headers: {
           'Accept': 'application/json'
         },
       });
 
-      const rawCategories = response.data.data || response.data.results || [];
+      const rawCategories = response.data.tags || response.data.data || response.data.results || [];
       const enforceHttps = (url) => url ? url.replace(/^http:\/\//i, 'https://') : url;
 
       const categories = rawCategories.map(cat => ({
-        id: cat.id || cat.slug || cat.name,
+        id: cat.searchterm || cat.id || cat.slug || cat.name,
         label: cat.name || cat.title,
-        gifUrl: enforceHttps(cat.cover_url || cat.icon_url || null),
+        gifUrl: enforceHttps(cat.image || cat.cover_url || cat.icon_url || null),
       }));
 
       return { data: categories };

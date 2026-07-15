@@ -53,7 +53,13 @@ async function fetchPage(query, category, offset) {
   
   const total = responseData.pagination?.total_count || gifs.length;
   const count = responseData.pagination?.count || gifs.length;
-  const result = { gifs, hasMore: (count > 0 && offset + count < total) };
+  const nextOffset = responseData.pagination?.offset;
+
+  const result = { 
+    gifs, 
+    hasMore: Boolean(nextOffset) && nextOffset !== offset && (count > 0 && (typeof offset === 'number' ? offset + count < total : true)),
+    nextOffset: nextOffset 
+  };
   
   cacheSet(cacheKey, result);
   return result;
@@ -153,7 +159,8 @@ export default function GifPickerModal({ isOpen, onClose, onSelectGif, anchorRef
           return [...prev, ...result.gifs.filter(g => !ids.has(g.id))];
         });
       }
-      offsetRef.current = offset + result.gifs.length;
+      
+      offsetRef.current = result.nextOffset !== undefined ? result.nextOffset : (typeof offset === 'number' ? offset + result.gifs.length : 0);
       setHasMore(result.hasMore);
     } catch {
       if (!abortRef.current) setError('Failed to load GIFs. Check your internet connection.');

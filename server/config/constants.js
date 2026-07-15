@@ -95,12 +95,12 @@ export const CHANNEL_MEMBER_ROLES = Object.freeze({
   MEMBER: 'member',
 });
 
-// ─── Message Content Types ───────────────────────────────────────────────────
 export const MESSAGE_CONTENT_TYPES = Object.freeze({
   TEXT: 'text',
   SYSTEM: 'system',
   BOT: 'bot',
   FILE: 'file',
+  GIF: 'gif',
   TASK_UPDATE: 'task_update',
   ACTIVITY: 'activity',
 });

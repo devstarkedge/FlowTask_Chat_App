@@ -1,0 +1,77 @@
+import { gifsService } from './gifs.service.js';
+
+export const gifsController = {
+  /**
+   * Search for GIFs
+   * GET /api/gifs/search?q=query&offset=0&limit=20
+   */
+  async search(req, res) {
+    try {
+      const { q, offset = 0, limit = 20 } = req.query;
+      
+      if (!q) {
+        return res.status(400).json({
+          status: 'error',
+          error: { message: 'Query parameter "q" is required' }
+        });
+      }
+
+      const results = await gifsService.search(q, parseInt(offset, 10), parseInt(limit, 10));
+      
+      return res.status(200).json({
+        status: 'success',
+        data: results
+      });
+    } catch (error) {
+      console.error('Error searching GIFs:', error);
+      return res.status(500).json({
+        status: 'error',
+        error: { message: 'Failed to search GIFs' }
+      });
+    }
+  },
+
+  /**
+   * Get trending GIFs
+   * GET /api/gifs/trending?offset=0&limit=20
+   */
+  async getTrending(req, res) {
+    try {
+      const { offset = 0, limit = 20 } = req.query;
+      
+      const results = await gifsService.getTrending(parseInt(offset, 10), parseInt(limit, 10));
+      
+      return res.status(200).json({
+        status: 'success',
+        data: results
+      });
+    } catch (error) {
+      console.error('Error fetching trending GIFs:', error);
+      return res.status(500).json({
+        status: 'error',
+        error: { message: 'Failed to fetch trending GIFs' }
+      });
+    }
+  },
+
+  /**
+   * Get GIF categories
+   * GET /api/gifs/categories
+   */
+  async getCategories(req, res) {
+    try {
+      const results = await gifsService.getCategories();
+      
+      return res.status(200).json({
+        status: 'success',
+        data: results
+      });
+    } catch (error) {
+      console.error('Error fetching GIF categories:', error);
+      return res.status(500).json({
+        status: 'error',
+        error: { message: 'Failed to fetch GIF categories' }
+      });
+    }
+  }
+};

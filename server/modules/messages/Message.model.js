@@ -130,6 +130,16 @@ const activityMetaSchema = new Schema({
   fileName: { type: String, default: null },
 }, { _id: false });
 
+const gifMetaSchema = new Schema({
+  provider: { type: String, required: true }, // e.g. 'giphy'
+  providerId: { type: String, required: true },
+  gifUrl: { type: String, required: true },
+  previewUrl: { type: String, required: true },
+  width: { type: Number, required: true },
+  height: { type: Number, required: true },
+  title: { type: String, default: '' },
+}, { _id: false });
+
 const messageSchema = new Schema({
   // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────
   workspaceId: {
@@ -186,6 +196,10 @@ const messageSchema = new Schema({
   // Structured metadata for activity/system messages (UI rendering context)
   activityMeta: {
     type: activityMetaSchema,
+    default: null,
+  },
+  gifMeta: {
+    type: gifMetaSchema,
     default: null,
   },
   attachments: {

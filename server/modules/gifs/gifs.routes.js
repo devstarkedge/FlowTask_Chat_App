@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { gifsController } from './gifs.controller.js';
-import { authenticate } from '../../middleware/auth.middleware.js';
+import { protect } from '../auth/auth.middleware.js';
 
 const router = Router();
 
 // All GIF routes require authentication
-router.use(authenticate);
+router.use(protect);
 
 router.get('/search', gifsController.search);
 router.get('/trending', gifsController.getTrending);

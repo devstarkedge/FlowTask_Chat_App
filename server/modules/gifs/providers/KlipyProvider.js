@@ -28,13 +28,16 @@ export class KlipyProvider extends GifProvider {
       const originalUrl = item.media?.gif?.url || item.url || item.images?.original?.url;
       const previewUrl = item.media?.preview?.url || item.images?.preview?.url || originalUrl;
 
+      // Force HTTPS to prevent Mixed Content errors on production servers
+      const enforceHttps = (url) => url ? url.replace(/^http:\/\//i, 'https://') : url;
+
       return {
         id: item.id || item.slug,
         provider: 'klipy',
         providerId: item.id || item.slug,
         title: item.title || item.name || '',
-        gifUrl: originalUrl,
-        previewUrl: previewUrl,
+        gifUrl: enforceHttps(originalUrl),
+        previewUrl: enforceHttps(previewUrl),
         width: parseInt(item.width || item.media?.gif?.width || 0, 10),
         height: parseInt(item.height || item.media?.gif?.height || 0, 10),
       };
@@ -121,10 +124,12 @@ export class KlipyProvider extends GifProvider {
       });
 
       const rawCategories = response.data.data || response.data.results || [];
+      const enforceHttps = (url) => url ? url.replace(/^http:\/\//i, 'https://') : url;
+
       const categories = rawCategories.map(cat => ({
         id: cat.id || cat.slug || cat.name,
         label: cat.name || cat.title,
-        gifUrl: cat.cover_url || cat.icon_url || null,
+        gifUrl: enforceHttps(cat.cover_url || cat.icon_url || null),
       }));
 
       return { data: categories };

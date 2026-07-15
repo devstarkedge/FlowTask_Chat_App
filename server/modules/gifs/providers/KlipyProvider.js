@@ -20,16 +20,14 @@ export class KlipyProvider extends GifProvider {
   constructor() {
     super();
 
-    if (!process.env.KLIPY_API_KEY) {
-      throw new Error(
-        "KLIPY_API_KEY environment variable is required but not set.",
+    this.apiKey = process.env.KLIPY_API_KEY || null;
+    this.baseUrl = process.env.KLIPY_BASE_URL || "https://api.klipy.com/v2";
+
+    if (!this.apiKey) {
+      console.warn(
+        "KlipyProvider: KLIPY_API_KEY is not set. GIF features will be disabled.",
       );
     }
-
-    this.apiKey = process.env.KLIPY_API_KEY;
-    // Override via KLIPY_BASE_URL env var if the base URL changes
-    this.baseUrl =
-      process.env.KLIPY_BASE_URL || "https://api.klipy.com/v2";
   }
 
   _logError(label, error) {
@@ -78,6 +76,7 @@ export class KlipyProvider extends GifProvider {
   }
 
   async search(query, offset = 0, limit = 20) {
+    if (!this.apiKey) return { data: [], pagination: { offset, count: 0, total_count: null } };
     try {
       // TODO: verify endpoint path and param names against Klipy API docs
       const response = await axios.get(`${this.baseUrl}/search`, {
@@ -102,6 +101,7 @@ export class KlipyProvider extends GifProvider {
   }
 
   async getTrending(offset = 0, limit = 20) {
+    if (!this.apiKey) return { data: [], pagination: { offset, count: 0, total_count: null } };
     try {
       // TODO: verify endpoint path and param names against Klipy API docs
       const response = await axios.get(`${this.baseUrl}/featured`, {
@@ -126,6 +126,7 @@ export class KlipyProvider extends GifProvider {
   }
 
   async getCategories() {
+    if (!this.apiKey) return { data: [] };
     try {
       // TODO: verify endpoint path and param names against Klipy API docs
       const response = await axios.get(`${this.baseUrl}/categories`, {

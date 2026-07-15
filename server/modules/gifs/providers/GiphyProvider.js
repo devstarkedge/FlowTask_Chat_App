@@ -4,7 +4,7 @@ import { GifProvider } from './GifProvider.interface.js';
 export class GiphyProvider extends GifProvider {
   constructor() {
     super();
-    this.apiKey = process.env.GIPHY_API_KEY;
+    this.apiKey = process.env.GIPHY_API_KEY || 'dc6zaTOxFJmzC';
     this.baseUrl = 'https://api.giphy.com/v1/gifs';
   }
 

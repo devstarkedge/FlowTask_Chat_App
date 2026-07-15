@@ -1,10 +1,21 @@
 import { GiphyProvider } from './providers/GiphyProvider.js';
+import { KlipyProvider } from './providers/KlipyProvider.js';
 
 class GifsService {
   constructor() {
-    // We can swap this out easily if we want to change providers or use a config variable
-    // e.g. process.env.GIF_PROVIDER === 'tenor' ? new TenorProvider() : new GiphyProvider()
-    this.provider = new GiphyProvider();
+    const activeProvider = process.env.ACTIVE_GIF_PROVIDER || 'klipy';
+    
+    switch (activeProvider.toLowerCase()) {
+      case 'giphy':
+        this.provider = new GiphyProvider();
+        break;
+      case 'klipy':
+        this.provider = new KlipyProvider();
+        break;
+      default:
+        console.warn(`Unsupported ACTIVE_GIF_PROVIDER: ${activeProvider}. Falling back to KlipyProvider.`);
+        this.provider = new KlipyProvider();
+    }
   }
 
   async search(query, offset, limit) {

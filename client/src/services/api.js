@@ -458,4 +458,10 @@ export const canvasAPI = {
   getSavedCanvases: (channelId, status) => api.get(`/canvas/saved/${channelId}`, { params: { status } }),
 };
 
+export const gifsAPI = {
+  search: (q, offset = 0, limit = 20) => api.get('/gifs/search', { params: { q, offset, limit } }),
+  getTrending: (offset = 0, limit = 20) => api.get('/gifs/trending', { params: { offset, limit } }),
+  getCategories: () => api.get('/gifs/categories'),
+};
+
 export default api;

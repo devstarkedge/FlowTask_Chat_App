@@ -6,6 +6,7 @@ import workspaceRepository from '../workspaces/workspace.repository.js';
 import { WORKSPACE_ROLES } from '../../config/constants.js';
 import ChatUser from './ChatUser.model.js';
 import logger from '../../utils/logger.js';
+import { broadcastPresenceUpdate, broadcastUserPreferences } from '../../sockets/socketManager.js';
 
 /**
  * GET /users/dm-contacts
@@ -180,6 +181,7 @@ export const getProfile = asyncHandler(async (req, res) => {
  */
 export const setCustomStatus = asyncHandler(async (req, res) => {
   const user = await userService.setCustomStatus(req.user._id, req.body);
+  await broadcastPresenceUpdate(user._id, user);
   res.json({
     success: true,
     data: {
@@ -193,7 +195,8 @@ export const setCustomStatus = asyncHandler(async (req, res) => {
  * DELETE /users/status
  */
 export const clearCustomStatus = asyncHandler(async (req, res) => {
-  await userService.clearCustomStatus(req.user._id);
+  const user = await userService.clearCustomStatus(req.user._id);
+  await broadcastPresenceUpdate(user._id, user);
   res.json({ success: true, data: { customStatus: { emoji: null, text: null, expiresAt: null } } });
 });
 
@@ -205,6 +208,7 @@ export const clearCustomStatus = asyncHandler(async (req, res) => {
 export const setPresence = asyncHandler(async (req, res) => {
   const { status } = req.body;
   const user = await userService.setOnlineStatus(req.user._id, status);
+  await broadcastPresenceUpdate(user._id, user);
   res.json({
     success: true,
     data: {
@@ -244,6 +248,7 @@ export const searchUsers = asyncHandler(async (req, res) => {
 export const pauseNotifications = asyncHandler(async (req, res) => {
   const payload = req.body || {}
   const user = await userService.pauseNotifications(req.user._id, payload)
+  await broadcastUserPreferences(user._id, user.chatPreferences)
   res.json({ success: true, data: { dnd: user.chatPreferences?.dnd || {} } })
 })
 
@@ -253,6 +258,7 @@ export const pauseNotifications = asyncHandler(async (req, res) => {
  */
 export const resumeNotifications = asyncHandler(async (req, res) => {
   const user = await userService.resumeNotifications(req.user._id)
+  await broadcastUserPreferences(user._id, user.chatPreferences)
   res.json({ success: true, data: { dnd: user.chatPreferences?.dnd || {} } })
 })
 

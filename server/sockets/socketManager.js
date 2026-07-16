@@ -1048,3 +1048,60 @@ export function cleanupSocketResources() {
     event: 'resources_cleaned',
   });
 }
+
+/**
+ * Broadcast presence and custom status changes to all workspaces a user belongs to.
+ * This ensures that when a user updates their status via the REST API, all connected
+ * clients in the same workspaces instantly receive the PRESENCE_SYNC update.
+ * @param {string} userId
+ * @param {object} userObject The full or partial user object to sync
+ */
+export async function broadcastPresenceUpdate(userId, userObject) {
+  if (!io) return;
+  try {
+    const { default: workspaceRepository } = await import('../modules/workspaces/workspace.repository.js');
+    const workspaces = await workspaceRepository.getUserWorkspaces(userId);
+    
+    // Extract a minimal payload containing only the fields we want to sync for presence
+    const payload = {
+      _id: userId,
+      onlineStatus: userObject.onlineStatus,
+      customStatus: userObject.customStatus,
+      lastSeenAt: userObject.lastSeenAt,
+    };
+    
+    for (const ws of workspaces) {
+      const wsId = ws.workspaceId?._id?.toString() || ws.workspaceId?.toString();
+      if (wsId) {
+        const room = `ws:${wsId}:workspace`;
+        io.to(room).emit(SOCKET_EVENTS.PRESENCE_SYNC, { users: [payload] });
+      }
+    }
+  } catch (error) {
+    logger.error('Failed to broadcast presence update', { userId, error: error.message });
+  }
+}
+
+/**
+ * Broadcast user preference updates (like DND) to the user's personal socket room.
+ * This ensures multi-device synchronization (e.g. mobile <-> web) for the same user.
+ * @param {string} userId
+ * @param {object} chatPreferences
+ */
+export async function broadcastUserPreferences(userId, chatPreferences) {
+  if (!io) return;
+  try {
+    const { default: workspaceRepository } = await import('../modules/workspaces/workspace.repository.js');
+    const workspaces = await workspaceRepository.getUserWorkspaces(userId);
+    
+    for (const ws of workspaces) {
+      const wsId = ws.workspaceId?._id?.toString() || ws.workspaceId?.toString();
+      if (wsId) {
+        const userRoom = buildRoomName(wsId, 'user', userId);
+        io.to(userRoom).emit('user:preferences_updated', { chatPreferences });
+      }
+    }
+  } catch (error) {
+    logger.error('Failed to broadcast preferences update', { userId, error: error.message });
+  }
+}

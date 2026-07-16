@@ -322,6 +322,23 @@ export async function initializeSocket(httpServer, corsOptions) {
         error: error.message,
       });
     }
+    // ─── Initial Presence Sync ───────────────────────────────────────
+    // Sync full current online presence to the newly connected socket
+    try {
+      if (wsId) {
+        const onlineUsers = await userRepository.findOnline(wsId);
+        const mappedUsers = onlineUsers.map((u) => ({
+          userId: u._id.toString(),
+          flowTaskUserId: u.flowTaskUserId,
+          name: u.name,
+          avatar: u.avatar,
+          onlineStatus: u.onlineStatus,
+        }));
+        socket.emit(SOCKET_EVENTS.PRESENCE_SYNC, { users: mappedUsers });
+      }
+    } catch (err) {
+      logger.error('Failed to sync initial presence', { userId, wsId, error: err.message });
+    }
 
     // Broadcast presence — SCOPED to user's channels only (not global io.emit)
     const presencePayload = {

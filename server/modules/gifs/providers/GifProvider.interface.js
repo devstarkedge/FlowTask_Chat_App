@@ -1,6 +1,6 @@
 /**
  * GifProvider Interface
- * Base class for all GIF providers (Giphy, Tenor, Custom, etc.)
+ * Base class for all GIF providers 
  * Ensures a consistent API for searching and fetching GIFs.
  */
 export class GifProvider {

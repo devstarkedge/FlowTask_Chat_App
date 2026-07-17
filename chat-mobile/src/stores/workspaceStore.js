@@ -11,6 +11,7 @@ export const useWorkspaceStore = create(
       activeWorkspaceId: null,
       activeWorkspace: null,
       members: [],
+      presenceMap: {},
       isLoading: false,
       error: null,
 
@@ -158,11 +159,18 @@ export const useWorkspaceStore = create(
       // Update member profile in store (for socket events, no API call)
       updateMemberProfile: (userId, updates) => {
         set((state) => ({
+          presenceMap: updates.onlineStatus ? { ...state.presenceMap, [userId]: updates.onlineStatus } : state.presenceMap,
           members: state.members.map((m) =>
             (m.userId?._id === userId || m.userId === userId || m._id === userId)
               ? { ...m, ...updates }
               : m
           ),
+        }))
+      },
+
+      updatePresenceBatch: (updates) => {
+        set((state) => ({
+          presenceMap: { ...state.presenceMap, ...updates }
         }))
       },
 

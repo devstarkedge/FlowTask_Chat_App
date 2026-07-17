@@ -21,6 +21,8 @@ import WorkspaceEmailCard from './WorkspaceEmailCard';
 import WorkspaceActionRow from './WorkspaceActionRow';
 import CreateWorkspaceModal from './CreateWorkspaceModal';
 import Toast from 'react-native-toast-message';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 /**
  * AddWorkspaceScreen
@@ -291,55 +293,55 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 13,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(13),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   closeBtn: {
-    marginRight: 4,
+    marginRight: scale(4),
   },
   closeCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: scale(34),
+    height: verticalScale(34),
+    borderRadius: moderateScale(17),
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
     flex: 1,
     textAlign: 'center',
-    fontSize: 17,
+    fontSize: moderateScale(17),
     fontWeight: '700',
     letterSpacing: -0.3,
   },
   headerSpacer: {
-    width: 34,
+    width: scale(34),
   },
   // Scroll
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: verticalScale(40),
   },
   // Divider
   divider: {
     height: StyleSheet.hairlineWidth,
-    marginHorizontal: 0,
-    marginTop: 20,
-    marginBottom: 20,
+    marginHorizontal: scale(0),
+    marginTop: verticalScale(20),
+    marginBottom: verticalScale(20),
   },
   // Section title
   sectionTitle: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '700',
-    paddingHorizontal: 20,
-    marginBottom: 4,
+    paddingHorizontal: scale(20),
+    marginBottom: verticalScale(4),
     letterSpacing: -0.2,
   },
   // Join modal
   joinBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 60,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(8),
+    minWidth: scale(60),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -349,35 +351,35 @@ const styles = StyleSheet.create({
   joinBtnText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   joinForm: {
-    padding: 20,
+    padding: moderateScale(20),
   },
   joinLabel: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: '700',
     letterSpacing: 0.8,
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   joinInput: {
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontSize: 16,
+    borderRadius: moderateScale(10),
+    paddingHorizontal: scale(14),
+    paddingVertical: verticalScale(13),
+    fontSize: moderateScale(16),
     fontWeight: '500',
     letterSpacing: 1.5,
   },
   joinError: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '500',
-    marginTop: 6,
+    marginTop: verticalScale(6),
   },
   joinHint: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     lineHeight: 19,
-    marginTop: 14,
+    marginTop: verticalScale(14),
   },
 });
 

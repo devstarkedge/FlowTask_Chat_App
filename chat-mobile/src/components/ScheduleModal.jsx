@@ -20,6 +20,8 @@ import {
 import { X, Clock, Calendar, Sun, Briefcase } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { formatMessageTime } from '../utils/dateUtils';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 function getQuickOptions() {
   const now = new Date();
@@ -128,7 +130,7 @@ const ScheduleModal = React.memo(function ScheduleModal({
 
           {/* Custom Date */}
           <View style={[styles.customSection, { borderTopColor: colors.border }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: verticalScale(8) }}>
               <Calendar size={16} color={colors.textSecondary} />
               <Text style={[styles.customLabel, { color: colors.textSecondary }]}>
                 Custom date & time
@@ -157,7 +159,7 @@ const ScheduleModal = React.memo(function ScheduleModal({
                         setShowPicker(true);
                       }}
                     >
-                      <Text style={{ color: colors.inputText, fontSize: 14 }}>
+                      <Text style={{ color: colors.inputText, fontSize: moderateScale(14) }}>
                         {customDate.toLocaleDateString()}
                       </Text>
                     </TouchableOpacity>
@@ -168,7 +170,7 @@ const ScheduleModal = React.memo(function ScheduleModal({
                         setShowPicker(true);
                       }}
                     >
-                      <Text style={{ color: colors.inputText, fontSize: 14 }}>
+                      <Text style={{ color: colors.inputText, fontSize: moderateScale(14) }}>
                         {formatMessageTime(customDate)}
                       </Text>
                     </TouchableOpacity>
@@ -178,7 +180,7 @@ const ScheduleModal = React.memo(function ScheduleModal({
                   style={[styles.scheduleButton, { backgroundColor: colors.primary, alignItems: 'center' }]}
                   onPress={handleCustomSubmit}
                 >
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: moderateScale(14) }}>
                     Schedule
                   </Text>
                 </TouchableOpacity>
@@ -221,8 +223,8 @@ const styles = StyleSheet.create({
   },
   container: {
     width: '85%',
-    maxWidth: 380,
-    borderRadius: 16,
+    maxWidth: scale(380),
+    borderRadius: moderateScale(16),
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -230,52 +232,52 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
     borderBottomWidth: 1,
   },
   title: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
   },
   closeButton: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   optionsContainer: {
-    paddingVertical: 4,
+    paddingVertical: verticalScale(4),
   },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   optionText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     flex: 1,
   },
   customSection: {
-    padding: 16,
+    padding: moderateScale(16),
     borderTopWidth: 1,
   },
   customLabel: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '600',
   },
   dateInput: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    borderRadius: moderateScale(8),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(10),
+    fontSize: moderateScale(14),
   },
   scheduleButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(10),
+    borderRadius: moderateScale(8),
   },
 });
 

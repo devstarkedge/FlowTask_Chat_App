@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Table, Image, Minus, Info, Columns, X } from 'lucide-react-native';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 export default function CanvasInsertSheet({ visible, onClose, onInsertOption }) {
   const slideAnim = React.useRef(new Animated.Value(0)).current;
@@ -145,7 +147,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -2 },
+    shadowOffset: { width: scale(0), height: -2 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 8,
@@ -157,50 +159,50 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 10,
+    paddingHorizontal: scale(20),
+    paddingTop: verticalScale(16),
+    paddingBottom: verticalScale(10),
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '600',
     color: '#1f2937',
   },
   closeBtn: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   optionsContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(12),
   },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginBottom: 4,
+    paddingVertical: verticalScale(12),
+    borderRadius: moderateScale(8),
+    marginBottom: verticalScale(4),
   },
   iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: scale(44),
+    height: verticalScale(44),
+    borderRadius: moderateScale(10),
     justifyContent: 'center',
     alignItems: 'center',
   },
   textContainer: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: scale(16),
   },
   optionTitle: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '600',
     color: '#1f2937',
-    marginBottom: 2,
+    marginBottom: verticalScale(2),
   },
   optionSubtitle: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     color: '#6b7280',
   },
 });

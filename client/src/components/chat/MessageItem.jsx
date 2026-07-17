@@ -45,6 +45,7 @@ import { handleDownload } from "../../utils/handleDownload";
 import { getFileUrl, getFileAssetId } from "../../utils/fileProxy";
 import MessageDetailsPanel from "./MessageDetailsPanel";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
+import { calculateResponsiveMediaDimensions } from "../../utils/mediaUtils";
 import RichTextEditor from "./RichTextEditor";
 import FormattingToolbar from "./FormattingToolbar";
 
@@ -747,6 +748,17 @@ const MessageItem = memo(
 
       // GIF Message
       if (message.contentType === 'gif' && message.gifMeta) {
+        const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
+        const maxGifWidth = Math.min(350, Math.floor(viewportWidth * 0.45));
+        const maxGifHeight = 320;
+
+        const { width: displayW, height: displayH } = calculateResponsiveMediaDimensions(
+          message.gifMeta.width,
+          message.gifMeta.height,
+          maxGifWidth,
+          maxGifHeight
+        );
+
         return (
           <div className="message-content">
             {message.content ? (
@@ -763,9 +775,10 @@ const MessageItem = memo(
               alt={message.gifMeta.title || 'GIF'} 
               style={{
                 borderRadius: '8px',
+                width: displayW,
+                height: displayH,
                 maxWidth: '100%',
-                maxHeight: '250px',
-                objectFit: 'cover'
+                objectFit: 'contain'
               }}
               loading="lazy"
             />

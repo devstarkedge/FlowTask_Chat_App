@@ -2,6 +2,8 @@ import React from 'react';
 import { TouchableOpacity, StyleSheet } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 const HeaderBackButton = ({ onPress, style, iconColor }) => {
   const { colors } = useThemeStore();
@@ -10,7 +12,7 @@ const HeaderBackButton = ({ onPress, style, iconColor }) => {
     <TouchableOpacity 
       style={[styles.headerBackButton, { backgroundColor: colors.card }, style]} 
       onPress={onPress} 
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      hitSlop={{ top: verticalScale(10), bottom: verticalScale(10), left: scale(10), right: scale(10) }}
     >
       <ChevronLeft size={24} color={iconColor || colors.textPrimary} />
     </TouchableOpacity>
@@ -19,13 +21,13 @@ const HeaderBackButton = ({ onPress, style, iconColor }) => {
 
 const styles = StyleSheet.create({
   headerBackButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: scale(44),
+    height: verticalScale(44),
+    borderRadius: moderateScale(22),
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: scale(0), height: verticalScale(2) },
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 3,

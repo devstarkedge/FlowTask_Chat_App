@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Sta
 import { ChevronLeft } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
 import { accentColors } from '../../theme/colors';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 const ACCENT_OPTIONS = [
   { label: 'Blue', value: 'blue' },
@@ -68,23 +70,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 12,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backButton: {
-    padding: 8,
+    padding: moderateScale(8),
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   headerRight: {
-    width: 44,
+    width: scale(44),
   },
   content: {
-    paddingTop: 8,
-    paddingBottom: 40,
+    paddingTop: verticalScale(8),
+    paddingBottom: verticalScale(40),
   },
   optionsContainer: {
     gap: 0,
@@ -93,34 +95,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: verticalScale(16),
+    paddingHorizontal: scale(20),
   },
   optionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   colorSwatch: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginRight: 16,
+    width: scale(24),
+    height: verticalScale(24),
+    borderRadius: moderateScale(12),
+    marginRight: scale(16),
   },
   optionLabel: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
   },
   radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: scale(22),
+    height: verticalScale(22),
+    borderRadius: moderateScale(11),
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: scale(10),
+    height: verticalScale(10),
+    borderRadius: moderateScale(5),
   },
 });
 

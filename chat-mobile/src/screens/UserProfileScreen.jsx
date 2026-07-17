@@ -23,6 +23,8 @@ import Toast from 'react-native-toast-message';
 import { AppAvatar, HeaderBackButton } from '../components/common';
 import { getAvatarColor } from '../components/Avatar';
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const { width } = Dimensions.get('window');
 
@@ -32,14 +34,14 @@ const UserProfileScreen = ({ route, navigation }) => {
   const channels = useChannelStore(s => s.channels);
   const createDM = useChannelStore(s => s.createDM);
   const setActiveChannel = useChannelStore(s => s.setActiveChannel);
-  const liveMember = useWorkspaceStore(s => {
-    if (!user) return null;
-    return s.members.find(m => (m.userId?._id || m.userId || m._id) === user._id);
-  });
+  const rawTargetId = user._id;
+  const targetId = typeof rawTargetId === 'object' ? rawTargetId?._id || rawTargetId?.id : rawTargetId;
+  const targetIdStr = targetId?.toString ? targetId.toString() : targetId;
+  const liveOnlineStatus = useWorkspaceStore(s => s.presenceMap?.[targetIdStr]);
   const liveUser = useMemo(() => {
     if (!user) return null;
-    return { ...user, ...(liveMember?.userId || liveMember || {}) };
-  }, [user, liveMember]);
+    return { ...user };
+  }, [user]);
 
   const [loadingDM, setLoadingDM] = useState(false);
   const [localTime, setLocalTime] = useState('');
@@ -56,7 +58,7 @@ const UserProfileScreen = ({ route, navigation }) => {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
         <Text style={{ color: colors.textPrimary }}>User not found.</Text>
-        <TouchableOpacity style={{ marginTop: 16 }} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={{ marginTop: verticalScale(16) }} onPress={() => navigation.goBack()}>
           <Text style={{ color: colors.primary }}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -108,17 +110,17 @@ const UserProfileScreen = ({ route, navigation }) => {
     Toast.show({ type: 'success', text1: `${liveUser.name} hidden` });
   };
 
-  const isOnline = liveUser.onlineStatus === 'online';
-  const isAway = liveUser.onlineStatus === 'away' || liveUser.onlineStatus === 'dnd';
+  const isOnline = liveOnlineStatus === 'online' || user.onlineStatus === 'online';
+  const isAway = liveOnlineStatus === 'away' || liveOnlineStatus === 'dnd' || user.onlineStatus === 'away' || user.onlineStatus === 'dnd';
   const statusColor = isOnline ? colors.online : isAway ? colors.away : colors.textSecondary;
-  const statusText = isOnline ? 'Active' : liveUser.onlineStatus === 'away' ? 'Away' : liveUser.onlineStatus === 'dnd' ? 'Do Not Disturb' : 'Offline';
+  const statusText = isOnline ? 'Active' : (liveOnlineStatus === 'away' || user.onlineStatus === 'away') ? 'Away' : (liveOnlineStatus === 'dnd' || user.onlineStatus === 'dnd') ? 'Do Not Disturb' : 'Offline';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <StatusBar barStyle={colors.effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
       
       {/* Header */}
-      <View style={[styles.header, { paddingTop: 12 }]}>
+      <View style={[styles.header, { paddingTop: verticalScale(12) }]}>
         <HeaderBackButton onPress={() => navigation.goBack()} />
         {/* <TouchableOpacity onPress={() => setShowDropdown(true)} style={[styles.headerButton, { backgroundColor: colors.backgroundSecondary }]}>
           <MoreHorizontal size={24} color={colors.textPrimary} />
@@ -134,8 +136,8 @@ const UserProfileScreen = ({ route, navigation }) => {
                 styles.dropdownContent, 
                 { backgroundColor: colors.backgroundSecondary },
                 Platform.OS === 'web' 
-                  ? { boxShadow: rnShadowToBoxShadow("#000", { width: 0, height: 4 }, 0.15, 12) }
-                  : { elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12 }
+                  ? { boxShadow: rnShadowToBoxShadow("#000", { width: scale(0), height: verticalScale(4) }, 0.15, 12) }
+                  : { elevation: 8, shadowColor: '#000', shadowOffset: { width: scale(0), height: verticalScale(4) }, shadowOpacity: 0.15, shadowRadius: 12 }
               ]}>
                 <TouchableOpacity style={styles.dropdownItem} onPress={handleCopyHuddle}>
                   <Headphones size={20} color={colors.textPrimary} />
@@ -220,11 +222,11 @@ const UserProfileScreen = ({ route, navigation }) => {
               <Text style={[styles.dmName, { color: colors.textPrimary }]}>{dm.name || user.name}</Text>
             </View>
           )) : (
-            <Text style={{ color: colors.textSecondary, marginLeft: 16 }}>No recent DMs found.</Text>
+            <Text style={{ color: colors.textSecondary, marginLeft: scale(16) }}>No recent DMs found.</Text>
           )}
         </View>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: verticalScale(40) }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -238,13 +240,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
   },
   headerButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: scale(44),
+    height: verticalScale(44),
+    borderRadius: moderateScale(22),
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -254,56 +256,56 @@ const styles = StyleSheet.create({
   dropdownContent: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 100 : 70, // Rough estimation depending on safe area
-    right: 20,
-    width: 250,
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
+    right: scale(20),
+    width: scale(250),
+    borderRadius: moderateScale(16),
+    paddingVertical: verticalScale(8),
+    paddingHorizontal: scale(8),
   },
   dropdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
+    paddingVertical: verticalScale(14),
+    paddingHorizontal: scale(12),
     gap: 12,
-    borderRadius: 8,
+    borderRadius: moderateScale(8),
   },
   dropdownText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '500',
   },
   scrollContent: {
-    paddingTop: 8,
+    paddingTop: verticalScale(8),
   },
   imageContainer: {
     alignItems: 'center',
-    marginHorizontal: 16,
-    marginBottom: 20,
-    borderRadius: 24,
+    marginHorizontal: scale(16),
+    marginBottom: verticalScale(20),
+    borderRadius: moderateScale(24),
     overflow: 'hidden',
   },
   infoSection: {
-    paddingHorizontal: 16,
-    marginBottom: 20,
+    paddingHorizontal: scale(16),
+    marginBottom: verticalScale(20),
   },
   name: {
-    fontSize: 26,
+    fontSize: moderateScale(26),
     fontWeight: '800',
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: scale(10),
+    height: verticalScale(10),
+    borderRadius: moderateScale(5),
   },
   statusText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
   },
   timeRow: {
     flexDirection: 'row',
@@ -311,49 +313,49 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   timeText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
   },
   actionButtons: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
+    paddingHorizontal: scale(16),
     gap: 12,
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
   },
   actionButton: {
     flex: 1,
     flexDirection: 'column',
-    paddingVertical: 14,
-    borderRadius: 16,
+    paddingVertical: verticalScale(14),
+    borderRadius: moderateScale(16),
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
   },
   actionButtonText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '600',
   },
   divider: {
     height: StyleSheet.hairlineWidth,
     width: '100%',
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
   },
   section: {
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    paddingHorizontal: scale(16),
+    marginBottom: verticalScale(16),
   },
   contactRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
-    paddingHorizontal: 16,
+    paddingHorizontal: scale(16),
   },
   contactIconContainer: {
-    width: 24,
+    width: scale(24),
     alignItems: 'center',
   },
   contactDetails: {
@@ -361,31 +363,31 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   contactEmail: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
   },
   contactLabel: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   dmRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    paddingHorizontal: scale(16),
+    marginBottom: verticalScale(16),
   },
   dmBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: scale(28),
+    height: verticalScale(28),
+    borderRadius: moderateScale(8),
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: scale(12),
   },
   dmBadgeText: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '700',
   },
   dmName: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
   },
 });
 

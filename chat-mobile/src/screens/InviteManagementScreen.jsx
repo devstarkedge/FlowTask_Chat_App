@@ -35,6 +35,8 @@ import {
   Info,
 } from "lucide-react-native";
 import logger from "../utils/logger";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const PLAN_FEATURES = {
   free:       { guestAccess: false },
@@ -342,7 +344,7 @@ export default function InviteManagementScreen({ navigation }) {
       transparent={false}
       onRequestClose={() => setChannelModalVisible(false)}
     >
-      <View style={[styles.modalContainer, { backgroundColor: colors.background, paddingTop: insets.top > 0 ? insets.top : 20 }]}>
+      <View style={[styles.modalContainer, { backgroundColor: colors.background, paddingTop: insets.top > 0 ? insets.top : verticalScale(20) }]}>
         {/* Modal Header */}
         <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={() => setChannelModalVisible(false)} style={styles.modalHeaderBtn}>
@@ -356,7 +358,7 @@ export default function InviteManagementScreen({ navigation }) {
 
         {/* Modal Search */}
         <View style={[styles.searchBox, { backgroundColor: colors.backgroundSecondary }]}>
-          <Search size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
+          <Search size={16} color={colors.textSecondary} style={{ marginRight: scale(8) }} />
           <TextInput
             style={[styles.searchInput, { color: colors.textPrimary }]}
             placeholder="Search channels..."
@@ -379,7 +381,7 @@ export default function InviteManagementScreen({ navigation }) {
                 onPress={() => toggleChannel(item._id)}
                 activeOpacity={0.7}
               >
-                <Hash size={18} color={colors.textSecondary} style={{ marginRight: 10 }} />
+                <Hash size={18} color={colors.textSecondary} style={{ marginRight: scale(10) }} />
                 <Text style={[styles.channelItemName, { color: colors.textPrimary }]}>{item.name}</Text>
                 <View style={[styles.checkOuter, { borderColor: colors.border }, isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
                   {isSelected && <Check size={12} color="#fff" />}
@@ -409,23 +411,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerBtn: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: "700",
   },
   sendBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(6),
   },
   sendText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: "700",
   },
   scrollContent: {
@@ -433,16 +435,16 @@ const styles = StyleSheet.create({
   },
   recipientArea: {
     flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
     borderBottomWidth: StyleSheet.hairlineWidth,
     alignItems: "flex-start",
   },
   toLabel: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: "600",
-    marginRight: 10,
-    marginTop: 4,
+    marginRight: scale(10),
+    marginTop: verticalScale(4),
   },
   recipientInputWrap: {
     flex: 1,
@@ -459,71 +461,71 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
+    borderRadius: moderateScale(6),
     borderWidth: 0.5,
   },
   chipText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "500",
-    maxWidth: 150,
+    maxWidth: scale(150),
   },
   chipRemove: {
-    marginLeft: 4,
-    padding: 2,
+    marginLeft: scale(4),
+    padding: moderateScale(2),
   },
   input: {
-    fontSize: 16,
-    paddingVertical: 4,
-    minWidth: 150,
+    fontSize: moderateScale(16),
+    paddingVertical: verticalScale(4),
+    minWidth: scale(150),
     flex: 1,
   },
   rowItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(16),
     borderBottomWidth: StyleSheet.hairlineWidth,
     justifyContent: "space-between",
   },
   rowLeft: {
     flex: 1,
-    paddingRight: 16,
+    paddingRight: scale(16),
   },
   rowLabel: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: "600",
   },
   rowSubLabel: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(2),
   },
   rowValue: {
-    fontSize: 14,
-    marginTop: 4,
+    fontSize: moderateScale(14),
+    marginTop: verticalScale(4),
     fontWeight: "500",
   },
   linkContainer: {
-    padding: 16,
-    marginTop: 16,
+    padding: moderateScale(16),
+    marginTop: verticalScale(16),
   },
   linkLabel: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "600",
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   linkBox: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(12),
+    borderRadius: moderateScale(10),
     borderWidth: 1,
     gap: 8,
   },
   linkText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "500",
     flex: 1,
   },
@@ -534,62 +536,62 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   modalHeaderBtn: {
-    paddingVertical: 4,
+    paddingVertical: verticalScale(4),
   },
   cancelText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: "500",
   },
   doneText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: "700",
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: "700",
   },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
-    margin: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    margin: moderateScale(16),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(10),
   },
   searchInput: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     flex: 1,
-    paddingVertical: 0,
+    paddingVertical: verticalScale(0),
   },
   channelItemRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(14),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   channelItemName: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: "500",
     flex: 1,
   },
   checkOuter: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
+    width: scale(20),
+    height: verticalScale(20),
+    borderRadius: moderateScale(4),
     borderWidth: 1.5,
     alignItems: "center",
     justifyContent: "center",
   },
   emptyLabel: {
     textAlign: "center",
-    padding: 32,
-    fontSize: 14,
+    padding: moderateScale(32),
+    fontSize: moderateScale(14),
   },
 });
 // File touched to trigger metro reload

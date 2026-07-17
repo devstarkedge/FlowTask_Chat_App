@@ -14,6 +14,8 @@ import { useThemeStore } from '../stores/themeStore';
 import { Hash, MessageSquare, Briefcase } from 'lucide-react-native';
 import CreateChannelModal from './CreateChannelModal';
 import CreateWorkspaceModal from './workspace/CreateWorkspaceModal';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const CreateNewBottomSheet = ({ visible, onClose, navigation }) => {
   const { colors } = useThemeStore();
@@ -171,7 +173,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
+    shadowOffset: { width: scale(0), height: -2 },
     shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 10,
@@ -181,45 +183,45 @@ const styles = StyleSheet.create({
   },
   handleContainer: {
     alignItems: 'center',
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingTop: verticalScale(12),
+    paddingBottom: verticalScale(8),
   },
   handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
+    width: scale(40),
+    height: verticalScale(4),
+    borderRadius: moderateScale(2),
   },
   optionsContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    paddingBottom: 20,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(12),
+    paddingBottom: verticalScale(20),
   },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    paddingVertical: verticalScale(12),
+    paddingHorizontal: scale(12),
+    borderRadius: moderateScale(8),
+    marginBottom: verticalScale(8),
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: scale(48),
+    height: verticalScale(48),
+    borderRadius: moderateScale(12),
     justifyContent: 'center',
     alignItems: 'center',
   },
   textContainer: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: scale(16),
   },
   optionTitle: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '600',
-    marginBottom: 2,
+    marginBottom: verticalScale(2),
   },
   optionSubtitle: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
   },
 });
 

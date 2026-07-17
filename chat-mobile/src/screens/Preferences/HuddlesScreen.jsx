@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Sta
 import { ChevronLeft, Music } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
 import { usePreferencesStore } from '../../stores/preferencesStore';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 const HuddlesScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
@@ -45,39 +47,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 12,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backButton: {
-    padding: 8,
+    padding: moderateScale(8),
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   headerRight: {
-    width: 44,
+    width: scale(44),
   },
   content: {
-    paddingTop: 16,
+    paddingTop: verticalScale(16),
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingVertical: verticalScale(14),
+    paddingHorizontal: scale(20),
   },
   rowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    paddingRight: 16,
+    paddingRight: scale(16),
   },
   rowLabel: {
-    fontSize: 16,
-    marginLeft: 16,
+    fontSize: moderateScale(16),
+    marginLeft: scale(16),
   },
 });
 

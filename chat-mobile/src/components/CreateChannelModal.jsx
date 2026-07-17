@@ -18,6 +18,8 @@ import { X, Hash, Lock, Search, Check, Plus } from "lucide-react-native";
 import { directoriesAPI } from "../services/api";
 import { useAuthStore } from "../stores/authStore";
 import { AppAvatar } from "./common";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 /**
  * CreateChannelModal — Slack-like modal for creating a new channel.
@@ -161,7 +163,7 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
           {/* Form */}
           <ScrollView 
             style={styles.form} 
-            contentContainerStyle={{ paddingBottom: 40 }}
+            contentContainerStyle={{ paddingBottom: verticalScale(40) }}
             keyboardShouldPersistTaps="handled"
           >
             {/* Channel name */}
@@ -197,7 +199,7 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
             </Text>
 
             {/* Topic */}
-            <Text style={[styles.label, { color: colors.textSecondary, marginTop: 20 }]}>
+            <Text style={[styles.label, { color: colors.textSecondary, marginTop: verticalScale(20) }]}>
               Description (optional)
             </Text>
             <TextInput
@@ -262,7 +264,7 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
                   </View>
                 )}
 
-                <View style={[styles.inputRow, { borderColor: colors.border, backgroundColor: colors.inputBackground, marginTop: 8 }]}>
+                <View style={[styles.inputRow, { borderColor: colors.border, backgroundColor: colors.inputBackground, marginTop: verticalScale(8) }]}>
                   <Search size={18} color={colors.textTertiary} />
                   <TextInput
                     style={[styles.input, { color: colors.inputText }]}
@@ -336,69 +338,69 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
     borderBottomWidth: 1,
   },
-  closeBtn: { padding: 4 },
-  title: { fontSize: 16, fontWeight: "700" },
+  closeBtn: { padding: moderateScale(4) },
+  title: { fontSize: moderateScale(16), fontWeight: "700" },
   createBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 64,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(8),
+    minWidth: scale(64),
     alignItems: "center",
   },
   createBtnText: {
     fontWeight: "700",
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   form: {
-    padding: 20,
+    padding: moderateScale(20),
   },
   label: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: "700",
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderRadius: moderateScale(8),
+    paddingHorizontal: scale(12),
     gap: 8,
   },
   input: {
     flex: 1,
-    fontSize: 15,
-    paddingVertical: 10,
+    fontSize: moderateScale(15),
+    paddingVertical: verticalScale(10),
   },
   hint: {
-    fontSize: 12,
-    marginTop: 8,
+    fontSize: moderateScale(12),
+    marginTop: verticalScale(8),
     lineHeight: 18,
   },
   textArea: {
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    minHeight: 70,
+    borderRadius: moderateScale(8),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(10),
+    fontSize: moderateScale(14),
+    minHeight: verticalScale(70),
     textAlignVertical: "top",
   },
   errorText: {
-    fontSize: 13,
-    marginTop: 6,
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(6),
     fontWeight: "500",
   },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 24,
-    paddingTop: 20,
+    marginTop: verticalScale(24),
+    paddingTop: verticalScale(20),
     borderTopWidth: 0.5,
     gap: 12,
   },
@@ -409,74 +411,74 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   toggleLabel: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "600",
   },
   toggleHint: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: moderateScale(12),
+    marginTop: verticalScale(2),
   },
   membersSection: {
-    marginTop: 24,
+    marginTop: verticalScale(24),
   },
   selectedMembersContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginTop: 8,
+    marginTop: verticalScale(8),
   },
   selectedChip: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: 16,
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(4),
+    borderRadius: moderateScale(16),
     borderWidth: 1,
     gap: 6,
   },
   selectedChipName: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: "600",
-    maxWidth: 100,
+    maxWidth: scale(100),
   },
   removeChipBtn: {
-    padding: 2,
+    padding: moderateScale(2),
   },
   searchResultsContainer: {
-    marginTop: 8,
+    marginTop: verticalScale(8),
     borderWidth: 1,
-    borderRadius: 8,
-    maxHeight: 180,
+    borderRadius: moderateScale(8),
+    maxHeight: verticalScale(180),
     overflow: "hidden",
   },
   noResultsText: {
-    padding: 12,
+    padding: moderateScale(12),
     textAlign: "center",
-    fontSize: 13,
+    fontSize: moderateScale(13),
   },
   searchResultItem: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
+    padding: moderateScale(10),
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   searchResultInfo: {
     flex: 1,
-    marginLeft: 10,
+    marginLeft: scale(10),
   },
   searchResultName: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "600",
   },
   searchResultEmail: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: moderateScale(12),
+    marginTop: verticalScale(2),
   },
   searchResultCheck: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: scale(20),
+    height: verticalScale(20),
+    borderRadius: moderateScale(10),
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",

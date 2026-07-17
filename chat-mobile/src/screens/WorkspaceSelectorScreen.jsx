@@ -12,6 +12,8 @@ import { useWorkspaceStore } from '../stores/workspaceStore';
 import { LogOut, Plus, CircleChevronRight, Briefcase } from 'lucide-react-native';
 import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const WorkspaceSelectorScreen = () => {
   const { workspaces, isLoading, fetchWorkspaces, switchWorkspace } = useWorkspaceStore();
@@ -82,25 +84,25 @@ const WorkspaceSelectorScreen = () => {
 const createStyles = (colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 20, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
-    welcome: { fontSize: 14, color: colors.textSecondary },
-    userName: { fontSize: 20, fontWeight: '800', color: colors.textPrimary, letterSpacing: -0.5 },
-    logoutButton: { padding: 10, borderRadius: 12, backgroundColor: `${colors.error}14` },
-    content: { flex: 1, paddingHorizontal: 20, paddingTop: 24 },
-    sectionTitle: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', color: colors.textTertiary, letterSpacing: 1, marginBottom: 16 },
-    listContent: { gap: 12, paddingBottom: 20 },
-    workspaceCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border },
-    workspaceIcon: { width: 48, height: 48, borderRadius: 12, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-    workspaceIconText: { color: colors.messageTextSent, fontSize: 20, fontWeight: '700' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: scale(20), paddingVertical: verticalScale(20), backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
+    welcome: { fontSize: moderateScale(14), color: colors.textSecondary },
+    userName: { fontSize: moderateScale(20), fontWeight: '800', color: colors.textPrimary, letterSpacing: -0.5 },
+    logoutButton: { padding: moderateScale(10), borderRadius: moderateScale(12), backgroundColor: `${colors.error}14` },
+    content: { flex: 1, paddingHorizontal: scale(20), paddingTop: verticalScale(24) },
+    sectionTitle: { fontSize: moderateScale(13), fontWeight: '700', textTransform: 'uppercase', color: colors.textTertiary, letterSpacing: 1, marginBottom: verticalScale(16) },
+    listContent: { gap: 12, paddingBottom: verticalScale(20) },
+    workspaceCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: moderateScale(16), padding: moderateScale(16), borderWidth: 1, borderColor: colors.border },
+    workspaceIcon: { width: scale(48), height: verticalScale(48), borderRadius: moderateScale(12), backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', marginRight: scale(16) },
+    workspaceIconText: { color: colors.messageTextSent, fontSize: moderateScale(20), fontWeight: '700' },
     workspaceInfo: { flex: 1 },
-    workspaceName: { fontSize: 16, fontWeight: '700', color: colors.textPrimary },
-    workspaceSlug: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
+    workspaceName: { fontSize: moderateScale(16), fontWeight: '700', color: colors.textPrimary },
+    workspaceSlug: { fontSize: moderateScale(13), color: colors.textSecondary, marginTop: verticalScale(2) },
     loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
-    loaderText: { fontSize: 14, color: colors.textSecondary },
-    emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60, gap: 12 },
-    emptyText: { fontSize: 16, color: colors.textTertiary, marginBottom: 8 },
-    createButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, gap: 8 },
-    createButtonText: { color: colors.messageTextSent, fontWeight: '700', fontSize: 15 },
+    loaderText: { fontSize: moderateScale(14), color: colors.textSecondary },
+    emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: verticalScale(60), gap: 12 },
+    emptyText: { fontSize: moderateScale(16), color: colors.textTertiary, marginBottom: verticalScale(8) },
+    createButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, paddingVertical: verticalScale(12), paddingHorizontal: scale(20), borderRadius: moderateScale(12), gap: 8 },
+    createButtonText: { color: colors.messageTextSent, fontWeight: '700', fontSize: moderateScale(15) },
   });
 
 export default WorkspaceSelectorScreen;

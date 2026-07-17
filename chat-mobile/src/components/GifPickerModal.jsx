@@ -1,4 +1,21 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+/**
+ * GifPickerModal — Full-screen GIPHY picker for the mobile chat app.
+ *
+ * Features:
+ *  - Debounced search (400ms)
+ *  - Trending GIFs by default
+ *  - Category chip row (Trending / Reactions / Funny / Love / Animals / Sports / etc.)
+ *  - 2-column responsive grid with loading skeletons
+ *  - Infinite scroll / pagination via FlatList onEndReached
+ *  - Empty state, error state, powered-by-GIPHY branding
+ *
+ * Props:
+ *   visible       – boolean
+ *   onClose       – () => void
+ *   onSelectGif   – (gifData) => void  where gifData = { gifUrl, previewUrl, title, width, height }
+ *   colors        – theme colors object
+ */
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,99 +28,129 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
+  ScrollView,
 } from 'react-native';
-import { X, Search, Smile } from 'lucide-react-native';
+import { X, Search, Smile, RefreshCw } from 'lucide-react-native';
+import useGiphySearch from '../hooks/useGiphySearch';
+import { GIF_CATEGORIES } from '../services/gifService';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const GIPHY_KEY = 'dc6zaTOxFJmzC'; // Giphy public beta key (for development)
-const NUM_COLS = 3;
-const ITEM_SIZE = (SCREEN_WIDTH - 48) / NUM_COLS;
+const NUM_COLS = 2;
+const GRID_PADDING = 12;
+const CELL_GAP = 6;
+const CELL_WIDTH = (SCREEN_WIDTH - GRID_PADDING * 2 - CELL_GAP) / NUM_COLS;
 
-const FALLBACK_GIFS = [
-  { id: '1', title: 'Thumbs Up', images: { fixed_height: { url: 'https://media.giphy.com/media/11ISwbgCxEzMyY/giphy.gif' } } },
-  { id: '2', title: 'Mind Blown', images: { fixed_height: { url: 'https://media.giphy.com/media/xT0xeJpnrWC4XWblWQ/giphy.gif' } } },
-  { id: '3', title: 'Happy Dance', images: { fixed_height: { url: 'https://media.giphy.com/media/blSTtZehjAZ8I/giphy.gif' } } },
-  { id: '4', title: 'Sad', images: { fixed_height: { url: 'https://media.giphy.com/media/d2lcHJTG5Tscg/giphy.gif' } } },
-  { id: '5', title: 'Celebrate', images: { fixed_height: { url: 'https://media.giphy.com/media/3o7TKoWXm3okO1kgHC/giphy.gif' } } },
-  { id: '6', title: 'Working', images: { fixed_height: { url: 'https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif' } } },
-  { id: '7', title: 'No', images: { fixed_height: { url: 'https://media.giphy.com/media/23BST5FQOc8k8/giphy.gif' } } },
-  { id: '8', title: 'Yes', images: { fixed_height: { url: 'https://media.giphy.com/media/nFjDu1LjEADh6/giphy.gif' } } },
-  { id: '9', title: 'Wow', images: { fixed_height: { url: 'https://media.giphy.com/media/L0qTl8hl84AQg/giphy.gif' } } },
-];
+// ─── Skeleton cell ────────────────────────────────────────────────────────────
 
-async function searchGifs(query, offset = 0) {
-  try {
-    const base = query
-      ? `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_KEY}&q=${encodeURIComponent(query)}&limit=24&offset=${offset}&rating=g`
-      : `https://api.giphy.com/v1/gifs/trending?api_key=${GIPHY_KEY}&limit=24&offset=${offset}&rating=g`;
-    const res = await fetch(base);
-    const json = await res.json();
-    if (json.data && json.data.length > 0) return json.data;
-    throw new Error("Empty or failed");
-  } catch (err) {
-    // Return fallback GIFs if API is rate limited or banned
-    return FALLBACK_GIFS.filter(g => query ? g.title.toLowerCase().includes(query.toLowerCase()) : true);
-  }
+function SkeletonCell({ colors }) {
+  return (
+    <View
+      style={[
+        styles.gifCell,
+        {
+          width: CELL_WIDTH,
+          height: CELL_WIDTH * 0.75,
+          backgroundColor: colors.backgroundSecondary || '#2a2a2a',
+          opacity: 0.6,
+        },
+      ]}
+    />
+  );
 }
+
+// ─── GIF cell ─────────────────────────────────────────────────────────────────
+
+const GifCell = React.memo(function GifCell({ item, onSelect, colors }) {
+  const aspectRatio = item.width && item.height ? item.width / item.height : 3 / 2;
+  const cellHeight = Math.round(CELL_WIDTH / aspectRatio);
+  const uri = item.previewUrl || item.gifUrl;
+  if (!uri) return null;
+
+  return (
+    <TouchableOpacity
+      style={[styles.gifCell, { width: CELL_WIDTH, height: cellHeight }]}
+      onPress={() => onSelect(item)}
+      activeOpacity={0.75}
+    >
+      <Image
+        source={{ uri }}
+        style={{ width: '100%', height: '100%' }}
+        resizeMode="cover"
+      />
+    </TouchableOpacity>
+  );
+});
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export default function GifPickerModal({ visible, onClose, onSelectGif, colors }) {
   const [query, setQuery] = useState('');
-  const [gifs, setGifs] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const debounceRef = useRef(null);
+  const [activeCategory, setActiveCategory] = useState('trending');
+  const inputRef = useRef(null);
 
-  const loadGifs = useCallback(async (q) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const results = await searchGifs(q);
-      setGifs(results);
-    } catch (e) {
-      setError('Failed to load GIFs. Check your connection.');
-    } finally {
-      setLoading(false);
+  // Search hook — query drives search, empty query uses category
+  const { gifs, isLoading, isLoadingMore, hasMore, error, loadMore, reset } =
+    useGiphySearch(query, query ? null : activeCategory);
+
+  // Reset on open/close
+  useEffect(() => {
+    if (visible) {
+      setQuery('');
+      setActiveCategory('trending');
+      reset();
     }
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSelect = useCallback(
+    (gif) => {
+      if (!gif.gifUrl) return; // guard against null URLs from provider
+      onSelectGif({
+        provider: gif.provider || 'giphy',
+        providerId: gif.providerId || gif.id,
+        gifUrl: gif.gifUrl,
+        previewUrl: gif.previewUrl,
+        title: gif.title,
+        width: gif.width,
+        height: gif.height,
+      });
+      onClose();
+    },
+    [onSelectGif, onClose],
+  );
+
+  const handleCategorySelect = useCallback((catId) => {
+    setActiveCategory(catId);
+    setQuery('');
   }, []);
 
-  useEffect(() => {
-    if (visible) loadGifs('');
-  }, [visible, loadGifs]);
+  const handleClearQuery = useCallback(() => {
+    setQuery('');
+    inputRef.current?.focus();
+  }, []);
 
-  const handleQueryChange = (text) => {
-    setQuery(text);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => loadGifs(text), 500);
-  };
+  const skeletonData = Array.from({ length: 8 }, (_, i) => ({ id: `sk-${i}`, _skeleton: true }));
 
-  const handleSelect = (gif) => {
-    const url = gif.images?.fixed_height?.url || gif.images?.original?.url;
-    if (!url) return;
-    onSelectGif({
-      url,
-      name: gif.title || 'gif.gif',
-      mimeType: 'image/gif',
-      isGif: true,
-    });
-    onClose();
-  };
+  const renderItem = useCallback(
+    ({ item }) => {
+      if (item._skeleton)
+        return <SkeletonCell key={item.id} colors={colors} />;
+      return <GifCell item={item} onSelect={handleSelect} colors={colors} />;
+    },
+    [handleSelect, colors],
+  );
 
-  const renderGif = ({ item }) => {
-    const thumb = item.images?.fixed_height_small?.url || item.images?.fixed_height?.url;
+  const renderFooter = useCallback(() => {
+    if (!isLoadingMore) return null;
     return (
-      <TouchableOpacity
-        onPress={() => handleSelect(item)}
-        activeOpacity={0.75}
-        style={styles.gifCell}
-      >
-        <Image
-          source={{ uri: thumb }}
-          style={[styles.gifImg, { width: ITEM_SIZE, height: ITEM_SIZE }]}
-          resizeMode="cover"
-        />
-      </TouchableOpacity>
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color={colors.primary} />
+      </View>
     );
-  };
+  }, [isLoadingMore, colors]);
+
+  const displayData = isLoading ? skeletonData : gifs;
 
   return (
     <Modal
@@ -114,112 +161,235 @@ export default function GifPickerModal({ visible, onClose, onSelectGif, colors }
       statusBarTranslucent
     >
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {/* Header */}
+        {/* ── Header ── */}
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={{ top: verticalScale(8), bottom: verticalScale(8), left: scale(8), right: scale(8) }}>
             <X size={22} color={colors.textSecondary} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: colors.textPrimary }]}>Add a GIF</Text>
-          <View style={{ width: 36 }} />
+          <View style={{ width: scale(36) }} />
         </View>
 
-        {/* Search bar */}
-        <View style={[styles.searchRow, { backgroundColor: colors.backgroundSecondary }]}>
-          <View style={[styles.searchBox, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
-            <Search size={16} color={colors.textTertiary} />
+        {/* ── Search bar ── */}
+        <View style={[styles.searchRow, { backgroundColor: colors.backgroundSecondary || colors.card }]}>
+          <View
+            style={[
+              styles.searchBox,
+              { backgroundColor: colors.inputBackground, borderColor: colors.border },
+            ]}
+          >
+            <Search size={15} color={colors.textTertiary} />
             <TextInput
+              ref={inputRef}
               style={[styles.searchInput, { color: colors.textPrimary }]}
-              placeholder="Search GIFs..."
+              placeholder="Search GIPHY..."
               placeholderTextColor={colors.inputPlaceholder}
               value={query}
-              onChangeText={handleQueryChange}
+              onChangeText={setQuery}
               autoCorrect={false}
+              autoCapitalize="none"
               returnKeyType="search"
+              clearButtonMode="never"
             />
             {query.length > 0 && (
-              <TouchableOpacity onPress={() => { setQuery(''); loadGifs(''); }}>
+              <TouchableOpacity onPress={handleClearQuery} hitSlop={{ top: verticalScale(8), bottom: verticalScale(8), left: scale(8), right: scale(8) }}>
                 <X size={14} color={colors.textTertiary} />
               </TouchableOpacity>
             )}
           </View>
         </View>
 
-        {/* Powered by Giphy */}
-        <View style={[styles.poweredRow, { backgroundColor: colors.backgroundSecondary }]}>
-          <Text style={[styles.poweredText, { color: colors.textTertiary }]}>Powered by GIPHY</Text>
-        </View>
-
-        {/* Grid */}
-        {loading ? (
-          <View style={styles.loadingBox}>
-            <ActivityIndicator size="large" color={colors.primary} />
+        {/* ── Category chips ── */}
+        {!query && (
+          <View style={[styles.categoryRow, { borderBottomColor: colors.border }]}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryList}
+            >
+              {GIF_CATEGORIES.map((cat) => {
+                const isActive = activeCategory === cat.id;
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
+                    style={[
+                      styles.categoryChip,
+                      {
+                        backgroundColor: isActive ? colors.primary : colors.inputBackground,
+                        borderColor: isActive ? colors.primary : colors.border,
+                      },
+                    ]}
+                    onPress={() => handleCategorySelect(cat.id)}
+                    activeOpacity={0.75}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryLabel,
+                        { color: isActive ? '#fff' : colors.textSecondary },
+                      ]}
+                    >
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
-        ) : error ? (
-          <View style={styles.loadingBox}>
-            <Smile size={40} color={colors.textTertiary} />
+        )}
+
+        {/* ── Grid ── */}
+        {error && !isLoading ? (
+          <View style={styles.centerBox}>
+            <Smile size={48} color={colors.textTertiary} />
             <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
+            <TouchableOpacity
+              style={[styles.retryBtn, { borderColor: colors.primary }]}
+              onPress={reset}
+            >
+              <RefreshCw size={14} color={colors.primary} />
+              <Text style={[styles.retryLabel, { color: colors.primary }]}>Try again</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <FlatList
-            data={gifs}
+            data={displayData}
             keyExtractor={(item) => item.id}
-            renderItem={renderGif}
+            renderItem={renderItem}
             numColumns={NUM_COLS}
             contentContainerStyle={styles.grid}
+            columnWrapperStyle={styles.columnWrapper}
             showsVerticalScrollIndicator={false}
+            onEndReached={hasMore && !isLoading ? loadMore : undefined}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={renderFooter}
             ListEmptyComponent={
-              <View style={styles.loadingBox}>
-                <Text style={[styles.errorText, { color: colors.textSecondary }]}>
-                  No GIFs found for "{query}"
-                </Text>
-              </View>
+              !isLoading ? (
+                <View style={styles.centerBox}>
+                  <Smile size={48} color={colors.textTertiary} />
+                  <Text style={[styles.errorText, { color: colors.textSecondary }]}>
+                    {query ? `No GIFs found for "${query}"` : 'No GIFs available'}
+                  </Text>
+                </View>
+              ) : null
             }
+            initialNumToRender={12}
+            maxToRenderPerBatch={8}
+            windowSize={5}
+            removeClippedSubviews={Platform.OS !== 'web'}
           />
         )}
+
+        {/* ── Powered by GIPHY ── */}
+        <View style={[styles.poweredRow, { borderTopColor: colors.border }]}>
+          <Text style={[styles.poweredText, { color: colors.textTertiary }]}>
+            Powered by GIPHY
+          </Text>
+        </View>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: Platform.OS === 'ios' ? 44 : 0 },
+  container: {
+    flex: 1,
+    paddingTop: Platform.OS === 'ios' ? 44 : 0,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  closeBtn: { padding: 4 },
-  title: { fontSize: 17, fontWeight: '700' },
+  closeBtn: { padding: moderateScale(4) },
+  title: { fontSize: moderateScale(17), fontWeight: '700' },
   searchRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(10),
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 10,
+    borderRadius: moderateScale(10),
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: scale(10),
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
     gap: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
-    paddingVertical: 0,
+    fontSize: moderateScale(15),
+    paddingVertical: verticalScale(0),
+  },
+  categoryRow: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: verticalScale(8),
+  },
+  categoryList: {
+    paddingHorizontal: scale(12),
+    gap: 8,
+    flexDirection: 'row',
+  },
+  categoryChip: {
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(6),
+    borderRadius: moderateScale(16),
+    borderWidth: 1,
+  },
+  categoryLabel: {
+    fontSize: moderateScale(13),
+    fontWeight: '500',
+  },
+  grid: {
+    padding: GRID_PADDING,
+  },
+  columnWrapper: {
+    gap: CELL_GAP,
+    marginBottom: CELL_GAP,
+  },
+  gifCell: {
+    borderRadius: moderateScale(8),
+    overflow: 'hidden',
+    backgroundColor: '#2a2a2a',
+  },
+  centerBox: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: verticalScale(60),
+    gap: 12,
+    paddingHorizontal: scale(32),
+  },
+  errorText: {
+    fontSize: moderateScale(14),
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(8),
+    borderWidth: 1,
+    marginTop: verticalScale(4),
+  },
+  retryLabel: {
+    fontSize: moderateScale(14),
+    fontWeight: '600',
+  },
+  footerLoader: {
+    paddingVertical: verticalScale(16),
+    alignItems: 'center',
   },
   poweredRow: {
-    paddingHorizontal: 16,
-    paddingBottom: 4,
-    alignItems: 'flex-end',
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(8),
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  poweredText: { fontSize: 10, fontStyle: 'italic' },
-  grid: { padding: 16, gap: 4 },
-  gifCell: { margin: 2, borderRadius: 6, overflow: 'hidden' },
-  gifImg: { borderRadius: 6, backgroundColor: '#eee' },
-  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60, gap: 12 },
-  errorText: { fontSize: 14, textAlign: 'center', paddingHorizontal: 32 },
+  poweredText: { fontSize: moderateScale(11), fontStyle: 'italic' },
 });

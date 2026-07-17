@@ -18,17 +18,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
 import { useAuthStore } from '../stores/authStore';
-import { Hash, Users, Pin, Bell, Settings, LogOut, ArrowLeft, FolderOpen, FileText, Clock, User, Mail, Briefcase, UserPlus, X, Search, Plus, Lock, MoreHorizontal } from 'lucide-react-native';
-import { channelAPI, notificationPrefAPI, usersAPI, directoriesAPI } from '../services/api';
+import { Hash, Users, Pin, Bell, Settings, LogOut, ArrowLeft, FolderOpen, FileText, Clock, User, Mail, Briefcase, UserPlus, X, Search, Plus, Lock, MoreHorizontal, Edit2 } from 'lucide-react-native';
+import api, { channelAPI, notificationPrefAPI, usersAPI, directoriesAPI } from '../services/api';
 import { AppAvatar, HeaderBackButton } from '../components/common';
 import logger from '../utils/logger';
 import Toast from 'react-native-toast-message';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const ChannelDetailsScreen = ({ route, navigation }) => {
   const { channelId, channelName, memberCount: initialMemberCount = 0 } = route.params || {};
   const { colors } = useThemeStore();
   const createDM = useChannelStore((s) => s.createDM);
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
+  const updateChannel = useChannelStore((s) => s.updateChannel);
   const channels = useChannelStore((s) => s.channels) || [];
   const { user: currentUser } = useAuthStore();
 
@@ -40,6 +43,32 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
   const [showMembersList, setShowMembersList] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isMuteLoading, setIsMuteLoading] = useState(false);
+
+  // Edit Name State
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  const handleSaveName = async () => {
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      setIsEditingName(false);
+      return;
+    }
+    if (trimmed === (channel?.name || channelName)) {
+      setIsEditingName(false);
+      return;
+    }
+    try {
+      await api.put(`/channels/${channelId}`, { name: trimmed });
+      updateChannel(channelId, { name: trimmed });
+      setIsEditingName(false);
+      Toast.show({ type: 'success', text1: 'Channel name updated' });
+    } catch (err) {
+      logger.error('Failed to update channel name:', err);
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to update channel name';
+      Toast.show({ type: 'error', text1: msg });
+    }
+  };
 
   // Add Member Modal State
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -229,12 +258,12 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
             <Text style={[styles.dmName, { color: colors.textPrimary }]}>{dmName}</Text>
             <Text style={[styles.dmUsername, { color: colors.textSecondary }]}>{username}</Text>
 
-            {/* <TouchableOpacity style={{ marginTop: 16 }}>
-              <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '500' }}>Add Topic</Text>
+            {/* <TouchableOpacity style={{ marginTop: verticalScale(16) }}>
+              <Text style={{ color: colors.primary, fontSize: moderateScale(16), fontWeight: '500' }}>Add Topic</Text>
             </TouchableOpacity> */}
 
-            <TouchableOpacity style={{ marginTop: 16, marginBottom: 12 }} onPress={() => navigation.navigate('UserProfile', { user: displayUser, channelId })}>
-              <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '500' }}>View Full Profile</Text>
+            <TouchableOpacity style={{ marginTop: verticalScale(16), marginBottom: verticalScale(12) }} onPress={() => navigation.navigate('UserProfile', { user: displayUser, channelId })}>
+              <Text style={{ color: colors.primary, fontSize: moderateScale(16), fontWeight: '500' }}>View Full Profile</Text>
             </TouchableOpacity>
           </View>
 
@@ -243,10 +272,10 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
             <Text style={[styles.dmSectionTitle, { color: colors.textPrimary }]}>Settings</Text>
             
             <View style={styles.dmSettingRow}>
-              <Bell size={24} color={colors.textPrimary} style={{ marginRight: 16, marginTop: 4 }} />
-              <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={{ fontSize: 16, color: colors.textPrimary }}>Mute</Text>
-                <Text style={{ fontSize: 14, color: colors.textSecondary, marginTop: 4, lineHeight: 20 }}>
+              <Bell size={24} color={colors.textPrimary} style={{ marginRight: scale(16), marginTop: verticalScale(4) }} />
+              <View style={{ flex: 1, paddingRight: scale(12) }}>
+                <Text style={{ fontSize: moderateScale(16), color: colors.textPrimary }}>Mute</Text>
+                <Text style={{ fontSize: moderateScale(14), color: colors.textSecondary, marginTop: verticalScale(4), lineHeight: 20 }}>
                   Muted conversations will always appear read and you won't receive any notifications from them.
                 </Text>
               </View>
@@ -264,13 +293,13 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
           </View>
 
           {/* Close Conversation Button */}
-          <View style={{ paddingHorizontal: 16, marginTop: 32, paddingBottom: 40 }}>
+          <View style={{ paddingHorizontal: scale(16), marginTop: verticalScale(32), paddingBottom: verticalScale(40) }}>
             <TouchableOpacity 
               style={styles.closeConversationBtn} 
               onPress={handleLeaveChannel}
             >
-              <LogOut size={20} color="#E53E3E" style={{ marginRight: 8, transform: [{ rotate: '180deg' }] }} />
-              <Text style={{ color: '#E53E3E', fontSize: 16, fontWeight: '600' }}>Close Conversation</Text>
+              <LogOut size={20} color="#E53E3E" style={{ marginRight: scale(8), transform: [{ rotate: '180deg' }] }} />
+              <Text style={{ color: '#E53E3E', fontSize: moderateScale(16), fontWeight: '600' }}>Close Conversation</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -284,7 +313,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
       <View style={[styles.navHeader, { borderBottomColor: colors.border }]}>
         <HeaderBackButton onPress={() => navigation.goBack()} />
         <Text style={[styles.navTitle, { color: colors.textPrimary }]}>Details</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: scale(40) }} />
       </View>
 
       <ScrollView>
@@ -296,9 +325,35 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               <Hash size={36} color={colors.primary} />
             )}
           </View>
-          <Text style={[styles.channelName, { color: colors.textPrimary }]}>
-            {channelName}
-          </Text>
+          {isEditingName ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: verticalScale(12) }}>
+              <TextInput
+                style={[styles.channelName, { color: colors.textPrimary, borderBottomWidth: 1, borderColor: colors.primary, minWidth: scale(150), padding: 0 }]}
+                value={newName}
+                onChangeText={setNewName}
+                autoFocus
+                onSubmitEditing={handleSaveName}
+                returnKeyType="done"
+              />
+              <TouchableOpacity onPress={handleSaveName} style={{ marginLeft: scale(12), padding: scale(4) }}>
+                <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Save</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setIsEditingName(false)} style={{ marginLeft: scale(8), padding: scale(4) }}>
+                <X size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: verticalScale(12) }}>
+              <Text style={[styles.channelName, { color: colors.textPrimary, marginTop: 0 }]}>
+                {channel?.name || channelName}
+              </Text>
+              {!(channel?.type === 'project' && channel?.systemManaged) && (
+                <TouchableOpacity onPress={() => { setNewName(channel?.name || channelName); setIsEditingName(true); }} style={{ marginLeft: scale(8) }}>
+                  <Edit2 size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
           <Text style={[styles.memberCount, { color: colors.textSecondary }]}>
             {members.length || initialMemberCount} members
           </Text>
@@ -324,7 +379,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
           {showMembersList && (
             <View style={[styles.membersContainer, { backgroundColor: colors.backgroundSecondary }]}>
               {isLoadingMembers ? (
-                <ActivityIndicator size="small" color={colors.primary} style={{ padding: 12 }} />
+                <ActivityIndicator size="small" color={colors.primary} style={{ padding: moderateScale(12) }} />
               ) : members.length === 0 ? (
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No members loaded</Text>
               ) : (
@@ -356,14 +411,11 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
             onPress={() => navigation.navigate('Files', { channelId, channelName })}
           />
 
-          {channel?.canvasTabs?.map((tab, idx) => (
-            <DetailItem
-              key={tab.canvasId || idx}
-              icon={FileText}
-              label={tab.title || 'Canvas'}
-              onPress={() => navigation.navigate('CanvasList', { channelId, channelName })}
-            />
-          ))}
+          <DetailItem
+            icon={FileText}
+            label="Canvases"
+            onPress={() => navigation.navigate('CanvasList', { channelId, channelName })}
+          />
 
           <DetailItem
             icon={Pin}
@@ -407,7 +459,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               </TouchableOpacity>
             </View>
 
-            <View style={{ padding: 16, flex: 1 }}>
+            <View style={{ padding: moderateScale(16), flex: 1 }}>
               <View style={[styles.searchInputRow, { borderColor: colors.border, backgroundColor: colors.inputBackground }]}>
                 <Search size={18} color={colors.textTertiary} />
                 <TextInput
@@ -474,98 +526,98 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: 1,
   },
   backButton: {
-    padding: 8,
+    padding: moderateScale(8),
   },
   navTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   header: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: verticalScale(24),
     borderBottomWidth: 1,
   },
   profileHeader: {
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingVertical: verticalScale(32),
     borderBottomWidth: 1,
   },
   presenceText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: verticalScale(4),
   },
   customStatusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    marginTop: verticalScale(12),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(8),
     borderWidth: 1,
     maxWidth: '85%',
   },
   customStatusEmoji: {
-    fontSize: 16,
-    marginRight: 6,
+    fontSize: moderateScale(16),
+    marginRight: scale(6),
   },
   customStatusText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '500',
   },
   channelIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: scale(72),
+    height: verticalScale(72),
+    borderRadius: moderateScale(36),
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
   },
   channelName: {
-    fontSize: 22,
+    fontSize: moderateScale(22),
     fontWeight: '700',
   },
   memberCount: {
-    fontSize: 13,
-    marginTop: 4,
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(4),
   },
   section: {
-    paddingVertical: 8,
+    paddingVertical: verticalScale(8),
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '700',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(8),
   },
   card: {
-    borderRadius: 12,
+    borderRadius: moderateScale(12),
     borderWidth: 1,
-    marginHorizontal: 16,
+    marginHorizontal: scale(16),
     overflow: 'hidden',
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
   },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
   },
   detailItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 15,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(15),
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 12,
   },
@@ -573,33 +625,33 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   detailLabel: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '500',
   },
   membersContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(8),
   },
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: verticalScale(8),
     gap: 10,
   },
   memberInfo: {
     flex: 1,
   },
   memberName: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
   },
   memberEmail: {
-    fontSize: 11,
-    marginTop: 1,
+    fontSize: moderateScale(11),
+    marginTop: verticalScale(1),
   },
   emptyText: {
-    fontSize: 13,
-    paddingVertical: 8,
+    fontSize: moderateScale(13),
+    paddingVertical: verticalScale(8),
     textAlign: 'center',
   },
   modalOverlay: {
@@ -617,64 +669,64 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 16,
+    padding: moderateScale(16),
     borderBottomWidth: 1,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: "700",
   },
   modalCloseBtn: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   searchInputRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(10),
+    borderRadius: moderateScale(8),
     borderWidth: 1,
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
     gap: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
-    padding: 0,
+    fontSize: moderateScale(15),
+    padding: moderateScale(0),
   },
   searchResultsContainer: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: moderateScale(8),
     overflow: "hidden",
   },
   noResultsText: {
-    padding: 20,
+    padding: moderateScale(20),
     textAlign: "center",
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   searchResultItem: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
+    padding: moderateScale(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   searchResultInfo: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: scale(12),
   },
   searchResultName: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: "600",
   },
   searchResultEmail: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(2),
   },
   searchResultAddBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: scale(28),
+    height: verticalScale(28),
+    borderRadius: moderateScale(14),
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -682,45 +734,45 @@ const styles = StyleSheet.create({
   dmNavHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
   },
   dmBackButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: scale(44),
+    height: verticalScale(44),
+    borderRadius: moderateScale(22),
     justifyContent: 'center',
     alignItems: 'center',
   },
   dmProfileHeader: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(12),
     alignItems: 'flex-start',
     borderBottomWidth: 1,
   },
   dmAvatarWrapper: {
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   dmName: {
-    fontSize: 24,
+    fontSize: moderateScale(24),
     fontWeight: '800',
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   dmRole: {
-    fontSize: 16,
-    marginBottom: 4,
+    fontSize: moderateScale(16),
+    marginBottom: verticalScale(4),
   },
   dmUsername: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
   },
   dmSection: {
-    paddingVertical: 24,
-    paddingHorizontal: 20,
+    paddingVertical: verticalScale(24),
+    paddingHorizontal: scale(20),
   },
   dmSectionTitle: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   dmSettingRow: {
     flexDirection: 'row',
@@ -731,8 +783,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: moderateScale(12),
+    paddingVertical: verticalScale(14),
   }
 });
 

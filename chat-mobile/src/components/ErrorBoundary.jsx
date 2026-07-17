@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import logger from '../utils/logger';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -63,45 +65,45 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: moderateScale(24),
   },
   emoji: {
-    fontSize: 48,
-    marginBottom: 16,
+    fontSize: moderateScale(48),
+    marginBottom: verticalScale(16),
   },
   title: {
-    fontSize: 20,
+    fontSize: moderateScale(20),
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   message: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
     lineHeight: 22,
   },
   debugContainer: {
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 24,
+    borderRadius: moderateScale(8),
+    padding: moderateScale(12),
+    marginBottom: verticalScale(24),
     width: '100%',
   },
   debugTitle: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   debugText: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontFamily: 'monospace',
   },
   button: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: scale(24),
+    paddingVertical: verticalScale(12),
+    borderRadius: moderateScale(10),
   },
   buttonText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '600',
   },
 });

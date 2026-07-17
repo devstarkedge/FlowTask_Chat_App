@@ -26,6 +26,8 @@ import ScheduleModal from '../components/ScheduleModal';
 import { AppAvatar } from '../components/common';
 import { useConversationDetails } from '../hooks/useConversationDetails';
 import { Alert } from 'react-native';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const DraftItem = React.memo(({ item, onPress, onSchedule, onDelete, onSend, colors }) => {
   const isThread = item.threadId && item.threadId !== 'root';
@@ -56,21 +58,21 @@ const DraftItem = React.memo(({ item, onPress, onSchedule, onDelete, onSend, col
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => onSend(item)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          hitSlop={{ top: verticalScale(10), bottom: verticalScale(10), left: scale(10), right: scale(10) }}
         >
           <Send size={18} color={colors.primary} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => onSchedule(item)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          hitSlop={{ top: verticalScale(10), bottom: verticalScale(10), left: scale(10), right: scale(10) }}
         >
           <Clock size={18} color={colors.textSecondary} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => onDelete(item)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          hitSlop={{ top: verticalScale(10), bottom: verticalScale(10), left: scale(10), right: scale(10) }}
         >
           <Trash2 size={18} color={colors.error} />
         </TouchableOpacity>
@@ -223,12 +225,12 @@ const DraftsScreen = ({ navigation }) => {
 
 const createStyles = (colors) => StyleSheet.create({
   listContainer: {
-    padding: 16,
+    padding: moderateScale(16),
     gap: 12,
   },
   draftItem: {
-    padding: 16,
-    borderRadius: 12,
+    padding: moderateScale(16),
+    borderRadius: moderateScale(12),
     gap: 12,
   },
   draftHeader: {
@@ -237,8 +239,8 @@ const createStyles = (colors) => StyleSheet.create({
     gap: 12,
   },
   draftIconContainer: {
-    width: 32,
-    height: 32,
+    width: scale(32),
+    height: verticalScale(32),
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -246,15 +248,15 @@ const createStyles = (colors) => StyleSheet.create({
     flex: 1,
   },
   draftLabel: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '600',
     textTransform: 'uppercase',
   },
   actionButton: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   draftContent: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     lineHeight: 20,
   },
   draftMeta: {
@@ -263,7 +265,7 @@ const createStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
   },
   metaText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
   },
 });
 

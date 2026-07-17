@@ -18,6 +18,8 @@ import {
   StyleSheet,
 } from 'react-native';
 import { AppAvatar } from './common';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const MentionDropdown = React.memo(function MentionDropdown({
   members = [],
@@ -75,10 +77,10 @@ const styles = StyleSheet.create({
   container: {
     position: 'absolute',
     bottom: '100%',
-    left: 12,
-    right: 12,
-    maxHeight: 220,
-    borderRadius: 12,
+    left: scale(12),
+    right: scale(12),
+    maxHeight: verticalScale(220),
+    borderRadius: moderateScale(12),
     borderWidth: 1,
     overflow: 'hidden',
     zIndex: 100,
@@ -86,16 +88,16 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOpacity: 0.15,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: scale(0), height: verticalScale(2) },
   },
   list: {
-    maxHeight: 220,
+    maxHeight: verticalScale(220),
   },
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
     gap: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
@@ -103,12 +105,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   memberName: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
   },
   memberEmail: {
-    fontSize: 12,
-    marginTop: 1,
+    fontSize: moderateScale(12),
+    marginTop: verticalScale(1),
   },
 });
 

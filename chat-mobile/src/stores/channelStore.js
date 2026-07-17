@@ -320,6 +320,33 @@ export const useChannelStore = create(
           logger.error('Failed to fetch channel members:', error);
         }
       },
+ 
+       
+
+        
+      // Update a single member's online status across all cached channel member lists.
+      // Called by socket presence events so the chat header avatar reflects live status.
+      updateMemberPresence: (userId, onlineStatus) => {
+        set((state) => {
+          const channelUpdates = {};
+          for (const [chId, members] of Object.entries(state.membersByChannel)) {
+            const hasUser = members.some(
+              (m) => m._id === userId || m.userId?._id === userId
+            );
+            if (hasUser) {
+              channelUpdates[chId] = members.map((m) =>
+                m._id === userId || m.userId?._id === userId
+                  ? { ...m, onlineStatus }
+                  : m
+              );
+            }
+          }
+          if (Object.keys(channelUpdates).length === 0) return state;
+          return {
+            membersByChannel: { ...state.membersByChannel, ...channelUpdates },
+          };
+        });
+      },
 
       getStarredChannels: () => {
         const { channels, starredIds } = get();

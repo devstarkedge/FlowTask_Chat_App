@@ -13,6 +13,8 @@ import {
 import { X, Shield, UserPlus, Globe, Check } from 'lucide-react-native';
 import Avatar from '../../components/Avatar';
 import api from '../../services/api';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 export default function CanvasShareModal({ visible, onClose, canvasId }) {
   const [isPublic, setIsPublic] = useState(false);
@@ -124,14 +126,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'center',
-    padding: 24,
+    padding: moderateScale(24),
   },
   container: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: moderateScale(16),
     maxHeight: '80%',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: scale(0), height: verticalScale(4) },
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 5,
@@ -140,9 +142,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingHorizontal: scale(20),
+    paddingTop: verticalScale(16),
+    paddingBottom: verticalScale(12),
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
@@ -151,96 +153,96 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerIcon: {
-    marginRight: 6,
+    marginRight: scale(6),
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '600',
     color: '#1f2937',
   },
   closeBtn: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   content: {
-    padding: 20,
+    padding: moderateScale(20),
   },
   publicToggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 16,
+    paddingBottom: verticalScale(16),
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
   publicToggleText: {
     flex: 1,
-    marginRight: 16,
+    marginRight: scale(16),
   },
   iconLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   rowIcon: {
-    marginRight: 6,
+    marginRight: scale(6),
   },
   rowTitle: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
     color: '#1f2937',
   },
   rowSubtitle: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     color: '#6b7280',
-    marginTop: 2,
+    marginTop: verticalScale(2),
   },
   sectionHeader: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '700',
     color: '#6b7280',
     textTransform: 'uppercase',
-    marginTop: 20,
-    marginBottom: 10,
+    marginTop: verticalScale(20),
+    marginBottom: verticalScale(10),
   },
   membersList: {
-    maxHeight: 250,
+    maxHeight: verticalScale(250),
   },
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: verticalScale(10),
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#f3f4f6',
   },
   memberInfo: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: scale(12),
   },
   memberName: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
     color: '#1f2937',
   },
   memberRole: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     color: '#6b7280',
-    marginTop: 1,
+    marginTop: verticalScale(1),
   },
   accessBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f5f3ff',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
+    borderRadius: moderateScale(4),
   },
   accessText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: '600',
     color: '#4f46e5',
-    marginLeft: 4,
+    marginLeft: scale(4),
   },
   centered: {
-    padding: 40,
+    padding: moderateScale(40),
     alignItems: 'center',
     justifyContent: 'center',
   },

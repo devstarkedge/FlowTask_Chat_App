@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import { View, Text, StyleSheet, Animated, Easing } from "react-native";
 import { LOADING_MESSAGES } from "../../constants/loadingMessages";
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 const HomeHeaderLoader = ({ colors }) => {
   const [loadingContent, setLoadingContent] = useState({ text: "", emoji: "" });
@@ -57,16 +59,16 @@ const HomeHeaderLoader = ({ colors }) => {
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 12,
+    paddingVertical: verticalScale(12),
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
   },
   emoji: {
-    fontSize: 24,
+    fontSize: moderateScale(24),
   },
   loadingText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "600",
   },
 });

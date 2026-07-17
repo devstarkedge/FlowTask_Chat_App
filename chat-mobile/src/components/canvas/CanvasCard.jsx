@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { FileText, Bookmark, BookmarkPlus, MoreVertical, Calendar, Users } from 'lucide-react-native';
 import { AppAvatar } from '../common';
 import { useThemeStore } from '../../stores/themeStore';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 // Canvas type display config
 const CANVAS_TYPE_CONFIG = {
@@ -191,19 +193,19 @@ export default function CanvasCard({ canvas, isSaved, onSelect, onSaveToggle, on
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
-    marginBottom: 12,
+    borderRadius: moderateScale(12),
+    marginBottom: verticalScale(12),
     borderWidth: 1,
     overflow: 'hidden',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: scale(0), height: verticalScale(2) },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
   },
   coverFrame: {
     width: '100%',
-    height: 70,
+    height: verticalScale(70),
   },
   coverImage: {
     width: '100%',
@@ -211,37 +213,37 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   cardBody: {
-    padding: 16,
+    padding: moderateScale(16),
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: scale(32),
+    height: verticalScale(32),
+    borderRadius: moderateScale(8),
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: scale(10),
   },
   titleContainer: {
     flex: 1,
   },
   title: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '600',
   },
   typeBadge: {
     alignSelf: 'flex-start',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginTop: 3,
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(2),
+    borderRadius: moderateScale(4),
+    marginTop: verticalScale(3),
   },
   typeBadgeText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -251,48 +253,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionBtn: {
-    padding: 6,
-    marginLeft: 4,
+    padding: moderateScale(6),
+    marginLeft: scale(4),
   },
   preview: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     lineHeight: 20,
-    marginBottom: 14,
+    marginBottom: verticalScale(14),
   },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderTopWidth: 1,
-    paddingTop: 10,
+    paddingTop: verticalScale(10),
   },
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    marginRight: 12,
+    marginRight: scale(12),
     gap: 6,
   },
   author: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
   },
   editorInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: scale(8),
     gap: 3,
   },
   editorText: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
   },
   timeInfo: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   timeIcon: {
-    marginRight: 4,
+    marginRight: scale(4),
   },
   timeText: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
   },
 });

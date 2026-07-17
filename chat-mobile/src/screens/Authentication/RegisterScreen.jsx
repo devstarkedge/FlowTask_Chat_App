@@ -16,6 +16,8 @@ import { Eye, EyeOff, MessageCircle, CircleChevronRight, Lock, Check } from 'luc
 import Toast from 'react-native-toast-message';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 // Password strength calculator (colors will be mapped at render time)
 function getStrength(pass) {
@@ -170,7 +172,7 @@ const RegisterScreen = ({ navigation }) => {
           <View style={styles.card}>
             {!!error && (
               <View style={[styles.errorBox, { backgroundColor: `${colors.error}14`, borderColor: `${colors.error}33` }]}>
-                <Lock size={14} color={colors.error} style={{ marginRight: 8 }} />
+                <Lock size={14} color={colors.error} style={{ marginRight: scale(8) }} />
                 <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
               </View>
             )}
@@ -292,44 +294,44 @@ const createStyles = (colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     scrollContent: { flexGrow: 1 },
-    header: { paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1 },
+    header: { paddingHorizontal: scale(20), paddingVertical: verticalScale(16), borderBottomWidth: 1 },
     logo: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    logoIcon: { width: 32, height: 32, borderRadius: 8 },
-    logoText: { fontSize: 15, fontWeight: '700', letterSpacing: -0.5 },
-    introSection: { paddingHorizontal: 20, paddingVertical: 24 },
-    heading: { fontSize: 28, fontWeight: '800', marginBottom: 8, letterSpacing: -0.6, color: colors.textPrimary },
-    subheading: { fontSize: 14, lineHeight: 22, color: colors.textSecondary },
-    card: { marginHorizontal: 20, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 20, marginBottom: 20, backgroundColor: colors.card },
-    errorBox: { borderWidth: 1, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-    errorText: { fontSize: 13, lineHeight: 20, flex: 1 },
-    formGroup: { marginBottom: 16 },
-    label: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6, color: colors.textTertiary },
-    input: { borderWidth: 1, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14, fontSize: 15, backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.inputText },
-    passwordWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10 },
-    passwordInput: { flex: 1, paddingVertical: 12, paddingHorizontal: 14, fontSize: 15 },
+    logoIcon: { width: scale(32), height: verticalScale(32), borderRadius: moderateScale(8) },
+    logoText: { fontSize: moderateScale(15), fontWeight: '700', letterSpacing: -0.5 },
+    introSection: { paddingHorizontal: scale(20), paddingVertical: verticalScale(24) },
+    heading: { fontSize: moderateScale(28), fontWeight: '800', marginBottom: verticalScale(8), letterSpacing: -0.6, color: colors.textPrimary },
+    subheading: { fontSize: moderateScale(14), lineHeight: 22, color: colors.textSecondary },
+    card: { marginHorizontal: scale(20), borderRadius: moderateScale(16), borderWidth: 1, borderColor: colors.border, padding: moderateScale(20), marginBottom: verticalScale(20), backgroundColor: colors.card },
+    errorBox: { borderWidth: 1, borderRadius: moderateScale(10), paddingVertical: verticalScale(12), paddingHorizontal: scale(14), marginBottom: verticalScale(16), flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+    errorText: { fontSize: moderateScale(13), lineHeight: 20, flex: 1 },
+    formGroup: { marginBottom: verticalScale(16) },
+    label: { fontSize: moderateScale(11), fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: verticalScale(6), color: colors.textTertiary },
+    input: { borderWidth: 1, borderRadius: moderateScale(10), paddingVertical: verticalScale(12), paddingHorizontal: scale(14), fontSize: moderateScale(15), backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.inputText },
+    passwordWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: moderateScale(10) },
+    passwordInput: { flex: 1, paddingVertical: verticalScale(12), paddingHorizontal: scale(14), fontSize: moderateScale(15) },
     inputError: { borderColor: `${colors.error}33` },
-    eyeButton: { paddingHorizontal: 12, justifyContent: 'center', alignItems: 'center' },
-    strengthBar: { height: 3, borderRadius: 3, overflow: 'hidden', marginTop: 8, backgroundColor: colors.border },
-    strengthFill: { height: '100%', borderRadius: 3 },
-    checksContainer: { borderRadius: 10, padding: 12, marginVertical: 12, gap: 8, backgroundColor: `${colors.primary}08` },
+    eyeButton: { paddingHorizontal: scale(12), justifyContent: 'center', alignItems: 'center' },
+    strengthBar: { height: verticalScale(3), borderRadius: moderateScale(3), overflow: 'hidden', marginTop: verticalScale(8), backgroundColor: colors.border },
+    strengthFill: { height: '100%', borderRadius: moderateScale(3) },
+    checksContainer: { borderRadius: moderateScale(10), padding: moderateScale(12), marginVertical: verticalScale(12), gap: 8, backgroundColor: `${colors.primary}08` },
     checkItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     checkItemOk: { opacity: 1 },
-    checkCircle: { width: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.border },
-    checkLabel: { fontSize: 12, fontWeight: '500', color: colors.textTertiary },
-    submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 18, borderRadius: 11, marginBottom: 12, backgroundColor: colors.primary },
+    checkCircle: { width: scale(16), height: verticalScale(16), borderRadius: moderateScale(8), justifyContent: 'center', alignItems: 'center', backgroundColor: colors.border },
+    checkLabel: { fontSize: moderateScale(12), fontWeight: '500', color: colors.textTertiary },
+    submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: verticalScale(14), paddingHorizontal: scale(18), borderRadius: moderateScale(11), marginBottom: verticalScale(12), backgroundColor: colors.primary },
     submitButtonDisabled: { opacity: 0.5 },
-    submitButtonText: { fontSize: 15, fontWeight: '700', letterSpacing: -0.3, color: colors.messageTextSent },
+    submitButtonText: { fontSize: moderateScale(15), fontWeight: '700', letterSpacing: -0.3, color: colors.messageTextSent },
     footerLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-    footerText: { fontSize: 13, color: colors.textSecondary },
-    linkText: { fontSize: 13, fontWeight: '600', color: colors.primary },
-    successContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
-    successCard: { borderRadius: 16, borderWidth: 1, padding: 32, alignItems: 'center', backgroundColor: colors.card, borderColor: colors.border },
-    successIcon: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', marginBottom: 20, backgroundColor: colors.success },
-    successHeading: { fontSize: 20, fontWeight: '800', marginBottom: 8, letterSpacing: -0.5, color: colors.textPrimary },
-    successText: { fontSize: 13, lineHeight: 20, textAlign: 'center', marginBottom: 8, color: colors.textSecondary },
+    footerText: { fontSize: moderateScale(13), color: colors.textSecondary },
+    linkText: { fontSize: moderateScale(13), fontWeight: '600', color: colors.primary },
+    successContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(20) },
+    successCard: { borderRadius: moderateScale(16), borderWidth: 1, padding: moderateScale(32), alignItems: 'center', backgroundColor: colors.card, borderColor: colors.border },
+    successIcon: { width: scale(64), height: verticalScale(64), borderRadius: moderateScale(32), justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(20), backgroundColor: colors.success },
+    successHeading: { fontSize: moderateScale(20), fontWeight: '800', marginBottom: verticalScale(8), letterSpacing: -0.5, color: colors.textPrimary },
+    successText: { fontSize: moderateScale(13), lineHeight: 20, textAlign: 'center', marginBottom: verticalScale(8), color: colors.textSecondary },
     successEmail: { fontWeight: '600', color: colors.primary },
-    successButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 10, marginTop: 20, backgroundColor: colors.primary },
-    successButtonText: { fontSize: 14, fontWeight: '700', letterSpacing: -0.3, color: colors.messageTextSent },
+    successButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: verticalScale(12), paddingHorizontal: scale(28), borderRadius: moderateScale(10), marginTop: verticalScale(20), backgroundColor: colors.primary },
+    successButtonText: { fontSize: moderateScale(14), fontWeight: '700', letterSpacing: -0.3, color: colors.messageTextSent },
   });
 
 export default RegisterScreen;

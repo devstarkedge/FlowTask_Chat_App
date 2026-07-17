@@ -23,6 +23,8 @@ import { X, Clock, Bell, Calendar, Repeat as RepeatIcon } from 'lucide-react-nat
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { formatMessageTime } from '../utils/dateUtils';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const RECURRENCE_OPTIONS = ['None', 'Daily', 'Weekly', 'Monthly', 'Yearly'];
 
@@ -185,13 +187,13 @@ const ReminderModal = React.memo(function ReminderModal({
             </View>
           ) : (
             <View style={styles.customContainer}>
-              <TouchableOpacity onPress={() => setShowCustom(false)} style={{ marginBottom: 12 }}>
-                <Text style={{ color: colors.primary, fontSize: 14 }}>
+              <TouchableOpacity onPress={() => setShowCustom(false)} style={{ marginBottom: verticalScale(12) }}>
+                <Text style={{ color: colors.primary, fontSize: moderateScale(14) }}>
                   ← Back to quick options
                 </Text>
               </TouchableOpacity>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: verticalScale(12) }}>
                 <Calendar size={16} color={colors.textSecondary} />
                 <Text style={[styles.customLabel, { color: colors.textSecondary }]}>
                   Custom date & time
@@ -205,34 +207,34 @@ const ReminderModal = React.memo(function ReminderModal({
                     mode="datetime"
                     display="spinner"
                     onChange={handleDateChange}
-                    style={{ width: '100%', height: 120 }}
+                    style={{ width: '100%', height: verticalScale(120) }}
                     textColor={colors.textPrimary}
                     themeVariant={colors.effectiveTheme === 'dark' ? 'dark' : 'light'}
                   />
                 ) : (
                   <View style={{ width: '100%', gap: 12 }}>
                     <TouchableOpacity
-                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.backgroundSecondary, borderRadius: 8 }}
+                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: verticalScale(12), paddingHorizontal: scale(16), backgroundColor: colors.backgroundSecondary, borderRadius: moderateScale(8) }}
                       onPress={() => setShowAndroidDatePicker(true)}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <Calendar size={16} color={colors.textPrimary} />
-                        <Text style={{ color: colors.textPrimary, fontSize: 14 }}>Date</Text>
+                        <Text style={{ color: colors.textPrimary, fontSize: moderateScale(14) }}>Date</Text>
                       </View>
-                      <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}>
+                      <Text style={{ color: colors.primary, fontSize: moderateScale(14), fontWeight: '600' }}>
                         {customDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </Text>
                     </TouchableOpacity>
                     
                     <TouchableOpacity
-                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.backgroundSecondary, borderRadius: 8 }}
+                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: verticalScale(12), paddingHorizontal: scale(16), backgroundColor: colors.backgroundSecondary, borderRadius: moderateScale(8) }}
                       onPress={() => setShowAndroidTimePicker(true)}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <Clock size={16} color={colors.textPrimary} />
-                        <Text style={{ color: colors.textPrimary, fontSize: 14 }}>Time</Text>
+                        <Text style={{ color: colors.textPrimary, fontSize: moderateScale(14) }}>Time</Text>
                       </View>
-                      <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}>
+                      <Text style={{ color: colors.primary, fontSize: moderateScale(14), fontWeight: '600' }}>
                         {formatMessageTime(customDate)}
                       </Text>
                     </TouchableOpacity>
@@ -241,21 +243,21 @@ const ReminderModal = React.memo(function ReminderModal({
 
                 {/* Repeat Button */}
                 <TouchableOpacity
-                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.backgroundSecondary, borderRadius: 8 }}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingVertical: verticalScale(12), paddingHorizontal: scale(16), backgroundColor: colors.backgroundSecondary, borderRadius: moderateScale(8) }}
                   onPress={() => setShowRecurrencePicker(true)}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <RepeatIcon size={16} color={colors.textPrimary} />
-                    <Text style={{ color: colors.textPrimary, fontSize: 14 }}>Repeat</Text>
+                    <Text style={{ color: colors.textPrimary, fontSize: moderateScale(14) }}>Repeat</Text>
                   </View>
-                  <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}>{recurrence}</Text>
+                  <Text style={{ color: colors.primary, fontSize: moderateScale(14), fontWeight: '600' }}>{recurrence}</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity
                   style={[styles.setButton, { backgroundColor: colors.primary, width: '100%', alignItems: 'center' }]}
                   onPress={handleCustomSubmit}
                 >
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Set Reminder</Text>
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: moderateScale(15) }}>Set Reminder</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -267,20 +269,20 @@ const ReminderModal = React.memo(function ReminderModal({
       {showRecurrencePicker && (
         <Modal transparent animationType="fade">
           <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowRecurrencePicker(false)}>
-            <View style={[styles.container, { backgroundColor: colors.background, paddingBottom: 16 }]}>
+            <View style={[styles.container, { backgroundColor: colors.background, paddingBottom: verticalScale(16) }]}>
               <View style={[styles.header, { borderBottomColor: colors.border, justifyContent: 'center' }]}>
-                <Text style={{ fontSize: 16, fontWeight: '600', color: colors.textPrimary }}>Repeat</Text>
+                <Text style={{ fontSize: moderateScale(16), fontWeight: '600', color: colors.textPrimary }}>Repeat</Text>
               </View>
               {RECURRENCE_OPTIONS.map((opt) => (
                 <TouchableOpacity
                   key={opt}
-                  style={{ paddingVertical: 16, paddingHorizontal: 24, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}
+                  style={{ paddingVertical: verticalScale(16), paddingHorizontal: scale(24), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}
                   onPress={() => {
                     setRecurrence(opt);
                     setShowRecurrencePicker(false);
                   }}
                 >
-                  <Text style={{ fontSize: 16, color: recurrence === opt ? colors.primary : colors.textPrimary }}>{opt}</Text>
+                  <Text style={{ fontSize: moderateScale(16), color: recurrence === opt ? colors.primary : colors.textPrimary }}>{opt}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -317,8 +319,8 @@ const styles = StyleSheet.create({
   },
   container: {
     width: '85%',
-    maxWidth: 380,
-    borderRadius: 16,
+    maxWidth: scale(380),
+    borderRadius: moderateScale(16),
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -326,51 +328,51 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
     borderBottomWidth: 1,
   },
   title: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
   },
   closeButton: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   optionsContainer: {
-    paddingVertical: 4,
+    paddingVertical: verticalScale(4),
   },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   optionText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     flex: 1,
   },
   customContainer: {
-    padding: 16,
+    padding: moderateScale(16),
   },
   customLabel: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '600',
   },
   dateInput: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    borderRadius: moderateScale(8),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(10),
+    fontSize: moderateScale(14),
   },
   setButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(10),
+    borderRadius: moderateScale(8),
   },
 });
 

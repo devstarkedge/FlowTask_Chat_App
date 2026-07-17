@@ -50,7 +50,7 @@ export const useChatStore = create((set, get) => ({
   sendMessage: async (channelId, content, options = {}) => {
     const user = useAuthStore.getState().user;
     const tempId = `temp-${Date.now()}`;
-    const { htmlContent, threadId, fileReferences, mentions, scheduledAt } = options;
+    const { htmlContent, threadId, fileReferences, mentions, scheduledAt, contentType, gifMeta, audioMeta, videoMeta } = options;
     
     // If scheduledAt is present, delegate to scheduledStore
     if (scheduledAt) {
@@ -60,6 +60,9 @@ export const useChatStore = create((set, get) => ({
         if (threadId) payload.threadId = threadId;
         if (fileReferences?.length) payload.fileReferences = fileReferences;
         if (mentions?.length) payload.mentions = mentions;
+        if (contentType) payload.contentType = contentType;
+        if (audioMeta) payload.audioMeta = audioMeta;
+        if (videoMeta) payload.videoMeta = videoMeta;
         
         return await useScheduledStore.getState().createScheduledMessage(channelId, payload);
       } catch (error) {
@@ -74,6 +77,11 @@ export const useChatStore = create((set, get) => ({
       channelId,
       content,
       htmlContent,
+      contentType: contentType || 'text',
+      gifMeta: gifMeta || undefined,
+      gifUrl: gifMeta?.gifUrl || undefined,
+      audioMeta,
+      videoMeta,
       authorId: user,
       senderSnapshot: {
         name: user?.name || 'You',
@@ -94,6 +102,10 @@ export const useChatStore = create((set, get) => ({
       if (threadId) payload.threadId = threadId;
       if (fileReferences?.length) payload.fileReferences = fileReferences;
       if (mentions?.length) payload.mentions = mentions;
+      if (contentType) payload.contentType = contentType;
+      if (gifMeta) payload.gifMeta = gifMeta;
+      if (audioMeta) payload.audioMeta = audioMeta;
+      if (videoMeta) payload.videoMeta = videoMeta;
 
       const { data } = await api.post(`/channels/${channelId}/messages`, payload);
       const serverMessage = data.data.message;

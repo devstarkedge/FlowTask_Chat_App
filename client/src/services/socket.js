@@ -62,6 +62,7 @@ const SOCKET_EVENTS = {
   USER_ONLINE: 'presence:online',
   USER_OFFLINE: 'presence:offline',
   USER_AWAY: 'presence:away',
+  PRESENCE_SYNC: 'presence:sync',
 
   // Channels
   CHANNEL_ADDED: 'channel:added',
@@ -480,6 +481,42 @@ export function connectSocket() {
     usePresenceStore.getState().setUserPresence(userId, 'away')
     if (flowTaskUserId) {
       usePresenceStore.getState().setUserPresence(flowTaskUserId, 'away')
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.PRESENCE_SYNC, ({ users }) => {
+    if (!users || !Array.isArray(users)) return
+    const store = usePresenceStore.getState()
+    for (const u of users) {
+      const id = u.userId || u._id
+      if (id) {
+        store.setUserPresence(id, u.onlineStatus)
+      }
+      if (u.flowTaskUserId) {
+        store.setUserPresence(u.flowTaskUserId, u.onlineStatus)
+      }
+      
+      // If this is the current user, update authStore
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser && (currentUser._id === id || currentUser.flowTaskUserId === u.flowTaskUserId)) {
+        useAuthStore.setState(state => ({
+          user: { 
+            ...state.user, 
+            onlineStatus: u.onlineStatus, 
+            customStatus: u.customStatus || state.user.customStatus 
+          }
+        }))
+      }
+    }
+    logger.log('[Socket] Initial presence synced', users.length, 'users')
+  })
+
+  socket.on('user:preferences_updated', ({ chatPreferences }) => {
+    const currentUser = useAuthStore.getState().user;
+    if (currentUser) {
+      useAuthStore.setState({ 
+        user: { ...currentUser, chatPreferences: { ...currentUser.chatPreferences, ...chatPreferences } }
+      })
     }
   })
 

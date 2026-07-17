@@ -365,18 +365,61 @@ export const connectSocket = async () => {
     import('../stores/workspaceStore').then(({ useWorkspaceStore }) => {
       useWorkspaceStore.getState().updateMemberProfile(userId, { onlineStatus: 'online' });
     });
+    useChannelStore.getState().updateMemberPresence(userId, 'online');
   });
 
   socket.on('presence:offline', ({ userId }) => {
     import('../stores/workspaceStore').then(({ useWorkspaceStore }) => {
       useWorkspaceStore.getState().updateMemberProfile(userId, { onlineStatus: 'offline' });
     });
+    useChannelStore.getState().updateMemberPresence(userId, 'offline');
   });
 
   socket.on('presence:away', ({ userId }) => {
     import('../stores/workspaceStore').then(({ useWorkspaceStore }) => {
       useWorkspaceStore.getState().updateMemberProfile(userId, { onlineStatus: 'away' });
     });
+    useChannelStore.getState().updateMemberPresence(userId, 'away');
+  });
+
+  socket.on('presence:sync', ({ users }) => {
+    if (!users || !Array.isArray(users)) return;
+    const presenceUpdates = {};
+    users.forEach(u => {
+      if (u.userId) {
+        presenceUpdates[u.userId] = u.onlineStatus;
+      }
+      if (u.flowTaskUserId) {
+        presenceUpdates[u.flowTaskUserId] = u.onlineStatus;
+      }
+      if (u._id) {
+        presenceUpdates[u._id] = u.onlineStatus;
+        // If this is the current user, update authStore
+        const currentUser = useAuthStore.getState().user;
+        if (currentUser && (currentUser._id === u._id || currentUser.flowTaskUserId === u.flowTaskUserId)) {
+          useAuthStore.setState(state => ({
+            user: { ...state.user, onlineStatus: u.onlineStatus, customStatus: u.customStatus || state.user.customStatus }
+          }));
+        }
+      }
+    });
+
+    if (Object.keys(presenceUpdates).length > 0) {
+      import('../stores/workspaceStore').then(({ useWorkspaceStore }) => {
+        useWorkspaceStore.getState().updatePresenceBatch(presenceUpdates);
+      });
+    }
+    logger.log('[Socket] Initial presence synced', users.length, 'users');
+  });
+
+  socket.on('user:preferences_updated', ({ chatPreferences }) => {
+    const currentUser = useAuthStore.getState().user;
+    if (currentUser) {
+      const updatedUser = { ...currentUser, chatPreferences: { ...currentUser.chatPreferences, ...chatPreferences } };
+      useAuthStore.setState({ user: updatedUser });
+      // We don't have direct access to storage here, but state is updated.
+      // Next app reload will fetch it from server or it will be persisted if we add a helper.
+    }
   });
 
   // ─── Draft Sync Events (cross-device) ──────────────────────────────────

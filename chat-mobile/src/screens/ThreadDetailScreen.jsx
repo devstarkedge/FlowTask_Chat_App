@@ -214,7 +214,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                 {formatRelativeTimeLong(item.createdAt).replace(' minutes', 'm').replace(' hours', 'h').replace(' days', 'd')}
               </Text>
             </View>
-            <View style={{ maxHeight: 250, overflow: 'hidden' }}>
+            <View style={{ maxHeight: verticalScale(250), overflow: 'hidden' }}>
               {!!(item.htmlContent || item.content) && (
                 <RichText
                   html={item.htmlContent || (/<[a-z][\s\S]*>/i.test(item.content) ? item.content : undefined)}
@@ -224,17 +224,17 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                     navigation.navigate('UserProfile', { user: { _id: userId }, channelId });
                   }}
                   colors={{ ...colors, textPrimary: colors.textPrimary }}
-                  baseStyle={{ color: colors.textPrimary, fontSize: 15, lineHeight: 22 }}
+                  baseStyle={{ color: colors.textPrimary, fontSize: moderateScale(15), lineHeight: 22 }}
                 />
               )}
               {(!item.htmlContent && !item.content && itemAttachments.length > 0) && (
-                <Text style={{ color: colors.textSecondary, fontStyle: 'italic', fontSize: 14 }}>
+                <Text style={{ color: colors.textSecondary, fontStyle: 'italic', fontSize: moderateScale(14) }}>
                   [Media attached]
                 </Text>
               )}
             </View>
             {itemAttachments.length > 0 && (
-               <View style={{ marginTop: 4, width: '100%', gap: 4 }}>
+               <View style={{ marginTop: verticalScale(4), width: '100%', gap: 4 }}>
                   {itemAttachments.map((file, i) => (
                     <MobileFileCard key={file._id || i} file={file} colors={colors} />
                   ))}
@@ -338,24 +338,24 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                       navigation.navigate('UserProfile', { user: { _id: userId }, channelId });
                     }}
                     colors={{ ...colors, textPrimary: colors.textPrimary }}
-                    baseStyle={{ color: colors.textPrimary, fontSize: 16, lineHeight: 24 }}
+                    baseStyle={{ color: colors.textPrimary, fontSize: moderateScale(16), lineHeight: 24 }}
                   />
                 )}
                 {(!effectiveRoot.htmlContent && !effectiveRoot.content && effectiveRootAttachments.length > 0) && (
-                  <Text style={{ color: colors.textSecondary, fontStyle: 'italic', fontSize: 15 }}>
+                  <Text style={{ color: colors.textSecondary, fontStyle: 'italic', fontSize: moderateScale(15) }}>
                     [Media attached]
                   </Text>
                 )}
               </View>
               {effectiveRootAttachments.length > 0 && (
-                 <View style={{ marginTop: 8, width: '100%', gap: 4, paddingHorizontal: 16 }}>
+                 <View style={{ marginTop: verticalScale(8), width: '100%', gap: 4, paddingHorizontal: scale(16) }}>
                     {effectiveRootAttachments.map((file, i) => (
                       <MobileFileCard key={file._id || i} file={file} colors={colors} />
                     ))}
                  </View>
               )}
 
-              <View style={{ flexDirection: 'row', paddingHorizontal: 16, marginTop: 12 }}>
+              <View style={{ flexDirection: 'row', paddingHorizontal: scale(16), marginTop: verticalScale(12) }}>
                 <ReactionBar
                   reactions={effectiveRoot.reactions}
                   messageId={effectiveRoot._id}
@@ -518,7 +518,7 @@ const createStyles = (colors) => StyleSheet.create({
     borderBottomWidth: 1,
   },
   backButton: {
-    padding: 8,
+    padding: moderateScale(8),
     marginRight: scale(8),
   },
   headerCenter: {
@@ -538,7 +538,7 @@ const createStyles = (colors) => StyleSheet.create({
     gap: 16,
   },
   headerRightIcon: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   repliesList: {
     paddingBottom: verticalScale(24),
@@ -603,7 +603,7 @@ const createStyles = (colors) => StyleSheet.create({
     gap: 16,
   },
   actionIcon: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   dateSeparator: {
     flexDirection: 'row',
@@ -666,7 +666,7 @@ const createStyles = (colors) => StyleSheet.create({
     minHeight: verticalScale(48),
   },
   plusButton: {
-    padding: 8,
+    padding: moderateScale(8),
     marginRight: scale(4),
   },
   input: {
@@ -676,10 +676,10 @@ const createStyles = (colors) => StyleSheet.create({
     paddingVertical: verticalScale(10),
   },
   micButton: {
-    padding: 8,
+    padding: moderateScale(8),
   },
   sendButton: {
-    padding: 8,
+    padding: moderateScale(8),
     paddingHorizontal: scale(12),
   },
   actionsOverlay: {
@@ -694,7 +694,7 @@ const createStyles = (colors) => StyleSheet.create({
     paddingBottom: verticalScale(24), // safe area
   },
   actionsHeader: {
-    padding: 16,
+    padding: moderateScale(16),
     borderBottomWidth: 1,
   },
   actionsTitle: {

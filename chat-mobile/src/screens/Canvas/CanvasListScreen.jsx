@@ -36,6 +36,8 @@ import { useCanvasStore } from '../../stores/canvasStore';
 import { useThemeStore } from '../../stores/themeStore';
 import CanvasCard from '../../components/canvas/CanvasCard';
 import { CATEGORIES, TEMPLATES, buildTemplateContent } from '../../utils/templates';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -498,7 +500,7 @@ export default function CanvasListScreen({ route, navigation }) {
 
               {/* ── STEP 1: CHOICE INTENT SELECTOR (Blank / Template / Link) ── */}
               {modalStep === 'choice' && (
-                <View style={{ flex: 1, padding: 20 }}>
+                <View style={{ flex: 1, padding: moderateScale(20) }}>
                   <View style={styles.modalChoiceHeader}>
                     <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Create canvas</Text>
                     <TouchableOpacity onPress={closeCreateModal} style={styles.modalCloseBtn}>
@@ -569,7 +571,7 @@ export default function CanvasListScreen({ route, navigation }) {
                     <TouchableOpacity onPress={() => setModalStep('choice')} style={styles.modalBackIconBtn}>
                       <ChevronLeft size={22} color={colors.textPrimary} />
                     </TouchableOpacity>
-                    <Text style={[styles.modalTitle, { color: colors.textPrimary, flex: 1, marginLeft: 8 }]}>
+                    <Text style={[styles.modalTitle, { color: colors.textPrimary, flex: 1, marginLeft: scale(8) }]}>
                       From template
                     </Text>
                     <TouchableOpacity onPress={closeCreateModal} style={styles.modalCloseBtn}>
@@ -591,7 +593,7 @@ export default function CanvasListScreen({ route, navigation }) {
                   </View>
 
                   {/* Category Scroll tabs */}
-                  <View style={{ height: 44, marginVertical: 4 }}>
+                  <View style={{ height: verticalScale(44), marginVertical: verticalScale(4) }}>
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
@@ -638,7 +640,7 @@ export default function CanvasListScreen({ route, navigation }) {
                     <TouchableOpacity onPress={() => setModalStep('templates_list')} style={styles.modalBackIconBtn}>
                       <ChevronLeft size={22} color={colors.textPrimary} />
                     </TouchableOpacity>
-                    <Text style={[styles.modalTitle, { color: colors.textPrimary, flex: 1, marginLeft: 8 }]}>
+                    <Text style={[styles.modalTitle, { color: colors.textPrimary, flex: 1, marginLeft: scale(8) }]}>
                       Configure Template
                     </Text>
                     <TouchableOpacity onPress={closeCreateModal} style={styles.modalCloseBtn}>
@@ -652,7 +654,7 @@ export default function CanvasListScreen({ route, navigation }) {
                         <View style={[styles.templateRowIconWrap, { backgroundColor: selectedTemplate.iconBg }]}>
                           {React.createElement(selectedTemplate.icon || FileText, { size: 18, color: selectedTemplate.iconColor })}
                         </View>
-                        <View style={{ marginLeft: 12, flex: 1 }}>
+                        <View style={{ marginLeft: scale(12), flex: 1 }}>
                           <Text style={[styles.selectedTemplateLabel, { color: colors.textPrimary }]}>{selectedTemplate.label}</Text>
                           <Text style={[styles.selectedTemplateCategory, { color: colors.textSecondary }]}>{selectedTemplate.category || 'General'}</Text>
                         </View>
@@ -711,7 +713,7 @@ export default function CanvasListScreen({ route, navigation }) {
                       {selectedTemplate.variables && selectedTemplate.variables.length > 0 && (
                         <View style={styles.formGroup}>
                           <View style={styles.prefillToggleRow}>
-                            <Text style={[styles.inputLabel, { color: colors.textSecondary, marginBottom: 0 }]}>
+                            <Text style={[styles.inputLabel, { color: colors.textSecondary, marginBottom: verticalScale(0) }]}>
                               Auto-Fill Variables
                             </Text>
                             <Switch
@@ -776,7 +778,7 @@ export default function CanvasListScreen({ route, navigation }) {
                     <TouchableOpacity onPress={() => setModalStep('choice')} style={styles.modalBackIconBtn}>
                       <ChevronLeft size={22} color={colors.textPrimary} />
                     </TouchableOpacity>
-                    <Text style={[styles.modalTitle, { color: colors.textPrimary, flex: 1, marginLeft: 8 }]}>
+                    <Text style={[styles.modalTitle, { color: colors.textPrimary, flex: 1, marginLeft: scale(8) }]}>
                       Link existing canvas
                     </Text>
                     <TouchableOpacity onPress={closeCreateModal} style={styles.modalCloseBtn}>
@@ -804,7 +806,7 @@ export default function CanvasListScreen({ route, navigation }) {
                   ) : filteredExisting.length === 0 ? (
                     <View style={styles.empty}>
                       <FileText size={32} color={colors.border} />
-                      <Text style={[styles.emptyTitle, { color: colors.textPrimary, fontSize: 14 }]}>
+                      <Text style={[styles.emptyTitle, { color: colors.textPrimary, fontSize: moderateScale(14) }]}>
                         No canvases found
                       </Text>
                     </View>
@@ -829,7 +831,7 @@ export default function CanvasListScreen({ route, navigation }) {
                             {item.updatedAt && (
                               <View style={styles.timeInfoRow}>
                                 <Clock size={10} color={colors.textTertiary} />
-                                <Text style={[styles.timeText, { color: colors.textTertiary, marginLeft: 4 }]}>
+                                <Text style={[styles.timeText, { color: colors.textTertiary, marginLeft: scale(4) }]}>
                                   {new Date(item.updatedAt).toLocaleDateString(undefined, {
                                     month: 'short',
                                     day: 'numeric',
@@ -858,56 +860,56 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   backBtn: {
-    marginRight: 12,
-    paddingVertical: 4,
-    paddingHorizontal: 2,
+    marginRight: scale(12),
+    paddingVertical: verticalScale(4),
+    paddingHorizontal: scale(2),
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingHorizontal: scale(16),
+    paddingTop: verticalScale(16),
+    paddingBottom: verticalScale(12),
     borderBottomWidth: 1,
   },
   headerTitleContainer: {
     flex: 1,
   },
   title: {
-    fontSize: 20,
+    fontSize: moderateScale(20),
     fontWeight: '700',
   },
   subtitle: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: moderateScale(12),
+    marginTop: verticalScale(2),
   },
   createBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: scale(36),
+    height: verticalScale(36),
+    borderRadius: moderateScale(18),
     alignItems: 'center',
     justifyContent: 'center',
   },
   searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    margin: 16,
-    borderRadius: 8,
+    margin: moderateScale(16),
+    borderRadius: moderateScale(8),
     borderWidth: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: scale(12),
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: scale(8),
   },
   searchInput: {
     flex: 1,
-    height: 40,
-    fontSize: 14,
+    height: verticalScale(40),
+    fontSize: moderateScale(14),
   },
   list: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingHorizontal: scale(16),
+    paddingBottom: verticalScale(24),
   },
   centered: {
     flex: 1,
@@ -918,30 +920,30 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
+    padding: moderateScale(32),
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '600',
-    marginTop: 16,
+    marginTop: verticalScale(16),
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: verticalScale(8),
   },
   emptyCreateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginTop: 20,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(10),
+    borderRadius: moderateScale(8),
+    marginTop: verticalScale(20),
     gap: 6,
   },
   emptyCreateBtnText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
   },
   // ── Modal Styles ───────────────────────────────────────────────────────────
@@ -958,189 +960,189 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     height: SCREEN_HEIGHT * 0.85,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
+    shadowOffset: { width: scale(0), height: -4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
   },
   modalDragHandle: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
+    width: scale(38),
+    height: verticalScale(4),
+    borderRadius: moderateScale(2),
     backgroundColor: '#e5e7eb',
     alignSelf: 'center',
-    marginTop: 8,
-    marginBottom: 4,
+    marginTop: verticalScale(8),
+    marginBottom: verticalScale(4),
   },
   modalHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 14,
+    paddingHorizontal: scale(20),
+    paddingTop: verticalScale(8),
+    paddingBottom: verticalScale(14),
     borderBottomWidth: 1,
   },
   modalChoiceHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 20,
+    paddingBottom: verticalScale(20),
   },
   modalBackIconBtn: {
-    padding: 4,
-    marginRight: 4,
+    padding: moderateScale(4),
+    marginRight: scale(4),
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   modalCloseBtn: {
-    padding: 6,
+    padding: moderateScale(6),
   },
   // Choice Layout
   choiceOptionsList: {
-    marginVertical: 20,
+    marginVertical: verticalScale(20),
     gap: 12,
     flex: 1,
   },
   choiceCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 14,
+    padding: moderateScale(16),
+    borderRadius: moderateScale(14),
     borderWidth: 1,
   },
   choiceIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: scale(44),
+    height: verticalScale(44),
+    borderRadius: moderateScale(10),
     alignItems: 'center',
     justifyContent: 'center',
   },
   choiceTextWrap: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: scale(16),
   },
   choiceLabel: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '600',
   },
   choiceDesc: {
-    fontSize: 12,
-    marginTop: 3,
+    fontSize: moderateScale(12),
+    marginTop: verticalScale(3),
   },
   choiceFooterText: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: verticalScale(10),
   },
   // Template/Search Styles
   modalSearchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 20,
-    marginTop: 14,
-    marginBottom: 8,
-    borderRadius: 8,
+    marginHorizontal: scale(20),
+    marginTop: verticalScale(14),
+    marginBottom: verticalScale(8),
+    borderRadius: moderateScale(8),
     borderWidth: 1,
-    paddingHorizontal: 10,
-    height: 38,
+    paddingHorizontal: scale(10),
+    height: verticalScale(38),
   },
   modalSearchInput: {
     flex: 1,
-    fontSize: 13,
-    paddingVertical: 0,
+    fontSize: moderateScale(13),
+    paddingVertical: verticalScale(0),
   },
   categoryScroll: {
-    paddingHorizontal: 20,
+    paddingHorizontal: scale(20),
     alignItems: 'center',
     gap: 8,
   },
   categoryTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: scale(14),
+    paddingVertical: verticalScale(6),
+    borderRadius: moderateScale(16),
     borderWidth: 1,
   },
   categoryTabText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '600',
   },
   templateListScroll: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 32,
+    paddingHorizontal: scale(20),
+    paddingTop: verticalScale(8),
+    paddingBottom: verticalScale(32),
   },
   templateRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
+    padding: moderateScale(12),
+    borderRadius: moderateScale(12),
     borderWidth: 1,
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   templateRowIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
+    width: scale(38),
+    height: verticalScale(38),
+    borderRadius: moderateScale(8),
     alignItems: 'center',
     justifyContent: 'center',
   },
   templateRowText: {
     flex: 1,
-    marginLeft: 12,
-    marginRight: 8,
+    marginLeft: scale(12),
+    marginRight: scale(8),
   },
   templateRowLabel: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
   },
   templateRowDesc: {
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: moderateScale(11),
+    marginTop: verticalScale(2),
   },
   timeInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: verticalScale(4),
   },
   timeText: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
   },
   // ── Customization Layout ───────────────────────────────────────────────────
   customizeContainer: {
-    padding: 20,
+    padding: moderateScale(20),
   },
   selectedBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: verticalScale(20),
   },
   selectedTemplateLabel: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
   },
   selectedTemplateCategory: {
-    fontSize: 12,
-    marginTop: 1,
+    fontSize: moderateScale(12),
+    marginTop: verticalScale(1),
   },
   formGroup: {
-    marginBottom: 20,
+    marginBottom: verticalScale(20),
   },
   inputLabel: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   customTitleInput: {
-    height: 44,
+    height: verticalScale(44),
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    fontSize: 14,
+    borderRadius: moderateScale(8),
+    paddingHorizontal: scale(14),
+    fontSize: moderateScale(14),
   },
   coverSelectorRow: {
     flexDirection: 'row',
@@ -1148,8 +1150,8 @@ const styles = StyleSheet.create({
   },
   coverOptionBtn: {
     flex: 1,
-    height: 54,
-    borderRadius: 8,
+    height: verticalScale(54),
+    borderRadius: moderateScale(8),
     overflow: 'hidden',
   },
   coverOptionPreview: {
@@ -1159,7 +1161,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   coverOptionText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: '600',
     color: '#ffffff',
   },
@@ -1167,7 +1169,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: verticalScale(10),
   },
   variablesInputsList: {
     gap: 10,
@@ -1179,35 +1181,35 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   variableName: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '500',
     flex: 1,
     textTransform: 'capitalize',
   },
   variableInput: {
     width: SCREEN_WIDTH * 0.5,
-    height: 38,
+    height: verticalScale(38),
     borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    fontSize: 13,
+    borderRadius: moderateScale(6),
+    paddingHorizontal: scale(10),
+    fontSize: moderateScale(13),
   },
   modalFooter: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(14),
     borderTopWidth: 1,
   },
   createCanvasBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 46,
-    borderRadius: 10,
+    height: verticalScale(46),
+    borderRadius: moderateScale(10),
     gap: 8,
   },
   createCanvasBtnText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '600',
   },
 });

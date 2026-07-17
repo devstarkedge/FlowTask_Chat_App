@@ -4,6 +4,8 @@ import { ChevronLeft, ChevronDown } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { OptionsSelectionModal } from '../../components/common';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 const SWIPE_OPTIONS = {
   dmLeft: [
@@ -98,51 +100,51 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 12,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backButton: {
-    padding: 8,
+    padding: moderateScale(8),
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   headerRight: {
-    width: 44,
+    width: scale(44),
   },
   content: {
-    padding: 20,
+    padding: moderateScale(20),
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '700',
-    marginBottom: 20,
+    marginBottom: verticalScale(20),
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
   },
   rowLabel: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
   },
   dropdownButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(10),
+    borderRadius: moderateScale(8),
     gap: 8,
   },
   dropdownText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '500',
   },
   spacing: {
-    height: 16,
+    height: verticalScale(16),
   }
 });
 

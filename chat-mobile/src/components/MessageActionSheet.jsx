@@ -23,6 +23,8 @@ import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { applySkinTone } from '../utils/emojiUtils';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const QUICK_EMOJIS = ['🎉', '👍', '😂', '🙂', '✅'];
 
@@ -157,7 +159,7 @@ const MessageActionSheet = ({
               style={[styles.bigActionBtn, { backgroundColor: colors.backgroundSecondary }]}
               onPress={() => { onClose(); setTimeout(() => onForward(), 100); }}
             >
-              <Forward size={24} color={colors.textPrimary} style={{ marginBottom: 8 }} />
+              <Forward size={24} color={colors.textPrimary} style={{ marginBottom: verticalScale(8) }} />
               <Text style={[styles.bigActionText, { color: colors.textPrimary }]}>Forward</Text>
             </TouchableOpacity>
 
@@ -168,7 +170,7 @@ const MessageActionSheet = ({
               <Bookmark
                 size={24}
                 color={colors.textPrimary}
-                style={{ marginBottom: 8 }}
+                style={{ marginBottom: verticalScale(8) }}
                 fill={isSaved ? colors.textPrimary : 'transparent'}
               />
               <Text style={[styles.bigActionText, { color: colors.textPrimary }]}>
@@ -181,7 +183,7 @@ const MessageActionSheet = ({
                 style={[styles.bigActionBtn, { backgroundColor: colors.backgroundSecondary }]}
                 onPress={() => { onClose(); setTimeout(() => onReply(message), 100); }}
               >
-                <MessageSquare size={24} color={colors.textPrimary} style={{ marginBottom: 8 }} />
+                <MessageSquare size={24} color={colors.textPrimary} style={{ marginBottom: verticalScale(8) }} />
                 <Text style={[styles.bigActionText, { color: colors.textPrimary }]}>Reply</Text>
               </TouchableOpacity>
             )}
@@ -236,7 +238,7 @@ const MessageActionSheet = ({
               </>
             )}
 
-            <View style={{ height: 24 }} />
+            <View style={{ height: verticalScale(24) }} />
           </ScrollView>
         </View>
       </TouchableOpacity>
@@ -253,51 +255,51 @@ const styles = StyleSheet.create({
   sheetContainer: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: scale(16),
+    paddingTop: verticalScale(8),
     maxHeight: '90%',
   },
   indicatorContainer: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   indicator: {
-    width: 40,
-    height: 5,
-    borderRadius: 3,
+    width: scale(40),
+    height: verticalScale(5),
+    borderRadius: moderateScale(3),
   },
   emojisRow: {
-    marginBottom: 20,
+    marginBottom: verticalScale(20),
   },
   emojisScroll: {
     gap: 16,
-    paddingHorizontal: 8,
+    paddingHorizontal: scale(8),
     alignItems: 'center',
   },
   emojiCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: scale(50),
+    height: verticalScale(50),
+    borderRadius: moderateScale(25),
     alignItems: 'center',
     justifyContent: 'center',
   },
   emojiText: {
-    fontSize: 24,
+    fontSize: moderateScale(24),
   },
   bigActionsRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
   },
   bigActionBtn: {
     flex: 1,
-    height: 90,
-    borderRadius: 16,
+    height: verticalScale(90),
+    borderRadius: moderateScale(16),
     alignItems: 'center',
     justifyContent: 'center',
   },
   bigActionText: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '600',
   },
   listContainer: {
@@ -306,16 +308,16 @@ const styles = StyleSheet.create({
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: verticalScale(14),
     gap: 16,
   },
   listItemText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '400',
   },
   divider: {
     height: StyleSheet.hairlineWidth,
-    marginVertical: 4,
+    marginVertical: verticalScale(4),
   },
 });
 

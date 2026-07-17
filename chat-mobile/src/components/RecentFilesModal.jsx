@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { X, FileText, Image as ImageIcon, Video, Music } from 'lucide-react-native';
 import { fileAPI } from '../services/api';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 export default function RecentFilesModal({ visible, onClose, onSelectFile, colors }) {
   const [files, setFiles] = useState([]);
@@ -89,7 +91,7 @@ export default function RecentFilesModal({ visible, onClose, onSelectFile, color
             <X size={22} color={colors.textSecondary} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: colors.textPrimary }]}>Recent Files</Text>
-          <View style={{ width: 36 }} />
+          <View style={{ width: scale(36) }} />
         </View>
 
         {loading ? (
@@ -119,31 +121,31 @@ export default function RecentFilesModal({ visible, onClose, onSelectFile, color
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: 40 },
+  container: { flex: 1, paddingTop: verticalScale(40) },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingHorizontal: scale(16),
+    paddingBottom: verticalScale(16),
     borderBottomWidth: 1,
   },
-  closeBtn: { padding: 4 },
-  title: { fontSize: 18, fontWeight: '700' },
-  list: { paddingHorizontal: 16, paddingBottom: 24 },
+  closeBtn: { padding: moderateScale(4) },
+  title: { fontSize: moderateScale(18), fontWeight: '700' },
+  list: { paddingHorizontal: scale(16), paddingBottom: verticalScale(24) },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: verticalScale(12),
     borderBottomWidth: 1,
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: scale(40),
+    height: verticalScale(40),
+    borderRadius: moderateScale(8),
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: scale(12),
     overflow: 'hidden',
   },
   thumbnail: {
@@ -151,8 +153,8 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   itemInfo: { flex: 1 },
-  itemTitle: { fontSize: 16, fontWeight: '500', marginBottom: 2 },
-  itemSub: { fontSize: 12 },
+  itemTitle: { fontSize: moderateScale(16), fontWeight: '500', marginBottom: verticalScale(2) },
+  itemSub: { fontSize: moderateScale(12) },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  empty: { textAlign: 'center', marginTop: 40 },
+  empty: { textAlign: 'center', marginTop: verticalScale(40) },
 });

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+import { useWindowDimensions } from 'react-native';
 
 import {
   View,
@@ -36,6 +37,8 @@ import MessageActionSheet from "../../components/MessageActionSheet";
 import ForwardMessageModal from "../../components/ForwardMessageModal";
 import EmojiPickerModal from "../../components/EmojiPickerModal";
 import ReminderModal from "../../components/ReminderModal";
+import AudioMessagePlayer from "../../components/AudioMessagePlayer";
+import VideoMessagePlayer from "../../components/VideoMessagePlayer";
 import {
   Send,
   Hash,
@@ -133,6 +136,44 @@ const isImageUrl = (url) => {
   return /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$/i.test(url);
 };
 
+// ─── GifRenderer ─────────────────────────────────────────────────────────────
+
+const GifRenderer = ({ item, contentColor, styles }) => {
+  const { width: screenWidth } = useWindowDimensions();
+  const MAX_WIDTH = Math.min(Math.floor(screenWidth * 0.55), 220);
+  const MAX_HEIGHT = 220;
+
+  const srcW = item.gifMeta.width || MAX_WIDTH;
+  const srcH = item.gifMeta.height || MAX_HEIGHT;
+
+  const scale = Math.min(1, MAX_WIDTH / srcW, MAX_HEIGHT / srcH);
+  const displayW = Math.floor(srcW * scale);
+  const displayH = Math.floor(srcH * scale);
+
+  const uri = item.gifUrl || item.gifMeta.gifUrl || item.gifMeta.previewUrl;
+
+  return (
+    <View style={{ marginTop: item.content ? 8 : 0, alignSelf: 'flex-start', width: '100%' }}>
+      {item.content ? (
+        <Text style={[styles.messageText, { color: contentColor, marginBottom: verticalScale(8) }]}>
+          {item.content}
+        </Text>
+      ) : null}
+      <Image
+        source={{ uri }}
+        style={{ 
+          width: displayW, 
+          height: displayH, 
+          maxWidth: '100%', 
+          borderRadius: moderateScale(8),
+          aspectRatio: srcW / srcH,
+        }}
+        resizeMode="contain"
+      />
+    </View>
+  );
+};
+
 // ─── ChatScreen ──────────────────────────────────────────────────────────────
 
 const ChatScreen = ({ route, navigation }) => {
@@ -168,6 +209,8 @@ const ChatScreen = ({ route, navigation }) => {
   const markAsRead = useChannelStore((s) => s.markAsRead);
   const { colors } = useThemeStore(useShallow((s) => ({ colors: s.colors })));
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  // Subscribe to workspace members for live presence updates in the DM header
+  const workspaceMembers = useWorkspaceStore(useShallow((s) => s.members));
   const toggleSaveMessage = useLaterStore((s) => s.toggleSaveMessage);
   const isMessageSaved = useLaterStore((s) => s.isMessageSaved);
 
@@ -330,15 +373,24 @@ const ChatScreen = ({ route, navigation }) => {
     if (!isDM) return null;
     // Try membersByChannel first — has full user data including avatar
     const other = channelMembers.find((m) => m._id !== user?._id);
-    if (other) return other;
-    // Fallback to channel decorated fields
-    return {
+    const base = other ?? {
       _id: channel?.dmRecipientId,
       name: channel?.name || channelName,
       avatar: channel?.avatar || null,
       onlineStatus: channel?.onlineStatus || 'offline',
     };
-  }, [isDM, channelMembers, channel, user, channelName]);
+    // Merge live onlineStatus from workspaceStore so presence socket events
+    // are reflected in the header avatar immediately without a full member refetch.
+    const recipientId = base._id;
+    const liveMember = recipientId
+      ? workspaceMembers.find(
+          (m) => m._id === recipientId || m.userId?._id === recipientId
+        )
+      : null;
+    const liveStatus =
+      liveMember?.onlineStatus ?? liveMember?.userId?.onlineStatus;
+    return liveStatus ? { ...base, onlineStatus: liveStatus } : base;
+  }, [isDM, channelMembers, channel, user, channelName, workspaceMembers]);
 
   const channelNameToShow = useMemo(() => {
     if (isDM && dmUser) return dmUser.name;
@@ -560,7 +612,7 @@ const ChatScreen = ({ route, navigation }) => {
       <View 
         key={item._id} 
         style={highlightedMessageId === item._id 
-          ? { backgroundColor: colors.primary + '20', marginHorizontal: -12, paddingHorizontal: 12, paddingVertical: 4 } 
+          ? { backgroundColor: colors.primary + '20', marginHorizontal: -12, paddingHorizontal: scale(12), paddingVertical: verticalScale(4) } 
           : null}
       >
         {showDateSep && renderDateSeparator(item.createdAt)}
@@ -571,7 +623,7 @@ const ChatScreen = ({ route, navigation }) => {
             isMe ? styles.myMessage : styles.theirMessage,
             isCompact && styles.messageCompact,
           ]}
-          onLongPress={() => showMessageActions(item)}
+          onLongPress={() => !isDeleted && showMessageActions(item)}
           activeOpacity={0.85}
           delayLongPress={300}
         >
@@ -581,10 +633,10 @@ const ChatScreen = ({ route, navigation }) => {
               user={messageSender}
               size={32}
               showStatus={false}
-              style={{ marginTop: 2 }}
+              style={{ marginTop: verticalScale(2) }}
             />
           )}
-          {!isMe && isCompact && <View style={{ width: 32 }} />}
+          {!isMe && isCompact && <View style={{ width: scale(32) }} />}
 
           <View style={{ flexShrink: 1 }}>
             {/* Sender name (hidden for compact) */}
@@ -646,7 +698,7 @@ const ChatScreen = ({ route, navigation }) => {
                     { borderBottomColor: colors.border },
                   ]}
                 >
-                  <Reply size={12} color={contentColor} style={{ marginRight: 4, transform: [{ scaleX: -1 }] }} />
+                  <Reply size={12} color={contentColor} style={{ marginRight: scale(4), transform: [{ scaleX: -1 }] }} />
                   <Text style={[styles.forwardedText, { color: contentColor, opacity: 0.8 }]}>
                     Forwarded from{" "}
                     <Text style={{ fontWeight: "700" }}>
@@ -660,13 +712,30 @@ const ChatScreen = ({ route, navigation }) => {
                 </View>
               )}
 
-              {/* Content — rich text or plain */}
+              {/* Content — rich text, plain, or GIF */}
               {isDeleted ? (
                 <Text
                   style={[styles.messageText, { color: colors.textTertiary, fontStyle: "italic" }]}
                 >
                   {deletedText}
                 </Text>
+              ) : item.contentType === 'audio' || item.type === 'audio' ? (
+                <AudioMessagePlayer 
+                  audioUrl={item.audioUrl || item.audioMeta?.audioUrl || attachments[0]?.url || attachments[0]?.secureUrl} 
+                  duration={item.duration || item.audioMeta?.duration} 
+                  colors={colors} 
+                  isMe={isMe} 
+                />
+              ) : item.contentType === 'video' || item.type === 'video' ? (
+                <VideoMessagePlayer 
+                  videoUrl={item.videoUrl || item.videoMeta?.videoUrl || attachments[0]?.url || attachments[0]?.secureUrl} 
+                  thumbnailUrl={item.thumbnailUrl || item.videoMeta?.thumbnailUrl || attachments[0]?.thumbnailUrl} 
+                  width={item.width || item.videoMeta?.width}
+                  height={item.height || item.videoMeta?.height}
+                  colors={colors} 
+                />
+              ) : item.contentType === 'gif' && item.gifMeta ? (
+                <GifRenderer item={item} contentColor={contentColor} styles={styles} />
               ) : item.htmlContent ? (
                 <RichText
                   html={item.htmlContent}
@@ -688,7 +757,7 @@ const ChatScreen = ({ route, navigation }) => {
                       : colors.codeBlockBackground,
                     codeBlockText: isMe ? colors.textOnPrimary : colors.codeBlockText,
                   }}
-                  baseStyle={{ color: contentColor, fontSize: 15, lineHeight: 22 }}
+                  baseStyle={{ color: contentColor, fontSize: moderateScale(15), lineHeight: 22 }}
                 />
               ) : (
                 <Text
@@ -699,14 +768,14 @@ const ChatScreen = ({ route, navigation }) => {
               )}
 
               {isSaved && !isDeleted && (
-                <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: colors.card, borderRadius: 10, padding: 2, elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } }}>
+                <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: colors.card, borderRadius: moderateScale(10), padding: moderateScale(2), elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: scale(0), height: verticalScale(1) } }}>
                   <Bookmark size={10} color={colors.primary} fill={colors.primary} />
                 </View>
               )}
 
               {/* Attachment cards */}
               {!isDeleted && attachments.length > 0 && (
-                <View style={{ marginTop: 4, width: '100%', gap: 4 }}>
+                <View style={{ marginTop: verticalScale(4), width: '100%', gap: 4 }}>
                   {attachments.map((file, i) => (
                     <MobileFileCard
                       key={file._id || i}
@@ -763,15 +832,17 @@ const ChatScreen = ({ route, navigation }) => {
             </View>
 
             {/* Reactions */}
-            <ReactionBar
-              reactions={item.reactions}
-              messageId={item._id}
-              currentUserId={user?._id}
-              onAddReaction={(emoji) => addReaction(item._id, emoji)}
-              onRemoveReaction={(emoji) => removeReaction(item._id, emoji)}
-              onOpenPicker={() => setEmojiPickerTarget(item._id)}
-              colors={colors}
-            />
+            {!isDeleted && (
+              <ReactionBar
+                reactions={item.reactions}
+                messageId={item._id}
+                currentUserId={user?._id}
+                onAddReaction={(emoji) => addReaction(item._id, emoji)}
+                onRemoveReaction={(emoji) => removeReaction(item._id, emoji)}
+                onOpenPicker={() => setEmojiPickerTarget(item._id)}
+                colors={colors}
+              />
+            )}
 
             {/* Thread indicator */}
             {hasThread && (
@@ -827,7 +898,10 @@ const ChatScreen = ({ route, navigation }) => {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
-    <AppScreen style={[styles.container, { backgroundColor: colors.background }]}> 
+    <AppScreen 
+      style={[styles.container, { backgroundColor: colors.background }]} 
+      edges={['top', 'left', 'right']}
+    > 
 
       {/* Custom Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -1030,7 +1104,7 @@ const ChatScreen = ({ route, navigation }) => {
           ListFooterComponent={
             isLoadingMessages ? (
               <ActivityIndicator
-                style={{ margin: 10 }}
+                style={{ margin: moderateScale(10) }}
                 color={colors.primary}
               />
             ) : null
@@ -1223,7 +1297,7 @@ const createStyles = (colors) =>
       gap: 8,
     },
     backButton: {
-      padding: 4,
+      padding: moderateScale(4),
     },
     headerCenter: {
       flex: 1,
@@ -1266,7 +1340,7 @@ const createStyles = (colors) =>
       gap: 4,
     },
     headerButton: {
-      padding: 8,
+      padding: moderateScale(8),
     },
     optionsMenu: {
       borderBottomWidth: 1,
@@ -1306,6 +1380,7 @@ const createStyles = (colors) =>
       paddingVertical: verticalScale(8),
       borderRadius: moderateScale(18),
       maxWidth: "100%",
+      overflow: "hidden",
     },
     senderRow: {
       flexDirection: "row",
@@ -1362,7 +1437,7 @@ const createStyles = (colors) =>
     fileAttachment: {
       flexDirection: "row",
       alignItems: "center",
-      padding: 8,
+      padding: moderateScale(8),
       borderRadius: moderateScale(8),
       marginTop: verticalScale(4),
       gap: 8,
@@ -1479,15 +1554,15 @@ const createStyles = (colors) =>
     },
     tabUnderline: {
       position: 'absolute',
-      bottom: 0,
-      left: 12,
-      right: 12,
+      bottom: verticalScale(0),
+      left: scale(12),
+      right: scale(12),
       height: scale(2),
       borderRadius: moderateScale(1),
     },
     canvasTabContent: {
       flexGrow: 1,
-      padding: 24,
+      padding: moderateScale(24),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -1520,7 +1595,7 @@ const createStyles = (colors) =>
       gap: 8,
     },
     attachButton: {
-      padding: 8,
+      padding: moderateScale(8),
     },
     inputContainer: {
       flex: 1,
@@ -1552,7 +1627,7 @@ const createStyles = (colors) =>
       backgroundColor: 'rgba(0,0,0,0.5)',
       justifyContent: 'center',
       alignItems: 'center',
-      padding: 24,
+      padding: moderateScale(24),
     },
     actionsSheet: {
       borderRadius: moderateScale(16),

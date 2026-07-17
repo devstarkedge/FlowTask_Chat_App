@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Mail, Info, Check } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
 import { useAuthStore } from '../../stores/authStore';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 /**
  * WorkspaceEmailCard
@@ -56,18 +58,18 @@ const WorkspaceEmailCard = ({ onInfoPress }) => {
 
 const styles = StyleSheet.create({
   wrapper: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingHorizontal: scale(20),
+    paddingTop: verticalScale(8),
   },
   emailRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    paddingVertical: 16,
+    paddingVertical: verticalScale(16),
   },
   emailText: {
     flex: 1,
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '500',
     letterSpacing: -0.2,
   },
@@ -75,21 +77,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 4,
+    padding: moderateScale(14),
+    borderRadius: moderateScale(12),
+    marginBottom: verticalScale(4),
   },
   checkBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: scale(32),
+    height: verticalScale(32),
+    borderRadius: moderateScale(8),
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
   },
   statusText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '500',
     lineHeight: 20,
   },

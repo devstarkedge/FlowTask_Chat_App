@@ -49,6 +49,7 @@ import {
   CaseSensitive,
   Loader2,
   Mic,
+  Camera as CameraIcon,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import logger from "../utils/logger";
@@ -65,8 +66,12 @@ import MediaPickerSheet from "./MediaPickerSheet";
 import GifPickerModal from "./GifPickerModal";
 import RecentCanvasesModal from "./RecentCanvasesModal";
 import RecentFilesModal from "./RecentFilesModal";
+import AudioRecorderUI from "./AudioRecorderUI";
+import VideoRecorderModal from "./VideoRecorderModal";
+import { useAudioRecorder } from "../hooks/useAudioRecorder";
+import { useVideoRecorder } from "../hooks/useVideoRecorder";
 import { pellToTipTap } from "../utils/formatConverter";
-import { scale, verticalScale } from "../utils/responsive";
+import { scale, verticalScale, moderateScale } from "../utils/responsive";
 
 const stripHtml = (html) => {
   if (!html) return "";
@@ -200,6 +205,10 @@ const MessageComposer = React.memo(function MessageComposer({
   const [editorHeight, setEditorHeight] = useState(40);
   const insets = useSafeAreaInsets();
   
+  const audioRecorder = useAudioRecorder();
+  const videoRecorder = useVideoRecorder();
+  const [showVideoModal, setShowVideoModal] = useState(false);
+
   const { height: screenHeight } = Dimensions.get("window");
   const maxComposerHeight = Math.floor(screenHeight * 0.3);
 
@@ -570,6 +579,56 @@ const MessageComposer = React.memo(function MessageComposer({
     setPendingFiles((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
+  const handleMediaSend = useCallback(async (uri, type, duration) => {
+    const file = {
+      uri,
+      // Workaround: The production backend doesn't allow audio/m4a or audio/x-m4a, but it allows video/mp4.
+      // Since M4A and MP4 use the same container (ftyp), we can upload it as MP4 to bypass the validation.
+      name: type === 'audio' ? `audio_${Date.now()}.mp4` : `video_${Date.now()}.mp4`,
+      type: type === 'audio' ? 'video/mp4' : 'video/mp4',
+    };
+    
+    const localEntries = [{
+      name: file.name,
+      uploading: true,
+      uploadFailed: false,
+      _tempUri: uri,
+    }];
+    
+    setPendingFiles(prev => [...prev, ...localEntries]);
+    
+    try {
+      const formData = new FormData();
+      formData.append("files", {
+        uri: Platform.OS === "ios" ? uri.replace("file://", "") : uri,
+        name: file.name,
+        type: file.type,
+      });
+
+      const { data } = await fileAPI.uploadFiles(channelId, formData);
+      // Access uploaded file correctly:
+      const uploadedFile = data?.data?.files?.[0] || data?.data?.[0] || data?.files?.[0];
+      const fileId = uploadedFile?._id || uploadedFile?.id;
+      
+      if (fileId) {
+        setPendingFiles(prev => prev.filter(f => f._tempUri !== uri));
+        onSend("", {
+          contentType: type,
+          fileReferences: [fileId],
+          [type === 'audio' ? 'audioMeta' : 'videoMeta']: {
+            duration,
+            [type === 'audio' ? 'audioUrl' : 'videoUrl']: uploadedFile.url || uploadedFile.secureUrl,
+          }
+        });
+      }
+    } catch (err) {
+      const serverMessage = err.response?.data?.error?.message || err.response?.data?.message || err.message;
+      logger.error(`Failed to upload ${type}:`, serverMessage, err.response?.data);
+      Alert.alert(`Upload Error`, `Failed to upload ${type}: ${serverMessage}`);
+      setPendingFiles(prev => prev.map(f => f._tempUri === uri ? { ...f, uploading: false, uploadFailed: true } : f));
+    }
+  }, [channelId, onSend]);
+
   const styles = createStyles(colors);
 
   return (
@@ -603,7 +662,7 @@ const MessageComposer = React.memo(function MessageComposer({
               if (editingMessage) onCancelEdit?.();
               else onCancelReply?.();
             }}
-            style={{ padding: 4 }}
+            style={{ padding: moderateScale(4) }}
           >
             <X size={18} color={colors.textSecondary} />
           </TouchableOpacity>
@@ -741,78 +800,126 @@ const MessageComposer = React.memo(function MessageComposer({
             },
           ]}
         >
-          <TouchableOpacity style={[styles.iconButton, { marginBottom: 4 }]} onPress={handleAttach}>
-            <Plus size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.iconButton, { marginBottom: 4 }]}
-            onPress={() => setShowToolbar((v) => !v)}
-          >
-            <CaseSensitive
-              size={18}
-              color={showToolbar ? colors.primary : colors.textSecondary}
-            />
-          </TouchableOpacity>
-
-          <View style={{ flex: 1, minHeight: 40, height: Math.min(maxComposerHeight, Math.max(40, editorHeight)) }}>
-            <RichEditor
-              ref={richText}
-              useContainer={false}
-              onHeightChange={(height) => setEditorHeight(height)}
-              style={{ flex: 1 }}
-              scrollEnabled={true}
-              placeholder={editingMessage ? "Edit message..." : "Message..."}
-              initialContentHTML={text}
-              editorStyle={{
-                backgroundColor: colors.inputBackground,
-                color: colors.inputText,
-                placeholderColor: colors.inputPlaceholder,
-                contentCSSText: "font-size: 15px; font-family: sans-serif; overflow-y: auto !important; ul, ol { padding-left: 24px !important; margin: 0 !important; margin-top: 4px !important; margin-bottom: 4px !important; } li { margin: 0 !important; padding: 0 !important; list-style-position: outside !important; }",
+          {audioRecorder.isRecording || audioRecorder.isPaused || audioRecorder.recordingUri ? (
+            <AudioRecorderUI
+              isRecording={audioRecorder.isRecording}
+              isPaused={audioRecorder.isPaused}
+              recordingDuration={audioRecorder.recordingDuration}
+              onPause={audioRecorder.pauseRecording}
+              onResume={audioRecorder.resumeRecording}
+              onStop={audioRecorder.stopRecording}
+              onCancel={audioRecorder.cancelRecording}
+              onSend={async (data) => {
+                let finalData = data;
+                if (!finalData && audioRecorder.recordingUri) {
+                  finalData = { uri: audioRecorder.recordingUri, duration: audioRecorder.recordingDuration };
+                }
+                if (finalData) {
+                  await handleMediaSend(finalData.uri, 'audio', finalData.duration);
+                  audioRecorder.cancelRecording();
+                }
               }}
-              onChange={(html) => {
-                handleTextChange(html);
-              }}
-              editorInitializedCallback={() => setIsEditorReady(true)}
+              colors={colors}
             />
-          </View>
-
-          {/* <TouchableOpacity style={styles.iconButton} onPress={() => setShowEmojiPicker(true)}>
-            <Smile size={20} color={colors.textSecondary} />
-          </TouchableOpacity> */}
-
-          {stripHtml(text) || pendingFiles.length > 0 ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() => setShowScheduleModal(true)}
-              >
-                <Clock size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.sendButton}
-                onPress={handleSend}
-                onLongPress={() => setShowScheduleModal(true)}
-                delayLongPress={500}
-              >
-                <Text
-                  style={{
-                    color: colors.primary,
-                    fontWeight: "bold",
-                    fontSize: 15,
-                  }}
-                >
-                  Send
-                </Text>
-              </TouchableOpacity>
-            </View>
           ) : (
-            <TouchableOpacity style={[styles.iconButton, { marginBottom: 4 }]}>
-              <Mic size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity style={[styles.iconButton, { marginBottom: verticalScale(4) }]} onPress={handleAttach}>
+                <Plus size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.iconButton, { marginBottom: verticalScale(4) }]}
+                onPress={() => setShowToolbar((v) => !v)}
+              >
+                <CaseSensitive
+                  size={18}
+                  color={showToolbar ? colors.primary : colors.textSecondary}
+                />
+              </TouchableOpacity>
+
+              <View style={{ flex: 1, minHeight: verticalScale(40), height: Math.min(maxComposerHeight, Math.max(verticalScale(40), editorHeight)) }}>
+                <RichEditor
+                  ref={richText}
+                  useContainer={false}
+                  onHeightChange={(height) => setEditorHeight(height)}
+                  style={{ flex: 1 }}
+                  scrollEnabled={editorHeight >= maxComposerHeight}
+                  placeholder={editingMessage ? "Edit message..." : "Message..."}
+                  initialContentHTML={text}
+                  editorStyle={{
+                    backgroundColor: colors.inputBackground,
+                    color: colors.inputText,
+                    placeholderColor: colors.inputPlaceholder,
+                    contentCSSText: "font-size: 15px; font-family: sans-serif; overflow-y: auto !important; ul, ol { padding-left: 24px !important; margin: 0 !important; margin-top: 4px !important; margin-bottom: 4px !important; } li { margin: 0 !important; padding: 0 !important; list-style-position: outside !important; }",
+                  }}
+                  onChange={(html) => {
+                    handleTextChange(html);
+                  }}
+                  editorInitializedCallback={() => setIsEditorReady(true)}
+                />
+              </View>
+
+              {stripHtml(text) || pendingFiles.length > 0 ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(4) }}>
+                  <TouchableOpacity
+                    style={styles.iconButton}
+                    onPress={() => setShowScheduleModal(true)}
+                  >
+                    <Clock size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.sendButton}
+                    onPress={handleSend}
+                    onLongPress={() => setShowScheduleModal(true)}
+                    delayLongPress={500}
+                  >
+                    <Text
+                      style={{
+                        color: colors.primary,
+                        fontWeight: "bold",
+                        fontSize: moderateScale(15),
+                      }}
+                    >
+                      Send
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(4) }}>
+                  <TouchableOpacity style={styles.iconButton} onPress={() => setShowVideoModal(true)}>
+                    <CameraIcon size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.iconButton} onPress={audioRecorder.startRecording}>
+                    <Mic size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
           )}
         </View>
       </View>
+
+      <VideoRecorderModal
+        visible={showVideoModal}
+        onClose={() => setShowVideoModal(false)}
+        cameraRef={videoRecorder.cameraRef}
+        isRecording={videoRecorder.isRecording}
+        recordingDuration={videoRecorder.recordingDuration}
+        videoUri={videoRecorder.videoUri}
+        cameraType={videoRecorder.cameraType}
+        flashMode={videoRecorder.flashMode}
+        startRecording={videoRecorder.startRecording}
+        stopRecording={videoRecorder.stopRecording}
+        toggleCamera={videoRecorder.toggleCamera}
+        toggleFlash={videoRecorder.toggleFlash}
+        onRetake={() => videoRecorder.setVideoUri(null)}
+        onSend={async (uri) => {
+          setShowVideoModal(false);
+          await handleMediaSend(uri, 'video', videoRecorder.recordingDuration);
+          videoRecorder.cancelRecording();
+        }}
+        colors={colors}
+      />
 
       {/* Emoji Picker */}
       <EmojiPickerModal
@@ -866,14 +973,19 @@ const MessageComposer = React.memo(function MessageComposer({
         }}
       />
 
-      {/* GIF Picker Modal */}
       <GifPickerModal
         visible={showGifPicker}
         onClose={() => setShowGifPicker(false)}
         colors={colors}
         onSelectGif={(gif) => {
-          const gifMarkdown = `![GIF](${gif.url})`;
-          onChangeText(text ? `${text}\n${gifMarkdown}` : gifMarkdown);
+          onSend('', {
+            contentType: 'gif',
+            gifMeta: gif,
+            threadId: replyingTo?._id || null,
+          });
+          if (editingMessage) onCancelEdit?.();
+          else onCancelReply?.();
+          onChangeText('');
         }}
       />
 
@@ -893,58 +1005,58 @@ const createStyles = (colors) =>
     banner: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 16,
-      paddingVertical: 8,
+      paddingHorizontal: scale(16),
+      paddingVertical: verticalScale(8),
       borderLeftWidth: 3,
       gap: 8,
     },
     bannerLabel: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
       fontWeight: "600",
     },
     bannerText: {
-      fontSize: 13,
-      marginTop: 1,
+      fontSize: moderateScale(13),
+      marginTop: verticalScale(1),
     },
     pendingFilesRow: {
       flexDirection: "row",
       flexWrap: "wrap",
-      paddingHorizontal: 12,
-      paddingVertical: 6,
+      paddingHorizontal: scale(12),
+      paddingVertical: verticalScale(6),
       gap: 6,
     },
     pendingFileChip: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 12,
+      paddingHorizontal: scale(8),
+      paddingVertical: verticalScale(4),
+      borderRadius: moderateScale(12),
       gap: 4,
-      maxWidth: 160,
+      maxWidth: scale(160),
     },
     pendingFileName: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
       flexShrink: 1,
     },
     inputBar: {
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      paddingHorizontal: scale(12),
+      paddingVertical: verticalScale(10),
     },
     inputContainer: {
       flexDirection: "row",
       alignItems: "center",
-      borderRadius: 24,
+      borderRadius: moderateScale(24),
       borderWidth: 1,
-      paddingHorizontal: 4,
-      minHeight: 48,
+      paddingHorizontal: scale(4),
+      minHeight: verticalScale(48),
     },
     iconButton: {
-      padding: 8,
+      padding: moderateScale(8),
     },
     input: {
       flex: 1,
-      fontSize: 16,
-      maxHeight: 100,
+      fontSize: moderateScale(16),
+      maxHeight: verticalScale(100),
       paddingVertical: Platform.OS === "android" ? 6 : 8,
       paddingHorizontal: Platform.OS === "android" ? 4 : 4,
       textAlignVertical: "center",
@@ -952,8 +1064,8 @@ const createStyles = (colors) =>
       ...(Platform.OS === "web" && { outlineWidth: 0, outlineStyle: "none" }),
     },
     sendButton: {
-      padding: 8,
-      paddingHorizontal: 12,
+      padding: moderateScale(8),
+      paddingHorizontal: scale(12),
     },
   });
 

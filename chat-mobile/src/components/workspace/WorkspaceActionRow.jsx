@@ -2,6 +2,8 @@ import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 /**
  * WorkspaceActionRow
@@ -37,20 +39,20 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(15),
     gap: 16,
   },
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 9,
+    width: scale(36),
+    height: verticalScale(36),
+    borderRadius: moderateScale(9),
     justifyContent: 'center',
     alignItems: 'center',
   },
   label: {
     flex: 1,
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '500',
     letterSpacing: -0.2,
   },

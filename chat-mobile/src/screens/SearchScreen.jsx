@@ -263,13 +263,13 @@ export default function SearchScreen({ navigation }) {
           )}
           
           <View style={{ flex: 1, justifyContent: 'center' }}>
-            <Text style={{ color: colors.textPrimary, fontWeight: '400', fontSize: 16 }} numberOfLines={1}>{getTitle(it)}</Text>
-            {getSubtitle(it) ? <Text style={{ color: colors.textTertiary, marginTop: 4, fontSize: 13 }} numberOfLines={1}>{getSubtitle(it)}</Text> : null}
+            <Text style={{ color: colors.textPrimary, fontWeight: '400', fontSize: moderateScale(16) }} numberOfLines={1}>{getTitle(it)}</Text>
+            {getSubtitle(it) ? <Text style={{ color: colors.textTertiary, marginTop: verticalScale(4), fontSize: moderateScale(13) }} numberOfLines={1}>{getSubtitle(it)}</Text> : null}
           </View>
         </TouchableOpacity>
         
         {!query && (
-          <TouchableOpacity onPress={() => removeRecent(it._id || it.id)} style={{ padding: 8 }}>
+          <TouchableOpacity onPress={() => removeRecent(it._id || it.id)} style={{ padding: moderateScale(8) }}>
             <X size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
@@ -310,25 +310,25 @@ export default function SearchScreen({ navigation }) {
               return `${base}${id}:${idx}`;
             }}
             renderItem={renderResultItem}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 }}
+            contentContainerStyle={{ paddingHorizontal: scale(16), paddingTop: verticalScale(16), paddingBottom: verticalScale(100) }}
             ListHeaderComponent={() => (
               <View>
                 {!query && recent && recent.length > 0 && (
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(12) }}>
                     <Text style={{ color: colors.textTertiary, fontWeight: '700' }}>Recent searches</Text>
                     <TouchableOpacity onPress={clearAllRecent}>
-                      <Text style={{ color: colors.textSecondary, fontSize: 13 }}>Clear All</Text>
+                      <Text style={{ color: colors.textSecondary, fontSize: moderateScale(13) }}>Clear All</Text>
                     </TouchableOpacity>
                   </View>
                 )}
-                {loading && <ActivityIndicator style={{ marginTop: 16 }} />}
+                {loading && <ActivityIndicator style={{ marginTop: verticalScale(16) }} />}
                 {!flattenedResults && !loading && !!query && (
-                   <View style={{ padding: 16 }}>
+                   <View style={{ padding: moderateScale(16) }}>
                      <Text style={{ color: colors.textTertiary }}>No results found for "{query}"</Text>
                    </View>
                 )}
                 {flattenedResults && flattenedResults.length === 0 && !loading && !!query && (
-                   <View style={{ padding: 16 }}>
+                   <View style={{ padding: moderateScale(16) }}>
                      <Text style={{ color: colors.textTertiary }}>No results found for "{query}"</Text>
                    </View>
                 )}
@@ -382,9 +382,9 @@ const styles = StyleSheet.create({
   resultIcon: { width: scale(32), height: scale(32), borderRadius: moderateScale(8), justifyContent: 'center', alignItems: 'center' },
   floatingSearchContainer: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: verticalScale(0),
+    left: scale(0),
+    right: scale(0),
     flexDirection: 'row',
     paddingHorizontal: scale(16),
     paddingTop: verticalScale(12),

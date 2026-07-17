@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { ArrowLeft, MessageSquare, History, MoreVertical, Users } from 'lucide-react-native';
 import Avatar from '../Avatar';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 export default function CanvasHeader({
   title,
@@ -101,36 +103,36 @@ export default function CanvasHeader({
 
 const styles = StyleSheet.create({
   container: {
-    height: 56,
+    height: verticalScale(56),
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: scale(8),
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     backgroundColor: '#ffffff',
   },
   iconBtn: {
-    padding: 8,
+    padding: moderateScale(8),
     position: 'relative',
   },
   titleContainer: {
     flex: 1,
-    marginLeft: 4,
-    marginRight: 8,
+    marginLeft: scale(4),
+    marginRight: scale(8),
   },
   titleTouchable: {
-    paddingVertical: 6,
+    paddingVertical: verticalScale(6),
   },
   titleText: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '600',
     color: '#1f2937',
   },
   titleInput: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '600',
     color: '#1f2937',
-    paddingVertical: 2,
+    paddingVertical: verticalScale(2),
     borderBottomWidth: 1.5,
     borderBottomColor: '#4f46e5',
   },
@@ -141,43 +143,43 @@ const styles = StyleSheet.create({
   presenceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: scale(10),
   },
   avatarWrapper: {
-    borderRadius: 12,
+    borderRadius: moderateScale(12),
     borderWidth: 2,
     borderColor: '#ffffff',
     overflow: 'hidden',
   },
   moreUsersCount: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: scale(24),
+    height: verticalScale(24),
+    borderRadius: moderateScale(12),
     backgroundColor: '#e5e7eb',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
   },
   moreUsersText: {
-    fontSize: 9,
+    fontSize: moderateScale(9),
     fontWeight: 'bold',
     color: '#4b5563',
   },
   badge: {
     position: 'absolute',
-    top: 2,
-    right: 2,
+    top: verticalScale(2),
+    right: scale(2),
     backgroundColor: '#ef4444',
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
+    borderRadius: moderateScale(8),
+    minWidth: scale(16),
+    height: verticalScale(16),
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: scale(4),
   },
   badgeText: {
     color: '#ffffff',
-    fontSize: 9,
+    fontSize: moderateScale(9),
     fontWeight: 'bold',
   },
 });

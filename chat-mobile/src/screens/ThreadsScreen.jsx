@@ -16,6 +16,8 @@ import RichText from '../components/RichText';
 import { MessageSquare } from 'lucide-react-native';
 import logger from '../utils/logger';
 import { useAuthStore } from '../stores/authStore';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const ThreadsScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
@@ -111,7 +113,7 @@ const ThreadsScreen = ({ navigation }) => {
               {formatRelativeTimeLong(msg.createdAt)}
             </Text>
           </View>
-          <View style={{ maxHeight: 80, overflow: 'hidden' }}>
+          <View style={{ maxHeight: verticalScale(80), overflow: 'hidden' }}>
             {!!(msg.htmlContent || msg.content) && (
               <RichText
                 html={msg.htmlContent || (/<[a-z][\s\S]*>/i.test(msg.content) ? msg.content : undefined)}
@@ -121,17 +123,17 @@ const ThreadsScreen = ({ navigation }) => {
                   navigation.navigate('UserProfile', { user: { _id: userId }, channelId });
                 }}
                 colors={{ ...colors, textPrimary: colors.textPrimary }}
-                baseStyle={{ color: colors.textPrimary, fontSize: 15, lineHeight: 22 }}
+                baseStyle={{ color: colors.textPrimary, fontSize: moderateScale(15), lineHeight: 22 }}
               />
             )}
             {(!msg.htmlContent && !msg.content && attachments.length > 0) && (
-              <Text style={{ color: colors.textSecondary, fontStyle: 'italic', fontSize: 14 }}>
+              <Text style={{ color: colors.textSecondary, fontStyle: 'italic', fontSize: moderateScale(14) }}>
                 [Media attached]
               </Text>
             )}
           </View>
           {attachments.length > 0 && (
-             <View style={{ marginTop: 4, width: '100%', gap: 4 }}>
+             <View style={{ marginTop: verticalScale(4), width: '100%', gap: 4 }}>
                 {attachments.map((file, i) => (
                   <MobileFileCard key={file._id || i} file={file} colors={colors} />
                 ))}
@@ -226,84 +228,84 @@ const ThreadsScreen = ({ navigation }) => {
 
 const createStyles = (colors) => StyleSheet.create({
   listContainer: {
-    paddingBottom: 40,
+    paddingBottom: verticalScale(40),
   },
   subHeader: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   subHeaderText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '500',
   },
   threadGroup: {
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   threadChannelHeader: {
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    paddingHorizontal: scale(16),
+    marginBottom: verticalScale(12),
   },
   channelTitle: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
-    marginBottom: 2,
+    marginBottom: verticalScale(2),
   },
   channelSubtitle: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
   },
   messageRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    paddingHorizontal: scale(16),
+    marginBottom: verticalScale(12),
   },
   messageContent: {
     flex: 1,
-    marginLeft: 10,
+    marginLeft: scale(10),
   },
   messageHeader: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   authorName: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '700',
-    marginRight: 8,
+    marginRight: scale(8),
   },
   timeText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
   },
   messageText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     lineHeight: 22,
   },
   replyWrapper: {
-    marginTop: 4,
+    marginTop: verticalScale(4),
   },
   replyButtonContainer: {
-    paddingHorizontal: 16,
-    paddingLeft: 62, // align with text
-    marginTop: 4,
-    marginBottom: 16,
+    paddingHorizontal: scale(16),
+    paddingLeft: scale(62), // align with text
+    marginTop: verticalScale(4),
+    marginBottom: verticalScale(16),
   },
   replyButton: {
     borderWidth: 1,
-    borderRadius: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 16,
+    borderRadius: moderateScale(6),
+    paddingVertical: verticalScale(6),
+    paddingHorizontal: scale(16),
     alignSelf: 'flex-start',
   },
   replyButtonText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
   },
   divider: {
-    height: 1,
+    height: verticalScale(1),
     width: '100%',
-    marginTop: 8,
+    marginTop: verticalScale(8),
   }
 });
 

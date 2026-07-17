@@ -16,6 +16,8 @@ import {
 import { Video, Audio, ResizeMode } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 import {
   FileText,
   Image as ImageIcon,
@@ -134,7 +136,7 @@ function ImageViewer({ visible, file, name, onClose }) {
       <View style={ms.imgModalBg}>
         {/* Header */}
         <View style={ms.imgHeader}>
-          <TouchableOpacity onPress={onClose} style={ms.imgCloseBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity onPress={onClose} style={ms.imgCloseBtn} hitSlop={{ top: verticalScale(10), bottom: verticalScale(10), left: scale(10), right: scale(10) }}>
             <X size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={ms.imgTitle} numberOfLines={1}>{name}</Text>
@@ -343,7 +345,7 @@ function CodePreviewModal({ visible, file, name, onClose }) {
         <ScrollView style={ms.codeScroll} horizontal={false}>
           <ScrollView horizontal showsHorizontalScrollIndicator>
             {loading
-              ? <ActivityIndicator color="#a5f3fc" style={{ margin: 40 }} />
+              ? <ActivityIndicator color="#a5f3fc" style={{ margin: moderateScale(40) }} />
               : error
                 ? <Text style={ms.codeError}>Failed to load file content.</Text>
                 : <Text style={ms.codeText} selectable>{code}</Text>
@@ -450,7 +452,7 @@ export default function MobileFileCard({ file, colors }) {
           {/* Play overlay */}
           <View style={ms.vidPlayOverlay}>
             <View style={ms.vidPlayCircle}>
-              <Play size={22} color="#fff" style={{ marginLeft: 3 }} />
+              <Play size={22} color="#fff" style={{ marginLeft: scale(3) }} />
             </View>
           </View>
         </TouchableOpacity>
@@ -525,31 +527,31 @@ const ms = StyleSheet.create({
   // ── Image thumbnail (inline in bubble) ──
   imgThumbContainer: {
     width: '100%',
-    minWidth: 240,
-    maxWidth: 340,
-    borderRadius: 12,
+    minWidth: scale(240),
+    maxWidth: scale(340),
+    borderRadius: moderateScale(12),
     overflow: 'hidden',
-    marginVertical: 4,
+    marginVertical: verticalScale(4),
   },
   imgThumb: {
     width: '100%',
-    height: 220,
+    height: verticalScale(220),
     backgroundColor: '#111',
   },
   imgThumbOverlay: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: verticalScale(0),
+    left: scale(0),
+    right: scale(0),
     backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(5),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  imgThumbName: { color: '#fff', fontSize: 11, fontWeight: '600', flex: 1, marginRight: 6 },
-  imgThumbSize: { color: 'rgba(255,255,255,0.75)', fontSize: 10 },
+  imgThumbName: { color: '#fff', fontSize: moderateScale(11), fontWeight: '600', flex: 1, marginRight: scale(6) },
+  imgThumbSize: { color: 'rgba(255,255,255,0.75)', fontSize: moderateScale(10) },
 
   // ── Fullscreen image viewer ──
   imgModalBg: { flex: 1, backgroundColor: '#000' },
@@ -557,30 +559,30 @@ const ms = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: Platform.OS === 'ios' ? 54 : 40,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: scale(16),
+    paddingBottom: verticalScale(12),
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  imgCloseBtn: { padding: 6 },
-  imgTitle: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '600', marginHorizontal: 10 },
+  imgCloseBtn: { padding: moderateScale(6) },
+  imgTitle: { flex: 1, color: '#fff', fontSize: moderateScale(15), fontWeight: '600', marginHorizontal: scale(10) },
   imgContentArea: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   fullImg: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.72 },
   imgErrorBox: { alignItems: 'center', gap: 12 },
-  imgErrorText: { color: 'rgba(255,255,255,0.5)', fontSize: 14 },
+  imgErrorText: { color: 'rgba(255,255,255,0.5)', fontSize: moderateScale(14) },
 
   // ── Video poster card ──
   vidPoster: {
     width: '100%',
-    minWidth: 240,
-    maxWidth: 340,
-    borderRadius: 12,
+    minWidth: scale(240),
+    maxWidth: scale(340),
+    borderRadius: moderateScale(12),
     overflow: 'hidden',
-    marginVertical: 4,
+    marginVertical: verticalScale(4),
   },
-  vidPosterImg: { width: '100%', height: 220 },
+  vidPosterImg: { width: '100%', height: verticalScale(220) },
   vidPosterPlaceholder: {
     width: '100%',
-    height: 220,
+    height: verticalScale(220),
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -590,27 +592,27 @@ const ms = StyleSheet.create({
     alignItems: 'center',
   },
   vidPlayCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: scale(50),
+    height: verticalScale(50),
+    borderRadius: moderateScale(25),
     backgroundColor: 'rgba(0,0,0,0.65)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   vidFooterStrip: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: verticalScale(0),
+    left: scale(0),
+    right: scale(0),
     backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(5),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  vidName: { color: '#fff', fontSize: 11, fontWeight: '600', flex: 1 },
-  vidSize: { color: 'rgba(255,255,255,0.7)', fontSize: 10 },
+  vidName: { color: '#fff', fontSize: moderateScale(11), fontWeight: '600', flex: 1 },
+  vidSize: { color: 'rgba(255,255,255,0.7)', fontSize: moderateScale(10) },
 
   // ── Fullscreen video player ──
   videoModalBg: { flex: 1, backgroundColor: '#000' },
@@ -618,48 +620,48 @@ const ms = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: Platform.OS === 'ios' ? 54 : 40,
-    paddingHorizontal: 12,
-    paddingBottom: 10,
+    paddingHorizontal: scale(12),
+    paddingBottom: verticalScale(10),
     backgroundColor: 'rgba(0,0,0,0.7)',
   },
-  videoHeaderBtn: { padding: 8 },
-  videoTitle: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '600', marginHorizontal: 8 },
+  videoHeaderBtn: { padding: moderateScale(8) },
+  videoTitle: { flex: 1, color: '#fff', fontSize: moderateScale(15), fontWeight: '600', marginHorizontal: scale(8) },
   videoArea: { flex: 1, justifyContent: 'center', backgroundColor: '#000' },
   videoPlayer: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.55 },
   videoFooter: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    paddingTop: 16,
+    paddingHorizontal: scale(20),
+    paddingBottom: verticalScale(40),
+    paddingTop: verticalScale(16),
     backgroundColor: 'rgba(0,0,0,0.7)',
     gap: 8,
   },
-  videoTimeText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, textAlign: 'right' },
-  progressBarBg: { height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2 },
-  progressBarFill: { height: 4, backgroundColor: '#fff', borderRadius: 2 },
+  videoTimeText: { color: 'rgba(255,255,255,0.7)', fontSize: moderateScale(12), textAlign: 'right' },
+  progressBarBg: { height: verticalScale(4), backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: moderateScale(2) },
+  progressBarFill: { height: verticalScale(4), backgroundColor: '#fff', borderRadius: moderateScale(2) },
 
   // ── Audio player card ──
   audioCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: moderateScale(14),
     borderWidth: 1,
-    padding: 12,
-    marginVertical: 4,
+    padding: moderateScale(12),
+    marginVertical: verticalScale(4),
     gap: 12,
   },
   audioPlayBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: scale(38),
+    height: verticalScale(38),
+    borderRadius: moderateScale(19),
     justifyContent: 'center',
     alignItems: 'center',
   },
   audioInfo: { flex: 1, gap: 6 },
-  audioName: { fontSize: 13, fontWeight: '600' },
+  audioName: { fontSize: moderateScale(13), fontWeight: '600' },
   audioProgressRow: { gap: 4 },
-  audioProgressBg: { height: 3, borderRadius: 2, overflow: 'hidden' },
-  audioProgressFill: { height: 3, borderRadius: 2 },
-  audioDuration: { fontSize: 10 },
+  audioProgressBg: { height: verticalScale(3), borderRadius: moderateScale(2), overflow: 'hidden' },
+  audioProgressFill: { height: verticalScale(3), borderRadius: moderateScale(2) },
+  audioDuration: { fontSize: moderateScale(10) },
 
   // ── Code preview modal ──
   codeModalBg: { flex: 1, backgroundColor: '#0d1117' },
@@ -667,49 +669,49 @@ const ms = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: Platform.OS === 'ios' ? 54 : 40,
-    paddingHorizontal: 12,
-    paddingBottom: 12,
+    paddingHorizontal: scale(12),
+    paddingBottom: verticalScale(12),
     backgroundColor: '#161b22',
     borderBottomWidth: 1,
     borderBottomColor: '#30363d',
   },
-  codeTitle: { flex: 1, color: '#e6edf3', fontSize: 14, fontWeight: '600', marginHorizontal: 8 },
-  codeScroll: { flex: 1, padding: 16 },
+  codeTitle: { flex: 1, color: '#e6edf3', fontSize: moderateScale(14), fontWeight: '600', marginHorizontal: scale(8) },
+  codeScroll: { flex: 1, padding: moderateScale(16) },
   codeText: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 12,
+    fontSize: moderateScale(12),
     color: '#e6edf3',
     lineHeight: 20,
   },
-  codeError: { color: '#f85149', fontSize: 13, margin: 20 },
+  codeError: { color: '#f85149', fontSize: moderateScale(13), margin: moderateScale(20) },
 
   // ── Generic file card ──
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: moderateScale(12),
     borderWidth: 1,
-    padding: 10,
-    marginVertical: 3,
+    padding: moderateScale(10),
+    marginVertical: verticalScale(3),
     gap: 10,
   },
   iconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
+    width: scale(42),
+    height: verticalScale(42),
+    borderRadius: moderateScale(10),
     justifyContent: 'center',
     alignItems: 'center',
   },
   info: { flex: 1, gap: 4 },
-  fileName: { fontSize: 13, fontWeight: '600' },
+  fileName: { fontSize: moderateScale(13), fontWeight: '600' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  badge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  badgeText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
-  sizeText: { fontSize: 11 },
+  badge: { paddingHorizontal: scale(6), paddingVertical: verticalScale(2), borderRadius: moderateScale(4) },
+  badgeText: { fontSize: moderateScale(9), fontWeight: '700', letterSpacing: 0.5 },
+  sizeText: { fontSize: moderateScale(11) },
   actionBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
+    width: scale(34),
+    height: verticalScale(34),
+    borderRadius: moderateScale(8),
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -13,6 +13,8 @@ import { usersAPI } from "../services/api";
 import { X, Circle } from "lucide-react-native";
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import logger from '../utils/logger';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const PresenceModal = ({ visible, onClose }) => {
   const { colors } = useThemeStore();
@@ -134,7 +136,7 @@ const createStyles = (colors) =>
     },
     modal: {
       width: "85%",
-      borderRadius: 16,
+      borderRadius: moderateScale(16),
       ...(Platform.OS !== "web"
         ? {
             boxShadow: `0px 4px 12px ${colors.shadowLg}`,
@@ -143,7 +145,7 @@ const createStyles = (colors) =>
         : {
             boxShadow: rnShadowToBoxShadow(
               "#000",
-              { width: 0, height: 4 },
+              { width: scale(0), height: verticalScale(4) },
               0.2,
               12,
             ),
@@ -153,34 +155,34 @@ const createStyles = (colors) =>
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingHorizontal: scale(20),
+      paddingVertical: verticalScale(16),
       borderBottomWidth: 1,
     },
     headerTitle: {
-      fontSize: 18,
+      fontSize: moderateScale(18),
       fontWeight: "700",
     },
     content: {
-      paddingVertical: 8,
+      paddingVertical: verticalScale(8),
     },
     presenceItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingHorizontal: scale(20),
+      paddingVertical: verticalScale(16),
       gap: 14,
     },
     presenceContent: {
       flex: 1,
     },
     presenceLabel: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
       fontWeight: "600",
-      marginBottom: 2,
+      marginBottom: verticalScale(2),
     },
     presenceDescription: {
-      fontSize: 13,
+      fontSize: moderateScale(13),
     },
   });
 

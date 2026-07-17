@@ -10,6 +10,8 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useThemeStore } from "../stores/themeStore";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 /* ── HSV ↔ RGB helpers ── */
 const hsvToRgb = (h, s, v) => {
@@ -279,45 +281,45 @@ const styles = StyleSheet.create({
   },
   container: {
     width: "92%",
-    borderRadius: 20,
-    padding: 22,
+    borderRadius: moderateScale(20),
+    padding: moderateScale(22),
     alignItems: "center",
     elevation: 12,
   },
   title: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: "700",
-    marginBottom: 18,
+    marginBottom: verticalScale(18),
   },
 
   /* Saturation panel */
   satWrap: {
-    borderRadius: 14,
+    borderRadius: moderateScale(14),
     overflow: "hidden",
     position: "relative",
   },
   circleSelector: {
     position: "absolute",
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: scale(28),
+    height: verticalScale(28),
+    borderRadius: moderateScale(14),
     borderWidth: 3,
     elevation: 6,
   },
 
   /* Hue bar */
   hueWrap: {
-    marginTop: 18,
-    borderRadius: 11,
+    marginTop: verticalScale(18),
+    borderRadius: moderateScale(11),
     overflow: "hidden",
     position: "relative",
   },
   hueSelector: {
     position: "absolute",
     top: -4,
-    width: 20,
+    width: scale(20),
     height: HUE_H + 8,
-    borderRadius: 10,
+    borderRadius: moderateScale(10),
     borderWidth: 3,
     elevation: 5,
   },
@@ -326,14 +328,14 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 22,
+    marginTop: verticalScale(22),
     width: "100%",
     gap: 14,
   },
   swatch: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: scale(48),
+    height: verticalScale(48),
+    borderRadius: moderateScale(14),
     borderWidth: 1,
   },
   infoText: {
@@ -341,12 +343,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   hexText: {
-    fontSize: 17,
+    fontSize: moderateScale(17),
     fontWeight: "700",
     fontFamily: "monospace",
   },
   rgbText: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: "500",
     fontFamily: "monospace",
   },
@@ -356,25 +358,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: 12,
-    marginTop: 24,
+    marginTop: verticalScale(24),
     width: "100%",
   },
   cancelBtn: {
-    paddingVertical: 11,
-    paddingHorizontal: 22,
-    borderRadius: 12,
+    paddingVertical: verticalScale(11),
+    paddingHorizontal: scale(22),
+    borderRadius: moderateScale(12),
   },
   cancelText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: "600",
   },
   applyBtn: {
-    paddingVertical: 11,
-    paddingHorizontal: 22,
-    borderRadius: 12,
+    paddingVertical: verticalScale(11),
+    paddingHorizontal: scale(22),
+    borderRadius: moderateScale(12),
   },
   applyText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: "600",
   },
 });

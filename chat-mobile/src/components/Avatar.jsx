@@ -2,6 +2,8 @@ import React, { useState, useCallback, useMemo } from "react";
 import { View, Text, Image, StyleSheet } from "react-native";
 import { useShallow } from 'zustand/react/shallow';
 import { useThemeStore } from "../stores/themeStore";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const AVATAR_COLORS = [
   "#e91e63",
@@ -98,7 +100,7 @@ const Avatar = React.memo(
           </View>
         )}
 
-        {showStatus && (isOnline || isAway || isDnd) && (
+        {showStatus && (
           <View
             style={[
               styles.statusBadge,
@@ -110,8 +112,13 @@ const Avatar = React.memo(
                   ? colors.online
                   : isDnd
                     ? colors.busy
-                    : colors.away,
-                borderColor: colors.background,
+                    : isAway
+                      ? colors.away
+                      : colors.background,
+                borderColor: isOnline || isDnd || isAway 
+                  ? colors.background 
+                  : colors.textTertiary,
+                borderWidth: 2,
                 bottom: -2,
                 right: -2,
               },
@@ -179,7 +186,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
-    borderRadius: 999,
+    borderRadius: moderateScale(999),
     backgroundColor: "transparent",
   },
   dndBadge: {
@@ -187,7 +194,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
-    borderRadius: 999,
+    borderRadius: moderateScale(999),
     backgroundColor: "transparent",
   },
 });

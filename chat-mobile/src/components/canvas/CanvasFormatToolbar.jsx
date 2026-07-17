@@ -1,5 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Text } from 'react-native';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 import {
   Undo2, Redo2, Bold, Italic, Underline, Strikethrough, Code,
   List, ListOrdered, SquareCheck, Quote, Table, Image, Minus
@@ -71,7 +73,7 @@ export default function CanvasFormatToolbar({
 
 const styles = StyleSheet.create({
   container: {
-    height: 48,
+    height: verticalScale(48),
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
     borderBottomWidth: 1,
@@ -80,15 +82,15 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: scale(8),
   },
   btn: {
-    width: 34,
-    height: 34,
-    borderRadius: 6,
+    width: scale(34),
+    height: verticalScale(34),
+    borderRadius: moderateScale(6),
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 3,
+    marginHorizontal: scale(3),
     backgroundColor: 'transparent',
   },
   activeBtn: {
@@ -98,7 +100,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   label: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: 'bold',
     color: '#4b5563',
   },
@@ -106,9 +108,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   divider: {
-    width: 1,
-    height: 24,
+    width: scale(1),
+    height: verticalScale(24),
     backgroundColor: '#e5e7eb',
-    marginHorizontal: 6,
+    marginHorizontal: scale(6),
   },
 });

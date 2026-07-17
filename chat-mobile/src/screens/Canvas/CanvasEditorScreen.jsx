@@ -23,6 +23,8 @@ import CanvasCommentsSheet from '../../screens/Canvas/CanvasCommentsSheet';
 import CanvasHistorySheet from '../../components/canvas/CanvasHistorySheet';
 import CanvasShareModal from '../../screens/Canvas/CanvasShareModal';
 import { EDITOR_HTML } from './EditorHtml';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+import logger from '../../utils/logger';
 
 export default function CanvasEditorScreen({ route, navigation }) {
   const { canvasId, channelId } = route.params || {};
@@ -76,16 +78,17 @@ export default function CanvasEditorScreen({ route, navigation }) {
   // Pass activeCanvas content once ready
   useEffect(() => {
     if (editorReady && activeCanvas && webviewRef.current) {
-      // activeCanvas.content is a TipTap JSON doc object (e.g. { type: "doc", content: [...] })
-      // Send the raw object directly — postMessage will serialize it, and the editor will parse
-      // it back. TipTap's setContent() natively accepts JSON doc objects.
+      logger.info(`[CanvasEditor] Sending setContent for canvas ${activeCanvas._id}, JSON size:`, JSON.stringify(activeCanvas.content || {}).length);
       const content = activeCanvas.content || '';
       sendEditorCommand('setContent', content);
+    } else {
+      logger.info(`[CanvasEditor] Waiting to set content. editorReady=${editorReady}, activeCanvas=${!!activeCanvas}`);
     }
   }, [editorReady, activeCanvas?._id]);
 
   const sendEditorCommand = (command, value = null) => {
     if (webviewRef.current) {
+      logger.info(`[CanvasEditor] Sending command: ${command}`);
       webviewRef.current.postMessage(JSON.stringify({ command, value }));
     }
   };
@@ -95,18 +98,19 @@ export default function CanvasEditorScreen({ route, navigation }) {
     try {
       data = JSON.parse(event.nativeEvent.data);
     } catch (e) {
+      logger.warn('[CanvasEditor] Failed to parse WebView message:', event.nativeEvent.data);
       return;
     }
 
     switch (data.type) {
       case 'ready':
+        logger.info(`[CanvasEditor] WebView Ready. BodyHeight: ${data.bodyHeight}, WindowHeight: ${data.windowHeight}, UA: ${data.userAgent}`);
         setEditorReady(true);
         break;
       case 'selection':
         setSelectionState(data);
         break;
       case 'update':
-        // Save updates (content json/html)
         if (canvasId) {
           updateCanvas(canvasId, { content: data.json });
         }
@@ -118,8 +122,16 @@ export default function CanvasEditorScreen({ route, navigation }) {
         setMentionSearch(null);
         break;
       case 'error':
-        console.warn('[CanvasEditor] WebView error:', data.message);
+        logger.error('[CanvasEditor] WebView ERROR event:', data);
         break;
+      case 'setContentAck':
+        logger.info('[CanvasEditor] WebView acknowledged setContent:', data);
+        break;
+      case 'log':
+        logger.info('[CanvasEditor WebView Log]:', data.message);
+        break;
+      default:
+        logger.info(`[CanvasEditor] Unhandled WebView event type: ${data.type}`);
     }
   };
 
@@ -150,7 +162,6 @@ export default function CanvasEditorScreen({ route, navigation }) {
     } else if (optionType === 'hr') {
       sendEditorCommand('insertHorizontalRule');
     } else if (optionType === 'callout') {
-      // Callout nodes are configured inTipTap. Let's send toggleBlockquote as fallback if custom callout wrapper is complex
       sendEditorCommand('toggleBlockquote');
     } else if (optionType === 'image') {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -218,7 +229,7 @@ export default function CanvasEditorScreen({ route, navigation }) {
           )}
           <WebView
             ref={webviewRef}
-            source={{ html: EDITOR_HTML, baseUrl: '' }}
+            source={{ html: EDITOR_HTML, baseUrl: 'https://localhost' }}
             originWhitelist={['*']}
             style={styles.webview}
             onMessage={handleMessage}
@@ -299,9 +310,11 @@ const styles = StyleSheet.create({
   editorWrapper: {
     flex: 1,
     position: 'relative',
+    height: '100%',
   },
   webview: {
     flex: 1,
+    height: '100%',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -312,15 +325,15 @@ const styles = StyleSheet.create({
   },
   mentionPopup: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    maxHeight: 200,
+    bottom: verticalScale(0),
+    left: scale(0),
+    right: scale(0),
+    maxHeight: verticalScale(200),
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
+    shadowOffset: { width: scale(0), height: -2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 5,
@@ -329,18 +342,18 @@ const styles = StyleSheet.create({
   mentionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: moderateScale(12),
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
   mentionAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginRight: 8,
+    width: scale(24),
+    height: verticalScale(24),
+    borderRadius: moderateScale(12),
+    marginRight: scale(8),
   },
   mentionName: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     color: '#1f2937',
     fontWeight: '500',
   },

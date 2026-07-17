@@ -6,6 +6,8 @@ import { usePreferencesStore } from '../stores/preferencesStore';
 import { useAuthStore } from '../stores/authStore';
 import { useTranslation } from '../utils/i18n';
 import { OptionsSelectionModal } from '../components/common';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 import {
   X,
   User,
@@ -344,65 +346,65 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
     borderBottomWidth: 1,
   },
   closeButton: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   headerRight: {
-    width: 32, // To balance the X icon size
+    width: scale(32), // To balance the X icon size
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: verticalScale(40),
   },
   section: {
-    marginTop: 24,
+    marginTop: verticalScale(24),
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '700',
-    paddingHorizontal: 20,
-    marginBottom: 8,
+    paddingHorizontal: scale(20),
+    marginBottom: verticalScale(8),
   },
   itemContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingVertical: verticalScale(14),
+    paddingHorizontal: scale(20),
   },
   iconContainer: {
-    width: 32,
+    width: scale(32),
     alignItems: 'flex-start',
   },
   textContainer: {
     flex: 1,
-    paddingRight: 16,
+    paddingRight: scale(16),
   },
   itemTitle: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '400',
   },
   itemSubtitle: {
-    fontSize: 13,
-    marginTop: 4,
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(4),
   },
   rightContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   rightText: {
-    fontSize: 14,
-    marginRight: 8,
+    fontSize: moderateScale(14),
+    marginRight: scale(8),
   },
   rightEmoji: {
-    fontSize: 18,
-    marginRight: 4,
+    fontSize: moderateScale(18),
+    marginRight: scale(4),
   },
 });
 

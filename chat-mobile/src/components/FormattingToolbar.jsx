@@ -13,6 +13,8 @@
  *   onInsertMention – () => void (triggers @mention flow in composer)
  */
 import React, { useCallback } from 'react';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 import {
   View,
   Text,
@@ -151,20 +153,20 @@ const styles = StyleSheet.create({
   container: {
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    paddingVertical: 8,
+    paddingVertical: verticalScale(8),
   },
   scrollContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: scale(16),
     gap: 8,
     alignItems: 'center',
   },
   button: {
-    padding: 8,
-    borderRadius: 8,
+    padding: moderateScale(8),
+    borderRadius: moderateScale(8),
     borderWidth: 1,
   },
   divider: {
-    width: 1,
+    width: scale(1),
     opacity: 0.7,
   },
 });

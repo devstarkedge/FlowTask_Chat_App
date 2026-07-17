@@ -21,6 +21,8 @@ import { pinsAPI } from '../services/api';
 import logger from '../utils/logger';
 import { ScreenLayout, ScreenHeader, LoadingState, EmptyState, AppAvatar, HeaderBackButton } from '../components/common';
 import RichText from '../components/RichText';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const formatTime = (dateStr) => {
   if (!dateStr) return '';
@@ -153,7 +155,7 @@ const PinnedMessagesScreen = ({ route, navigation }) => {
               onMentionPress={(userId) => {
                 navigation.navigate('UserProfile', { user: { _id: userId }, channelId });
               }}
-              baseStyle={{ fontSize: 14, lineHeight: 20 }}
+              baseStyle={{ fontSize: moderateScale(14), lineHeight: 20 }}
             />
           ) : item.content ? (
             <Text style={[styles.contentText, { color: colors.textPrimary }]}>
@@ -284,18 +286,18 @@ const createStyles = (colors) =>
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingHorizontal: scale(16),
+      paddingVertical: verticalScale(12),
       borderBottomWidth: 1,
       gap: 8,
     },
-    backButton: { padding: 4 },
-    headerTitle: { fontSize: 17, fontWeight: '700' },
-    headerSubtitle: { fontSize: 12, marginTop: 2 },
-    listContainer: { padding: 12, gap: 10 },
+    backButton: { padding: moderateScale(4) },
+    headerTitle: { fontSize: moderateScale(17), fontWeight: '700' },
+    headerSubtitle: { fontSize: moderateScale(12), marginTop: verticalScale(2) },
+    listContainer: { padding: moderateScale(12), gap: 10 },
     messageCard: {
-      borderRadius: 12,
-      padding: 12,
+      borderRadius: moderateScale(12),
+      padding: moderateScale(12),
       gap: 8,
     },
     authorRow: {
@@ -303,16 +305,16 @@ const createStyles = (colors) =>
       alignItems: 'center',
       gap: 8,
     },
-    authorName: { fontSize: 13, fontWeight: '700' },
-    timestamp: { fontSize: 11 },
-    contentContainer: { paddingLeft: 36, gap: 8 },
-    contentText: { fontSize: 14, lineHeight: 20 },
+    authorName: { fontSize: moderateScale(13), fontWeight: '700' },
+    timestamp: { fontSize: moderateScale(11) },
+    contentContainer: { paddingLeft: scale(36), gap: 8 },
+    contentText: { fontSize: moderateScale(14), lineHeight: 20 },
     canvasCard: {
-      padding: 10,
-      borderRadius: 8,
+      padding: moderateScale(10),
+      borderRadius: moderateScale(8),
       borderWidth: 1,
       gap: 4,
-      marginTop: 4,
+      marginTop: verticalScale(4),
     },
     canvasHeader: {
       flexDirection: 'row',
@@ -320,72 +322,72 @@ const createStyles = (colors) =>
       gap: 6,
     },
     canvasTitle: {
-      fontSize: 14,
+      fontSize: moderateScale(14),
       fontWeight: '700',
     },
     canvasSummary: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
     },
     imageFrame: {
-      borderRadius: 8,
+      borderRadius: moderateScale(8),
       overflow: 'hidden',
-      marginTop: 4,
+      marginTop: verticalScale(4),
     },
     previewImage: {
       width: '100%',
-      height: 140,
-      borderRadius: 8,
+      height: verticalScale(140),
+      borderRadius: moderateScale(8),
       resizeMode: 'cover',
     },
     mediaFrame: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 8,
-      borderRadius: 8,
+      padding: moderateScale(8),
+      borderRadius: moderateScale(8),
       gap: 8,
-      marginTop: 4,
+      marginTop: verticalScale(4),
     },
     mediaName: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
       fontWeight: '500',
       flex: 1,
     },
     fileRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 8,
-      borderRadius: 8,
+      padding: moderateScale(8),
+      borderRadius: moderateScale(8),
       borderWidth: 1,
       gap: 8,
-      marginTop: 4,
+      marginTop: verticalScale(4),
     },
     reactionsRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: 6,
-      marginTop: 6,
+      marginTop: verticalScale(6),
     },
     reactionPill: {
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 12,
+      paddingHorizontal: scale(8),
+      paddingVertical: verticalScale(4),
+      borderRadius: moderateScale(12),
       borderWidth: 1,
     },
     reactionText: {
-      fontSize: 11,
+      fontSize: moderateScale(11),
     },
     unpinButton: {
       flexDirection: 'row',
       alignItems: 'center',
       alignSelf: 'flex-end',
       gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 6,
+      paddingHorizontal: scale(10),
+      paddingVertical: verticalScale(5),
+      borderRadius: moderateScale(6),
       borderWidth: 1,
-      marginTop: 4,
+      marginTop: verticalScale(4),
     },
-    unpinText: { fontSize: 12, fontWeight: '600' },
+    unpinText: { fontSize: moderateScale(12), fontWeight: '600' },
   });
 
 export default PinnedMessagesScreen;

@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Search, CircleChevronLeft, CircleChevronRight , X } from 'lucide-react-native';
 import { useThemeStore } from '../stores/themeStore';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const SearchBar = ({ query, onChangeQuery, onClose, onNext, onPrev, currentIndex, total }) => {
   const { colors } = useThemeStore();
@@ -22,29 +24,29 @@ const SearchBar = ({ query, onChangeQuery, onClose, onNext, onPrev, currentIndex
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
   },
   inner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    borderRadius: 20,
-    paddingHorizontal: 10,
+    borderRadius: moderateScale(20),
+    paddingHorizontal: scale(10),
     borderWidth: 1,
   },
   input: {
     flex: 1,
-    fontSize: 15,
-    paddingVertical: 6,
+    fontSize: moderateScale(15),
+    paddingVertical: verticalScale(6),
   },
   counter: {
-    fontSize: 12,
-    minWidth: 48,
+    fontSize: moderateScale(12),
+    minWidth: scale(48),
     textAlign: 'center',
   },
   closeButton: {
-    paddingLeft: 8,
+    paddingLeft: scale(8),
   },
 });
 

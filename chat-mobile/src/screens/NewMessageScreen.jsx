@@ -12,9 +12,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
+import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useAuthStore } from '../stores/authStore';
+import { workspaceAPI } from '../services/api';
+import logger from '../utils/logger';
 import { useNewMessageSearch } from '../hooks/useNewMessageSearch';
 import { AppAvatar , HeaderBackButton } from '../components/common';
 import { X, Hash, Lock, Volume2, Search } from 'lucide-react-native';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 // ─── Channel List Item ──────────────────────────────────────────────────────
 
@@ -70,6 +76,28 @@ const DMListItem = React.memo(({ channel, onPress, colors }) => {
   );
 });
 
+// ─── User List Item ─────────────────────────────────────────────────────────
+
+const UserListItem = React.memo(({ user, onPress, colors }) => {
+  return (
+    <TouchableOpacity
+      style={styles.listItem}
+      onPress={() => onPress(user)}
+      activeOpacity={0.6}
+    >
+      <AppAvatar user={user} size={36} showStatus statusSize={10} />
+      <View style={styles.dmInfo}>
+        <Text style={[styles.itemName, { color: colors.textPrimary }]} numberOfLines={1}>
+          {user.name}
+        </Text>
+        <Text style={[styles.dmPreview, { color: colors.textTertiary }]} numberOfLines={1}>
+          {user.email}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
 // ─── Section Header ─────────────────────────────────────────────────────────
 
 const SectionHeader = React.memo(({ title, colors }) => (
@@ -84,12 +112,59 @@ const NewMessageScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
   const channels = useChannelStore(s => s.channels) || [];
   const setActiveChannel = useChannelStore(s => s.setActiveChannel);
+  const { createDM } = useChannelStore();
+  const { user: currentUser } = useAuthStore();
+  const activeWorkspaceId = useWorkspaceStore(s => s.activeWorkspaceId);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
+  const loadUsers = useCallback(async () => {
+    if (!activeWorkspaceId) return;
+    
+    setLoadingUsers(true);
+    try {
+      const { data } = await workspaceAPI.getMembers(activeWorkspaceId, { limit: 1000 });
+      const fetchedData = data?.data || data;
+      let members = [];
+      if (Array.isArray(fetchedData)) {
+        members = fetchedData;
+      } else if (fetchedData?.members && Array.isArray(fetchedData.members)) {
+        members = fetchedData.members;
+      }
+      
+      const normalizedUsers = members.map(m => {
+        if (m.userId && typeof m.userId === 'object') {
+          return { ...m.userId, membershipRole: m.role };
+        }
+        return m;
+      }).filter(u => Boolean(u && u.name));
+      setUsers(normalizedUsers);
+    } catch (e) {
+      logger.error("Failed to fetch workspace members:", e);
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, [activeWorkspaceId]);
+
+  React.useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
 
   const { recent, channels: channelResults, dms: dmResults, filtered } = useNewMessageSearch(
     channels,
     searchQuery
   );
+
+  const userResults = useMemo(() => {
+    let res = users.filter((u) => u._id !== currentUser?._id);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      res = res.filter((u) => u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q));
+    }
+    return res;
+  }, [users, searchQuery, currentUser]);
 
   const handleChannelPress = useCallback(
     (channel) => {
@@ -103,6 +178,15 @@ const NewMessageScreen = ({ navigation }) => {
     },
     [navigation, setActiveChannel]
   );
+
+  const handleUserPress = useCallback(async (targetUser) => {
+    try {
+      const result = await createDM(targetUser._id);
+      navigation.replace("Chat", { channelId: result._id, channelName: result.name });
+    } catch (e) {
+      logger.error("Create DM error:", e);
+    }
+  }, [createDM, navigation]);
 
   // Build sections
   const sections = useMemo(() => {
@@ -120,17 +204,24 @@ const NewMessageScreen = ({ navigation }) => {
       result.push({ title: 'Direct Messages', data: dmResults, type: 'dm' });
     }
 
+    if (userResults.length > 0) {
+      result.push({ title: `People (${userResults.length})`, data: userResults, type: 'user' });
+    }
+
     return result;
-  }, [filtered, recent, channelResults, dmResults]);
+  }, [filtered, recent, channelResults, dmResults, userResults]);
 
   const renderItem = useCallback(
     ({ item, section }) => {
+      if (section.type === 'user') {
+        return <UserListItem user={item} onPress={handleUserPress} colors={colors} />;
+      }
       if (section.type === 'dm') {
         return <DMListItem channel={item} onPress={handleChannelPress} colors={colors} />;
       }
       return <ChannelListItem channel={item} onPress={handleChannelPress} colors={colors} />;
     },
-    [handleChannelPress, colors]
+    [handleChannelPress, handleUserPress, colors]
   );
 
   const renderSectionHeader = useCallback(
@@ -147,12 +238,12 @@ const NewMessageScreen = ({ navigation }) => {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          hitSlop={{ top: verticalScale(10), bottom: verticalScale(10), left: scale(10), right: scale(10) }}
         >
           <X size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>New Message</Text>
-        <View style={{ width: 24 }} />
+        <View style={{ width: scale(24) }} />
       </View>
 
       {/* Search Input */}
@@ -173,7 +264,7 @@ const NewMessageScreen = ({ navigation }) => {
           {searchQuery.length > 0 && (
             <TouchableOpacity
               onPress={() => setSearchQuery('')}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              hitSlop={{ top: verticalScale(8), bottom: verticalScale(8), left: scale(8), right: scale(8) }}
             >
               <X size={16} color={colors.textTertiary} />
             </TouchableOpacity>
@@ -216,41 +307,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(10),
+    borderRadius: moderateScale(8),
     gap: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
-    padding: 0,
+    fontSize: moderateScale(16),
+    padding: moderateScale(0),
   },
   listContent: {
-    paddingBottom: 20,
+    paddingBottom: verticalScale(20),
   },
   sectionHeader: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingHorizontal: scale(16),
+    paddingTop: verticalScale(16),
+    paddingBottom: verticalScale(8),
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -258,19 +349,19 @@ const styles = StyleSheet.create({
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(10),
     gap: 12,
   },
   iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: scale(36),
+    height: verticalScale(36),
+    borderRadius: moderateScale(8),
     justifyContent: 'center',
     alignItems: 'center',
   },
   itemName: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '500',
     flex: 1,
   },
@@ -279,16 +370,16 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   dmPreview: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: scale(40),
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     textAlign: 'center',
   },
 });

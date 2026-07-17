@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useThemeStore } from '../../stores/themeStore';
 import HeaderBackButton from './HeaderBackButton';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 /**
  * ScreenHeader — standardized back-button + title + optional right action.
@@ -39,8 +41,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: 1,
     gap: 16,
   },
@@ -48,15 +50,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 17,
+    fontSize: moderateScale(17),
     fontWeight: '700',
   },
   subtitle: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: moderateScale(12),
+    marginTop: verticalScale(2),
   },
   spacer: {
-    width: 40,
+    width: scale(40),
   },
 });
 

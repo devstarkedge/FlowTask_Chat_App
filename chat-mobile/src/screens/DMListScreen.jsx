@@ -12,8 +12,9 @@ import {
   Modal,
   Platform,
 } from "react-native";
-import { AppAvatar, AppScreen } from "../components/common";
+import { AppAvatar, AppScreen, FAB } from "../components/common";
 import AccountDrawer from "../components/AccountDrawer";
+import CreateNewBottomSheet from "../components/CreateNewBottomSheet";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useChannelStore } from "../stores/channelStore";
 import { useAuthStore } from "../stores/authStore";
@@ -79,7 +80,7 @@ const DMItem = React.memo(({ channel, onPress, isSelf }) => {
       onPress={() => onPress(channel)}
       activeOpacity={0.5}
     >
-      <AppAvatar user={dmUser} size={40} showStatus={true} statusSize={10} style={{ borderRadius: 8 }} />
+      <AppAvatar user={dmUser} size={40} showStatus={true} statusSize={10} style={{ borderRadius: moderateScale(8) }} />
       <View style={dmItem.textCol}>
         <View style={dmItem.topRow}>
           <Text
@@ -164,161 +165,7 @@ const dmItem = StyleSheet.create({
   },
 });
 
-const NewDMModal = ({ visible, onClose, navigation }) => {
-  const { colors } = useThemeStore();
-  const [users, setUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [creating, setCreating] = useState(false);
-  const { createDM } = useChannelStore();
-  const { user: currentUser } = useAuthStore();
-
-  const loadUsers = useCallback(async () => {
-    setLoadingUsers(true);
-    try {
-      const data = await directoriesAPI.getUsers({ page: 1, limit: 50 });
-      setUsers(Array.isArray(data) ? data : data?.users || []);
-    } catch (e) {
-      logger.error("Failed to fetch users:", e);
-    } finally {
-      setLoadingUsers(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    if (visible) loadUsers();
-  }, [visible, loadUsers]);
-
-  const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) return users;
-    const q = searchQuery.toLowerCase();
-    return users.filter((u) => u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q));
-  }, [users, searchQuery]);
-
-  const handleCreateDM = useCallback(
-    async (targetUser) => {
-      setCreating(true);
-      try {
-        const result = await createDM(targetUser._id);
-        onClose();
-        navigation.navigate("Chat", { channelId: result._id, channelName: result.name });
-      } catch (e) {
-        logger.error("Create DM error:", e);
-      } finally {
-        setCreating(false);
-      }
-    },
-    [createDM, navigation, onClose]
-  );
-
-  if (!visible) return null;
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-        {/* Header */}
-        <View style={[ndmStyles.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={onClose}>
-            <X size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <Text style={[ndmStyles.title, { color: colors.textPrimary }]}>New message</Text>
-          <View style={{ width: scale(22) }} />
-        </View>
-
-        {/* To field */}
-        <View style={[ndmStyles.toRow, { borderBottomColor: colors.border }]}>
-          <Text style={[ndmStyles.toLabel, { color: colors.textTertiary }]}>To:</Text>
-          <TextInput
-            style={[ndmStyles.toInput, { color: colors.inputText }]}
-            placeholder="Search people"
-            placeholderTextColor={colors.inputPlaceholder}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoFocus
-          />
-        </View>
-
-        {/* User list */}
-        {loadingUsers ? (
-          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: verticalScale(40) }} />
-        ) : (
-          <FlatList
-            data={filteredUsers.filter((u) => u._id !== currentUser?._id)}
-            keyExtractor={(item) => item._id}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={ndmStyles.userRow}
-                onPress={() => handleCreateDM(item)}
-                disabled={creating}
-                activeOpacity={0.5}
-              >
-                <AppAvatar user={item} size={32} showStatus />
-                <View style={{ flex: 1 }}>
-                  <Text style={[ndmStyles.userName, { color: colors.textPrimary }]}>
-                    {item.name}
-                  </Text>
-                  <Text style={[ndmStyles.userEmail, { color: colors.textTertiary }]} numberOfLines={1}>
-                    {item.email}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            )}
-          />
-        )}
-      </SafeAreaView>
-    </Modal>
-  );
-};
-
-const ndmStyles = StyleSheet.create({
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(12),
-    borderBottomWidth: 1,
-  },
-  title: {
-    fontSize: moderateScale(17),
-    fontWeight: "600",
-  },
-  toRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(10),
-    gap: 8,
-    borderBottomWidth: 1,
-  },
-  toLabel: {
-    fontSize: moderateScale(15),
-  },
-  toInput: {
-    flex: 1,
-    fontSize: moderateScale(15),
-    padding: 0,
-  },
-  userRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(10),
-    gap: 10,
-  },
-  userName: {
-    fontSize: moderateScale(15),
-    fontWeight: "500",
-  },
-  userEmail: {
-    fontSize: moderateScale(12),
-  },
-});
+// NewDMModal has been removed in favor of the shared CreateNewBottomSheet
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
@@ -332,7 +179,7 @@ const DMListScreen = ({ navigation }) => {
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
   const { user: currentUser } = useAuthStore();
 
-  const [newDMVisible, setNewDMVisible] = useState(false);
+  const [createNewVisible, setCreateNewVisible] = useState(false);
   const [accountDrawerVisible, setAccountDrawerVisible] = useState(false);
   const [filterQuery, setFilterQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
@@ -398,23 +245,13 @@ const DMListScreen = ({ navigation }) => {
 
       return (
         <TouchableOpacity style={styles.recentItem} onPress={() => handlePress(item)}>
-          <AppAvatar user={dmUser} size={64} showStatus={true} statusSize={14} style={{ borderRadius: 18 }} />
+          <AppAvatar user={dmUser} size={64} showStatus={true} statusSize={14} style={{ borderRadius: moderateScale(18) }} />
           <Text style={[styles.recentName, { color: colors.textPrimary }]} numberOfLines={1}>{firstName}</Text>
         </TouchableOpacity>
       );
     },
     [handlePress, currentUser, colors.textPrimary]
   );
-
-  // Hardcoded Slackbot
-  const slackbot = {
-    _id: 'slackbot',
-    name: 'Slackbot',
-    dmRecipientId: 'slackbot',
-    dmRecipientName: 'Slackbot',
-    onlineStatus: 'online',
-    avatar: 'https://ca.slack-edge.com/T00000000-U00000000-g00000000000-512'
-  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -433,7 +270,7 @@ const DMListScreen = ({ navigation }) => {
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
-          data={[slackbot, ...dmChannels.slice(0, 10)]}
+          data={dmChannels.slice(0, 10)}
           keyExtractor={(item) => item._id}
           renderItem={renderRecentItem}
           contentContainerStyle={{ paddingHorizontal: scale(16), paddingVertical: verticalScale(16), gap: 16 }}
@@ -446,7 +283,7 @@ const DMListScreen = ({ navigation }) => {
           onPress={() => setActiveFilter('all')}
           style={[styles.pill, activeFilter === 'all' ? [styles.pillActive, { backgroundColor: colors.primary, borderColor: colors.primary }] : { borderColor: colors.border }]}
         >
-          <MessageSquare size={14} color={activeFilter === 'all' ? '#fff' : colors.textSecondary} style={{ marginRight: 6 }} />
+          <MessageSquare size={14} color={activeFilter === 'all' ? '#fff' : colors.textSecondary} style={{ marginRight: scale(6) }} />
           <Text style={[styles.pillText, { color: activeFilter === 'all' ? '#fff' : colors.textSecondary, fontWeight: activeFilter === 'all' ? '600' : '500' }]}>All</Text>
         </TouchableOpacity>
         
@@ -454,7 +291,7 @@ const DMListScreen = ({ navigation }) => {
           onPress={() => setActiveFilter('unreads')}
           style={[styles.pill, activeFilter === 'unreads' ? [styles.pillActive, { backgroundColor: colors.primary, borderColor: colors.primary }] : { borderColor: colors.border }]}
         >
-          <CheckSquare size={14} color={activeFilter === 'unreads' ? '#fff' : colors.textSecondary} style={{ marginRight: 6 }} />
+          <CheckSquare size={14} color={activeFilter === 'unreads' ? '#fff' : colors.textSecondary} style={{ marginRight: scale(6) }} />
           <Text style={[styles.pillText, { color: activeFilter === 'unreads' ? '#fff' : colors.textSecondary, fontWeight: activeFilter === 'unreads' ? '600' : '500' }]}>Unreads</Text>
         </TouchableOpacity>
         
@@ -462,7 +299,7 @@ const DMListScreen = ({ navigation }) => {
           onPress={() => setActiveFilter('external')}
           style={[styles.pill, activeFilter === 'external' ? [styles.pillActive, { backgroundColor: colors.primary, borderColor: colors.primary }] : { borderColor: colors.border }]}
         >
-          <Building2 size={14} color={activeFilter === 'external' ? '#fff' : colors.textSecondary} style={{ marginRight: 6 }} />
+          <Building2 size={14} color={activeFilter === 'external' ? '#fff' : colors.textSecondary} style={{ marginRight: scale(6) }} />
           <Text style={[styles.pillText, { color: activeFilter === 'external' ? '#fff' : colors.textSecondary, fontWeight: activeFilter === 'external' ? '600' : '500' }]}>External</Text>
         </TouchableOpacity>
       </View>
@@ -477,25 +314,18 @@ const DMListScreen = ({ navigation }) => {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No direct messages yet</Text>
-            <TouchableOpacity onPress={() => setNewDMVisible(true)}>
+            <TouchableOpacity onPress={() => setCreateNewVisible(true)}>
               <Text style={[styles.emptyLink, { color: colors.primary }]}>Start a conversation</Text>
             </TouchableOpacity>
           </View>
         }
       />
 
-      {/* FAB */}
-      <TouchableOpacity 
-        style={[styles.fab, { backgroundColor: colors.primary }]} 
-        activeOpacity={0.8}
-        onPress={() => setNewDMVisible(true)}
-      >
-        <Plus size={28} color="#fff" />
-      </TouchableOpacity>
+      <FAB onPress={() => setCreateNewVisible(true)} />
 
-      <NewDMModal
-        visible={newDMVisible}
-        onClose={() => setNewDMVisible(false)}
+      <CreateNewBottomSheet
+        visible={createNewVisible}
+        onClose={() => setCreateNewVisible(false)}
         navigation={navigation}
       />
 
@@ -562,24 +392,6 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(15),
     fontWeight: "600",
   },
-  fab: {
-    position: 'absolute',
-    bottom: verticalScale(20),
-    right: scale(20),
-    width: scale(56),
-    height: scale(56),
-    borderRadius: scale(28),
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
-  }
 });
 
 export default DMListScreen;

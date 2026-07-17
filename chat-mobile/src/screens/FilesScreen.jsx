@@ -31,6 +31,8 @@ import Toast from "react-native-toast-message";
 import * as Clipboard from "expo-clipboard";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import logger from '../utils/logger';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 function formatSize(bytes) {
   if (!bytes) return "0 B";
@@ -283,7 +285,7 @@ export default function FilesScreen({ route, navigation }) {
           {
             borderBottomColor: colors.border,
             backgroundColor: colors.backgroundSecondary,
-            paddingTop: 8,
+            paddingTop: verticalScale(8),
           },
         ]}
       >
@@ -320,7 +322,7 @@ export default function FilesScreen({ route, navigation }) {
             placeholderTextColor={colors.inputPlaceholder}
             value={query}
             onChangeText={setQuery}
-            style={{ flex: 1, color: colors.inputText, marginLeft: 8 }}
+            style={{ flex: 1, color: colors.inputText, marginLeft: scale(8) }}
           />
         </View>
       </View>
@@ -354,13 +356,13 @@ export default function FilesScreen({ route, navigation }) {
       </View>
 
       {isLoading ? (
-        <ActivityIndicator style={{ marginTop: 30 }} />
+        <ActivityIndicator style={{ marginTop: verticalScale(30) }} />
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.referenceId || item._id}
           renderItem={renderItem}
-          contentContainerStyle={{ padding: 12 }}
+          contentContainerStyle={{ padding: moderateScale(12) }}
           initialNumToRender={10}
           maxToRenderPerBatch={10}
           windowSize={5}
@@ -376,7 +378,7 @@ export default function FilesScreen({ route, navigation }) {
       >
         <View style={{ flex: 1, backgroundColor: "#000" }}>
           <TouchableOpacity
-            style={{ padding: 12 }}
+            style={{ padding: moderateScale(12) }}
             onPress={() => setPreview(null)}
           >
             <Text style={{ color: "#fff" }}>Close</Text>
@@ -398,46 +400,46 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
+    padding: moderateScale(12),
     borderBottomWidth: 1,
   },
-  back: { padding: 6 },
-  title: { fontSize: 16, fontWeight: "700", marginLeft: 12 },
-  searchRow: { padding: 12 },
+  back: { padding: moderateScale(6) },
+  title: { fontSize: moderateScale(16), fontWeight: "700", marginLeft: scale(12) },
+  searchRow: { padding: moderateScale(12) },
   searchInput: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 12,
-    padding: 8,
+    borderRadius: moderateScale(12),
+    padding: moderateScale(8),
     borderWidth: 1,
   },
-  filterRow: { flexDirection: "row", paddingHorizontal: 12, gap: 8 },
+  filterRow: { flexDirection: "row", paddingHorizontal: scale(12), gap: 8 },
   pill: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    marginRight: 8,
+    paddingVertical: verticalScale(6),
+    paddingHorizontal: scale(10),
+    borderRadius: moderateScale(999),
+    marginRight: scale(8),
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 10,
+    padding: moderateScale(10),
+    borderRadius: moderateScale(10),
+    marginBottom: verticalScale(10),
   },
   thumb: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
+    width: scale(64),
+    height: verticalScale(64),
+    borderRadius: moderateScale(8),
     overflow: "hidden",
     backgroundColor: "#222",
     justifyContent: "center",
     alignItems: "center",
   },
   imageThumb: { width: "100%", height: "100%", resizeMode: "cover" },
-  meta: { flex: 1, paddingHorizontal: 10 },
-  name: { fontSize: 14, fontWeight: "700" },
-  sub: { fontSize: 12, marginTop: 4 },
+  meta: { flex: 1, paddingHorizontal: scale(10) },
+  name: { fontSize: moderateScale(14), fontWeight: "700" },
+  sub: { fontSize: moderateScale(12), marginTop: verticalScale(4) },
   actions: { flexDirection: "row", alignItems: "center", gap: 6 },
-  actionBtn: { padding: 6, marginLeft: 6 },
+  actionBtn: { padding: moderateScale(6), marginLeft: scale(6) },
 });

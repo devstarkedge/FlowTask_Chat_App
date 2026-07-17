@@ -9,3 +9,4 @@ export { default as MobileFileCard } from './MobileFileCard';
 export { default as HomeHeaderLoader } from './HomeHeaderLoader';
 export { default as HeaderBackButton } from './HeaderBackButton';
 export { default as OptionsSelectionModal } from './OptionsSelectionModal';
+export { default as FAB } from './FAB';

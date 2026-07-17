@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppAvatar, HomeHeaderLoader } from "../components/common";
+import FAB from "../components/common/FAB";
 import AccountDrawer from "../components/AccountDrawer";
 import CustomizeHomeModal from "../components/CustomizeHomeModal";
 import CreateNewBottomSheet from "../components/CreateNewBottomSheet";
@@ -50,16 +51,16 @@ import { useTranslation } from "../utils/i18n";
 
 const SkeletonCard = ({ colors }) => (
   <View style={[qcStyles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
-    <View style={[{ width: 20, height: 20, borderRadius: 10, opacity: 0.5, backgroundColor: colors.border }]} />
-    <View style={[{ width: 50, height: 10, borderRadius: 4, opacity: 0.5, backgroundColor: colors.border }]} />
-    <View style={[{ width: 30, height: 8, borderRadius: 4, opacity: 0.5, backgroundColor: colors.border }]} />
+    <View style={[{ width: scale(20), height: verticalScale(20), borderRadius: moderateScale(10), opacity: 0.5, backgroundColor: colors.border }]} />
+    <View style={[{ width: scale(50), height: verticalScale(10), borderRadius: moderateScale(4), opacity: 0.5, backgroundColor: colors.border }]} />
+    <View style={[{ width: scale(30), height: verticalScale(8), borderRadius: moderateScale(4), opacity: 0.5, backgroundColor: colors.border }]} />
   </View>
 );
 
 const SkeletonRow = ({ colors }) => (
-  <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 6, gap: 8, minHeight: 36 }}>
-    <View style={[{ width: 16, height: 16, borderRadius: 4, opacity: 0.5, backgroundColor: colors.border }]} />
-    <View style={[{ width: 120, height: 14, borderRadius: 4, opacity: 0.5, backgroundColor: colors.border }]} />
+  <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: scale(16), paddingVertical: verticalScale(6), gap: 8, minHeight: verticalScale(36) }}>
+    <View style={[{ width: scale(16), height: verticalScale(16), borderRadius: moderateScale(4), opacity: 0.5, backgroundColor: colors.border }]} />
+    <View style={[{ width: scale(120), height: verticalScale(14), borderRadius: moderateScale(4), opacity: 0.5, backgroundColor: colors.border }]} />
   </View>
 );
 
@@ -753,19 +754,7 @@ const HomeScreen = ({ navigation }) => {
       />
 
       {/* Floating "+" button for create new menu */}
-      <TouchableOpacity
-        style={[
-          styles.fab,
-          {
-            backgroundColor: colors.primary,
-            shadowColor: colors.shadow || "#000",
-          },
-        ]}
-        onPress={() => setCreateNewVisible(true)}
-        activeOpacity={0.8}
-      >
-        <Plus size={24} color={colors.textOnPrimary} strokeWidth={2.5} />
-      </TouchableOpacity>
+      <FAB onPress={() => setCreateNewVisible(true)} />
 
       <AccountDrawer
         visible={accountDrawerVisible}
@@ -840,7 +829,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   settingsBtn: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   menuBtn: {
     borderRadius: moderateScale(16),
@@ -862,7 +851,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: moderateScale(20),
     gap: 12,
   },
   errorText: { fontSize: moderateScale(16), fontWeight: "600" },
@@ -873,8 +862,8 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    right: 20,
-    bottom: 20,
+    right: scale(20),
+    bottom: verticalScale(20),
     width: scale(52),
     height: scale(52),
     borderRadius: moderateScale(26),

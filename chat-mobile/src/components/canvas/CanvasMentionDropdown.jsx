@@ -7,6 +7,8 @@ import {
   StyleSheet,
 } from 'react-native';
 import Avatar from '../Avatar';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 export default function CanvasMentionDropdown({
   type = 'user', // 'user' or 'channel'
@@ -71,11 +73,11 @@ export default function CanvasMentionDropdown({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 50,
-    left: 12,
-    right: 12,
-    maxHeight: 200,
-    borderRadius: 8,
+    bottom: verticalScale(50),
+    left: scale(12),
+    right: scale(12),
+    maxHeight: verticalScale(200),
+    borderRadius: moderateScale(8),
     borderWidth: 1,
     borderColor: '#e5e7eb',
     backgroundColor: '#ffffff',
@@ -85,38 +87,38 @@ const styles = StyleSheet.create({
     shadowColor: '#000000',
     shadowOpacity: 0.15,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: scale(0), height: verticalScale(2) },
   },
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(10),
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#f3f4f6',
   },
   textContainer: {
-    marginLeft: 10,
+    marginLeft: scale(10),
     flex: 1,
   },
   itemName: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
     color: '#1f2937',
   },
   itemSubtext: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     color: '#6b7280',
-    marginTop: 1,
+    marginTop: verticalScale(1),
   },
   channelRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   hash: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: 'bold',
     color: '#6b7280',
-    marginRight: 8,
+    marginRight: scale(8),
   },
 });

@@ -11,6 +11,8 @@ import {
 import { Camera, Image as ImageIcon, Mic, Video, FileText, Smile, Layers, Clock, X } from 'lucide-react-native';
 import * as MediaLibrary from 'expo-media-library';
 import * as ImagePicker from 'expo-image-picker';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 export default function MediaPickerSheet({
   visible,
@@ -221,20 +223,20 @@ const OptionRow = ({ icon: Icon, label, colors, onPress }) => (
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
-  sheet: { borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 24, maxHeight: '90%' },
-  dragHandleContainer: { alignItems: 'center', paddingVertical: 12 },
-  dragHandle: { width: 40, height: 4, borderRadius: 2 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 12, alignItems: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: '700' },
-  headerAction: { fontSize: 14, fontWeight: '600' },
-  photoStripContainer: { height: 100, marginBottom: 16 },
-  photoStripList: { paddingHorizontal: 16, gap: 8 },
-  cameraBtn: { width: 100, height: 100, borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center', borderStyle: 'dashed' },
-  photoThumb: { width: 100, height: 100, borderRadius: 12, overflow: 'hidden' },
+  sheet: { borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: verticalScale(24), maxHeight: '90%' },
+  dragHandleContainer: { alignItems: 'center', paddingVertical: verticalScale(12) },
+  dragHandle: { width: scale(40), height: verticalScale(4), borderRadius: moderateScale(2) },
+  header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: scale(16), marginBottom: verticalScale(12), alignItems: 'center' },
+  headerTitle: { fontSize: moderateScale(16), fontWeight: '700' },
+  headerAction: { fontSize: moderateScale(14), fontWeight: '600' },
+  photoStripContainer: { height: verticalScale(100), marginBottom: verticalScale(16) },
+  photoStripList: { paddingHorizontal: scale(16), gap: 8 },
+  cameraBtn: { width: scale(100), height: verticalScale(100), borderRadius: moderateScale(12), borderWidth: 1, justifyContent: 'center', alignItems: 'center', borderStyle: 'dashed' },
+  photoThumb: { width: scale(100), height: verticalScale(100), borderRadius: moderateScale(12), overflow: 'hidden' },
   photoImg: { width: '100%', height: '100%' },
-  optionsList: { paddingHorizontal: 16 },
-  optionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
-  optionIcon: { width: 32, alignItems: 'center', marginRight: 12 },
-  optionLabel: { fontSize: 16, fontWeight: '500' },
-  divider: { height: 1, marginVertical: 8, marginHorizontal: 8 }
+  optionsList: { paddingHorizontal: scale(16) },
+  optionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: verticalScale(12) },
+  optionIcon: { width: scale(32), alignItems: 'center', marginRight: scale(12) },
+  optionLabel: { fontSize: moderateScale(16), fontWeight: '500' },
+  divider: { height: verticalScale(1), marginVertical: verticalScale(8), marginHorizontal: scale(8) }
 });

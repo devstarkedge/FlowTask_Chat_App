@@ -22,6 +22,8 @@ import {
 import ScheduledMessageDetailsModal from '../components/ScheduledMessageDetailsModal';
 import { AppAvatar } from '../components/common';
 import { useConversationDetails } from '../hooks/useConversationDetails';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const ScheduledItem = React.memo(({ item, onPress, colors }) => {
   const scheduledDate = new Date(item.scheduledAt);
@@ -53,7 +55,7 @@ const ScheduledItem = React.memo(({ item, onPress, colors }) => {
             </Text>
           </View>
         </View>
-        <Clock size={16} color={isPast ? colors.error : colors.success} style={{ marginLeft: 8 }} />
+        <Clock size={16} color={isPast ? colors.error : colors.success} style={{ marginLeft: scale(8) }} />
       </View>
 
       <Text 
@@ -153,12 +155,12 @@ const ScheduledScreen = ({ navigation }) => {
 
 const createStyles = (colors) => StyleSheet.create({
   listContainer: {
-    padding: 16,
+    padding: moderateScale(16),
     gap: 12,
   },
   scheduledItem: {
-    padding: 16,
-    borderRadius: 12,
+    padding: moderateScale(16),
+    borderRadius: moderateScale(12),
     gap: 12,
   },
   scheduledHeader: {
@@ -167,8 +169,8 @@ const createStyles = (colors) => StyleSheet.create({
     gap: 12,
   },
   scheduledIconContainer: {
-    width: 32,
-    height: 32,
+    width: scale(32),
+    height: verticalScale(32),
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -176,22 +178,22 @@ const createStyles = (colors) => StyleSheet.create({
     flex: 1,
   },
   channelName: {
-    fontSize: 13,
-    marginBottom: 4,
+    fontSize: moderateScale(13),
+    marginBottom: verticalScale(4),
   },
   timeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   scheduledTime: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
   },
   actionButton: {
-    padding: 6,
+    padding: moderateScale(6),
   },
   messageContent: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     lineHeight: 20,
   },
   scheduledMeta: {
@@ -200,15 +202,15 @@ const createStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
   },
   metaText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
+    borderRadius: moderateScale(6),
   },
   statusText: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: '600',
   },
 });

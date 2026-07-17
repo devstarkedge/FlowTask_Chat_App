@@ -17,6 +17,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { SmilePlus } from 'lucide-react-native';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const ReactionBar = React.memo(function ReactionBar({
   reactions = [],
@@ -93,29 +95,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: verticalScale(4),
     gap: 4,
   },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(3),
+    borderRadius: moderateScale(12),
     borderWidth: 1,
     gap: 4,
   },
   emoji: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   count: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '600',
   },
   addButton: {
-    width: 30,
-    height: 26,
-    borderRadius: 13,
+    width: scale(30),
+    height: verticalScale(26),
+    borderRadius: moderateScale(13),
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',

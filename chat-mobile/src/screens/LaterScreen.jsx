@@ -35,6 +35,8 @@ import { AppAvatar } from '../components/common';
 import { useConversationDetails } from '../hooks/useConversationDetails';
 import logger from '../utils/logger';
 import Toast from 'react-native-toast-message';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const LaterItem = React.memo(({ item, onPress, onLongPress, onBottomSheet, filter, handleStatusChange, setReminderTarget, colors }) => {
   const message = item.messageId;
@@ -130,7 +132,7 @@ const LaterItem = React.memo(({ item, onPress, onLongPress, onBottomSheet, filte
       )}
 
       {isCustom && (
-        <Text style={[styles.embeddedSubtitle, { color: colors.textSecondary, marginLeft: 56, marginTop: -8 }]}>{subtitle}</Text>
+        <Text style={[styles.embeddedSubtitle, { color: colors.textSecondary, marginLeft: scale(56), marginTop: -8 }]}>{subtitle}</Text>
       )}
 
       <View style={styles.actionsRow}>
@@ -414,7 +416,7 @@ const LaterScreen = ({ navigation }) => {
                   <Trash2 size={20} color="#E53E3E" />
                   <Text style={[styles.bottomSheetText, { color: '#E53E3E' }]}>Delete</Text>
                 </TouchableOpacity>
-                <View style={{ height: 30 }} />
+                <View style={{ height: verticalScale(30) }} />
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -440,56 +442,56 @@ const createStyles = (colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingTop: 16,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
+    paddingTop: verticalScale(16),
     backgroundColor: 'transparent',
   },
   headerBackButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: scale(44),
+    height: verticalScale(44),
+    borderRadius: moderateScale(22),
     backgroundColor: colors.card,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: scale(0), height: verticalScale(2) },
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 3,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   headerRightPill: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: 22,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: moderateScale(22),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(10),
     gap: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: scale(0), height: verticalScale(2) },
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 3,
   },
   headerIconButton: {
-    padding: 2,
+    padding: moderateScale(2),
   },
   listContainer: {
-    padding: 16,
-    paddingTop: 24,
+    padding: moderateScale(16),
+    paddingTop: verticalScale(24),
     gap: 24,
   },
   savedItem: {
-    paddingVertical: 8,
+    paddingVertical: verticalScale(8),
     gap: 12,
     backgroundColor: colors.background,
-    borderRadius: 16,
-    paddingHorizontal: 12,
+    borderRadius: moderateScale(16),
+    paddingHorizontal: scale(12),
   },
   topRow: {
     flexDirection: 'row',
@@ -497,11 +499,11 @@ const createStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
   },
   typeLabel: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '600',
   },
   dateLabel: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
   },
   mainRow: {
     flexDirection: 'row',
@@ -509,15 +511,15 @@ const createStyles = (colors) => StyleSheet.create({
     gap: 12,
   },
   mainIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: scale(44),
+    height: verticalScale(44),
+    borderRadius: moderateScale(12),
     backgroundColor: '#1DA1F2', 
     alignItems: 'center',
     justifyContent: 'center',
   },
   mainTitle: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '500',
     flex: 1,
   },
@@ -525,15 +527,15 @@ const createStyles = (colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: moderateScale(16),
+    padding: moderateScale(14),
     gap: 14,
-    marginLeft: 0,
+    marginLeft: scale(0),
   },
   embeddedIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: scale(36),
+    height: verticalScale(36),
+    borderRadius: moderateScale(10),
     backgroundColor: '#1DA1F2',
     alignItems: 'center',
     justifyContent: 'center',
@@ -542,32 +544,32 @@ const createStyles = (colors) => StyleSheet.create({
     flex: 1,
   },
   embeddedTitle: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   embeddedSubtitle: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
   },
   actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginTop: 4,
+    marginTop: verticalScale(4),
   },
   completeBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(10),
+    borderRadius: moderateScale(10),
   },
   completeBtnText: {
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   clockBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: scale(40),
+    height: verticalScale(40),
+    borderRadius: moderateScale(10),
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -581,11 +583,11 @@ const createStyles = (colors) => StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.1)',
   },
   contextMenu: {
-    width: 250,
-    borderRadius: 24,
-    paddingVertical: 8,
+    width: scale(250),
+    borderRadius: moderateScale(24),
+    paddingVertical: verticalScale(8),
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: scale(0), height: verticalScale(8) },
     shadowOpacity: 0.15,
     shadowRadius: 24,
     elevation: 8,
@@ -593,12 +595,12 @@ const createStyles = (colors) => StyleSheet.create({
   contextMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingHorizontal: scale(24),
+    paddingVertical: verticalScale(14),
     gap: 16,
   },
   contextMenuText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '400',
   },
   // Bottom Sheet
@@ -610,36 +612,36 @@ const createStyles = (colors) => StyleSheet.create({
   bottomSheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 24,
+    paddingHorizontal: scale(24),
+    paddingTop: verticalScale(12),
+    paddingBottom: verticalScale(24),
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
+    shadowOffset: { width: scale(0), height: -4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 10,
   },
   bottomSheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
+    width: scale(40),
+    height: verticalScale(4),
+    borderRadius: moderateScale(2),
     alignSelf: 'center',
-    marginBottom: 20,
+    marginBottom: verticalScale(20),
   },
   bottomSheetTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
     alignSelf: 'center',
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
   },
   bottomSheetItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: verticalScale(16),
     gap: 16,
   },
   bottomSheetText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
   }
 });
 

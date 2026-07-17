@@ -28,6 +28,8 @@ import {
 } from "lucide-react-native";
 import { AppAvatar } from "../../components/common";
 import { formatMessageTime } from '../../utils/dateUtils';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 const { width } = Dimensions.get("window");
 
@@ -54,7 +56,7 @@ const ProfileScreen = ({ navigation }) => {
       />
 
       {/* Header */}
-      <View style={[styles.header, { paddingTop: 12 }]}>
+      <View style={[styles.header, { paddingTop: verticalScale(12) }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={[
@@ -190,7 +192,7 @@ const ProfileScreen = ({ navigation }) => {
           </View>
         </View> */}
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: verticalScale(40) }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -213,10 +215,10 @@ const prStyles = StyleSheet.create({
   linkRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: verticalScale(12),
     gap: 12,
   },
-  linkLabel: { fontSize: 15, fontWeight: "500" },
+  linkLabel: { fontSize: moderateScale(15), fontWeight: "500" },
 });
 
 const createStyles = (colors) =>
@@ -228,52 +230,52 @@ const createStyles = (colors) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingHorizontal: scale(16),
+      paddingVertical: verticalScale(12),
     },
     headerButton: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      width: scale(44),
+      height: verticalScale(44),
+      borderRadius: moderateScale(22),
       justifyContent: "center",
       alignItems: "center",
     },
     headerTitle: {
-      fontSize: 18,
+      fontSize: moderateScale(18),
       fontWeight: "700",
     },
     scrollContent: {
-      paddingTop: 8,
+      paddingTop: verticalScale(8),
     },
     imageContainer: {
       alignItems: "center",
-      marginHorizontal: 16,
-      marginBottom: 20,
-      borderRadius: 24,
+      marginHorizontal: scale(16),
+      marginBottom: verticalScale(20),
+      borderRadius: moderateScale(24),
       overflow: "hidden", // Add overflow hidden if we customize the image corner inside
     },
     infoSection: {
-      paddingHorizontal: 16,
-      marginBottom: 20,
+      paddingHorizontal: scale(16),
+      marginBottom: verticalScale(20),
     },
     name: {
-      fontSize: 26,
+      fontSize: moderateScale(26),
       fontWeight: "800",
-      marginBottom: 16,
+      marginBottom: verticalScale(16),
     },
     statusRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
-      marginBottom: 8,
+      marginBottom: verticalScale(8),
     },
     statusDot: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
+      width: scale(10),
+      height: verticalScale(10),
+      borderRadius: moderateScale(5),
     },
     statusText: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
     },
     timeRow: {
       flexDirection: "row",
@@ -281,46 +283,46 @@ const createStyles = (colors) =>
       gap: 8,
     },
     timeText: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
     },
     actionButtons: {
       flexDirection: "row",
-      paddingHorizontal: 16,
+      paddingHorizontal: scale(16),
       gap: 12,
-      marginBottom: 24,
+      marginBottom: verticalScale(24),
     },
     actionButton: {
       flex: 1,
-      paddingVertical: 14,
-      borderRadius: 16,
+      paddingVertical: verticalScale(14),
+      borderRadius: moderateScale(16),
       justifyContent: "center",
       alignItems: "center",
     },
     actionButtonText: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
       fontWeight: "600",
     },
     divider: {
       height: StyleSheet.hairlineWidth,
       width: "100%",
-      marginBottom: 24,
+      marginBottom: verticalScale(24),
     },
     section: {
-      paddingHorizontal: 16,
-      marginBottom: 24,
+      paddingHorizontal: scale(16),
+      marginBottom: verticalScale(24),
     },
     sectionHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      marginBottom: 16,
+      marginBottom: verticalScale(16),
     },
     sectionTitle: {
-      fontSize: 18,
+      fontSize: moderateScale(18),
       fontWeight: "600",
     },
     editText: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
       fontWeight: "600",
     },
     contactRow: {
@@ -329,7 +331,7 @@ const createStyles = (colors) =>
       gap: 16,
     },
     contactIconContainer: {
-      width: 24,
+      width: scale(24),
       alignItems: "center",
     },
     contactDetails: {
@@ -337,24 +339,24 @@ const createStyles = (colors) =>
       gap: 4,
     },
     contactEmail: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
     },
     contactLabel: {
-      fontSize: 14,
+      fontSize: moderateScale(14),
     },
     card: {
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: moderateScale(12),
+      padding: moderateScale(16),
       gap: 8,
     },
     logoutRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
-      paddingVertical: 4,
+      paddingVertical: verticalScale(4),
     },
     logoutLabel: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
       fontWeight: "600",
     },
   });

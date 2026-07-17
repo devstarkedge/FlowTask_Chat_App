@@ -4,6 +4,8 @@ import { ChevronLeft, HelpCircle, ChevronRight, Bell, Clock, Smartphone, Volume2
 import { useThemeStore } from '../../stores/themeStore';
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { OptionsSelectionModal } from '../../components/common';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 const NOTIF_OPTIONS = {
   schedule: [
@@ -153,64 +155,64 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 12,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backButton: {
-    padding: 8,
+    padding: moderateScale(8),
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   helpButton: {
-    padding: 8,
+    padding: moderateScale(8),
   },
   content: {
-    paddingBottom: 40,
+    paddingBottom: verticalScale(40),
   },
   sectionHeader: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 12,
+    paddingHorizontal: scale(20),
+    paddingTop: verticalScale(24),
+    paddingBottom: verticalScale(12),
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '700',
   },
   sectionSubtitle: {
-    fontSize: 14,
-    marginTop: 4,
+    fontSize: moderateScale(14),
+    marginTop: verticalScale(4),
     lineHeight: 20,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingVertical: verticalScale(14),
+    paddingHorizontal: scale(20),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    paddingRight: 16,
+    paddingRight: scale(16),
   },
   textContainer: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: scale(16),
   },
   rowLabel: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
   },
   rowSubtitle: {
-    fontSize: 14,
-    marginTop: 2,
+    fontSize: moderateScale(14),
+    marginTop: verticalScale(2),
   },
   divider: {
-    height: 16,
+    height: verticalScale(16),
   },
 });
 

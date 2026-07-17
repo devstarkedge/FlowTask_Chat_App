@@ -19,6 +19,8 @@ import { useThemeStore } from "../stores/themeStore";
 import { useChannelStore } from "../stores/channelStore";
 import { disconnectSocket } from "../services/socket";
 import CreateChannelModal from "./CreateChannelModal";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 import {
   Hash,
   Plus,
@@ -57,9 +59,9 @@ const sHeader = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 4,
+    paddingHorizontal: scale(16),
+    paddingTop: verticalScale(18),
+    paddingBottom: verticalScale(4),
   },
   header: {
     flexDirection: "row",
@@ -68,12 +70,12 @@ const sHeader = StyleSheet.create({
     gap: 4,
   },
   title: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: "700",
     opacity: 0.7,
   },
   addBtn: {
-    padding: 4,
+    padding: moderateScale(4),
   },
 });
 
@@ -125,28 +127,28 @@ const chRow = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingLeft: 30,
-    paddingVertical: 5,
+    paddingHorizontal: scale(16),
+    paddingLeft: scale(30),
+    paddingVertical: verticalScale(5),
     gap: 6,
-    minHeight: 32,
-    borderRadius: 6,
-    marginHorizontal: 4,
+    minHeight: verticalScale(32),
+    borderRadius: moderateScale(6),
+    marginHorizontal: scale(4),
   },
   name: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     flex: 1,
   },
   badge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 5,
+    minWidth: scale(18),
+    height: verticalScale(18),
+    borderRadius: moderateScale(9),
+    paddingHorizontal: scale(5),
     justifyContent: "center",
     alignItems: "center",
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: "700",
   },
 });
@@ -155,12 +157,12 @@ const chRow = StyleSheet.create({
 
 const DMRow = React.memo(({ channel, unreadCount, onPress, colors }) => {
   const otherUser = channel.members?.find((m) => m._id !== channel.selfId) || channel.otherUser;
-  const targetId = otherUser?._id || channel.dmRecipientId;
-  const liveMember = useWorkspaceStore(s => 
-    s.members.find(m => (m.userId?._id || m.userId || m._id) === targetId)
-  );
+  const rawTargetId = otherUser?._id || channel.dmRecipientId;
+  const targetId = typeof rawTargetId === 'object' ? rawTargetId?._id || rawTargetId?.id : rawTargetId;
+  const targetIdStr = targetId?.toString ? targetId.toString() : targetId;
+  const liveOnlineStatus = useWorkspaceStore(s => s.presenceMap?.[targetIdStr]);
   
-  const isOnline = liveMember?.onlineStatus === 'online' || liveMember?.userId?.onlineStatus === 'online' || otherUser?.presence === "online" || otherUser?.isOnline || channel.onlineStatus === "online";
+  const isOnline = liveOnlineStatus === 'online' || otherUser?.presence === "online" || otherUser?.isOnline || channel.onlineStatus === "online";
   const displayName = channel.name || otherUser?.name || "DM";
 
   return (
@@ -199,33 +201,33 @@ const dmRow = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingLeft: 30,
-    paddingVertical: 5,
+    paddingHorizontal: scale(16),
+    paddingLeft: scale(30),
+    paddingVertical: verticalScale(5),
     gap: 6,
-    minHeight: 32,
-    borderRadius: 6,
-    marginHorizontal: 4,
+    minHeight: verticalScale(32),
+    borderRadius: moderateScale(6),
+    marginHorizontal: scale(4),
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: scale(8),
+    height: verticalScale(8),
+    borderRadius: moderateScale(4),
   },
   name: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     flex: 1,
   },
   badge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 5,
+    minWidth: scale(18),
+    height: verticalScale(18),
+    borderRadius: moderateScale(9),
+    paddingHorizontal: scale(5),
     justifyContent: "center",
     alignItems: "center",
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: "700",
   },
 });
@@ -251,28 +253,28 @@ const navItem = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(9),
     gap: 8,
-    borderRadius: 6,
-    marginHorizontal: 4,
+    borderRadius: moderateScale(6),
+    marginHorizontal: scale(4),
   },
   label: {
     flex: 1,
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: "500",
     opacity: 0.8,
   },
   badge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 5,
+    minWidth: scale(18),
+    height: verticalScale(18),
+    borderRadius: moderateScale(9),
+    paddingHorizontal: scale(5),
     justifyContent: "center",
     alignItems: "center",
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: "700",
   },
 });
@@ -453,7 +455,7 @@ const DrawerNavigation = ({ navigation }) => {
 
           <View style={[styles.sep, { backgroundColor: colors.primaryOverlayLight }]} />
           <NavItem label="Sign out" onPress={handleLogout} colors={colors} />
-          <View style={{ height: 20 }} />
+          <View style={{ height: verticalScale(20) }} />
         </ScrollView>
       </Animated.View>
 
@@ -476,54 +478,54 @@ const styles = StyleSheet.create({
   },
   drawer: {
     position: "absolute",
-    right: 0,
-    top: 0,
-    bottom: 0,
+    right: scale(0),
+    top: verticalScale(0),
+    bottom: verticalScale(0),
     width: DRAWER_WIDTH,
   },
   topRow: {
     flexDirection: "row",
     justifyContent: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
   },
   closeBtn: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   wsHeader: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 2,
+    paddingHorizontal: scale(16),
+    paddingTop: verticalScale(4),
+    paddingBottom: verticalScale(2),
     gap: 4,
   },
   wsName: {
-    fontSize: 17,
+    fontSize: moderateScale(17),
     fontWeight: "800",
     flex: 1,
   },
   userRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(6),
     gap: 6,
   },
   statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: scale(8),
+    height: verticalScale(8),
+    borderRadius: moderateScale(4),
   },
   userName: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "500",
     opacity: 0.7,
   },
   sep: {
     height: StyleSheet.hairlineWidth,
-    marginHorizontal: 16,
-    marginVertical: 8,
+    marginHorizontal: scale(16),
+    marginVertical: verticalScale(8),
   },
 });
 

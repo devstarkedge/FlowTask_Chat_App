@@ -10,12 +10,14 @@ import {
 } from "react-native";
 import AccessibleModal from "./AccessibleModal";
 import { useThemeStore } from "../stores/themeStore";
-import api from "../services/api";
+import api, { usersAPI } from "../services/api";
 import { X, Clock, Calendar } from "lucide-react-native";
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import logger from '../utils/logger';
 import { formatMessageTime } from "../utils/dateUtils";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const PauseNotificationsModal = ({ visible, onClose }) => {
   const { colors } = useThemeStore();
@@ -52,7 +54,7 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
       }
 
       if (minutes) {
-        await api.put('/notifications/preferences/pause', {
+        await usersAPI.pauseNotifications({
           duration: minutes,
           resumeAt: new Date(Date.now() + minutes * 60000).toISOString(),
         });
@@ -72,7 +74,7 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
     try {
       const minutes = Math.ceil((customDate - new Date()) / 60000);
       if (minutes > 0) {
-        await api.put('/notifications/preferences/pause', {
+        await usersAPI.pauseNotifications({
           duration: minutes,
           resumeAt: customDate.toISOString(),
         });
@@ -147,7 +149,7 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
             </View>
           ) : (
             <View style={[styles.customSection, { borderTopColor: colors.border }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: verticalScale(12) }}>
                 <Calendar size={16} color={colors.textSecondary} />
                 <Text style={[styles.customLabel, { color: colors.textSecondary }]}>
                   Custom date & time
@@ -175,7 +177,7 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
                         setShowPicker(true);
                       }}
                     >
-                      <Text style={{ color: colors.inputText || colors.textPrimary, fontSize: 14 }}>
+                      <Text style={{ color: colors.inputText || colors.textPrimary, fontSize: moderateScale(14) }}>
                         {customDate.toLocaleDateString()}
                       </Text>
                     </TouchableOpacity>
@@ -186,7 +188,7 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
                         setShowPicker(true);
                       }}
                     >
-                      <Text style={{ color: colors.inputText || colors.textPrimary, fontSize: 14 }}>
+                      <Text style={{ color: colors.inputText || colors.textPrimary, fontSize: moderateScale(14) }}>
                         {formatMessageTime(customDate)}
                       </Text>
                     </TouchableOpacity>
@@ -196,7 +198,7 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
                   style={[styles.scheduleButton, { backgroundColor: colors.primary, alignItems: 'center' }]}
                   onPress={handleCustomSubmit}
                 >
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: moderateScale(14) }}>
                     Set Custom Time
                   </Text>
                 </TouchableOpacity>
@@ -240,7 +242,7 @@ const createStyles = (colors) =>
     },
     modal: {
       width: "85%",
-      borderRadius: 16,
+      borderRadius: moderateScale(16),
       ...(Platform.OS !== "web"
         ? {
             boxShadow: `0px 4px 12px ${colors.shadowLg}`,
@@ -249,7 +251,7 @@ const createStyles = (colors) =>
         : {
             boxShadow: rnShadowToBoxShadow(
               "#000",
-              { width: 0, height: 4 },
+              { width: scale(0), height: verticalScale(4) },
               0.2,
               12,
             ),
@@ -259,47 +261,47 @@ const createStyles = (colors) =>
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingHorizontal: scale(20),
+      paddingVertical: verticalScale(16),
       borderBottomWidth: 1,
     },
     headerTitle: {
-      fontSize: 18,
+      fontSize: moderateScale(18),
       fontWeight: "700",
     },
     content: {
-      paddingVertical: 8,
+      paddingVertical: verticalScale(8),
     },
     durationItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingHorizontal: scale(20),
+      paddingVertical: verticalScale(16),
       gap: 14,
     },
     durationLabel: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
       fontWeight: "500",
     },
     customSection: {
-      padding: 20,
+      padding: moderateScale(20),
     },
     customLabel: {
-      fontSize: 14,
+      fontSize: moderateScale(14),
       fontWeight: '600',
     },
     dateInput: {
       flex: 1,
       borderWidth: 1,
-      borderRadius: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      borderRadius: moderateScale(8),
+      paddingHorizontal: scale(12),
+      paddingVertical: verticalScale(10),
     },
     scheduleButton: {
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderRadius: 8,
-      marginTop: 8,
+      paddingHorizontal: scale(16),
+      paddingVertical: verticalScale(12),
+      borderRadius: moderateScale(8),
+      marginTop: verticalScale(8),
     },
   });
 

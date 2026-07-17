@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: verticalScale(100),
   },
   itemContainer: {
     flexDirection: 'row',
@@ -160,8 +160,8 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    right: 20,
-    bottom: 20,
+    right: scale(20),
+    bottom: verticalScale(20),
     width: scale(52),
     height: scale(52),
     borderRadius: moderateScale(26),

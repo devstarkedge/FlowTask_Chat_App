@@ -21,6 +21,8 @@ import { X, Upload, Briefcase } from "lucide-react-native";
 import { workspaceAPI } from "../../services/api";
 import Toast from "react-native-toast-message";
 import logger from "../../utils/logger";
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 const CreateWorkspaceModal = ({ visible, onClose, onSuccess, navigation }) => {
   const { colors } = useThemeStore();
@@ -143,7 +145,7 @@ const CreateWorkspaceModal = ({ visible, onClose, onSuccess, navigation }) => {
           keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
         >
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={handleClose} style={styles.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity onPress={handleClose} style={styles.closeBtn} hitSlop={{ top: verticalScale(10), bottom: verticalScale(10), left: scale(10), right: scale(10) }}>
               <X size={22} color={colors.textPrimary} />
             </TouchableOpacity>
             <Text style={[styles.title, { color: colors.textPrimary }]}>
@@ -157,7 +159,7 @@ const CreateWorkspaceModal = ({ visible, onClose, onSuccess, navigation }) => {
                 { backgroundColor: colors.primary },
                 (!name.trim() || loading) && { opacity: 0.4 },
               ]}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              hitSlop={{ top: verticalScale(10), bottom: verticalScale(10), left: scale(10), right: scale(10) }}
             >
               {loading ? (
                 <ActivityIndicator size="small" color={colors.textOnPrimary || '#fff'} />
@@ -226,7 +228,7 @@ const CreateWorkspaceModal = ({ visible, onClose, onSuccess, navigation }) => {
               <Text style={[styles.errorText, { color: colors.error || '#ef4444' }]}>{error}</Text>
             )}
 
-            <Text style={[styles.label, { color: colors.textSecondary, marginTop: 20 }]}>
+            <Text style={[styles.label, { color: colors.textSecondary, marginTop: verticalScale(20) }]}>
               Description (optional)
             </Text>
             <TextInput
@@ -251,7 +253,7 @@ const CreateWorkspaceModal = ({ visible, onClose, onSuccess, navigation }) => {
             <Text style={[styles.hint, { color: colors.textTertiary }]}>
               Create a workspace to organize your team's channels, files, and conversations.
             </Text>
-            <View style={{ height: 40 }} />
+            <View style={{ height: verticalScale(40) }} />
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -267,40 +269,40 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
     borderBottomWidth: 1,
   },
-  closeBtn: { padding: 4 },
-  title: { fontSize: 16, fontWeight: "700", flex: 1, textAlign: "center" },
+  closeBtn: { padding: moderateScale(4) },
+  title: { fontSize: moderateScale(16), fontWeight: "700", flex: 1, textAlign: "center" },
   createBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 64,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(8),
+    minWidth: scale(64),
     alignItems: "center",
   },
   createBtnText: {
     fontWeight: "700",
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   form: {
     flex: 1,
-    padding: 20,
+    padding: moderateScale(20),
   },
   avatarSection: {
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
   },
   avatarUpload: {
-    width: 100,
-    height: 100,
-    borderRadius: 20,
+    width: scale(100),
+    height: verticalScale(100),
+    borderRadius: moderateScale(20),
     borderWidth: 2,
     borderStyle: "dashed",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
     overflow: "hidden",
   },
   avatarPlaceholder: {
@@ -316,47 +318,47 @@ const styles = StyleSheet.create({
   },
   uploadIconBadge: {
     position: "absolute",
-    bottom: 10,
-    right: 10,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    bottom: verticalScale(10),
+    right: scale(10),
+    width: scale(28),
+    height: verticalScale(28),
+    borderRadius: moderateScale(14),
     justifyContent: "center",
     alignItems: "center",
   },
   avatarHint: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     textAlign: "center",
   },
   label: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: "700",
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   input: {
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 15,
+    borderRadius: moderateScale(8),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(12),
+    fontSize: moderateScale(15),
   },
   textArea: {
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 14,
-    minHeight: 90,
-    maxHeight: 150,
+    borderRadius: moderateScale(8),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(12),
+    fontSize: moderateScale(14),
+    minHeight: verticalScale(90),
+    maxHeight: verticalScale(150),
   },
   errorText: {
-    fontSize: 13,
-    marginTop: 6,
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(6),
     fontWeight: "500",
   },
   hint: {
-    fontSize: 12,
-    marginTop: 12,
+    fontSize: moderateScale(12),
+    marginTop: verticalScale(12),
     lineHeight: 18,
   },
 });

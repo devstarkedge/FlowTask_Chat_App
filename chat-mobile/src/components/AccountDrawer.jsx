@@ -51,6 +51,8 @@ import {
   LogOut as LogOutIcon,
 } from "lucide-react-native";
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const AccountDrawer = ({ visible, onClose, navigation }) => {
   const { colors } = useThemeStore();
@@ -183,7 +185,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
               {t("You")}
             </Text>
-            <View style={{ width: 40 }} />
+            <View style={{ width: scale(40) }} />
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
@@ -201,13 +203,13 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
                     <View
                       style={[
                         styles.statusDot,
-                        { backgroundColor: colors.online },
+                        { backgroundColor: user?.onlineStatus === 'away' ? colors.away : user?.onlineStatus === 'dnd' ? colors.busy : colors.online },
                       ]}
                     />
                     <Text
                       style={[styles.statusText, { color: colors.textSecondary }]}
                     >
-                      {t("Active")}
+                      {user?.onlineStatus === 'away' ? t("Away") : user?.onlineStatus === 'dnd' ? t("Do Not Disturb") : t("Active")}
                     </Text>
                   </View>
                 </View>
@@ -240,8 +242,11 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
                     styles.statusCardText,
                     { color: colors.textSecondary },
                   ]}
+                  numberOfLines={1}
                 >
-                  {t("What's your status?")}
+                  {user?.customStatus?.text
+                    ? `${user.customStatus.emoji || '💬'} ${user.customStatus.text}`
+                    : t("What's your status?")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -352,7 +357,7 @@ const createStyles = (colors) =>
         : {
             boxShadow: rnShadowToBoxShadow(
               '#000',
-              { width: 0, height: -4 },
+              { width: scale(0), height: -4 },
               0.15,
               12,
             ),
@@ -362,22 +367,22 @@ const createStyles = (colors) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingHorizontal: scale(20),
+      paddingVertical: verticalScale(16),
       borderBottomWidth: 1,
     },
     closeButton: {
-      padding: 8,
-      borderRadius: 8,
+      padding: moderateScale(8),
+      borderRadius: moderateScale(8),
     },
     headerTitle: {
-      fontSize: 18,
+      fontSize: moderateScale(18),
       fontWeight: "700",
       letterSpacing: -0.5,
     },
     profileSection: {
-      paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingHorizontal: scale(20),
+      paddingVertical: verticalScale(16),
     },
     profileRow: {
       flexDirection: "row",
@@ -389,37 +394,37 @@ const createStyles = (colors) =>
     },
     avatarWrapper: {
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
+      shadowOffset: { width: scale(0), height: verticalScale(2) },
       shadowOpacity: 0.1,
       shadowRadius: 4,
       elevation: 3,
     },
     avatar: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
+      width: scale(80),
+      height: verticalScale(80),
+      borderRadius: moderateScale(40),
       justifyContent: "center",
       alignItems: "center",
       position: "relative",
     },
     avatarText: {
-      fontSize: 32,
+      fontSize: moderateScale(32),
       fontWeight: "800",
     },
     statusIndicator: {
       position: "absolute",
-      bottom: 2,
-      right: 2,
-      width: 20,
-      height: 20,
-      borderRadius: 10,
+      bottom: verticalScale(2),
+      right: scale(2),
+      width: scale(20),
+      height: verticalScale(20),
+      borderRadius: moderateScale(10),
       borderWidth: 3,
       borderColor: colors.background,
     },
     userName: {
-      fontSize: 18,
+      fontSize: moderateScale(18),
       fontWeight: "800",
-      marginBottom: 4,
+      marginBottom: verticalScale(4),
       letterSpacing: -0.3,
     },
     statusRow: {
@@ -428,84 +433,84 @@ const createStyles = (colors) =>
       gap: 6,
     },
     statusDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
+      width: scale(8),
+      height: verticalScale(8),
+      borderRadius: moderateScale(4),
     },
     statusText: {
-      fontSize: 14,
+      fontSize: moderateScale(14),
       fontWeight: "500",
     },
     statusCardContainer: {
-      paddingHorizontal: 20,
-      marginVertical: 12,
+      paddingHorizontal: scale(20),
+      marginVertical: verticalScale(12),
     },
     statusCard: {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
-      padding: 16,
-      borderRadius: 14,
+      padding: moderateScale(16),
+      borderRadius: moderateScale(14),
       borderWidth: 1.5,
       borderColor: "transparent",
     },
     statusCardText: {
-      fontSize: 15,
+      fontSize: moderateScale(15),
       fontWeight: "600",
     },
     section: {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: scale(12),
+      paddingVertical: verticalScale(8),
     },
     sectionTitle: {
-      fontSize: 11,
+      fontSize: moderateScale(11),
       fontWeight: "700",
       letterSpacing: 0.5,
-      marginBottom: 8,
-      marginTop: 4,
-      paddingHorizontal: 8,
+      marginBottom: verticalScale(8),
+      marginTop: verticalScale(4),
+      paddingHorizontal: scale(8),
     },
     menuItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: 12,
-      paddingHorizontal: 8,
-      marginVertical: 2,
-      borderRadius: 12,
+      paddingVertical: verticalScale(12),
+      paddingHorizontal: scale(8),
+      marginVertical: verticalScale(2),
+      borderRadius: moderateScale(12),
       gap: 14,
       transition: "background-color 200ms ease",
     },
     menuIconContainer: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
+      width: scale(36),
+      height: verticalScale(36),
+      borderRadius: moderateScale(10),
       justifyContent: "center",
       alignItems: "center",
       backgroundColor: colors.backgroundSecondary,
     },
     menuLabel: {
       flex: 1,
-      fontSize: 16,
+      fontSize: moderateScale(16),
       fontWeight: "500",
       letterSpacing: -0.3,
     },
     badge: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
-      minWidth: 24,
+      paddingHorizontal: scale(10),
+      paddingVertical: verticalScale(4),
+      borderRadius: moderateScale(12),
+      minWidth: scale(24),
       alignItems: "center",
       justifyContent: "center",
-      marginRight: 8,
+      marginRight: scale(8),
     },
     badgeText: {
-      fontSize: 12,
+      fontSize: moderateScale(12),
       fontWeight: "700",
     },
     divider: {
-      height: 1,
-      marginVertical: 12,
-      marginHorizontal: 20,
+      height: verticalScale(1),
+      marginVertical: verticalScale(12),
+      marginHorizontal: scale(20),
       opacity: 0.5,
     },
     logoutButton: {
@@ -513,10 +518,10 @@ const createStyles = (colors) =>
       alignItems: "center",
       justifyContent: "center",
       gap: 12,
-      paddingVertical: 16,
+      paddingVertical: verticalScale(16),
     },
     logoutText: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
       fontWeight: "600",
     },
   });

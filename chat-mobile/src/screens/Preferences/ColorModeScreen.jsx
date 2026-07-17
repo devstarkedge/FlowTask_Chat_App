@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, StatusBar } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 const ThemeThumbnail = ({ mode, colors }) => {
   const isDark = mode === 'dark' || (mode === 'system' && colors.background === '#1A1D21');
@@ -79,29 +81,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 12,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backButton: {
-    padding: 8,
+    padding: moderateScale(8),
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   headerRight: {
-    width: 44,
+    width: scale(44),
   },
   content: {
-    paddingTop: 8,
+    paddingTop: verticalScale(8),
   },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: verticalScale(16),
+    paddingHorizontal: scale(20),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   optionLeft: {
@@ -109,15 +111,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   thumbnail: {
-    width: 60,
-    height: 44,
-    borderRadius: 6,
+    width: scale(60),
+    height: verticalScale(44),
+    borderRadius: moderateScale(6),
     borderWidth: 1,
     overflow: 'hidden',
-    marginRight: 16,
+    marginRight: scale(16),
   },
   thumbHeader: {
-    height: 12,
+    height: verticalScale(12),
     width: '100%',
   },
   thumbBody: {
@@ -125,41 +127,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   thumbSidebar: {
-    width: 14,
+    width: scale(14),
     borderRightWidth: 1,
   },
   thumbContent: {
     flex: 1,
-    padding: 4,
+    padding: moderateScale(4),
     gap: 4,
   },
   thumbLine: {
-    height: 4,
-    borderRadius: 2,
+    height: verticalScale(4),
+    borderRadius: moderateScale(2),
   },
   optionTextContainer: {
     justifyContent: 'center',
   },
   optionLabel: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '500',
   },
   optionSubtitle: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(2),
   },
   radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: scale(22),
+    height: verticalScale(22),
+    borderRadius: moderateScale(11),
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: scale(10),
+    height: verticalScale(10),
+    borderRadius: moderateScale(5),
   },
 });
 

@@ -8,6 +8,8 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { Archive, BellOff, CheckCircle, Clock } from 'lucide-react-native';
 import { useChannelStore } from '../stores/channelStore';
 import Toast from 'react-native-toast-message';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 /**
  * Shared DM list row used in both HomeScreen DM section and DMListScreen.
@@ -25,17 +27,17 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
   const markAsRead = useChannelStore(s => s.markAsRead);
   const swipeableRef = React.useRef(null);
 
-  const liveMember = useWorkspaceStore(s => 
-    s.members.find(m => (m.userId?._id || m.userId || m._id) === channel.dmRecipientId)
-  );
-  const liveOnlineStatus = liveMember?.onlineStatus || liveMember?.userId?.onlineStatus || channel.onlineStatus || 'offline';
+  const rawTargetId = channel.dmRecipientId;
+  const targetId = typeof rawTargetId === 'object' ? rawTargetId?._id || rawTargetId?.id : rawTargetId;
+  const targetIdStr = targetId?.toString ? targetId.toString() : targetId;
+  const liveOnlineStatus = useWorkspaceStore(s => s.presenceMap?.[targetIdStr]);
 
   // Build the same dmUser object used across the app
   const dmUser = {
     _id: channel.dmRecipientId,
     name: channel.name,
     avatar: channel.avatar,
-    onlineStatus: liveOnlineStatus,
+    onlineStatus: liveOnlineStatus || channel.onlineStatus || 'offline',
   };
 
   const content = (
@@ -158,47 +160,47 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     gap: 12,
   },
   info: {
     flex: 1,
   },
   name: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '600',
   },
   unreadName: {
     fontWeight: '700',
   },
   lastMessage: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(2),
   },
   unreadBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    minWidth: 24,
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(4),
+    borderRadius: moderateScale(12),
+    minWidth: scale(24),
     alignItems: 'center',
     justifyContent: 'center',
   },
   unreadText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '700',
   },
   swipeAction: {
     justifyContent: 'center',
-    width: 75,
+    width: scale(75),
   },
   swipeLeft: {
     alignItems: 'flex-start',
-    paddingLeft: 20,
+    paddingLeft: scale(20),
   },
   swipeRight: {
     alignItems: 'flex-end',
-    paddingRight: 20,
+    paddingRight: scale(20),
   },
 });
 

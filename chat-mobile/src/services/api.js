@@ -95,9 +95,58 @@ const performRefresh = async () => {
   return newAccessToken;
 };
 
-// Response interceptor — handle 401 and token refresh
+// Response interceptor — handle 401 and token refresh, and auto-sync presence
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Auto-sync any presence data found in the response payload to the global store
+    setTimeout(() => {
+      try {
+        const { useWorkspaceStore } = require('../stores/workspaceStore');
+        const updates = {};
+        let updated = false;
+
+        const scan = (obj, depth = 0) => {
+          if (depth > 10) return; // Prevent infinite recursion
+          if (!obj || typeof obj !== 'object') return;
+          if (Array.isArray(obj)) {
+            obj.forEach(item => scan(item, depth + 1));
+          } else {
+            const getIdStr = (id) => typeof id === 'object' ? id?._id?.toString?.() || id?.id?.toString?.() : id?.toString?.();
+            const oId = getIdStr(obj._id);
+            if (oId && obj.onlineStatus) {
+              updates[oId] = obj.onlineStatus;
+              updated = true;
+            }
+            if (obj.userId && typeof obj.userId === 'object' && obj.userId.onlineStatus) {
+              const uId = getIdStr(obj.userId);
+              if (uId) {
+                updates[uId] = obj.userId.onlineStatus;
+                updated = true;
+              }
+            }
+            if (obj.dmRecipientId && obj.onlineStatus) {
+              const dmId = getIdStr(obj.dmRecipientId);
+              if (dmId) {
+                updates[dmId] = obj.onlineStatus;
+                updated = true;
+              }
+            }
+            Object.values(obj).forEach(val => scan(val, depth + 1));
+          }
+        };
+
+        scan(response.data);
+
+        if (updated) {
+          useWorkspaceStore.getState().updatePresenceBatch(updates);
+        }
+      } catch (e) {
+        // Silently ignore scanner errors to prevent breaking app flow
+      }
+    }, 0);
+
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
@@ -155,6 +204,7 @@ export const workspaceAPI = {
   inviteByEmail: (workspaceId, payload) =>
     api.post(`/workspaces/${workspaceId}/invite-email`, payload, { timeout: 45000 }),
   leave: (workspaceId) => api.post(`/workspaces/${workspaceId}/leave`),
+  getMembers: (id, params) => api.get(`/workspaces/${id}/members`, { params }),
 
   // ── Invite management ──
   getAllInvites: (workspaceId, params = {}) =>
@@ -184,6 +234,7 @@ export const channelAPI = {
   removeMember: (id, userId) => api.delete(`/channels/${id}/members/${userId}`),
   search: (q) => api.get('/channels/search', { params: { q } }),
   get: (id) => api.get(`/channels/${id}`),
+  update: (id, data) => api.put(`/channels/${id}`, data),
 };
 
 // Thread API
@@ -255,6 +306,8 @@ export const usersAPI = {
   setCustomStatus: (data) => api.put('/users/status', data),
   getChannelMembers: (channelId) => api.get(`/channels/${channelId}/members`),
   getDMContacts: (search) => api.get('/users/dm-contacts', { params: { search } }),
+  pauseNotifications: (data) => api.post('/users/dnd/pause', data),
+  resumeNotifications: () => api.post('/users/dnd/resume'),
 };
 
 // Read Receipts API
@@ -336,6 +389,13 @@ export const canvasCommentAPI = {
   reply: (commentId, content) =>
     api.post(`/canvas-comments/${commentId}/reply`, { content }),
   resolve: (commentId) => api.patch(`/canvas-comments/${commentId}/resolve`),
+};
+
+// ─── GIFs API ─────────────────────────────────────────────────────────────────
+export const gifsAPI = {
+  search: (q, offset = 0, limit = 20) => api.get('/gifs/search', { params: { q, offset, limit } }),
+  getTrending: (offset = 0, limit = 20) => api.get('/gifs/trending', { params: { offset, limit } }),
+  getCategories: () => api.get('/gifs/categories'),
 };
 
 export default api;

@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, KeyboardAvo
 import { X, Check } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { formatMessageTime } from '../utils/dateUtils';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const RECURRENCE_OPTIONS = ['None', 'Daily', 'Weekly', 'Monthly', 'Yearly'];
 
@@ -95,7 +97,7 @@ const CreateReminderModal = ({ visible, onClose, onSubmit, colors }) => {
               <View style={[styles.iosPickerContainer, { backgroundColor: colors.background }]}>
                 <View style={[styles.iosPickerHeader, { borderBottomColor: colors.border }]}>
                   <TouchableOpacity onPress={() => { setShowDatePicker(false); setShowTimePicker(false); }}>
-                    <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Done</Text>
+                    <Text style={{ color: colors.primary, fontSize: moderateScale(16), fontWeight: '600' }}>Done</Text>
                   </TouchableOpacity>
                 </View>
                 <DateTimePicker
@@ -107,7 +109,7 @@ const CreateReminderModal = ({ visible, onClose, onSubmit, colors }) => {
                   onChange={(event, selectedDate) => {
                     if (selectedDate) setDate(selectedDate);
                   }}
-                  style={{ width: '100%', height: 200 }}
+                  style={{ width: '100%', height: verticalScale(200) }}
                 />
               </View>
             </View>
@@ -136,20 +138,20 @@ const CreateReminderModal = ({ visible, onClose, onSubmit, colors }) => {
         {showRecurrencePicker && (
           <Modal transparent animationType="fade">
             <TouchableOpacity style={styles.iosPickerOverlay} activeOpacity={1} onPress={() => setShowRecurrencePicker(false)}>
-              <View style={[styles.iosPickerContainer, { backgroundColor: colors.card, paddingBottom: 20 }]}>
+              <View style={[styles.iosPickerContainer, { backgroundColor: colors.card, paddingBottom: verticalScale(20) }]}>
                 <View style={[styles.iosPickerHeader, { borderBottomColor: colors.border, justifyContent: 'center' }]}>
-                  <Text style={{ fontSize: 16, fontWeight: '600', color: colors.textPrimary }}>Repeat</Text>
+                  <Text style={{ fontSize: moderateScale(16), fontWeight: '600', color: colors.textPrimary }}>Repeat</Text>
                 </View>
                 {RECURRENCE_OPTIONS.map((opt) => (
                   <TouchableOpacity
                     key={opt}
-                    style={{ paddingVertical: 16, paddingHorizontal: 24, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}
+                    style={{ paddingVertical: verticalScale(16), paddingHorizontal: scale(24), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}
                     onPress={() => {
                       setRecurrence(opt);
                       setShowRecurrencePicker(false);
                     }}
                   >
-                    <Text style={{ fontSize: 16, color: recurrence === opt ? colors.primary : colors.textPrimary }}>{opt}</Text>
+                    <Text style={{ fontSize: moderateScale(16), color: recurrence === opt ? colors.primary : colors.textPrimary }}>{opt}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -170,62 +172,62 @@ const styles = StyleSheet.create({
   container: {
     borderTopLeftRadius: 36,
     borderTopRightRadius: 36,
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 40,
+    paddingHorizontal: scale(24),
+    paddingTop: verticalScale(20),
+    paddingBottom: verticalScale(40),
     height: '90%',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: verticalScale(32),
   },
   iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: scale(44),
+    height: verticalScale(44),
+    borderRadius: moderateScale(22),
     backgroundColor: 'rgba(0,0,0,0.04)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   form: {
-    marginTop: 8,
+    marginTop: verticalScale(8),
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: verticalScale(20),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   label: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
   },
   pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(20),
   },
   pillText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '500',
   },
   descContainer: {
-    paddingVertical: 24,
+    paddingVertical: verticalScale(24),
   },
   descLabel: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '700',
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
   },
   input: {
-    fontSize: 16,
-    minHeight: 100,
+    fontSize: moderateScale(16),
+    minHeight: verticalScale(100),
     textAlignVertical: 'top',
   },
   iosPickerOverlay: {
@@ -236,13 +238,13 @@ const styles = StyleSheet.create({
   iosPickerContainer: {
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    paddingBottom: 40, // safe area
+    paddingBottom: verticalScale(40), // safe area
   },
   iosPickerHeader: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
   }
 });

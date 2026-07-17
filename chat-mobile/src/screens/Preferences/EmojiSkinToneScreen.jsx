@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Sta
 import { ChevronLeft } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
 import { usePreferencesStore } from '../../stores/preferencesStore';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 const SKIN_TONE_OPTIONS = [
   { label: 'Default', value: 'Default', emojis: '✋👍👏✌️' },
@@ -65,27 +67,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 12,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backButton: {
-    padding: 8,
+    padding: moderateScale(8),
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   headerRight: {
-    width: 44,
+    width: scale(44),
   },
   content: {
-    padding: 20,
+    padding: moderateScale(20),
   },
   description: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     lineHeight: 22,
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
   },
   optionsContainer: {
     gap: 0,
@@ -94,24 +96,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
+    paddingVertical: verticalScale(16),
   },
   emojiText: {
-    fontSize: 24,
+    fontSize: moderateScale(24),
     letterSpacing: 4,
   },
   radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: scale(22),
+    height: verticalScale(22),
+    borderRadius: moderateScale(11),
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: scale(10),
+    height: verticalScale(10),
+    borderRadius: moderateScale(5),
   },
 });
 

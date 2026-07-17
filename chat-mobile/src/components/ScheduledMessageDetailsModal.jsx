@@ -23,6 +23,8 @@ import { useScheduledStore } from '../stores/scheduledStore';
 import { useChannelStore } from '../stores/channelStore';
 import { useConversationDetails } from '../hooks/useConversationDetails';
 import ScheduleModal from './ScheduleModal';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const ScheduledMessageDetailsModal = ({
   visible,
@@ -129,7 +131,7 @@ const ScheduledMessageDetailsModal = ({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
-        <View style={[styles.container, { backgroundColor: colors.background, paddingBottom: 24 }]}>
+        <View style={[styles.container, { backgroundColor: colors.background, paddingBottom: verticalScale(24) }]}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <Text style={[styles.title, { color: colors.textPrimary }]}>
@@ -165,7 +167,7 @@ const ScheduledMessageDetailsModal = ({
                 </Text>
               </View> */}
               {isPast && (
-                <View style={[styles.statusBadge, { backgroundColor: colors.error + '20', alignSelf: 'flex-start', marginTop: 8 }]}>
+                <View style={[styles.statusBadge, { backgroundColor: colors.error + '20', alignSelf: 'flex-start', marginTop: verticalScale(8) }]}>
                   <Text style={[styles.statusText, { color: colors.error }]}>Sending...</Text>
                 </View>
               )}
@@ -284,89 +286,89 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: moderateScale(16),
     borderBottomWidth: 1,
   },
   title: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   closeButton: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: moderateScale(16),
   },
   metaBox: {
-    padding: 16,
-    borderRadius: 12,
+    padding: moderateScale(16),
+    borderRadius: moderateScale(12),
     gap: 8,
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   metaLabel: {
-    width: 100,
-    fontSize: 13,
+    width: scale(100),
+    fontSize: moderateScale(13),
     fontWeight: '500',
   },
   metaValue: {
     flex: 1,
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
+    borderRadius: moderateScale(6),
   },
   statusText: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: '600',
   },
   messageSection: {
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
   },
   messageHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '600',
   },
   editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    padding: 4,
+    padding: moderateScale(4),
   },
   editBtnText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '500',
   },
   messageBubble: {
-    padding: 16,
-    borderRadius: 12,
-    minHeight: 100,
+    padding: moderateScale(16),
+    borderRadius: moderateScale(12),
+    minHeight: verticalScale(100),
   },
   messageText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     lineHeight: 22,
   },
   textInput: {
-    minHeight: 120,
+    minHeight: verticalScale(120),
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 15,
+    borderRadius: moderateScale(12),
+    padding: moderateScale(12),
+    fontSize: moderateScale(15),
     textAlignVertical: 'top',
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
   },
   editActions: {
     flexDirection: 'row',
@@ -374,31 +376,31 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   btn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 80,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(8),
+    minWidth: scale(80),
     alignItems: 'center',
   },
   btnText: {
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   footer: {
     flexDirection: 'row',
-    padding: 16,
+    padding: moderateScale(16),
     gap: 12,
     borderTopWidth: 1,
   },
   actionSquare: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: verticalScale(12),
+    borderRadius: moderateScale(12),
     alignItems: 'center',
     gap: 8,
   },
   actionSquareText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '600',
   },
 });

@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { X, FileText, Image as ImageIcon, Video, Music, Archive } from 'lucide-react-native';
 import { fileAPI } from '../../services/api';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -95,7 +97,7 @@ export default function RecentFilesModal({ visible, onClose, onSelectFile, color
             <X size={22} color={colors.textSecondary} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: colors.textPrimary }]}>Recent Files</Text>
-          <View style={{ width: 36 }} />
+          <View style={{ width: scale(36) }} />
         </View>
 
         {loading ? (
@@ -130,30 +132,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  closeBtn: { padding: 4 },
-  title: { fontSize: 17, fontWeight: '700' },
-  list: { padding: 16, paddingBottom: 60 },
+  closeBtn: { padding: moderateScale(4) },
+  title: { fontSize: moderateScale(17), fontWeight: '700' },
+  list: { padding: moderateScale(16), paddingBottom: verticalScale(60) },
   fileItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: verticalScale(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
+    width: scale(44),
+    height: verticalScale(44),
+    borderRadius: moderateScale(8),
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: scale(12),
   },
   fileInfo: { flex: 1, justifyContent: 'center' },
-  fileName: { fontSize: 15, fontWeight: '500', marginBottom: 2 },
-  fileMeta: { fontSize: 12 },
+  fileName: { fontSize: moderateScale(15), fontWeight: '500', marginBottom: verticalScale(2) },
+  fileMeta: { fontSize: moderateScale(12) },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { fontSize: 14, textAlign: 'center' },
+  errorText: { fontSize: moderateScale(14), textAlign: 'center' },
 });

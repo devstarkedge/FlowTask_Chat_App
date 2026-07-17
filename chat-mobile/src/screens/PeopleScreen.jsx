@@ -23,6 +23,8 @@ import {
   UserPlus,
 } from "lucide-react-native";
 import logger from '../utils/logger';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const PeopleScreen = ({ navigation }) => {
   const { colors, effectiveTheme } = useThemeStore();
@@ -165,7 +167,7 @@ const PeopleScreen = ({ navigation }) => {
         />
         {search.length > 0 && (
           <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
-            <Text style={{ color: colors.textTertiary, fontSize: 16 }}>×</Text>
+            <Text style={{ color: colors.textTertiary, fontSize: moderateScale(16) }}>×</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -218,78 +220,78 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: 1,
   },
-  backButton: { padding: 4 },
+  backButton: { padding: moderateScale(4) },
   headerTitle: {
-    fontSize: 17,
+    fontSize: moderateScale(17),
     fontWeight: "700",
   },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 16,
-    marginVertical: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    marginHorizontal: scale(16),
+    marginVertical: verticalScale(10),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(8),
     borderWidth: 1,
     gap: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
-    padding: 0,
+    fontSize: moderateScale(14),
+    padding: moderateScale(0),
   },
   countRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingHorizontal: scale(16),
+    paddingBottom: verticalScale(8),
     gap: 6,
   },
   countText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: "500",
   },
   userRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     gap: 12,
     borderBottomWidth: 0.5,
   },
   userInfo: { flex: 1 },
-  userName: { fontSize: 15, fontWeight: "600" },
-  userEmail: { fontSize: 13, marginTop: 2 },
+  userName: { fontSize: moderateScale(15), fontWeight: "600" },
+  userEmail: { fontSize: moderateScale(13), marginTop: verticalScale(2) },
   roleBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(3),
+    borderRadius: moderateScale(4),
   },
   roleText: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: "600",
     textTransform: "capitalize",
   },
   presenceDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: scale(8),
+    height: verticalScale(8),
+    borderRadius: moderateScale(4),
   },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 40,
+    padding: moderateScale(40),
     gap: 12,
   },
-  errorText: { fontSize: 14, textAlign: "center" },
-  retryBtn: { padding: 8 },
-  emptyText: { fontSize: 14, marginTop: 8 },
+  errorText: { fontSize: moderateScale(14), textAlign: "center" },
+  retryBtn: { padding: moderateScale(8) },
+  emptyText: { fontSize: moderateScale(14), marginTop: verticalScale(8) },
 });
 
 export default PeopleScreen;

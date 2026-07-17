@@ -19,6 +19,8 @@ import { AppAvatar } from './common';
 import { Hash, Lock, CheckCircle2, Circle } from 'lucide-react-native';
 import { messageAPI } from '../services/api';
 import Toast from 'react-native-toast-message';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const ForwardMessageModal = ({ visible, onClose, message, colors }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -259,39 +261,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: 1,
   },
   headerButton: {
-    padding: 4,
-    minWidth: 60,
+    padding: moderateScale(4),
+    minWidth: scale(60),
   },
   headerButtonText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
   },
   searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: 1,
   },
   searchInput: {
-    fontSize: 16,
-    height: 40,
+    fontSize: moderateScale(16),
+    height: verticalScale(40),
   },
   listContent: {
-    paddingVertical: 8,
+    paddingVertical: verticalScale(8),
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
   },
   rowContent: {
     flexDirection: 'row',
@@ -299,28 +301,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   channelIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: scale(36),
+    height: verticalScale(36),
+    borderRadius: moderateScale(8),
     alignItems: 'center',
     justifyContent: 'center',
   },
   textContainer: {
-    marginLeft: 12,
+    marginLeft: scale(12),
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   nameText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '600',
   },
   subText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   checkboxContainer: {
-    marginLeft: 16,
+    marginLeft: scale(16),
   },
 });
 

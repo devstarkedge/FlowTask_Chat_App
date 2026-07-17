@@ -25,6 +25,8 @@ import {
 } from "lucide-react-native";
 import WorkspaceAvatar from "./WorkspaceAvatar";
 import AddWorkspaceScreen from "./workspace/AddWorkspaceScreen";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const { width } = Dimensions.get("window");
 const SIDEBAR_WIDTH = Math.min(width * 0.82, 320);
@@ -259,98 +261,98 @@ const styles = StyleSheet.create({
   },
   sidebar: {
     position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
+    left: scale(0),
+    top: verticalScale(0),
+    bottom: verticalScale(0),
     flexDirection: "column",
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
   },
   title: {
-    fontSize: 22,
+    fontSize: moderateScale(22),
     fontWeight: "800",
   },
   closeBtn: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   scrollContent: {
     flex: 1,
   },
   wsList: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
   },
   wsCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
-    borderRadius: 8,
-    marginHorizontal: 4,
-    marginVertical: 3,
+    padding: moderateScale(10),
+    borderRadius: moderateScale(8),
+    marginHorizontal: scale(4),
+    marginVertical: verticalScale(3),
   },
   wsInfo: {
     flex: 1,
-    marginLeft: 10,
+    marginLeft: scale(10),
   },
   wsName: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: "700",
   },
   wsUrl: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(2),
   },
   moreBtn: {
-    padding: 6,
+    padding: moderateScale(6),
   },
   divider: {
     height: StyleSheet.hairlineWidth,
-    marginHorizontal: 16,
-    // marginTop: 16,
-    marginBottom: 8,
+    marginHorizontal: scale(16),
+    // marginTop: verticalScale(16),
+    marginBottom: verticalScale(8),
   },
   footerOptions: {
-    paddingHorizontal: 4,
-    paddingBottom: 20,
+    paddingHorizontal: scale(4),
+    paddingBottom: verticalScale(20),
   },
   footerRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(12),
     gap: 12,
-    borderRadius: 8,
-    marginHorizontal: 4,
+    borderRadius: moderateScale(8),
+    marginHorizontal: scale(4),
   },
   footerLabel: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: "500",
   },
   loadingBox: {
-    padding: 40,
+    padding: moderateScale(40),
     alignItems: "center",
   },
   errorBox: {
-    padding: 30,
+    padding: moderateScale(30),
     alignItems: "center",
     gap: 10,
   },
   errorText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     textAlign: "center",
   },
   actionDropdown: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(10),
+    borderRadius: moderateScale(8),
     borderWidth: 1,
-    marginHorizontal: 16,
-    marginVertical: 4,
+    marginHorizontal: scale(16),
+    marginVertical: verticalScale(4),
     flexDirection: 'column',
     alignItems: 'stretch',
     gap: 12,
@@ -365,7 +367,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   dropdownText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
   },
 });

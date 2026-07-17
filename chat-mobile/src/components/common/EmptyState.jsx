@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useThemeStore } from '../../stores/themeStore';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 /**
  * EmptyState — centered empty placeholder with icon, title, optional subtitle and action.
@@ -42,25 +44,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: scale(24),
   },
   title: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '500',
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     textAlign: 'center',
   },
   actionButton: {
-    marginTop: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    marginTop: verticalScale(8),
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(10),
+    borderRadius: moderateScale(8),
   },
   actionLabel: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
   },
 });

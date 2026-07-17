@@ -58,6 +58,8 @@ import InviteManagementScreen from "../screens/InviteManagementScreen";
 import NewMessageScreen from "../screens/NewMessageScreen";
 import CanvasListScreen from "../screens/Canvas/CanvasListScreen";
 import CanvasEditorScreen from "../screens/Canvas/CanvasEditorScreen";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 
 const Stack = createNativeStackNavigator();
@@ -80,15 +82,15 @@ const badgeStyles = StyleSheet.create({
     position: "absolute",
     top: -2,
     right: -10,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    paddingHorizontal: 4,
+    minWidth: scale(16),
+    height: verticalScale(16),
+    borderRadius: moderateScale(8),
+    paddingHorizontal: scale(4),
     justifyContent: "center",
     alignItems: "center",
   },
   text: {
-    fontSize: 9,
+    fontSize: moderateScale(9),
     fontWeight: "700",
   },
 });
@@ -124,17 +126,17 @@ function BottomTabs({ navigation }) {
             backgroundColor: colors.backgroundSecondary,
             borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: colors.border,
-            paddingBottom: insets.bottom > 0 ? insets.bottom : 6,
-            paddingTop: 4,
+            paddingBottom: insets.bottom > 0 ? insets.bottom : verticalScale(6),
+            paddingTop: verticalScale(4),
             height: 50 + (insets.bottom > 0 ? insets.bottom : 6),
           },
           tabBarLabelStyle: {
-            fontSize: 10,
+            fontSize: moderateScale(10),
             fontWeight: "600",
-            marginTop: 1,
+            marginTop: verticalScale(1),
           },
           tabBarIconStyle: {
-            marginTop: 2,
+            marginTop: verticalScale(2),
           },
           headerShown: false,
         }}
@@ -190,9 +192,9 @@ function BottomTabs({ navigation }) {
             tabBarIcon: ({ focused }) => (
               <View
                 style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 16,
+                  width: scale(32),
+                  height: verticalScale(32),
+                  borderRadius: moderateScale(16),
                   backgroundColor: focused ? colors.primary : colors.backgroundTertiary,
                   justifyContent: "center",
                   alignItems: "center",

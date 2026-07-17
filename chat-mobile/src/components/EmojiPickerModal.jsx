@@ -18,6 +18,8 @@ import { X, Search } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { applySkinTone } from '../utils/emojiUtils';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 // Comprehensive categorized emoji dataset matching emoji-picker-react categories
 const EMOJI_CATEGORIES = [
@@ -236,7 +238,7 @@ export default function EmojiPickerModal({ visible, onClose, onSelect, colors })
                     >
                       <Text style={[
                         styles.tabLabel,
-                        { color: isActive ? colors.primary : colors.textSecondary, fontSize: 18 }
+                        { color: isActive ? colors.primary : colors.textSecondary, fontSize: moderateScale(18) }
                       ]}>
                         {item.icon}
                       </Text>
@@ -279,13 +281,13 @@ const styles = StyleSheet.create({
   },
   container: {
     width: '90%',
-    maxWidth: 400,
-    height: 420,
-    borderRadius: 20,
+    maxWidth: scale(400),
+    height: verticalScale(420),
+    borderRadius: moderateScale(20),
     borderWidth: 1,
-    paddingBottom: 12,
+    paddingBottom: verticalScale(12),
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: scale(0), height: verticalScale(10) },
     shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 5,
@@ -294,61 +296,61 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   title: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
   },
   closeButton: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    margin: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    height: 38,
+    margin: moderateScale(12),
+    paddingHorizontal: scale(12),
+    borderRadius: moderateScale(10),
+    height: verticalScale(38),
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: scale(8),
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
-    paddingVertical: 6,
+    fontSize: moderateScale(15),
+    paddingVertical: verticalScale(6),
     height: '100%',
   },
   clearSearchButton: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   tabsWrapper: {
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   tabsContainer: {
-    paddingHorizontal: 8,
+    paddingHorizontal: scale(8),
   },
   tabButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(10),
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   tabLabel: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '600',
   },
   gridContainer: {
     flex: 1,
-    minHeight: 250,
+    minHeight: verticalScale(250),
   },
   grid: {
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    paddingBottom: 24,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(8),
+    paddingBottom: verticalScale(24),
   },
   emojiButton: {
     flex: 1,
@@ -356,16 +358,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     maxWidth: '12.5%',
-    marginVertical: 4,
+    marginVertical: verticalScale(4),
   },
   emojiText: {
-    fontSize: 26,
+    fontSize: moderateScale(26),
   },
   emptyContainer: {
-    paddingVertical: 40,
+    paddingVertical: verticalScale(40),
     alignItems: 'center',
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
 });

@@ -13,6 +13,8 @@
  */
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Linking } from 'react-native';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 // ─── Lightweight HTML Tokenizer ─────────────────────────────────────────────
 // Produces a flat token array: [{ type: 'open'|'close'|'self'|'text', tag?, attrs?, text? }]
@@ -146,8 +148,8 @@ function renderTextWithLinksAndMentions(text, baseKey, parentStyles, ctx) {
               {
                 backgroundColor: colors.primaryLight,
                 color: colors.primary,
-                borderRadius: 4,
-                paddingHorizontal: 4,
+                borderRadius: moderateScale(4),
+                paddingHorizontal: scale(4),
                 fontWeight: '600',
                 fontSize: (parentStyles.fontSize || 15) * 0.92,
                 overflow: 'hidden',
@@ -265,9 +267,9 @@ function renderNode(node, ctx, parentStyles = {}, depth = 0) {
             fontSize: (parentStyles.fontSize || 15) * 0.875,
             backgroundColor: colors.backgroundTertiary,
             color: colors.warning,
-            paddingHorizontal: 5,
-            paddingVertical: 1,
-            borderRadius: 4,
+            paddingHorizontal: scale(5),
+            paddingVertical: verticalScale(1),
+            borderRadius: moderateScale(4),
             overflow: 'hidden',
           }
         ]}>
@@ -305,7 +307,7 @@ function renderNode(node, ctx, parentStyles = {}, depth = 0) {
 
     case 'ul': {
       return (
-        <View key={key} style={{ paddingLeft: depth === 0 ? 20 : 16, marginVertical: 2 }}>
+        <View key={key} style={{ paddingLeft: depth === 0 ? 20 : 16, marginVertical: verticalScale(2) }}>
           {node.children.map((c, i) => renderNode(c, ctx, parentStyles, depth + 1))}
         </View>
       );
@@ -313,13 +315,13 @@ function renderNode(node, ctx, parentStyles = {}, depth = 0) {
 
     case 'ol': {
       return (
-        <View key={key} style={{ paddingLeft: depth === 0 ? 20 : 16, marginVertical: 2 }}>
+        <View key={key} style={{ paddingLeft: depth === 0 ? 20 : 16, marginVertical: verticalScale(2) }}>
           {node.children.filter(c => c.tag === 'li').map((c, i) => {
             return (
               <View key={`oli-${keyCounter++}`} style={styles.listItem}>
-                <Text style={[parentStyles, { color: colors.textPrimary, fontSize: 15 }]}>{`${i + 1}. `}</Text>
+                <Text style={[parentStyles, { color: colors.textPrimary, fontSize: moderateScale(15) }]}>{`${i + 1}. `}</Text>
                 <View style={{ flexShrink: 1 }}>
-                  {renderChildren(c.children, ctx, { ...parentStyles, color: colors.textPrimary, fontSize: 15 }, depth + 1)}
+                  {renderChildren(c.children, ctx, { ...parentStyles, color: colors.textPrimary, fontSize: moderateScale(15) }, depth + 1)}
                 </View>
               </View>
             );
@@ -334,9 +336,9 @@ function renderNode(node, ctx, parentStyles = {}, depth = 0) {
       const marker = markers[Math.min(depth - 1, markers.length - 1)] || '\u2022';
       return (
         <View key={key} style={styles.listItem}>
-          <Text style={[parentStyles, { color: colors.textPrimary, fontSize: 15 }]}>{marker}  </Text>
+          <Text style={[parentStyles, { color: colors.textPrimary, fontSize: moderateScale(15) }]}>{marker}  </Text>
           <View style={{ flexShrink: 1 }}>
-            {renderChildren(node.children, ctx, { ...parentStyles, color: colors.textPrimary, fontSize: 15 }, depth)}
+            {renderChildren(node.children, ctx, { ...parentStyles, color: colors.textPrimary, fontSize: moderateScale(15) }, depth)}
           </View>
         </View>
       );
@@ -345,7 +347,7 @@ function renderNode(node, ctx, parentStyles = {}, depth = 0) {
     case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6': {
       const size = HEADING_SIZES[node.tag] || 15;
       return (
-        <Text key={key} style={[parentStyles, { fontSize: size, fontWeight: '700', marginVertical: 3, lineHeight: size * 1.3 }]}>
+        <Text key={key} style={[parentStyles, { fontSize: size, fontWeight: '700', marginVertical: verticalScale(3), lineHeight: size * 1.3 }]}>
           {node.children.map((c, i) => renderNode(c, ctx, { ...parentStyles, fontWeight: '700', fontSize: size }, depth))}
         </Text>
       );
@@ -379,8 +381,8 @@ function renderNode(node, ctx, parentStyles = {}, depth = 0) {
               {
                 backgroundColor: colors.primaryLight,
                 color: colors.primary,
-                borderRadius: 4,
-                paddingHorizontal: 4,
+                borderRadius: moderateScale(4),
+                paddingHorizontal: scale(4),
                 fontWeight: '600',
                 fontSize: (parentStyles.fontSize || 15) * 0.92,
                 overflow: 'hidden',
@@ -520,43 +522,43 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   paragraphView: {
-    marginVertical: 1,
+    marginVertical: verticalScale(1),
   },
   paragraphText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     lineHeight: 22,
   },
   codeBlock: {
-    borderRadius: 6,
+    borderRadius: moderateScale(6),
     borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginVertical: 4,
+    paddingVertical: verticalScale(10),
+    paddingHorizontal: scale(14),
+    marginVertical: verticalScale(4),
   },
   codeBlockText: {
     fontFamily: 'monospace',
-    fontSize: 13,
+    fontSize: moderateScale(13),
     lineHeight: 18,
   },
   blockquote: {
     borderLeftWidth: 3,
-    paddingLeft: 10,
-    paddingVertical: 2,
-    marginVertical: 3,
+    paddingLeft: scale(10),
+    paddingVertical: verticalScale(2),
+    marginVertical: verticalScale(3),
   },
   blockquoteText: {
     fontStyle: 'italic',
-    fontSize: 15,
+    fontSize: moderateScale(15),
     lineHeight: 22,
   },
   listItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginVertical: 1,
+    marginVertical: verticalScale(1),
   },
   hr: {
-    height: 1,
-    marginVertical: 6,
+    height: verticalScale(1),
+    marginVertical: verticalScale(6),
   },
 });
 

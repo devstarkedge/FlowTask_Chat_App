@@ -19,6 +19,8 @@ import { useNotificationStore } from "../stores/notificationStore";
 import { useNotificationPrefStore } from "../stores/notificationPrefStore";
 import { formatRelativeTime } from "../utils/dateUtils";
 import { AppAvatar } from "../components/common";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 import {
   Bell,
   BellOff,
@@ -68,15 +70,15 @@ const levelStyles = StyleSheet.create({
   option: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    borderRadius: 10,
+    padding: moderateScale(12),
+    borderRadius: moderateScale(10),
     borderWidth: 1.5,
     gap: 12,
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   textWrap: { flex: 1 },
-  label: { fontSize: 14, fontWeight: "600" },
-  desc: { fontSize: 12, marginTop: 2 },
+  label: { fontSize: moderateScale(14), fontWeight: "600" },
+  desc: { fontSize: moderateScale(12), marginTop: verticalScale(2) },
 });
 
 // ─── Get notification icon ───────────────────────────────────────────────────
@@ -319,7 +321,7 @@ const NotificationsScreen = ({ navigation }) => {
         }
         ListFooterComponent={
           isLoading ? (
-            <ActivityIndicator style={{ margin: 16 }} color={colors.primary} />
+            <ActivityIndicator style={{ margin: moderateScale(16) }} color={colors.primary} />
           ) : null
         }
         ListEmptyComponent={
@@ -341,29 +343,29 @@ const itemStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "flex-start",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     gap: 12,
     borderBottomWidth: 0.5,
     overflow: "hidden",
   },
   unreadBar: {
-    width: 3,
+    width: scale(3),
     position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
+    left: scale(0),
+    top: verticalScale(0),
+    bottom: verticalScale(0),
   },
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: scale(36),
+    height: verticalScale(36),
+    borderRadius: moderateScale(18),
     justifyContent: "center",
     alignItems: "center",
   },
   info: { flex: 1 },
-  text: { fontSize: 14, lineHeight: 20, marginBottom: 4 },
-  time: { fontSize: 12 },
+  text: { fontSize: moderateScale(14), lineHeight: 20, marginBottom: verticalScale(4) },
+  time: { fontSize: moderateScale(12) },
 });
 
 const styles = StyleSheet.create({
@@ -371,39 +373,39 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     borderBottomWidth: 1,
     gap: 8,
   },
-  backButton: { padding: 4 },
+  backButton: { padding: moderateScale(4) },
   headerTitle: {
-    fontSize: 17,
+    fontSize: moderateScale(17),
     fontWeight: "700",
   },
   badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 6,
+    minWidth: scale(20),
+    height: verticalScale(20),
+    borderRadius: moderateScale(10),
+    paddingHorizontal: scale(6),
     justifyContent: "center",
     alignItems: "center",
   },
   badgeText: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: "700",
   },
   section: {
-    padding: 16,
+    padding: moderateScale(16),
     borderBottomWidth: 0.5,
   },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
   },
   dndRow: {
     flexDirection: "row",
@@ -412,31 +414,31 @@ const styles = StyleSheet.create({
   dndChip: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(8),
     borderWidth: 1,
     gap: 6,
   },
   dndChipText: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: "600",
   },
   dndButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: verticalScale(12),
+    borderRadius: moderateScale(10),
     gap: 8,
   },
   dndText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "600",
   },
   markAllRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(10),
     borderBottomWidth: 0.5,
   },
   markAllBtn: {
@@ -445,17 +447,17 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   markAllText: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: "600",
   },
   empty: {
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 80,
+    paddingTop: verticalScale(80),
     gap: 8,
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
 });
 

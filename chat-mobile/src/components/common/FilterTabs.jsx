@@ -1,6 +1,8 @@
 import React, { useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useThemeStore } from '../../stores/themeStore';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 /**
  * FilterTabs — standardized horizontal tab filter bar.
@@ -42,17 +44,17 @@ const FilterTabs = React.memo(({ tabs, activeTab, onTabChange }) => {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
+    paddingHorizontal: scale(16),
     borderBottomWidth: 1,
   },
   tab: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: verticalScale(12),
+    paddingHorizontal: scale(14),
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   label: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
   },
 });

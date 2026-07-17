@@ -10,6 +10,8 @@ import {
 } from "react-native";
 import AccessibleModal from "./AccessibleModal";
 import { useThemeStore } from "../stores/themeStore";
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 import {
   X,
   Layers,
@@ -52,7 +54,7 @@ const CustomizeHomeModal = ({ visible, onClose, enabledCards, onToggleCard }) =>
         >
           {/* Header */}
           <View style={styles.header}>
-            <View style={{ width: 40 }} />
+            <View style={{ width: scale(40) }} />
             <View style={styles.headerCenter}>
               <Text style={[styles.title, { color: colors.textPrimary }]}>
                 Customize Home
@@ -132,53 +134,53 @@ const styles = StyleSheet.create({
   },
   sheet: {
     maxHeight: "75%",
-    paddingTop: 8,
+    paddingTop: verticalScale(8),
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(14),
   },
   headerCenter: {
     alignItems: "center",
     flex: 1,
   },
   title: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: "700",
     letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: "500",
-    marginTop: 2,
+    marginTop: verticalScale(2),
   },
   closeBtn: {
-    padding: 4,
+    padding: moderateScale(4),
   },
   list: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: scale(16),
+    paddingTop: verticalScale(8),
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
+    paddingVertical: verticalScale(14),
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: scale(36),
+    height: verticalScale(36),
+    borderRadius: moderateScale(10),
     justifyContent: "center",
     alignItems: "center",
   },
   rowLabel: {
     flex: 1,
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: "600",
     letterSpacing: -0.2,
   },

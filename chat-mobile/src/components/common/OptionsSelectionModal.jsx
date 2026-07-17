@@ -2,6 +2,8 @@ import React from 'react';
 import { Modal, View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { Check } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
@@ -56,25 +58,25 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: moderateScale(24),
   },
   container: {
     width: '100%',
     maxHeight: SCREEN_H * 0.7,
-    borderRadius: 16,
+    borderRadius: moderateScale(16),
     overflow: 'hidden',
     elevation: 8,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: scale(0), height: verticalScale(8) },
     shadowOpacity: 0.2,
     shadowRadius: 20,
   },
   header: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: verticalScale(16),
+    paddingHorizontal: scale(20),
     borderBottomWidth: 1,
   },
   title: {
-    fontSize: 17,
+    fontSize: moderateScale(17),
     fontWeight: '700',
     textAlign: 'center',
   },
@@ -85,12 +87,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: verticalScale(16),
+    paddingHorizontal: scale(20),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   optionText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
   },
 });
 

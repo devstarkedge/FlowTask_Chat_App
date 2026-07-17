@@ -15,6 +15,8 @@ import { usersAPI } from "../services/api";
 import { X, Clock } from "lucide-react-native";
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import logger from '../utils/logger';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
+
 
 const StatusModal = ({ visible, onClose }) => {
   const { colors } = useThemeStore();
@@ -221,7 +223,7 @@ const createStyles = (colors) =>
     modal: {
       width: "90%",
       maxHeight: "80%",
-      borderRadius: 16,
+      borderRadius: moderateScale(16),
       ...(Platform.OS !== "web"
         ? {
             boxShadow: `0px 4px 12px ${colors.shadowLg}`,
@@ -230,7 +232,7 @@ const createStyles = (colors) =>
         : {
             boxShadow: rnShadowToBoxShadow(
               "#000",
-              { width: 0, height: 4 },
+              { width: scale(0), height: verticalScale(4) },
               0.2,
               12,
             ),
@@ -240,79 +242,79 @@ const createStyles = (colors) =>
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingHorizontal: scale(20),
+      paddingVertical: verticalScale(16),
       borderBottomWidth: 1,
     },
     headerTitle: {
-      fontSize: 18,
+      fontSize: moderateScale(18),
       fontWeight: "700",
     },
     section: {
-      paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingHorizontal: scale(20),
+      paddingVertical: verticalScale(16),
     },
     sectionTitle: {
-      fontSize: 11,
+      fontSize: moderateScale(11),
       fontWeight: "700",
       letterSpacing: 0.5,
-      marginBottom: 12,
+      marginBottom: verticalScale(12),
     },
     inputContainer: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderRadius: 8,
+      paddingHorizontal: scale(16),
+      paddingVertical: verticalScale(12),
+      borderRadius: moderateScale(8),
       borderWidth: 1,
       gap: 12,
     },
     emojiInput: {
-      fontSize: 24,
+      fontSize: moderateScale(24),
     },
     textInput: {
       flex: 1,
-      fontSize: 16,
+      fontSize: moderateScale(16),
     },
     presetItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: 12,
+      paddingVertical: verticalScale(12),
       gap: 12,
     },
     presetEmoji: {
-      fontSize: 20,
+      fontSize: moderateScale(20),
     },
     presetLabel: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
       fontWeight: "500",
     },
     expirationItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: 12,
+      paddingVertical: verticalScale(12),
       gap: 12,
     },
     expirationLabel: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
       fontWeight: "500",
     },
     actions: {
       flexDirection: "row",
       gap: 12,
-      paddingHorizontal: 20,
-      paddingBottom: 20,
+      paddingHorizontal: scale(20),
+      paddingBottom: verticalScale(20),
     },
     button: {
       flex: 1,
-      paddingVertical: 14,
-      borderRadius: 8,
+      paddingVertical: verticalScale(14),
+      borderRadius: moderateScale(8),
       alignItems: "center",
     },
     clearButton: {},
     saveButton: {},
     buttonText: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
       fontWeight: "600",
     },
   });

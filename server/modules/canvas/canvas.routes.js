@@ -12,6 +12,11 @@ router.get(
   canvasController.getTemplates
 );
 
+router.get(
+  "/public/:token",
+  canvasController.getPublicCanvas
+);
+
 // All canvas routes require authentication + workspace context
 router.use(protect, resolveWorkspace);
 
@@ -71,6 +76,11 @@ router.post(
 router.patch(
   "/save-later/:canvasId/status",
   canvasController.updateCanvasSavedStatus
+);
+
+router.post(
+  "/share/:canvasId",
+  canvasController.togglePublicShare
 );
 
 router.post(

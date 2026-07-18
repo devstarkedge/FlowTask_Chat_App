@@ -110,6 +110,17 @@ const canvasSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "ChatUser",
     }],
+
+    sharing: {
+      isPublic: {
+        type: Boolean,
+        default: false,
+      },
+      publicToken: {
+        type: String,
+        default: null,
+      },
+    },
   },
   {
     timestamps: true,

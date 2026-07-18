@@ -10,6 +10,16 @@ const getTemplates = asyncHandler(async (req, res) => {
   });
 });
 
+// ── Get Public Canvas (No Auth Required)
+const getPublicCanvas = asyncHandler(async (req, res) => {
+  const { token } = req.params;
+  const canvas = await canvasService.getPublicCanvas(token);
+  return res.status(200).json({
+    success: true,
+    data: canvas,
+  });
+});
+
 // ── Get Canvas metadata (returns existing canvas or null; no auto-create)
 const getCanvas = asyncHandler(async (req, res) => {
   const { channelId } = req.params;
@@ -218,9 +228,24 @@ const getMyCanvases = asyncHandler(async (req, res) => {
   });
 });
 
+// ── Toggle Public Share
+const togglePublicShare = asyncHandler(async (req, res) => {
+  const { canvasId } = req.params;
+  const workspaceId = req.workspaceId;
+  const userId = req.user._id;
+
+  const canvas = await canvasService.togglePublicShare(canvasId, userId, workspaceId);
+
+  return res.status(200).json({
+    success: true,
+    data: canvas,
+  });
+});
+
 export default {
   getCanvas,
   getTemplates,
+  getPublicCanvas,
   getCanvasById,
   createCanvas,
   updateCanvas,
@@ -233,4 +258,5 @@ export default {
   toggleCanvasSaveForLater,
   updateCanvasSavedStatus,
   getSavedCanvases,
+  togglePublicShare,
 };

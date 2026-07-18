@@ -21,6 +21,8 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+import crypto from "crypto";
+
 class CanvasService {
   async getTemplates() {
     try {
@@ -788,6 +790,66 @@ class CanvasService {
     } catch (err) {
       logger.warn('[CANVAS] incrementViewCount failed', { error: err.message });
     }
+  }
+
+  // ── Toggle Public Share
+  async togglePublicShare(canvasId, userId, workspaceId) {
+    if (!workspaceId) throw new ValidationError("workspaceId is required");
+    const Canvas = (await import("./canvas.model.js")).default;
+    const canvas = await Canvas.findOne({ _id: canvasId, workspaceId });
+    if (!canvas) throw new NotFoundError("Canvas not found");
+
+    if (!canvas.sharing) {
+      canvas.sharing = { isPublic: false, publicToken: null };
+    }
+
+    // Toggle logic
+    if (canvas.sharing.isPublic) {
+      canvas.sharing.isPublic = false;
+      canvas.sharing.publicToken = null;
+    } else {
+      canvas.sharing.isPublic = true;
+      // generate a unique random token
+      canvas.sharing.publicToken = crypto.randomBytes(16).toString("hex");
+    }
+
+    await canvas.save();
+
+    // Broadcast canvas update
+    emitToChannel(
+      canvas.channelId.toString(),
+      "canvas:updated",
+      {
+        canvasId: canvas._id,
+        channelId: canvas.channelId,
+        updates: {
+          sharing: canvas.sharing,
+          updatedAt: canvas.updatedAt,
+          lastEditedBy: userId,
+          updatedBy: userId,
+        },
+      },
+      workspaceId
+    );
+
+    return canvas;
+  }
+
+  // ── Get Public Canvas
+  async getPublicCanvas(token) {
+    if (!token) throw new ValidationError("token is required");
+    const Canvas = (await import("./canvas.model.js")).default;
+    const canvas = await Canvas.findOne({ "sharing.publicToken": token, "sharing.isPublic": true });
+    if (!canvas) throw new NotFoundError("Canvas not found or not public");
+
+    const blocks = await CanvasBlock.find({ canvasId: canvas._id }).sort({ order: 1 });
+    // Don't return comments for public canvas for now (simpler)
+    
+    return {
+      canvas,
+      blocks,
+      comments: [],
+    };
   }
 }
 

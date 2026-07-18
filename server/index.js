@@ -32,6 +32,7 @@ import debugRoutes from './modules/debug/debug.routes.js';
 import pushRoutes from './modules/push/push.routes.js';
 import favoritesRoutes from './modules/favorites/favorites.routes.js';
 import gifsRoutes from './modules/gifs/gifs.routes.js';
+import customGroupRoutes from './modules/customGroups/customGroup.routes.js';
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
 import eventBus from './services/eventBus.js';
 import channelService from './modules/channels/channel.service.js';
@@ -264,6 +265,7 @@ app.use('/api/chat/admin', adminRoutes);
 app.use('/api/chat/directories', directoriesRoutes);
 app.use('/api/chat/drafts', draftRoutes);
 app.use('/api/chat/search', searchRoutes);
+app.use('/api/chat/custom-groups', customGroupRoutes);
 app.use('/api/chat', readReceiptRoutes);
 // Debug routes (local dev only)
 app.use('/api/chat/debug', debugRoutes);

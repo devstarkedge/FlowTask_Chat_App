@@ -28,7 +28,7 @@ const ALLOWED_TYPES = new Set([
 
   // ── Audio ─────────────────────────────────────────────────────────────
   'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/aac',
-  'audio/m4a', 'audio/mp4',
+  'audio/m4a', 'audio/x-m4a', 'audio/mp4',
 
   // ── Documents ─────────────────────────────────────────────────────────
   'application/pdf',
@@ -69,7 +69,7 @@ const MIME_TO_EXT = {
   'video/webm': '.webm', 'video/mpeg': '.mpeg',
   'audio/mpeg': '.mp3', 'audio/wav': '.wav', 'audio/ogg': '.ogg',
   'audio/flac': '.flac', 'audio/aac': '.aac',
-  'audio/m4a': '.m4a', 'audio/mp4': '.mp4',
+  'audio/m4a': '.m4a', 'audio/x-m4a': '.m4a', 'audio/mp4': '.mp4',
   'application/pdf': '.pdf', 'application/msword': '.doc',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
   'application/vnd.ms-excel': '.xls',

@@ -456,12 +456,27 @@ export const canvasAPI = {
   toggleSaveForLater: (canvasId) => api.post(`/canvas/save-later/${canvasId}`),
   updateSavedStatus: (canvasId, status) => api.patch(`/canvas/save-later/${canvasId}/status`, { status }),
   getSavedCanvases: (channelId, status) => api.get(`/canvas/saved/${channelId}`, { params: { status } }),
+  togglePublicShare: (canvasId) => api.post(`/canvas/share/${canvasId}`),
+  getPublic: (token) => api.get(`/canvas/public/${token}`),
 };
 
 export const gifsAPI = {
   search: (q, offset = 0, limit = 20) => api.get('/gifs/search', { params: { q, offset, limit } }),
   getTrending: (offset = 0, limit = 20) => api.get('/gifs/trending', { params: { offset, limit } }),
   getCategories: () => api.get('/gifs/categories'),
+};
+
+export const categoryAPI = {
+  list: () => api.get('/categories'),
+  create: (data) => api.post('/categories', data),
+  update: (id, data) => api.put(`/categories/${id}`, data),
+  delete: (id) => api.delete(`/categories/${id}`),
+  reorder: (categoryOrders) => api.put('/categories/reorder', { categoryOrders }),
+  suggestChannels: (name) => api.post('/categories/suggest-channels', { name }),
+  addChannelToCategory: (id, channelId) => api.post(`/categories/${id}/channels`, { channelId }),
+  removeChannelFromCategory: (id, channelId) => api.delete(`/categories/${id}/channels/${channelId}`),
+  syncDepartments: () => api.post('/categories/sync-departments'),
+  getDepartments: () => api.get('/categories/departments'),
 };
 
 export default api;

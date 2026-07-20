@@ -3,6 +3,7 @@ import channelService from '../../channels/channel.service.js';
 import channelRepository from '../../channels/channel.repository.js';
 import messageService from '../../messages/message.service.js';
 import userRepository from '../../users/user.repository.js';
+import Department from '../../categories/Department.model.js';
 import { emitToUser } from '../../../sockets/socketManager.js';
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SOCKET_EVENTS } from '../../../config/constants.js';
@@ -35,6 +36,18 @@ export function registerDepartmentTeamEventHandlers() {
       const deptName = department.name || 'Unnamed Department';
 
       const channel = await channelService.getOrCreateDepartmentChannel(deptId, deptName, wsId);
+
+      // Sync Department to local collection
+      await Department.findOneAndUpdate(
+        { workspaceId: wsId, externalId: deptId },
+        { 
+          name: deptName, 
+          description: department.description || '', 
+          icon: department.icon || '',
+          color: department.color || ''
+        },
+        { upsert: true, new: true }
+      );
 
       // Broadcast channel:created so it appears in sidebar for relevant users
       const populated = await channelRepository.findById(channel._id, { workspaceId: wsId });
@@ -69,6 +82,21 @@ export function registerDepartmentTeamEventHandlers() {
       if (!department) return;
 
       const deptId = department._id || department.id;
+      
+      // Sync local Department collection
+      const deptUpdates = {};
+      if (changes?.name) deptUpdates.name = changes.name;
+      if (changes?.description !== undefined) deptUpdates.description = changes.description;
+      if (changes?.icon !== undefined) deptUpdates.icon = changes.icon;
+      if (changes?.color !== undefined) deptUpdates.color = changes.color;
+      
+      if (Object.keys(deptUpdates).length > 0) {
+        await Department.findOneAndUpdate(
+          { workspaceId: wsId, externalId: deptId },
+          { $set: deptUpdates }
+        );
+      }
+
       const channel = await channelRepository.findByFlowTaskRef('department', deptId, wsId);
       if (!channel) return;
 
@@ -88,6 +116,9 @@ export function registerDepartmentTeamEventHandlers() {
     try {
       const { departmentId, departmentName, _workspaceId: wsId } = payload;
       if (!departmentId) return;
+
+      // Delete from local Department collection
+      await Department.findOneAndDelete({ workspaceId: wsId, externalId: departmentId });
 
       const channel = await channelRepository.findByFlowTaskRef('department', departmentId, wsId);
       if (!channel || channel.isArchived) return;

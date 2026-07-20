@@ -202,6 +202,12 @@ const channelSchema = new Schema(
       departmentId: { type: String, default: null },
       departmentName: { type: String, default: null },
     },
+    // ─── Enterprise Category Management ───
+    categoryId: {
+      type: Schema.Types.ObjectId,
+      ref: "Category",
+      default: null,
+    },
     isAI: {
       type: Boolean,
       default: false,

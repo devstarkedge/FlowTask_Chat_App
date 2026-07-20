@@ -1,4 +1,5 @@
 import channelService from "./channel.service.js";
+import Channel from "./Channel.model.js";
 import asyncHandler from "../../middleware/asyncHandler.js";
 
 function isSystemManagedProjectChannel(channel) {
@@ -415,4 +416,25 @@ export const starChannel = asyncHandler(async (req, res) => {
     success: true,
     data: result,
   });
+});
+
+/**
+ * DEPRECATED: PUT /api/chat/channels/:id/category
+ */
+export const assignCategory = asyncHandler(async (req, res) => {
+ res.status(400).json({ success: false, error: { message: "This endpoint is deprecated. Use /api/categories/:id/channels instead." } });
+});
+
+/**
+ * DEPRECATED: PUT /api/chat/channels/:id/department
+ */
+export const assignDepartment = asyncHandler(async (req, res) => {
+  res.status(400).json({ success: false, error: { message: "This endpoint is deprecated. Create a department category instead." } });
+});
+
+/**
+ * DEPRECATED: POST /api/chat/channels/bulk-category
+ */
+export const bulkAssignCategory = asyncHandler(async (req, res) => {
+ res.status(400).json({ success: false, error: { message: "This endpoint is deprecated. Use /api/categories/:id/channels instead." } });
 });

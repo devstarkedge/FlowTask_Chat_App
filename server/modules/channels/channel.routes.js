@@ -16,6 +16,9 @@ import {
   createAIDM,
   pinChannel,
   starChannel,
+  assignCategory,
+  assignDepartment,
+  bulkAssignCategory,
 } from "./channel.controller.js";
 import { protect, requireChannelAccess } from "../auth/auth.middleware.js";
 import { resolveWorkspace } from "../../middleware/workspaceContext.js";
@@ -90,6 +93,9 @@ router.delete(
 router.post("/:id/leave", requireChannelAccess(), leaveChannel);
 router.put("/:id/pin", requireChannelAccess(), pinChannel);
 router.put("/:id/star", requireChannelAccess(), starChannel);
+router.put("/:id/category", requireChannelAccess(), assignCategory);
+router.put("/:id/department", requireChannelAccess(), assignDepartment);
+router.post("/bulk-category", bulkAssignCategory);
 
 router.post("/ai-dm", createAIDM);
 export default router;

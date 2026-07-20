@@ -28,6 +28,7 @@ const SidebarItem = memo(function SidebarItem({
   badge,
   indicator,
   onClick,
+  onRemove,
   onKeyDown,
   className = "",
   ariaSelected,
@@ -53,7 +54,7 @@ const SidebarItem = memo(function SidebarItem({
         {sublabel && <span className="sidebar-item-sublabel">{sublabel}</span>}
       </span>
 
-      {(meta || badge > 0 || indicator) && (
+      {(meta || badge > 0 || indicator || onRemove) && (
         <span className="sidebar-item-meta">
           {meta}
           {badge > 0 && (
@@ -62,6 +63,32 @@ const SidebarItem = memo(function SidebarItem({
             </span>
           )}
           {indicator}
+          {onRemove && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              className="sidebar-item-remove-btn"
+              title="Remove"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                padding: "2px",
+                marginLeft: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: 0.6,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = 1)}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = 0.6)}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          )}
         </span>
       )}
     </button>

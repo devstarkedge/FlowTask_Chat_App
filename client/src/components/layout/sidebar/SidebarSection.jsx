@@ -23,6 +23,11 @@ const SidebarSection = memo(function SidebarSection({
   showAdd = false,
   onAdd,
   addTitle = 'Add',
+  onEdit,
+  editTitle = 'Edit',
+  onDelete,
+  deleteTitle = 'Delete',
+  actionMenu,
   children,
 }) {
   return (
@@ -38,15 +43,37 @@ const SidebarSection = memo(function SidebarSection({
             <span className="sidebar-section-count">{count}</span>
           )}
         </button>
-        {showAdd && (
-          <button
-            onClick={onAdd}
-            className="sidebar-section-add"
-            title={addTitle}
-          >
-            <Plus size={18} />
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 4 }}>
+          {onEdit && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit(); }}
+              className="sidebar-section-add"
+              title={editTitle}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              className="sidebar-section-add"
+              title={deleteTitle}
+              style={{ color: 'var(--accent-red, #ef4444)' }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+            </button>
+          )}
+          {showAdd && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onAdd(); }}
+              className="sidebar-section-add"
+              title={addTitle}
+            >
+              <Plus size={16} />
+            </button>
+          )}
+          {actionMenu}
+        </div>
       </div>
       {expanded && (
         <div className="sidebar-section-list">{children}</div>

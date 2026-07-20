@@ -26,10 +26,20 @@ import {
   BookMarked,
   Clock,
   Star,
+  MoreVertical,
+  Folder,
+  FolderPlus,
+  Plus,
 } from "lucide-react";
 import { Avatar } from "../chat/MemberAvatarGroup";
 import CreateChannelModal from "../chat/CreateChannelModal";
+import CreateCategoryModal from "../chat/CreateCategoryModal";
+
+import EditCategoryModal from "../chat/EditCategoryModal";
+import MoveToCategoryModal from "../chat/MoveToCategoryModal";
 import UserPickerModal from "../chat/UserPickerModal";
+import CategoryHeader from "./CategoryHeader";
+import CategoryList from "./CategoryList";
 import PreferencesModal from "../chat/PreferencesModal";
 import SetStatusModal from "../chat/SetStatusModal";
 import WorkspaceSwitcher from "../workspace/WorkspaceSwitcher";
@@ -49,8 +59,10 @@ import { isContentEmpty } from "../../utils/draftUtils";
 import SidebarContainer from "./sidebar/SidebarContainer";
 import SidebarItem from "./sidebar/SidebarItem";
 import SidebarSection from "./sidebar/SidebarSection";
-import api from "../../services/api";
+import ChannelListItem from "./sidebar/ChannelListItem";
+import api, { categoryAPI } from "../../services/api";
 import { useUIStore } from '../../stores/uiStore';
+import toast from "react-hot-toast";
 
 const CHANNEL_ICONS = {
   project: Hash,
@@ -73,12 +85,21 @@ export default function NavigationSidebar({
   const navigate = useNavigate();
   const location = useLocation();
   const { workspaceId } = useParams();
-  const { channels, activeChannelId, setActiveChannel, unreads, createDM } =
-    useChannelStore();
+  const {
+    channels,
+    categories,
+    departments,
+    activeChannelId,
+    setActiveChannel,
+    unreads,
+    createDM,
+  } = useChannelStore();
   const { user } = useAuthStore();
   const { switchWorkspace } = useWorkspaceStore();
   const drafts = useDraftStore((s) => s.drafts);
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const isEnterpriseOrPro = activeWorkspace?.plan === 'enterprise' || activeWorkspace?.plan === 'pro';
   const onlineUsers = usePresenceStore((s) => s.presence);
   const {
     favorites,
@@ -105,13 +126,32 @@ export default function NavigationSidebar({
   };
 
   const [expandedSections, setExpandedSections] = useState({
+    starred: true,
     channels: true,
     privateChannels: true,
     dms: true,
     system: true,
   });
+  
+  const [expandedGroups, setExpandedGroups] = useState({});
 
   const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [showCreateCategory, setShowCreateCategory] = useState(false);
+
+  const [categoryToEdit, setCategoryToEdit] = useState(null);
+  const [channelToMove, setChannelToMove] = useState(null);
+  const [activeCategoryMenu, setActiveCategoryMenu] = useState(null);
+
+  // We no longer need inline fetch logic for departments in NavigationSidebar as it's handled in CreateDepartmentCategoryModal
+  // removing loadDepartments()rkspaceId]);
+
+  // Close category dropdown on outside click
+  useEffect(() => {
+    if (!activeCategoryMenu) return;
+    const handleClick = () => setActiveCategoryMenu(null);
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [activeCategoryMenu]);
   const [showUserPicker, setShowUserPicker] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -129,23 +169,47 @@ export default function NavigationSidebar({
 
   const [selfDmLoading, setSelfDmLoading] = useState(false);
 
+  const isManagerOrAdmin = user?.role === 'admin' || user?.role === 'owner' || user?.role === 'manager';
+
   const toggleSection = (section) => {
     setExpandedSections((s) => ({ ...s, [section]: !s[section] }));
   };
 
-  /**
-   * FIX: Use visibility field for channel categorization instead of relying
-   * solely on the static `type` field. When visibility changes (e.g., private→public),
-   * the channel automatically moves to the correct section without a page refresh.
-   */
+  const categorizedChannelIds = useMemo(() => {
+    const ids = new Set();
+    
+    // Add channels from custom categories
+    categories?.forEach(cat => {
+      if (cat.type === 'custom' && cat.channelIds) {
+        cat.channelIds.forEach(ch => {
+          const chId = typeof ch === 'object' ? ch._id || ch : ch;
+          ids.add(String(chId));
+        });
+      }
+    });
+
+    // Add channels mapped to department categories
+    const deptCategories = categories?.filter(c => c.type === 'department') || [];
+    deptCategories.forEach(dept => {
+      channels.forEach(c => {
+        const targetDeptId = dept.departmentId?.externalId || dept.departmentId?._id || dept.departmentId;
+        if (!targetDeptId) return;
+        const isDepartmentChannel = c.flowTaskRef?.entityType === "department" && String(c.flowTaskRef?.entityId) === String(targetDeptId);
+        const isProjectInDepartment = c.departmentRef?.departmentId && String(c.departmentRef.departmentId) === String(targetDeptId);
+        if (isDepartmentChannel || isProjectInDepartment) {
+          ids.add(String(c._id));
+        }
+      });
+    });
+    return ids;
+  }, [categories, channels]);
+
   const projectChannels = channels.filter(
-    (c) => c.type === "project" && c.visibility !== "private" && !c.isArchived,
+    (c) => c.type === "project" && c.visibility !== "private" && !c.isArchived && !categorizedChannelIds.has(String(c._id)),
   );
+  
   const publicChannels = channels.filter(
     (c) =>
-      // A channel is public if:
-      // 1. Its type is "public" AND visibility is NOT "private" (handles Public→Private transition)
-      // 2. OR its visibility is "public" (handles Private→Public transition where type stays "private")
       ((c.type === "public" && c.visibility !== "private") ||
         (c.type !== "public" && c.visibility === "public")) &&
       !c.isArchived &&
@@ -154,18 +218,18 @@ export default function NavigationSidebar({
       c.type !== "team" &&
       c.type !== "dm" &&
       c.type !== "system" &&
-      c.type !== "self",
+      c.type !== "self" &&
+      !categorizedChannelIds.has(String(c._id)),
   );
+  
   const privateChannels = channels.filter(
     (c) =>
-      // A channel is private if:
-      // 1. Its type is "private" (AND visibility is NOT "public" — handles Private→Public transition)
-      // 2. OR its visibility is explicitly "private" (handles Public→Private transition)
       ((c.type === "private" && c.visibility !== "public") || c.visibility === "private") &&
       c.type !== "dm" &&
       c.type !== "system" &&
       c.type !== "self" &&
-      !c.isArchived,
+      !c.isArchived &&
+      !categorizedChannelIds.has(String(c._id)),
   );
 
   const selfChannel = useMemo(
@@ -362,6 +426,26 @@ export default function NavigationSidebar({
     </>
   );
 
+  const handleDeleteCategory = async (categoryId) => {
+    if (window.confirm("Are you sure you want to delete this category? The channels will not be deleted.")) {
+      try {
+        await categoryAPI.delete(categoryId);
+        toast.success("Category deleted successfully");
+      } catch (err) {
+        toast.error("Failed to delete category");
+      }
+    }
+  };
+
+  const handleRemoveChannelFromCategory = async (channelId) => {
+    try {
+      await api.put(`/channels/${channelId}/category`, { categoryId: null });
+      toast.success("Channel removed from category");
+    } catch (err) {
+      toast.error("Failed to remove channel");
+    }
+  };
+
   return (
     <>
       <SidebarContainer header={header} aria-label="Channels sidebar">
@@ -404,6 +488,13 @@ export default function NavigationSidebar({
                 onClose?.();
               }}
             />
+
+            {/* ── Category Header Option ── */}
+            {isEnterpriseOrPro && (
+              <CategoryHeader 
+                onCreateCategory={() => setShowCreateCategory(true)}
+              />
+            )}
           </div>
         )}
 
@@ -412,8 +503,8 @@ export default function NavigationSidebar({
           <SidebarSection
             title="Starred"
             count={favoriteChannels.length}
-            expanded={true}
-            onToggle={() => {}}
+            expanded={expandedSections.starred}
+            onToggle={() => toggleSection("starred")}
           >
             {favoriteChannels.map((channel) => {
               const favId = favorites.find(
@@ -481,7 +572,28 @@ export default function NavigationSidebar({
             </SidebarSection>
           )}
 
-          {!isDMMode && (
+          {/* ── User-Specific Categories ── */}
+          {!isDMMode && isEnterpriseOrPro && (
+            <CategoryList
+              categories={categories}
+              channels={channels}
+              expandedGroups={expandedGroups}
+              setExpandedGroups={setExpandedGroups}
+              isLaterPage={isLaterPage}
+              activeChannelId={activeChannelId}
+              unreads={unreads}
+              handleSelectChannel={handleSelectChannel}
+              hasDraft={hasDraft}
+              setCategoryToEdit={setCategoryToEdit}
+              setChannelToMove={setChannelToMove}
+              handleDeleteCategory={handleDeleteCategory}
+              activeCategoryMenu={activeCategoryMenu}
+              setActiveCategoryMenu={setActiveCategoryMenu}
+              sortChannels={sortChannels}
+            />
+          )}
+
+          {!isDMMode && [...publicChannels, ...projectChannels, ...deptChannels].length > 0 && (
             <SidebarSection
               title="Channels"
               count={
@@ -519,6 +631,8 @@ export default function NavigationSidebar({
               )}
             </SidebarSection>
           )}
+
+
 
           {!isDMMode && privateChannels.length > 0 && (
             <SidebarSection
@@ -603,6 +717,23 @@ export default function NavigationSidebar({
       {/* Modals */}
       {showCreateChannel && (
         <CreateChannelModal onClose={() => setShowCreateChannel(false)} />
+      )}
+      {showCreateCategory && (
+        <CreateCategoryModal
+          onClose={() => setShowCreateCategory(false)}
+        />
+      )}
+      {categoryToEdit && (
+        <EditCategoryModal
+          category={categoryToEdit}
+          onClose={() => setCategoryToEdit(null)}
+        />
+      )}
+      {channelToMove && (
+        <MoveToCategoryModal
+          initialCategory={channelToMove.categoryId}
+          onClose={() => setChannelToMove(null)}
+        />
       )}
       {showUserPicker && (
         <UserPickerModal
@@ -800,47 +931,6 @@ function SavedMessagesItem({
             {timeAgo}
           </span>
         )
-      }
-      isActive={isActive}
-      isBold={unread > 0 || hasDraft}
-      badge={unread}
-      onClick={onClick}
-    />
-  );
-}
-
-/* ─── Channel List Item ────────────────────────────────────────────────── */
-
-function ChannelListItem({
-  channel,
-  isActive,
-  unread,
-  onClick,
-  hasDraft,
-}) {
-  /**
-   * FIX: Use visibility field to determine the icon, not just the static type.
-   * When visibility changes (e.g., private→public), the icon updates instantly.
-   */
-  let Icon = CHANNEL_ICONS[channel.type] || Hash;
-  if (channel.visibility === "private") Icon = Lock;
-  else if (channel.visibility === "public") Icon = Hash;
-  // Also handle the case where type is "private" but visibility changed to "public"
-  else if (channel.type === "private" && channel.visibility !== "private") Icon = Hash;
-
-  return (
-    <SidebarItem
-      icon={<Icon size={18} style={{ opacity: isActive ? 1 : 0.6 }} />}
-      label={channel.name}
-      sublabel={
-        hasDraft ? (
-          <span
-            className="flex items-center gap-1"
-            style={{ color: "var(--accent-primary)", fontSize: 11 }}
-          >
-            <span style={{ fontSize: 10 }}>✏️</span> Draft
-          </span>
-        ) : undefined
       }
       isActive={isActive}
       isBold={unread > 0 || hasDraft}

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { channelAPI, readReceiptAPI } from '../services/api'
+import { channelAPI, readReceiptAPI, categoryAPI } from '../services/api'
 import toast from 'react-hot-toast'
 import logger from '../utils/logger'
 import { useAuthStore } from './authStore'
@@ -37,6 +37,8 @@ export const useChannelStore = create(
   persist(
     (set, get) => ({
   channels: [],
+  categories: [],
+  departments: [],
   activeChannelId: null,
   unreads: {},
   isLoading: false,
@@ -59,9 +61,29 @@ export const useChannelStore = create(
       const channels = (data.data.channels || []).map(normalizeChannel)
       set({ channels, isLoading: false })
       get().fetchUnreads()
+      get().fetchCategories()
+      get().fetchDepartments()
     } catch (error) {
       set({ isLoading: false })
       logger.error('Failed to fetch channels:', error)
+    }
+  },
+  
+  fetchCategories: async () => {
+    try {
+      const { data } = await categoryAPI.list();
+      set({ categories: data.data || [] });
+    } catch (err) {
+      logger.error('Failed to fetch categories:', err);
+    }
+  },
+
+  fetchDepartments: async () => {
+    try {
+      const { data } = await categoryAPI.getDepartments();
+      set({ departments: data.data || [] });
+    } catch (err) {
+      logger.error('Failed to fetch departments:', err);
     }
   },
 
@@ -181,6 +203,26 @@ export const useChannelStore = create(
       channels: state.channels.filter((c) => c._id !== channelId),
       activeChannelId: state.activeChannelId === channelId ? null : state.activeChannelId,
     }))
+  },
+
+  addCategory: (category) => {
+    set((state) => {
+      const exists = state.categories.some((g) => g._id === category._id);
+      if (exists) return state;
+      return { categories: [...state.categories, category] };
+    });
+  },
+
+  updateCategory: (category) => {
+    set((state) => ({
+      categories: state.categories.map((g) => g._id === category._id ? category : g),
+    }));
+  },
+
+  removeCategory: (categoryId) => {
+    set((state) => ({
+      categories: state.categories.filter((g) => g._id !== categoryId),
+    }));
   },
 
   updateChannel: (channelId, updates) => {
@@ -334,10 +376,13 @@ export const useChannelStore = create(
   archiveChannel: async (channelId) => {
     try {
       await channelAPI.archive(channelId)
-      set((state) => ({
-        channels: state.channels.filter((c) => c._id !== channelId),
-        activeChannelId: state.activeChannelId === channelId ? null : state.activeChannelId,
-      }))
+      set((state) => {
+        // Also remove from any category local state isn't strictly necessary as it removes the channel entirely
+        return {
+          channels: state.channels.filter((c) => c._id !== channelId),
+          activeChannelId: state.activeChannelId === channelId ? null : state.activeChannelId,
+        }
+      })
       toast.success('Channel archived')
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to archive channel')

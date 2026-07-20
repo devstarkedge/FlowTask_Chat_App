@@ -110,6 +110,11 @@ const SOCKET_EVENTS = {
   // Favorites
   FAVORITE_ADDED: 'favorite:added',
   FAVORITE_REMOVED: 'favorite:removed',
+
+  // Custom Groups
+  CUSTOM_GROUP_CREATED: 'customGroup:created',
+  CUSTOM_GROUP_UPDATED: 'customGroup:updated',
+  CUSTOM_GROUP_DELETED: 'customGroup:deleted',
 }
 
 export function connectSocket() {
@@ -440,6 +445,25 @@ export function connectSocket() {
     const activeId = useChannelStore.getState().activeChannelId
     if (channelId === activeId) {
       useChannelStore.getState().fetchMembers(channelId)
+    }
+  })
+
+  // ─── Custom Group Events ──────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.CUSTOM_GROUP_CREATED, ({ customGroup }) => {
+    if (customGroup) {
+      useChannelStore.getState().addCustomGroup(customGroup)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.CUSTOM_GROUP_UPDATED, ({ customGroup }) => {
+    if (customGroup) {
+      useChannelStore.getState().updateCustomGroup(customGroup)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.CUSTOM_GROUP_DELETED, ({ customGroupId }) => {
+    if (customGroupId) {
+      useChannelStore.getState().removeCustomGroup(customGroupId)
     }
   })
 

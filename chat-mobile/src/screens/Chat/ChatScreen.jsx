@@ -143,8 +143,8 @@ import GifRenderer from '../../components/GifRenderer';
 const ChatScreen = ({ route, navigation }) => {
   const { channelId, channelName, initialTab, canvasId: deepLinkCanvasId, messageId: targetMessageId } = route.params || {};
 
-  const KeyboardContainer = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
-  const keyboardProps = Platform.OS === 'ios' ? { behavior: 'padding', keyboardVerticalOffset: 0 } : {};
+  const KeyboardContainer = KeyboardAvoidingView;
+  const keyboardProps = Platform.OS === 'ios' ? { behavior: 'padding', keyboardVerticalOffset: 0 } : { behavior: 'height', keyboardVerticalOffset: 0 };
 
   // Granular store subscriptions — prevent unnecessary re-renders
   const messages = useChatStore(useShallow((s) => s.messagesByChannel[channelId] || []));

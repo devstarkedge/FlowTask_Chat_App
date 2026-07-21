@@ -22,16 +22,17 @@ const StatusModal = ({ visible, onClose }) => {
   const { colors } = useThemeStore();
   const [statusText, setStatusText] = useState("");
   const [selectedEmoji, setSelectedEmoji] = useState("");
+  const [selectedExpiration, setSelectedExpiration] = useState(null);
 
   const statusPresets = [
     { emoji: "🟢", label: "Available", text: "Available" },
-    { emoji: "🌴", label: "On Leave", text: "On vacation" },
-    { emoji: "📞", label: "In Meeting", text: "In a meeting" },
-    { emoji: "🏠", label: "Working Remote", text: "Working from home" },
+    { emoji: "🌴", label: "On Leave", text: "On Leave" },
+    { emoji: "📞", label: "In Meeting", text: "In Meeting" },
+    { emoji: "🏠", label: "Working Remote", text: "Working Remote" },
     { emoji: "🎧", label: "Focusing", text: "Focusing" },
-    { emoji: "☕", label: "On Break", text: "Taking a break" },
+    { emoji: "☕", label: "On Break", text: "On Break" },
     { emoji: "🚀", label: "Busy", text: "Busy" },
-    { emoji: "🤒", label: "Sick", text: "Out sick" },
+    { emoji: "🤒", label: "Sick", text: "Sick" },
   ];
 
   const expirationOptions = [
@@ -51,6 +52,14 @@ const StatusModal = ({ visible, onClose }) => {
   };
 
   const styles = createStyles(colors);
+
+  // Helper to determine if a preset is currently selected
+  const isPresetSelected = (preset) => {
+    return (
+      (preset.emoji && preset.emoji === selectedEmoji) ||
+      (preset.text && preset.text === statusText)
+    );
+  };
 
   return (
     <AccessibleModal
@@ -110,8 +119,14 @@ const StatusModal = ({ visible, onClose }) => {
                   style={styles.presetItem}
                   onPress={() => {
                     setSelectedEmoji(preset.emoji);
-                    setStatusText(preset.text);
+                    setStatusText(preset.label); // use label for display consistency
+                    setSelectedExpiration(null); // reset expiration on new preset
                   }}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.presetItem,
+                    isPresetSelected(preset) && { backgroundColor: colors.backgroundSecondary },
+                  ]}
                   activeOpacity={0.7}
                 >
                   <Text style={styles.presetEmoji}>{preset.emoji}</Text>
@@ -135,7 +150,14 @@ const StatusModal = ({ visible, onClose }) => {
                 <TouchableOpacity
                   key={index}
                   style={styles.expirationItem}
-                  onPress={() => {}}
+                  onPress={() => {
+                    setSelectedExpiration(option.value);
+                  }}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.expirationItem,
+                    selectedExpiration === option.value && { backgroundColor: colors.backgroundSecondary },
+                  ]}
                   activeOpacity={0.7}
                 >
                   <Clock size={18} color={colors.textSecondary} />
@@ -161,12 +183,13 @@ const StatusModal = ({ visible, onClose }) => {
                 ]}
                 onPress={async () => {
                   try {
-                    await usersAPI.setCustomStatus({ text: '', emoji: '' });
+                    await usersAPI.setCustomStatus({ text: '', emoji: '', expiration: null });
                   } catch (err) {
-                    logger.error('Failed to clear status:', err);
+                    console.error('Failed to clear status:', err);
                   }
                   setStatusText("");
                   setSelectedEmoji("");
+                  setSelectedExpiration(null);
                 }}
                 activeOpacity={0.7}
               >
@@ -187,9 +210,10 @@ const StatusModal = ({ visible, onClose }) => {
                     await usersAPI.setCustomStatus({
                       text: statusText,
                       emoji: selectedEmoji || '😊',
+                      expiration: selectedExpiration,
                     });
                   } catch (err) {
-                    logger.error('Failed to set status:', err);
+                    console.error('Failed to set status:', err);
                   }
                   if (Platform.OS === "web") {
                     document.activeElement?.blur();
@@ -313,10 +337,14 @@ const createStyles = (colors) =>
     },
     clearButton: {},
     saveButton: {},
-    buttonText: {
-      fontSize: moderateScale(16),
-      fontWeight: "600",
-    },
+    bustatusCardText: {
+        fontSize: moderateScale(15),
+        fontWeight: "600",
+      },
+      statusExpiration: {
+        fontSize: moderateScale(12),
+        marginTop: verticalScale(4),
+      },
   });
 
 export default StatusModal;

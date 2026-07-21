@@ -23,7 +23,6 @@ import {
 } from "lucide-react-native";
 
 const QUICK_VIEW_ITEMS = [
-  { key: "catchUp", label: "Catch Up", icon: Layers },
   { key: "threads", label: "Threads", icon: MessageSquare },
   { key: "huddles", label: "Huddles", icon: Headphones },
   { key: "later", label: "Later", icon: Bookmark },

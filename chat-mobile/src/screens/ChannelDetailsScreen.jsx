@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Switch,
-  Alert,
-  FlatList,
   Modal,
   TextInput,
   KeyboardAvoidingView,
@@ -16,216 +14,54 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
-import { useChannelStore } from '../stores/channelStore';
-import { useAuthStore } from '../stores/authStore';
-import { Hash, Users, Pin, Bell, Settings, LogOut, ArrowLeft, FolderOpen, FileText, Clock, User, Mail, Briefcase, UserPlus, X, Search, Plus, Lock, MoreHorizontal, Edit2 } from 'lucide-react-native';
-import api, { channelAPI, notificationPrefAPI, usersAPI, directoriesAPI } from '../services/api';
+import { Hash, Users, Pin, Bell, LogOut, FolderOpen, FileText, UserPlus, X, Search, Plus, Lock, Edit2, Star, MessageSquare } from 'lucide-react-native';
 import { AppAvatar, HeaderBackButton } from '../components/common';
-import logger from '../utils/logger';
-import Toast from 'react-native-toast-message';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { useChannelDetails } from '../hooks/useChannelDetails';
 
+const DetailItem = ({ icon: Icon, label, onPress, colors, children }) => (
+  <TouchableOpacity style={[styles.detailItem, { borderBottomColor: colors.border }]} onPress={onPress}>
+    <Icon size={20} color={colors.textSecondary} />
+    <View style={styles.detailLabelContainer}>
+      <Text style={[styles.detailLabel, { color: colors.textPrimary }]}>{label}</Text>
+    </View>
+    {children}
+  </TouchableOpacity>
+);
 
 const ChannelDetailsScreen = ({ route, navigation }) => {
   const { channelId, channelName, memberCount: initialMemberCount = 0 } = route.params || {};
   const { colors } = useThemeStore();
-  const createDM = useChannelStore((s) => s.createDM);
-  const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
-  const updateChannel = useChannelStore((s) => s.updateChannel);
-  const channels = useChannelStore((s) => s.channels) || [];
-  const { user: currentUser } = useAuthStore();
 
-  const channel = channels.find((c) => c._id === channelId);
-  const isOneToOneDM = channel?.type === 'dm' && (channel?.dmParticipants?.length || 0) <= 2;
-
-  const [members, setMembers] = useState([]);
-  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
-  const [showMembersList, setShowMembersList] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isMuteLoading, setIsMuteLoading] = useState(false);
-
-  // Edit Name State
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [newName, setNewName] = useState("");
-
-  const handleSaveName = async () => {
-    const trimmed = newName.trim();
-    if (!trimmed) {
-      setIsEditingName(false);
-      return;
-    }
-    if (trimmed === (channel?.name || channelName)) {
-      setIsEditingName(false);
-      return;
-    }
-    try {
-      await api.put(`/channels/${channelId}`, { name: trimmed });
-      updateChannel(channelId, { name: trimmed });
-      setIsEditingName(false);
-      Toast.show({ type: 'success', text1: 'Channel name updated' });
-    } catch (err) {
-      logger.error('Failed to update channel name:', err);
-      const msg = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to update channel name';
-      Toast.show({ type: 'error', text1: msg });
-    }
-  };
-
-  // Add Member Modal State
-  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
-  const [memberSearchQuery, setMemberSearchQuery] = useState("");
-  const [memberSearchResults, setMemberSearchResults] = useState([]);
-  const [isSearchingMembers, setIsSearchingMembers] = useState(false);
-  const [addingMemberId, setAddingMemberId] = useState(null);
-
-  useEffect(() => {
-    if (!showAddMemberModal) return;
-    const fetchSearchMembers = async () => {
-      setIsSearchingMembers(true);
-      try {
-        const query = memberSearchQuery.trim();
-        const params = { limit: 100 };
-        if (query) params.search = query;
-        const { data } = await directoriesAPI.getUsers(params);
-        const contacts = data.data || data;
-        
-        // Filter out existing members
-        const existingIds = new Set(members.map(m => m._id));
-        
-        const filtered = (Array.isArray(contacts) ? contacts : contacts?.users || [])
-          .map(u => ({
-            _id: u._id || u.chatUserId,
-            name: u.name,
-            email: u.email,
-            avatar: u.avatar
-          }))
-          .filter(u => u._id && u._id !== currentUser?._id && !existingIds.has(u._id));
-        setMemberSearchResults(filtered);
-      } catch (err) {
-        logger.error("Failed to search members:", err);
-      } finally {
-        setIsSearchingMembers(false);
-      }
-    };
-
-    const timer = setTimeout(fetchSearchMembers, memberSearchQuery ? 350 : 50);
-    return () => clearTimeout(timer);
-  }, [memberSearchQuery, showAddMemberModal, members, currentUser]);
-
-  const handleAddMemberToChannel = async (userId, userName) => {
-    try {
-      setAddingMemberId(userId);
-      await channelAPI.addMember(channelId, userId);
-      Toast.show({ type: 'success', text1: `${userName} added to channel` });
-      // Refresh members
-      fetchMembers();
-      // Remove from search results locally
-      setMemberSearchResults(prev => prev.filter(m => m._id !== userId));
-    } catch (err) {
-      logger.error('Failed to add member:', err);
-      const msg = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to add member';
-      Toast.show({ type: 'error', text1: msg });
-    } finally {
-      setAddingMemberId(null);
-    }
-  };
-
-  const handleMemberPress = async (member) => {
-    try {
-      const channel = await createDM(member._id);
-      if (channel) {
-        setActiveChannel(channel._id);
-        navigation.navigate("Chat", {
-          channelId: channel._id,
-          channelName: channel.name || member.name,
-        });
-      }
-    } catch (err) {
-      logger.error("Failed to start DM:", err);
-    }
-  };
-
-  // Load members and notification preferences
-  useEffect(() => {
-    if (channelId) {
-      fetchMembers();
-      fetchNotificationPrefs();
-    }
-  }, [channelId]);
-
-  const fetchMembers = async () => {
-    setIsLoadingMembers(true);
-    try {
-      const res = await usersAPI.getChannelMembers(channelId);
-      const data = res.data?.data || res.data;
-      const list = Array.isArray(data) ? data : data?.members || [];
-      setMembers(Array.isArray(list) ? list : []);
-    } catch (err) {
-      logger.error('Failed to load channel members:', err);
-    } finally {
-      setIsLoadingMembers(false);
-    }
-  };
-
-  const fetchNotificationPrefs = async () => {
-    try {
-      const res = await notificationPrefAPI.get();
-      const channelPrefs = res.data?.data?.channels?.[channelId];
-      if (channelPrefs) {
-        setIsMuted(channelPrefs.paused || false);
-      }
-    } catch (err) {
-      logger.error('Failed to load notification preferences:', err);
-    }
-  };
-
-  const handleToggleMute = async (val) => {
-    setIsMuteLoading(true);
-    setIsMuted(val);
-    try {
-      await notificationPrefAPI.updateChannel(channelId, { paused: val });
-    } catch (err) {
-      logger.error('Failed to update channel mute preferences:', err);
-      setIsMuted(!val);
-      Alert.alert('Error', 'Failed to update notification settings.');
-    } finally {
-      setIsMuteLoading(false);
-    }
-  };
-
-  const handleLeaveChannel = () => {
-    Alert.alert(
-      'Leave Channel',
-      `Are you sure you want to leave #${channelName}? You will not receive any further messages unless you are re-invited.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await channelAPI.leave(channelId);
-              Alert.alert('Left Channel', `You have successfully left #${channelName}.`);
-              navigation.navigate('Main');
-            } catch (err) {
-              logger.error('Failed to leave channel:', err);
-              const msg = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to leave the channel.';
-              Alert.alert('Error', msg);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const DetailItem = ({ icon: Icon, label, onPress, children }) => (
-    <TouchableOpacity style={[styles.detailItem, { borderBottomColor: colors.border }]} onPress={onPress}>
-      <Icon size={20} color={colors.textSecondary} />
-      <View style={styles.detailLabelContainer}>
-        <Text style={[styles.detailLabel, { color: colors.textPrimary }]}>{label}</Text>
-      </View>
-      {children}
-    </TouchableOpacity>
-  );
+  const {
+    currentUser,
+    channel,
+    isOneToOneDM,
+    members,
+    isLoadingMembers,
+    showMembersList,
+    setShowMembersList,
+    isMuted,
+    isMuteLoading,
+    isEditingName,
+    setIsEditingName,
+    newName,
+    setNewName,
+    showAddMemberModal,
+    setShowAddMemberModal,
+    memberSearchQuery,
+    setMemberSearchQuery,
+    memberSearchResults,
+    isSearchingMembers,
+    addingMemberId,
+    handleSaveName,
+    handleAddMemberToChannel,
+    handleMemberPress,
+    handleToggleMute,
+    isStarred,
+    handleToggleStar,
+    handleLeaveChannel
+  } = useChannelDetails(channelId, channelName, navigation);
 
   if (isOneToOneDM) {
     const otherUser = members.find(m => m._id !== currentUser?._id);
@@ -244,13 +80,11 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
 
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-        {/* Header Bar */}
         <View style={[styles.dmNavHeader, { borderBottomColor: 'transparent' }]}>
           <HeaderBackButton onPress={() => navigation.goBack()} />
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
-          {/* User Info Profile Box */}
           <View style={[styles.dmProfileHeader, { borderBottomColor: colors.border }]}>
             <View style={styles.dmAvatarWrapper}>
               <AppAvatar user={otherUser || { name: dmName, avatar: channel?.avatar }} size={64} showStatus statusSize={16} />
@@ -258,16 +92,27 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
             <Text style={[styles.dmName, { color: colors.textPrimary }]}>{dmName}</Text>
             <Text style={[styles.dmUsername, { color: colors.textSecondary }]}>{username}</Text>
 
-            {/* <TouchableOpacity style={{ marginTop: verticalScale(16) }}>
-              <Text style={{ color: colors.primary, fontSize: moderateScale(16), fontWeight: '500' }}>Add Topic</Text>
-            </TouchableOpacity> */}
-
-            <TouchableOpacity style={{ marginTop: verticalScale(16), marginBottom: verticalScale(12) }} onPress={() => navigation.navigate('UserProfile', { user: displayUser, channelId })}>
-              <Text style={{ color: colors.primary, fontSize: moderateScale(16), fontWeight: '500' }}>View Full Profile</Text>
-            </TouchableOpacity>
+            <View style={styles.actionButtonsRow}>
+              <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => {}}>
+                <UserPlus size={18} color={colors.textPrimary} />
+                <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Add</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={handleToggleStar}>
+                <Star size={18} color={isStarred ? '#E5A443' : colors.textPrimary} fill={isStarred ? '#E5A443' : 'transparent'} />
+                <Text style={[styles.actionBtnText, { color: isStarred ? '#E5A443' : colors.textPrimary }]}>Star</Text>
+              </TouchableOpacity>
+              {/* <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => navigation.navigate('Search', { channelId })}>
+                <Search size={18} color={colors.textPrimary} />
+                <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Search</Text>
+              </TouchableOpacity> */}
+            </View>
+          </View>
+          
+          <View style={{ width: '100%', marginTop: verticalScale(12), borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <DetailItem icon={MessageSquare} label="Messages" colors={colors} onPress={() => navigation.goBack()} />
+            <DetailItem icon={Users} label="View Profile" colors={colors} onPress={() => navigation.navigate('UserProfile', { user: displayUser, channelId })} />
           </View>
 
-          {/* Settings Section */}
           <View style={styles.dmSection}>
             <Text style={[styles.dmSectionTitle, { color: colors.textPrimary }]}>Settings</Text>
             
@@ -292,12 +137,8 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
             </View>
           </View>
 
-          {/* Close Conversation Button */}
           <View style={{ paddingHorizontal: scale(16), marginTop: verticalScale(32), paddingBottom: verticalScale(40) }}>
-            <TouchableOpacity 
-              style={styles.closeConversationBtn} 
-              onPress={handleLeaveChannel}
-            >
+            <TouchableOpacity style={styles.closeConversationBtn} onPress={handleLeaveChannel}>
               <LogOut size={20} color="#E53E3E" style={{ marginRight: scale(8), transform: [{ rotate: '180deg' }] }} />
               <Text style={{ color: '#E53E3E', fontSize: moderateScale(16), fontWeight: '600' }}>Close Conversation</Text>
             </TouchableOpacity>
@@ -309,7 +150,6 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-      {/* Header Bar */}
       <View style={[styles.navHeader, { borderBottomColor: colors.border }]}>
         <HeaderBackButton onPress={() => navigation.goBack()} />
         <Text style={[styles.navTitle, { color: colors.textPrimary }]}>Details</Text>
@@ -357,24 +197,28 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
           <Text style={[styles.memberCount, { color: colors.textSecondary }]}>
             {members.length || initialMemberCount} members
           </Text>
+
+          <View style={styles.actionButtonsRow}>
+            {!(channel?.type === 'project' && channel?.systemManaged) && (
+              <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => { setMemberSearchQuery(""); setShowAddMemberModal(true); }}>
+                <UserPlus size={18} color={colors.textPrimary} />
+                <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Add</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={handleToggleStar}>
+              <Star size={18} color={isStarred ? '#E5A443' : colors.textPrimary} fill={isStarred ? '#E5A443' : 'transparent'} />
+              <Text style={[styles.actionBtnText, { color: isStarred ? '#E5A443' : colors.textPrimary }]}>Star</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => navigation.navigate('Search', { channelId })}>
+              <Search size={18} color={colors.textPrimary} />
+              <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Search</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.section}>
-          {!(channel?.type === 'project' && channel?.systemManaged) && (
-            <DetailItem
-              icon={UserPlus}
-              label="Add Members"
-              onPress={() => {
-                setMemberSearchQuery("");
-                setShowAddMemberModal(true);
-              }}
-            />
-          )}
-          <DetailItem
-            icon={Users}
-            label="View Members"
-            onPress={() => setShowMembersList(!showMembersList)}
-          />
+          <DetailItem icon={FileText} label="Canvas Documents" colors={colors} onPress={() => navigation.navigate("CanvasList", { channelId, channelName })} />
+          <DetailItem icon={Users} label="View Members" colors={colors} onPress={() => setShowMembersList(!showMembersList)} />
 
           {showMembersList && (
             <View style={[styles.membersContainer, { backgroundColor: colors.backgroundSecondary }]}>
@@ -384,20 +228,11 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No members loaded</Text>
               ) : (
                 members.map((member) => (
-                  <TouchableOpacity
-                    key={member._id}
-                    style={styles.memberRow}
-                    onPress={() => handleMemberPress(member)}
-                    activeOpacity={0.6}
-                  >
+                  <TouchableOpacity key={member._id} style={styles.memberRow} onPress={() => handleMemberPress(member)} activeOpacity={0.6}>
                     <AppAvatar user={member} size={28} />
                     <View style={styles.memberInfo}>
-                      <Text style={[styles.memberName, { color: colors.textPrimary }]}>
-                        {member.name || 'Member'}
-                      </Text>
-                      <Text style={[styles.memberEmail, { color: colors.textSecondary }]}>
-                        {member.email}
-                      </Text>
+                      <Text style={[styles.memberName, { color: colors.textPrimary }]}>{member.name || 'Member'}</Text>
+                      <Text style={[styles.memberEmail, { color: colors.textSecondary }]}>{member.email}</Text>
                     </View>
                   </TouchableOpacity>
                 ))
@@ -405,46 +240,19 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
             </View>
           )}
 
-          <DetailItem
-            icon={FolderOpen}
-            label="Files"
-            onPress={() => navigation.navigate('Files', { channelId, channelName })}
-          />
-
-          <DetailItem
-            icon={FileText}
-            label="Canvases"
-            onPress={() => navigation.navigate('CanvasList', { channelId, channelName })}
-          />
-
-          <DetailItem
-            icon={Pin}
-            label="Pinned Messages"
-            onPress={() => navigation.navigate('PinnedMessages', { channelId, channelName })}
-          />
-
-          <DetailItem
-            icon={Bell}
-            label="Mute Notifications"
-            onPress={null}
-          >
+          <DetailItem icon={FolderOpen} label="Files" colors={colors} onPress={() => navigation.navigate('Files', { channelId, channelName })} />
+          <DetailItem icon={FileText} label="Canvases" colors={colors} onPress={() => navigation.navigate('CanvasList', { channelId, channelName })} />
+          <DetailItem icon={Pin} label="Pinned Messages" colors={colors} onPress={() => navigation.navigate('PinnedMessages', { channelId, channelName })} />
+          
+          <DetailItem icon={Bell} label="Mute Notifications" colors={colors} onPress={null}>
             {isMuteLoading ? (
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <Switch
-                value={isMuted}
-                onValueChange={handleToggleMute}
-                trackColor={{ false: '#767577', true: colors.primary + '80' }}
-                thumbColor={isMuted ? colors.primary : '#f4f3f4'}
-              />
+              <Switch value={isMuted} onValueChange={handleToggleMute} trackColor={{ false: '#767577', true: colors.primary + '80' }} thumbColor={isMuted ? colors.primary : '#f4f3f4'} />
             )}
           </DetailItem>
 
-          <DetailItem
-            icon={LogOut}
-            label="Leave Channel"
-            onPress={handleLeaveChannel}
-          />
+          <DetailItem icon={LogOut} label="Leave Channel" colors={colors} onPress={handleLeaveChannel} />
         </View>
       </ScrollView>
 
@@ -474,37 +282,19 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
                 {isSearchingMembers && <ActivityIndicator size="small" color={colors.primary} />}
               </View>
 
-              <ScrollView 
-                style={[styles.searchResultsContainer, { borderColor: colors.border, backgroundColor: colors.inputBackground }]}
-                keyboardShouldPersistTaps="handled"
-                nestedScrollEnabled={true}
-              >
+              <ScrollView style={[styles.searchResultsContainer, { borderColor: colors.border, backgroundColor: colors.inputBackground }]} keyboardShouldPersistTaps="handled" nestedScrollEnabled={true}>
                 {memberSearchResults.length === 0 ? (
-                  <Text style={[styles.noResultsText, { color: colors.textTertiary }]}>
-                    {isSearchingMembers ? "Loading..." : "No people found to add"}
-                  </Text>
+                  <Text style={[styles.noResultsText, { color: colors.textTertiary }]}>{isSearchingMembers ? "Loading..." : "No people found to add"}</Text>
                 ) : (
                   memberSearchResults.map((m) => (
-                    <TouchableOpacity
-                      key={m._id}
-                      style={[styles.searchResultItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}
-                      onPress={() => handleAddMemberToChannel(m._id, m.name)}
-                      disabled={addingMemberId === m._id}
-                    >
+                    <TouchableOpacity key={m._id} style={[styles.searchResultItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]} onPress={() => handleAddMemberToChannel(m._id, m.name)} disabled={addingMemberId === m._id}>
                       <AppAvatar user={m} size={32} />
                       <View style={styles.searchResultInfo}>
                         <Text style={[styles.searchResultName, { color: colors.textPrimary }]}>{m.name}</Text>
                         <Text style={[styles.searchResultEmail, { color: colors.textTertiary }]}>{m.email}</Text>
                       </View>
-                      <View style={[
-                        styles.searchResultAddBtn, 
-                        { borderColor: colors.primary }
-                      ]}>
-                        {addingMemberId === m._id ? (
-                          <ActivityIndicator size="small" color={colors.primary} />
-                        ) : (
-                          <Plus size={14} color={colors.primary} />
-                        )}
+                      <View style={[styles.searchResultAddBtn, { borderColor: colors.primary }]}>
+                        {addingMemberId === m._id ? <ActivityIndicator size="small" color={colors.primary} /> : <Plus size={14} color={colors.primary} />}
                       </View>
                     </TouchableOpacity>
                   ))
@@ -519,273 +309,49 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  navHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(12),
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    padding: moderateScale(8),
-  },
-  navTitle: {
-    fontSize: moderateScale(18),
-    fontWeight: '700',
-  },
-  header: {
-    alignItems: 'center',
-    paddingVertical: verticalScale(24),
-    borderBottomWidth: 1,
-  },
-  profileHeader: {
-    alignItems: 'center',
-    paddingVertical: verticalScale(32),
-    borderBottomWidth: 1,
-  },
-  presenceText: {
-    fontSize: moderateScale(14),
-    fontWeight: '600',
-    marginTop: verticalScale(4),
-  },
-  customStatusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: verticalScale(12),
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(8),
-    borderRadius: moderateScale(8),
-    borderWidth: 1,
-    maxWidth: '85%',
-  },
-  customStatusEmoji: {
-    fontSize: moderateScale(16),
-    marginRight: scale(6),
-  },
-  customStatusText: {
-    fontSize: moderateScale(14),
-    fontWeight: '500',
-  },
-  channelIcon: {
-    width: scale(72),
-    height: verticalScale(72),
-    borderRadius: moderateScale(36),
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: verticalScale(12),
-  },
-  channelName: {
-    fontSize: moderateScale(22),
-    fontWeight: '700',
-  },
-  memberCount: {
-    fontSize: moderateScale(13),
-    marginTop: verticalScale(4),
-  },
-  section: {
-    paddingVertical: verticalScale(8),
-  },
-  sectionTitle: {
-    fontSize: moderateScale(12),
-    fontWeight: '700',
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(8),
-  },
-  card: {
-    borderRadius: moderateScale(12),
-    borderWidth: 1,
-    marginHorizontal: scale(16),
-    overflow: 'hidden',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(12),
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(14),
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(15),
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 12,
-  },
-  detailLabelContainer: {
-    flex: 1,
-  },
-  detailLabel: {
-    fontSize: moderateScale(15),
-    fontWeight: '500',
-  },
-  membersContainer: {
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(8),
-  },
-  memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: verticalScale(8),
-    gap: 10,
-  },
-  memberInfo: {
-    flex: 1,
-  },
-  memberName: {
-    fontSize: moderateScale(14),
-    fontWeight: '600',
-  },
-  memberEmail: {
-    fontSize: moderateScale(11),
-    marginTop: verticalScale(1),
-  },
-  emptyText: {
-    fontSize: moderateScale(13),
-    paddingVertical: verticalScale(8),
-    textAlign: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalContainer: {
-    height: "80%",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: "hidden",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: moderateScale(16),
-    borderBottomWidth: 1,
-  },
-  modalTitle: {
-    fontSize: moderateScale(18),
-    fontWeight: "700",
-  },
-  modalCloseBtn: {
-    padding: moderateScale(4),
-  },
-  searchInputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(10),
-    borderRadius: moderateScale(8),
-    borderWidth: 1,
-    marginBottom: verticalScale(12),
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: moderateScale(15),
-    padding: moderateScale(0),
-  },
-  searchResultsContainer: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: moderateScale(8),
-    overflow: "hidden",
-  },
-  noResultsText: {
-    padding: moderateScale(20),
-    textAlign: "center",
-    fontSize: moderateScale(14),
-  },
-  searchResultItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: moderateScale(12),
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  searchResultInfo: {
-    flex: 1,
-    marginLeft: scale(12),
-  },
-  searchResultName: {
-    fontSize: moderateScale(15),
-    fontWeight: "600",
-  },
-  searchResultEmail: {
-    fontSize: moderateScale(13),
-    marginTop: verticalScale(2),
-  },
-  searchResultAddBtn: {
-    width: scale(28),
-    height: verticalScale(28),
-    borderRadius: moderateScale(14),
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dmNavHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(12),
-  },
-  dmBackButton: {
-    width: scale(44),
-    height: verticalScale(44),
-    borderRadius: moderateScale(22),
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dmProfileHeader: {
-    paddingHorizontal: scale(20),
-    paddingVertical: verticalScale(12),
-    alignItems: 'flex-start',
-    borderBottomWidth: 1,
-  },
-  dmAvatarWrapper: {
-    marginBottom: verticalScale(16),
-  },
-  dmName: {
-    fontSize: moderateScale(24),
-    fontWeight: '800',
-    marginBottom: verticalScale(4),
-  },
-  dmRole: {
-    fontSize: moderateScale(16),
-    marginBottom: verticalScale(4),
-  },
-  dmUsername: {
-    fontSize: moderateScale(15),
-  },
-  dmSection: {
-    paddingVertical: verticalScale(24),
-    paddingHorizontal: scale(20),
-  },
-  dmSectionTitle: {
-    fontSize: moderateScale(16),
-    fontWeight: '700',
-    marginBottom: verticalScale(16),
-  },
-  dmSettingRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  closeConversationBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderRadius: moderateScale(12),
-    paddingVertical: verticalScale(14),
-  }
+  container: { flex: 1 },
+  navHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: scale(12), paddingVertical: verticalScale(12), borderBottomWidth: 1 },
+  navTitle: { fontSize: moderateScale(18), fontWeight: '700' },
+  header: { alignItems: 'center', paddingVertical: verticalScale(24), borderBottomWidth: 1 },
+  channelIcon: { width: scale(72), height: verticalScale(72), borderRadius: moderateScale(36), justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(12) },
+  channelName: { fontSize: moderateScale(22), fontWeight: '700' },
+  memberCount: { fontSize: moderateScale(13), marginTop: verticalScale(4) },
+  section: { paddingVertical: verticalScale(8) },
+  detailItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: scale(16), paddingVertical: verticalScale(15), borderBottomWidth: StyleSheet.hairlineWidth, gap: 12 },
+  detailLabelContainer: { flex: 1 },
+  detailLabel: { fontSize: moderateScale(15), fontWeight: '500' },
+  membersContainer: { paddingHorizontal: scale(16), paddingVertical: verticalScale(8) },
+  memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: verticalScale(8), gap: 10 },
+  memberInfo: { flex: 1 },
+  memberName: { fontSize: moderateScale(14), fontWeight: '600' },
+  memberEmail: { fontSize: moderateScale(11), marginTop: verticalScale(1) },
+  emptyText: { fontSize: moderateScale(13), paddingVertical: verticalScale(8), textAlign: 'center' },
+  modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
+  modalContainer: { height: "80%", borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: "hidden" },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: moderateScale(16), borderBottomWidth: 1 },
+  modalTitle: { fontSize: moderateScale(18), fontWeight: "700" },
+  modalCloseBtn: { padding: moderateScale(4) },
+  searchInputRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: scale(12), paddingVertical: verticalScale(10), borderRadius: moderateScale(8), borderWidth: 1, marginBottom: verticalScale(12), gap: 8 },
+  searchInput: { flex: 1, fontSize: moderateScale(15), padding: moderateScale(0) },
+  searchResultsContainer: { flex: 1, borderWidth: 1, borderRadius: moderateScale(8), overflow: "hidden" },
+  noResultsText: { padding: moderateScale(20), textAlign: "center", fontSize: moderateScale(14) },
+  searchResultItem: { flexDirection: "row", alignItems: "center", padding: moderateScale(12), borderBottomWidth: StyleSheet.hairlineWidth },
+  searchResultInfo: { flex: 1, marginLeft: scale(12) },
+  searchResultName: { fontSize: moderateScale(15), fontWeight: "600" },
+  searchResultEmail: { fontSize: moderateScale(13), marginTop: verticalScale(2) },
+  searchResultAddBtn: { width: scale(28), height: verticalScale(28), borderRadius: moderateScale(14), borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  dmNavHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: scale(16), paddingVertical: verticalScale(12) },
+  dmProfileHeader: { paddingHorizontal: scale(20), paddingVertical: verticalScale(12), alignItems: 'flex-start', borderBottomWidth: 1 },
+  dmAvatarWrapper: { marginBottom: verticalScale(16) },
+  dmName: { fontSize: moderateScale(24), fontWeight: '800', marginBottom: verticalScale(4) },
+  dmUsername: { fontSize: moderateScale(15) },
+  dmSection: { paddingVertical: verticalScale(24), paddingHorizontal: scale(20) },
+  dmSectionTitle: { fontSize: moderateScale(16), fontWeight: '700', marginBottom: verticalScale(16) },
+  dmSettingRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  closeConversationBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: moderateScale(12), paddingVertical: verticalScale(14) },
+  actionButtonsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: verticalScale(16), marginBottom: verticalScale(8), gap: scale(10) },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: verticalScale(8), paddingHorizontal: scale(14), borderRadius: moderateScale(24), borderWidth: 1 },
+  actionBtnText: { marginLeft: scale(6), fontSize: moderateScale(14), fontWeight: '600' }
 });
 
 export default ChannelDetailsScreen;

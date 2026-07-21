@@ -5,13 +5,13 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   Alert,
   FlatList,
   TouchableOpacity,
   Text,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
 import { useCanvasStore } from '../../stores/canvasStore';
@@ -23,6 +23,7 @@ import CanvasCommentsSheet from '../../screens/Canvas/CanvasCommentsSheet';
 import CanvasHistorySheet from '../../components/canvas/CanvasHistorySheet';
 import CanvasShareModal from '../../screens/Canvas/CanvasShareModal';
 import { EDITOR_HTML } from './EditorHtml';
+import ENV from '../../config/environment';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import logger from '../../utils/logger';
 
@@ -186,8 +187,19 @@ export default function CanvasEditorScreen({ route, navigation }) {
         });
 
         try {
-          const uploadRes = await fileAPI.uploadFiles(channelId, formData);
-          const uploadedUrl = uploadRes.data?.data?.[0]?.url || uploadRes.data?.url;
+          const uploadChannelId = channelId || activeCanvas?.channelId;
+          if (!uploadChannelId) {
+            Alert.alert('Upload Error', 'No active channel context found for uploading.');
+            return;
+          }
+          const uploadRes = await fileAPI.uploadFiles(uploadChannelId, formData, undefined, true);
+          let uploadedUrl = uploadRes.data?.data?.files?.[0]?.secureUrl || uploadRes.data?.data?.files?.[0]?.url || uploadRes.data?.data?.urls?.[0] || uploadRes.data?.url || uploadRes.data?.data?.[0]?.url;
+          
+          if (uploadedUrl && !uploadedUrl.startsWith('http')) {
+            const prefix = ENV.SOCKET_URL || ENV.API_BASE_URL.replace(/\/api\/.*$/, '');
+            uploadedUrl = uploadedUrl.startsWith('/') ? prefix + uploadedUrl : prefix + '/' + uploadedUrl;
+          }
+
           if (uploadedUrl) {
             sendEditorCommand('insertImage', uploadedUrl);
           } else {
@@ -229,13 +241,18 @@ export default function CanvasEditorScreen({ route, navigation }) {
           )}
           <WebView
             ref={webviewRef}
-            source={{ html: EDITOR_HTML, baseUrl: 'https://localhost' }}
+            source={{ html: EDITOR_HTML, baseUrl: ENV.SOCKET_URL || 'https://chat-app-api-cyyl.onrender.com' }}
             originWhitelist={['*']}
             style={styles.webview}
             onMessage={handleMessage}
             keyboardDisplayRequiresUserAction={false}
             javaScriptEnabled
             domStorageEnabled
+            mixedContentMode="always"
+            allowFileAccess={true}
+            allowFileAccessFromFileURLs={true}
+            allowUniversalAccessFromFileURLs={true}
+            androidLayerType={Platform.OS === 'android' ? 'hardware' : 'none'}
           />
           {mentionSearch !== null && (
             <View style={styles.mentionPopup}>

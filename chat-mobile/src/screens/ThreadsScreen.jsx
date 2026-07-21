@@ -13,6 +13,9 @@ import { formatRelativeTimeLong } from '../utils/dateUtils';
 import { ScreenLayout, ScreenHeader, LoadingState, EmptyState, MobileFileCard } from '../components/common';
 import AppAvatar from '../components/common/AppAvatar';
 import RichText from '../components/RichText';
+import GifRenderer from '../components/GifRenderer';
+import AudioMessagePlayer from '../components/AudioMessagePlayer';
+import VideoMessagePlayer from '../components/VideoMessagePlayer';
 import { MessageSquare } from 'lucide-react-native';
 import logger from '../utils/logger';
 import { useAuthStore } from '../stores/authStore';
@@ -114,7 +117,24 @@ const ThreadsScreen = ({ navigation }) => {
             </Text>
           </View>
           <View style={{ maxHeight: verticalScale(80), overflow: 'hidden' }}>
-            {!!(msg.htmlContent || msg.content) && (
+            {msg.contentType === 'audio' || msg.type === 'audio' ? (
+              <AudioMessagePlayer 
+                audioUrl={msg.audioUrl || msg.audioMeta?.audioUrl || attachments[0]?.url || attachments[0]?.secureUrl} 
+                duration={msg.duration || msg.audioMeta?.duration} 
+                colors={colors} 
+                isMe={msg.authorId === user?._id || msg.authorId?._id === user?._id} 
+              />
+            ) : msg.contentType === 'video' || msg.type === 'video' ? (
+              <VideoMessagePlayer 
+                videoUrl={msg.videoUrl || msg.videoMeta?.videoUrl || attachments[0]?.url || attachments[0]?.secureUrl} 
+                thumbnailUrl={msg.thumbnailUrl || msg.videoMeta?.thumbnailUrl || attachments[0]?.thumbnailUrl} 
+                width={msg.width || msg.videoMeta?.width}
+                height={msg.height || msg.videoMeta?.height}
+                colors={colors} 
+              />
+            ) : msg.contentType === 'gif' && msg.gifMeta ? (
+              <GifRenderer item={msg} contentColor={colors.textPrimary} styles={styles} />
+            ) : !!(msg.htmlContent || msg.content) && (
               <RichText
                 html={msg.htmlContent || (/<[a-z][\s\S]*>/i.test(msg.content) ? msg.content : undefined)}
                 text={msg.content}

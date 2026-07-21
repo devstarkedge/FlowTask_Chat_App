@@ -157,6 +157,18 @@ const PinnedMessagesScreen = ({ route, navigation }) => {
               }}
               baseStyle={{ fontSize: moderateScale(14), lineHeight: 20 }}
             />
+          ) : item.contentType === 'gif' && item.gifMeta ? (
+            <View style={{ gap: 8 }}>
+              {item.content ? (
+                <Text style={[styles.contentText, { color: colors.textPrimary }]}>
+                  {item.content}
+                </Text>
+              ) : null}
+              <Image
+                source={{ uri: item.gifUrl || item.gifMeta.gifUrl || item.gifMeta.previewUrl }}
+                style={{ width: '80%', aspectRatio: (item.gifMeta.width || 1) / (item.gifMeta.height || 1), maxWidth: 250, maxHeight: 250, resizeMode: 'contain', borderRadius: 8 }}
+              />
+            </View>
           ) : item.content ? (
             <Text style={[styles.contentText, { color: colors.textPrimary }]}>
               {item.content}

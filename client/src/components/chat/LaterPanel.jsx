@@ -173,7 +173,23 @@ function SavedMessageCard({
                       style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}
                     />
                   ) : (
-                    msg?.content || (fileAssets.length === 0 && <em className="lp-item__preview--empty">Attachment</em>)
+                    msg?.content || (fileAssets.length === 0 && msg?.contentType !== 'gif' && <em className="lp-item__preview--empty">Attachment</em>)
+                  )}
+                  {msg?.contentType === 'gif' && msg?.gifMeta && (
+                    <div style={{ marginTop: 6 }}>
+                      <img
+                        src={msg.gifUrl || msg.gifMeta.gifUrl || msg.gifMeta.previewUrl}
+                        alt={msg.gifMeta.title || 'GIF'}
+                        style={{
+                          maxWidth: '100%',
+                          maxHeight: 120,
+                          borderRadius: 6,
+                          objectFit: 'contain',
+                          display: 'block'
+                        }}
+                        loading="lazy"
+                      />
+                    </div>
                   )}
                 </div>
                 {fileAssets.length > 0 && (

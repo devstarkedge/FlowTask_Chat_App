@@ -208,7 +208,7 @@ export const useWorkspaceStore = create(
           const id = workspaceId || get().activeWorkspaceId
           if (!id) return []
           const { data } = await api.get(`/workspaces/${id}/members`)
-          const members = data.data?.members || []
+          const members = data.data || []
           set({ members })
           return members
         } catch (error) {

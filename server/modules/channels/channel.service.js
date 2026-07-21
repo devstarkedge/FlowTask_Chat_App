@@ -81,6 +81,30 @@ class ChannelService {
       return existing;
     }
 
+    const systemChannelMatch = Object.values(SYSTEM_CHANNELS).find(
+      (sys) => sys.name.toLowerCase() === boardName.toLowerCase()
+    );
+
+    if (systemChannelMatch) {
+      const existingSystem = await channelRepository.findBySlug(systemChannelMatch.slug, workspaceId);
+      if (existingSystem) {
+        const updates = {
+          flowTaskRef: { entityType: "board", entityId: boardId },
+          systemManaged: true,
+          departmentRef: deptId
+            ? { departmentId: deptId.toString(), departmentName: deptName }
+            : { departmentId: null, departmentName: null },
+        };
+        const updatedSystem = await channelRepository.update(existingSystem._id, updates, workspaceId);
+        logger.info("System channel linked to ProofHub project", {
+          channelId: updatedSystem._id,
+          slug: updatedSystem.slug,
+          boardId,
+        });
+        return updatedSystem;
+      }
+    }
+
     const creator = creatorFlowTaskId
       ? await userRepository.findByFlowTaskId(creatorFlowTaskId, workspaceId)
       : null;
@@ -1531,6 +1555,16 @@ class ChannelService {
     }
     if (updates.adminOverrides !== undefined) {
       allowed.adminOverrides = updates.adminOverrides;
+    }
+    if (updates.departmentRef !== undefined) {
+      allowed.departmentRef = updates.departmentRef;
+    }
+    if (updates.isArchived !== undefined) {
+      allowed.isArchived = updates.isArchived;
+      if (!updates.isArchived) {
+        allowed.archivedAt = null;
+        allowed.archivedBy = null;
+      }
     }
 
     // Detect visibility change for workspace-wide broadcast

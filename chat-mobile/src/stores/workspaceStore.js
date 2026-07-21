@@ -175,6 +175,23 @@ export const useWorkspaceStore = create(
       },
 
       clearError: () => set({ error: null }),
+
+      fetchMembers: async (workspaceId) => {
+        if (!workspaceId) return;
+        set({ isLoading: true, error: null });
+        try {
+          const { data } = await workspaceAPI.getMembers(workspaceId);
+          const members = data.data?.members || data.data || [];
+          set({ members, isLoading: false });
+          logger.info('[WorkspaceStore] Fetched members:', members.length);
+          return members;
+        } catch (error) {
+          const msg = error.response?.data?.error?.message || error.response?.data?.message || error.userMessage || 'Failed to fetch members';
+          set({ isLoading: false, error: msg });
+          logger.error('[WorkspaceStore] Fetch members error:', msg);
+          throw error;
+        }
+      },
     }),
     {
       name: 'flowtask-workspace-storage',

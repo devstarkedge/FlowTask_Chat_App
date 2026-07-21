@@ -394,6 +394,21 @@ export const workspaceAPI = {
   getBilling: (id) => api.get(`/workspaces/${id}/billing`),
   upgradePlan: (id, plan) =>
     api.post(`/workspaces/${id}/upgrade-plan`, { plan }),
+  // Security settings
+  getSecuritySettings: (id) => api.get(`/workspaces/${id}/settings/security`),
+  updateSecuritySettings: (id, data) =>
+    api.patch(`/workspaces/${id}/settings/security`, data),
+  // Notification settings
+  getNotificationSettings: (id) => api.get(`/workspaces/${id}/settings/notifications`),
+  updateNotificationSettings: (id, data) =>
+    api.patch(`/workspaces/${id}/settings/notifications`, data),
+  // Integration settings
+  getIntegrationSettings: (id) => api.get(`/workspaces/${id}/settings/integrations`),
+  updateIntegrationSettings: (id, data) =>
+    api.patch(`/workspaces/${id}/settings/integrations`, data),
+  // Sessions
+  getActiveSessions: (id) => api.get(`/workspaces/${id}/sessions`),
+  logoutAllSessions: (id) => api.post(`/workspaces/${id}/sessions/logout-all`),
 };
 
 // ─── Saved Messages ──────────────────────────────────────────────────────

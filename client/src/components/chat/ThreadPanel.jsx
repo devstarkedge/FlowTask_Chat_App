@@ -622,6 +622,24 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
           );
         })()}
 
+        {/* GIF Rendering */}
+        {!isDeleted && message.contentType === 'gif' && message.gifMeta && (
+          <div style={{ marginTop: 8 }}>
+            <img
+              src={message.gifUrl || message.gifMeta.gifUrl || message.gifMeta.previewUrl}
+              alt={message.gifMeta.title || 'GIF'}
+              style={{
+                maxWidth: '100%',
+                maxHeight: 320,
+                borderRadius: 8,
+                objectFit: 'contain',
+                display: 'block'
+              }}
+              loading="lazy"
+            />
+          </div>
+        )}
+
         {/* Attachments */}
         {!isDeleted && derivedAttachments.length > 0 && (
           <div

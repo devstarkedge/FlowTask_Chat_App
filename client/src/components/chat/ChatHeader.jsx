@@ -393,16 +393,6 @@ export default function ChatHeader({
             size={14}
           />
 
-          {!isConstrained && (
-            <HdrBtn
-              icon={Search}
-              title="Search messages"
-              onClick={onToggleSearch}
-              className="hide-mobile"
-              size={14}
-            />
-          )}
-
           <HdrBtn
             icon={MoreVertical}
             title="More options"

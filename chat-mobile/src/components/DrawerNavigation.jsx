@@ -10,6 +10,7 @@ import {
   ScrollView,
   StatusBar,
   Platform,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUIStore } from "../stores/uiStore";
@@ -19,6 +20,8 @@ import { useThemeStore } from "../stores/themeStore";
 import { useChannelStore } from "../stores/channelStore";
 import { disconnectSocket } from "../services/socket";
 import CreateChannelModal from "./CreateChannelModal";
+import ManageCategoryChannelsModal from "./ManageCategoryChannelsModal";
+import CategoryActionSheet from "./CategoryActionSheet";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 import {
@@ -29,6 +32,7 @@ import {
   Lock,
   Volume2,
   X,
+  MoreVertical,
 } from "lucide-react-native";
 
 const { width } = Dimensions.get("window");
@@ -36,7 +40,7 @@ const DRAWER_WIDTH = Math.min(width * 0.8, 320);
 
 // ─── Section Header ─────────────────────────────────────────────────────────
 
-const SectionHeader = ({ title, isExpanded, onToggle, onAdd, colors }) => (
+const SectionHeader = ({ title, isExpanded, onToggle, onAdd, onMenu, colors }) => (
   <View style={sHeader.row}>
     <TouchableOpacity style={sHeader.header} onPress={onToggle} activeOpacity={0.6}>
       <ChevronRight
@@ -46,11 +50,18 @@ const SectionHeader = ({ title, isExpanded, onToggle, onAdd, colors }) => (
       />
       <Text style={[sHeader.title, { color: colors.textOnPrimary }]}>{title}</Text>
     </TouchableOpacity>
-    {onAdd && (
-      <TouchableOpacity onPress={onAdd} style={sHeader.addBtn} hitSlop={10}>
-        <Plus size={16} color={colors.textOnPrimary} style={{ opacity: 0.5 }} />
-      </TouchableOpacity>
-    )}
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      {onAdd && (
+        <TouchableOpacity onPress={onAdd} style={sHeader.addBtn} hitSlop={10}>
+          <Plus size={16} color={colors.textOnPrimary} style={{ opacity: 0.5 }} />
+        </TouchableOpacity>
+      )}
+      {onMenu && (
+        <TouchableOpacity onPress={onMenu} style={sHeader.addBtn} hitSlop={10}>
+          <MoreVertical size={16} color={colors.textOnPrimary} style={{ opacity: 0.5 }} />
+        </TouchableOpacity>
+      )}
+    </View>
   </View>
 );
 
@@ -288,13 +299,19 @@ const DrawerNavigation = ({ navigation }) => {
   const { user, logout } = useAuthStore();
   const { colors } = useThemeStore();
   const channels = useChannelStore((s) => s.channels) || [];
+  const categories = useChannelStore((s) => s.categories) || [];
   const unreads = useChannelStore((s) => s.unreads) || {};
   const starredIds = useChannelStore((s) => s.starredIds) || [];
   const slideAnim = useRef(new Animated.Value(DRAWER_WIDTH)).current;
 
   const [channelsExpanded, setChannelsExpanded] = useState(true);
   const [dmsExpanded, setDmsExpanded] = useState(true);
+  const [expandedCategories, setExpandedCategories] = useState({});
   const [createChannelVisible, setCreateChannelVisible] = useState(false);
+  const [manageCategoryVisible, setManageCategoryVisible] = useState(false);
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
+  const [activeCategory, setActiveCategory] = useState(null);
+  const [categoryModalMode, setCategoryModalMode] = useState('add');
 
   useEffect(() => {
     Animated.timing(slideAnim, {
@@ -305,9 +322,9 @@ const DrawerNavigation = ({ navigation }) => {
   }, [isDrawerOpen]);
 
   const { starredChannels, regularChannels, dmChannels } = useMemo(() => {
-    const starred = channels.filter((c) => starredIds.includes(c._id) && c.type !== "dm");
-    const regular = channels.filter((c) => c.type !== "dm" && !starredIds.includes(c._id));
-    const dms = channels.filter((c) => c.type === "dm");
+    const starred = channels.filter((c) => starredIds.includes(c._id));
+    const regular = channels.filter((c) => c.type !== "dm" && !c.categoryId && !starredIds.includes(c._id));
+    const dms = channels.filter((c) => c.type === "dm" && !starredIds.includes(c._id));
     return { starredChannels: starred, regularChannels: regular, dmChannels: dms };
   }, [channels, starredIds]);
 
@@ -339,6 +356,15 @@ const DrawerNavigation = ({ navigation }) => {
     },
     [navigateAndClose]
   );
+
+  const handleCategoryAction = (cat) => {
+    // Only custom categories have actions menu
+    if (cat.type === 'department') {
+      return;
+    }
+    setActiveCategory(cat);
+    setActionSheetVisible(true);
+  };
 
   if (!isDrawerOpen) return null;
 
@@ -409,10 +435,49 @@ const DrawerNavigation = ({ navigation }) => {
               <View style={[styles.sep, { backgroundColor: colors.primaryOverlayLight }]} />
               <SectionHeader title="Starred" isExpanded={true} onToggle={() => {}} colors={colors} />
               {starredChannels.map((ch) => (
-                <ChannelRow key={ch._id} channel={ch} unreadCount={unreads[ch._id] || 0} onPress={handleChannelPress} colors={colors} />
+                ch.type === "dm" ? (
+                  <DMRow key={ch._id} channel={ch} unreadCount={unreads[ch._id] || 0} onPress={handleDMPress} colors={colors} />
+                ) : (
+                  <ChannelRow key={ch._id} channel={ch} unreadCount={unreads[ch._id] || 0} onPress={handleChannelPress} colors={colors} />
+                )
               ))}
             </>
           )}
+
+          {/* Categories */}
+          {categories.map((cat) => {
+            const catChannels = channels.filter(c => c.categoryId === cat._id && !starredIds.includes(c._id));
+            const isExpanded = expandedCategories[cat._id] !== false; // default true
+            const isDepartment = cat.type === 'department';
+            return (
+              <React.Fragment key={cat._id}>
+                <View style={[styles.sep, { backgroundColor: colors.primaryOverlayLight }]} />
+                <SectionHeader
+                  title={`${cat.icon || '📁'} ${cat.name}`}
+                  isExpanded={isExpanded}
+                  onToggle={() => setExpandedCategories(p => ({ ...p, [cat._id]: !isExpanded }))}
+                  onMenu={!isDepartment ? () => handleCategoryAction(cat) : undefined}
+                  colors={colors}
+                />
+                {isExpanded && catChannels.length === 0 && !isDepartment && (
+                  <TouchableOpacity 
+                    onPress={() => {
+                      setActiveCategory(cat);
+                      setActionSheetVisible(true);
+                    }} 
+                    style={{ paddingLeft: 12, paddingVertical: 8 }}
+                  >
+                    <Text style={{ fontSize: 13, paddingHorizontal: 30, color: colors.textOnPrimary, opacity: 0.8, fontWeight: "600" }}>
+                      + Add Channels
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {isExpanded && catChannels.map((ch) => (
+                  <ChannelRow key={ch._id} channel={ch} unreadCount={unreads[ch._id] || 0} onPress={handleChannelPress} colors={colors} />
+                ))}
+              </React.Fragment>
+            );
+          })}
 
           {/* Channels */}
           <View style={[styles.sep, { backgroundColor: colors.primaryOverlayLight }]} />
@@ -451,6 +516,7 @@ const DrawerNavigation = ({ navigation }) => {
           <NavItem label="Preferences" onPress={() => navigateAndClose("Preferences")} colors={colors} />
           <NavItem label="People" onPress={() => navigateAndClose("People")} colors={colors} />
           <NavItem label="Invite people" onPress={() => navigateAndClose("InviteManagement")} colors={colors} />
+          <NavItem label="Starred messages" onPress={() => navigateAndClose("StarredMessages")} colors={colors} />
           <NavItem label="Saved items" onPress={() => navigateAndClose("Later")} colors={colors} />
 
           <View style={[styles.sep, { backgroundColor: colors.primaryOverlayLight }]} />
@@ -463,6 +529,35 @@ const DrawerNavigation = ({ navigation }) => {
         visible={createChannelVisible}
         onClose={() => setCreateChannelVisible(false)}
         navigation={navigation}
+      />
+      <CategoryActionSheet
+        visible={actionSheetVisible}
+        onClose={() => {
+          setActionSheetVisible(false);
+          setActiveCategory(null);
+        }}
+        category={activeCategory}
+        onAddChannels={(cat) => {
+          setActionSheetVisible(false);
+          setActiveCategory(cat);
+          setCategoryModalMode('add');
+          setManageCategoryVisible(true);
+        }}
+        onRemoveChannels={(cat) => {
+          setActionSheetVisible(false);
+          setActiveCategory(cat);
+          setCategoryModalMode('remove');
+          setManageCategoryVisible(true);
+        }}
+      />
+      <ManageCategoryChannelsModal 
+        visible={manageCategoryVisible} 
+        onClose={() => {
+          setManageCategoryVisible(false);
+          setActiveCategory(null);
+        }} 
+        category={activeCategory}
+        mode={categoryModalMode}
       />
     </View>
   );
@@ -527,6 +622,14 @@ const styles = StyleSheet.create({
     marginHorizontal: scale(16),
     marginVertical: verticalScale(8),
   },
+  emptyText: {
+    fontSize: moderateScale(12),
+    paddingHorizontal: scale(16),
+    paddingLeft: scale(30),
+    opacity: 0.5,
+    fontStyle: 'italic',
+    paddingVertical: verticalScale(4),
+  }
 });
 
 export default DrawerNavigation;

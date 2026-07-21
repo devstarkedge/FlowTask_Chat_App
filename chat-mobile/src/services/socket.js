@@ -208,6 +208,19 @@ export const connectSocket = async () => {
     }
   });
 
+  // Custom Group Events
+  socket.on('customGroup:created', ({ customGroup }) => {
+    useChannelStore.getState().addCustomGroup(customGroup);
+  });
+
+  socket.on('customGroup:updated', ({ customGroup }) => {
+    useChannelStore.getState().updateCustomGroup(customGroup);
+  });
+
+  socket.on('customGroup:deleted', ({ customGroupId }) => {
+    useChannelStore.getState().removeCustomGroup(customGroupId);
+  });
+
   // Thread Events
   socket.on('thread:created', ({ thread }) => {
     useThreadStore.getState().addThread(thread);

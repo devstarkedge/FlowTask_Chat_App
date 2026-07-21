@@ -155,5 +155,14 @@ export const useAuthStore = create((set, get) => ({
     });
   },
 
+  updateUser: (updates) => {
+    set((state) => {
+      if (!state.user) return state;
+      const updatedUser = { ...state.user, ...updates };
+      storage.setItem('chat_user', JSON.stringify(updatedUser)).catch(() => {});
+      return { user: updatedUser };
+    });
+  },
+
   clearError: () => set({ error: null }),
 }));

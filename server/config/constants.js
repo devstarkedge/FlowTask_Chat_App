@@ -22,7 +22,6 @@ export const FLOWTASK_EVENTS = Object.freeze({
   TIME_ENTRY_ADDED: 'TIME_ENTRY_ADDED',
   TIME_ENTRY_UPDATED: 'TIME_ENTRY_UPDATED',
   TIME_ENTRY_DELETED: 'TIME_ENTRY_DELETED',
-  // Type-specific time entry events
   LOGGED_TIME_ADDED: 'LOGGED_TIME_ADDED',
   LOGGED_TIME_UPDATED: 'LOGGED_TIME_UPDATED',
   LOGGED_TIME_DELETED: 'LOGGED_TIME_DELETED',
@@ -40,35 +39,27 @@ export const FLOWTASK_EVENTS = Object.freeze({
   ANNOUNCEMENT_CREATED: 'ANNOUNCEMENT_CREATED',
   ANNOUNCEMENT_DELETED: 'ANNOUNCEMENT_DELETED',
   ANNOUNCEMENT_UPDATED: 'ANNOUNCEMENT_UPDATED',
-
-  // Department events
   DEPARTMENT_CREATED: 'DEPARTMENT_CREATED',
   DEPARTMENT_UPDATED: 'DEPARTMENT_UPDATED',
   DEPARTMENT_DELETED: 'DEPARTMENT_DELETED',
   DEPARTMENT_MEMBER_ADDED: 'DEPARTMENT_MEMBER_ADDED',
   DEPARTMENT_MEMBER_REMOVED: 'DEPARTMENT_MEMBER_REMOVED',
-  // Team events
   TEAM_CREATED: 'TEAM_CREATED',
   TEAM_UPDATED: 'TEAM_UPDATED',
   TEAM_DELETED: 'TEAM_DELETED',
   TEAM_MEMBER_ADDED: 'TEAM_MEMBER_ADDED',
   TEAM_MEMBER_REMOVED: 'TEAM_MEMBER_REMOVED',
-  // Comment events
   COMMENT_UPDATED: 'COMMENT_UPDATED',
   COMMENT_DELETED: 'COMMENT_DELETED',
-  // Attachment events
   ATTACHMENT_ADDED: 'ATTACHMENT_ADDED',
   ATTACHMENT_DELETED: 'ATTACHMENT_DELETED',
-  // Subtask events
   SUBTASK_CREATED: 'SUBTASK_CREATED',
   SUBTASK_UPDATED: 'SUBTASK_UPDATED',
   SUBTASK_COMPLETED: 'SUBTASK_COMPLETED',
   SUBTASK_DELETED: 'SUBTASK_DELETED',
-  // Nano subtask events
   NANO_CREATED: 'NANO_CREATED',
   NANO_COMPLETED: 'NANO_COMPLETED',
   NANO_DELETED: 'NANO_DELETED',
-  // Assignment events (for auto-join propagation)
   SUBTASK_ASSIGNED: 'SUBTASK_ASSIGNED',
   NANO_ASSIGNED: 'NANO_ASSIGNED',
 });
@@ -79,8 +70,10 @@ export const CHANNEL_TYPES = Object.freeze({
   DEPARTMENT: 'department',
   TEAM: 'team',
   DM: 'dm',
-  SYSTEM: 'system',  PUBLIC: 'public',
-  PRIVATE: 'private',});
+  SYSTEM: 'system',
+  PUBLIC: 'public',
+  PRIVATE: 'private',
+});
 
 // ─── Channel Visibility ──────────────────────────────────────────────────────
 export const CHANNEL_VISIBILITY = Object.freeze({
@@ -207,8 +200,7 @@ export const WORKSPACE_LIMITS = Object.freeze({
   },
 });
 
-// ─── Default Channels (created on workspace creation) ─────────────────
-// These are always created for every workspace.
+// ─── Default Channels ─────────────────────────────────────────────────
 export const DEFAULT_CHANNELS = Object.freeze([
   { slug: 'general', name: 'general', description: 'Company-wide general discussion', visibility: 'public', type: 'public' },
   { slug: 'random', name: 'random', description: 'Non-work banter and water-cooler chat', visibility: 'public', type: 'public' },
@@ -222,17 +214,30 @@ export const SYSTEM_CHANNELS = Object.freeze({
   ANNOUNCEMENTS: { slug: 'flowtask-announcements', name: 'Announcements', description: 'Company announcements', visibility: 'public' },
 });
 
-// ─── Socket Events (emitted by chat server) ──────────────────────────────────
+// ─── Socket Events ──────────────────────────────────────────────────────────
 export const SOCKET_EVENTS = Object.freeze({
+  // Workspace settings
+  WORKSPACE_UPDATED: 'workspace:updated',
+  WORKSPACE_MEMBER_ADDED: 'workspace:member:added',
+  WORKSPACE_MEMBER_REMOVED: 'workspace:member:removed',
+  WORKSPACE_SETTINGS_UPDATED: 'workspace:settings:updated',
+  WORKSPACE_INTEGRATION_UPDATED: 'workspace:integration:updated',
+  WORKSPACE_SECURITY_UPDATED: 'workspace:security:updated',
+  WORKSPACE_NOTIFICATION_SETTINGS_UPDATED: 'workspace:notification:settings:updated',
+  WORKSPACE_INVITE_CODE_REGENERATED: 'workspace:invite:code:regenerated',
+  WORKSPACE_DELETED: 'workspace:deleted',
+  WORKSPACE_ROLE_UPDATED: 'workspace:role:updated',
+  WORKSPACE_BILLING_UPDATED: 'workspace:billing:updated',
+  WORKSPACE_PLAN_CHANGED: 'workspace:plan:changed',
+
   // Messages
   MESSAGE_CREATE: 'message:create',
   MESSAGE_UPDATE: 'message:update',
   MESSAGE_DELETE: 'message:delete',
   MESSAGE_ACK: 'message:ack',
+  MESSAGE_STATUS: 'message:status',
   MESSAGE_PINNED: 'message:pinned',
   MESSAGE_UNPINNED: 'message:unpinned',
-
-  // Reactions
   REACTION_ADD: 'reaction:add',
   REACTION_REMOVE: 'reaction:remove',
 
@@ -240,72 +245,69 @@ export const SOCKET_EVENTS = Object.freeze({
   THREAD_CREATED: 'thread:created',
   THREAD_UPDATED: 'thread:updated',
   THREAD_REPLY: 'thread:reply',
-  THREAD_STATS_UPDATED: 'thread:stats_updated',
+  THREAD_STATS_UPDATED: 'thread:stats:updated',
 
   // Channels
   CHANNEL_CREATED: 'channel:created',
   CHANNEL_UPDATED: 'channel:updated',
-  CHANNEL_ARCHIVED: 'channel:archived',
+  CHANNEL_DELETED: 'channel:deleted',
   CHANNEL_ADDED: 'channel:added',
   CHANNEL_REMOVED: 'channel:removed',
-  CHANNEL_MEMBER_ADDED: 'channel:member:added',
-  CHANNEL_MEMBER_REMOVED: 'channel:member:removed',
   CHANNEL_MEMBERS_UPDATED: 'channel:members:updated',
-  MEMBER_JOINED: 'channel:member_joined',
-  MEMBER_LEFT: 'channel:member_left',
+  MEMBER_JOINED: 'member:joined',
+  MEMBER_LEFT: 'member:left',
 
   // Presence
-  USER_ONLINE: 'presence:online',
-  USER_OFFLINE: 'presence:offline',
-  USER_AWAY: 'presence:away',
+  USER_ONLINE: 'user:online',
+  USER_AWAY: 'user:away',
+  USER_OFFLINE: 'user:offline',
+  USER_PROFILE_UPDATED: 'user:profile:updated',
+  USER_ROLE_UPDATED: 'user:role:updated',
   PRESENCE_SYNC: 'presence:sync',
-  TYPING_START: 'typing:start',
-  TYPING_STOP: 'typing:stop',
-
-  // Read Receipts
-  READ_RECEIPT_UPDATED: 'readReceipt:updated',
-
-  // Message Delivery Status
-  MESSAGE_STATUS: 'message:status',
-
-  // Unread
-  UNREAD_UPDATED: 'unread:updated',
 
   // Notifications
   NOTIFICATION: 'notification',
-  NOTIFICATION_UNREAD_UPDATED: 'notification:unread:updated',
-
-  // Notification sync (multi-device)
   NOTIFICATION_DISMISS: 'notification:dismiss',
   NOTIFICATION_READ_SYNC: 'notification:read:sync',
   NOTIFICATION_PREFERENCES_UPDATED: 'notification:preferences:updated',
+  NOTIFICATION_UNREAD_UPDATED: 'notification:unread:updated',
 
-  // Window focus tracking (for presence-based notification suppression)
-  WINDOW_FOCUS: 'window:focus',
-  WINDOW_BLUR: 'window:blur',
+  // Typing
+  TYPING_START: 'typing:start',
+  TYPING_STOP: 'typing:stop',
+
+  // Announcements
+  ANNOUNCEMENT_UPDATED: 'announcement:updated',
+  ANNOUNCEMENT_DELETED: 'announcement:deleted',
 
   // Drafts
   DRAFT_UPDATED: 'draft:updated',
   DRAFT_DELETED: 'draft:deleted',
 
+  // Saved Messages
+  SAVED_MESSAGE_ADDED: 'saved:message:added',
+  SAVED_MESSAGE_STATUS_UPDATED: 'saved:message:status:updated',
+
   // Scheduled Messages
-  SCHEDULED_MESSAGE_SENT: 'scheduledMessage:sent',
-  SCHEDULED_MESSAGE_FAILED: 'scheduledMessage:failed',
+  SCHEDULED_MESSAGE_SENT: 'scheduled:sent',
+  SCHEDULED_MESSAGE_FAILED: 'scheduled:failed',
 
-  // Announcements
-  ANNOUNCEMENT_DELETED: 'announcement:deleted',
-  ANNOUNCEMENT_UPDATED: 'announcement:updated',
+  // Favorites
+  FAVORITE_ADDED: 'favorite:added',
+  FAVORITE_REMOVED: 'favorite:removed',
 
-  // FlowTask Sync
-  USER_ACTIVATED: 'user:activated',
-  USER_ROLE_UPDATED: 'user:role_updated',
-  USER_PROFILE_UPDATED: 'user:profile_updated',
+  // Window / Session
+  WINDOW_FOCUS: 'window:focus',
+  WINDOW_BLUR: 'window:blur',
 
   // Invites
   INVITE_CREATED: 'invite:created',
-  INVITE_REVOKED: 'invite:revoked',
   INVITE_ACCEPTED: 'invite:accepted',
   INVITE_RESENT: 'invite:resent',
+  INVITE_REVOKED: 'invite:revoked',
+
+  // Workspace members
+  WORKSPACE_MEMBER_UPDATED: 'workspace:member:updated',
 });
 
 // ─── Audit Actions ──────────────────────────────────────────────────────────
@@ -364,8 +366,8 @@ export const NOTIFICATION_CATEGORIES = Object.freeze({
 
 // ─── Notification Bundling ───────────────────────────────────────────────────
 export const NOTIFICATION_BUNDLING = Object.freeze({
-  BUNDLE_WINDOW_MS: 2 * 60 * 1000,  // 2-minute window for batching low-priority
-  MAX_BUNDLE_SIZE: 50,               // Max notifications per bundle
+  BUNDLE_WINDOW_MS: 2 * 60 * 1000,
+  MAX_BUNDLE_SIZE: 50,
   BUNDLE_QUEUE_NAME: 'notification-bundle',
 });
 
@@ -382,9 +384,7 @@ export const RATE_LIMITS = Object.freeze({
   REACTION: { windowMs: 60_000, max: 60 },
   SEARCH: { windowMs: 60_000, max: 10 },
   WEBHOOK: { windowMs: 60_000, max: 1000 },
-  // Auth: 5 requests per 100 seconds
   AUTH: { windowMs: 100_000, max: 5 },
-  // Invite: 10 requests per minute
   INVITE: { windowMs: 60_000, max: 10 },
 });
 
@@ -399,9 +399,9 @@ export const CIRCUIT_BREAKER = Object.freeze({
 
 // ─── Event Processing ────────────────────────────────────────────────────────
 export const EVENT_PROCESSING = Object.freeze({
-  MAX_HOLD_MS: 60_000,          // max time to hold out-of-order events
-  DEBOUNCE_WINDOW_MS: 5_000,    // rapid successive updates debounce
-  TASK_UPDATE_DEBOUNCE_MS: 30_000, // task update suppression window
+  MAX_HOLD_MS: 60_000,
+  DEBOUNCE_WINDOW_MS: 5_000,
+  TASK_UPDATE_DEBOUNCE_MS: 30_000,
   PROCESSED_EVENT_TTL_DAYS: 7,
 });
 
@@ -410,12 +410,12 @@ export const BOT = Object.freeze({
   SYSTEM_USER_ID: 'SYSTEM_BOT',
   DISPLAY_NAME: 'FlowTask Bot',
   AVATAR: '/bot_6819665.png',
-  DEADLINE_CHECK_CRON: '0 9 * * *',       // Daily at 9 AM
-  DEADLINE_WARNING_HOURS: 24,              // Warn for tasks due within 24h
+  DEADLINE_CHECK_CRON: '0 9 * * *',
+  DEADLINE_WARNING_HOURS: 24,
 });
 
 // ─── Message Edit Window ─────────────────────────────────────────────────────
-export const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+export const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000;
 
 // ─── Channel Name Constraints ────────────────────────────────────────────────
 export const CHANNEL_NAME = Object.freeze({

@@ -216,3 +216,63 @@ export const upgradePlan = asyncHandler(async (req, res) => {
   );
   res.json({ success: true, data: workspace });
 });
+
+// ─── Workspace Security Settings ────────────────────────────────────────────
+
+export const getSecuritySettings = asyncHandler(async (req, res) => {
+  const settings = await workspaceService.getSecuritySettings(req.params.id, req.user._id);
+  res.json({ success: true, data: settings });
+});
+
+export const updateSecuritySettings = asyncHandler(async (req, res) => {
+  const result = await workspaceService.updateSecuritySettings(
+    req.params.id,
+    req.body,
+    req.user._id,
+  );
+  res.json({ success: true, data: result });
+});
+
+// ─── Workspace Notification Settings ────────────────────────────────────────
+
+export const getNotificationSettings = asyncHandler(async (req, res) => {
+  const settings = await workspaceService.getNotificationSettings(req.params.id, req.user._id);
+  res.json({ success: true, data: settings });
+});
+
+export const updateNotificationSettings = asyncHandler(async (req, res) => {
+  const result = await workspaceService.updateNotificationSettings(
+    req.params.id,
+    req.body,
+    req.user._id,
+  );
+  res.json({ success: true, data: result });
+});
+
+// ─── Workspace Integration Settings ─────────────────────────────────────────
+
+export const getIntegrationSettings = asyncHandler(async (req, res) => {
+  const settings = await workspaceService.getIntegrationSettings(req.params.id, req.user._id);
+  res.json({ success: true, data: settings });
+});
+
+export const updateIntegrationSettings = asyncHandler(async (req, res) => {
+  const result = await workspaceService.updateIntegrationSettings(
+    req.params.id,
+    req.body,
+    req.user._id,
+  );
+  res.json({ success: true, data: result });
+});
+
+// ─── Active Sessions ─────────────────────────────────────────────────────
+
+export const getActiveSessions = asyncHandler(async (req, res) => {
+  const sessions = await workspaceService.getActiveSessions(req.params.id, req.user._id);
+  res.json({ success: true, data: sessions });
+});
+
+export const logoutAllSessions = asyncHandler(async (req, res) => {
+  const result = await workspaceService.logoutAllSessions(req.params.id, req.user._id);
+  res.json({ success: true, data: result });
+});

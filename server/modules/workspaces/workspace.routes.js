@@ -9,6 +9,9 @@ import {
   getAllInvitesSchema,
   updateDomainRestrictionsSchema,
   updateGuestSettingsSchema,
+  updateSecuritySettingsSchema,
+  updateNotificationSettingsSchema,
+  updateIntegrationSettingsSchema,
 } from '../../middleware/schemas.js';
 import * as ctrl from './workspace.controller.js';
 
@@ -51,6 +54,22 @@ router.delete('/:id/invites/:inviteId', protect, resolveWorkspace, requireWorksp
 // ─── Workspace Settings ─────────────────────────────────────────────────────────────
 router.patch('/:id/settings/domain-restrictions', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), validate({ body: updateDomainRestrictionsSchema }), ctrl.updateDomainRestrictions);
 router.patch('/:id/settings/guest-settings', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER), validate({ body: updateGuestSettingsSchema }), ctrl.updateGuestSettings);
+
+// ─── Security Settings ──────────────────────────────────────────────────────
+router.get('/:id/settings/security', protect, resolveWorkspace, ctrl.getSecuritySettings);
+router.patch('/:id/settings/security', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), validate({ body: updateSecuritySettingsSchema }), ctrl.updateSecuritySettings);
+
+// ─── Notification Settings ─────────────────────────────────────────────────
+router.get('/:id/settings/notifications', protect, resolveWorkspace, ctrl.getNotificationSettings);
+router.patch('/:id/settings/notifications', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), validate({ body: updateNotificationSettingsSchema }), ctrl.updateNotificationSettings);
+
+// ─── Integration Settings ──────────────────────────────────────────────────
+router.get('/:id/settings/integrations', protect, resolveWorkspace, ctrl.getIntegrationSettings);
+router.patch('/:id/settings/integrations', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), validate({ body: updateIntegrationSettingsSchema }), ctrl.updateIntegrationSettings);
+
+// ─── Active Sessions ──────────────────────────────────────────────────────
+router.get('/:id/sessions', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.getActiveSessions);
+router.post('/:id/sessions/logout-all', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER), ctrl.logoutAllSessions);
 
 // ─── Billing & Plan ──────────────────────────────────────────────────────────
 router.get('/:id/billing', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.getWorkspaceBilling);

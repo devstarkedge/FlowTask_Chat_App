@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import storage from '../services/storage';
-import { channelAPI, usersAPI, readReceiptAPI } from '../services/api';
+import { channelAPI, usersAPI, readReceiptAPI, categoryAPI } from '../services/api';
 import { getSocket } from '../services/socket';
 import logger from '../utils/logger';
 import Toast from 'react-native-toast-message';
@@ -21,6 +21,7 @@ export const useChannelStore = create(
       activeChannelId: null,
       unreads: {},
       membersByChannel: {},
+      categories: [],
       starredIds: [],
       pinnedIds: [],
       isLoading: false,
@@ -34,6 +35,8 @@ export const useChannelStore = create(
           const starredIds = channels.filter(c => c.isStarred || c.starred).map(c => c._id);
           const pinnedIds = channels.filter(c => c.isPinned || c.pinned).map(c => c._id);
           set({ channels, starredIds, pinnedIds, isLoading: false });
+
+          get().fetchCategories();
 
           // ── Join channel rooms AFTER channels are loaded ──────────────────
           // The socket connect handler runs before fetchChannels resolves, so channels
@@ -56,6 +59,30 @@ export const useChannelStore = create(
           set({ isLoading: false });
           logger.error('Failed to fetch channels:', error);
         }
+      },
+      fetchCategories: async () => {
+        try {
+          const { data } = await categoryAPI.list();
+          set({ categories: data.data || [] });
+        } catch (error) {
+          logger.error('Failed to fetch categories:', error);
+        }
+      },
+
+      addCategory: (category) => {
+        set((state) => ({ categories: [...state.categories, category] }));
+      },
+
+      updateCategory: (category) => {
+        set((state) => ({
+          categories: state.categories.map(g => g._id === category._id ? category : g),
+        }));
+      },
+
+      removeCategory: (categoryId) => {
+        set((state) => ({
+          categories: state.categories.filter(g => g._id !== categoryId),
+        }));
       },
 
       fetchUnreads: async () => {

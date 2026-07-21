@@ -116,11 +116,68 @@ export const EDITOR_HTML = `
 
     body.dark .ProseMirror blockquote { color: #9ca3af; }
 
+    .ProseMirror img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+      margin: 8px 0;
+      object-fit: contain;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .ProseMirror img.ProseMirror-selectednode {
+      outline: 3px solid var(--accent-color);
+    }
+
+    /* File Node Styles */
+    .file-node {
+      display: flex;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background-color: var(--callout-bg);
+      margin: 12px 0;
+      cursor: pointer;
+      user-select: none;
+    }
+    .file-node-icon {
+      font-size: 24px;
+      margin-right: 12px;
+      color: var(--accent-color);
+    }
+    .file-node-details {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+    }
+    .file-node-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text-color);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-node-size {
+      font-size: 12px;
+      color: var(--placeholder-color);
+      margin-top: 4px;
+    }
+
+    .tableWrapper {
+      overflow-x: auto;
+      margin: 16px 0;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+
     .ProseMirror table {
       border-collapse: collapse;
       table-layout: fixed;
       width: 100%;
-      margin: 16px 0;
+      margin: 0;
       overflow: hidden;
     }
 
@@ -359,7 +416,19 @@ img.ProseMirror-separator {
       parseHTML: function() { return [{ tag: 'div[data-type="file"]' }]; },
       renderHTML: function(ref) {
         var node = ref.node;
-        return ['div', { 'data-type': 'file', class: 'file-node' }, '\uD83D\uDCCE File: ' + (node.attrs.fileName || 'Unknown')];
+        var HTMLAttributes = ref.HTMLAttributes;
+        
+        var fileName = node.attrs.fileName || 'Unknown File';
+        var fileSize = node.attrs.fileSize ? (node.attrs.fileSize / 1024).toFixed(2) + ' KB' : 'Unknown size';
+        
+        return [
+          'div', mergeAttributes(HTMLAttributes, { 'data-type': 'file', class: 'file-node', 'data-url': node.attrs.url }),
+          ['span', { class: 'file-node-icon', contenteditable: 'false' }, '📄'],
+          ['div', { class: 'file-node-details', contenteditable: 'false' },
+            ['span', { class: 'file-node-name' }, fileName],
+            ['span', { class: 'file-node-size' }, fileSize]
+          ]
+        ];
       }
     });
 
@@ -469,6 +538,7 @@ img.ProseMirror-separator {
             orderedList: e.isActive('orderedList'),
             taskList: e.isActive('taskList'),
             heading: e.isActive('heading') ? e.getAttributes('heading').level : null,
+            table: e.isActive('table'),
             canUndo: e.can().undo(),
             canRedo: e.can().redo()
           });
@@ -521,6 +591,13 @@ img.ProseMirror-separator {
           else editor.chain().focus().setParagraph().run();
           break;
         case 'insertTable':         editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(); break;
+        case 'addColumnBefore':     editor.chain().focus().addColumnBefore().run(); break;
+        case 'addColumnAfter':      editor.chain().focus().addColumnAfter().run(); break;
+        case 'deleteColumn':        editor.chain().focus().deleteColumn().run(); break;
+        case 'addRowBefore':        editor.chain().focus().addRowBefore().run(); break;
+        case 'addRowAfter':         editor.chain().focus().addRowAfter().run(); break;
+        case 'deleteRow':           editor.chain().focus().deleteRow().run(); break;
+        case 'deleteTable':         editor.chain().focus().deleteTable().run(); break;
         case 'insertHorizontalRule': editor.chain().focus().setHorizontalRule().run(); break;
         case 'undo':                editor.chain().focus().undo().run(); break;
         case 'redo':                editor.chain().focus().redo().run(); break;

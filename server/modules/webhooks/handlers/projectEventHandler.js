@@ -129,6 +129,11 @@ export function registerProjectEventHandlers() {
               name: populatedChannel.name,
               slug: populatedChannel.slug,
               type: populatedChannel.type,
+              visibility: populatedChannel.visibility,
+              isArchived: populatedChannel.isArchived,
+              systemManaged: populatedChannel.systemManaged,
+              departmentRef: populatedChannel.departmentRef,
+              adminOverrides: populatedChannel.adminOverrides,
               flowTaskRef: populatedChannel.flowTaskRef,
               memberCount: populatedChannel.memberCount || populatedChannel.members?.length,
             },
@@ -180,8 +185,8 @@ export function registerProjectEventHandlers() {
       return;
     }
 
-    // Update channel metadata if name changed
-    if (changes?.title || changes?.description) {
+    // Update channel metadata if name, description, department, or status changed
+    if (changes?.title || changes?.description || changes?.department || changes?.departmentId || changes?.status || changes?.isArchived !== undefined) {
       const updates = {};
       if (changes?.title) {
         updates.name = changes.title;
@@ -195,18 +200,35 @@ export function registerProjectEventHandlers() {
         }
         updates.slug = newSlug;
       }
-      if (changes?.description) {
+      if (changes?.description !== undefined) {
         updates.description = changes.description;
       }
+      
+      // Handle department changes
+      const newDept = changes?.department || changes?.departmentId;
+      if (newDept) {
+        const deptObj = typeof newDept === 'object' ? newDept : null;
+        const deptId = deptObj?._id || deptObj?.id || (typeof newDept === 'string' ? newDept : null);
+        const deptName = deptObj?.name || 'general';
+        if (deptId) {
+          updates.departmentRef = { departmentId: deptId.toString(), departmentName: deptName };
+        } else if (newDept === null) {
+          updates.departmentRef = { departmentId: null, departmentName: null };
+        }
+      }
 
-      await channelService.updateChannel(channel._id, updates, null);
+      // Handle unarchiving / restoring via status
+      if (changes?.status === 'active' || changes?.isArchived === false) {
+        updates.isArchived = false;
+      }
 
-      // Emit channel update via socket
-      const { emitToChannel: emitChannel } = await import('../../../sockets/socketManager.js');
-      const { SOCKET_EVENTS: SE } = await import('../../../config/constants.js');
-      emitChannel(channel._id.toString(), SE.CHANNEL_UPDATED, {
-        channel: { _id: channel._id, name: updates.name || channel.name, slug: updates.slug || channel.slug },
-      }, wsId);
+      // Handle archiving
+      if (changes?.status === 'archived' || changes?.isArchived === true) {
+        await channelService.archiveChannel(channel._id, 'system', wsId);
+        // The archiveChannel method handles emitting the update event for archiving.
+      }
+
+      await channelService.updateChannel(channel._id, updates, null, wsId);
     }
 
     // Post update notification

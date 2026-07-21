@@ -229,14 +229,14 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
               <Text style={[styles.footerLabel, { color: colors.textPrimary }]}>Preferences</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.footerRow}
               onPress={() => { onClose(); }}
               activeOpacity={0.6}
             >
               <HelpCircle size={20} color={colors.textSecondary} strokeWidth={1.5} />
               <Text style={[styles.footerLabel, { color: colors.textPrimary }]}>Help</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
         </ScrollView>
       </Animated.View>

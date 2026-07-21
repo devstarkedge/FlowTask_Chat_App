@@ -58,6 +58,8 @@ import InviteManagementScreen from "../screens/InviteManagementScreen";
 import NewMessageScreen from "../screens/NewMessageScreen";
 import CanvasListScreen from "../screens/Canvas/CanvasListScreen";
 import CanvasEditorScreen from "../screens/Canvas/CanvasEditorScreen";
+import WorkspaceSettingsScreen from "../screens/workspace/WorkspaceSettingsScreen";
+import StarredMessagesScreen from "../screens/StarredMessagesScreen";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 
@@ -403,6 +405,16 @@ export default function AppNavigation() {
           <Stack.Screen
             name="CanvasEditor"
             component={CanvasEditorScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="StarredMessages"
+            component={StarredMessagesScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="WorkspaceSettings"
+            component={WorkspaceSettingsScreen}
             options={{ headerShown: false }}
           />
         </>

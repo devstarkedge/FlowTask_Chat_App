@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
-import { ArrowLeft, MessageSquare, History, MoreVertical, Users } from 'lucide-react-native';
+import { ArrowLeft, MessageSquare, History, Users } from 'lucide-react-native';
 import Avatar from '../Avatar';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-
+import { useThemeStore } from '../../stores/themeStore';
 
 export default function CanvasHeader({
   title,
@@ -15,6 +15,7 @@ export default function CanvasHeader({
   onCommentsPress,
   onOptionsPress,
 }) {
+  const { colors } = useThemeStore();
   const [isEditing, setIsEditing] = useState(false);
   const [tempTitle, setTempTitle] = useState(title);
 
@@ -31,10 +32,12 @@ export default function CanvasHeader({
     setTempTitle(title);
   }, [title]);
 
+  const styles = createStyles(colors);
+
   return (
     <View style={styles.container}>
       <TouchableOpacity onPress={onBack} style={styles.iconBtn}>
-        <ArrowLeft size={22} color="#1f2937" />
+        <ArrowLeft size={22} color={colors.textPrimary} />
       </TouchableOpacity>
 
       <View style={styles.titleContainer}>
@@ -47,6 +50,7 @@ export default function CanvasHeader({
             autoFocus
             maxLength={60}
             returnKeyType="done"
+            cursorColor={colors.primary}
           />
         ) : (
           <TouchableOpacity onPress={() => setIsEditing(true)} activeOpacity={0.7} style={styles.titleTouchable}>
@@ -80,8 +84,14 @@ export default function CanvasHeader({
           </View>
         )}
 
-        <TouchableOpacity onPress={onCommentsPress} style={styles.iconBtn}>
-          <MessageSquare size={20} color="#4b5563" />
+        {/* History Button */}
+        <TouchableOpacity onPress={onHistoryPress} style={styles.actionPill}>
+          <History size={16} color={colors.textSecondary} />
+        </TouchableOpacity>
+
+        {/* Comments Button */}
+        <TouchableOpacity onPress={onCommentsPress} style={styles.actionPill}>
+          <MessageSquare size={16} color={colors.textSecondary} />
           {commentCount > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{commentCount}</Text>
@@ -89,27 +99,25 @@ export default function CanvasHeader({
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={onHistoryPress} style={styles.iconBtn}>
-          <History size={20} color="#4b5563" />
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={onOptionsPress} style={styles.iconBtn}>
-          <MoreVertical size={20} color="#4b5563" />
+        {/* Share Button */}
+        <TouchableOpacity onPress={onOptionsPress} style={styles.shareBtn}>
+          <Users size={16} color={colors.textOnPrimary || '#ffffff'} />
+          <Text style={styles.shareText}>Share</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     height: verticalScale(56),
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: scale(8),
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
+    borderBottomColor: colors.border,
+    backgroundColor: colors.background,
   },
   iconBtn: {
     padding: moderateScale(8),
@@ -125,37 +133,38 @@ const styles = StyleSheet.create({
   },
   titleText: {
     fontSize: moderateScale(18),
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
   titleInput: {
     fontSize: moderateScale(18),
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: '700',
+    color: colors.textPrimary,
     paddingVertical: verticalScale(2),
     borderBottomWidth: 1.5,
-    borderBottomColor: '#4f46e5',
+    borderBottomColor: colors.primary,
   },
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: scale(6),
   },
   presenceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: scale(10),
+    marginRight: scale(4),
   },
   avatarWrapper: {
     borderRadius: moderateScale(12),
     borderWidth: 2,
-    borderColor: '#ffffff',
+    borderColor: colors.background,
     overflow: 'hidden',
   },
   moreUsersCount: {
     width: scale(24),
     height: verticalScale(24),
     borderRadius: moderateScale(12),
-    backgroundColor: '#e5e7eb',
+    backgroundColor: colors.surfaceHover,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
@@ -163,19 +172,46 @@ const styles = StyleSheet.create({
   moreUsersText: {
     fontSize: moderateScale(9),
     fontWeight: 'bold',
-    color: '#4b5563',
+    color: colors.textSecondary,
+  },
+  actionPill: {
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(6),
+    borderRadius: moderateScale(16),
+    backgroundColor: colors.surfaceHover || '#f3f4f6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  shareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(6),
+    borderRadius: moderateScale(16),
+    gap: scale(4),
+    marginLeft: scale(4),
+  },
+  shareText: {
+    color: colors.textOnPrimary || '#ffffff',
+    fontSize: moderateScale(13),
+    fontWeight: '600',
   },
   badge: {
     position: 'absolute',
-    top: verticalScale(2),
-    right: scale(2),
-    backgroundColor: '#ef4444',
-    borderRadius: moderateScale(8),
-    minWidth: scale(16),
-    height: verticalScale(16),
+    top: -verticalScale(4),
+    right: -scale(4),
+    backgroundColor: colors.notification || '#ef4444',
+    borderRadius: moderateScale(10),
+    minWidth: scale(18),
+    height: verticalScale(18),
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: scale(4),
+    borderWidth: 1.5,
+    borderColor: colors.background,
   },
   badgeText: {
     color: '#ffffff',

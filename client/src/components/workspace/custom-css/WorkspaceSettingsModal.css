@@ -601,6 +601,7 @@
       border-radius: 12px;
       transition: background .12s, transform .12s;
       cursor: default;
+      position: relative;
   }
 
   .wsm-member-row:hover {

@@ -9,6 +9,7 @@
     "@react-navigation/bottom-tabs": "^7.16.2",
     "@react-navigation/native": "^7.2.5",
     "@react-navigation/native-stack": "^7.16.0",
+    "@tanstack/react-query": "^5.101.2",
     "@tiptap/core": "^2.10.3",
     "@tiptap/extension-blockquote": "^2.10.3",
     "@tiptap/extension-bold": "^2.10.3",

@@ -312,3 +312,37 @@ export const updateGuestSettingsSchema = z.object({
   maxGuests: z.number().int().min(-1).optional(),
   guestChannelRestriction: z.boolean().optional(),
 });
+
+export const updateSecuritySettingsSchema = z.object({
+  requireEmailVerification: z.boolean().optional(),
+  sessionTimeout: z.string().optional(),
+  twoFactorEnabled: z.boolean().optional(),
+  passwordPolicy: z.object({
+    minLength: z.number().int().min(6).max(128).optional(),
+    requireSpecialChar: z.boolean().optional(),
+    requireNumber: z.boolean().optional(),
+    requireUppercase: z.boolean().optional(),
+  }).optional(),
+});
+
+export const updateNotificationSettingsSchema = z.object({
+  mentions: z.boolean().optional(),
+  directMessages: z.boolean().optional(),
+  threadReplies: z.boolean().optional(),
+  taskUpdates: z.boolean().optional(),
+  workspaceAnnouncements: z.boolean().optional(),
+  channelNotifications: z.boolean().optional(),
+  emailNotifications: z.boolean().optional(),
+  pushNotifications: z.boolean().optional(),
+  notificationDigest: z.enum(['all', 'mentions', 'dms', 'off']).optional(),
+});
+
+export const updateIntegrationSettingsSchema = z.object({
+  autoCreateChannels: z.boolean().optional(),
+  syncMembers: z.boolean().optional(),
+  integrationEnabled: z.boolean().optional(),
+});
+
+export const getWorkspaceSettingsSchema = z.object({
+  type: z.enum(['security', 'notifications', 'integrations', 'all']).optional().default('all'),
+});

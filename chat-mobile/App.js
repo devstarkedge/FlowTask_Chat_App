@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AppNavigator from "./src/navigation/AppNavigation";
 import { useAuthStore } from "./src/stores/authStore";
 import { useThemeStore } from "./src/stores/themeStore";
@@ -13,6 +14,7 @@ import Toast from "react-native-toast-message";
 import ThemeProvider from './src/theme/ThemeProvider';
 
 const navigationRef = createNavigationContainerRef();
+const queryClient = new QueryClient();
 
 export default function App() {
   const init = useAuthStore((state) => state.init);
@@ -72,15 +74,17 @@ export default function App() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <ErrorBoundary>
-        <ThemeProvider>
-          <NavigationContainer ref={navigationRef}>
-            <AppNavigator />
-            <Toast />
-          </NavigationContainer>
-        </ThemeProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
+    <QueryClientProvider client={queryClient}>
+      <SafeAreaProvider>
+        <ErrorBoundary>
+          <ThemeProvider>
+            <NavigationContainer ref={navigationRef}>
+              <AppNavigator />
+              <Toast />
+            </NavigationContainer>
+          </ThemeProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
+    </QueryClientProvider>
   );
 }

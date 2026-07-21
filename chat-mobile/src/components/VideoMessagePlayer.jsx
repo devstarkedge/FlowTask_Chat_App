@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Modal, SafeAreaView } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
-import { Play, X } from 'lucide-react-native';
+import { Play, X, Loader2 } from 'lucide-react-native';
 import { scale, moderateScale } from '../utils/responsive';
 import logger from '../utils/logger';
 
@@ -21,19 +21,30 @@ const VideoMessagePlayer = ({ videoUrl, thumbnailUrl, colors, width, height }) =
         style={[styles.container, { width: displayWidth, height: displayHeight, backgroundColor: colors.border }]} 
         activeOpacity={0.9}
         onPress={() => setIsFullScreen(true)}
+        disabled={videoUrl === '/placeholder-loading'}
       >
-        <Video
-          source={{ uri: videoUrl }}
+        {videoUrl === '/placeholder-loading' ? (
+          <View style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]}>
+             <Loader2 size={24} color="#FFF" />
+          </View>
+        ) : (
+          <Video
+            source={{ uri: videoUrl }}
           posterSource={thumbnailUrl ? { uri: thumbnailUrl } : undefined}
           style={StyleSheet.absoluteFillObject}
           resizeMode={ResizeMode.COVER}
           shouldPlay={false}
           isMuted={true}
         />
+        )}
         <View style={styles.overlay}>
-          <View style={[styles.playButtonContainer, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
-            <Play size={24} color="#FFF" fill="#FFF" style={{ marginLeft: 2 }} />
-          </View>
+          {videoUrl === '/placeholder-loading' ? (
+            <View style={[styles.playButtonContainer, { backgroundColor: 'transparent' }]} />
+          ) : (
+            <View style={[styles.playButtonContainer, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+              <Play size={24} color="#FFF" fill="#FFF" style={{ marginLeft: 2 }} />
+            </View>
+          )}
         </View>
       </TouchableOpacity>
 

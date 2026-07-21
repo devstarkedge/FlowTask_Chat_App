@@ -18,10 +18,13 @@ import {
   Trash2,
   SmilePlus,
   MessageSquare,
+  Star,
+  Pin,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
 import { usePreferencesStore } from '../stores/preferencesStore';
+import { useStarredStore } from '../stores/useStarredStore';
 import { applySkinTone } from '../utils/emojiUtils';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
@@ -86,8 +89,10 @@ const MessageActionSheet = ({
   onReply,
   onMarkUnread,
   onToggleNotifications,
+  onPin,
 }) => {
   const { emojiSkinTone } = usePreferencesStore();
+  const { toggleFavorite, isFavorited } = useStarredStore();
   if (!message) return null;
 
   const isAuthor =
@@ -109,6 +114,16 @@ const MessageActionSheet = ({
     await Clipboard.setStringAsync(url);
     Toast.show({ type: 'success', text1: 'Link copied to clipboard' });
     onClose();
+  };
+
+  const isStarred = isFavorited('message', message?._id);
+  const handleStarToggle = async () => {
+    try {
+      await toggleFavorite('message', message?._id);
+      Toast.show({ type: 'success', text1: isStarred ? 'Message unstarred' : 'Message starred' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Failed to star/unstar message' });
+    }
   };
 
   return (
@@ -191,6 +206,26 @@ const MessageActionSheet = ({
 
           {/* List Actions */}
           <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
+            <TouchableOpacity
+              style={styles.listItem}
+              onPress={() => { onClose(); setTimeout(() => handleStarToggle(), 100); }}
+            >
+              <Star size={20} color={colors.textPrimary} fill={isStarred ? colors.textPrimary : 'transparent'} />
+              <Text style={[styles.listItemText, { color: colors.textPrimary }]}>
+                {isStarred ? 'Unstar Message' : 'Star Message'}
+              </Text>
+            </TouchableOpacity>
+
+            {!!onPin && (
+              <TouchableOpacity
+                style={styles.listItem}
+                onPress={() => { onClose(); setTimeout(() => onPin(message), 100); }}
+              >
+                <Pin size={20} color={colors.textPrimary} />
+                <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Pin Message</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={styles.listItem}
               onPress={() => { onClose(); setTimeout(() => onRemind(), 100); }}

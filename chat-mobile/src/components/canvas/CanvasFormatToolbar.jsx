@@ -4,7 +4,8 @@ import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 import {
   Undo2, Redo2, Bold, Italic, Underline, Strikethrough, Code,
-  List, ListOrdered, SquareCheck, Quote, Table, Image, Minus
+  List, ListOrdered, SquareCheck, Quote, Table, Image, Minus,
+  ArrowRightToLine, ArrowDownToLine, Trash, TableProperties
 } from 'lucide-react-native';
 
 export default function CanvasFormatToolbar({
@@ -58,14 +59,36 @@ export default function CanvasFormatToolbar({
           );
         })}
 
-        <View style={styles.divider} />
-
-        <TouchableOpacity onPress={onInsertPress} style={styles.btn}>
-          <Table size={18} color="#4b5563" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => onCommand('insertHorizontalRule')} style={styles.btn}>
-          <Minus size={18} color="#4b5563" />
-        </TouchableOpacity>
+        {selectionState.table ? (
+          <>
+            <View style={styles.divider} />
+            <TouchableOpacity onPress={() => onCommand('addColumnAfter')} style={styles.btn}>
+              <ArrowRightToLine size={18} color="#4b5563" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onCommand('deleteColumn')} style={styles.btn}>
+              <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>-C</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onCommand('addRowAfter')} style={styles.btn}>
+              <ArrowDownToLine size={18} color="#4b5563" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onCommand('deleteRow')} style={styles.btn}>
+              <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>-R</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onCommand('deleteTable')} style={styles.btn}>
+              <Trash size={18} color="#ef4444" />
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <View style={styles.divider} />
+            <TouchableOpacity onPress={onInsertPress} style={styles.btn}>
+              <Table size={18} color="#4b5563" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onCommand('insertHorizontalRule')} style={styles.btn}>
+              <Minus size={18} color="#4b5563" />
+            </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
     </View>
   );

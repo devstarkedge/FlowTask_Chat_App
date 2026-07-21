@@ -133,7 +133,25 @@ export default function NavigationSidebar({
     system: true,
   });
   
-  const [expandedGroups, setExpandedGroups] = useState({});
+  const [expandedGroups, setExpandedGroups] = useState(() => {
+    try {
+      const saved = localStorage.getItem('flowtask_expanded_categories');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const handleToggleCategory = (categoryId) => {
+    setExpandedGroups(prev => {
+      const isCurrentlyExpanded = prev[categoryId] !== false;
+      const nextState = { ...prev, [categoryId]: !isCurrentlyExpanded };
+      try {
+        localStorage.setItem('flowtask_expanded_categories', JSON.stringify(nextState));
+      } catch (e) {}
+      return nextState;
+    });
+  };
 
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
@@ -578,7 +596,7 @@ export default function NavigationSidebar({
               categories={categories}
               channels={channels}
               expandedGroups={expandedGroups}
-              setExpandedGroups={setExpandedGroups}
+              onToggleCategory={handleToggleCategory}
               isLaterPage={isLaterPage}
               activeChannelId={activeChannelId}
               unreads={unreads}

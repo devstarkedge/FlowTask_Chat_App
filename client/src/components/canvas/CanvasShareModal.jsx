@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { useChannelStore } from "../../stores/channelStore";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { getSocket } from "../../services/socket";
+import { canvasAPI } from "../../services/api";
 
 const EMPTY_MEMBERS = [];
 
@@ -284,6 +285,40 @@ const styles = {
     flexShrink: 0,
     background: "var(--bg-primary)",
   },
+  publicShare: {
+    padding: "16px 24px",
+    borderTop: "1px solid var(--border-primary)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  publicShareInfo: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  publicShareTitle: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: "var(--text-primary)",
+    margin: 0,
+  },
+  publicShareDesc: {
+    fontSize: 12,
+    color: "var(--text-muted)",
+    margin: 0,
+  },
+  toggleBtn: (isActive) => ({
+    padding: "6px 12px",
+    borderRadius: 8,
+    border: `1px solid ${isActive ? "var(--accent-primary, #3b82f6)" : "var(--border-primary)"}`,
+    background: isActive ? "rgba(59,130,246,0.1)" : "transparent",
+    color: isActive ? "var(--accent-primary, #3b82f6)" : "var(--text-primary)",
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: "pointer",
+    transition: "all 0.15s",
+  }),
   copyLink: {
     display: "flex",
     alignItems: "center",
@@ -337,6 +372,7 @@ export default function CanvasShareModal({
   const [userRoles, setUserRoles] = useState(new Map());
   const [currentAccessLevel, setCurrentAccessLevel] = useState("view");
   const [isSaving, setIsSaving] = useState(false);
+  const [isTogglingPublic, setIsTogglingPublic] = useState(false);
   const searchRef = useRef(null);
 
   const members =
@@ -482,6 +518,31 @@ export default function CanvasShareModal({
     }
   }, [canvasId, currentAccessLevel, userRoles, updateCanvasMetadata, onClose]);
 
+  const handleTogglePublicShare = useCallback(async () => {
+    if (!canvasId) return;
+    setIsTogglingPublic(true);
+    try {
+      const res = await canvasAPI.togglePublicShare(canvasId);
+      // It's handled globally via socket but we can also update local state if needed.
+      // We rely on canvas updates pushing new state down.
+      if (res.data?.success) {
+        toast.success(res.data.data.sharing?.isPublic ? "Public sharing enabled" : "Public sharing disabled");
+      }
+    } catch (err) {
+      toast.error("Failed to toggle public share");
+    } finally {
+      setIsTogglingPublic(false);
+    }
+  }, [canvasId]);
+
+  const handleCopyPublicLink = useCallback(() => {
+    if (!canvas?.sharing?.publicToken) return;
+    const url = `${window.location.origin}/public/canvas/${canvas.sharing.publicToken}`;
+    navigator.clipboard.writeText(url).then(() => {
+      toast.success("Public link copied");
+    });
+  }, [canvas?.sharing?.publicToken]);
+
   if (!isOpen) return null;
 
   return createPortal(
@@ -618,6 +679,27 @@ export default function CanvasShareModal({
               })
             )}
           </div>
+        </div>
+
+        {/* Public Share */}
+        <div style={styles.publicShare}>
+          <div style={styles.publicShareInfo}>
+            <h4 style={styles.publicShareTitle}>Public sharing</h4>
+            <p style={styles.publicShareDesc}>Allow anyone with the link to view this canvas</p>
+            {canvas?.sharing?.isPublic && canvas?.sharing?.publicToken && (
+              <button style={styles.copyLink} onClick={handleCopyPublicLink}>
+                <Link2 size={14} />
+                Copy public link
+              </button>
+            )}
+          </div>
+          <button
+            style={styles.toggleBtn(canvas?.sharing?.isPublic)}
+            onClick={handleTogglePublicShare}
+            disabled={isTogglingPublic}
+          >
+            {isTogglingPublic ? "..." : canvas?.sharing?.isPublic ? "On" : "Off"}
+          </button>
         </div>
 
         {/* Footer */}

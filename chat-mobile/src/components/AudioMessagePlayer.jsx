@@ -30,6 +30,10 @@ const AudioMessagePlayer = ({ audioUrl, duration, colors, isMe }) => {
   }, [sound]);
 
   const togglePlayback = async () => {
+    if (audioUrl === '/placeholder-loading' || !audioUrl) {
+      logger.warn('Audio is still processing');
+      return;
+    }
     try {
       if (!sound) {
         await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });

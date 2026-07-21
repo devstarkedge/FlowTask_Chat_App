@@ -56,7 +56,19 @@ export function registerDepartmentTeamEventHandlers() {
           const uid = member.userId?._id?.toString() || member.userId?.toString();
           if (uid) {
             emitToUser(uid, SOCKET_EVENTS.CHANNEL_CREATED, {
-              channel: { _id: populated._id, name: populated.name, slug: populated.slug, type: populated.type },
+              channel: {
+                _id: populated._id,
+                name: populated.name,
+                slug: populated.slug,
+                type: populated.type,
+                visibility: populated.visibility,
+                isArchived: populated.isArchived,
+                systemManaged: populated.systemManaged,
+                departmentRef: populated.departmentRef,
+                adminOverrides: populated.adminOverrides,
+                flowTaskRef: populated.flowTaskRef,
+                memberCount: populated.memberCount || populated.members?.length,
+              },
             }, wsId);
           }
         }
@@ -188,7 +200,19 @@ export function registerDepartmentTeamEventHandlers() {
           const uid = member.userId?._id?.toString() || member.userId?.toString();
           if (uid) {
             emitToUser(uid, SOCKET_EVENTS.CHANNEL_CREATED, {
-              channel: { _id: populated._id, name: populated.name, slug: populated.slug, type: populated.type },
+              channel: {
+                _id: populated._id,
+                name: populated.name,
+                slug: populated.slug,
+                type: populated.type,
+                visibility: populated.visibility,
+                isArchived: populated.isArchived,
+                systemManaged: populated.systemManaged,
+                departmentRef: populated.departmentRef,
+                adminOverrides: populated.adminOverrides,
+                flowTaskRef: populated.flowTaskRef,
+                memberCount: populated.memberCount || populated.members?.length,
+              },
             }, wsId);
           }
         }

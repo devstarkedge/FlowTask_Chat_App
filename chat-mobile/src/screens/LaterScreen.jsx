@@ -55,6 +55,9 @@ const LaterItem = React.memo(({ item, onPress, onLongPress, onBottomSheet, filte
   let title;
   if (isCustom) title = item.title;
   else if (isCanvas) title = canvasObj.title || item.title || 'Untitled Canvas';
+  else if (message?.contentType === 'gif' || item.contentType === 'gif') title = '[GIF]';
+  else if (message?.contentType === 'audio' || item.contentType === 'audio') title = '[Voice Message]';
+  else if (message?.contentType === 'video' || item.contentType === 'video') title = '[Video]';
   else title = messageText;
 
   const formattedDate = new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });

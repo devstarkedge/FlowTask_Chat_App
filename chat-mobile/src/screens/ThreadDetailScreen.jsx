@@ -1,28 +1,21 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
-
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  Modal,
-  ScrollView,
-  Share as RNShare,
   Alert,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
-import { useThreadStore } from '../stores/threadStore';
-import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useChatStore } from '../stores/chatStore';
-import { useLaterStore } from '../stores/laterStore';
-import { laterAPI, messageAPI, threadAPI } from '../services/api';
+import { useThreadStore } from '../stores/threadStore';
+import { laterAPI, threadAPI, pinsAPI } from '../services/api';
 import { formatRelativeTimeLong, formatMessageTime } from '../utils/dateUtils';
 import { ScreenLayout, AppAvatar, HeaderBackButton, MobileFileCard } from '../components/common';
 import RichText from '../components/RichText';
@@ -32,13 +25,11 @@ import ReminderModal from '../components/ReminderModal';
 import ForwardMessageModal from '../components/ForwardMessageModal';
 import MessageActionSheet from '../components/MessageActionSheet';
 import MessageComposer from '../components/MessageComposer';
-import {
-  ArrowLeft,
-  Headphones,
-  Bookmark,
-  Share,
-  MoreVertical,
-} from 'lucide-react-native';
+import GifRenderer from '../components/GifRenderer';
+import AudioMessagePlayer from '../components/AudioMessagePlayer';
+import VideoMessagePlayer from '../components/VideoMessagePlayer';
+import { Bookmark, Share, MoreVertical } from 'lucide-react-native';
+import { useThreadDetails } from '../hooks/useThreadDetails';
 
 const ThreadDetailScreen = ({ route, navigation }) => {
   const {
@@ -55,101 +46,36 @@ const ThreadDetailScreen = ({ route, navigation }) => {
   } = route.params;
 
   const { colors } = useThemeStore();
-  const { user } = useAuthStore();
   const {
-    threadRepliesByRoot,
-    fetchThreadReplies,
-    sendThreadReply,
+    user,
+    replies,
+    rootMessageLive,
     isLoadingReplies,
     threadHasMore,
-  } = useThreadStore();
-  const { addReaction, removeReaction } = useChatStore();
-  // Also subscribe to chatStore messages so root message reactions update in real time
-  const rootMessageLive = useChatStore((s) =>
-    (s.messagesByChannel[channelId] || []).find(m => m._id === rootMessageId)
-  );
-  const toggleSaveMessage = useLaterStore((s) => s.toggleSaveMessage);
-  const isMessageSaved = useLaterStore((s) => s.isMessageSaved);
-
-  const [replyText, setReplyText] = useState('');
-  const [editingMessage, setEditingMessage] = useState(null);
-  const [emojiPickerTarget, setEmojiPickerTarget] = useState(null);
-  const [actionMenuTarget, setActionMenuTarget] = useState(null);
-  const [reminderTarget, setReminderTarget] = useState(null);
-  const [forwardTarget, setForwardTarget] = useState(null);
-  const flatListRef = useRef(null);
-
-  const showMessageActions = useCallback((item) => {
-    setActionMenuTarget(item);
-  }, []);
-
-  const getAttachments = useCallback((msg) => {
-    if (!msg) return [];
-    const refs = msg.fileReferences || [];
-    if (refs.length > 0) {
-      return refs
-        .map((ref) => {
-          if (!ref.fileId) return null;
-          const file = ref.fileId;
-          return {
-            _id: file._id,
-            name: file.originalName || file.fileName || file.name || 'File',
-            fileName: file.originalName || file.fileName || file.name || 'File',
-            url: file.url || file.secureUrl,
-            thumbnailUrl: file.thumbnailUrl,
-            mimeType: file.mimeType,
-            fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
-          };
-        })
-        .filter(Boolean);
-    }
-    return msg.attachments || msg.files || [];
-  }, []);
-
-  // Subscribe to real-time reply updates
-  const rawReplies = useThreadStore((s) => s.threadRepliesByRoot[rootMessageId]);
-  const replies = rawReplies || [];
-
-  useEffect(() => {
-    fetchThreadReplies(rootMessageId);
-  }, [rootMessageId]);
-
-  useEffect(() => {
-    if (highlightedMessageId && replies.length > 0) {
-      const index = replies.findIndex((r) => r._id === highlightedMessageId);
-      if (index !== -1 && flatListRef.current) {
-        // Delay to allow layout
-        setTimeout(() => {
-          try {
-            flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-          } catch (e) {
-            console.log("Could not scroll to reply:", e);
-          }
-        }, 500);
-      }
-    }
-  }, [highlightedMessageId, replies.length > 0]);
-
-  const handleSendReply = async (content, options) => {
-    try {
-      if (editingMessage) {
-        if (editingMessage._id === rootMessageId) {
-          // Editing root message
-          const { editMessage } = useChatStore.getState();
-          await editMessage(rootMessageId, channelId, content, options?.htmlContent);
-        } else {
-          // Editing reply
-          await useThreadStore.getState().editThreadReply(rootMessageId, editingMessage._id, content, options?.htmlContent);
-        }
-        setEditingMessage(null);
-      } else {
-        await sendThreadReply(rootMessageId, channelId, content, options);
-      }
-    } catch (err) {
-      console.error('Failed to send reply:', err);
-      Toast.show({ type: 'error', text1: 'Failed to send reply' });
-    }
-  };
+    fetchThreadReplies,
+    addReaction,
+    removeReaction,
+    toggleSaveMessage,
+    isMessageSaved,
+    replyText,
+    setReplyText,
+    editingMessage,
+    setEditingMessage,
+    emojiPickerTarget,
+    setEmojiPickerTarget,
+    actionMenuTarget,
+    setActionMenuTarget,
+    reminderTarget,
+    setReminderTarget,
+    forwardTarget,
+    setForwardTarget,
+    flatListRef,
+    showMessageActions,
+    getAttachments,
+    handleSendReply,
+    getAuthorId,
+    resolveAuthor
+  } = useThreadDetails({ rootMessageId, channelId, highlightedMessageId });
 
   const effectiveRoot = rootMessageLive || {
     _id: rootMessageId,
@@ -161,20 +87,6 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     createdAt: rootCreatedAt || new Date().toISOString(),
     replyCount: initialReplyCount,
   };
-
-  const getAuthorId = (msg) => {
-    if (!msg) return null;
-    if (typeof msg.authorId === "string") return msg.authorId;
-    return msg.authorId?._id || msg.senderSnapshot?._id || null;
-  };
-
-  const resolveAuthor = useCallback((msg) => {
-    if (!msg) return { _id: null };
-    const a = msg.authorId;
-    if (a && typeof a === 'object' && (a.name || a.email || a.avatar)) return a;
-    if (msg.senderSnapshot?.name) return msg.senderSnapshot;
-    return { _id: typeof a === 'string' ? a : a?._id };
-  }, []);
 
   const renderReply = useCallback(({ item, index }) => {
     const sender = resolveAuthor(item);
@@ -206,7 +118,9 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           activeOpacity={0.85}
           delayLongPress={300}
         >
-          <AppAvatar user={sender} size={36} showStatus={false} />
+          <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { user: sender, channelId })}>
+            <AppAvatar user={sender} size={36} showStatus={false} />
+          </TouchableOpacity>
           <View style={styles.messageContent}>
             <View style={styles.messageHeader}>
               <Text style={[styles.authorName, { color: colors.textPrimary }]}>{name}</Text>
@@ -215,7 +129,24 @@ const ThreadDetailScreen = ({ route, navigation }) => {
               </Text>
             </View>
             <View style={{ maxHeight: verticalScale(250), overflow: 'hidden' }}>
-              {!!(item.htmlContent || item.content) && (
+              {item.contentType === 'audio' || item.type === 'audio' ? (
+                <AudioMessagePlayer 
+                  audioUrl={item.audioUrl || item.audioMeta?.audioUrl || itemAttachments[0]?.url || itemAttachments[0]?.secureUrl} 
+                  duration={item.duration || item.audioMeta?.duration} 
+                  colors={colors} 
+                  isMe={isMe} 
+                />
+              ) : item.contentType === 'video' || item.type === 'video' ? (
+                <VideoMessagePlayer 
+                  videoUrl={item.videoUrl || item.videoMeta?.videoUrl || itemAttachments[0]?.url || itemAttachments[0]?.secureUrl} 
+                  thumbnailUrl={item.thumbnailUrl || item.videoMeta?.thumbnailUrl || itemAttachments[0]?.thumbnailUrl} 
+                  width={item.width || item.videoMeta?.width}
+                  height={item.height || item.videoMeta?.height}
+                  colors={colors} 
+                />
+              ) : item.contentType === 'gif' && item.gifMeta ? (
+                <GifRenderer item={item} contentColor={colors.textPrimary} styles={styles} />
+              ) : !!(item.htmlContent || item.content) && (
                 <RichText
                   html={item.htmlContent || (/<[a-z][\s\S]*>/i.test(item.content) ? item.content : undefined)}
                   text={item.content}
@@ -253,7 +184,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </View>
     );
-  }, [colors, user, replies, getAttachments]);
+  }, [colors, user, replies, getAttachments, highlightedMessageId, showMessageActions, resolveAuthor, addReaction, removeReaction, setEmojiPickerTarget, navigation, channelId]);
 
   const styles = createStyles(colors);
   
@@ -270,9 +201,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <HeaderBackButton onPress={() => navigation.goBack()} />
         <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-            Thread
-          </Text>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>Thread</Text>
           <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
             {channelName ? `#${channelName}` : 'Message'}
           </Text>
@@ -280,11 +209,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         <View style={styles.headerRight} />
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={0}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={0}>
         <FlatList
           ref={flatListRef}
           onScrollToIndexFailed={(info) => {
@@ -306,7 +231,9 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           ListHeaderComponent={
             <View style={[styles.rootSection, highlightedMessageId === effectiveRoot._id && { backgroundColor: colors.primary + '20' }]}>
               <View style={styles.rootMessageRow}>
-                <AppAvatar user={effectiveRootSender} size={42} showStatus={false} />
+                <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { user: effectiveRootSender, channelId })}>
+                  <AppAvatar user={effectiveRootSender} size={42} showStatus={false} />
+                </TouchableOpacity>
                 <View style={styles.rootMessageContent}>
                   <View style={styles.rootMessageHeaderLine}>
                     <Text style={[styles.rootAuthorName, { color: colors.textPrimary }]}>
@@ -322,29 +249,40 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                       <Bookmark size={20} color={isMessageSaved?.(effectiveRoot._id) ? colors.warning : colors.textSecondary} fill={isMessageSaved?.(effectiveRoot._id) ? colors.warning : 'transparent'} />
                     </TouchableOpacity>
                   </View>
-                  <Text style={[styles.rootDateTime, { color: colors.textSecondary }]}>
-                    {rootDateStr} at {rootTimeStr}
-                  </Text>
+                  <Text style={[styles.rootDateTime, { color: colors.textSecondary }]}>{rootDateStr} at {rootTimeStr}</Text>
                 </View>
               </View>
 
               <View style={styles.rootTextContainer}>
-                {!!(effectiveRoot.htmlContent || effectiveRoot.content) && (
+                {effectiveRoot.contentType === 'audio' || effectiveRoot.type === 'audio' ? (
+                  <AudioMessagePlayer 
+                    audioUrl={effectiveRoot.audioUrl || effectiveRoot.audioMeta?.audioUrl || effectiveRootAttachments[0]?.url || effectiveRootAttachments[0]?.secureUrl} 
+                    duration={effectiveRoot.duration || effectiveRoot.audioMeta?.duration} 
+                    colors={colors} 
+                    isMe={effectiveRootSender?._id === user?._id} 
+                  />
+                ) : effectiveRoot.contentType === 'video' || effectiveRoot.type === 'video' ? (
+                  <VideoMessagePlayer 
+                    videoUrl={effectiveRoot.videoUrl || effectiveRoot.videoMeta?.videoUrl || effectiveRootAttachments[0]?.url || effectiveRootAttachments[0]?.secureUrl} 
+                    thumbnailUrl={effectiveRoot.thumbnailUrl || effectiveRoot.videoMeta?.thumbnailUrl || effectiveRootAttachments[0]?.thumbnailUrl} 
+                    width={effectiveRoot.width || effectiveRoot.videoMeta?.width}
+                    height={effectiveRoot.height || effectiveRoot.videoMeta?.height}
+                    colors={colors} 
+                  />
+                ) : effectiveRoot.contentType === 'gif' && effectiveRoot.gifMeta ? (
+                  <GifRenderer item={effectiveRoot} contentColor={colors.textPrimary} styles={styles} />
+                ) : !!(effectiveRoot.htmlContent || effectiveRoot.content) && (
                   <RichText
                     html={effectiveRoot.htmlContent || (/<[a-z][\s\S]*>/i.test(effectiveRoot.content) ? effectiveRoot.content : undefined)}
                     text={effectiveRoot.content}
                     mentions={effectiveRoot.mentions}
-                    onMentionPress={(userId) => {
-                      navigation.navigate('UserProfile', { user: { _id: userId }, channelId });
-                    }}
+                    onMentionPress={(userId) => { navigation.navigate('UserProfile', { user: { _id: userId }, channelId }); }}
                     colors={{ ...colors, textPrimary: colors.textPrimary }}
                     baseStyle={{ color: colors.textPrimary, fontSize: moderateScale(16), lineHeight: 24 }}
                   />
                 )}
                 {(!effectiveRoot.htmlContent && !effectiveRoot.content && effectiveRootAttachments.length > 0) && (
-                  <Text style={{ color: colors.textSecondary, fontStyle: 'italic', fontSize: moderateScale(15) }}>
-                    [Media attached]
-                  </Text>
+                  <Text style={{ color: colors.textSecondary, fontStyle: 'italic', fontSize: moderateScale(15) }}>[Media attached]</Text>
                 )}
               </View>
               {effectiveRootAttachments.length > 0 && (
@@ -384,8 +322,6 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           }
         />
 
-        {/* Input */}
-        {/* Input using MessageComposer */}
         <MessageComposer
           channelId={channelId}
           channelName={channelName}
@@ -398,35 +334,10 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         />
       </KeyboardAvoidingView>
 
-      <EmojiPickerModal
-        visible={!!emojiPickerTarget}
-        onClose={() => setEmojiPickerTarget(null)}
-        onSelect={(emoji) => {
-          if (emojiPickerTarget) {
-            addReaction(emojiPickerTarget, emoji);
-          }
-          setEmojiPickerTarget(null);
-        }}
-        colors={colors}
-      />
+      <EmojiPickerModal visible={!!emojiPickerTarget} onClose={() => setEmojiPickerTarget(null)} onSelect={(emoji) => { if (emojiPickerTarget) { addReaction(emojiPickerTarget, emoji); } setEmojiPickerTarget(null); }} colors={colors} />
 
-      {/* Reminder Modal */}
-      <ReminderModal
-        visible={!!reminderTarget}
-        onClose={() => setReminderTarget(null)}
-        onSetReminder={async (reminderAt) => {
-          if (reminderTarget) {
-            try {
-              await laterAPI.updateReminder(reminderTarget, { reminderAt });
-            } catch (err) {
-              console.error('Failed to set reminder:', err);
-            }
-          }
-        }}
-        colors={colors}
-      />
+      <ReminderModal visible={!!reminderTarget} onClose={() => setReminderTarget(null)} onSetReminder={async (reminderAt) => { if (reminderTarget) { try { await laterAPI.updateReminder(reminderTarget, { reminderAt }); } catch (err) { console.error('Failed to set reminder:', err); } } }} colors={colors} />
 
-      {/* Custom Message Actions Modal */}
       <MessageActionSheet
         visible={!!actionMenuTarget}
         onClose={() => setActionMenuTarget(null)}
@@ -434,18 +345,21 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         colors={colors}
         user={user}
         isSaved={isMessageSaved?.(actionMenuTarget?._id)}
-        onReact={(emoji) => {
-          if (actionMenuTarget) addReaction(actionMenuTarget._id, emoji);
-        }}
+        onReact={(emoji) => { if (actionMenuTarget) addReaction(actionMenuTarget._id, emoji); }}
         onOpenEmojiPicker={() => setEmojiPickerTarget(actionMenuTarget?._id)}
         onForward={() => setForwardTarget(actionMenuTarget)}
-        onSave={() => toggleSaveMessage?.(actionMenuTarget?._id)}
-        onRemind={() => setReminderTarget(actionMenuTarget?._id)}
-        onEdit={() => {
-          setEditingMessage(actionMenuTarget);
-          setReplyText(actionMenuTarget.htmlContent || actionMenuTarget.content || '');
+        onPin={async (msg) => {
+          try {
+            await pinsAPI.pin(msg._id);
+            Toast.show({ type: 'success', text1: 'Message pinned' });
+          } catch (error) {
+            Toast.show({ type: 'error', text1: 'Failed to pin message' });
+          }
           setActionMenuTarget(null);
         }}
+        onSave={() => toggleSaveMessage?.(actionMenuTarget?._id)}
+        onRemind={() => setReminderTarget(actionMenuTarget?._id)}
+        onEdit={() => { setEditingMessage(actionMenuTarget); setReplyText(actionMenuTarget.htmlContent || actionMenuTarget.content || ''); setActionMenuTarget(null); }}
         onDelete={() => {
           const targetId = actionMenuTarget._id;
           const isRoot = targetId === rootMessageId;
@@ -478,15 +392,6 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           await Clipboard.setStringAsync(url);
           Toast.show({ type: 'success', text1: 'Link copied to clipboard' });
         }}
-        // onMarkUnread={async () => {
-        //   try {
-        //     await messageAPI.markUnread(channelId, actionMenuTarget._id);
-        //     Toast.show({ type: 'success', text1: 'Marked as unread' });
-        //     navigation.navigate("Main", { screen: "ChannelsTab" });
-        //   } catch (error) {
-        //     Toast.show({ type: 'error', text1: 'Failed to mark unread' });
-        //   }
-        // }}
         onToggleNotifications={async () => {
           try {
             const tId = actionMenuTarget.threadId || actionMenuTarget._id;
@@ -498,224 +403,38 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         }}
       />
 
-      {/* Forward Message Modal */}
-      <ForwardMessageModal
-        visible={!!forwardTarget}
-        onClose={() => setForwardTarget(null)}
-        message={forwardTarget}
-        colors={colors}
-      />
+      <ForwardMessageModal visible={!!forwardTarget} onClose={() => setForwardTarget(null)} message={forwardTarget} colors={colors} />
     </ScreenLayout>
   );
 };
 
 const createStyles = (colors) => StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(12),
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    padding: moderateScale(8),
-    marginRight: scale(8),
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: moderateScale(18),
-    fontWeight: '700',
-  },
-  headerSubtitle: {
-    fontSize: moderateScale(13),
-    marginTop: verticalScale(2),
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  headerRightIcon: {
-    padding: moderateScale(4),
-  },
-  repliesList: {
-    paddingBottom: verticalScale(24),
-  },
-  rootSection: {
-    paddingTop: verticalScale(16),
-  },
-  rootMessageRow: {
-    flexDirection: 'row',
-    paddingHorizontal: scale(16),
-    marginBottom: verticalScale(12),
-  },
-  rootMessageContent: {
-    flex: 1,
-    marginLeft: scale(12),
-  },
-  rootMessageHeaderLine: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  rootAuthorName: {
-    fontSize: moderateScale(16),
-    fontWeight: '700',
-  },
-  rootDateTime: {
-    fontSize: moderateScale(13),
-    marginTop: verticalScale(2),
-  },
-  rootTextContainer: {
-    paddingHorizontal: scale(16),
-    marginBottom: verticalScale(12),
-  },
-  rootText: {
-    fontSize: moderateScale(16),
-    lineHeight: 24,
-  },
-  reactionPill: {
-    marginLeft: scale(16),
-    width: scale(36),
-    height: scale(36),
-    borderRadius: moderateScale(18),
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: verticalScale(24),
-  },
-  repliesDivider: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(12),
-  },
-  repliesCount: {
-    fontSize: moderateScale(15),
-    fontWeight: '700',
-  },
-  dividerActions: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  actionIcon: {
-    padding: moderateScale(4),
-  },
-  dateSeparator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: verticalScale(16),
-    paddingHorizontal: scale(16),
-  },
-  dateLine: {
-    flex: 1,
-    height: scale(1),
-  },
-  datePill: {
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(4),
-    borderRadius: moderateScale(12),
-    borderWidth: 1,
-    marginHorizontal: scale(12),
-  },
-  dateText: {
-    fontSize: moderateScale(12),
-    fontWeight: '600',
-  },
-  messageRow: {
-    flexDirection: 'row',
-    paddingHorizontal: scale(16),
-    marginBottom: verticalScale(16),
-  },
-  messageContent: {
-    flex: 1,
-    marginLeft: scale(10),
-  },
-  messageHeader: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: verticalScale(4),
-  },
-  authorName: {
-    fontSize: moderateScale(15),
-    fontWeight: '700',
-    marginRight: scale(8),
-  },
-  timeText: {
-    fontSize: moderateScale(12),
-  },
-  messageText: {
-    fontSize: moderateScale(15),
-    lineHeight: 22,
-  },
-  inputBar: {
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(10),
-    paddingBottom: verticalScale(24), // safe area padding
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: moderateScale(24),
-    borderWidth: 1,
-    paddingHorizontal: scale(12),
-    minHeight: verticalScale(48),
-  },
-  plusButton: {
-    padding: moderateScale(8),
-    marginRight: scale(4),
-  },
-  input: {
-    flex: 1,
-    fontSize: moderateScale(16),
-    maxHeight: verticalScale(100),
-    paddingVertical: verticalScale(10),
-  },
-  micButton: {
-    padding: moderateScale(8),
-  },
-  sendButton: {
-    padding: moderateScale(8),
-    paddingHorizontal: scale(12),
-  },
-  actionsOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  actionsSheet: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderTopWidth: 1,
-    paddingBottom: verticalScale(24), // safe area
-  },
-  actionsHeader: {
-    padding: moderateScale(16),
-    borderBottomWidth: 1,
-  },
-  actionsTitle: {
-    fontSize: moderateScale(16),
-    fontWeight: '700',
-  },
-  actionsSnippet: {
-    fontSize: moderateScale(14),
-    marginTop: verticalScale(4),
-  },
-  actionsList: {
-    paddingTop: verticalScale(8),
-    maxHeight: verticalScale(300),
-  },
-  actionItem: {
-    paddingVertical: verticalScale(14),
-    paddingHorizontal: scale(16),
-  },
-  actionItemText: {
-    fontSize: moderateScale(16),
-  }
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: scale(12), paddingVertical: verticalScale(12), borderBottomWidth: 1 },
+  headerCenter: { flex: 1 },
+  headerTitle: { fontSize: moderateScale(18), fontWeight: '700' },
+  headerSubtitle: { fontSize: moderateScale(13), marginTop: verticalScale(2) },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  repliesList: { paddingBottom: verticalScale(24) },
+  rootSection: { paddingTop: verticalScale(16) },
+  rootMessageRow: { flexDirection: 'row', paddingHorizontal: scale(16), marginBottom: verticalScale(12) },
+  rootMessageContent: { flex: 1, marginLeft: scale(12) },
+  rootMessageHeaderLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  rootAuthorName: { fontSize: moderateScale(16), fontWeight: '700' },
+  rootDateTime: { fontSize: moderateScale(13), marginTop: verticalScale(2) },
+  rootTextContainer: { paddingHorizontal: scale(16), marginBottom: verticalScale(12) },
+  repliesDivider: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, paddingHorizontal: scale(16), paddingVertical: verticalScale(12) },
+  repliesCount: { fontSize: moderateScale(15), fontWeight: '700' },
+  dividerActions: { flexDirection: 'row', gap: 16 },
+  actionIcon: { padding: moderateScale(4) },
+  dateSeparator: { flexDirection: 'row', alignItems: 'center', marginVertical: verticalScale(16), paddingHorizontal: scale(16) },
+  dateLine: { flex: 1, height: scale(1) },
+  datePill: { paddingHorizontal: scale(12), paddingVertical: verticalScale(4), borderRadius: moderateScale(12), borderWidth: 1, marginHorizontal: scale(12) },
+  dateText: { fontSize: moderateScale(12), fontWeight: '600' },
+  messageRow: { flexDirection: 'row', paddingHorizontal: scale(16), marginBottom: verticalScale(16) },
+  messageContent: { flex: 1, marginLeft: scale(10) },
+  messageHeader: { flexDirection: 'row', alignItems: 'baseline', marginBottom: verticalScale(4) },
+  authorName: { fontSize: moderateScale(15), fontWeight: '700', marginRight: scale(8) },
+  timeText: { fontSize: moderateScale(12) }
 });
 
 export default ThreadDetailScreen;

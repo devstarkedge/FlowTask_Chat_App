@@ -21,9 +21,7 @@ import { useDraftStore } from "../stores/draftStore";
 import { useScheduledStore } from "../stores/scheduledStore";
 import { disconnectSocket } from "../services/socket";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
- 
- 
- import { useTranslation } from "../utils/i18n";
+import { useTranslation } from "../utils/i18n";
 import StatusModal from "./StatusModal";
 import PauseNotificationsModal from "./PauseNotificationsModal";
 import PresenceModal from "./PresenceModal";
@@ -290,6 +288,14 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
                 label={t("Invite members")}
                 onPress={() => navigateTo("InviteManagement")}
               />
+
+              {activeWorkspace && (
+                <MenuItem
+                  icon={Settings}
+                  label={t("Workspace Settings")}
+                  onPress={() => navigateTo("WorkspaceSettings")}
+                />
+              )}
 
               <MenuItem
                 icon={User}

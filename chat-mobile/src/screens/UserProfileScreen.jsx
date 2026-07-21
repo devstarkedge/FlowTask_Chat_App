@@ -26,6 +26,8 @@ import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 
+import { usersAPI } from '../services/api';
+
 const { width } = Dimensions.get('window');
 
 const UserProfileScreen = ({ route, navigation }) => {
@@ -34,14 +36,38 @@ const UserProfileScreen = ({ route, navigation }) => {
   const channels = useChannelStore(s => s.channels);
   const createDM = useChannelStore(s => s.createDM);
   const setActiveChannel = useChannelStore(s => s.setActiveChannel);
-  const rawTargetId = user._id;
+  const rawTargetId = user?._id;
   const targetId = typeof rawTargetId === 'object' ? rawTargetId?._id || rawTargetId?.id : rawTargetId;
   const targetIdStr = targetId?.toString ? targetId.toString() : targetId;
   const liveOnlineStatus = useWorkspaceStore(s => s.presenceMap?.[targetIdStr]);
+  
+  const [fetchedUser, setFetchedUser] = useState(null);
+  const [isFetchingUser, setIsFetchingUser] = useState(true);
+
   const liveUser = useMemo(() => {
+    if (fetchedUser) return { ...user, ...fetchedUser };
     if (!user) return null;
     return { ...user };
-  }, [user]);
+  }, [user, fetchedUser]);
+
+  useEffect(() => {
+    if (targetId) {
+      const fetchFullUser = async () => {
+        setIsFetchingUser(true);
+        try {
+          const { data } = await usersAPI.getUser(targetId);
+          setFetchedUser(data?.data || data);
+        } catch (err) {
+          console.error('Failed to fetch full user profile', err);
+        } finally {
+          setIsFetchingUser(false);
+        }
+      };
+      fetchFullUser();
+    } else {
+      setIsFetchingUser(false);
+    }
+  }, [targetId]);
 
   const [loadingDM, setLoadingDM] = useState(false);
   const [localTime, setLocalTime] = useState('');
@@ -54,13 +80,19 @@ const UserProfileScreen = ({ route, navigation }) => {
     return () => clearInterval(interval);
   }, []);
   
-  if (!user) {
+  if (isFetchingUser && !fetchedUser) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: colors.textPrimary }}>User not found.</Text>
-        <TouchableOpacity style={{ marginTop: verticalScale(16) }} onPress={() => navigation.goBack()}>
-          <Text style={{ color: colors.primary }}>Go Back</Text>
-        </TouchableOpacity>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!liveUser) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+        <UserX size={48} color={colors.textSecondary} />
+        <Text style={{ color: colors.textSecondary, marginTop: 16, fontSize: 16 }}>User profile unavailable</Text>
       </View>
     );
   }
@@ -79,7 +111,7 @@ const UserProfileScreen = ({ route, navigation }) => {
         setActiveChannel(channel._id);
         navigation.navigate("Chat", {
           channelId: channel._id,
-          channelName: channel.name || user.name,
+          channelName: channel.name || liveUser.name,
         });
       }
     } catch (err) {
@@ -110,10 +142,10 @@ const UserProfileScreen = ({ route, navigation }) => {
     Toast.show({ type: 'success', text1: `${liveUser.name} hidden` });
   };
 
-  const isOnline = liveOnlineStatus === 'online' || user.onlineStatus === 'online';
-  const isAway = liveOnlineStatus === 'away' || liveOnlineStatus === 'dnd' || user.onlineStatus === 'away' || user.onlineStatus === 'dnd';
+  const isOnline = liveOnlineStatus === 'online' || liveUser.onlineStatus === 'online';
+  const isAway = liveOnlineStatus === 'away' || liveOnlineStatus === 'dnd' || liveUser.onlineStatus === 'away' || liveUser.onlineStatus === 'dnd';
   const statusColor = isOnline ? colors.online : isAway ? colors.away : colors.textSecondary;
-  const statusText = isOnline ? 'Active' : (liveOnlineStatus === 'away' || user.onlineStatus === 'away') ? 'Away' : (liveOnlineStatus === 'dnd' || user.onlineStatus === 'dnd') ? 'Do Not Disturb' : 'Offline';
+  const statusText = isOnline ? 'Active' : (liveOnlineStatus === 'away' || liveUser.onlineStatus === 'away') ? 'Away' : (liveOnlineStatus === 'dnd' || liveUser.onlineStatus === 'dnd') ? 'Do Not Disturb' : 'Offline';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -165,7 +197,31 @@ const UserProfileScreen = ({ route, navigation }) => {
 
         {/* User Info */}
         <View style={styles.infoSection}>
-          <Text style={[styles.name, { color: colors.textPrimary }]}>{liveUser.name}</Text>
+          <Text style={[styles.name, { color: colors.textPrimary }]}>
+            {liveUser.displayName || liveUser.name}
+          </Text>
+          {(liveUser.displayName && liveUser.displayName !== liveUser.name) && (
+            <Text style={[styles.fullName, { color: colors.textSecondary }]}>
+              {liveUser.name}
+            </Text>
+          )}
+
+          {(liveUser.title || liveUser.role) && (
+            <Text style={[styles.roleText, { color: colors.textSecondary, textTransform: 'capitalize', marginTop: 2, marginBottom: 6 }]}>
+              {liveUser.title || liveUser.role}
+            </Text>
+          )}
+
+          {liveUser.customStatus?.text && (
+            <View style={[styles.customStatusRow, { backgroundColor: colors.backgroundSecondary }]}>
+              {liveUser.customStatus?.emoji && (
+                <Text style={styles.customStatusEmoji}>{liveUser.customStatus.emoji}</Text>
+              )}
+              <Text style={[styles.customStatusText, { color: colors.textPrimary }]}>
+                {liveUser.customStatus.text}
+              </Text>
+            </View>
+          )}
           
           <View style={styles.statusRow}>
             <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
@@ -203,7 +259,7 @@ const UserProfileScreen = ({ route, navigation }) => {
               <Mail size={24} color={colors.textPrimary} />
             </View>
             <View style={styles.contactDetails}>
-              <Text style={[styles.contactEmail, { color: colors.textPrimary }]}>{user.email}</Text>
+              <Text style={[styles.contactEmail, { color: colors.textPrimary }]}>{liveUser.email}</Text>
               <Text style={[styles.contactLabel, { color: colors.textSecondary }]}>Work</Text>
             </View>
           </View>
@@ -219,7 +275,7 @@ const UserProfileScreen = ({ route, navigation }) => {
               <View style={[styles.dmBadge, { backgroundColor: colors.backgroundSecondary }]}>
                 <Text style={[styles.dmBadgeText, { color: colors.textPrimary }]}>{idx + 1}</Text>
               </View>
-              <Text style={[styles.dmName, { color: colors.textPrimary }]}>{dm.name || user.name}</Text>
+              <Text style={[styles.dmName, { color: colors.textPrimary }]}>{dm.name || liveUser.name}</Text>
             </View>
           )) : (
             <Text style={{ color: colors.textSecondary, marginLeft: scale(16) }}>No recent DMs found.</Text>
@@ -289,9 +345,34 @@ const styles = StyleSheet.create({
     marginBottom: verticalScale(20),
   },
   name: {
-    fontSize: moderateScale(26),
-    fontWeight: '800',
-    marginBottom: verticalScale(16),
+    fontSize: moderateScale(22),
+    fontWeight: '700',
+    marginBottom: verticalScale(4),
+  },
+  fullName: {
+    fontSize: moderateScale(16),
+    marginBottom: verticalScale(4),
+  },
+  roleText: {
+    fontSize: moderateScale(15),
+  },
+  customStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(8),
+    marginTop: verticalScale(4),
+    marginBottom: verticalScale(8),
+    alignSelf: 'flex-start',
+    gap: 8,
+  },
+  customStatusEmoji: {
+    fontSize: moderateScale(16),
+  },
+  customStatusText: {
+    fontSize: moderateScale(14),
+    fontWeight: '500',
   },
   statusRow: {
     flexDirection: 'row',

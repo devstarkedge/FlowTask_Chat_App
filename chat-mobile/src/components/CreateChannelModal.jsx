@@ -249,19 +249,23 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
                 </Text>
 
                 {selectedMembers.length > 0 && (
-                  <View style={styles.selectedMembersContainer}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.selectedMembersContainer}
+                  >
                     {selectedMembers.map((m) => (
                       <View key={m._id} style={[styles.selectedChip, { backgroundColor: colors.primary + '20', borderColor: colors.primary + '40' }]}>
-                        <AppAvatar user={m} size={20} />
+                        <AppAvatar user={m} size={28} />
                         <Text style={[styles.selectedChipName, { color: colors.textPrimary }]} numberOfLines={1}>
                           {m.name}
                         </Text>
                         <TouchableOpacity onPress={() => handleRemoveMember(m._id)} style={styles.removeChipBtn}>
-                          <X size={12} color={colors.textSecondary} />
+                          <X size={16} color={colors.textSecondary} />
                         </TouchableOpacity>
                       </View>
                     ))}
-                  </View>
+                  </ScrollView>
                 )}
 
                 <View style={[styles.inputRow, { borderColor: colors.border, backgroundColor: colors.inputBackground, marginTop: verticalScale(8) }]}>
@@ -423,26 +427,27 @@ const styles = StyleSheet.create({
   },
   selectedMembersContainer: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: verticalScale(8),
+    gap: 12,
+    marginTop: verticalScale(12),
+    marginBottom: verticalScale(12),
+    paddingRight: scale(16),
   },
   selectedChip: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: scale(6),
-    paddingVertical: verticalScale(4),
-    borderRadius: moderateScale(16),
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(6),
+    borderRadius: moderateScale(20),
     borderWidth: 1,
-    gap: 6,
+    gap: 8,
   },
   selectedChipName: {
-    fontSize: moderateScale(12),
+    fontSize: moderateScale(14),
     fontWeight: "600",
-    maxWidth: scale(100),
+    maxWidth: scale(120),
   },
   removeChipBtn: {
-    padding: moderateScale(2),
+    padding: moderateScale(4),
   },
   searchResultsContainer: {
     marginTop: verticalScale(8),

@@ -21,7 +21,9 @@ export default function MediaPickerSheet({
   onPickFiles,
   onOpenGifPicker,
   onOpenRecentCanvases,
-  onOpenRecentFiles
+  onOpenRecentFiles,
+  onRecordAudio,
+  onRecordVideo,
 }) {
   const [photos, setPhotos] = useState([]);
   const [permissionResponse, requestPermission] = MediaLibrary.usePermissions();
@@ -165,13 +167,19 @@ export default function MediaPickerSheet({
               icon={Mic}
               label="Record an Audio Clip"
               colors={colors}
-              onPress={() => { alert('Audio recording coming soon'); onClose(); }}
+              onPress={() => {
+                onClose();
+                onRecordAudio?.();
+              }}
             />
             <OptionRow
               icon={Video}
               label="Record a Video Clip"
               colors={colors}
-              onPress={() => handleLaunchCamera(['videos'])}
+              onPress={() => {
+                onClose();
+                onRecordVideo?.();
+              }}
             />
             <OptionRow
               icon={FileText}

@@ -200,11 +200,18 @@ export const authAPI = {
 export const workspaceAPI = {
   mine: () => api.get('/workspaces/mine'),
   create: (data) => api.post('/workspaces', data),
+  get: (id) => api.get(`/workspaces/${id}`),
+  update: (id, data) => api.patch(`/workspaces/${id}`, data),
+  delete: (id) => api.delete(`/workspaces/${id}`),
   joinByInviteCode: (inviteCode) => api.post('/workspaces/join', { inviteCode }),
   inviteByEmail: (workspaceId, payload) =>
     api.post(`/workspaces/${workspaceId}/invite-email`, payload, { timeout: 45000 }),
   leave: (workspaceId) => api.post(`/workspaces/${workspaceId}/leave`),
   getMembers: (id, params) => api.get(`/workspaces/${id}/members`, { params }),
+  updateMemberRole: (workspaceId, memberId, role) =>
+    api.patch(`/workspaces/${workspaceId}/members/${memberId}`, { role }),
+  removeMember: (workspaceId, memberId) =>
+    api.delete(`/workspaces/${workspaceId}/members/${memberId}`),
 
   // ── Invite management ──
   getAllInvites: (workspaceId, params = {}) =>
@@ -219,6 +226,34 @@ export const workspaceAPI = {
     api.post('/workspaces/accept-invite', { token }),
   getInviteInfo: (token) =>
     api.get(`/workspaces/invite-info/${token}`),
+  regenerateInviteCode: (workspaceId) =>
+    api.post(`/workspaces/${workspaceId}/invite-code`),
+
+  // ── Settings ──
+  updateDomainRestrictions: (workspaceId, payload) =>
+    api.patch(`/workspaces/${workspaceId}/settings/domain-restrictions`, payload),
+  updateGuestSettings: (workspaceId, payload) =>
+    api.patch(`/workspaces/${workspaceId}/settings/guest-settings`, payload),
+  getSecuritySettings: (workspaceId) =>
+    api.get(`/workspaces/${workspaceId}/settings/security`),
+  updateSecuritySettings: (workspaceId, payload) =>
+    api.patch(`/workspaces/${workspaceId}/settings/security`, payload),
+  getNotificationSettings: (workspaceId) =>
+    api.get(`/workspaces/${workspaceId}/settings/notifications`),
+  updateNotificationSettings: (workspaceId, payload) =>
+    api.patch(`/workspaces/${workspaceId}/settings/notifications`, payload),
+  getIntegrationSettings: (workspaceId) =>
+    api.get(`/workspaces/${workspaceId}/settings/integrations`),
+  updateIntegrationSettings: (workspaceId, payload) =>
+    api.patch(`/workspaces/${workspaceId}/settings/integrations`, payload),
+  getBilling: (workspaceId) =>
+    api.get(`/workspaces/${workspaceId}/billing`),
+  upgradePlan: (workspaceId, plan) =>
+    api.post(`/workspaces/${workspaceId}/upgrade-plan`, { plan }),
+  getActiveSessions: (workspaceId) =>
+    api.get(`/workspaces/${workspaceId}/sessions`),
+  logoutAllSessions: (workspaceId) =>
+    api.post(`/workspaces/${workspaceId}/sessions/logout-all`),
 };
 
 // Channel API
@@ -289,8 +324,8 @@ export const fileAPI = {
   listWorkspace: (params) => api.get('/messages/files', { params }),
   listByChannel: (channelId, params) => api.get(`/channels/${channelId}/files`, { params }),
   deleteFromChannel: (channelId, fileId) => api.delete(`/channels/${channelId}/files/${fileId}`),
-  uploadFiles: (channelId, formData, onProgress) =>
-    api.post(`/channels/${channelId}/upload`, formData, {
+  uploadFiles: (channelId, formData, onProgress, isSync = false) =>
+    api.post(`/channels/${channelId}/upload${isSync ? '?sync=true' : ''}`, formData, {
       timeout: 60000,
       onUploadProgress: onProgress,
       headers: {
@@ -302,6 +337,7 @@ export const fileAPI = {
 
 // Users API — presence and custom status
 export const usersAPI = {
+  getUser: (id) => api.get(`/users/${id}`),
   setPresence: (status) => api.put('/users/presence', { status }),
   setCustomStatus: (data) => api.put('/users/status', data),
   getChannelMembers: (channelId) => api.get(`/channels/${channelId}/members`),
@@ -315,6 +351,15 @@ export const readReceiptAPI = {
   getUnread: () => api.get("/unread"),
   markRead: (channelId, lastReadMessageId = null) =>
     api.post(`/channels/${channelId}/read`, { lastReadMessageId }),
+};
+
+// Favorites (Starred) API
+export const favoritesAPI = {
+  list: () => api.get("/favorites"),
+  add: (targetType, targetId) => api.post("/favorites", { targetType, targetId }),
+  remove: (id) => api.delete(`/favorites/${id}`),
+  toggle: (targetType, targetId) => api.post("/favorites/toggle", { targetType, targetId }),
+  check: (targetType, targetId) => api.get("/favorites/check", { params: { targetType, targetId } }),
 };
 
  
@@ -398,5 +443,18 @@ export const gifsAPI = {
   getCategories: () => api.get('/gifs/categories'),
 };
 
-export default api;
+// ─── Categories API ──────────────────────────────────────────────────────
+export const categoryAPI = {
+  list: () => api.get('/categories'),
+  create: (data) => api.post('/categories', data),
+  update: (id, data) => api.put(`/categories/${id}`, data),
+  delete: (id) => api.delete(`/categories/${id}`),
+  reorder: (categoryOrders) => api.put('/categories/reorder', { categoryOrders }),
+  suggestChannels: (name) => api.post('/categories/suggest-channels', { name }),
+  syncDepartments: () => api.post('/categories/sync-departments'),
+  getDepartments: () => api.get('/categories/departments'),
+  addBulkChannels: (id, channelIds) => api.post(`/categories/${id}/bulk-channels`, { channelIds }),
+  removeChannel: (id, channelId) => api.delete(`/categories/${id}/channels/${channelId}`),
+};
 
+export default api;

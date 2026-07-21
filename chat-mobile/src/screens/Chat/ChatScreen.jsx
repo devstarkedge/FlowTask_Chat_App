@@ -136,48 +136,15 @@ const isImageUrl = (url) => {
   return /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$/i.test(url);
 };
 
-// ─── GifRenderer ─────────────────────────────────────────────────────────────
-
-const GifRenderer = ({ item, contentColor, styles }) => {
-  const { width: screenWidth } = useWindowDimensions();
-  const MAX_WIDTH = Math.min(Math.floor(screenWidth * 0.55), 220);
-  const MAX_HEIGHT = 220;
-
-  const srcW = item.gifMeta.width || MAX_WIDTH;
-  const srcH = item.gifMeta.height || MAX_HEIGHT;
-
-  const scale = Math.min(1, MAX_WIDTH / srcW, MAX_HEIGHT / srcH);
-  const displayW = Math.floor(srcW * scale);
-  const displayH = Math.floor(srcH * scale);
-
-  const uri = item.gifUrl || item.gifMeta.gifUrl || item.gifMeta.previewUrl;
-
-  return (
-    <View style={{ marginTop: item.content ? 8 : 0, alignSelf: 'flex-start', width: '100%' }}>
-      {item.content ? (
-        <Text style={[styles.messageText, { color: contentColor, marginBottom: verticalScale(8) }]}>
-          {item.content}
-        </Text>
-      ) : null}
-      <Image
-        source={{ uri }}
-        style={{ 
-          width: displayW, 
-          height: displayH, 
-          maxWidth: '100%', 
-          borderRadius: moderateScale(8),
-          aspectRatio: srcW / srcH,
-        }}
-        resizeMode="contain"
-      />
-    </View>
-  );
-};
+import GifRenderer from '../../components/GifRenderer';
 
 // ─── ChatScreen ──────────────────────────────────────────────────────────────
 
 const ChatScreen = ({ route, navigation }) => {
   const { channelId, channelName, initialTab, canvasId: deepLinkCanvasId, messageId: targetMessageId } = route.params || {};
+
+  const KeyboardContainer = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
+  const keyboardProps = Platform.OS === 'ios' ? { behavior: 'padding', keyboardVerticalOffset: 0 } : {};
 
   // Granular store subscriptions — prevent unnecessary re-renders
   const messages = useChatStore(useShallow((s) => s.messagesByChannel[channelId] || []));
@@ -440,7 +407,10 @@ const ChatScreen = ({ route, navigation }) => {
       if (!q) { setSearchResults([]); setCurrentMatch(0); return; }
       const matches = [];
       displayedMessages.forEach((m, idx) => {
-        if (m?.content && m.content.toLowerCase().includes(q)) matches.push(idx);
+        const textToSearch = m?.content || m?.htmlContent || '';
+        if (typeof textToSearch === 'string' && textToSearch.toLowerCase().includes(q)) {
+          matches.push(idx);
+        }
       });
       setSearchResults(matches);
       setCurrentMatch(0);
@@ -529,10 +499,11 @@ const ChatScreen = ({ route, navigation }) => {
       ? "You deleted this message"
       : "This message was deleted";
 
+    const textToSearch = item?.content || item?.htmlContent || '';
     const isMatch =
       searchQuery &&
-      item?.content &&
-      item.content.toLowerCase().includes(searchQuery.toLowerCase());
+      typeof textToSearch === 'string' &&
+      textToSearch.toLowerCase().includes(searchQuery.toLowerCase());
     const isHighlighted =
       isMatch && searchResults.length && searchResults[currentMatch] === index;
 
@@ -629,12 +600,21 @@ const ChatScreen = ({ route, navigation }) => {
         >
           {/* Avatar (hidden for compact/grouped messages) */}
           {!isMe && !isCompact && (
-            <AppAvatar
-              user={messageSender}
-              size={32}
-              showStatus={false}
-              style={{ marginTop: verticalScale(2) }}
-            />
+            <TouchableOpacity 
+              onPress={() => {
+                const members = membersByChannel[channelId] || [];
+                const userObj = members.find((m) => m._id === messageSender?._id) || messageSender;
+                navigation.navigate("UserProfile", { user: userObj, channelId });
+              }}
+              activeOpacity={0.7}
+            >
+              <AppAvatar
+                user={messageSender}
+                size={32}
+                showStatus={false}
+                style={{ marginTop: verticalScale(2) }}
+              />
+            </TouchableOpacity>
           )}
           {!isMe && isCompact && <View style={{ width: scale(32) }} />}
 
@@ -675,7 +655,8 @@ const ChatScreen = ({ route, navigation }) => {
             )}
 
             {/* Message bubble */}
-            <View
+            <View style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: "100%" }}>
+              <View
               style={[
                 styles.bubble,
                 bubbleRadiusStyle,
@@ -766,12 +747,7 @@ const ChatScreen = ({ route, navigation }) => {
                   {item.content}
                 </Text>
               )}
-
-              {isSaved && !isDeleted && (
-                <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: colors.card, borderRadius: moderateScale(10), padding: moderateScale(2), elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: scale(0), height: verticalScale(1) } }}>
-                  <Bookmark size={10} color={colors.primary} fill={colors.primary} />
-                </View>
-              )}
+              </View>
 
               {/* Attachment cards */}
               {!isDeleted && attachments.length > 0 && (
@@ -822,6 +798,9 @@ const ChatScreen = ({ route, navigation }) => {
                     sending...
                   </Text>
                 )}
+                {item.isPinned && (
+                  <Pin size={10} color={isMe ? colors.messageTextSent : colors.textTertiary} style={{ marginLeft: scale(4), opacity: 0.7 }} />
+                )}
                 {item.failed && (
                   <Text style={[styles.editedLabel, { color: colors.error }]}>
                     {" "}
@@ -829,6 +808,12 @@ const ChatScreen = ({ route, navigation }) => {
                   </Text>
                 )}
               </View>
+
+              {isSaved && !isDeleted && (
+                <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: colors.card, borderRadius: moderateScale(10), padding: moderateScale(2), elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: scale(0), height: verticalScale(1) } }}>
+                  <Bookmark size={10} color={colors.primary} fill={colors.primary} />
+                </View>
+              )}
             </View>
 
             {/* Reactions */}
@@ -1059,26 +1044,13 @@ const ChatScreen = ({ route, navigation }) => {
               Pinned Messages
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.optionItem}
-            onPress={() => {
-              setShowOptions(false);
-              navigation.navigate('Preferences', { channelId, channelName });
-            }}
-          >
-            <Bell size={18} color={colors.textSecondary} />
-            <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-              Notifications
-            </Text>
-          </TouchableOpacity>
         </View>
       )}
 
       {/* Messages View — KeyboardAvoidingView + FlatList */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      <KeyboardContainer
         style={{ flex: 1 }}
-        keyboardVerticalOffset={0}
+        {...keyboardProps}
       >
         <FlatList
           ref={flatListRef}
@@ -1170,7 +1142,7 @@ const ChatScreen = ({ route, navigation }) => {
           onCancelReply={() => { setReplyingTo(null); setText(""); }}
           onCancelEdit={() => { setEditingMessage(null); setText(""); }}
         />
-      </KeyboardAvoidingView>
+      </KeyboardContainer>
 
       {/* Reminder Modal */}
       <ReminderModal
@@ -1214,6 +1186,15 @@ const ChatScreen = ({ route, navigation }) => {
         }}
         onOpenEmojiPicker={() => setEmojiPickerTarget(actionMenuTarget?._id)}
         onForward={() => setForwardTarget(actionMenuTarget)}
+        onPin={async (msg) => {
+          try {
+            await pinsAPI.pin(msg._id);
+            Toast.show({ type: 'success', text1: 'Message pinned' });
+          } catch (error) {
+            Toast.show({ type: 'error', text1: 'Failed to pin message' });
+          }
+          setActionMenuTarget(null);
+        }}
         onSave={() => toggleSaveMessage?.(actionMenuTarget?._id)}
         onRemind={() => setReminderTarget(actionMenuTarget?._id)}
         onEdit={() => {
@@ -1380,7 +1361,6 @@ const createStyles = (colors) =>
       paddingVertical: verticalScale(8),
       borderRadius: moderateScale(18),
       maxWidth: "100%",
-      overflow: "hidden",
     },
     senderRow: {
       flexDirection: "row",

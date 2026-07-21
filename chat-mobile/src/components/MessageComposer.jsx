@@ -37,6 +37,9 @@ import {
   Alert,
   Image,
   Dimensions,
+  Animated,
+  PanResponder,
+  useWindowDimensions,
 } from "react-native";
 import {
   Send,
@@ -209,26 +212,158 @@ const MessageComposer = React.memo(function MessageComposer({
   const videoRecorder = useVideoRecorder();
   const [showVideoModal, setShowVideoModal] = useState(false);
 
-  const { height: screenHeight } = Dimensions.get("window");
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
+  const isTablet = screenWidth >= 600;
+
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [collapsedHeight, setCollapsedHeight] = useState(verticalScale(60));
+
+  const isExpandedRef = useRef(false);
+  isExpandedRef.current = isExpanded;
+
+  const collapsedHeightRef = useRef(verticalScale(60));
+  collapsedHeightRef.current = collapsedHeight;
+
+  const screenPhysicalHeight = Dimensions.get('screen').height;
+  // If the window dimensions height is smaller than the physical screen height by at least 150px,
+  // it means the window has already resized (shrunk) to accommodate the keyboard.
+  const hasResizedForKeyboard = (screenPhysicalHeight - screenHeight) > 150;
+  
+  // If the window has already resized, we don't subtract keyboardHeight again (resizing handles it).
+  // Otherwise, we subtract keyboardHeight to avoid covering the keyboard.
+  const activeKeyboardOffset = hasResizedForKeyboard ? 0 : keyboardHeight;
+
+  // Visible height above keyboard, subtracting status bar / safe area / header (~60px)
+  const visibleHeight = screenHeight - activeKeyboardOffset - insets.top - (Platform.OS === 'ios' ? 44 : 56);
+  const maxExpandedHeight = visibleHeight * (isTablet ? 0.65 : 0.85);
+
+  const maxExpandedHeightRef = useRef(maxExpandedHeight);
+  maxExpandedHeightRef.current = maxExpandedHeight;
+
   const maxComposerHeight = Math.floor(screenHeight * 0.3);
+
+  const dragStartY = useRef(0);
+  const animatedHeight = useRef(new Animated.Value(verticalScale(60))).current;
+  const isAnimating = useRef(false);
+
+  const collapseComposer = useCallback((dismissKeyboard = false) => {
+    isAnimating.current = true;
+    Animated.spring(animatedHeight, {
+      toValue: collapsedHeightRef.current,
+      useNativeDriver: false,
+      tension: 40,
+      friction: 7,
+    }).start(() => {
+      setIsExpanded(false);
+      setIsDragging(false);
+      isAnimating.current = false;
+      if (dismissKeyboard) {
+        Keyboard.dismiss();
+      }
+    });
+  }, []);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return Math.abs(gestureState.dy) > 5;
+      },
+      onPanResponderGrant: (evt, gestureState) => {
+        setIsDragging(true);
+        const currentHeight = isExpandedRef.current ? maxExpandedHeightRef.current : collapsedHeightRef.current;
+        animatedHeight.setValue(currentHeight);
+        dragStartY.current = currentHeight;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        let newHeight = dragStartY.current - gestureState.dy;
+        const cHeight = collapsedHeightRef.current;
+        const mHeight = maxExpandedHeightRef.current;
+        if (newHeight < cHeight) newHeight = cHeight;
+        if (newHeight > mHeight) newHeight = mHeight;
+        animatedHeight.setValue(newHeight);
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        setIsDragging(false);
+        const currentHeight = dragStartY.current - gestureState.dy;
+        const cHeight = collapsedHeightRef.current;
+        const mHeight = maxExpandedHeightRef.current;
+        const threshold = cHeight + (mHeight - cHeight) * 0.25;
+        
+        isAnimating.current = true;
+        if (gestureState.vy < -0.5 || currentHeight > threshold) {
+          Animated.spring(animatedHeight, {
+            toValue: mHeight,
+            useNativeDriver: false,
+            tension: 40,
+            friction: 7,
+          }).start(() => {
+            setIsExpanded(true);
+            isAnimating.current = false;
+          });
+        } else {
+          Animated.spring(animatedHeight, {
+            toValue: cHeight,
+            useNativeDriver: false,
+            tension: 40,
+            friction: 7,
+          }).start(() => {
+            setIsExpanded(false);
+            isAnimating.current = false;
+            Keyboard.dismiss();
+          });
+        }
+      },
+    })
+  ).current;
+
+  const handleComposerLayout = useCallback((event) => {
+    if (!isExpanded && !isDragging && !isAnimating.current) {
+      const height = event.nativeEvent.layout.height;
+      if (height > 0) {
+        setCollapsedHeight(height);
+        animatedHeight.setValue(height);
+      }
+    }
+  }, [isExpanded, isDragging]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      () => setKeyboardVisible(true),
+      (e) => {
+        setKeyboardVisible(true);
+        if (e && e.endCoordinates) {
+          setKeyboardHeight(e.endCoordinates.height);
+        }
+      },
     );
     const hideSub = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
       () => {
         setKeyboardVisible(false);
-        richText.current?.blurContentEditor();
+        setKeyboardHeight(0);
       }
     );
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, []);
+  }, [collapseComposer]);
+
+  // Keep composer size in sync with visible height adjustments when keyboard state changes
+  useEffect(() => {
+    if (isExpanded && !isDragging && !isAnimating.current) {
+      Animated.spring(animatedHeight, {
+        toValue: maxExpandedHeight,
+        useNativeDriver: false,
+        tension: 40,
+        friction: 7,
+      }).start();
+    }
+  }, [maxExpandedHeight, isExpanded]);
 
   const bottomPadding = isKeyboardVisible
     ? Platform.OS === "ios"
@@ -391,6 +526,7 @@ const MessageComposer = React.memo(function MessageComposer({
     clearDraft(channelId, activeWorkspaceId, null);
     lastSavedRef.current = "";
     emitTyping(channelId, false);
+    collapseComposer();
   }, [
     text,
     onSend,
@@ -401,6 +537,7 @@ const MessageComposer = React.memo(function MessageComposer({
     activeWorkspaceId,
     clearDraft,
     onChangeText,
+    collapseComposer,
   ]);
 
   // ─── Schedule send ─────────────────────────────────────────────────────────
@@ -429,6 +566,7 @@ const MessageComposer = React.memo(function MessageComposer({
       clearDraft(channelId, activeWorkspaceId, null);
       lastSavedRef.current = "";
       setShowScheduleModal(false);
+      collapseComposer();
     },
     [
       text,
@@ -438,6 +576,7 @@ const MessageComposer = React.memo(function MessageComposer({
       activeWorkspaceId,
       clearDraft,
       onChangeText,
+      collapseComposer,
     ],
   );
 
@@ -784,19 +923,29 @@ const MessageComposer = React.memo(function MessageComposer({
       )}
 
       {/* Input bar */}
-      <View
+      <Animated.View
+        onLayout={handleComposerLayout}
         style={[
           styles.inputBar,
           { backgroundColor: colors.background, paddingBottom: bottomPadding },
+          (isExpanded || isDragging) ? { height: animatedHeight } : null,
         ]}
       >
+        {/* Top Drag Handle */}
+        <View
+          {...panResponder.panHandlers}
+          style={styles.dragHandleContainer}
+        >
+          <View style={[styles.dragHandle, { backgroundColor: colors.border }]} />
+        </View>
+
         <View
           style={[
             styles.inputContainer,
+            (isExpanded || isDragging) ? styles.inputContainerExpanded : { alignItems: "flex-end" },
             {
               borderColor: colors.border,
               backgroundColor: colors.inputBackground,
-              alignItems: "flex-end", // Align icons to bottom as it expands
             },
           ]}
         >
@@ -823,34 +972,43 @@ const MessageComposer = React.memo(function MessageComposer({
             />
           ) : (
             <>
-              <TouchableOpacity style={[styles.iconButton, { marginBottom: verticalScale(4) }]} onPress={handleAttach}>
-                <Plus size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
+              {/* Left Buttons (only when collapsed) */}
+              {!(isExpanded || isDragging) && (
+                <>
+                  <TouchableOpacity style={[styles.iconButton, { marginBottom: verticalScale(4) }]} onPress={handleAttach}>
+                    <Plus size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.iconButton, { marginBottom: verticalScale(4) }]}
-                onPress={() => setShowToolbar((v) => !v)}
+                  <TouchableOpacity
+                    style={[styles.iconButton, { marginBottom: verticalScale(4) }]}
+                    onPress={() => setShowToolbar((v) => !v)}
+                  >
+                    <CaseSensitive
+                      size={18}
+                      color={showToolbar ? colors.primary : colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {/* Editor wrapper - always mounted with a stable key to preserve focus and typed text */}
+              <View 
+                key="editor-wrapper"
+                style={(isExpanded || isDragging) ? { flex: 1, width: '100%' } : { flex: 1, minHeight: verticalScale(40), height: Math.min(maxComposerHeight, Math.max(verticalScale(40), editorHeight)) }}
               >
-                <CaseSensitive
-                  size={18}
-                  color={showToolbar ? colors.primary : colors.textSecondary}
-                />
-              </TouchableOpacity>
-
-              <View style={{ flex: 1, minHeight: verticalScale(40), height: Math.min(maxComposerHeight, Math.max(verticalScale(40), editorHeight)) }}>
                 <RichEditor
                   ref={richText}
                   useContainer={false}
                   onHeightChange={(height) => setEditorHeight(height)}
                   style={{ flex: 1 }}
-                  scrollEnabled={editorHeight >= maxComposerHeight}
-                  placeholder={editingMessage ? "Edit message..." : "Message..."}
+                  scrollEnabled={isExpanded || isDragging || editorHeight >= maxComposerHeight}
+                  placeholder={(isExpanded || isDragging) ? "Jot something down" : (editingMessage ? "Edit message..." : "Message...")}
                   initialContentHTML={text}
                   editorStyle={{
                     backgroundColor: colors.inputBackground,
                     color: colors.inputText,
                     placeholderColor: colors.inputPlaceholder,
-                    contentCSSText: "font-size: 15px; font-family: sans-serif; overflow-y: auto !important; ul, ol { padding-left: 24px !important; margin: 0 !important; margin-top: 4px !important; margin-bottom: 4px !important; } li { margin: 0 !important; padding: 0 !important; list-style-position: outside !important; }",
+                    contentCSSText: "font-size: 15px; font-family: sans-serif; overflow-y: auto !important; body { margin: 0 !important; padding: 0 !important; padding-top: 0px !important; } p { margin-top: 0px !important; margin-bottom: 0px !important; line-height: 1.4 !important; } ul, ol { padding-left: 24px !important; margin: 0 !important; margin-top: 4px !important; margin-bottom: 4px !important; } li { margin: 0 !important; padding: 0 !important; list-style-position: outside !important; }",
                   }}
                   onChange={(html) => {
                     handleTextChange(html);
@@ -859,45 +1017,105 @@ const MessageComposer = React.memo(function MessageComposer({
                 />
               </View>
 
-              {stripHtml(text) || pendingFiles.length > 0 ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(4) }}>
-                  <TouchableOpacity
-                    style={styles.iconButton}
-                    onPress={() => setShowScheduleModal(true)}
-                  >
-                    <Clock size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.sendButton}
-                    onPress={handleSend}
-                    onLongPress={() => setShowScheduleModal(true)}
-                    delayLongPress={500}
-                  >
-                    <Text
-                      style={{
-                        color: colors.primary,
-                        fontWeight: "bold",
-                        fontSize: moderateScale(15),
-                      }}
-                    >
-                      Send
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(4) }}>
-                  <TouchableOpacity style={styles.iconButton} onPress={() => setShowVideoModal(true)}>
-                    <CameraIcon size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.iconButton} onPress={audioRecorder.startRecording}>
-                    <Mic size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
+              {/* Right Buttons (only when collapsed) */}
+              {!(isExpanded || isDragging) && (
+                <>
+                  {stripHtml(text) || pendingFiles.length > 0 ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(4) }}>
+                      <TouchableOpacity
+                        style={styles.iconButton}
+                        onPress={() => setShowScheduleModal(true)}
+                      >
+                        <Clock size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.sendButton}
+                        onPress={handleSend}
+                        onLongPress={() => setShowScheduleModal(true)}
+                        delayLongPress={500}
+                      >
+                        <Text
+                          style={{
+                            color: colors.primary,
+                            fontWeight: "bold",
+                            fontSize: moderateScale(15),
+                          }}
+                        >
+                          Send
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(4) }}>
+                      <TouchableOpacity style={styles.iconButton} onPress={() => setShowVideoModal(true)}>
+                        <CameraIcon size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.iconButton} onPress={audioRecorder.startRecording}>
+                        <Mic size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
+              )}
+
+              {/* Bottom Toolbar Row (only when expanded) */}
+              {(isExpanded || isDragging) && (
+                <>
+                  <View style={[styles.toolbarDivider, { backgroundColor: colors.border }]} />
+                  <View style={styles.expandedToolbar}>
+                    <View style={styles.expandedToolbarLeft}>
+                      <TouchableOpacity style={styles.iconButton} onPress={handleAttach}>
+                        <Plus size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.iconButton}
+                        onPress={() => setShowToolbar((v) => !v)}
+                      >
+                        <CaseSensitive
+                          size={18}
+                          color={showToolbar ? colors.primary : colors.textSecondary}
+                        />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.iconButton}
+                        onPress={() => setShowEmojiPicker(true)}
+                      >
+                        <Smile size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.iconButton}
+                        onPress={() => {
+                          const newText = text + "@";
+                          onChangeText(newText);
+                          setMentionRangeStart(newText.length - 1);
+                          setMentionQuery("");
+                          setMentionVisible(true);
+                        }}
+                      >
+                        <AtSign size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.iconButton}
+                        onPress={() => setShowRecentCanvases(true)}
+                      >
+                        <FileText size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity style={styles.iconButton} onPress={handleSend}>
+                      <Send size={20} color={colors.primary} />
+                    </TouchableOpacity>
+                  </View>
+                </>
               )}
             </>
           )}
         </View>
-      </View>
+      </Animated.View>
 
       <VideoRecorderModal
         visible={showVideoModal}
@@ -938,6 +1156,8 @@ const MessageComposer = React.memo(function MessageComposer({
         onOpenGifPicker={() => setShowGifPicker(true)}
         onOpenRecentCanvases={() => setShowRecentCanvases(true)}
         onOpenRecentFiles={() => setShowRecentFiles(true)}
+        onRecordAudio={audioRecorder.startRecording}
+        onRecordVideo={() => setShowVideoModal(true)}
       />
 
       {/* Recent Canvases Modal */}
@@ -1049,6 +1269,40 @@ const createStyles = (colors) =>
       borderWidth: 1,
       paddingHorizontal: scale(4),
       minHeight: verticalScale(48),
+    },
+    dragHandleContainer: {
+      alignItems: "center",
+      paddingVertical: verticalScale(6),
+      width: "100%",
+    },
+    dragHandle: {
+      width: scale(36),
+      height: verticalScale(5),
+      borderRadius: moderateScale(3),
+    },
+    inputContainerExpanded: {
+      flex: 1,
+      flexDirection: "column",
+      alignItems: "stretch",
+      borderRadius: moderateScale(16),
+      padding: moderateScale(8),
+    },
+    toolbarDivider: {
+      height: 1,
+      width: "100%",
+      marginVertical: verticalScale(8),
+    },
+    expandedToolbar: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: scale(4),
+      width: "100%",
+    },
+    expandedToolbarLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(10),
     },
     iconButton: {
       padding: moderateScale(8),

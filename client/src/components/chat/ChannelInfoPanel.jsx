@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   X,
   Users,
@@ -10,7 +10,9 @@ import {
   Info,
   Globe,
   Star,
+  FolderInput,
 } from "lucide-react";
+import api from "../../services/api";
 import toast from "react-hot-toast";
 import MemberItem from "./MemberItem";
 import { useChannelStore } from "../../stores/channelStore";
@@ -19,6 +21,7 @@ import { useFavoritesStore } from "../../stores/favoritesStore";
 import { usePresenceStore } from "../../stores/presenceStore";
 import EditChannelModal from "./EditChannelModal";
 import AddMemberModal from "./AddMemberModal";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import "./custom-css/channelInfoPanel.css";
 
@@ -34,6 +37,9 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
     setShowInfoPanel,
     removeMember,
     leaveChannel,
+    fetchChannels,
+    fetchCategories,
+    categories,
   } = useChannelStore();
   // Always read the latest channel data from the store so privacy/name/topic
   // changes reflect immediately, even if the parent's re-render is delayed.
@@ -41,10 +47,22 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
     s.channels.find((c) => c._id === channelProp?._id) || channelProp
   );
   const { user } = useAuthStore();
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const isEnterpriseOrPro = activeWorkspace?.plan === 'enterprise' || activeWorkspace?.plan === 'pro';
   const { confirm } = useDeleteConfirm();
   const { isFavorited, toggleFavorite, favorites } = useFavoritesStore();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [departments, setDepartments] = useState([]);
+
+  useEffect(() => {
+    if (showCategoryDropdown && departments.length === 0) {
+      api.get('/categories/departments').then(({ data }) => {
+        if (data.success) setDepartments(data.data);
+      }).catch(err => console.error("Failed to fetch departments", err));
+    }
+  }, [showCategoryDropdown]);
 
   const channelId = channel?._id?.toString?.();
   const isStarred = channelId
@@ -150,6 +168,25 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
       setShowInfoPanel(false);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleAssignCategory = async (categoryId) => {
+    try {
+      if (categoryId === null) {
+        // Find which custom category currently has this channel and remove it
+        const currentCat = categories.find(c => c.type === "custom" && c.channelIds?.includes(channelId));
+        if (currentCat) {
+          await api.removeChannelFromCategory(currentCat._id, channelId);
+        }
+      } else {
+        await api.addBulkChannelsToCategory(categoryId, [channelId]);
+      }
+      toast.success("Channel category updated");
+      await fetchCategories();
+      setShowCategoryDropdown(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || "Failed to update category");
     }
   };
 
@@ -285,8 +322,66 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
                 style={{ fontSize: 12, padding: "6px 12px", gap: 6, flex: 1, justifyContent: "center" }}
               >
                 <Settings size={13} />
-                Edit Channel
+                Edit
               </button>
+            )}
+
+            {/* Move to Category */}
+            {canEditChannel && isEnterpriseOrPro && (
+              <div style={{ position: "relative", flex: 1, display: "flex" }}>
+                <button
+                  onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                  className="btn-ghost"
+                  style={{ fontSize: 12, padding: "6px 12px", gap: 6, flex: 1, justifyContent: "center" }}
+                >
+                  <FolderInput size={13} />
+                  Move To
+                </button>
+                {showCategoryDropdown && (
+                  <div
+                    className="absolute z-50 rounded-md shadow-lg py-1 text-sm"
+                    style={{ 
+                      top: "100%", 
+                      right: 0, 
+                      minWidth: "160px", 
+                      marginTop: 4, 
+                      maxHeight: "250px", 
+                      overflowY: "auto",
+                      background: "var(--bg-modal, var(--bg-secondary))",
+                      border: "1px solid var(--border-primary)",
+                      color: "var(--text-primary)"
+                    }}
+                  >
+                    <button
+                       className="w-full text-left transition-colors"
+                       style={{ padding: "8px 16px", color: "var(--text-primary)" }}
+                       onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface-hover, var(--bg-hover))"; }}
+                       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                       onClick={() => handleAssignCategory(null, "category")}
+                    >
+                      (No Category)
+                    </button>
+                    
+                    {categories?.filter(c => c.type === "custom").length > 0 && (
+                      <>
+                        <div style={{ padding: "6px 12px", fontSize: "11px", fontWeight: "bold", color: "var(--text-muted)", textTransform: "uppercase", marginTop: 4 }}>Custom Categories</div>
+                        {categories.filter(c => c.type === "custom").map(cat => (
+                          <button
+                            key={cat._id}
+                            className="w-full text-left transition-colors"
+                            style={{ padding: "6px 16px", color: "var(--text-primary)" }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface-hover, var(--bg-hover))"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                            onClick={() => handleAssignCategory(cat._id)}
+                          >
+                            {cat.name}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Leave  */}

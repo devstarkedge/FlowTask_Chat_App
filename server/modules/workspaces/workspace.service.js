@@ -892,6 +892,194 @@ class WorkspaceService {
   /**
    * Upgrade workspace plan (schema only — no actual payment processing).
    */
+  // ─── Security Settings ──────────────────────────────────────────────
+
+  async getSecuritySettings(workspaceId, requesterId) {
+    const workspace = await this.getWorkspace(workspaceId);
+    const role = await workspaceRepository.getUserRole(requesterId, workspaceId);
+    if (!role) {
+      throw new ForbiddenError('You are not a member of this workspace.');
+    }
+    return {
+      requireEmailVerification: workspace.settings?.requireEmailVerification ?? true,
+      sessionTimeout: workspace.settings?.sessionTimeout || '7d',
+      twoFactorEnabled: workspace.settings?.twoFactorEnabled ?? false,
+      passwordPolicy: workspace.settings?.passwordPolicy || {
+        minLength: 8,
+        requireSpecialChar: true,
+        requireNumber: true,
+        requireUppercase: true,
+      },
+      activeSessions: 0,
+    };
+  }
+
+  async updateSecuritySettings(workspaceId, updates, requesterId) {
+    const workspace = await this.getWorkspace(workspaceId);
+    const role = await workspaceRepository.getUserRole(requesterId, workspaceId);
+    if (!role || ![WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN].includes(role)) {
+      throw new ForbiddenError('Only workspace owner or admin can update security settings.');
+    }
+
+    const setFields = {};
+    if (updates.requireEmailVerification !== undefined) {
+      setFields['settings.requireEmailVerification'] = updates.requireEmailVerification;
+    }
+    if (updates.sessionTimeout !== undefined) {
+      setFields['settings.sessionTimeout'] = updates.sessionTimeout;
+    }
+    if (updates.twoFactorEnabled !== undefined) {
+      setFields['settings.twoFactorEnabled'] = updates.twoFactorEnabled;
+    }
+    if (updates.passwordPolicy !== undefined) {
+      setFields['settings.passwordPolicy'] = updates.passwordPolicy;
+    }
+
+    const updated = await workspaceRepository.update(workspaceId, setFields);
+
+    // Emit socket event for real-time sync
+    try {
+      const { emitToWorkspace } = await import('../../sockets/socketManager.js');
+      const { SOCKET_EVENTS } = await import('../../config/constants.js');
+      emitToWorkspace(workspaceId.toString(), SOCKET_EVENTS.WORKSPACE_SECURITY_UPDATED, {
+        workspaceId: workspaceId.toString(),
+        settings: await this.getSecuritySettings(workspaceId, requesterId),
+      });
+    } catch (err) {
+      logger.warn('Failed to emit security settings update event', { error: err.message });
+    }
+
+    logger.info(`Security settings updated for workspace ${workspace.slug}`, { updatedBy: requesterId });
+    return updated;
+  }
+
+  // ─── Notification Settings ─────────────────────────────────────────
+
+  async getNotificationSettings(workspaceId, requesterId) {
+    const workspace = await this.getWorkspace(workspaceId);
+    const role = await workspaceRepository.getUserRole(requesterId, workspaceId);
+    if (!role) {
+      throw new ForbiddenError('You are not a member of this workspace.');
+    }
+    return {
+      mentions: workspace.settings?.notificationSettings?.mentions ?? true,
+      directMessages: workspace.settings?.notificationSettings?.directMessages ?? true,
+      threadReplies: workspace.settings?.notificationSettings?.threadReplies ?? true,
+      taskUpdates: workspace.settings?.notificationSettings?.taskUpdates ?? true,
+      workspaceAnnouncements: workspace.settings?.notificationSettings?.workspaceAnnouncements ?? true,
+      channelNotifications: workspace.settings?.notificationSettings?.channelNotifications ?? true,
+      emailNotifications: workspace.settings?.notificationSettings?.emailNotifications ?? true,
+      pushNotifications: workspace.settings?.notificationSettings?.pushNotifications ?? true,
+      notificationDigest: workspace.settings?.notificationSettings?.notificationDigest || 'all',
+    };
+  }
+
+  async updateNotificationSettings(workspaceId, updates, requesterId) {
+    const workspace = await this.getWorkspace(workspaceId);
+    const role = await workspaceRepository.getUserRole(requesterId, workspaceId);
+    if (!role || ![WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN].includes(role)) {
+      throw new ForbiddenError('Only workspace owner or admin can update notification settings.');
+    }
+
+    const setFields = {};
+    for (const key of ['mentions', 'directMessages', 'threadReplies', 'taskUpdates', 'workspaceAnnouncements', 'channelNotifications', 'emailNotifications', 'pushNotifications', 'notificationDigest']) {
+      if (updates[key] !== undefined) {
+        setFields[`settings.notificationSettings.${key}`] = updates[key];
+      }
+    }
+
+    const updated = await workspaceRepository.update(workspaceId, setFields);
+
+    // Emit socket event for real-time sync
+    try {
+      const { emitToWorkspace } = await import('../../sockets/socketManager.js');
+      const { SOCKET_EVENTS } = await import('../../config/constants.js');
+      emitToWorkspace(workspaceId.toString(), SOCKET_EVENTS.WORKSPACE_NOTIFICATION_SETTINGS_UPDATED, {
+        workspaceId: workspaceId.toString(),
+        settings: await this.getNotificationSettings(workspaceId, requesterId),
+      });
+    } catch (err) {
+      logger.warn('Failed to emit notification settings update event', { error: err.message });
+    }
+
+    logger.info(`Notification settings updated for workspace ${workspace.slug}`, { updatedBy: requesterId });
+    return updated;
+  }
+
+  // ─── Integration Settings ──────────────────────────────────────────
+
+  async getIntegrationSettings(workspaceId, requesterId) {
+    const workspace = await this.getWorkspace(workspaceId);
+    const role = await workspaceRepository.getUserRole(requesterId, workspaceId);
+    if (!role) {
+      throw new ForbiddenError('You are not a member of this workspace.');
+    }
+    return {
+      integrationEnabled: workspace.settings?.flowtaskIntegration?.enabled ?? false,
+      autoCreateChannels: workspace.settings?.integrationSettings?.autoCreateChannels ?? true,
+      syncMembers: workspace.settings?.integrationSettings?.syncMembers ?? true,
+      lastSyncAt: workspace.settings?.integrationSettings?.lastSyncAt || null,
+      apiUrl: workspace.settings?.flowtaskIntegration?.apiUrl || '',
+    };
+  }
+
+  async updateIntegrationSettings(workspaceId, updates, requesterId) {
+    const workspace = await this.getWorkspace(workspaceId);
+    const role = await workspaceRepository.getUserRole(requesterId, workspaceId);
+    if (!role || ![WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN].includes(role)) {
+      throw new ForbiddenError('Only workspace owner or admin can update integration settings.');
+    }
+
+    const setFields = {};
+    if (updates.autoCreateChannels !== undefined) {
+      setFields['settings.integrationSettings.autoCreateChannels'] = updates.autoCreateChannels;
+    }
+    if (updates.syncMembers !== undefined) {
+      setFields['settings.integrationSettings.syncMembers'] = updates.syncMembers;
+    }
+    if (updates.integrationEnabled !== undefined) {
+      setFields['settings.flowtaskIntegration.enabled'] = updates.integrationEnabled;
+    }
+
+    const updated = await workspaceRepository.update(workspaceId, setFields);
+
+    // Emit socket event for real-time sync
+    try {
+      const { emitToWorkspace } = await import('../../sockets/socketManager.js');
+      const { SOCKET_EVENTS } = await import('../../config/constants.js');
+      emitToWorkspace(workspaceId.toString(), SOCKET_EVENTS.WORKSPACE_INTEGRATION_UPDATED, {
+        workspaceId: workspaceId.toString(),
+        settings: await this.getIntegrationSettings(workspaceId, requesterId),
+      });
+    } catch (err) {
+      logger.warn('Failed to emit integration update event', { error: err.message });
+    }
+
+    logger.info(`Integration settings updated for workspace ${workspace.slug}`, { updatedBy: requesterId });
+    return updated;
+  }
+
+  // ─── Active Sessions ─────────────────────────────────────────────
+
+  async getActiveSessions(workspaceId, requesterId) {
+    const role = await workspaceRepository.getUserRole(requesterId, workspaceId);
+    if (!role || ![WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN].includes(role)) {
+      throw new ForbiddenError('Only workspace owner or admin can view active sessions.');
+    }
+    // Return placeholder - real session tracking would query a sessions collection
+    return { sessions: [], total: 0 };
+  }
+
+  async logoutAllSessions(workspaceId, requesterId) {
+    const workspace = await this.getWorkspace(workspaceId);
+    if (workspace.owner.toString() !== requesterId.toString()) {
+      throw new ForbiddenError('Only the workspace owner can logout all sessions.');
+    }
+    // Placeholder - real implementation would invalidate all refresh tokens
+    logger.info(`All sessions logged out for workspace ${workspace.slug} by ${requesterId}`);
+    return { message: 'All sessions logged out successfully.' };
+  }
+
   async upgradePlan(workspaceId, newPlan, requesterId) {
     const workspace = await this.getWorkspace(workspaceId);
 

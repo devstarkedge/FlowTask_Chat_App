@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import AccessibleModal from "./AccessibleModal";
 import { useThemeStore } from "../stores/themeStore";
+import { useAuthStore } from "../stores/authStore";
 import api, { usersAPI } from "../services/api";
 import { X, Clock, Calendar } from "lucide-react-native";
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -21,12 +22,16 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 const PauseNotificationsModal = ({ visible, onClose }) => {
   const { colors } = useThemeStore();
+  const { user, updateUser } = useAuthStore();
   const [showCustomPicker, setShowCustomPicker] = useState(false);
   const [customDate, setCustomDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState('date');
 
-  const durations = [
+  const isPaused = user?.notificationsPausedUntil && new Date(user.notificationsPausedUntil) > new Date();
+
+  const allDurations = [
+    { label: "Continue Notifications", value: "continue" },
     { label: "30 minutes", value: 30 },
     { label: "1 hour", value: 60 },
     { label: "2 hours", value: 120 },
@@ -36,32 +41,41 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
     { label: "Custom time", value: "custom" },
   ];
 
+  const durations = isPaused ? allDurations : allDurations.filter(d => d.value !== "continue");
+
   const handleSelect = async (duration) => {
     try {
-      // Compute pause duration in minutes
-      let minutes = typeof duration.value === 'number' ? duration.value : null;
-      if (duration.value === 'tomorrow') {
-        // Until tomorrow = ~16 hours from now (until 8am)
-        const now = new Date();
-        const tomorrow = new Date(now);
-        tomorrow.setHours(8, 0, 0, 0);
-        if (tomorrow <= now) tomorrow.setDate(tomorrow.getDate() + 1);
-        minutes = Math.ceil((tomorrow - now) / 60000);
-      }
-      if (duration.value === 'custom') {
-        setShowCustomPicker(true);
-        return;
-      }
+      if (duration.value === 'continue') {
+        await usersAPI.resumeNotifications();
+        updateUser({ notificationsPausedUntil: null });
+      } else {
+        // Compute pause duration in minutes
+        let minutes = typeof duration.value === 'number' ? duration.value : null;
+        if (duration.value === 'tomorrow') {
+          // Until tomorrow = ~16 hours from now (until 8am)
+          const now = new Date();
+          const tomorrow = new Date(now);
+          tomorrow.setHours(8, 0, 0, 0);
+          if (tomorrow <= now) tomorrow.setDate(tomorrow.getDate() + 1);
+          minutes = Math.ceil((tomorrow - now) / 60000);
+        }
+        if (duration.value === 'custom') {
+          setShowCustomPicker(true);
+          return;
+        }
 
-      if (minutes) {
-        await usersAPI.pauseNotifications({
-          duration: minutes,
-          resumeAt: new Date(Date.now() + minutes * 60000).toISOString(),
-        });
+        if (minutes) {
+          const resumeAt = new Date(Date.now() + minutes * 60000).toISOString();
+          await usersAPI.pauseNotifications({
+            duration: minutes,
+            resumeAt,
+          });
+          updateUser({ notificationsPausedUntil: resumeAt });
+        }
       }
     } catch (err) {
-      logger.error('Failed to pause notifications:', err);
-      Alert.alert('Error', 'Could not pause notifications. Please try again.');
+      logger.error('Failed to update notifications:', err);
+      Alert.alert('Error', 'Could not update notifications. Please try again.');
     }
     if (Platform.OS === "web") {
       document.activeElement?.blur();
@@ -74,10 +88,12 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
     try {
       const minutes = Math.ceil((customDate - new Date()) / 60000);
       if (minutes > 0) {
+        const resumeAt = customDate.toISOString();
         await usersAPI.pauseNotifications({
           duration: minutes,
-          resumeAt: customDate.toISOString(),
+          resumeAt,
         });
+        updateUser({ notificationsPausedUntil: resumeAt });
       }
     } catch (err) {
       logger.error('Failed to pause notifications:', err);

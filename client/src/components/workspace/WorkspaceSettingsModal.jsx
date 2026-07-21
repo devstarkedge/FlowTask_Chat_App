@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useAuthStore } from "../../stores/authStore";
 import { X, Settings, Users, Link2, Copy, RefreshCw, Crown, Shield, UserMinus, ChevronDown, Trash2, Zap, Lock, Bell, Check, Sparkles, AlertTriangle, UserPlus, Globe, Eye, Plus } from 'lucide-react';
@@ -9,6 +9,7 @@ import api, { workspaceAPI } from "../../services/api";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import InviteMembersModal from "./InviteMembersModal";
 import PendingInvitesList from "./PendingInvitesList";
+import MembersTab from "./MembersTab";
 import "./custom-css/WorkspaceSettingsModal.css";
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ const TABS = [
   { id: "notifications", label: "Notifications", icon: Bell },
 ];
 
-const ROLE_CFG = {
+export const ROLE_CFG = {
   owner: {
     label: "Owner",
     color: "#92400e",
@@ -70,7 +71,7 @@ export default function WorkspaceSettingsModal({ onClose }) {
   const {
     activeWorkspace,
     activeWorkspaceId,
-    members,
+    members = [],
     fetchMembers,
     fetchWorkspace,
     updateWorkspace,
@@ -243,13 +244,14 @@ export default function WorkspaceSettingsModal({ onClose }) {
                 onDelete={handleDeleteWorkspace}
                 isOwner={currentUserRole === "owner"}
                 workspace={activeWorkspace}
+          members={members}
               />
             )}
             {activeTab === "members" && (
               <MembersTab
                 members={members}
+                loading={false}
                 currentUserId={user?._id}
-                currentUserRole={currentUserRole}
                 canManage={canManage}
                 onRemove={removeMember}
                 onUpdateRole={updateMemberRole}
@@ -298,6 +300,7 @@ function GeneralTab({
   onSave,
   onDelete,
   isOwner,
+  members,
   workspace,
 }) {
   return (
@@ -334,7 +337,7 @@ function GeneralTab({
           { label: "Plan", val: workspace?.plan || "free", dot: "#8b5cf6" },
           {
             label: "Members",
-            val: workspace?.memberCount ?? 0,
+            val: members.length,
             dot: "#06b6d4",
           },
         ].map(({ label, val, dot }) => (
@@ -401,199 +404,6 @@ function GeneralTab({
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   MEMBERS TAB
-───────────────────────────────────────────────────────────────────────── */
-function MembersTab({
-  members,
-  currentUserId,
-  currentUserRole,
-  canManage,
-  onRemove,
-  onUpdateRole,
-  confirm,
-}) {
-  const [roleMenuId, setRoleMenuId] = useState(null);
-
-  return (
-    <div>
-      {/* Header row */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 18,
-        }}
-      >
-        <SectionLabel>Team Members</SectionLabel>
-        <span
-          className="wsm-badge-in"
-          style={{
-            fontSize: 11.5,
-            fontWeight: 700,
-            color: "var(--accent-primary, #4f46e5)",
-            background: "var(--bg-active, #eef2ff)",
-            padding: "4px 12px",
-            borderRadius: 20,
-            border: "1.5px solid var(--border-focus, #c7d2fe)",
-            letterSpacing: ".01em",
-          }}
-        >
-          {members.length} {members.length === 1 ? "member" : "members"}
-        </span>
-      </div>
-
-      <div className="wsm-card" style={{ padding: 8 }}>
-        {members.map((m, idx) => {
-          const memberUser =
-            m.userId && typeof m.userId === "object"
-              ? m.userId
-              : { _id: m.userId };
-          const memberId = memberUser._id || m.userId;
-          const isCurrentUser = memberId === currentUserId;
-          const role = ROLE_CFG[m.role] || ROLE_CFG.member;
-          const RoleIcon = role.icon;
-
-          return (
-            <div key={m._id || memberId}>
-              {idx > 0 && (
-                <div
-                  style={{ height: 1, background: "var(--border-secondary, #f8fafc)", margin: "3px 0" }}
-                />
-              )}
-              <div className="wsm-row-item wsm-member-row">
-                {/* Avatar */}
-                <Avatar member={memberUser} size={38} />
-
-                {/* Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p
-                    style={{
-                      fontSize: 13.5,
-                      fontWeight: 700,
-                      color: "var(--text-primary)",
-                      display: "flex",
-                      alignItems: "center",
-                      overflow: "hidden",
-                    }}
-                  >
-                    <span
-                      style={{
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {memberUser.name || m.displayName || "Unknown"}
-                    </span>
-                    {isCurrentUser && (
-                      <span className="wsm-you-badge">you</span>
-                    )}
-                  </p>
-                  <p
-                    style={{
-                      fontSize: 11.5,
-                      color: "var(--text-secondary)",
-                      marginTop: 2,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {memberUser.email || ""}
-                  </p>
-                </div>
-
-                {/* Role + actions */}
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span
-                    className="wsm-role-badge"
-                    style={{
-                      background: role.bg,
-                      color: role.color,
-                      border: `1.5px solid ${role.border}`,
-                    }}
-                  >
-                    <span
-                      className="wsm-role-dot"
-                      style={{ background: role.dot }}
-                    />
-                    {RoleIcon && <RoleIcon size={10} />}
-                    {role.label}
-                  </span>
-
-                  {canManage && !isCurrentUser && m.role !== "owner" && (
-                    <div style={{ position: "relative" }}>
-                      <button
-                        className="wsm-role-btn"
-                        onClick={() =>
-                          setRoleMenuId(
-                            roleMenuId === memberId ? null : memberId,
-                          )
-                        }
-                        aria-label="Change role"
-                      >
-                        <ChevronDown
-                          size={13}
-                          style={{
-                            transition: "transform .18s",
-                            transform:
-                              roleMenuId === memberId
-                                ? "rotate(180deg)"
-                                : "none",
-                          }}
-                        />
-                      </button>
-
-                      {roleMenuId === memberId && (
-                        <div className="wsm-dropdown wsm-slide-down">
-                          {["admin", "member", "guest"]
-                            .filter((r) => r !== m.role)
-                            .map((role) => (
-                              <button
-                                key={role}
-                                className="wsm-dropdown-item"
-                                onClick={() => {
-                                  onUpdateRole(memberId, role);
-                                  setRoleMenuId(null);
-                                }}
-                              >
-                                Make{" "}
-                                {role.charAt(0).toUpperCase() + role.slice(1)}
-                              </button>
-                            ))}
-                          <div className="wsm-dropdown-sep" />
-                          <button
-                            className="wsm-dropdown-item danger"
-                            onClick={async () => {
-                              setRoleMenuId(null);
-                              const name = memberUser.name || m.displayName || 'this member';
-                              const ok = await confirm({
-                                title: 'Remove member',
-                                message: `${name} will lose access to this workspace.`,
-                                confirmLabel: 'Remove',
-                              })
-                              if (ok) onRemove(memberId);
-                            }}
-                          >
-                            <UserMinus size={12} />
-                            Remove member
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
    INVITE TAB
 ───────────────────────────────────────────────────────────────────────── */
 const GUEST_ACCESS_PLANS = { free: false, pro: true, enterprise: true };
@@ -631,14 +441,13 @@ function InviteTab({
   const [savingGuest, setSavingGuest]           = useState(false);
 
   useEffect(() => {
-    setDomainEnabled(domainRestrictions.enabled);
-    setDomainList(domainRestrictions.allowedDomains || []);
-  }, [domainRestrictions.enabled, domainRestrictions.allowedDomains]);
-
-  useEffect(() => {
-    setMaxGuests(guestSettings.maxGuests);
-    setGuestChannelRestriction(guestSettings.guestChannelRestriction);
-  }, [guestSettings.maxGuests, guestSettings.guestChannelRestriction]);
+    const dr = workspace?.settings?.domainRestrictions || { enabled: false, allowedDomains: [] };
+    setDomainEnabled(dr.enabled);
+    setDomainList(dr.allowedDomains || []);
+    const gs = workspace?.settings?.guestSettings || { maxGuests: -1, guestChannelRestriction: true };
+    setMaxGuests(gs.maxGuests);
+    setGuestChannelRestriction(gs.guestChannelRestriction);
+  }, [workspace?.settings]);
 
   /* ── Domain Restrictions handlers ── */
   const addDomain = () => {

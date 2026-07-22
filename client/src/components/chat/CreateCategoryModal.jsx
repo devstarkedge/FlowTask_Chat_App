@@ -1,10 +1,24 @@
-import { useState, useRef, useMemo, useEffect } from "react";
+import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { useChannelStore } from "../../stores/channelStore";
 import { X, Search, Check, FolderPlus, Hash, Lock, Volume2, Users, ChevronDown } from 'lucide-react';
 import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import api, { categoryAPI } from "../../services/api";
 import EmojiPickerPortal from "./EmojiPickerPortal";
+
+let departmentSyncInFlight = null;
+
+function synchronizeDepartmentsSingleFlight() {
+  if (departmentSyncInFlight) return departmentSyncInFlight;
+
+  const request = categoryAPI.syncDepartments();
+  departmentSyncInFlight = request;
+  const clearRequest = () => {
+    if (departmentSyncInFlight === request) departmentSyncInFlight = null;
+  };
+  request.then(clearRequest, clearRequest);
+  return request;
+}
 
 const STYLES = `
   .ccm-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); animation: ccm-overlay-in 180ms ease; }
@@ -36,7 +50,7 @@ const STYLES = `
   .ccm-input { flex: 1; background: transparent; border: none; outline: none; font-size: 14px; color: var(--text-primary, #1D1C1D); }
   .ccm-input::placeholder { color: var(--text-secondary, #616061); }
   .ccm-search-results { margin-top: 8px; border: 1px solid var(--border-primary, #EBECEF); border-radius: 6px; max-height: 160px; overflow-y: auto; }
-  .ccm-search-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; }
+  .ccm-search-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border: 0; background: transparent; text-align: left; font: inherit; cursor: pointer; }
   .ccm-search-row:hover { background: var(--bg-secondary, #F8F8F8); }
   .ccm-search-row.is-selected { background: var(--accent-primary-light, rgba(0, 90, 158, 0.05)); }
   .ccm-search-row__name { font-size: 13px; color: var(--text-primary, #1D1C1D); flex: 1; }
@@ -66,15 +80,22 @@ function getChannelIcon(channel) {
 }
 
 export default function CreateCategoryModal({ onClose }) {
-  const { channels, categories, fetchCategories } = useChannelStore();
+  const { channels, categories, fetchCategories, fetchChannels, isLoading: channelsLoading } = useChannelStore();
   
   // Category Type
-  const [categoryType, setCategoryType] = useState('department');
+  const [categoryType, setCategoryType] = useState(() => {
+    if (categories.some((category) => category.type === 'department')) return 'department';
+    if (categories.some((category) => category.type === 'custom')) return 'custom';
+    return 'department';
+  });
   
   // Department State
   const [departments, setDepartments] = useState([]);
   const [loadingDepts, setLoadingDepts] = useState(false);
+  const [departmentError, setDepartmentError] = useState(null);
   const [expandedDepts, setExpandedDepts] = useState({});
+  const departmentLoadSequence = useRef(0);
+  const channelRefreshStarted = useRef(false);
 
   // Custom Category State
   const [customName, setCustomName] = useState("");
@@ -87,25 +108,53 @@ export default function CreateCategoryModal({ onClose }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedChannels, setSelectedChannels] = useState([]);
 
-  // Fetch departments on mount
-  useEffect(() => {
-    let isMounted = true;
+  const loadDepartments = useCallback(async () => {
+    const requestSequence = ++departmentLoadSequence.current;
     setLoadingDepts(true);
-    api.get("/categories/departments")
-      .then(({ data }) => {
-        if (data.success && isMounted) {
-          setDepartments(data.data);
+    setDepartmentError(null);
+
+    try {
+      const { data } = await synchronizeDepartmentsSingleFlight();
+      if (requestSequence !== departmentLoadSequence.current) return;
+      setDepartments(Array.isArray(data.data) ? data.data : []);
+    } catch (syncError) {
+      try {
+        const { data } = await categoryAPI.getDepartments();
+        if (requestSequence !== departmentLoadSequence.current) return;
+        const cachedDepartments = Array.isArray(data.data) ? data.data : [];
+        setDepartments(cachedDepartments);
+        if (cachedDepartments.length === 0) {
+          setDepartmentError(
+            syncError.response?.data?.error?.message
+              || 'Unable to synchronize departments from FlowTask.',
+          );
         }
-      })
-      .catch((err) => {
-        console.error("Failed to load departments", err);
-      })
-      .finally(() => {
-        if (isMounted) setLoadingDepts(false);
-      });
-    
-    return () => { isMounted = false; };
+      } catch {
+        if (requestSequence !== departmentLoadSequence.current) return;
+        setDepartments([]);
+        setDepartmentError('Unable to load departments. Check your FlowTask session and try again.');
+      }
+    } finally {
+      if (requestSequence === departmentLoadSequence.current) {
+        setLoadingDepts(false);
+      }
+    }
   }, []);
+
+  // Synchronize before displaying departments. The sequence guard makes the
+  // effect safe under React Strict Mode and ignores stale responses.
+  useEffect(() => {
+    loadDepartments();
+    return () => { departmentLoadSequence.current += 1; };
+  }, [loadDepartments]);
+
+  // Refresh through the membership-filtered channel endpoint once per modal
+  // instance. This keeps the picker authoritative after assignment changes.
+  useEffect(() => {
+    if (channelRefreshStarted.current) return;
+    channelRefreshStarted.current = true;
+    fetchChannels();
+  }, [fetchChannels]);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -133,16 +182,40 @@ export default function CreateCategoryModal({ onClose }) {
   };
 
   const nonDmChannels = useMemo(() => {
-    return channels.filter(c => c.type !== 'dm' && c.type !== 'self' && !c.isArchived && !c.categoryId);
+    return channels
+      .filter(c => c.type !== 'dm' && c.type !== 'self' && !c.isArchived)
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [channels]);
 
+  const existingDepartmentIds = useMemo(() => new Set(
+    categories
+      .filter((category) => category.type === 'department')
+      .flatMap((category) => [
+        category.departmentId?._id,
+        category.departmentId?.externalId,
+        category.departmentId,
+      ])
+      .filter((id) => typeof id === 'string')
+      .map(String),
+  ), [categories]);
+  const hasDepartmentCategory = existingDepartmentIds.size > 0;
+
+  const missingDepartments = useMemo(() => departments.filter((department) => (
+    !existingDepartmentIds.has(String(department._id))
+    && !existingDepartmentIds.has(String(department.externalId))
+  )), [departments, existingDepartmentIds]);
+
+  const allDepartmentsImported = !loadingDepts
+    && departments.length > 0
+    && missingDepartments.length === 0;
+  const hideDepartmentImportAction = categoryType === 'department' && allDepartmentsImported;
+
   const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase();
-    return nonDmChannels.filter(c => 
-      c.name?.toLowerCase().includes(q) &&
+    const q = searchQuery.trim().toLowerCase();
+    return nonDmChannels.filter(c =>
+      (!q || c.name?.toLowerCase().includes(q)) &&
       !selectedChannels.some(s => s._id === c._id)
-    ).slice(0, 10);
+    ).slice(0, 50);
   }, [searchQuery, nonDmChannels, selectedChannels]);
 
   const handleToggleChannel = (ch) => {
@@ -159,8 +232,9 @@ export default function CreateCategoryModal({ onClose }) {
   };
 
   const isFormValid = () => {
-    if (categoryType === 'department') return departments.length > 0 && !loadingDepts;
+    if (categoryType === 'department') return missingDepartments.length > 0 && !loadingDepts;
     if (categoryType === 'custom') return customName.trim().length > 0;
+    if (categoryType === 'none') return categories.length > 0;
     return false;
   };
 
@@ -172,18 +246,10 @@ export default function CreateCategoryModal({ onClose }) {
     try {
       let successMessage = "";
 
-      if (categoryType === 'department') {
-        const existingDeptIds = new Set(
-          categories
-            .filter(c => c.type === 'department')
-            .map(c => c.departmentId?._id || c.departmentId)
-            .filter(Boolean)
-        );
-
-        const missingDepartments = departments.filter(d => 
-          !existingDeptIds.has(d._id) && !existingDeptIds.has(String(d.externalId))
-        );
-        
+      if (categoryType === 'none') {
+        const { data } = await categoryAPI.clearAll();
+        successMessage = data.message || 'Categories removed. Channels are now shown normally.';
+      } else if (categoryType === 'department') {
         if (missingDepartments.length === 0) {
           toast.success("All departments are already imported.");
           onClose();
@@ -237,10 +303,18 @@ export default function CreateCategoryModal({ onClose }) {
       }
 
       toast.success(successMessage);
-      await fetchCategories();
+      if (categoryType === 'none') {
+        await Promise.all([fetchCategories(), fetchChannels()]);
+      } else {
+        await fetchCategories();
+      }
       onClose();
     } catch (err) {
-      toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Failed to create category");
+      toast.error(
+        err.response?.data?.error?.message
+        || err.response?.data?.message
+        || (categoryType === 'none' ? 'Failed to update category view' : 'Failed to create category'),
+      );
       setIsSubmitting(false);
     }
   };
@@ -286,6 +360,19 @@ export default function CreateCategoryModal({ onClose }) {
             />
             Custom Category
           </label>
+          {hasDepartmentCategory && (
+            <label className="ccm-radio-label">
+              <input
+                type="radio"
+                className="ccm-radio-input"
+                name="categoryType"
+                value="none"
+                checked={categoryType === 'none'}
+                onChange={() => setCategoryType('none')}
+              />
+              No Category
+            </label>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="ccm-body">
@@ -293,24 +380,28 @@ export default function CreateCategoryModal({ onClose }) {
           {categoryType === 'department' ? (
               <div className="ccm-field-group">
                 <div style={{ padding: '16px', fontSize: '13px', color: 'var(--text-secondary, #616061)', background: 'var(--bg-secondary, #F8F8F8)', borderRadius: '8px', lineHeight: '1.5', marginBottom: '16px', border: '1px solid var(--border-primary, #EBECEF)' }}>
-                  Departments are synchronized automatically from FlowTask. Click <strong>"Create Category"</strong> to import all departments and their associated channels into your personal Categories.
+                  {allDepartmentsImported
+                    ? 'All FlowTask departments are already available in your Categories.'
+                    : <>Departments are synchronized automatically from FlowTask. Click <strong>"Import Departments"</strong> to import all missing departments and their associated channels.</>}
                 </div>
                 
-                <div className="ccm-label">DEPARTMENTS TO BE IMPORTED</div>
+                <div className="ccm-label">FLOWTASK DEPARTMENTS</div>
                 <div className="ccm-department-list">
                   {loadingDepts ? (
                     <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-secondary, #616061)', fontSize: '13px' }}>Loading...</div>
+                  ) : departmentError ? (
+                    <div role="alert" style={{ padding: '16px', textAlign: 'center', color: '#9f1239', fontSize: '13px', background: '#fff1f2', borderRadius: '6px' }}>
+                      <div>{departmentError}</div>
+                      <button type="button" onClick={loadDepartments} style={{ marginTop: '10px', border: '1px solid #fda4af', borderRadius: '5px', padding: '6px 12px', background: '#fff', color: '#9f1239', cursor: 'pointer', fontWeight: 600 }}>
+                        Retry
+                      </button>
+                    </div>
                   ) : departments.length === 0 ? (
-                    <div style={{ padding: '16px', textAlign: 'center', color: '#616061', fontSize: '13px' }}>No departments found.</div>
+                    <div style={{ padding: '16px', textAlign: 'center', color: '#616061', fontSize: '13px' }}>No FlowTask departments are available for your account.</div>
                   ) : (
                     departments.map(dept => {
-                      const existingDeptIds = new Set(
-                        categories
-                          .filter(c => c.type === 'department')
-                          .map(c => c.departmentId?._id || c.departmentId)
-                          .filter(Boolean)
-                      );
-                      const isAlreadyImported = existingDeptIds.has(dept._id) || existingDeptIds.has(String(dept.externalId));
+                      const isAlreadyImported = existingDepartmentIds.has(String(dept._id))
+                        || existingDepartmentIds.has(String(dept.externalId));
                       const isExpanded = expandedDepts[dept._id];
                       
                       const deptChannels = getDeptChannels(dept);
@@ -349,7 +440,7 @@ export default function CreateCategoryModal({ onClose }) {
                   )}
                 </div>
               </div>
-          ) : (
+          ) : categoryType === 'custom' ? (
             <div className="ccm-field-group">
               <div className="ccm-label">CATEGORY NAME</div>
               <div className="ccm-input-wrap">
@@ -383,10 +474,13 @@ export default function CreateCategoryModal({ onClose }) {
                     placeholder="Search channels..."
                   />
                 </div>
-                {searchQuery && searchResults.length > 0 && (
-                  <div className="ccm-search-results">
-                    {searchResults.map(ch => (
-                      <div
+                <div className="ccm-search-results" aria-label="Accessible channels">
+                  {channelsLoading && channels.length === 0 ? (
+                    <div style={{ padding: '14px', textAlign: 'center', color: 'var(--text-secondary, #616061)', fontSize: '13px' }}>Loading your channels...</div>
+                  ) : searchResults.length > 0 ? (
+                    searchResults.map(ch => (
+                      <button
+                        type="button"
                         key={ch._id}
                         className={`ccm-search-row ${selectedChannels.some(s => s._id === ch._id) ? 'is-selected' : ''}`}
                         onClick={() => handleToggleChannel(ch)}
@@ -394,10 +488,14 @@ export default function CreateCategoryModal({ onClose }) {
                         {getChannelIcon(ch)}
                         <span className="ccm-search-row__name"># {ch.name}</span>
                         {selectedChannels.some(s => s._id === ch._id) && <Check size={14} color="var(--accent-primary, #005A9E)" />}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      </button>
+                    ))
+                  ) : (
+                    <div style={{ padding: '14px', textAlign: 'center', color: 'var(--text-secondary, #616061)', fontSize: '13px' }}>
+                      {searchQuery.trim() ? 'No accessible channels match your search.' : 'No accessible channels are available.'}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {selectedChannels.length > 0 && (
@@ -417,29 +515,52 @@ export default function CreateCategoryModal({ onClose }) {
                 </div>
               )}
             </div>
+          ) : (
+            <div className="ccm-field-group">
+              <div
+                role="alert"
+                style={{
+                  padding: '16px',
+                  fontSize: '13px',
+                  lineHeight: 1.5,
+                  color: 'var(--text-primary, #1D1C1D)',
+                  background: 'var(--bg-secondary, #F8F8F8)',
+                  border: '1px solid var(--border-primary, #EBECEF)',
+                  borderRadius: '8px',
+                }}
+              >
+                Choose <strong>Update</strong> to remove all category groupings for your account. No channels, messages, memberships, or history will be deleted. All accessible channels will return to the normal channel lists.
+              </div>
+            </div>
           )}
 
           <div className="ccm-footer">
             <button type="button" className="ccm-btn-cancel" onClick={onClose}>
               Cancel
             </button>
-            <button 
-              type="submit" 
-              className="ccm-btn-submit"
-              disabled={!isFormValid() || isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader size={14} />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Check size={14} />
-                  Create Category
-                </>
-              )}
-            </button>
+            {!hideDepartmentImportAction && (
+              <button 
+                type="submit" 
+                className="ccm-btn-submit"
+                disabled={!isFormValid() || isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader size={14} />
+                    {categoryType === 'department'
+                      ? 'Importing...'
+                      : categoryType === 'none' ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} />
+                    {categoryType === 'department'
+                      ? `Import ${missingDepartments.length} Department${missingDepartments.length === 1 ? '' : 's'}`
+                      : categoryType === 'none' ? 'Update' : 'Create Category'}
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </form>
       </div>

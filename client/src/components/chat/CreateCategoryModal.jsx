@@ -428,7 +428,7 @@ export default function CreateCategoryModal({ onClose }) {
                                 deptChannels.map(c => (
                                   <div key={c._id} className="ccm-dept-channel-item">
                                     <Check size={14} color="var(--accent-primary, #005A9E)" strokeWidth={3} />
-                                    <span># {c.name}</span>
+                                    <span> {c.name}</span>
                                   </div>
                                 ))
                               )}
@@ -486,7 +486,7 @@ export default function CreateCategoryModal({ onClose }) {
                         onClick={() => handleToggleChannel(ch)}
                       >
                         {getChannelIcon(ch)}
-                        <span className="ccm-search-row__name"># {ch.name}</span>
+                        <span className="ccm-search-row__name"> {ch.name}</span>
                         {selectedChannels.some(s => s._id === ch._id) && <Check size={14} color="var(--accent-primary, #005A9E)" />}
                       </button>
                     ))
@@ -502,7 +502,8 @@ export default function CreateCategoryModal({ onClose }) {
                 <div className="ccm-selected-users">
                   {selectedChannels.map(ch => (
                     <span key={ch._id} className="ccm-selected-chip">
-                      <span className="ccm-selected-chip__name"># {ch.name}</span>
+                      {getChannelIcon(ch)}
+                      <span className="ccm-selected-chip__name">{ch.name}</span>
                       <button
                         type="button"
                         className="ccm-selected-chip__remove"

@@ -540,7 +540,7 @@ export function registerTaskEventHandlers() {
     const assignerName = resolveActorName(payload, assigner);
 
     // Auto-add all assignees to project channel
-    if (channel) {
+    if (channel && !payload.authoritativeSnapshotFollows) {
       const allAssigneeIds = (payload.assignees || [])
         .map((a) => a.userId || a._id || a.id || (typeof a === 'string' ? a : null))
         .filter(Boolean);
@@ -586,6 +586,7 @@ export function registerTaskEventHandlers() {
 
     const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
+    if (payload.authoritativeSnapshotFollows) return;
 
     const actor = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const actorName = resolveActorName(payload, actor);

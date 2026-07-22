@@ -1,5 +1,7 @@
 import Channel from "./Channel.model.js";
+import crypto from "crypto";
 import ChannelMember from "./ChannelMember.model.js";
+import PendingChannelParticipant from "./PendingChannelParticipant.model.js";
 import ChannelPin from "./ChannelPin.model.js";
 import channelRepository from "./channel.repository.js";
 import userRepository from "../users/user.repository.js";
@@ -14,6 +16,7 @@ import {
   emitToWorkspace,
   joinChannelRoom,
   leaveChannelRoom,
+  reconcileChannelRoomAccess,
 } from "../../sockets/socketManager.js";
 import {
   slugify,
@@ -24,6 +27,8 @@ import {
 } from "../../utils/slugify.js";
 import { sanitizeHtml, stripHtml, truncate } from "../../utils/sanitize.js";
 import logger from "../../utils/logger.js";
+import { isRetryableMongoError, mapWithConcurrency } from "../../utils/mongoRetry.js";
+import { withProjectChannelLock } from "../flowtask/projectChannelLock.service.js";
 import {
   CHANNEL_TYPES,
   CHANNEL_VISIBILITY,
@@ -74,39 +79,48 @@ class ChannelService {
       workspaceId,
     );
     if (existing) {
+      if (existing.visibility !== CHANNEL_VISIBILITY.PRIVATE) {
+        const migrated = await channelRepository.update(
+          existing._id,
+          {
+            visibility: CHANNEL_VISIBILITY.PRIVATE,
+            type: CHANNEL_TYPES.PROJECT,
+            systemManaged: true,
+          },
+          workspaceId,
+        );
+        emitToWorkspace(workspaceId, SOCKET_EVENTS.CHANNEL_UPDATED, {
+          channelId: migrated._id,
+          updates: {
+            visibility: CHANNEL_VISIBILITY.PRIVATE,
+            type: CHANNEL_TYPES.PROJECT,
+          },
+        });
+        await reconcileChannelRoomAccess(migrated._id.toString(), workspaceId);
+        logger.info("Migrated mapped FlowTask channel to private in place", {
+          boardId,
+          channelId: migrated._id,
+        });
+        if (migrated.$locals) migrated.$locals.flowTaskCreated = false;
+        else migrated.__flowTaskCreated = false;
+        return migrated;
+      }
       logger.info("Project channel already exists", {
         boardId,
         slug: existing.slug,
       });
+      if (existing.$locals) existing.$locals.flowTaskCreated = false;
+      else existing.__flowTaskCreated = false;
       return existing;
     }
 
-    const systemChannelMatch = Object.values(SYSTEM_CHANNELS).find(
-      (sys) => sys.name.toLowerCase() === boardName.toLowerCase()
-    );
-
-    if (systemChannelMatch) {
-      const existingSystem = await channelRepository.findBySlug(systemChannelMatch.slug, workspaceId);
-      if (existingSystem) {
-        const updates = {
-          flowTaskRef: { entityType: "board", entityId: boardId },
-          systemManaged: true,
-          departmentRef: deptId
-            ? { departmentId: deptId.toString(), departmentName: deptName }
-            : { departmentId: null, departmentName: null },
-        };
-        const updatedSystem = await channelRepository.update(existingSystem._id, updates, workspaceId);
-        logger.info("System channel linked to ProofHub project", {
-          channelId: updatedSystem._id,
-          slug: updatedSystem.slug,
-          boardId,
-        });
-        return updatedSystem;
-      }
-    }
-
-    const creator = creatorFlowTaskId
+    const resolvedCreator = creatorFlowTaskId
       ? await userRepository.findByFlowTaskId(creatorFlowTaskId, workspaceId)
+      : null;
+    const creator = resolvedCreator && (
+      resolvedCreator.authProvider === "native" || resolvedCreator.registeredAt
+    )
+      ? resolvedCreator
       : null;
 
     let slug = projectChannelSlug(deptName, boardName, boardId);
@@ -114,12 +128,13 @@ class ChannelService {
       slug = appendCollisionSuffix(slug, boardId);
     }
 
+    // Project access comes only from the authoritative hierarchy snapshot.
+    // Keep the actor as audit metadata without granting transient membership.
     const members = [];
-    if (creator) {
-      members.push({ userId: creator._id, role: CHANNEL_MEMBER_ROLES.OWNER });
-    }
 
-    const channel = await channelRepository.create({
+    let channel;
+    try {
+      channel = await channelRepository.create({
       name: boardName,
       slug,
       type: CHANNEL_TYPES.PROJECT,
@@ -127,12 +142,10 @@ class ChannelService {
       description: board.description
         ? truncate(stripHtml(board.description), 200)
         : "",
-      visibility:
-        board.visibility === "public"
-          ? CHANNEL_VISIBILITY.PUBLIC
-          : CHANNEL_VISIBILITY.PRIVATE,
+      visibility: CHANNEL_VISIBILITY.PRIVATE,
       members,
       memberCount: members.length,
+      createdBy: creator?._id || null,
       workspaceId,
       systemManaged: true,
       adminOverrides: {
@@ -143,7 +156,20 @@ class ChannelService {
       departmentRef: deptId
         ? { departmentId: deptId.toString(), departmentName: deptName }
         : { departmentId: null, departmentName: null },
-    });
+      });
+      if (channel.$locals) channel.$locals.flowTaskCreated = true;
+      else channel.__flowTaskCreated = true;
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+      channel = await channelRepository.findByFlowTaskRef("board", boardId, workspaceId);
+      if (!channel) throw error;
+      if (channel.$locals) channel.$locals.flowTaskCreated = false;
+      else channel.__flowTaskCreated = false;
+      logger.info("Concurrent project-channel create resolved by mapping", {
+        boardId,
+        channelId: channel._id,
+      });
+    }
 
     logger.info("Project channel created", {
       channelId: channel._id,
@@ -817,7 +843,7 @@ class ChannelService {
    * Sync all project channels for a user from FlowTask boards.
    * Called during login/sync to create channels for existing projects.
    */
-  async syncProjectChannelsForUser(token, chatUser, workspaceId) {
+  async syncProjectChannelsForUser(token, chatUser, workspaceId, options = {}) {
     const flowTaskService = (await import("../flowtask/flowtask.service.js"))
       .default;
 
@@ -829,53 +855,84 @@ class ChannelService {
         userId: chatUser._id,
         error: error.message,
       });
-      return;
+      throw error;
     }
 
     if (!boards || !Array.isArray(boards) || boards.length === 0) {
       logger.debug("No boards found for user", { userId: chatUser._id });
-      return;
+      return { totalBoards: 0, created: 0, completed: 0, failed: 0, results: [] };
     }
 
-    let created = 0;
-    let synced = 0;
-
-    for (const board of boards) {
+    const requestedBoardIds = options.boardIds?.length
+      ? new Set(options.boardIds.map(String))
+      : null;
+    const eligibleBoards = boards.filter((board) => {
+      const boardId = board?._id || board?.id;
+      return boardId && !board.isArchived && (!requestedBoardIds || requestedBoardIds.has(String(boardId)));
+    });
+    const counters = { created: 0, completed: 0, failed: 0, processed: 0 };
+    if (options.onBoardsDiscovered) {
       try {
-        const boardId = board._id || board.id;
-        if (!boardId) continue;
-        if (board.isArchived) continue;
-
-        // Create channel if it doesn't exist
-        const channel = await this.createProjectChannel(
-          board,
-          chatUser.flowTaskUserId,
+        await options.onBoardsDiscovered(eligibleBoards.map((board) => ({
+          boardId: String(board._id || board.id),
+          boardName: board.name || board.title || '',
+          status: 'pending',
+          retryable: false,
+        })));
+      } catch (error) {
+        logger.warn('Failed to persist discovered project boards', {
+          jobId: options.jobId,
+          requestId: options.requestId,
           workspaceId,
-        );
+          error: error.message,
+        });
+      }
+    }
 
-        // Ensure current user is a member (ChannelMember + embedded array)
-        if (!channel.hasMember(chatUser._id)) {
-          await this.addMember(channel._id, chatUser._id);
-        } else {
-          // Embedded members may be in sync while ChannelMember is missing.
-          // Force idempotent add to guarantee ChannelMember row exists.
-          await channelRepository.addMember(
-            channel._id,
-            chatUser._id,
-            CHANNEL_MEMBER_ROLES.MEMBER,
-            channel.workspaceId?.toString() || workspaceId,
-          );
-        }
+    const reportBoardState = async (state) => {
+      if (!options.onBoardState) return;
+      try {
+        await options.onBoardState(state);
+      } catch (error) {
+        logger.warn('Failed to persist project-board sync state', {
+          jobId: options.jobId,
+          requestId: options.requestId,
+          workspaceId,
+          boardId: state.boardId,
+          error: error.message,
+        });
+      }
+    };
 
+    const results = await mapWithConcurrency(
+      eligibleBoards,
+      options.concurrency || 3,
+      async (board) => {
+        const boardId = String(board._id || board.id);
+        await reportBoardState({
+          boardId,
+          boardName: board.name || board.title || '',
+          status: 'processing',
+          retryable: false,
+          error: null,
+        });
+      try {
         // Deep sync: board members + card/subtask/nano assignees
         let memberIds = [];
+        let participants = [];
+        let membershipVersion = 0;
+        let authoritativeSnapshotLoaded = false;
         let ownerId = typeof board.owner === "string"
           ? board.owner
           : board.owner?._id || board.owner?.id;
 
+        let deepFetchError = null;
         try {
           const deepResult = await flowTaskService.getBoardDeepMembers(boardId, token);
           memberIds = [...deepResult.memberIds];
+          participants = deepResult.participants || [];
+          membershipVersion = deepResult.membershipVersion || 0;
+          authoritativeSnapshotLoaded = Array.isArray(deepResult.participants);
 
           // Extract owner from deep result sources
           if (deepResult.sources) {
@@ -887,6 +944,7 @@ class ChannelService {
             }
           }
         } catch (deepErr) {
+          deepFetchError = deepErr;
           // Fallback to shallow board members if deep fetch fails
           logger.warn('[CHANNEL_SYNC] Deep member fetch failed, using shallow members', {
             boardId,
@@ -900,35 +958,121 @@ class ChannelService {
           }
         }
 
-        if (memberIds.length > 0) {
-          await this.reconcileProjectMembers(channel._id, memberIds, workspaceId, {
-            ownerFlowTaskId: ownerId,
-          });
-          synced++;
+        if (!authoritativeSnapshotLoaded && memberIds.length === 0 && deepFetchError) {
+          throw deepFetchError;
         }
 
-        if (
-          channel.createdAt &&
-          Date.now() - channel.createdAt.getTime() < 5000
-        ) {
-          created++;
-        }
+        let channel;
+        await withProjectChannelLock(
+          { workspaceId, boardId, jobId: options.jobId },
+          async () => {
+            channel = await this.createProjectChannel(
+              board,
+              chatUser.flowTaskUserId,
+              workspaceId,
+            );
+            if (authoritativeSnapshotLoaded || memberIds.length > 0) {
+              await this.reconcileProjectMembers(
+                channel._id,
+                participants.length > 0 ? participants : memberIds,
+                workspaceId,
+                {
+                  ownerFlowTaskId: ownerId,
+                  membershipVersion,
+                  syncContext: {
+                    jobId: options.jobId,
+                    requestId: options.requestId,
+                    boardId,
+                    userId: chatUser._id?.toString?.(),
+                  },
+                },
+              );
+            }
+          },
+        );
+
+        const createdNow = channel.$locals?.flowTaskCreated === true
+          || channel.__flowTaskCreated === true;
+        counters.created += createdNow ? 1 : 0;
+        counters.completed += 1;
+        const result = {
+          boardId,
+          boardName: board.name || board.title || '',
+          status: 'completed',
+          created: createdNow,
+          retryable: false,
+          error: null,
+        };
+        await reportBoardState(result);
+        return result;
       } catch (error) {
+        const retryable = error.retryable === true
+          || isRetryableMongoError(error)
+          || (error.isAxiosError && !error.response)
+          || Number(error.response?.status) >= 500
+          || ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED'].includes(error.code);
+        counters.failed += 1;
         logger.error("Failed to sync project channel", {
-          boardId: board._id,
+          jobId: options.jobId,
+          requestId: options.requestId,
+          workspaceId,
+          userId: chatUser._id,
+          boardId,
           boardName: board.name,
+          retryable,
           error: error.message,
         });
+        const result = {
+          boardId,
+          boardName: board.name || board.title || '',
+          status: 'failed',
+          created: false,
+          retryable,
+          error: error.message,
+        };
+        await reportBoardState(result);
+        return result;
+      } finally {
+        counters.processed += 1;
+        if (options.onProgress) {
+          try {
+            await options.onProgress({
+              totalBoards: eligibleBoards.length,
+              processedBoards: counters.processed,
+              completedBoards: counters.completed,
+              failedBoards: counters.failed,
+            });
+          } catch (progressError) {
+            logger.warn('Failed to persist project-channel sync progress', {
+              jobId: options.jobId,
+              requestId: options.requestId,
+              workspaceId,
+              boardId,
+              error: progressError.message,
+            });
+          }
+        }
       }
-    }
+      },
+    );
 
     logger.info("[CHANNEL_SYNC] Project channels synced for user", {
+      jobId: options.jobId,
+      requestId: options.requestId,
       userId: chatUser._id,
       workspaceId,
-      totalBoards: boards.length,
-      created,
-      synced,
+      totalBoards: eligibleBoards.length,
+      created: counters.created,
+      synced: counters.completed,
+      failed: counters.failed,
     });
+    return {
+      totalBoards: eligibleBoards.length,
+      created: counters.created,
+      completed: counters.completed,
+      failed: counters.failed,
+      results,
+    };
   }
 
   // ──────────────────── Channel Retrieval ───────────────────────────────────
@@ -1154,12 +1298,12 @@ class ChannelService {
   /**
    * Get a single channel by slug.
    */
-  async getChannelBySlug(slug, workspaceId) {
+  async getChannelBySlug(slug, workspaceId, userId) {
     const channel = await channelRepository.findBySlug(slug, workspaceId);
     if (!channel) {
       throw new NotFoundError("Channel not found");
     }
-    return channel;
+    return this.getChannelById(channel._id, userId, workspaceId);
   }
 
   // ──────────────────── Membership Management ──────────────────────────────
@@ -1314,21 +1458,120 @@ class ChannelService {
    */
   async reconcileProjectMembers(
     channelId,
-    flowTaskUserIds,
+    flowTaskParticipants,
     workspaceId,
-    { ownerFlowTaskId = null } = {},
+    options = {},
+  ) {
+    const lockToken = crypto.randomUUID();
+    const delays = [25, 75, 150, 300, 600];
+    let locked = false;
+
+    for (const delay of delays) {
+      const now = new Date();
+      const claimed = await Channel.findOneAndUpdate(
+        {
+          _id: channelId,
+          $or: [
+            { 'membershipSyncLock.expiresAt': { $lt: now } },
+            { 'membershipSyncLock.expiresAt': null },
+            { membershipSyncLock: { $exists: false } },
+          ],
+        },
+        {
+          $set: {
+            membershipSyncLock: {
+              token: lockToken,
+              expiresAt: new Date(Date.now() + 60_000),
+            },
+          },
+        },
+        { returnDocument: 'after' },
+      );
+      if (claimed) {
+        locked = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+
+    if (!locked) {
+      const error = new ConflictError('Project membership reconciliation is busy; retry');
+      error.retryable = true;
+      throw error;
+    }
+
+    const heartbeat = setInterval(() => {
+      Channel.updateOne(
+        { _id: channelId, 'membershipSyncLock.token': lockToken },
+        { $set: { 'membershipSyncLock.expiresAt': new Date(Date.now() + 60_000) } },
+      ).catch((error) => logger.warn('Project membership lock heartbeat failed', {
+        channelId,
+        workspaceId,
+        jobId: options.syncContext?.jobId,
+        boardId: options.syncContext?.boardId,
+        error: error.message,
+      }));
+    }, 20_000);
+    heartbeat.unref?.();
+
+    try {
+      return await this._reconcileProjectMembersUnlocked(
+        channelId,
+        flowTaskParticipants,
+        workspaceId,
+        options,
+      );
+    } finally {
+      clearInterval(heartbeat);
+      await Channel.updateOne(
+        { _id: channelId, 'membershipSyncLock.token': lockToken },
+        {
+          $set: {
+            'membershipSyncLock.token': null,
+            'membershipSyncLock.expiresAt': null,
+          },
+        },
+      );
+    }
+  }
+
+  async _reconcileProjectMembersUnlocked(
+    channelId,
+    flowTaskParticipants,
+    workspaceId,
+    { ownerFlowTaskId = null, membershipVersion = 0, syncContext = {} } = {},
   ) {
     const channel = await channelRepository.findById(channelId, {
       workspaceId,
     });
     if (!channel) throw new NotFoundError("Channel not found");
 
+    if (
+      membershipVersion > 0 &&
+      (channel.flowTaskMembershipVersion || 0) > membershipVersion
+    ) {
+      logger.info("Ignored stale project membership snapshot", {
+        channelId,
+        receivedVersion: membershipVersion,
+        appliedVersion: channel.flowTaskMembershipVersion,
+      });
+      return channel;
+    }
+
     const effectiveWorkspaceId = channel.workspaceId?.toString() || workspaceId;
     const desiredFlowTaskIds = new Set();
+    const participantById = new Map();
 
-    for (const flowTaskUserId of flowTaskUserIds || []) {
+    for (const participant of flowTaskParticipants || []) {
+      const flowTaskUserId = typeof participant === "string"
+        ? participant
+        : participant?.flowTaskUserId || participant?._id || participant?.id;
       if (!flowTaskUserId) continue;
-      desiredFlowTaskIds.add(flowTaskUserId.toString());
+      const normalizedId = flowTaskUserId.toString();
+      desiredFlowTaskIds.add(normalizedId);
+      participantById.set(normalizedId, typeof participant === "string"
+        ? { flowTaskUserId: normalizedId }
+        : participant);
     }
     if (ownerFlowTaskId) {
       desiredFlowTaskIds.add(ownerFlowTaskId.toString());
@@ -1343,17 +1586,85 @@ class ChannelService {
         .filter(Boolean),
     );
 
+    const candidateEmails = [...participantById.values()]
+      .map((participant) => participant.email?.trim().toLowerCase())
+      .filter(Boolean);
     const chatUsers = desiredFlowTaskIds.size > 0
-      ? await userRepository.findByFlowTaskIds(
+      ? await userRepository.findByFlowTaskIdentityCandidates(
           [...desiredFlowTaskIds],
-          effectiveWorkspaceId,
+          [...new Set(candidateEmails)],
         )
       : [];
+    const usersByFlowTaskId = new Map(
+      chatUsers
+        .filter((user) => user.flowTaskUserId)
+        .map((user) => [user.flowTaskUserId.toString(), user]),
+    );
+    const usersByVerifiedEmail = new Map(
+      chatUsers
+        .filter((user) => user.emailVerified && user.email)
+        .map((user) => [user.email.trim().toLowerCase(), user]),
+    );
+    const registeredMatches = [];
+    const claimedChatUserIds = new Map();
 
-    const desiredMembers = chatUsers.map((user) => ({
+    for (const flowTaskUserId of desiredFlowTaskIds) {
+      const participant = participantById.get(flowTaskUserId) || {};
+      const normalizedEmail = participant.email?.trim().toLowerCase();
+      const byId = usersByFlowTaskId.get(flowTaskUserId);
+      const byEmail = normalizedEmail
+        ? usersByVerifiedEmail.get(normalizedEmail)
+        : null;
+
+      if (byId && byEmail && byId._id.toString() !== byEmail._id.toString()) {
+        throw new ConflictError(
+          `FlowTask identity conflict for participant ${flowTaskUserId}`,
+        );
+      }
+
+      let user = byId || byEmail;
+      if (!user || user.isActive === false) continue;
+      if (user.authProvider !== "native" && !user.registeredAt) continue;
+
+      const userId = user._id.toString();
+      const previouslyClaimedFlowTaskId = claimedChatUserIds.get(userId);
+      if (
+        previouslyClaimedFlowTaskId &&
+        previouslyClaimedFlowTaskId !== flowTaskUserId
+      ) {
+        throw new ConflictError(
+          `ChatApp identity matches multiple FlowTask participants: ${userId}`,
+        );
+      }
+
+      if (user.flowTaskUserId && user.flowTaskUserId.toString() !== flowTaskUserId) {
+        throw new ConflictError(
+          `Verified email is already linked to another FlowTask identity: ${userId}`,
+        );
+      }
+      if (!user.flowTaskUserId) {
+        const linkedUser = await userRepository.linkFlowTaskIdentity(
+          user._id,
+          flowTaskUserId,
+        );
+        if (!linkedUser) {
+          throw new ConflictError(
+            `FlowTask identity could not be linked safely: ${flowTaskUserId}`,
+          );
+        }
+        user = linkedUser;
+      }
+
+      claimedChatUserIds.set(userId, flowTaskUserId);
+      registeredMatches.push({ user, flowTaskUserId });
+    }
+
+    const registeredUsers = registeredMatches.map(({ user }) => user);
+    const desiredMembers = registeredUsers.map((user) => ({
       userId: user._id,
       role:
-        channel.createdBy?.toString() === user._id.toString()
+        ownerFlowTaskId &&
+        user.flowTaskUserId?.toString() === ownerFlowTaskId.toString()
           ? CHANNEL_MEMBER_ROLES.OWNER
           : CHANNEL_MEMBER_ROLES.MEMBER,
     }));
@@ -1366,7 +1677,67 @@ class ChannelService {
       channelId,
       desiredMembers,
       effectiveWorkspaceId,
+      syncContext,
     );
+
+    const registeredFlowTaskIds = new Set(
+      registeredMatches.map(({ flowTaskUserId }) => flowTaskUserId),
+    );
+    const pendingParticipants = [...desiredFlowTaskIds]
+      .filter((flowTaskUserId) => !registeredFlowTaskIds.has(flowTaskUserId))
+      .map((flowTaskUserId) => participantById.get(flowTaskUserId) || { flowTaskUserId });
+    const pendingIds = pendingParticipants.map((participant) => participant.flowTaskUserId);
+
+    await PendingChannelParticipant.updateMany(
+      {
+        channelId,
+        isActive: true,
+        flowTaskUserId: { $nin: pendingIds },
+      },
+      { $set: { isActive: false } },
+    );
+
+    if (pendingParticipants.length > 0) {
+      await PendingChannelParticipant.bulkWrite(
+        pendingParticipants.map((participant) => ({
+          updateOne: {
+            filter: { channelId, flowTaskUserId: participant.flowTaskUserId },
+            update: {
+              $set: {
+                workspaceId: effectiveWorkspaceId,
+                normalizedEmail: participant.email?.trim().toLowerCase() || "",
+                name: participant.name || "FlowTask participant",
+                avatar: participant.avatar || null,
+                role: participant.role || "employee",
+                sources: participant.sources || [],
+                isActive: true,
+                convertedToUserId: null,
+                convertedAt: null,
+              },
+            },
+            upsert: true,
+          },
+        })),
+        { ordered: false },
+      );
+    }
+
+    if (registeredFlowTaskIds.size > 0) {
+      await PendingChannelParticipant.updateMany(
+        {
+          channelId,
+          flowTaskUserId: { $in: [...registeredFlowTaskIds] },
+        },
+        { $set: { isActive: false, convertedAt: new Date() } },
+      );
+    }
+
+    if (membershipVersion > 0) {
+      await Channel.updateOne(
+        { _id: channelId },
+        { $max: { flowTaskMembershipVersion: membershipVersion } },
+      );
+    }
 
     const syncChannelPayload = updated
       ? {
@@ -1382,7 +1753,7 @@ class ChannelService {
         }
       : null;
 
-    for (const user of chatUsers) {
+    for (const user of registeredUsers) {
       const userId = user._id.toString();
       if (existingUserIds.has(userId) || !syncChannelPayload) continue;
 
@@ -1427,6 +1798,106 @@ class ChannelService {
     });
 
     return updated;
+  }
+
+  /**
+   * Convert pending project participants after a real ChatApp account signs in.
+   * Stable FlowTask ID wins; normalized verified email is the fallback.
+   */
+  async activatePendingParticipantsForUser(chatUser, workspaceId) {
+    const identityFilters = [];
+    if (chatUser.flowTaskUserId) {
+      identityFilters.push({ flowTaskUserId: chatUser.flowTaskUserId.toString() });
+    }
+    if (chatUser.emailVerified && chatUser.email) {
+      identityFilters.push({ normalizedEmail: chatUser.email.trim().toLowerCase() });
+    }
+    if (identityFilters.length === 0) return { converted: 0 };
+
+    const pendingFilter = {
+      isActive: true,
+      $or: identityFilters,
+    };
+    if (workspaceId) pendingFilter.workspaceId = workspaceId;
+    const pending = await PendingChannelParticipant.find(pendingFilter).lean();
+    const pendingFlowTaskIds = [...new Set(
+      pending.map((item) => item.flowTaskUserId).filter(Boolean),
+    )];
+    if (
+      chatUser.flowTaskUserId &&
+      pendingFlowTaskIds.some(
+        (flowTaskUserId) =>
+          flowTaskUserId !== chatUser.flowTaskUserId.toString(),
+      )
+    ) {
+      throw new ConflictError(
+        'Verified email matches a different pending FlowTask identity',
+      );
+    }
+    if (!chatUser.flowTaskUserId && pendingFlowTaskIds.length > 1) {
+      throw new ConflictError(
+        'Verified email matches multiple pending FlowTask identities',
+      );
+    }
+    if (!chatUser.flowTaskUserId && pendingFlowTaskIds.length === 1) {
+      const linkedUser = await userRepository.linkFlowTaskIdentity(
+        chatUser._id,
+        pendingFlowTaskIds[0],
+      );
+      if (!linkedUser) {
+        throw new ConflictError('Pending FlowTask identity could not be linked safely');
+      }
+      chatUser.flowTaskUserId = linkedUser.flowTaskUserId;
+    }
+
+    const channels = new Map();
+    for (const item of pending) {
+      channels.set(item.channelId.toString(), item.workspaceId.toString());
+    }
+    for (const [channelId, pendingWorkspaceId] of channels) {
+      if (!await workspaceRepository.isMember(chatUser._id, pendingWorkspaceId)) {
+        await workspaceRepository.addMember(
+          chatUser._id,
+          pendingWorkspaceId,
+          'member',
+        );
+      }
+      await this.addMember(
+        channelId,
+        chatUser._id,
+        CHANNEL_MEMBER_ROLES.MEMBER,
+        pendingWorkspaceId,
+      );
+    }
+
+    if (pending.length > 0) {
+      await PendingChannelParticipant.updateMany(
+        { _id: { $in: pending.map((item) => item._id) } },
+        {
+          $set: {
+            isActive: false,
+            convertedToUserId: chatUser._id,
+            convertedAt: new Date(),
+          },
+        },
+      );
+
+      for (const [channelId, pendingWorkspaceId] of channels) {
+        emitToChannel(
+          channelId,
+          SOCKET_EVENTS.CHANNEL_MEMBERS_UPDATED,
+          { channelId },
+          pendingWorkspaceId,
+        );
+      }
+    }
+
+    logger.info("Pending FlowTask participants activated", {
+      workspaceId: workspaceId || 'all-matching-workspaces',
+      chatUserId: chatUser._id,
+      converted: pending.length,
+    });
+    return { converted: pending.length };
   }
 
   /**
@@ -1665,11 +2136,14 @@ class ChannelService {
     });
     if (!channel) throw new NotFoundError("Channel not found");
 
-    const members = await channelRepository.listActiveMembers(channelId, {
-      workspaceId: channel.workspaceId?.toString() || workspaceId,
-    });
+    const [members, pendingParticipants] = await Promise.all([
+      channelRepository.listActiveMembers(channelId, {
+        workspaceId: channel.workspaceId?.toString() || workspaceId,
+      }),
+      PendingChannelParticipant.find({ channelId, isActive: true }).lean(),
+    ]);
 
-    return members
+    const activeMembers = members
       .map((member) => {
         const user = member.userId;
         if (!user) return null;
@@ -1689,7 +2163,24 @@ class ChannelService {
           joinedAt: member.joinedAt,
         };
       })
-      .filter(Boolean)
+      .filter(Boolean);
+
+    const pendingMembers = pendingParticipants.map((participant) => ({
+      _id: `pending:${participant.flowTaskUserId}`,
+      flowTaskUserId: participant.flowTaskUserId,
+      name: participant.name,
+      email: participant.normalizedEmail,
+      avatar: participant.avatar,
+      role: participant.role,
+      onlineStatus: "offline",
+      isActive: false,
+      registrationStatus: "faded",
+      source: participant.sources,
+      channelRole: "participant",
+      joinedAt: participant.createdAt,
+    }));
+
+    return [...activeMembers, ...pendingMembers]
       .sort((a, b) => {
       // Online first, then alphabetical
       const onlineOrder = { online: 0, away: 1, dnd: 2, offline: 3 };

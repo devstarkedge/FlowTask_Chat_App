@@ -94,6 +94,16 @@ const channelSchema = new Schema(
       type: flowTaskRefSchema,
       default: null,
     },
+    // Last exact FlowTask hierarchy snapshot applied to this channel.
+    flowTaskMembershipVersion: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    membershipSyncLock: {
+      token: { type: String, default: null },
+      expiresAt: { type: Date, default: null },
+    },
     description: {
       type: String,
       maxlength: 500,

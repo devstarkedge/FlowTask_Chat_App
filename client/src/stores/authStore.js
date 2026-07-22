@@ -6,6 +6,12 @@ import { useWorkspaceStore } from './workspaceStore'
 import logger from '../utils/logger'
 
 const FLOWTASK_ENABLED = import.meta.env.VITE_FLOWTASK_ENABLED !== 'false'
+let flowTaskLoginInFlight = null
+
+function createAuthAttemptId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+  return `flowtask-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
 
 export const useAuthStore = create((set, get) => ({
   accessToken: localStorage.getItem('chat_access_token') || null,
@@ -15,6 +21,34 @@ export const useAuthStore = create((set, get) => ({
   isInitialized: !localStorage.getItem('chat_access_token'),
   error: null,
   flowtaskEnabled: FLOWTASK_ENABLED,
+  channelSync: null,
+  setChannelSync: (channelSync) => set((state) => {
+    const current = state.channelSync
+    if (!current || current.jobId !== channelSync?.jobId) return { channelSync }
+    const terminal = ['completed', 'partial', 'failed']
+    if (terminal.includes(current.status) && !terminal.includes(channelSync.status)) return state
+    if ((channelSync.processedBoards || 0) < (current.processedBoards || 0)) return state
+    return {
+      channelSync: {
+        ...current,
+        ...channelSync,
+        totalBoards: Math.max(current.totalBoards || 0, channelSync.totalBoards || 0),
+        completedBoards: Math.max(current.completedBoards || 0, channelSync.completedBoards || 0),
+        failedBoards: Math.max(current.failedBoards || 0, channelSync.failedBoards || 0),
+      },
+    }
+  }),
+  fetchChannelSyncStatus: async () => {
+    try {
+      const { data } = await authAPI.channelSyncStatus()
+      const channelSync = data.data?.channelSync
+      if (channelSync) get().setChannelSync(channelSync)
+      return channelSync
+    } catch (error) {
+      logger.warn('Failed to reconcile project-channel sync status:', error)
+      return null
+    }
+  },
 
   // ─── Token management ─────────────────────────────────────────────
   setTokens: (accessToken, refreshToken) => {
@@ -62,35 +96,59 @@ export const useAuthStore = create((set, get) => ({
   },
 
   // ─── FlowTask SSO Login ──────────────────────────────────────────
-  loginFlowTask: async (token) => {
+  loginFlowTask: (token) => {
+    if (flowTaskLoginInFlight) return flowTaskLoginInFlight.promise
+
+    const attemptId = createAuthAttemptId()
     set({ isLoading: true, error: null })
-    try {
-      const { data } = await authAPI.loginFlowTask(token)
-      const { user, accessToken, refreshToken, channels, flowTaskToken } = data.data
-      localStorage.setItem('chat_access_token', accessToken)
-      localStorage.setItem('chat_refresh_token', refreshToken)
-      if (flowTaskToken) localStorage.setItem('flowtask_token', flowTaskToken)
-      set({ accessToken, refreshToken, user, isLoading: false, isInitialized: true })
-      // Seed sidebar channels immediately from login payload to avoid
-      // any race with subsequent /channels fetch.
-      if (Array.isArray(channels) && channels.length > 0) {
-        useChannelStore.setState({ channels })
+    const promise = (async () => {
+      try {
+        const { data } = await authAPI.loginFlowTask(token, attemptId)
+        const {
+          user,
+          accessToken,
+          refreshToken,
+          channels,
+          flowTaskToken,
+          channelSync,
+        } = data.data
+        localStorage.setItem('chat_access_token', accessToken)
+        localStorage.setItem('chat_refresh_token', refreshToken)
+        if (flowTaskToken) localStorage.setItem('flowtask_token', flowTaskToken)
+        set({
+          accessToken,
+          refreshToken,
+          user,
+          channelSync: channelSync || null,
+          isInitialized: true,
+        })
+        if (Array.isArray(channels)) {
+          useChannelStore.setState({ channels })
+        }
+        useWorkspaceStore.getState().fetchWorkspaces().catch((error) => {
+          logger.error('Post-login workspace reconciliation failed:', error)
+        })
+        return data
+      } catch (error) {
+        const status = error.response?.status
+        const serverMsg = error.response?.data?.error?.message
+        let msg = serverMsg || 'FlowTask login failed'
+        if (!serverMsg && status) msg = `FlowTask login failed (HTTP ${status})`
+        if (!error.response) {
+          msg = 'FlowTask login failed — could not reach the server. Check your network or backend URL.'
+        }
+        set({ error: msg })
+        throw error
+      } finally {
+        if (flowTaskLoginInFlight?.attemptId === attemptId) {
+          flowTaskLoginInFlight = null
+          set({ isLoading: false })
+        }
       }
-      await useWorkspaceStore.getState().fetchWorkspaces()
-      return data
-    } catch (error) {
-      const status = error.response?.status
-      const serverMsg = error.response?.data?.error?.message
-      let msg = serverMsg || 'FlowTask login failed'
-      if (!serverMsg && status) {
-        msg = `FlowTask login failed (HTTP ${status})`
-      }
-      if (!error.response) {
-        msg = 'FlowTask login failed — could not reach the server. Check your network or backend URL.'
-      }
-      set({ isLoading: false, error: msg })
-      throw error
-    }
+    })()
+
+    flowTaskLoginInFlight = { attemptId, promise }
+    return promise
   },
 
   // ─── Fetch Current User ───────────────────────────────────────────
@@ -138,7 +196,8 @@ export const useAuthStore = create((set, get) => ({
     localStorage.removeItem('flowtask_token')
     disconnectSocket()
     useWorkspaceStore.getState().clearWorkspaceState()
-    set({ accessToken: null, refreshToken: null, user: null, error: null, isInitialized: true })
+    flowTaskLoginInFlight = null
+    set({ accessToken: null, refreshToken: null, user: null, channelSync: null, error: null, isLoading: false, isInitialized: true })
   },
 
   // ─── Password Reset ──────────────────────────────────────────────

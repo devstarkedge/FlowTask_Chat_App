@@ -132,26 +132,43 @@ workspaceMembershipSchema.statics.getUserRole = async function (userId, workspac
  * @returns {Promise<WorkspaceMembership>}
  */
 workspaceMembershipSchema.statics.addMember = async function (userId, workspaceId, role = 'member', invitedBy = null) {
-  const existing = await this.findOne({ userId, workspaceId }).lean();
-  const wasInactive = existing && !existing.isActive;
-  const isNew = !existing;
-
-  const membership = await this.findOneAndUpdate(
-    { userId, workspaceId },
-    {
-      $set: { role, isActive: true },
-      $setOnInsert: { joinedAt: new Date(), invitedBy },
-    },
-    { upsert: true, returnDocument: 'after' },
+  const { default: Workspace } = await import('./Workspace.model.js');
+  const reactivated = await this.findOneAndUpdate(
+    { userId, workspaceId, isActive: false },
+    { $set: { role, isActive: true } },
+    { returnDocument: 'after' },
   );
-
-  // Sync denormalized memberCount on Workspace when a new member is added
-  if (isNew || wasInactive) {
-    const { default: Workspace } = await import('./Workspace.model.js');
+  if (reactivated) {
     await Workspace.updateOne({ _id: workspaceId }, { $inc: { memberCount: 1 } });
+    return reactivated;
   }
 
-  return membership;
+  const active = await this.findOneAndUpdate(
+    { userId, workspaceId, isActive: true },
+    { $set: { role } },
+    { returnDocument: 'after' },
+  );
+  if (active) return active;
+
+  try {
+    const membership = await this.create({
+      userId,
+      workspaceId,
+      role,
+      invitedBy,
+      isActive: true,
+      joinedAt: new Date(),
+    });
+    await Workspace.updateOne({ _id: workspaceId }, { $inc: { memberCount: 1 } });
+    return membership;
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+    return this.findOneAndUpdate(
+      { userId, workspaceId },
+      { $set: { role, isActive: true } },
+      { returnDocument: 'after' },
+    );
+  }
 };
 
 /**

@@ -160,6 +160,10 @@ workspaceSchema.index({ 'billing.stripeCustomerId': 1 }, { sparse: true });
 workspaceSchema.index({ 'billing.stripeSubscriptionId': 1 }, { sparse: true });
 // FlowTask integration lookup
 workspaceSchema.index({ 'settings.flowtaskIntegration.enabled': 1, isActive: 1 }, { sparse: true });
+workspaceSchema.index(
+  { source: 1 },
+  { unique: true, partialFilterExpression: { source: 'flowtask', isActive: true } },
+);
 
 // Partial unique index: only enforce slug uniqueness for active workspaces.
 workspaceSchema.index({ slug: 1 }, { unique: true, partialFilterExpression: { isActive: true } });

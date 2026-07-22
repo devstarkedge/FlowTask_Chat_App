@@ -14,6 +14,10 @@
     "db:fix-raw-urls": "node scripts/fix-raw-urls.js",
     "db:fix-raw-urls:apply": "node scripts/fix-raw-urls.js --fix",
     "db:check-file": "node scripts/check-file.js",
+    "db:migrate-flowtask-project-privacy": "node scripts/migrateFlowTaskProjectPrivacy.js",
+    "db:migrate-flowtask-project-privacy:apply": "node scripts/migrateFlowTaskProjectPrivacy.js --apply",
+    "db:migrate-flowtask-sync-indexes": "node scripts/migrateFlowTaskSyncIndexes.js",
+    "db:migrate-flowtask-sync-indexes:apply": "node scripts/migrateFlowTaskSyncIndexes.js --apply",
     "debug:notify": "node scripts/send_debug_notification.js"
   },
   "dependencies": {

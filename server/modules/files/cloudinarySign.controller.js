@@ -2,6 +2,9 @@ import { v2 as cloudinary } from "cloudinary";
 import asyncHandler from "../../middleware/asyncHandler.js";
 import env from "../../config/environment.js";
 import FileAsset from "./FileAsset.model.js";
+import FileReference from "./FileReference.model.js";
+import Channel from "../channels/Channel.model.js";
+import ChannelMember from "../channels/ChannelMember.model.js";
 import {
   NotFoundError,
   ForbiddenError,
@@ -31,6 +34,43 @@ function redactDeliveryUrl(url = "") {
       .replace(/([?&](signature|api_key)=)[^&]+/g, "$1redacted")
       .substring(0, 180);
   }
+}
+
+async function assertFileAccess(asset, req) {
+  if (!req.workspaceId || asset.workspaceId?.toString() !== req.workspaceId.toString()) {
+    throw new ForbiddenError("Access denied");
+  }
+
+  if (asset.uploadedBy?.toString() === req.user._id.toString()) return;
+
+  const references = await FileReference.find({
+    workspaceId: req.workspaceId,
+    fileId: asset._id,
+  }).select('channelId').lean();
+  const channelIds = [...new Set(
+    references.map((reference) => reference.channelId?.toString()).filter(Boolean),
+  )];
+  if (channelIds.length === 0) throw new ForbiddenError("Access denied");
+
+  const channels = await Channel.find({
+    _id: { $in: channelIds },
+    workspaceId: req.workspaceId,
+    isArchived: { $ne: true },
+  }).select('type visibility flowTaskRef').lean();
+  const publicChannel = channels.some(
+    (channel) =>
+      channel.visibility === 'public' &&
+      channel.type !== 'project' &&
+      channel.flowTaskRef?.entityType !== 'board',
+  );
+  if (publicChannel) return;
+
+  const isMember = await ChannelMember.exists({
+    channelId: { $in: channels.map((channel) => channel._id) },
+    userId: req.user._id,
+    isActive: true,
+  });
+  if (!isMember) throw new ForbiddenError("Access denied");
 }
 
 function getResourceTypeFromUrl(url = "") {
@@ -194,11 +234,12 @@ export const getUploadSignature = asyncHandler(async (req, res) => {
 export const getFileDetails = asyncHandler(async (req, res) => {
   const { assetId } = req.params;
   const asset = await FileAsset.findById(assetId)
-    .select('publicId secureUrl resourceType mimeType fileSize originalName uploadedBy thumbnailUrl metadata status downloadCount forwardCount createdAt updatedAt')
+    .select('workspaceId publicId secureUrl resourceType mimeType fileSize originalName uploadedBy thumbnailUrl metadata status downloadCount forwardCount createdAt updatedAt')
     .populate('uploadedBy', 'name avatar email')
     .lean();
 
   if (!asset) throw new NotFoundError('File');
+  await assertFileAccess(asset, req);
 
   // Workspace isolation
   if (!req.workspaceId || asset.workspaceId.toString() !== req.workspaceId.toString()) {
@@ -214,6 +255,11 @@ export const getFileDetails = asyncHandler(async (req, res) => {
  */
 export const incrementDownloadCount = asyncHandler(async (req, res) => {
   const { assetId } = req.params;
+  const asset = await FileAsset.findById(assetId)
+    .select('workspaceId uploadedBy')
+    .lean();
+  if (!asset) throw new NotFoundError('File');
+  await assertFileAccess(asset, req);
   await FileAsset.findByIdAndUpdate(assetId, { $inc: { downloadCount: 1 } });
   res.json({ success: true });
 });
@@ -230,6 +276,7 @@ export const proxyFileAsset = asyncHandler(async (req, res) => {
   const asset = await FileAsset.findById(assetId).lean();
 
   if (!asset) throw new NotFoundError("File");
+  await assertFileAccess(asset, req);
 
   logger.info("File proxy: asset loaded", {
     assetId,

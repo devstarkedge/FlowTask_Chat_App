@@ -40,6 +40,12 @@ export function registerUserEventHandlers() {
 
     // Upsert ChatUser
     const chatUser = await userRepository.upsertFromFlowTask(user, wsId);
+    if (!chatUser) {
+      logger.info('FlowTask user retained as external identity until ChatApp login', {
+        flowTaskUserId: user._id,
+      });
+      return;
+    }
 
     // Add to public system channels
     const generalChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.GENERAL.slug, wsId);
@@ -101,6 +107,12 @@ export function registerUserEventHandlers() {
 
     // Upsert with latest data
     const chatUser = await userRepository.upsertFromFlowTask(user, wsId);
+    if (!chatUser) {
+      logger.info('Ignored profile update for unregistered ChatApp identity', {
+        flowTaskUserId: user._id,
+      });
+      return;
+    }
     
     logger.info('[UserEventHandler] ChatUser upserted', {
       chatUserId: chatUser._id,
@@ -226,6 +238,12 @@ export function registerUserEventHandlers() {
     // Upsert ChatUser as inactive (pending verification)
     const userData = { ...user, isActive: false };
     const chatUser = await userRepository.upsertFromFlowTask(userData, wsId);
+    if (!chatUser) {
+      logger.info('FlowTask registration did not provision a ChatApp account', {
+        flowTaskUserId: user._id,
+      });
+      return;
+    }
 
     // Notify admins only
     const adminChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ADMIN.slug, wsId);
@@ -258,6 +276,12 @@ export function registerUserEventHandlers() {
 
     // Activate user
     const chatUser = await userRepository.upsertFromFlowTask({ ...user, isActive: true }, wsId);
+    if (!chatUser) {
+      logger.info('FlowTask verification did not provision a ChatApp account', {
+        flowTaskUserId: user._id,
+      });
+      return;
+    }
 
     // Add to #general
     const generalChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.GENERAL.slug, wsId);

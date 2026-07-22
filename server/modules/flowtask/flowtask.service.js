@@ -382,6 +382,37 @@ class FlowTaskService {
    *   - sources: Map of userId → array of source labels (board, task, subtask, nano)
    */
   async getBoardDeepMembers(boardId, token) {
+    try {
+      const result = await this.get(
+        `/api/chat-integration/projects/${boardId}/participants`,
+        token,
+        { useCache: false },
+      );
+      const snapshot = result.data || result;
+      const participants = Array.isArray(snapshot.participants)
+        ? snapshot.participants
+        : [];
+
+      return {
+        memberIds: new Set(
+          participants.map((participant) => participant.flowTaskUserId).filter(Boolean),
+        ),
+        sources: new Map(
+          participants.map((participant) => [
+            participant.flowTaskUserId,
+            participant.sources || [],
+          ]),
+        ),
+        participants,
+        membershipVersion: snapshot.membershipVersion || 0,
+      };
+    } catch (error) {
+      logger.warn('Authoritative project participant fetch failed; using legacy fallback', {
+        boardId,
+        error: error.message,
+      });
+    }
+
     const memberIds = new Set();
     const sources = new Map(); // userId → ['board', 'task', ...]
 

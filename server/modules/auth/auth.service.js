@@ -202,7 +202,10 @@ class AuthService {
     }
 
     // 4. Upsert ChatUser (global identity)
-    const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser);
+    const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser, {
+      markRegistered: true,
+      createIfMissing: true,
+    });
 
     // 5. Issue Chat tokens (no workspaceId in JWT)
     const accessToken = tokenService.issueAccessToken({ id: chatUser._id.toString(), role: chatUser.role });
@@ -429,7 +432,10 @@ class AuthService {
       throw new UnauthorizedError('FlowTask account is deactivated');
     }
 
-    const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser, workspaceId);
+    const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser, {
+      markRegistered: true,
+      createIfMissing: true,
+    });
 
     logger.info('FlowTask user synced', {
       chatUserId: chatUser._id,

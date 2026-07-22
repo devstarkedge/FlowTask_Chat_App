@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuthStore } from "../stores/authStore";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import {
@@ -129,8 +129,17 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [flowtaskToken, setFlowtaskToken] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [autoLoginAttempted, setAutoLoginAttempted] = useState(false);
   const [autoLoginInProgress, setAutoLoginInProgress] = useState(false);
+  const autoLoginStartedRef = useRef(false);
+  const mountedRef = useRef(true);
+  const manualSubmitRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   /* ── Post-login redirect (handles ALL login paths: form, FlowTask SSO, already-authenticated) ── */
   useEffect(() => {
@@ -149,23 +158,25 @@ export default function LoginPage() {
 
   /* ── auto-login from FlowTask redirect ── */
   useEffect(() => {
-    if (autoLoginAttempted) return;
+    if (autoLoginStartedRef.current) return;
     const token = searchParams.get("token");
     const source = searchParams.get("source");
     if (token && source === "flowtask") {
-      setAutoLoginAttempted(true);
+      autoLoginStartedRef.current = true;
       setAutoLoginInProgress(true);
       loginFlowTask(token)
         .then(() => {
-          toast.success("Welcome from FlowTask!");
+          if (mountedRef.current) toast.success("Welcome from FlowTask!");
           // Redirect handled by the user-watch useEffect above
         })
         .catch(() => {
-          toast.error("FlowTask auto-login failed. Please try again.");
-          setAutoLoginInProgress(false);
+          if (mountedRef.current) toast.error("FlowTask auto-login failed. Please try again.");
+        })
+        .finally(() => {
+          if (mountedRef.current) setAutoLoginInProgress(false);
         });
     }
-  }, [searchParams, autoLoginAttempted, loginFlowTask]);
+  }, [searchParams, loginFlowTask]);
 
   /* ── auto-login loading screen ── */
   if (autoLoginInProgress) {
@@ -201,17 +212,21 @@ export default function LoginPage() {
 
   const handleFlowTaskLogin = async (e) => {
     e.preventDefault();
+    if (manualSubmitRef.current) return;
     clearError();
     if (!flowtaskToken.trim()) {
       toast.error("Please enter your FlowTask token");
       return;
     }
+    manualSubmitRef.current = true;
     try {
       await loginFlowTask(flowtaskToken.trim());
       toast.success("FlowTask login successful!");
       // Redirect handled by the user-watch useEffect above
     } catch {
       /* error in store */
+    } finally {
+      manualSubmitRef.current = false;
     }
   };
 

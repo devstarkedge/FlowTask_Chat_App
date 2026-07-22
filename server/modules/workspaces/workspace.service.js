@@ -23,36 +23,54 @@ class WorkspaceService {
    * @returns {Promise<object>} workspace document
    */
   async findOrCreateFlowTaskWorkspace(creatorId, workspaceName) {
-    // Check for existing FlowTask-linked workspace
-    const existing = await workspaceRepository.findFlowTaskWorkspace();
-    if (existing) {
-      // Ensure user is a member
-      const isMember = await workspaceRepository.isMember(creatorId, existing._id);
-      if (!isMember) {
-        await workspaceRepository.addMember(
+    const name = workspaceName || env.DEFAULT_WORKSPACE_NAME || 'FlowTask Workspace';
+    const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    let workspace = await workspaceRepository.findFlowTaskWorkspace();
+    let created = false;
+
+    if (!workspace) {
+      try {
+        workspace = await workspaceRepository.create({
+          name,
+          slug,
+          description: 'Auto-created workspace for FlowTask integration',
+          plan: 'enterprise',
+          source: 'flowtask',
+          owner: creatorId,
+          memberCount: 0,
+          inviteCode: crypto.randomBytes(16).toString('hex'),
+          settings: {
+            defaultChannelVisibility: 'private',
+            flowtaskIntegration: {
+              enabled: true,
+              apiUrl: env.FLOWTASK_API_URL || '',
+              webhookSecret: env.FLOWTASK_WEBHOOK_SECRET || '',
+            },
+          },
+        });
+        created = true;
+      } catch (error) {
+        if (error?.code !== 11000) throw error;
+        workspace = await workspaceRepository.findFlowTaskWorkspace()
+          || await workspaceRepository.findBySlug(slug);
+        if (!workspace) throw error;
+        logger.info('Concurrent FlowTask workspace create resolved by unique mapping', {
+          workspaceId: workspace._id,
           creatorId,
-          existing._id,
-          WORKSPACE_ROLES.MEMBER,
-        );
-        logger.info('FlowTask user auto-added to workspace', {
-          userId: creatorId,
-          workspaceId: existing._id,
         });
       }
-      return existing;
     }
 
-    // Create new workspace for FlowTask integration
-    const name = workspaceName || env.DEFAULT_WORKSPACE_NAME || 'FlowTask Workspace';
-    const workspace = await this.createWorkspace({
-      name,
-      description: 'Auto-created workspace for FlowTask integration',
-      plan: 'enterprise',
-      source: 'flowtask',
-    }, creatorId);
+    const currentMembership = await workspaceRepository.getMembership(creatorId, workspace._id);
+    await workspaceRepository.addMember(
+      creatorId,
+      workspace._id,
+      currentMembership?.role || (created ? WORKSPACE_ROLES.OWNER : WORKSPACE_ROLES.MEMBER),
+    );
 
-    // Enable FlowTask integration settings
-    await workspaceRepository.update(workspace._id, {
+    workspace = await workspaceRepository.update(workspace._id, {
+      source: 'flowtask',
+      plan: 'enterprise',
       'settings.flowtaskIntegration': {
         enabled: true,
         apiUrl: env.FLOWTASK_API_URL || '',
@@ -60,7 +78,11 @@ class WorkspaceService {
       },
     });
 
-    logger.info('FlowTask workspace auto-created', {
+    if (created) {
+      await this._createDefaultChannels(workspace._id, creatorId);
+    }
+
+    logger.info(created ? 'FlowTask workspace auto-created' : 'FlowTask workspace membership resolved', {
       workspaceId: workspace._id,
       name: workspace.name,
       creatorId,

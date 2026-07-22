@@ -105,12 +105,19 @@ processedEventSchema.statics.claimEvent = async function (deliveryId, eventName,
   }
 
   // New event — claim it
-  const doc = await this.create({
-    deliveryId,
-    eventName,
-    status: EVENT_STATUS.PROCESSING,
-    ...(workspaceId && { workspaceId }),
-  });
+  let doc;
+  try {
+    doc = await this.create({
+      deliveryId,
+      eventName,
+      status: EVENT_STATUS.PROCESSING,
+      ...(workspaceId && { workspaceId }),
+    });
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+    const concurrent = await this.findOne(filter);
+    return { status: 'duplicate', doc: concurrent };
+  }
 
   return { status: 'new', doc };
 };

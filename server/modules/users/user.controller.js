@@ -423,3 +423,33 @@ export const getThemePreferences = asyncHandler(async (req, res) => {
   
   res.json({ success: true, data: { theme: responseTheme } });
 });
+
+/**
+ * PATCH /users/:id
+ * Update user profile details.
+ */
+export const updateUser = asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+
+  // Users can only update their own profile unless they are an admin
+  if (req.user._id.toString() !== id && req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Not authorized to update this profile' });
+  }
+
+  const { name, displayName, title, email, phone } = req.body;
+  const updates = {};
+  if (name !== undefined) updates.name = name;
+  if (displayName !== undefined) updates.displayName = displayName;
+  if (title !== undefined) updates.title = title;
+  if (email !== undefined) updates.email = email.toLowerCase();
+  if (phone !== undefined) updates.phone = phone;
+
+  const updatedUser = await userRepository.update(id, updates);
+  if (!updatedUser) {
+    return res.status(404).json({ success: false, error: 'User not found' });
+  }
+
+  await broadcastPresenceUpdate(updatedUser._id, updatedUser);
+
+  res.status(200).json({ success: true, data: updatedUser });
+});

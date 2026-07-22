@@ -54,21 +54,10 @@ const ProfileScreen = ({ navigation }) => {
             <Text style={[styles.timeText, { color: colors.textPrimary }]}>{formatMessageTime(new Date())} local time</Text>
           </View>
         </View>
-        <View style={styles.actionButtons}>
-          <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.backgroundSecondary }]} activeOpacity={0.7} onPress={() => setStatusModalVisible(true)}>
-            <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>Set a Status</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.backgroundSecondary }]} activeOpacity={0.7} onPress={() => navigation.navigate('EditProfile')}>
-            <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>Edit Profile</Text>
-          </TouchableOpacity>
-        </View>
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Contact Information</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('EditContact')}>
-              <Text style={[styles.editText, { color: colors.primary }]}>Edit</Text>
-            </TouchableOpacity>
           </View>
           <View style={styles.contactRow}>
             <View style={styles.contactIconContainer}>
@@ -81,15 +70,15 @@ const ProfileScreen = ({ navigation }) => {
           </View>
         </View>
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
-        {/* Optional Logout */}
-        {/* <View style={styles.section}>
-          <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
-            <TouchableOpacity style={styles.logoutRow} onPress={logout} activeOpacity={0.7}>
-              <LogOut size={20} color={colors.error} />
-              <Text style={[styles.logoutLabel, { color: colors.error }]}>Log Out</Text>
-            </TouchableOpacity>
-          </View>
-        </View> */}
+
+        {/* Sync Indicator */}
+        <View style={styles.syncFooter}>
+          <View style={[styles.syncDot, { backgroundColor: colors.success }]} />
+          <Text style={[styles.syncText, { color: colors.textSecondary }]}>
+            Profile information is synced from FlowTask
+          </Text>
+        </View>
+
         <View style={{ height: verticalScale(40) }} />
         <StatusModal visible={statusModalVisible} onClose={() => setStatusModalVisible(false)} />
       </ScrollView>
@@ -117,6 +106,7 @@ const createStyles = (colors) =>
      
      
      
+ 
 
      
      
@@ -142,7 +132,6 @@ const createStyles = (colors) =>
     section: { paddingHorizontal: scale(16), marginBottom: verticalScale(24) },
     sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: verticalScale(16) },
     sectionTitle: { fontSize: moderateScale(18), fontWeight: "600" },
-    editText: { fontSize: moderateScale(16), fontWeight: "600" },
     contactRow: { flexDirection: "row", alignItems: "center", gap: 16 },
     contactIconContainer: { width: scale(24), alignItems: "center" },
     contactDetails: { flex: 1, gap: 4 },
@@ -151,6 +140,23 @@ const createStyles = (colors) =>
     card: { borderRadius: moderateScale(12), padding: moderateScale(16), gap: 8 },
     logoutRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: verticalScale(4) },
     logoutLabel: { fontSize: moderateScale(16), fontWeight: "600" },
+    syncFooter: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      paddingHorizontal: scale(16),
+      marginTop: verticalScale(8),
+    },
+    syncDot: {
+      width: scale(6),
+      height: verticalScale(6),
+      borderRadius: moderateScale(3),
+    },
+    syncText: {
+      fontSize: moderateScale(12),
+      fontWeight: "500",
+    },
   });
 
 export default ProfileScreen;

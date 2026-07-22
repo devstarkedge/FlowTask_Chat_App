@@ -25,6 +25,7 @@ import EditContactScreen from "../screens/Authentication/EditContactScreen";
 import EditProfileScreen from "../screens/Authentication/EditProfileScreen";
 import LoginScreen from "../screens/Authentication/LoginScreen";
 import RegisterScreen from "../screens/Authentication/RegisterScreen";
+import ForgotPasswordScreen from "../screens/Authentication/ForgotPasswordScreen";
 
 // Auth Screens
 import WorkspaceSelectorScreen from "../screens/WorkspaceSelectorScreen";
@@ -192,20 +193,9 @@ function BottomTabs({ navigation }) {
           name="SearchTab"
           component={SearchScreen}
           options={{
-            tabBarLabel: "",
-            tabBarIcon: ({ focused }) => (
-              <View
-                style={{
-                  width: scale(32),
-                  height: verticalScale(32),
-                  borderRadius: moderateScale(16),
-                  backgroundColor: focused ? colors.primary : colors.backgroundTertiary,
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <Search size={18} color={focused ? colors.textInverse : colors.textPrimary} />
-              </View>
+            tabBarLabel: t("Search"),
+            tabBarIcon: ({ color }) => (
+              <Search size={22} color={color} />
             ),
           }}
         />
@@ -242,6 +232,7 @@ export default function AppNavigation() {
           <Stack.Screen name="Landing" component={LandingScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
         </>
       ) : !activeWorkspaceId ? (
         <>

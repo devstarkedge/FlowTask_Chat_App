@@ -10,13 +10,23 @@ export const useNotificationPrefStore = create((set, get) => ({
   level: 'all', // 'all' | 'mentions' | 'nothing'
   error: null,
 
+  mutedChannels: {},
+
   fetchPreferences: async () => {
     set({ isLoading: true, error: null });
     try {
       const { data } = await notificationPrefAPI.get();
       const prefs = data.data || data;
+      const channelPrefs = prefs.channels || {};
+      const mutedMap = {};
+      Object.keys(channelPrefs).forEach((cId) => {
+        if (channelPrefs[cId]?.paused) {
+          mutedMap[cId] = true;
+        }
+      });
       set({
         preferences: prefs,
+        mutedChannels: mutedMap,
         level: prefs.level || prefs.notificationLevel || 'all',
         isPaused: !!prefs.isPaused || !!prefs.pausedUntil,
         pauseUntil: prefs.pausedUntil || null,
@@ -25,6 +35,21 @@ export const useNotificationPrefStore = create((set, get) => ({
     } catch (error) {
       logger.error('Failed to fetch notification preferences:', error);
       set({ isLoading: false, error: error.message });
+    }
+  },
+
+  toggleChannelMute: async (channelId, isMuted) => {
+    set((state) => ({
+      mutedChannels: { ...state.mutedChannels, [channelId]: isMuted },
+    }));
+    try {
+      await notificationPrefAPI.updateChannel(channelId, { paused: isMuted });
+    } catch (error) {
+      logger.error('Failed to update channel mute preferences:', error);
+      set((state) => ({
+        mutedChannels: { ...state.mutedChannels, [channelId]: !isMuted },
+      }));
+      throw error;
     }
   },
 

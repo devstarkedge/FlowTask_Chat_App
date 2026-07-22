@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useChannelStore } from '../stores/channelStore';
 import { useAuthStore } from '../stores/authStore';
-import api, { channelAPI, notificationPrefAPI, usersAPI, directoriesAPI } from '../services/api';
+import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useNotificationPrefStore } from '../stores/notificationPrefStore';
+import api, { channelAPI, notificationPrefAPI, usersAPI, directoriesAPI, workspaceAPI, categoryAPI } from '../services/api';
 import logger from '../utils/logger';
 import Toast from 'react-native-toast-message';
 
@@ -21,7 +23,9 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
   const [members, setMembers] = useState([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
   const [showMembersList, setShowMembersList] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const isMutedStore = useNotificationPrefStore((s) => !!s.mutedChannels?.[channelId]);
+  const [isMutedLocal, setIsMutedLocal] = useState(false);
+  const isMuted = isMutedStore || isMutedLocal;
   const [isMuteLoading, setIsMuteLoading] = useState(false);
 
   const [isEditingName, setIsEditingName] = useState(false);
@@ -52,7 +56,7 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
       const res = await notificationPrefAPI.get();
       const channelPrefs = res.data?.data?.channels?.[channelId];
       if (channelPrefs) {
-        setIsMuted(channelPrefs.paused || false);
+        setIsMutedLocal(channelPrefs.paused || false);
       }
     } catch (err) {
       logger.error('Failed to load notification preferences:', err);
@@ -72,22 +76,43 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
       setIsSearchingMembers(true);
       try {
         const query = memberSearchQuery.trim();
-        const params = { limit: 100 };
-        if (query) params.search = query;
-        const { data } = await directoriesAPI.getUsers(params);
-        const contacts = data.data || data;
+        const activeWorkspaceId = useWorkspaceStore.getState().activeWorkspaceId;
         
+        let rawUsers = [];
+        if (activeWorkspaceId) {
+          const params = { limit: 1000 };
+          if (query) params.search = query;
+          const { data } = await workspaceAPI.getMembers(activeWorkspaceId, params);
+          const raw = data.data?.members || data.data || [];
+          rawUsers = raw.map(m => m.user || m.userId || m);
+        } else {
+          const params = { limit: 100 };
+          if (query) params.search = query;
+          const { data } = await directoriesAPI.getUsers(params);
+          const contacts = data.data || data;
+          rawUsers = Array.isArray(contacts) ? contacts : contacts?.users || [];
+        }
+
         const existingIds = new Set(members.map(m => m._id));
         
-        const filtered = (Array.isArray(contacts) ? contacts : contacts?.users || [])
+        const filtered = rawUsers
           .map(u => ({
-            _id: u._id || u.chatUserId,
-            name: u.name,
+            _id: u._id || u.chatUserId || u.id,
+            name: u.name || u.displayName,
             email: u.email,
             avatar: u.avatar
           }))
           .filter(u => u._id && u._id !== currentUser?._id && !existingIds.has(u._id));
-        setMemberSearchResults(filtered);
+        
+        if (query) {
+          const lowerQ = query.toLowerCase();
+          setMemberSearchResults(filtered.filter(u => 
+            (u.name && u.name.toLowerCase().includes(lowerQ)) ||
+            (u.email && u.email.toLowerCase().includes(lowerQ))
+          ));
+        } else {
+          setMemberSearchResults(filtered);
+        }
       } catch (err) {
         logger.error("Failed to search members:", err);
       } finally {
@@ -95,7 +120,7 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
       }
     };
 
-    const timer = setTimeout(fetchSearchMembers, memberSearchQuery ? 350 : 50);
+    const timer = setTimeout(fetchSearchMembers, memberSearchQuery ? 250 : 50);
     return () => clearTimeout(timer);
   }, [memberSearchQuery, showAddMemberModal, members, currentUser]);
 
@@ -154,12 +179,12 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
 
   const handleToggleMute = async (val) => {
     setIsMuteLoading(true);
-    setIsMuted(val);
+    setIsMutedLocal(val);
     try {
-      await notificationPrefAPI.updateChannel(channelId, { paused: val });
+      await useNotificationPrefStore.getState().toggleChannelMute(channelId, val);
     } catch (err) {
       logger.error('Failed to update channel mute preferences:', err);
-      setIsMuted(!val);
+      setIsMutedLocal(!val);
       Alert.alert('Error', 'Failed to update notification settings.');
     } finally {
       setIsMuteLoading(false);
@@ -201,10 +226,45 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
     );
   };
 
+  const userRole = (currentUser?.role || '').toLowerCase();
+  const isSystemAdminOrManager = userRole === 'admin' || userRole === 'manager' || currentUser?.isAdmin;
+  const isChannelCreator = channel?.createdBy === currentUser?._id;
+  const isChannelAdmin = channel?.admins?.includes(currentUser?._id);
+  const canAddMember = !isOneToOneDM && (isSystemAdminOrManager || isChannelCreator || isChannelAdmin || !channel?.systemManaged);
+
+  const categories = useChannelStore((s) => s.categories) || [];
+  const fetchCategories = useChannelStore((s) => s.fetchCategories);
+  const [showMoveCategoryModal, setShowMoveCategoryModal] = useState(false);
+
+  const handleAssignCategory = async (categoryId) => {
+    try {
+      if (categoryId === null) {
+        const currentCat = categories.find(c => c.type === "custom" && c.channelIds?.includes(channelId));
+        if (currentCat) {
+          await categoryAPI.removeChannel(currentCat._id, channelId);
+        }
+      } else {
+        await categoryAPI.addBulkChannels(categoryId, [channelId]);
+      }
+      Toast.show({ type: 'success', text1: 'Channel category updated' });
+      if (fetchCategories) fetchCategories();
+      setShowMoveCategoryModal(false);
+    } catch (err) {
+      logger.error('Failed to update channel category:', err);
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to update category';
+      Toast.show({ type: 'error', text1: msg });
+    }
+  };
+
   return {
     currentUser,
     channel,
     isOneToOneDM,
+    canAddMember,
+    categories,
+    showMoveCategoryModal,
+    setShowMoveCategoryModal,
+    handleAssignCategory,
     members,
     isLoadingMembers,
     showMembersList,

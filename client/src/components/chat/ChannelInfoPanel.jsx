@@ -327,7 +327,7 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
             )}
 
             {/* Move to Category */}
-            {canEditChannel && isEnterpriseOrPro && (
+            {canEditChannel && (
               <div style={{ position: "relative", flex: 1, display: "flex" }}>
                 <button
                   onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}

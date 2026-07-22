@@ -21,6 +21,8 @@ import WorkspaceSwitcher from "../components/WorkspaceSwitcher";
 
 // Unauth Screens
 import LandingScreen from "../screens/Authentication/LandingScreen";
+import EditContactScreen from "../screens/Authentication/EditContactScreen";
+import EditProfileScreen from "../screens/Authentication/EditProfileScreen";
 import LoginScreen from "../screens/Authentication/LoginScreen";
 import RegisterScreen from "../screens/Authentication/RegisterScreen";
 
@@ -361,6 +363,16 @@ export default function AppNavigation() {
           <Stack.Screen
             name="Profile"
             component={ProfileScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="EditContact"
+            component={EditContactScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="EditProfile"
+            component={EditProfileScreen}
             options={{ headerShown: false }}
           />
           <Stack.Screen

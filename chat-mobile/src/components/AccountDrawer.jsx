@@ -51,6 +51,20 @@ import {
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
+// Helper to format expiration values into readable strings
+const formatExpiration = (exp) => {
+  if (!exp) return '';
+  if (exp === 'today') return 'Today';
+  if (exp === 'week') return 'This week';
+  if (typeof exp === 'number') {
+    if (exp === 30) return '30 mins';
+    if (exp === 60) return '1 hour';
+    if (exp === 240) return '4 hours';
+    return `${exp} mins`;
+  }
+  return '';
+};
+
 
 const AccountDrawer = ({ visible, onClose, navigation }) => {
   const { colors } = useThemeStore();
@@ -243,8 +257,8 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
                   numberOfLines={1}
                 >
                   {user?.customStatus?.text
-                    ? `${user.customStatus.emoji || '💬'} ${user.customStatus.text}`
-                    : t("What's your status?")}
+                  ? `${user.customStatus.emoji || '💬'} ${user.customStatus.text}${user.customStatus.expiration ? ` • ${formatExpiration(user.customStatus.expiration)}` : ''}`
+                  : t("What's your status?")}
                 </Text>
               </TouchableOpacity>
             </View>

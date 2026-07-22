@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,17 +11,20 @@ import {
 } from "react-native";
 import AccessibleModal from "./AccessibleModal";
 import { useThemeStore } from "../stores/themeStore";
+import { useAuthStore } from "../stores/authStore";
 import { usersAPI } from "../services/api";
-import { X, Clock } from "lucide-react-native";
+import { X, Clock, Check } from "lucide-react-native";
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import logger from '../utils/logger';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 
-const StatusModal = ({ visible, onClose }) => {
+const StatusModal = ({ visible, onClose, initialStatus }) => {
   const { colors } = useThemeStore();
-  const [statusText, setStatusText] = useState("");
-  const [selectedEmoji, setSelectedEmoji] = useState("");
+  const [statusText, setStatusText] = useState(initialStatus?.text || "");
+  const [selectedEmoji, setSelectedEmoji] = useState(initialStatus?.emoji || "");
+  const [selectedPresetIndex, setSelectedPresetIndex] = useState(null);
+  const [expiration, setExpiration] = useState(initialStatus?.expiration || 60);
 
   const statusPresets = [
     { emoji: "🟢", label: "Available", text: "Available" },
@@ -42,6 +45,17 @@ const StatusModal = ({ visible, onClose }) => {
     { label: "This week", value: "week" },
     { label: "Don't clear", value: null },
   ];
+
+  useEffect(() => {
+    if (visible && initialStatus) {
+      setStatusText(initialStatus.text || "");
+      setSelectedEmoji(initialStatus.emoji || "");
+      setExpiration(initialStatus.expiration || 60);
+      
+      const index = statusPresets.findIndex(p => p.text === initialStatus.text && p.emoji === initialStatus.emoji);
+      setSelectedPresetIndex(index !== -1 ? index : null);
+    }
+  }, [visible, initialStatus]);
 
   const handleClose = () => {
     if (Platform.OS === "web") {
@@ -92,7 +106,10 @@ const StatusModal = ({ visible, onClose }) => {
                   placeholder="What's your status?"
                   placeholderTextColor={colors.textTertiary}
                   value={statusText}
-                  onChangeText={setStatusText}
+                  onChangeText={(text) => {
+                    setStatusText(text);
+                    setSelectedPresetIndex(null);
+                  }}
                 />
               </View>
             </View>
@@ -111,15 +128,19 @@ const StatusModal = ({ visible, onClose }) => {
                   onPress={() => {
                     setSelectedEmoji(preset.emoji);
                     setStatusText(preset.text);
+                    setSelectedPresetIndex(index);
                   }}
                   activeOpacity={0.7}
                 >
                   <Text style={styles.presetEmoji}>{preset.emoji}</Text>
                   <Text
-                    style={[styles.presetLabel, { color: colors.textPrimary }]}
+                    style={[styles.presetLabel, { color: selectedPresetIndex === index ? colors.primary : colors.textPrimary }]}
                   >
                     {preset.label}
                   </Text>
+                  {selectedPresetIndex === index && (
+                    <Check size={18} color={colors.primary} style={{ marginLeft: 'auto' }} />
+                  )}
                 </TouchableOpacity>
               ))}
             </View>
@@ -135,14 +156,14 @@ const StatusModal = ({ visible, onClose }) => {
                 <TouchableOpacity
                   key={index}
                   style={styles.expirationItem}
-                  onPress={() => {}}
+                  onPress={() => setExpiration(option.value)}
                   activeOpacity={0.7}
                 >
-                  <Clock size={18} color={colors.textSecondary} />
+                  <Clock size={18} color={expiration === option.value ? colors.primary : colors.textSecondary} />
                   <Text
                     style={[
                       styles.expirationLabel,
-                      { color: colors.textPrimary },
+                      { color: expiration === option.value ? colors.primary : colors.textPrimary },
                     ]}
                   >
                     {option.label}
@@ -161,12 +182,14 @@ const StatusModal = ({ visible, onClose }) => {
                 ]}
                 onPress={async () => {
                   try {
-                    await usersAPI.setCustomStatus({ text: '', emoji: '' });
+                    await usersAPI.setCustomStatus({ text: '', emoji: '', expiration: null });
                   } catch (err) {
                     logger.error('Failed to clear status:', err);
                   }
                   setStatusText("");
                   setSelectedEmoji("");
+                  setSelectedPresetIndex(null);
+                  onClose();
                 }}
                 activeOpacity={0.7}
               >
@@ -187,6 +210,7 @@ const StatusModal = ({ visible, onClose }) => {
                     await usersAPI.setCustomStatus({
                       text: statusText,
                       emoji: selectedEmoji || '😊',
+                      expiration: expiration,
                     });
                   } catch (err) {
                     logger.error('Failed to set status:', err);

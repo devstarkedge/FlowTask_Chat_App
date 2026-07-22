@@ -105,9 +105,11 @@ export const getDMContacts = asyncHandler(async (req, res) => {
     try {
       if (!ftu._id || !ftu.email) continue;
       syncedUser = await userRepository.upsertFromFlowTask(ftu);
-      const isMember = await workspaceRepository.isMember(syncedUser._id, workspaceId);
-      if (!isMember) {
-        await workspaceRepository.addMember(syncedUser._id, workspaceId, WORKSPACE_ROLES.MEMBER);
+      if (syncedUser) {
+        const isMember = await workspaceRepository.isMember(syncedUser._id, workspaceId);
+        if (!isMember) {
+          await workspaceRepository.addMember(syncedUser._id, workspaceId, WORKSPACE_ROLES.MEMBER);
+        }
       }
     } catch (err) {
       logger.warn('Failed to sync FlowTask user into workspace during DM contacts', {

@@ -394,7 +394,11 @@ export async function initializeSocket(httpServer, corsOptions) {
 
         // Permission engine: users with VIEW_ALL_CHANNELS capability can join any channel
         const { default: permissionEngine } = await import('../services/permissionEngine.js');
-        if (permissionEngine.canViewAllChannels(user, { workspaceId: wsId })) {
+        if (
+          channel.type !== 'project' &&
+          channel.flowTaskRef?.entityType !== 'board' &&
+          permissionEngine.canViewAllChannels(user, { workspaceId: wsId })
+        ) {
           const joinRoom = buildRoomName(wsId, 'channel', channelId);
           socket.join(joinRoom);
           // Emit persisted canvas tabs for this channel to the joining socket
@@ -432,7 +436,12 @@ export async function initializeSocket(httpServer, corsOptions) {
         }
 
         // Public non-DM channels are accessible to all authenticated users
-        if (channel.visibility === 'public' && channel.type !== 'dm') {
+        if (
+          channel.visibility === 'public' &&
+          channel.type !== 'dm' &&
+          channel.type !== 'project' &&
+          channel.flowTaskRef?.entityType !== 'board'
+        ) {
           const joinRoom = buildRoomName(wsId, 'channel', channelId);
           socket.join(joinRoom);
           try {
@@ -446,7 +455,11 @@ export async function initializeSocket(httpServer, corsOptions) {
           return;
         }
         // Check membership
-        if (!channel.hasMember(user._id)) {
+        const { default: ChannelMember } = await import('../modules/channels/ChannelMember.model.js');
+        const isChannelMember = channel.hasMember(user._id)
+          ? true
+          : await ChannelMember.isMember(channelId, user._id);
+        if (!isChannelMember) {
           socket.emit('error', { message: 'Not a member of this channel' });
           return;
         }
@@ -999,6 +1012,41 @@ export async function leaveChannelRoom(userId, channelId, workspaceId) {
     logger.error('Failed to leave channel room programmatically', {
       userId,
       channelId,
+      error: error.message,
+    });
+  }
+}
+
+/**
+ * Remove every socket that is no longer an active member from a channel room.
+ * Used when a formerly-public FlowTask channel becomes private.
+ */
+export async function reconcileChannelRoomAccess(channelId, workspaceId) {
+  if (!io) return;
+  try {
+    const channelRoom = resolveScopedRoom(
+      workspaceId,
+      'channel',
+      channelId,
+      'reconcileChannelRoomAccess.channelRoom',
+    );
+    if (!channelRoom) return;
+    const { default: ChannelMember } = await import(
+      '../modules/channels/ChannelMember.model.js'
+    );
+    const allowedUserIds = new Set(await ChannelMember.getMemberIds(channelId));
+    const sockets = await io.in(channelRoom).fetchSockets();
+    for (const socket of sockets) {
+      const userId = socket.chatUser?._id?.toString();
+      if (userId && !allowedUserIds.has(userId)) {
+        socket.leave(channelRoom);
+        socket.emit(SOCKET_EVENTS.CHANNEL_REMOVED, { channelId });
+      }
+    }
+  } catch (error) {
+    logger.error('Failed to reconcile channel room access', {
+      channelId,
+      workspaceId,
       error: error.message,
     });
   }

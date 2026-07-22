@@ -117,8 +117,18 @@ export const authAPI = {
   login: (data) => api.post("/auth/login", data),
 
   // FlowTask SSO
-  loginFlowTask: (token) => api.post("/auth/login/flowtask", { token }),
+  loginFlowTask: (token, attemptId) => api.post(
+    "/auth/login/flowtask",
+    { token },
+    {
+      headers: {
+        "X-Auth-Attempt-Id": attemptId,
+        "X-Request-Id": attemptId,
+      },
+    },
+  ),
   sync: () => api.post("/auth/sync"),
+  channelSyncStatus: () => api.get("/auth/channel-sync/status"),
 
   // Token management
   refresh: (refreshToken) => api.post("/auth/refresh", { refreshToken }),

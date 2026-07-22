@@ -13,6 +13,7 @@ import {
   getMe,
   updatePreferences,
   searchUsers,
+  getFlowTaskChannelSyncStatus,
 } from './auth.controller.js';
 import { protect } from './auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
@@ -66,6 +67,7 @@ router.post('/reset-password', passwordResetLimiter, validate({ body: resetPassw
 
 // Protected routes
 router.get('/me', protect, getMe);
+router.get('/channel-sync/status', protect, resolveWorkspace, getFlowTaskChannelSyncStatus);
 router.put('/preferences', protect, resolveWorkspace, updatePreferences);
 router.post('/logout', logout);
 

@@ -68,6 +68,10 @@ class FlowTaskSyncService {
 
         // Upsert ChatUser from FlowTask data
         const chatUser = await userRepository.upsertFromFlowTask(ftUser);
+        if (!chatUser) {
+          report.skipped++;
+          continue;
+        }
 
         // Ensure workspace membership
         const isMember = await workspaceRepository.isMember(chatUser._id, workspaceId);

@@ -86,6 +86,19 @@ export async function addJob(name, data, opts = {}) {
     }
 
     // Synchronous fallback — execute immediately and propagate processor result
+    if (opts.backgroundOnly) {
+      const jobWrapper = { data, id: opts.jobId || `background-${Date.now()}` };
+      setImmediate(() => {
+        entry.processor(jobWrapper).catch((err) => {
+          logger.error(`Background fallback job failed: ${name}`, {
+            jobId: jobWrapper.id,
+            error: err.message,
+          });
+        });
+      });
+      return { queuedInBackground: true, id: jobWrapper.id };
+    }
+
     try {
       const jobWrapper = { data, id: `sync-${Date.now()}` };
       const result = await entry.processor(jobWrapper);
@@ -99,7 +112,8 @@ export async function addJob(name, data, opts = {}) {
     }
   }
 
-  return entry.queue.add(name, data, opts);
+  const { backgroundOnly: _backgroundOnly, ...queueOptions } = opts;
+  return entry.queue.add(name, data, queueOptions);
 }
 
 /**

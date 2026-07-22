@@ -162,6 +162,12 @@ const chatUserSchema = new Schema({
     select: false,
     default: null,
   },
+  // Set only after the person has completed a real ChatApp login or native
+  // registration. FlowTask directory synchronization must not set this field.
+  registeredAt: {
+    type: Date,
+    default: null,
+  },
   // ─── Identity ─────────────────────────────────────────────────────────
   name: {
     type: String,

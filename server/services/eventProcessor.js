@@ -94,6 +94,7 @@ class EventProcessor {
           totalCount: settled.length,
           step: 'handler_partial_failure',
         });
+        throw failures[0].reason || new Error('Event handler failed');
       }
 
       // 3. Mark as completed (now safe — all handlers have settled)

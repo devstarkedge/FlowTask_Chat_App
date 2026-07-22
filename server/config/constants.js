@@ -4,6 +4,18 @@
  */
 
 // ─── FlowTask Domain Events ─────────────────────────────────────────────────
+// Browser API headers that must be accepted by the CORS preflight. Keep this
+// list in sync with client/src/services/api.js request interceptors and auth.
+export const CORS_ALLOWED_HEADERS = Object.freeze([
+  'Content-Type',
+  'Authorization',
+  'X-Requested-With',
+  'X-Workspace-Id',
+  'X-FlowTask-Token',
+  'X-Auth-Attempt-Id',
+  'X-Request-Id',
+]);
+
 export const FLOWTASK_EVENTS = Object.freeze({
   PROJECT_CREATED: 'PROJECT_CREATED',
   PROJECT_UPDATED: 'PROJECT_UPDATED',
@@ -11,6 +23,7 @@ export const FLOWTASK_EVENTS = Object.freeze({
   PROJECT_MEMBER_ASSIGNED: 'PROJECT_MEMBER_ASSIGNED',
   PROJECT_MEMBER_ADDED: 'PROJECT_MEMBER_ADDED',
   PROJECT_MEMBER_REMOVED: 'PROJECT_MEMBER_REMOVED',
+  PROJECT_MEMBERSHIP_SYNCED: 'PROJECT_MEMBERSHIP_SYNCED',
   TASK_CREATED: 'TASK_CREATED',
   TASK_UPDATED: 'TASK_UPDATED',
   TASK_DELETED: 'TASK_DELETED',
@@ -253,7 +266,11 @@ export const SOCKET_EVENTS = Object.freeze({
   CHANNEL_DELETED: 'channel:deleted',
   CHANNEL_ADDED: 'channel:added',
   CHANNEL_REMOVED: 'channel:removed',
-  CHANNEL_MEMBERS_UPDATED: 'channel:members:updated',
+    CHANNEL_MEMBERS_UPDATED: 'channel:members:updated',
+    CHANNEL_LIST_INVALIDATED: 'channel:list:invalidated',
+    CHANNEL_SYNC_PROGRESS: 'channel-sync:progress',
+    CHANNEL_SYNC_COMPLETED: 'channel-sync:completed',
+    CHANNEL_SYNC_FAILED: 'channel-sync:failed',
   MEMBER_JOINED: 'member:joined',
   MEMBER_LEFT: 'member:left',
 

@@ -8,6 +8,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 
 import env from './config/environment.js';
+import { CORS_ALLOWED_HEADERS } from './config/constants.js';
 import { connectDatabase, disconnectDatabase, isDatabaseConnected, getDatabaseHealth, stopHealthCheck } from './config/database.js';
 import logger from './utils/logger.js';
 import { errorHandler, NotFoundError } from './middleware/errorHandler.js';
@@ -45,6 +46,7 @@ import webhookRetryService from './services/webhookRetry.service.js';
 import cache from './services/cache.service.js';
 import canvasRoutes from './modules/canvas/canvas.routes.js';
 import { startCanvasCollaborationServer, stopCanvasCollaborationServer } from './modules/canvas/canvasCollaboration.server.js';
+import projectChannelSyncService from './modules/flowtask/projectChannelSync.service.js';
 
 // ─── Express App ─────────────────────────────────────────────────────────────
 const app = express();
@@ -98,7 +100,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Workspace-Id', 'X-FlowTask-Token'],
+  allowedHeaders: CORS_ALLOWED_HEADERS,
   exposedHeaders: ['X-Total-Count', 'X-Page', 'X-Has-More'],
   maxAge: 86400,
 };
@@ -327,6 +329,9 @@ async function startServer() {
 
     // 3. Initialize Socket.IO
     await initializeSocket(httpServer, corsOptions);
+    if (env.FLOWTASK_ENABLED) {
+      projectChannelSyncService.startRecovery();
+    }
 
     // 3b. Start Canvas CRDT collaboration server
     await startCanvasCollaborationServer();
@@ -403,6 +408,7 @@ async function startServer() {
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 async function shutdown(signal) {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
+  projectChannelSyncService.stopRecovery();
 
   // 1. Stop memory monitor
   if (memoryMonitorTimer) {
@@ -425,7 +431,16 @@ async function shutdown(signal) {
     // Socket may not be initialized
   }
 
-  // 2b. Close global Redis clients using the unified manager
+  // 2b. Stop queue workers before closing the Redis connections they use.
+  try {
+    const { shutdownQueues } = await import('./services/jobQueue.service.js');
+    await shutdownQueues();
+    logger.info('Job queues closed');
+  } catch (err) {
+    logger.error('Error closing job queues', { error: err.message });
+  }
+
+  // 2c. Close global Redis clients using the unified manager
   try {
     const { default: redisManager } = await import('./config/redisManager.js');
     await redisManager.closeAll();
@@ -466,14 +481,6 @@ async function shutdown(signal) {
   // 5. Stop accepting new connections, wait for in-flight to drain
   httpServer.close(async () => {
     logger.info('HTTP server closed');
-
-    try {
-      const { shutdownQueues } = await import('./services/jobQueue.service.js');
-      await shutdownQueues();
-      logger.info('Job queues closed');
-    } catch (err) {
-      logger.error('Error closing job queues', { error: err.message });
-    }
 
     try {
       await disconnectDatabase();

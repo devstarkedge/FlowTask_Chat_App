@@ -59,6 +59,7 @@ export const getChannelBySlug = asyncHandler(async (req, res) => {
   const channel = await channelService.getChannelBySlug(
     req.params.slug,
     req.workspaceId,
+    req.user._id,
   );
 
   res.json({

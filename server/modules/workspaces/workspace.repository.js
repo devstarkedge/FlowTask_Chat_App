@@ -88,9 +88,12 @@ class WorkspaceRepository {
   // ─── Search & List ───────────────────────────────────────────────────
   async findFlowTaskWorkspace() {
     return Workspace.findOne({
-      'settings.flowtaskIntegration.enabled': true,
+      $or: [
+        { source: 'flowtask' },
+        { 'settings.flowtaskIntegration.enabled': true },
+      ],
       isActive: true,
-    }).lean();
+    });
   }
   async searchWorkspaces(query, limit = 20) {
     return Workspace.find({

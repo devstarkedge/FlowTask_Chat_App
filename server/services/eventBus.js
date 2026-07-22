@@ -57,6 +57,7 @@ class EventBus extends EventEmitter {
           error,
           payload,
         });
+        throw error;
       }
     };
 
@@ -168,6 +169,18 @@ try {
 
     // Dispatch locally and capture settlement results
     const result = await eventBus._dispatchLocal(eventName, payload);
+    const failures = result.settled.filter((entry) => entry.status === 'rejected');
+    if (failures.length > 0) {
+      const error = failures[0].reason || new Error('Event handler failed');
+      if (payload?.deliveryId) {
+        await ProcessedEvent.markFailed(
+          payload.deliveryId,
+          error,
+          payload?._workspaceId || payload?.workspaceId,
+        );
+      }
+      throw error;
+    }
 
     // If this job came from a webhook with a deliveryId, mark the processed event completed
     const deliveryId = payload?.deliveryId;

@@ -43,6 +43,7 @@ class DirectoriesService {
           try {
             if (!ftu._id || !ftu.email) continue;
             const synced = await userRepository.upsertFromFlowTask(ftu);
+            if (!synced) continue;
             const isMember = await workspaceRepository.isMember(synced._id, workspaceId);
             if (!isMember) {
               await workspaceRepository.addMember(synced._id, workspaceId, 'member');

@@ -11,7 +11,7 @@ import {
   Text,
   Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../../components/common/ScreenContainer';
 import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
 import { useCanvasStore } from '../../stores/canvasStore';
@@ -213,7 +213,7 @@ export default function CanvasEditorScreen({ route, navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ScreenContainer style={styles.container}>
       <CanvasHeader
         title={activeCanvas?.title || ''}
         presence={presence}
@@ -228,11 +228,7 @@ export default function CanvasEditorScreen({ route, navigation }) {
         onOptionsPress={() => setShareVisible(true)}
       />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardContainer}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
+      <View style={styles.keyboardContainer}>
         <View style={styles.editorWrapper}>
           {isLoading && !activeCanvas && (
             <View style={styles.loadingOverlay}>
@@ -283,7 +279,7 @@ export default function CanvasEditorScreen({ route, navigation }) {
           onCommand={sendEditorCommand}
           onInsertPress={() => setInsertVisible(true)}
         />
-      </KeyboardAvoidingView>
+      </View>
 
       <CanvasInsertSheet
         visible={insertVisible}
@@ -312,7 +308,7 @@ export default function CanvasEditorScreen({ route, navigation }) {
         onClose={() => setShareVisible(false)}
         canvasId={canvasId}
       />
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

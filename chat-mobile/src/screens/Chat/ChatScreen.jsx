@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+import useResponsive from '../../hooks/useResponsive';
 import { useWindowDimensions } from 'react-native';
 
 import {
@@ -9,7 +10,6 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Keyboard,
   Platform,
   ActivityIndicator,
@@ -29,6 +29,7 @@ import { useLaterStore } from "../../stores/laterStore";
 import { laterAPI, pinsAPI, messageAPI, threadAPI, channelAPI } from "../../services/api";
 import { emitTyping } from "../../services/socket";
 import { AppAvatar, AppScreen, HeaderBackButton, MobileFileCard } from "../../components/common";
+import ScreenContainer from "../../components/common/ScreenContainer";
 import RichText from "../../components/RichText";
 import ReactionBar from "../../components/ReactionBar";
 import MediaPickerSheet from "../../components/MediaPickerSheet";
@@ -63,6 +64,7 @@ import {
   Copy,
   ExternalLink,
 } from "lucide-react-native";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SearchBar from "../../components/SearchBar";
 import MessageComposer from "../../components/MessageComposer";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
@@ -142,9 +144,15 @@ import GifRenderer from '../../components/GifRenderer';
 
 const ChatScreen = ({ route, navigation }) => {
   const { channelId, channelName, initialTab, canvasId: deepLinkCanvasId, messageId: targetMessageId } = route.params || {};
+  const { isTablet, isDesktop, width } = useResponsive();
+  const maxBubbleWidth = isTablet || isDesktop || width > 600 ? 580 : '85%';
 
-  const KeyboardContainer = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
-  const keyboardProps = Platform.OS === 'ios' ? { behavior: 'padding', keyboardVerticalOffset: 0 } : {};
+  const insets = useSafeAreaInsets();
+  const [headerHeight, setHeaderHeight] = useState(56);
+  const KeyboardContainer = ScreenContainer;
+  const keyboardProps = Platform.OS === 'ios' 
+    ? { behavior: 'padding', keyboardVerticalOffset: insets.top + headerHeight } 
+    : { behavior: undefined };
 
   // Granular store subscriptions — prevent unnecessary re-renders
   const messages = useChatStore(useShallow((s) => s.messagesByChannel[channelId] || []));
@@ -655,7 +663,7 @@ const ChatScreen = ({ route, navigation }) => {
             )}
 
             {/* Message bubble */}
-            <View style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: "100%" }}>
+            <View style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: maxBubbleWidth }}>
               <View
               style={[
                 styles.bubble,
@@ -889,7 +897,10 @@ const ChatScreen = ({ route, navigation }) => {
     > 
 
       {/* Custom Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <View
+        style={[styles.header, { borderBottomColor: colors.border }]}
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+      >
         <HeaderBackButton onPress={() => navigation.goBack()} />
 
         <TouchableOpacity 

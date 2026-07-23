@@ -346,6 +346,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
       <StatusModal
         visible={statusModalVisible}
         onClose={() => setStatusModalVisible(false)}
+        initialStatus={user?.customStatus}
       />
       <PauseNotificationsModal
         visible={pauseNotificationsVisible}

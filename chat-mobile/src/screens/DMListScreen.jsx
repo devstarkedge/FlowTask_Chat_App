@@ -266,6 +266,10 @@ const DMListScreen = ({ navigation }) => {
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={12}
+        maxToRenderPerBatch={10}
+        windowSize={11}
+        removeClippedSubviews={Platform.OS !== 'web'}
         contentContainerStyle={{ paddingTop: verticalScale(4), paddingBottom: verticalScale(80) }}
         ListEmptyComponent={
           <View style={styles.empty}>

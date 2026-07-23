@@ -26,12 +26,11 @@ import {
 import WorkspaceAvatar from "./WorkspaceAvatar";
 import AddWorkspaceScreen from "./workspace/AddWorkspaceScreen";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
-
-
-const { width } = Dimensions.get("window");
-const SIDEBAR_WIDTH = Math.min(width * 0.82, 320);
+import useResponsive from '../hooks/useResponsive';
 
 const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
+  const { width } = useResponsive();
+  const SIDEBAR_WIDTH = Math.min(width * 0.82, 360);
   const insets = useSafeAreaInsets();
   const {
     workspaces,
@@ -57,7 +56,7 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
       duration: 220,
       useNativeDriver: Platform.OS !== "web",
     }).start();
-  }, [visible]);
+  }, [visible, SIDEBAR_WIDTH]);
 
   const handleInvite = (ws) => {
     const code = ws?.inviteCode || ws?.code || 'WS123';

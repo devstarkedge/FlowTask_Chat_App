@@ -23,6 +23,7 @@ import CreateChannelModal from "./CreateChannelModal";
 import ManageCategoryChannelsModal from "./ManageCategoryChannelsModal";
 import CategoryActionSheet from "./CategoryActionSheet";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import useResponsive from '../hooks/useResponsive';
 
 import {
   Hash,
@@ -34,9 +35,6 @@ import {
   X,
   MoreVertical,
 } from "lucide-react-native";
-
-const { width } = Dimensions.get("window");
-const DRAWER_WIDTH = Math.min(width * 0.8, 320);
 
 // ─── Section Header ─────────────────────────────────────────────────────────
 
@@ -293,6 +291,8 @@ const navItem = StyleSheet.create({
 // ─── Main Drawer (slides from RIGHT) ────────────────────────────────────────
 
 const DrawerNavigation = ({ navigation }) => {
+  const { width } = useResponsive();
+  const DRAWER_WIDTH = Math.min(width * 0.8, 360);
   const insets = useSafeAreaInsets();
   const { isDrawerOpen, closeDrawer } = useUIStore();
   const { activeWorkspace } = useWorkspaceStore();
@@ -319,7 +319,7 @@ const DrawerNavigation = ({ navigation }) => {
       duration: 220,
       useNativeDriver: Platform.OS !== "web",
     }).start();
-  }, [isDrawerOpen]);
+  }, [isDrawerOpen, DRAWER_WIDTH]);
 
   const { starredChannels, regularChannels, dmChannels } = useMemo(() => {
     const starred = channels.filter((c) => starredIds.includes(c._id));
@@ -379,6 +379,7 @@ const DrawerNavigation = ({ navigation }) => {
         style={[
           styles.drawer,
           {
+            width: DRAWER_WIDTH,
             backgroundColor: colors.primary,
             transform: [{ translateX: slideAnim }],
             paddingTop: insets.top,
@@ -576,7 +577,6 @@ const styles = StyleSheet.create({
     right: scale(0),
     top: verticalScale(0),
     bottom: verticalScale(0),
-    width: DRAWER_WIDTH,
   },
   topRow: {
     flexDirection: "row",

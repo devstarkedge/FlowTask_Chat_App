@@ -64,6 +64,7 @@ import CanvasEditorScreen from "../screens/Canvas/CanvasEditorScreen";
 import WorkspaceSettingsScreen from "../screens/workspace/WorkspaceSettingsScreen";
 import StarredMessagesScreen from "../screens/StarredMessagesScreen";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import useResponsive from '../hooks/useResponsive';
 
 
 
@@ -120,6 +121,8 @@ function BottomTabs({ navigation }) {
   const insets = useSafeAreaInsets();
   const unreadCount = useNotificationStore((s) => s.unreadCount) || 0;
   const { t } = useTranslation();
+  const { isTablet, isDesktop } = useResponsive();
+  const isWide = isTablet || isDesktop;
 
   return (
     <>
@@ -133,10 +136,10 @@ function BottomTabs({ navigation }) {
             borderTopColor: colors.border,
             paddingBottom: insets.bottom > 0 ? insets.bottom : verticalScale(6),
             paddingTop: verticalScale(4),
-            height: 50 + (insets.bottom > 0 ? insets.bottom : 6),
+            height: (isWide ? 58 : 50) + (insets.bottom > 0 ? insets.bottom : 6),
           },
           tabBarLabelStyle: {
-            fontSize: moderateScale(10),
+            fontSize: moderateScale(isWide ? 12 : 10),
             fontWeight: "600",
             marginTop: verticalScale(1),
           },

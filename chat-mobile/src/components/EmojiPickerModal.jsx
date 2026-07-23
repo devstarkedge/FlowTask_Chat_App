@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { applySkinTone } from '../utils/emojiUtils';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import useResponsive from '../hooks/useResponsive';
 
 
 // Comprehensive categorized emoji dataset matching emoji-picker-react categories
@@ -106,6 +107,9 @@ const EmojiItem = React.memo(({ emoji, onPress, skinTone }) => {
 });
 
 export default function EmojiPickerModal({ visible, onClose, onSelect, colors }) {
+  const { isTablet, isDesktop, width } = useResponsive();
+  const isWide = isTablet || isDesktop || width > 640;
+  const numColumns = isWide ? 10 : 8;
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('smileys_people');
   const [recentEmojis, setRecentEmojis] = useState(POPULAR_DEFAULT);
@@ -182,10 +186,14 @@ export default function EmojiPickerModal({ visible, onClose, onSelect, colors })
       >
         <TouchableOpacity
           activeOpacity={1}
-          style={[styles.container, {
-            backgroundColor: colors.background,
-            borderColor: colors.border,
-          }]}
+          style={[
+            styles.container,
+            {
+              backgroundColor: colors.background,
+              borderColor: colors.border,
+            },
+            isWide && styles.wideContainer,
+          ]}
           onPress={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -252,8 +260,9 @@ export default function EmojiPickerModal({ visible, onClose, onSelect, colors })
           {/* Emojis Grid */}
           <View style={styles.gridContainer}>
             <FlatList
+              key={numColumns}
               data={searchQuery.trim() ? filteredEmojis : activeCategoryData}
-              numColumns={8}
+              numColumns={numColumns}
               keyExtractor={(item, index) => `${item}-${index}`}
               renderItem={renderCategoryItem}
               contentContainerStyle={styles.grid}
@@ -291,6 +300,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 5,
+  },
+  wideContainer: {
+    maxWidth: 560,
+    height: 480,
   },
   header: {
     flexDirection: 'row',

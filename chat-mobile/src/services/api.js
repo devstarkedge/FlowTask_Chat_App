@@ -194,6 +194,7 @@ export const authAPI = {
   me: () => api.get('/auth/me'),
   logout: (refreshToken) => api.post('/auth/logout', { refreshToken }),
   refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken }),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
 };
 
 // Workspace API

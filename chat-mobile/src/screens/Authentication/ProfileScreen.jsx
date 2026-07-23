@@ -80,7 +80,11 @@ const ProfileScreen = ({ navigation }) => {
         </View>
 
         <View style={{ height: verticalScale(40) }} />
-        <StatusModal visible={statusModalVisible} onClose={() => setStatusModalVisible(false)} />
+        <StatusModal
+          visible={statusModalVisible}
+          onClose={() => setStatusModalVisible(false)}
+          initialStatus={user?.customStatus}
+        />
       </ScrollView>
     </SafeAreaView>
   );

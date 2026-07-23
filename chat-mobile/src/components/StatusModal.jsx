@@ -28,13 +28,13 @@ const StatusModal = ({ visible, onClose, initialStatus }) => {
 
   const statusPresets = [
     { emoji: "🟢", label: "Available", text: "Available" },
-    { emoji: "🌴", label: "On Leave", text: "On vacation" },
-    { emoji: "📞", label: "In Meeting", text: "In a meeting" },
-    { emoji: "🏠", label: "Working Remote", text: "Working from home" },
+    { emoji: "🌴", label: "On Leave", text: "On Leave" },
+    { emoji: "📞", label: "In Meeting", text: "In Meeting" },
+    { emoji: "🏠", label: "Working Remote", text: "Working Remote" },
     { emoji: "🎧", label: "Focusing", text: "Focusing" },
-    { emoji: "☕", label: "On Break", text: "Taking a break" },
+    { emoji: "☕", label: "On Break", text: "On Break" },
     { emoji: "🚀", label: "Busy", text: "Busy" },
-    { emoji: "🤒", label: "Sick", text: "Out sick" },
+    { emoji: "🤒", label: "Sick", text: "Sick" },
   ];
 
   const expirationOptions = [
@@ -47,13 +47,26 @@ const StatusModal = ({ visible, onClose, initialStatus }) => {
   ];
 
   useEffect(() => {
-    if (visible && initialStatus) {
-      setStatusText(initialStatus.text || "");
-      setSelectedEmoji(initialStatus.emoji || "");
-      setExpiration(initialStatus.expiration || 60);
+    if (visible) {
+      const textVal = initialStatus?.text || "";
+      const emojiVal = initialStatus?.emoji || "";
+      const expVal = initialStatus?.expiration !== undefined ? initialStatus.expiration : 60;
       
-      const index = statusPresets.findIndex(p => p.text === initialStatus.text && p.emoji === initialStatus.emoji);
-      setSelectedPresetIndex(index !== -1 ? index : null);
+      setStatusText(textVal);
+      setSelectedEmoji(emojiVal);
+      setExpiration(expVal);
+
+      if (textVal) {
+        const index = statusPresets.findIndex(
+          (p) =>
+            (p.label.toLowerCase() === textVal.toLowerCase() ||
+              p.text.toLowerCase() === textVal.toLowerCase()) &&
+            (p.emoji === emojiVal || !emojiVal)
+        );
+        setSelectedPresetIndex(index !== -1 ? index : null);
+      } else {
+        setSelectedPresetIndex(null);
+      }
     }
   }, [visible, initialStatus]);
 
@@ -61,6 +74,52 @@ const StatusModal = ({ visible, onClose, initialStatus }) => {
     if (Platform.OS === "web") {
       document.activeElement?.blur();
     }
+    onClose();
+  };
+
+  const handleSave = async () => {
+    try {
+      const statusObj = {
+        text: statusText.trim(),
+        emoji: selectedEmoji || '💬',
+        expiration: expiration,
+      };
+      await usersAPI.setCustomStatus(statusObj);
+
+      // Update local auth store so user state updates immediately across components
+      const authState = useAuthStore.getState();
+      if (authState.user) {
+        authState.setUser({
+          ...authState.user,
+          customStatus: statusObj.text ? statusObj : null,
+        });
+      }
+    } catch (err) {
+      logger.error('Failed to set status:', err);
+    }
+    if (Platform.OS === "web") {
+      document.activeElement?.blur();
+    }
+    onClose();
+  };
+
+  const handleClear = async () => {
+    try {
+      await usersAPI.setCustomStatus({ text: '', emoji: '', expiration: null });
+
+      const authState = useAuthStore.getState();
+      if (authState.user) {
+        authState.setUser({
+          ...authState.user,
+          customStatus: null,
+        });
+      }
+    } catch (err) {
+      logger.error('Failed to clear status:', err);
+    }
+    setStatusText("");
+    setSelectedEmoji("");
+    setSelectedPresetIndex(null);
     onClose();
   };
 
@@ -127,7 +186,7 @@ const StatusModal = ({ visible, onClose, initialStatus }) => {
                   style={styles.presetItem}
                   onPress={() => {
                     setSelectedEmoji(preset.emoji);
-                    setStatusText(preset.text);
+                    setStatusText(preset.label);
                     setSelectedPresetIndex(index);
                   }}
                   activeOpacity={0.7}
@@ -180,17 +239,7 @@ const StatusModal = ({ visible, onClose, initialStatus }) => {
                   styles.clearButton,
                   { backgroundColor: colors.backgroundSecondary },
                 ]}
-                onPress={async () => {
-                  try {
-                    await usersAPI.setCustomStatus({ text: '', emoji: '', expiration: null });
-                  } catch (err) {
-                    logger.error('Failed to clear status:', err);
-                  }
-                  setStatusText("");
-                  setSelectedEmoji("");
-                  setSelectedPresetIndex(null);
-                  onClose();
-                }}
+                onPress={handleClear}
                 activeOpacity={0.7}
               >
                 <Text
@@ -205,21 +254,7 @@ const StatusModal = ({ visible, onClose, initialStatus }) => {
                   styles.saveButton,
                   { backgroundColor: colors.primary },
                 ]}
-                onPress={async () => {
-                  try {
-                    await usersAPI.setCustomStatus({
-                      text: statusText,
-                      emoji: selectedEmoji || '😊',
-                      expiration: expiration,
-                    });
-                  } catch (err) {
-                    logger.error('Failed to set status:', err);
-                  }
-                  if (Platform.OS === "web") {
-                    document.activeElement?.blur();
-                  }
-                  onClose();
-                }}
+                onPress={handleSave}
                 activeOpacity={0.7}
               >
                 <Text

@@ -27,6 +27,7 @@ import { usePreferencesStore } from '../stores/preferencesStore';
 import { useStarredStore } from '../stores/useStarredStore';
 import { applySkinTone } from '../utils/emojiUtils';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import useResponsive from '../hooks/useResponsive';
 
 
 const QUICK_EMOJIS = ['🎉', '👍', '😂', '🙂', '✅'];
@@ -91,6 +92,8 @@ const MessageActionSheet = ({
   onToggleNotifications,
   onPin,
 }) => {
+  const { isTablet, isDesktop, width } = useResponsive();
+  const isWide = isTablet || isDesktop || width > 640;
   const { emojiSkinTone } = usePreferencesStore();
   const { toggleFavorite, isFavorited } = useStarredStore();
   if (!message) return null;
@@ -134,11 +137,18 @@ const MessageActionSheet = ({
       onRequestClose={onClose}
     >
       <TouchableOpacity
-        style={styles.overlay}
+        style={[styles.overlay, isWide && styles.wideOverlay]}
         activeOpacity={1}
         onPress={onClose}
       >
-        <View style={[styles.sheetContainer, { backgroundColor: colors.background }]}>
+        <TouchableOpacity
+          activeOpacity={1}
+          style={[
+            styles.sheetContainer,
+            { backgroundColor: colors.background },
+            isWide && styles.wideSheetContainer,
+          ]}
+        >
           {/* Drag indicator */}
           <View style={styles.indicatorContainer}>
             <View style={[styles.indicator, { backgroundColor: colors.border }]} />
@@ -275,7 +285,7 @@ const MessageActionSheet = ({
 
             <View style={{ height: verticalScale(24) }} />
           </ScrollView>
-        </View>
+        </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
   );
@@ -287,12 +297,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
+  wideOverlay: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: scale(20),
+  },
   sheetContainer: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: scale(16),
     paddingTop: verticalScale(8),
     maxHeight: '90%',
+  },
+  wideSheetContainer: {
+    width: '100%',
+    maxWidth: 540,
+    borderRadius: 20,
+    maxHeight: '85%',
   },
   indicatorContainer: {
     alignItems: 'center',

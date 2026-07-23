@@ -808,16 +808,15 @@ const MessageComposer = React.memo(function MessageComposer({
         </View>
       )}
 
-      {/* Mention Dropdown */}
-      {mentionVisible && members.length > 0 && (
-        <MentionDropdown
-          members={members}
-          query={mentionQuery}
-          onSelect={handleMentionSelect}
-          onClose={() => setMentionVisible(false)}
-          colors={colors}
-        />
-      )}
+      {/* Mention Popup Modal */}
+      <MentionDropdown
+        visible={mentionVisible}
+        members={members}
+        query={mentionQuery}
+        onSelect={handleMentionSelect}
+        onClose={() => setMentionVisible(false)}
+        colors={colors}
+      />
 
       {/* Formatting Toolbar */}
       {showToolbar && (

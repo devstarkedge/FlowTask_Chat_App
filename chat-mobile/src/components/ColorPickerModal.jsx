@@ -11,6 +11,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { useThemeStore } from "../stores/themeStore";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import useResponsive from '../hooks/useResponsive';
 
 
 /* ── HSV ↔ RGB helpers ── */
@@ -70,9 +71,7 @@ const hexToRgb = (hex) => {
   return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
 };
 
-/* ── Layout ── */
-const { width: SCREEN_W } = Dimensions.get("window");
-const PANEL_SIZE = Math.min(SCREEN_W - 64, 300);
+/* ── Layout constants ── */
 const HUE_H = 22;
 
 const ColorPickerModal = ({
@@ -82,6 +81,8 @@ const ColorPickerModal = ({
   initialHex,
   onPreview,
 }) => {
+  const { width } = useResponsive();
+  const PANEL_SIZE = Math.min(width - 64, 320);
   const { colors } = useThemeStore();
   const initRgb = hexToRgb(initialHex);
   const initHsv = rgbToHsv(initRgb.r, initRgb.g, initRgb.b);

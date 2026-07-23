@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
 import AppNavigator from "./src/navigation/AppNavigation";
 import { useAuthStore } from "./src/stores/authStore";
 import { useThemeStore } from "./src/stores/themeStore";
@@ -28,6 +29,8 @@ export default function App() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
   const themeSubscriptionRef = useRef(null);
+
+
 
   // Initialize auth FIRST (primes token cache), then theme
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import axios from 'axios';
 import storage from './storage';
 import { secureGet, secureSet, secureMultiRemove } from '../utils/secureStorage';
@@ -68,6 +69,47 @@ api.interceptors.request.use((config) => {
   }
   if (cachedFlowtaskToken) {
     config.headers['X-FlowTask-Token'] = cachedFlowtaskToken;
+  }
+
+  // ── FormData detection ───────────────────────────────────────────────────
+  // React Native’s native XHR auto‑generates the multipart boundary.
+  // In React Native (Hermes / Android), config.data is a polyfilled FormData
+  // where (config.data instanceof FormData) may evaluate to false. We check _parts
+  // to ensure Content-Type is always deleted so RN's XHR module sets boundary.
+  const isFormData =
+    config.data &&
+    (config.data instanceof FormData ||
+      Object.prototype.toString.call(config.data) === '[object FormData]' ||
+      typeof config.data._parts !== 'undefined');
+
+  if (isFormData) {
+    if (config.headers) {
+      if (typeof config.headers.delete === 'function') {
+        config.headers.delete('Content-Type');
+        config.headers.delete('content-type');
+      } else {
+        delete config.headers['Content-Type'];
+        delete config.headers['content-type'];
+      }
+      if (config.headers.common) {
+        if (typeof config.headers.common.delete === 'function') {
+          config.headers.common.delete('Content-Type');
+          config.headers.common.delete('content-type');
+        } else {
+          delete config.headers.common['Content-Type'];
+          delete config.headers.common['content-type'];
+        }
+      }
+      if (config.headers.post) {
+        if (typeof config.headers.post.delete === 'function') {
+          config.headers.post.delete('Content-Type');
+          config.headers.post.delete('content-type');
+        } else {
+          delete config.headers.post['Content-Type'];
+          delete config.headers.post['content-type'];
+        }
+      }
+    }
   }
   return config;
 });
@@ -325,14 +367,68 @@ export const fileAPI = {
   listWorkspace: (params) => api.get('/messages/files', { params }),
   listByChannel: (channelId, params) => api.get(`/channels/${channelId}/files`, { params }),
   deleteFromChannel: (channelId, fileId) => api.delete(`/channels/${channelId}/files/${fileId}`),
-  uploadFiles: (channelId, formData, onProgress, isSync = false) =>
-    api.post(`/channels/${channelId}/upload${isSync ? '?sync=true' : ''}`, formData, {
-      timeout: 60000,
-      onUploadProgress: onProgress,
+  uploadFiles: async (channelId, formData, onProgress, isSync = false) => {
+    const uploadUrl = `${BASE_URL}/channels/${channelId}/upload${isSync ? '?sync=true' : ''}`;
+    
+    // On native platforms (especially Android), use Expo FileSystem.uploadAsync for OkHttp native multipart upload
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      try {
+        const FileSystem = require('expo-file-system/legacy');
+        const parts = formData?._parts || [];
+        const fileParts = parts.filter(([_, val]) => val && typeof val === 'object' && val.uri);
+        
+        if (fileParts.length > 0) {
+          const uploadHeaders = {
+            ...(cachedToken ? { Authorization: `Bearer ${cachedToken}` } : {}),
+            ...(cachedWorkspaceId ? { 'X-Workspace-Id': cachedWorkspaceId } : {}),
+          };
+
+          const uploadedFiles = [];
+          for (const [fieldName, fileObj] of fileParts) {
+            let fileUri = fileObj.uri;
+            if (Platform.OS === 'android' && !fileUri.startsWith('file://') && !fileUri.startsWith('content://')) {
+              fileUri = `file://${fileUri}`;
+            }
+
+            const response = await FileSystem.uploadAsync(uploadUrl, fileUri, {
+              fieldName: fieldName || 'files',
+              httpMethod: 'POST',
+              uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+              headers: uploadHeaders,
+              mimeType: fileObj.type || 'image/jpeg',
+            });
+
+            if (response.status >= 200 && response.status < 300) {
+              const resJson = JSON.parse(response.body);
+              const files = resJson.data?.files || resJson.files || resJson.data || [];
+              if (Array.isArray(files)) {
+                uploadedFiles.push(...files);
+              } else if (files && typeof files === 'object') {
+                uploadedFiles.push(files);
+              }
+            } else {
+              logger.warn('[fileAPI] uploadAsync non-200 status:', response.status, response.body);
+            }
+          }
+
+          if (uploadedFiles.length > 0) {
+            return { data: { success: true, data: { files: uploadedFiles } } };
+          }
+        }
+      } catch (nativeUploadErr) {
+        logger.warn('[fileAPI] Native uploadAsync fallback to axios:', nativeUploadErr?.message);
+      }
+    }
+
+    // Standard Axios fallback
+    return api.post(uploadUrl, formData, {
+      timeout: 120000,
       headers: {
-        'Accept': 'application/json',
+        'Content-Type': undefined,
       },
-    }),
+      onUploadProgress: onProgress,
+    });
+  },
 };
 
 // Users API — presence and custom status

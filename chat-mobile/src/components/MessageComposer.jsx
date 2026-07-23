@@ -250,6 +250,7 @@ const MessageComposer = React.memo(function MessageComposer({
 
   const dragStartY = useRef(0);
   const animatedHeight = useRef(new Animated.Value(verticalScale(60))).current;
+  const animatedKeyboardOffset = useRef(new Animated.Value(0)).current;
   const isAnimating = useRef(false);
 
   const collapseComposer = useCallback((dismissKeyboard = false) => {
@@ -356,27 +357,56 @@ const MessageComposer = React.memo(function MessageComposer({
   }, [isExpanded, isDragging]);
 
   useEffect(() => {
-    const showSub = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      (e) => {
+    const handleKeyboardShow = (e) => {
+      const height = e?.endCoordinates?.height || 0;
+      if (height > 0) {
         setKeyboardVisible(true);
-        if (e && e.endCoordinates) {
-          setKeyboardHeight(e.endCoordinates.height);
+        setKeyboardHeight(height);
+        if (Platform.OS === 'android') {
+          Animated.timing(animatedKeyboardOffset, {
+            toValue: height,
+            duration: 180,
+            useNativeDriver: false,
+          }).start();
         }
-      },
+      }
+    };
+
+    const handleKeyboardHide = (e) => {
+      setKeyboardVisible(false);
+      setKeyboardHeight(0);
+      if (Platform.OS === 'android') {
+        Animated.timing(animatedKeyboardOffset, {
+          toValue: 0,
+          duration: 150,
+          useNativeDriver: false,
+        }).start();
+      }
+    };
+
+    const showSub1 = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      handleKeyboardShow
     );
-    const hideSub = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      () => {
-        setKeyboardVisible(false);
-        setKeyboardHeight(0);
+    const showSub2 = Keyboard.addListener(
+      'keyboardDidChangeFrame',
+      (e) => {
+        if (e && e.endCoordinates && e.endCoordinates.height > 0) {
+          handleKeyboardShow(e);
+        }
       }
     );
+    const hideSub1 = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      handleKeyboardHide
+    );
+
     return () => {
-      showSub.remove();
-      hideSub.remove();
+      showSub1.remove();
+      showSub2.remove();
+      hideSub1.remove();
     };
-  }, [collapseComposer]);
+  }, [animatedKeyboardOffset]);
 
   // Keep composer size in sync with visible height adjustments when keyboard state changes
   useEffect(() => {
@@ -538,10 +568,23 @@ const MessageComposer = React.memo(function MessageComposer({
     const mentionPayload =
       pendingMentions.length > 0 ? pendingMentions : undefined;
 
+    const attachmentObjects = uploadedFiles.map((f) => ({
+      _id: f._id,
+      fileName: f.name,
+      originalName: f.name,
+      mimeType: f.mimeType || 'image/jpeg',
+      fileSize: f.fileSize || 0,
+      url: f.url,
+      secureUrl: f.url,
+      thumbnailUrl: f.thumbnailUrl || f.url,
+      source: 'chat_upload',
+    }));
+
     onSend(plainContent, {
       htmlContent,
       threadId: replyingTo?._id || null,
       fileReferences: uploadedFiles.map((f) => f._id),
+      attachments: attachmentObjects,
       mentions: mentionPayload,
     });
 
@@ -602,9 +645,7 @@ const MessageComposer = React.memo(function MessageComposer({
       clearDraft,
       onChangeText,
       collapseComposer,
-    ],
-  );
-
+    ]);
   // ─── Emoji select ─────────────────────────────────────────────────────────
   const handleEmojiSelect = useCallback(
     (emoji) => {
@@ -618,36 +659,72 @@ const MessageComposer = React.memo(function MessageComposer({
     async (pickedFiles, localEntries) => {
       try {
         const formData = new FormData();
-        pickedFiles.forEach((file, index) => {
-          // Use the exact name resolved in localEntries
-          let name = localEntries[index].name;
-          if (!name.includes(".")) name += ".jpg";
+        for (let i = 0; i < pickedFiles.length; i++) {
+          const file = pickedFiles[i];
+          let name = file.name || file.fileName || localEntries[i]?.name || `file_${Date.now()}`;
+          
+          let type = file.mimeType || file.type || '';
+          
+          // Extension to MIME map
+          const extToMime = {
+            png: 'image/png',
+            jpg: 'image/jpeg',
+            jpeg: 'image/jpeg',
+            gif: 'image/gif',
+            webp: 'image/webp',
+            mp4: 'video/mp4',
+            mov: 'video/quicktime',
+            pdf: 'application/pdf',
+            doc: 'application/msword',
+            docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            xls: 'application/vnd.ms-excel',
+            xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            zip: 'application/zip',
+          };
 
-          let type = file.mimeType || file.type;
-          if (
-            !type ||
-            type === "image" ||
-            type === "video" ||
-            type === "application/octet-stream"
-          ) {
-            const ext = name.split(".").pop().toLowerCase();
-            if (ext === "jpg" || ext === "jpeg") type = "image/jpeg";
-            else if (ext === "png") type = "image/png";
-            else if (ext === "gif") type = "image/gif";
-            else if (ext === "webp") type = "image/webp";
-            else if (ext === "mp4") type = "video/mp4";
-            else if (ext === "pdf") type = "application/pdf";
-            else type = "image/jpeg"; // Safe default for mobile uploads if completely unknown
+          const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+
+          if (!type || type === 'image' || type === 'video' || type === 'application/octet-stream') {
+            type = extToMime[ext] || (ext ? `image/${ext}` : 'image/jpeg');
           }
 
-          formData.append("files", {
-            uri: file.uri,
+          if (!name.includes('.')) {
+            const mimeExtMap = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'video/mp4': 'mp4', 'application/pdf': 'pdf' };
+            name += `.${mimeExtMap[type] || 'jpg'}`;
+          }
+
+          let fileUri = file.uri || '';
+          if (fileUri.startsWith('ph://') || fileUri.startsWith('assets-library://')) {
+            try {
+              const FileSystem = require('expo-file-system/legacy');
+              const fileExt = name.split('.').pop() || 'jpg';
+              const destPath = `${FileSystem.cacheDirectory}upload_${Date.now()}_${i}.${fileExt}`;
+              await FileSystem.copyAsync({ from: fileUri, to: destPath });
+              fileUri = destPath;
+            } catch (e) {
+              logger.warn('[Composer] Copy asset URI to cache failed:', e);
+            }
+          }
+
+          if (Platform.OS === 'android' && fileUri && !fileUri.startsWith('file://') && !fileUri.startsWith('content://')) {
+            fileUri = `file://${fileUri}`;
+          }
+
+          logger.info('[Composer Audit] Appending file to FormData:', {
+            index: i,
+            uri: fileUri,
             name,
             type,
           });
-        });
 
-        const { data } = await fileAPI.uploadFiles(channelId, formData);
+          formData.append("files", {
+            uri: fileUri,
+            name,
+            type,
+          });
+        }
+
+        const { data } = await fileAPI.uploadFiles(channelId, formData, undefined, true);
         const uploadedFiles = data.data?.files || [];
 
         // Replace pending local file entries with server file objects using exact matching
@@ -695,7 +772,23 @@ const MessageComposer = React.memo(function MessageComposer({
           return result;
         });
       } catch (err) {
-        logger.error("[Composer] File upload failed:", err);
+        const serverErrorMessage =
+          err.response?.data?.error?.message ||
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message;
+
+        logger.error("[Composer Audit] File upload failed details:", {
+          message: err.message,
+          code: err.code,
+          isAxiosError: err.isAxiosError,
+          responseStatus: err.response?.status,
+          responseData: err.response?.data,
+          requestSent: !!err.request,
+          requestUrl: err.config?.url,
+          requestHeaders: err.config?.headers,
+        });
+
         // Mark the failed files so user can remove them
         setPendingFiles((prev) =>
           prev.map((f) =>
@@ -705,8 +798,8 @@ const MessageComposer = React.memo(function MessageComposer({
           ),
         );
         Alert.alert(
-          "Upload failed",
-          "Could not upload files. Please remove them and try again.",
+          "Upload Failed",
+          serverErrorMessage ? `Upload failed: ${serverErrorMessage}` : "Could not upload files. Please remove them and try again.",
         );
       }
     },
@@ -759,14 +852,29 @@ const MessageComposer = React.memo(function MessageComposer({
     setPendingFiles(prev => [...prev, ...localEntries]);
     
     try {
+      let fileUri = uri || '';
+      if (fileUri.startsWith('ph://')) {
+        try {
+          const MediaLibrary = require('expo-media-library');
+          const info = await MediaLibrary.getAssetInfoAsync(fileUri);
+          if (info?.localUri || info?.uri) {
+            fileUri = info.localUri || info.uri;
+          }
+        } catch (e) {}
+      }
+
+      if (Platform.OS === 'android' && fileUri && !fileUri.startsWith('file://') && !fileUri.startsWith('content://')) {
+        fileUri = `file://${fileUri}`;
+      }
+
       const formData = new FormData();
       formData.append("files", {
-        uri: uri,
+        uri: fileUri,
         name: file.name,
         type: file.type,
       });
 
-      const { data } = await fileAPI.uploadFiles(channelId, formData);
+      const { data } = await fileAPI.uploadFiles(channelId, formData, undefined, true);
       // Access uploaded file correctly:
       const uploadedFile = data?.data?.files?.[0] || data?.data?.[0] || data?.files?.[0];
       const fileId = uploadedFile?._id || uploadedFile?.id;
@@ -790,7 +898,7 @@ const MessageComposer = React.memo(function MessageComposer({
     }
   }, [channelId, onSend]);
 
-  const styles = createStyles(colors);
+  const styles = createStyles(colors, insets);
 
   return (
     <View>
@@ -948,7 +1056,10 @@ const MessageComposer = React.memo(function MessageComposer({
         onLayout={handleComposerLayout}
         style={[
           styles.inputBar,
-          { backgroundColor: colors.background, paddingBottom: bottomPadding },
+          {
+            backgroundColor: colors.background,
+            paddingBottom: bottomPadding,
+          },
           (isExpanded || isDragging) ? { height: animatedHeight } : null,
         ]}
       >
@@ -1135,13 +1246,6 @@ const MessageComposer = React.memo(function MessageComposer({
 
                       <TouchableOpacity
                         style={styles.iconButton}
-                        onPress={() => setShowRecentCanvases(true)}
-                      >
-                        <FileText size={20} color={colors.textSecondary} />
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.iconButton}
                         onPress={toggleExpand}
                       >
                         <ChevronDown size={20} color={colors.textSecondary} />
@@ -1262,7 +1366,7 @@ const MessageComposer = React.memo(function MessageComposer({
   );
 });
 
-const createStyles = (colors) =>
+const createStyles = (colors, insets) =>
   StyleSheet.create({
     banner: {
       flexDirection: "row",
@@ -1302,7 +1406,8 @@ const createStyles = (colors) =>
     },
     inputBar: {
       paddingHorizontal: scale(12),
-      paddingVertical: verticalScale(10),
+      paddingTop: verticalScale(6),
+      paddingBottom: Math.max(verticalScale(6), insets.bottom),
     },
     inputContainer: {
       flexDirection: "row",

@@ -20,6 +20,10 @@ export const useChatStore = create((set, get) => ({
       const messages = data.data.items || [];
       const hasMore = data.data.hasMore || false;
 
+      logger.info(`[API Response] Channel ${channelId} fetched ${messages.length} messages`, {
+        mediaMessagesCount: messages.filter(m => (m.attachments?.length || m.fileReferences?.length || m.imageUrl || m.mediaUrl)).length,
+      });
+
       set((state) => {
         const existing = state.messagesByChannel[channelId] || [];
         // Merge and sort
@@ -30,6 +34,8 @@ export const useChatStore = create((set, get) => ({
         // Dedup by _id
         const unique = Array.from(new Map(merged.map(m => [m._id, m])).values())
           .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+        logger.info(`[ChatStore State] Stored ${unique.length} unique messages for channel ${channelId}`);
 
         return {
           messagesByChannel: {
@@ -50,7 +56,7 @@ export const useChatStore = create((set, get) => ({
   sendMessage: async (channelId, content, options = {}) => {
     const user = useAuthStore.getState().user;
     const tempId = `temp-${Date.now()}`;
-    const { htmlContent, threadId, fileReferences, mentions, scheduledAt, contentType, gifMeta, audioMeta, videoMeta } = options;
+    const { htmlContent, threadId, fileReferences, attachments, mentions, scheduledAt, contentType, gifMeta, audioMeta, videoMeta } = options;
     
     // If scheduledAt is present, delegate to scheduledStore
     if (scheduledAt) {
@@ -59,6 +65,7 @@ export const useChatStore = create((set, get) => ({
         if (htmlContent) payload.htmlContent = htmlContent;
         if (threadId) payload.threadId = threadId;
         if (fileReferences?.length) payload.fileReferences = fileReferences;
+        if (attachments?.length) payload.attachments = attachments;
         if (mentions?.length) payload.mentions = mentions;
         if (contentType) payload.contentType = contentType;
         if (audioMeta) payload.audioMeta = audioMeta;
@@ -89,7 +96,7 @@ export const useChatStore = create((set, get) => ({
       },
       createdAt: new Date().toISOString(),
       pending: true,
-      attachments: fileReferences || [],
+      attachments: attachments?.length ? attachments : (fileReferences || []),
     };
 
     // Add locally (don't add to channel list if scheduled)
@@ -101,6 +108,7 @@ export const useChatStore = create((set, get) => ({
       if (htmlContent) payload.htmlContent = htmlContent;
       if (threadId) payload.threadId = threadId;
       if (fileReferences?.length) payload.fileReferences = fileReferences;
+      if (attachments?.length) payload.attachments = attachments;
       if (mentions?.length) payload.mentions = mentions;
       if (contentType) payload.contentType = contentType;
       if (gifMeta) payload.gifMeta = gifMeta;

@@ -72,72 +72,14 @@ import { usePreferencesStore } from '../../stores/preferencesStore';
 import { formatMessageTime } from '../../utils/dateUtils';
 import logger from '../../utils/logger';
 import ENV from '../../config/environment';
+import { normalizeMediaUrl, getMessageAttachments } from '../../utils/mediaUtils';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const normalizeMediaUrl = (url) => {
-  if (!url) return '';
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('file:')) {
-    return url;
-  }
-  const prefix = ENV.SOCKET_URL || 'https://chat-app-api-cyyl.onrender.com';
-  return url.startsWith('/') ? `${prefix}${url}` : `${prefix}/${url}`;
-};
 
 const getAuthorId = (msg) => {
   if (!msg) return null;
   if (typeof msg.authorId === "string") return msg.authorId;
   return msg.authorId?._id || msg.senderSnapshot?._id || null;
-};
-
-const getMessageAttachments = (msg) => {
-  if (!msg) return [];
-  const refs = msg.fileReferences || [];
-  if (refs.length > 0) {
-    const list = refs
-      .map((ref) => {
-        if (!ref) return null;
-        const file = (typeof ref.fileId === 'object' && ref.fileId) ? ref.fileId : ref;
-        if (!file) return null;
-        const rawUrl = file.url || file.secureUrl || file.path;
-        if (!rawUrl) return null;
-        const url = normalizeMediaUrl(rawUrl);
-        const thumbnailUrl = normalizeMediaUrl(file.thumbnailUrl) || url;
-        return {
-          _id: file._id || ref._id || String(Math.random()),
-          name: file.originalName || file.fileName || file.name || 'File',
-          fileName: file.originalName || file.fileName || file.name || 'File',
-          url: url,
-          secureUrl: url,
-          thumbnailUrl: thumbnailUrl,
-          mimeType: file.mimeType || file.type || '',
-          fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
-        };
-      })
-      .filter(Boolean);
-    if (list.length > 0) return list;
-  }
-
-  const rawAttachments = msg.attachments || msg.files || msg.media || [];
-  return rawAttachments
-    .map((file) => {
-      if (!file) return null;
-      const rawUrl = file.url || file.secureUrl || file.path;
-      if (!rawUrl) return null;
-      const url = normalizeMediaUrl(rawUrl);
-      const thumbnailUrl = normalizeMediaUrl(file.thumbnailUrl) || url;
-      return {
-        _id: file._id || String(Math.random()),
-        name: file.originalName || file.fileName || file.name || 'File',
-        fileName: file.originalName || file.fileName || file.name || 'File',
-        url: url,
-        secureUrl: url,
-        thumbnailUrl: thumbnailUrl,
-        mimeType: file.mimeType || file.type || '',
-        fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
-      };
-    })
-    .filter(Boolean);
 };
 
 const isSameDay = (d1, d2) => {
@@ -619,6 +561,12 @@ const ChatScreen = ({ route, navigation }) => {
     // File attachments
     const attachments = getMessageAttachments(item);
 
+    if (attachments.length > 0) {
+      logger.info(`[ChatScreen Render] Message ${item._id} (${item.contentType}) has ${attachments.length} attachment(s)`, {
+        attachmentDetails: attachments.map(a => ({ name: a.name, mimeType: a.mimeType, url: a.url })),
+      });
+    }
+
     const contentColor = isMe
       ? colors.messageTextSent
       : colors.messageTextReceived;
@@ -662,18 +610,17 @@ const ChatScreen = ({ route, navigation }) => {
           )}
           {!isMe && isCompact && <View style={{ width: scale(32) }} />}
 
-          <View style={{ flexShrink: 1, alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+          <View style={[
+            styles.messageContent,
+            isMe ? styles.messageContentMe : styles.messageContentThem,
+          ]}>
             {/* Sender name (hidden for compact) */}
             {!isMe && !isCompact && (
               <View style={styles.senderRow}>
-                <Text
-                  style={[styles.senderName, { color: colors.textSecondary }]}
-                >
+                <Text style={[styles.senderName, { color: colors.textSecondary }]}>
                   {messageSender?.name || "Unknown"}
                 </Text>
-                <Text
-                  style={[styles.timestamp, { color: colors.textTertiary }]}
-                >
+                <Text style={[styles.timestamp, { color: colors.textTertiary }]}>
                   {formatTime(item.createdAt)}
                 </Text>
               </View>
@@ -681,12 +628,7 @@ const ChatScreen = ({ route, navigation }) => {
 
             {/* Reply preview */}
             {item.parentMessageId && item.replyTo && (
-              <View
-                style={[
-                  styles.replyPreview,
-                  { borderLeftColor: colors.primary },
-                ]}
-              >
+              <View style={[styles.replyPreview, { borderLeftColor: colors.primary }]}>
                 <Reply size={12} color={colors.textSecondary} />
                 <Text
                   style={[styles.replyPreviewText, { color: colors.textSecondary }]}
@@ -698,9 +640,8 @@ const ChatScreen = ({ route, navigation }) => {
               </View>
             )}
 
-            {/* Message bubble */}
-            <View style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: maxBubbleWidth }}>
-              <View
+            {/* Message bubble — self-sizes to content, max 85% of screen width */}
+            <View
               style={[
                 styles.bubble,
                 bubbleRadiusStyle,
@@ -708,6 +649,7 @@ const ChatScreen = ({ route, navigation }) => {
                   backgroundColor: isMe
                     ? colors.messageBubbleSent
                     : colors.messageBubbleReceived,
+                  alignSelf: isMe ? 'flex-end' : 'flex-start',
                 },
                 isHighlighted && {
                   borderWidth: 2,
@@ -717,12 +659,7 @@ const ChatScreen = ({ route, navigation }) => {
             >
               {/* Forwarded indicator */}
               {item.forwardMeta?.isForwarded && (
-                <View
-                  style={[
-                    styles.forwardedRow,
-                    { borderBottomColor: colors.border },
-                  ]}
-                >
+                <View style={[styles.forwardedRow, { borderBottomColor: colors.border }]}>
                   <Reply size={12} color={contentColor} style={{ marginRight: scale(4), transform: [{ scaleX: -1 }] }} />
                   <Text style={[styles.forwardedText, { color: contentColor, opacity: 0.8 }]}>
                     Forwarded from{" "}
@@ -739,25 +676,23 @@ const ChatScreen = ({ route, navigation }) => {
 
               {/* Content — rich text, plain, or GIF */}
               {isDeleted ? (
-                <Text
-                  style={[styles.messageText, { color: colors.textTertiary, fontStyle: "italic" }]}
-                >
+                <Text style={[styles.messageText, { color: colors.textTertiary, fontStyle: "italic" }]}>
                   {deletedText}
                 </Text>
               ) : item.contentType === 'audio' || item.type === 'audio' ? (
-                <AudioMessagePlayer 
-                  audioUrl={item.audioUrl || item.audioMeta?.audioUrl || attachments[0]?.url || attachments[0]?.secureUrl} 
-                  duration={item.duration || item.audioMeta?.duration} 
-                  colors={colors} 
-                  isMe={isMe} 
+                <AudioMessagePlayer
+                  audioUrl={item.audioUrl || item.audioMeta?.audioUrl || attachments[0]?.url || attachments[0]?.secureUrl}
+                  duration={item.duration || item.audioMeta?.duration}
+                  colors={colors}
+                  isMe={isMe}
                 />
               ) : item.contentType === 'video' || item.type === 'video' ? (
-                <VideoMessagePlayer 
-                  videoUrl={item.videoUrl || item.videoMeta?.videoUrl || attachments[0]?.url || attachments[0]?.secureUrl} 
-                  thumbnailUrl={item.thumbnailUrl || item.videoMeta?.thumbnailUrl || attachments[0]?.thumbnailUrl} 
+                <VideoMessagePlayer
+                  videoUrl={item.videoUrl || item.videoMeta?.videoUrl || attachments[0]?.url || attachments[0]?.secureUrl}
+                  thumbnailUrl={item.thumbnailUrl || item.videoMeta?.thumbnailUrl || attachments[0]?.thumbnailUrl}
                   width={item.width || item.videoMeta?.width}
                   height={item.height || item.videoMeta?.height}
-                  colors={colors} 
+                  colors={colors}
                 />
               ) : item.contentType === 'gif' && item.gifMeta ? (
                 <GifRenderer item={item} contentColor={contentColor} styles={styles} />
@@ -774,24 +709,17 @@ const ChatScreen = ({ route, navigation }) => {
                   colors={{
                     ...colors,
                     textPrimary: contentColor,
-                    codeBackground: isMe
-                      ? colors.surfaceOverlayLight
-                      : colors.codeBackground,
-                    codeBlockBackground: isMe
-                      ? colors.shadowMd
-                      : colors.codeBlockBackground,
+                    codeBackground: isMe ? colors.surfaceOverlayLight : colors.codeBackground,
+                    codeBlockBackground: isMe ? colors.shadowMd : colors.codeBlockBackground,
                     codeBlockText: isMe ? colors.textOnPrimary : colors.codeBlockText,
                   }}
                   baseStyle={{ color: contentColor, fontSize: moderateScale(15), lineHeight: 22 }}
                 />
               ) : (
-                <Text
-                  style={[styles.messageText, { color: contentColor }]}
-                >
+                <Text style={[styles.messageText, { color: contentColor }]}>
                   {item.content}
                 </Text>
               )}
-              </View>
 
               {/* Attachment cards */}
               {!isDeleted && attachments.length > 0 && (
@@ -812,9 +740,7 @@ const ChatScreen = ({ route, navigation }) => {
                   style={[
                     styles.timestamp,
                     {
-                      color: isMe
-                        ? colors.messageTextSent
-                        : colors.textTertiary,
+                      color: isMe ? colors.messageTextSent : colors.textTertiary,
                       opacity: 0.7,
                     },
                   ]}
@@ -822,24 +748,13 @@ const ChatScreen = ({ route, navigation }) => {
                   {formatTime(item.createdAt)}
                 </Text>
                 {item.isEdited && !isDeleted && (
-                  <Text
-                    style={[
-                      styles.editedLabel,
-                      {
-                        color: isMe
-                          ? colors.messageTextSent
-                          : colors.textTertiary,
-                      },
-                    ]}
-                  >
-                    {" "}
-                    (edited)
+                  <Text style={[styles.editedLabel, { color: isMe ? colors.messageTextSent : colors.textTertiary }]}>
+                    {" "}(edited)
                   </Text>
                 )}
                 {item.pending && (
                   <Text style={[styles.editedLabel, { color: colors.textTertiary }]}>
-                    {" "}
-                    sending...
+                    {" "}sending...
                   </Text>
                 )}
                 {item.isPinned && (
@@ -847,8 +762,7 @@ const ChatScreen = ({ route, navigation }) => {
                 )}
                 {item.failed && (
                   <Text style={[styles.editedLabel, { color: colors.error }]}>
-                    {" "}
-                    failed
+                    {" "}failed
                   </Text>
                 )}
               </View>
@@ -1391,24 +1305,34 @@ const createStyles = (colors) =>
     messageContainer: {
       flexDirection: "row",
       marginBottom: verticalScale(4),
-      maxWidth: "85%",
       gap: 8,
+      // Full-width row — alignment is controlled by justifyContent on myMessage/theirMessage
+      // Never use alignSelf/maxWidth here as it causes flex-shrink collapse of bubble content
     },
     messageCompact: {
       marginBottom: verticalScale(1),
     },
     myMessage: {
-      alignSelf: "flex-end",
+      justifyContent: "flex-end",
     },
     theirMessage: {
-      alignSelf: "flex-start",
+      justifyContent: "flex-start",
+    },
+    // Content column (sender name + bubble + reactions + thread)
+    messageContent: {
+      maxWidth: "75%",
+      flexShrink: 0,
+    },
+    messageContentMe: {
+      alignItems: "flex-end",
+    },
+    messageContentThem: {
+      alignItems: "flex-start",
     },
     bubble: {
       paddingHorizontal: scale(12),
       paddingVertical: verticalScale(8),
       borderRadius: moderateScale(18),
-      maxWidth: "100%",
-      minWidth: scale(40),
     },
     senderRow: {
       flexDirection: "row",

@@ -80,8 +80,6 @@ router.post(
 );
 router.post(
   "/:id/members",
-  requireChannelAccess(),
-  requirePermission("channel:manage_members"),
   addMember,
 );
 router.delete(

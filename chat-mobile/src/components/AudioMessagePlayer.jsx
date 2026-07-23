@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native
 import { Audio } from 'expo-av';
 import { Play, Pause } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { normalizeMediaUrl } from '../utils/mediaUtils';
 import logger from '../utils/logger';
 
 const formatDuration = (millis) => {
@@ -20,6 +21,7 @@ const AudioMessagePlayer = ({ audioUrl, duration, colors, isMe }) => {
   const [durationMillis, setDurationMillis] = useState(duration ? duration * 1000 : 0);
   
   const contentColor = isMe ? colors.messageTextSent : colors.messageTextReceived;
+  const normalizedAudioUrl = normalizeMediaUrl(audioUrl);
 
   useEffect(() => {
     return () => {
@@ -30,7 +32,7 @@ const AudioMessagePlayer = ({ audioUrl, duration, colors, isMe }) => {
   }, [sound]);
 
   const togglePlayback = async () => {
-    if (audioUrl === '/placeholder-loading' || !audioUrl) {
+    if (normalizedAudioUrl === '/placeholder-loading' || !normalizedAudioUrl) {
       logger.warn('Audio is still processing');
       return;
     }
@@ -38,7 +40,7 @@ const AudioMessagePlayer = ({ audioUrl, duration, colors, isMe }) => {
       if (!sound) {
         await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
         const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: audioUrl },
+          { uri: normalizedAudioUrl },
           { shouldPlay: true },
           onPlaybackStatusUpdate
         );

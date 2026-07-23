@@ -12,9 +12,10 @@
  *   baseStyle  – optional base Text style override
  */
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Linking } from 'react-native';
+import { View, Text, StyleSheet, Linking, Image } from 'react-native';
 import { pellToTipTap } from '../utils/formatConverter';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { normalizeMediaUrl } from '../utils/mediaUtils';
 
 
 // ─── Lightweight HTML Tokenizer ─────────────────────────────────────────────
@@ -404,8 +405,18 @@ function renderNode(node, ctx, parentStyles = {}, depth = 0) {
     }
 
     case 'img': {
-      // Skip images in text rendering — they're handled by file attachments
-      return null;
+      const src = node.attrs?.src;
+      if (!src) return null;
+      const normalizedSrc = normalizeMediaUrl(src);
+      return (
+        <View key={key} style={styles.inlineImageContainer}>
+          <Image
+            source={{ uri: normalizedSrc }}
+            style={styles.inlineImage}
+            resizeMode="cover"
+          />
+        </View>
+      );
     }
 
     default: {
@@ -563,6 +574,19 @@ const styles = StyleSheet.create({
   hr: {
     height: verticalScale(1),
     marginVertical: verticalScale(6),
+  },
+  inlineImageContainer: {
+    width: '100%',
+    minWidth: scale(220),
+    maxWidth: scale(320),
+    borderRadius: moderateScale(12),
+    overflow: 'hidden',
+    marginVertical: verticalScale(4),
+  },
+  inlineImage: {
+    width: '100%',
+    height: verticalScale(200),
+    borderRadius: moderateScale(12),
   },
 });
 

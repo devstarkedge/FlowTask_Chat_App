@@ -214,10 +214,7 @@ export const WORKSPACE_LIMITS = Object.freeze({
 });
 
 // ─── Default Channels ─────────────────────────────────────────────────
-export const DEFAULT_CHANNELS = Object.freeze([
-  { slug: 'general', name: 'general', description: 'Company-wide general discussion', visibility: 'public', type: 'public' },
-  { slug: 'random', name: 'random', description: 'Non-work banter and water-cooler chat', visibility: 'public', type: 'public' },
-]);
+export const DEFAULT_CHANNELS = Object.freeze([]);
 
 // ─── FlowTask System Channels (only when FlowTask integration enabled) ───
 export const SYSTEM_CHANNELS = Object.freeze({

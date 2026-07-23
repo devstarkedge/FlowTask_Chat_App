@@ -94,7 +94,7 @@ class WorkspaceService {
 
   /**
    * Create a new workspace. Creator becomes the owner.
-   * Auto-creates #general and #random default channels.
+   * Auto-creates system channels via FlowTask sync if enabled.
    * Uses a MongoDB transaction so workspace + owner membership are atomic.
    */
   async createWorkspace(data, creatorId) {

@@ -17,8 +17,8 @@ const departmentSchema = new Schema(
     },
     provider: {
       type: String,
-      enum: ['proofhub', 'trello', 'jira', 'asana', 'monday', 'custom'],
-      default: 'proofhub',
+      enum: ['flowtask', 'proofhub', 'trello', 'jira', 'asana', 'monday', 'custom'],
+      default: 'flowtask',
     },
     name: {
       type: String,

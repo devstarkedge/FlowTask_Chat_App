@@ -1,17 +1,44 @@
 import Category from "./Category.model.js";
 import Department from "./Department.model.js";
 import Channel from "../channels/Channel.model.js";
+import channelService from "../channels/channel.service.js";
 import { syncDepartments } from "./syncDepartmentsService.js";
 import asyncHandler from "../../middleware/asyncHandler.js";
-import { AppError, NotFoundError, ForbiddenError, BadRequestError } from "../../middleware/errorHandler.js";
+import { AppError, NotFoundError, ForbiddenError, BadRequestError, ConflictError } from "../../middleware/errorHandler.js";
+
+async function validateAccessibleCategoryChannels(req, channelIds) {
+  const requestedIds = [...new Set(channelIds.map((channelId) => String(channelId)).filter(Boolean))];
+  if (requestedIds.length === 0) return [];
+
+  const accessibleChannels = await channelService.getChannelsForUser(
+    req.user._id,
+    req.workspaceId,
+    req.membership?.role || null,
+  );
+  const accessibleIds = new Set(
+    accessibleChannels
+      .filter((channel) => channel.type !== 'dm' && channel.type !== 'self' && !channel.isArchived)
+      .map((channel) => String(channel._id)),
+  );
+
+  if (requestedIds.some((channelId) => !accessibleIds.has(channelId))) {
+    throw new ForbiddenError('One or more selected channels are not accessible to this user');
+  }
+
+  return requestedIds;
+}
 
 // @desc    Sync external departments
 // @route   POST /api/categories/sync-departments
-// @access  Private (Admin/Manager)
+// @access  Private (imports FlowTask's public active-department directory)
 export const syncExternalDepartments = asyncHandler(async (req, res, next) => {
   const result = await syncDepartments(req.workspaceId);
   if (!result.success) {
-    return next(new AppError(result.error || result.message, 500));
+    return next(new AppError(
+      result.error || result.message || 'FlowTask department synchronization failed',
+      502,
+      'FLOWTASK_DEPARTMENT_SYNC_FAILED',
+    ));
   }
   res.status(200).json(result);
 });
@@ -40,6 +67,30 @@ export const getCategories = asyncHandler(async (req, res, next) => {
 export const createCategory = asyncHandler(async (req, res, next) => {
   const { name, type, departmentId, icon, color, description } = req.body;
 
+  if (!['department', 'custom'].includes(type)) {
+    return next(new BadRequestError('Category type must be department or custom'));
+  }
+
+  let resolvedDepartmentId = null;
+  if (type === 'department') {
+    if (!departmentId) {
+      return next(new BadRequestError('A department is required for a department category'));
+    }
+    const department = await Department.findOne({ _id: departmentId, workspaceId: req.workspaceId });
+    if (!department) return next(new BadRequestError('Selected department is not available in this workspace'));
+
+    const existingDepartmentCategory = await Category.findOne({
+      workspaceId: req.workspaceId,
+      createdBy: req.user._id,
+      type: 'department',
+      departmentId: department._id,
+    });
+    if (existingDepartmentCategory) {
+      return next(new ConflictError('This department is already imported as a category', 'DEPARTMENT_CATEGORY_EXISTS'));
+    }
+    resolvedDepartmentId = department._id;
+  }
+
   // Get max order
   const lastCategory = await Category.findOne({ workspaceId: req.workspaceId }).sort({ order: -1 });
   const nextOrder = lastCategory ? (lastCategory.order || 0) + 1 : 0;
@@ -48,7 +99,7 @@ export const createCategory = asyncHandler(async (req, res, next) => {
     workspaceId: req.workspaceId,
     name,
     type,
-    departmentId: departmentId || null,
+    departmentId: resolvedDepartmentId,
     icon,
     color,
     description,
@@ -67,41 +118,128 @@ export const createCategory = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/categories/:id
 // @access  Private (Admin/Manager)
 export const updateCategory = asyncHandler(async (req, res, next) => {
-  let category = await Category.findById(req.params.id);
+  const category = await Category.findOne({
+    _id: req.params.id,
+    workspaceId: req.workspaceId,
+    createdBy: req.user._id,
+  });
 
   if (!category) {
     return next(new NotFoundError("Category"));
   }
 
-  if (category.workspaceId.toString() !== req.workspaceId.toString()) {
-    return next(new ForbiddenError("Not authorized to update this category"));
+  const requestedType = req.body.type ?? category.type;
+  if (!['department', 'custom'].includes(requestedType)) {
+    return next(new BadRequestError('Category type must be department or custom'));
   }
 
-  category = await Category.findByIdAndUpdate(
-    req.params.id,
-    { ...req.body, lastActivity: new Date() },
+  const update = {
+    type: requestedType,
+    lastActivity: new Date(),
+  };
+
+  for (const field of ['name', 'icon', 'color', 'description']) {
+    if (req.body[field] !== undefined) update[field] = req.body[field];
+  }
+  if (update.name !== undefined) {
+    update.name = String(update.name).trim();
+    if (!update.name) return next(new BadRequestError('Category name is required'));
+  }
+
+  if (requestedType === 'department') {
+    const requestedDepartmentId = req.body.departmentId
+      || category.departmentId?._id
+      || category.departmentId;
+    if (!requestedDepartmentId) {
+      return next(new BadRequestError('A department is required for a department category'));
+    }
+
+    const department = await Department.findOne({
+      _id: requestedDepartmentId,
+      workspaceId: req.workspaceId,
+    });
+    if (!department) return next(new BadRequestError('Selected department is not available in this workspace'));
+
+    const duplicate = await Category.findOne({
+      _id: { $ne: category._id },
+      workspaceId: req.workspaceId,
+      createdBy: req.user._id,
+      type: 'department',
+      departmentId: department._id,
+    });
+    if (duplicate) {
+      return next(new ConflictError('This department is already imported as a category', 'DEPARTMENT_CATEGORY_EXISTS'));
+    }
+
+    update.departmentId = department._id;
+    update.channelIds = [];
+  } else {
+    update.departmentId = null;
+    if (req.body.channelIds !== undefined) {
+      if (!Array.isArray(req.body.channelIds)) {
+        return next(new BadRequestError('channelIds must be an array'));
+      }
+      update.channelIds = await validateAccessibleCategoryChannels(req, req.body.channelIds);
+    }
+  }
+
+  const updatedCategory = await Category.findOneAndUpdate(
+    { _id: category._id, workspaceId: req.workspaceId, createdBy: req.user._id },
+    { $set: update },
     { new: true, runValidators: true }
   ).populate('departmentId');
 
   req.app.get("io")
     ?.to(req.workspaceId.toString())
-    .emit("category:updated", category);
+    .emit("category:updated", updatedCategory);
 
-  res.status(200).json({ success: true, data: category });
+  res.status(200).json({ success: true, data: updatedCategory });
+});
+
+// @desc    Remove all personal category groupings and return channels to normal lists
+// @route   DELETE /api/categories
+// @access  Private
+export const clearAllCategories = asyncHandler(async (req, res) => {
+  const ownerFilter = {
+    workspaceId: req.workspaceId,
+    createdBy: req.user._id,
+  };
+  const categoryIds = await Category.find(ownerFilter).distinct('_id');
+  const result = await Category.deleteMany(ownerFilter);
+
+  if (categoryIds.length > 0) {
+    // Clear legacy channel-side category references. Current custom mappings
+    // live on Category.channelIds, so deleting the personal categories is the
+    // authoritative ungroup operation and never deletes channel data.
+    await Channel.updateMany(
+      { workspaceId: req.workspaceId, categoryId: { $in: categoryIds } },
+      { $set: { categoryId: null } },
+    );
+  }
+
+  req.app.get('io')
+    ?.to(`ws:${req.workspaceId}:user:${req.user._id}`)
+    .emit('channel:list:invalidated', { reason: 'categories-cleared' });
+
+  res.status(200).json({
+    success: true,
+    data: { deletedCount: result.deletedCount || 0 },
+    message: 'Categories removed. Channels are now shown in the regular lists.',
+  });
 });
 
 // @desc    Delete a category
 // @route   DELETE /api/categories/:id
 // @access  Private (Admin/Manager)
 export const deleteCategory = asyncHandler(async (req, res, next) => {
-  const category = await Category.findById(req.params.id);
+  const category = await Category.findOne({
+    _id: req.params.id,
+    workspaceId: req.workspaceId,
+    createdBy: req.user._id,
+  });
 
   if (!category) {
     return next(new NotFoundError("Category"));
-  }
-
-  if (category.workspaceId.toString() !== req.workspaceId.toString()) {
-    return next(new ForbiddenError("Not authorized to delete this category"));
   }
 
   // Remove category assignment from all channels
@@ -171,10 +309,12 @@ export const addChannelToCategory = asyncHandler(async (req, res, next) => {
   const { channelId } = req.body;
   if (!channelId) return next(new BadRequestError("channelId is required"));
 
+  const [accessibleChannelId] = await validateAccessibleCategoryChannels(req, [channelId]);
+
 
   const category = await Category.findOneAndUpdate(
     { _id: req.params.id, workspaceId: req.workspaceId, createdBy: req.user._id },
-    { $addToSet: { channelIds: channelId }, lastActivity: new Date() },
+    { $addToSet: { channelIds: accessibleChannelId }, lastActivity: new Date() },
     { new: true }
   ).populate('departmentId');
 
@@ -206,9 +346,11 @@ export const addBulkChannelsToCategory = asyncHandler(async (req, res, next) => 
     return next(new BadRequestError("channelIds array is required"));
   }
 
+  const accessibleChannelIds = await validateAccessibleCategoryChannels(req, channelIds);
+
   const category = await Category.findOneAndUpdate(
     { _id: req.params.id, workspaceId: req.workspaceId, createdBy: req.user._id, type: 'custom' },
-    { $addToSet: { channelIds: { $each: channelIds } }, lastActivity: new Date() },
+    { $addToSet: { channelIds: { $each: accessibleChannelIds } }, lastActivity: new Date() },
     { new: true }
   ).populate('departmentId');
 

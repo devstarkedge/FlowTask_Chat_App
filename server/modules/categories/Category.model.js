@@ -64,6 +64,13 @@ const categorySchema = new Schema(
 
 categorySchema.index({ workspaceId: 1, createdBy: 1, name: 1 }, { unique: true });
 categorySchema.index({ workspaceId: 1, createdBy: 1, order: 1 });
+categorySchema.index(
+  { workspaceId: 1, createdBy: 1, departmentId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { type: 'department', departmentId: { $type: 'objectId' } },
+  },
+);
 
 const Category = mongoose.models.Category || model("Category", categorySchema);
 

@@ -42,6 +42,8 @@ import '../../modules/canvas/canvasHistory.model.js';
 import '../../modules/directories/UserGroup.model.js';
 import '../../modules/admin/AuditLog.model.js';
 import '../../modules/flowtask/ProcessedEvent.model.js';
+import '../../modules/categories/Category.model.js';
+import '../../modules/categories/Department.model.js';
 
 async function run() {
   try {

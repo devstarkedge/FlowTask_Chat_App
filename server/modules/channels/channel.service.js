@@ -379,6 +379,7 @@ class ChannelService {
         members,
         memberCount: ids.length,
         workspaceId,
+        createdBy: user1Id,
       });
     } catch (error) {
       // Race-safe path: another request created the DM first.
@@ -457,6 +458,7 @@ class ChannelService {
       dmParticipants: channel.dmParticipants,
       workspaceId: channel.workspaceId,
       memberCount: channel.memberCount,
+      createdBy: channel.createdBy,
     };
 
     try {

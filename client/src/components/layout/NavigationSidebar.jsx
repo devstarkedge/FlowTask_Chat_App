@@ -260,9 +260,16 @@ export default function NavigationSidebar({
     const currentFlowTaskId = user?.flowTaskUserId?.toString?.();
     const selfIds = new Set([currentChatId, currentFlowTaskId].filter(Boolean));
 
-    const regularDMs = channels.filter(
-      (c) => c.type === "dm" && !c.isArchived && !c.isAI && !c.isSelf && !c.isSelfDM,
-    );
+    const regularDMs = channels.filter((c) => {
+      if (c.type !== "dm" || c.isArchived || c.isAI || c.isSelf || c.isSelfDM) {
+        return false;
+      }
+      
+      // Hide premature DMs from the recipient until the first message is sent
+      const isCreator = c.createdBy && c.createdBy.toString() === currentChatId;
+      const hasMessages = !!c.lastMessageAt;
+      return hasMessages || isCreator;
+    });
 
     const aiDMs = channels.filter(
       (c) => c.type === "dm" && !c.isArchived && c.isAI

@@ -109,7 +109,8 @@ const breaker = new CircuitBreaker('flowtask-api');
 
 class FlowTaskService {
   /**
-   * Make an authenticated GET request to FlowTask API.
+   * Make a GET request to FlowTask API. Authentication is optional so public
+   * integration endpoints never receive a misleading `Bearer undefined` header.
    * @param {string} path - API path (e.g., '/api/users/123')
    * @param {string} token - FlowTask JWT token
    * @param {object} [options]
@@ -131,9 +132,8 @@ class FlowTaskService {
     });
 
     const data = await breaker.execute(async () => {
-      const response = await httpClient.get(path, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await httpClient.get(path, { headers });
       return response.data;
     });
 
@@ -238,6 +238,17 @@ class FlowTaskService {
    */
   async getDepartments(token) {
     const result = await this.get('/api/departments', token);
+    return result.data || result;
+  }
+
+  /**
+   * Get the organization-wide active department directory. This endpoint is
+   * intentionally public in FlowTask and is used by ChatApp category import,
+   * which must not depend on an individual user's expiring SSO token.
+   * @returns {Promise<object[]>}
+   */
+  async getPublicDepartments() {
+    const result = await this.get('/api/departments/public', null);
     return result.data || result;
   }
 

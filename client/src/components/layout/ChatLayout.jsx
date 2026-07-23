@@ -1276,7 +1276,12 @@ export default function ChatLayout() {
 
   useEffect(() => {
     if (!workspaceId || !dmsHomeRoute) return;
-    const dmChannels = channels.filter((c) => c.type === "dm" && !c.isArchived);
+    const currentChatId = user?._id?.toString?.();
+    const dmChannels = channels.filter((c) => {
+      if (c.type !== "dm" || c.isArchived) return false;
+      const isCreator = c.createdBy && c.createdBy.toString() === currentChatId;
+      return !!c.lastMessageAt || isCreator;
+    });
     if (!dmChannels.length) return;
     const nextDM = [...dmChannels].sort((a, b) => {
       const aU = unreads[a._id] || 0,

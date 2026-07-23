@@ -3,6 +3,7 @@ import {
   syncExternalDepartments,
   getDepartments,
   getCategories,
+  clearAllCategories,
   createCategory,
   updateCategory,
   deleteCategory,
@@ -12,7 +13,7 @@ import {
   addBulkChannelsToCategory,
   removeChannelFromCategory,
 } from "./category.controller.js";
-import { protect, authorize } from "../auth/auth.middleware.js";
+import { protect } from "../auth/auth.middleware.js";
 import { resolveWorkspace } from "../../middleware/workspaceContext.js";
 
 const router = express.Router();
@@ -21,11 +22,12 @@ const router = express.Router();
 router.use(protect);
 router.use(resolveWorkspace);
 
-router.post("/sync-departments", authorize("admin", "owner", "manager"), syncExternalDepartments);
+router.post("/sync-departments", syncExternalDepartments);
 router.get("/departments", getDepartments);
 
 router.get("/", getCategories);
 router.post("/", createCategory);
+router.delete("/", clearAllCategories);
 router.post("/suggest-channels", suggestChannels);
 router.put("/reorder", reorderCategories);
 

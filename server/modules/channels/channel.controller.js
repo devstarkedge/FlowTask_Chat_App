@@ -214,8 +214,19 @@ export const createDM = asyncHandler(async (req, res) => {
  */
 export const addMember = asyncHandler(async (req, res) => {
   const { userId, role } = req.body;
+  const channelId = req.params.id;
 
-  if (isSystemManagedProjectChannel(req.channel)) {
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: "userId is required" },
+    });
+  }
+
+  // Look up channel if not already on request (e.g. from requireChannelAccess middleware)
+  const channel = req.channel || await channelService.getChannelById(channelId, null, req.workspaceId);
+
+  if (channel && isSystemManagedProjectChannel(channel)) {
     return res.status(403).json({
       success: false,
       error: {
@@ -226,15 +237,8 @@ export const addMember = asyncHandler(async (req, res) => {
     });
   }
 
-  if (!userId) {
-    return res.status(400).json({
-      success: false,
-      error: { message: "userId is required" },
-    });
-  }
-
-  const channel = await channelService.addMember(
-    req.params.id,
+  const updatedChannel = await channelService.addMember(
+    channelId,
     userId,
     role,
     req.workspaceId,
@@ -243,7 +247,7 @@ export const addMember = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    data: { channel },
+    data: { channel: updatedChannel },
   });
 });
 

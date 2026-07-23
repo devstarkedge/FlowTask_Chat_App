@@ -22,7 +22,7 @@ import logger from '../utils/logger';
 import { ScreenLayout, ScreenHeader, LoadingState, EmptyState, AppAvatar, HeaderBackButton } from '../components/common';
 import RichText from '../components/RichText';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
-
+import { getMessageAttachments } from '../utils/mediaUtils';
 
 const formatTime = (dateStr) => {
   if (!dateStr) return '';
@@ -32,28 +32,6 @@ const formatTime = (dateStr) => {
     hour: '2-digit',
     minute: '2-digit',
   });
-};
-
-const getMessageAttachments = (msg) => {
-  if (!msg) return [];
-  const refs = msg.fileReferences || [];
-  if (refs.length > 0) {
-    return refs
-      .map((ref) => {
-        if (!ref.fileId) return null;
-        const file = ref.fileId;
-        return {
-          _id: file._id,
-          name: file.originalName || file.fileName || file.name || 'File',
-          url: file.url || file.secureUrl,
-          thumbnailUrl: file.thumbnailUrl,
-          mimeType: file.mimeType,
-          fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
-        };
-      })
-      .filter(Boolean);
-  }
-  return msg.attachments || msg.files || [];
 };
 
 const PinnedMessagesScreen = ({ route, navigation }) => {

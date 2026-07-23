@@ -107,25 +107,14 @@ export async function sendViaFCM(userId, payload) {
 
     for (const tokenEntry of fcmTokens) {
       try {
-        const fcmPayload = {
-          notification: {
-            title: payload.title,
-            body: payload.body,
-            icon: payload.icon || '/icon-192x192.png',
-            badge: payload.badge || '/badge.png',
-            tag: payload.tag,
-            click_action: payload.data?.deepLink || '/',
-          },
-          data: {
-            ...Object.fromEntries(
-              Object.entries(payload.data || {}).map(([k, v]) => [k, String(v ?? '')])
-            ),
-          },
-          token: tokenEntry.token,
+        const fcmData = {
+          ...Object.fromEntries(
+            Object.entries(payload.data || {}).map(([k, v]) => [k, String(v ?? '')])
+          ),
         }
 
         // Use HTTP v1 API if Firebase Admin is available
-        const response = await _sendFCMHttp(fcmPayload, tokenEntry.token)
+        const response = await _sendFCMHttp(payload, tokenEntry.token, fcmData)
         if (response.success) {
           sent++
         } else if (response.expired) {
@@ -155,10 +144,10 @@ export async function sendViaFCM(userId, payload) {
 }
 
 /**
- * Send FCM message via HTTP v1 API (legacy).
+ * Send FCM message via HTTP v1 API.
  * @private
  */
-async function _sendFCMHttp(payload, token) {
+async function _sendFCMHttp(payload, token, fcmData = {}) {
   // Preferred path: use Firebase Admin SDK if initialized
   try {
     if (firebaseAdmin && firebaseAdmin.isInitialized && firebaseAdmin.isInitialized()) {
@@ -166,8 +155,28 @@ async function _sendFCMHttp(payload, token) {
       if (admin && admin.messaging) {
         const message = {
           token,
-          notification: payload.notification,
-          data: payload.data,
+          notification: {
+            title: payload.title || '',
+            body: payload.body || '',
+          },
+          data: fcmData,
+          android: {
+            notification: {
+              ...(payload.icon && { icon: payload.icon }),
+              ...(payload.tag && { tag: payload.tag }),
+              ...(payload.data?.deepLink && { clickAction: payload.data.deepLink }),
+            },
+          },
+          webpush: {
+            notification: {
+              ...(payload.icon && { icon: payload.icon }),
+              ...(payload.badge && { badge: payload.badge }),
+              ...(payload.tag && { tag: payload.tag }),
+            },
+            fcmOptions: {
+              link: payload.data?.deepLink || '/',
+            },
+          },
         }
         await admin.messaging().send(message)
         return { success: true }

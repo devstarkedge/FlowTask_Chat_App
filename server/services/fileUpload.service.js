@@ -1,6 +1,7 @@
 import { v2 as cloudinary } from "cloudinary";
 import { createHash } from "crypto";
 import fs from "fs";
+import path from "path";
 import FileAsset from "../modules/files/FileAsset.model.js";
 import env from "../config/environment.js";
 import logger from "../utils/logger.js";
@@ -329,12 +330,55 @@ class FileUploadService {
         uploadOptions,
       });
 
-      // Upload with retry
-      const result = await this._uploadWithRetry(
-        file.path,
-        uploadOptions,
-        file.size,
-      );
+      const isCloudinaryConfigured = env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET;
+      let result = null;
+
+      if (isCloudinaryConfigured) {
+        try {
+          result = await this._uploadWithRetry(
+            file.path,
+            uploadOptions,
+            file.size,
+          );
+        } catch (cloudinaryErr) {
+          logger.warn("Cloudinary upload failed, attempting local storage fallback", {
+            assetId: asset._id.toString(),
+            error: cloudinaryErr.message,
+          });
+        }
+      }
+
+      if (!result) {
+        // Fallback to local storage in env.UPLOAD_DIR ('./uploads')
+        const uploadDir = path.resolve(env.UPLOAD_DIR || './uploads');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const ext = path.extname(file.originalname || file.path) || '.jpg';
+        const filename = `file_${asset._id}_${Date.now()}${ext}`;
+        const destinationPath = path.join(uploadDir, filename);
+
+        await fs.promises.copyFile(file.path, destinationPath);
+        const localUrl = `/uploads/${filename}`;
+
+        asset.publicId = filename;
+        asset.secureUrl = localUrl;
+        asset.thumbnailUrl = localUrl;
+        asset.status = "available";
+        await asset.save();
+
+        const durationMs = Math.round(performance.now() - startTime);
+        logger.info("File saved to local storage fallback", {
+          metric: "upload_complete_local",
+          assetId: asset._id.toString(),
+          localUrl,
+          durationMs,
+        });
+
+        const { default: eventBus } = await import("./eventBus.js");
+        eventBus.emit("file:uploaded", { assetId: asset._id, asset });
+        return;
+      }
 
       logger.info("Cloudinary upload response", {
         assetId: asset._id.toString(),
@@ -434,7 +478,7 @@ class FileUploadService {
       eventBus.emit("file:uploaded", { assetId: asset._id, asset });
     } catch (error) {
       const durationMs = Math.round(performance.now() - startTime);
-      logger.error("Cloudinary upload failed permanently", {
+      logger.error("Upload failed permanently", {
         metric: "upload_failure",
         assetId: asset._id.toString(),
         error: error.message,

@@ -18,6 +18,10 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { downloadAndSaveFile } from '../../utils/fileDownload';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+import { normalizeMediaUrl, getFileKind } from '../../utils/mediaUtils';
+import { useAuthStore } from '../../stores/authStore';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
+import logger from '../../utils/logger';
 
 import {
   FileText,
@@ -39,26 +43,6 @@ import {
 } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-// ─── File type detection ──────────────────────────────────────────────────────
-
-export function getFileKind(mime = '', name = '') {
-  const ext = (name.split('.').pop() || '').toLowerCase();
-  if (mime?.startsWith('image/') || /^(jpg|jpeg|png|gif|webp|svg|tiff|tif|bmp|ico|heic|heif)$/.test(ext)) return 'image';
-  if (mime?.startsWith('video/') || /^(mp4|mov|avi|mkv|webm|flv|wmv|m4v|3gp)$/.test(ext)) return 'video';
-  if (mime?.startsWith('audio/') || /^(mp3|m4a|wav|aac|ogg|flac|opus|wma)$/.test(ext)) return 'audio';
-  if (mime === 'application/pdf' || ext === 'pdf') return 'pdf';
-  if (/^(doc|docx)$/.test(ext) || mime?.includes('word') || mime?.includes('msword')) return 'word';
-  if (/^(xls|xlsx)$/.test(ext) || mime?.includes('excel') || mime?.includes('spreadsheet')) return 'spreadsheet';
-  if (ext === 'csv') return 'csv';
-  if (/^(ppt|pptx)$/.test(ext) || mime?.includes('presentation') || mime?.includes('powerpoint')) return 'presentation';
-  if (/^(zip|rar|tar|gz|7z|bz2|xz)$/.test(ext) || mime?.includes('zip') || mime?.includes('rar') || mime?.includes('tar')) return 'archive';
-  if (/^(js|ts|jsx|tsx|py|java|c|cpp|cs|go|rs|rb|php|swift|kt|sh|bash)$/.test(ext)) return 'code';
-  if (/^(json|xml|html|htm|css|yaml|yml|toml|ini|env|md|mdx)$/.test(ext)) return 'code';
-  if (mime?.startsWith('text/') || mime?.includes('json') || mime?.includes('xml')) return 'code';
-  if (ext === 'txt') return 'text';
-  return 'file';
-}
 
 function formatFileSize(bytes) {
   if (!bytes) return '';
@@ -114,15 +98,15 @@ function KindIcon({ kind, color, size = 22 }) {
 
 // ─── Fullscreen Image Viewer ──────────────────────────────────────────────────
 
-function ImageViewer({ visible, file, name, onClose }) {
+function ImageViewer({ visible, fileUrl, name, mimeType, headers, onClose }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
 
   const handleDownload = async () => {
     try {
-      await downloadAndSaveFile(file.url, name, file.mimeType || 'image/jpeg');
-    } catch {
-      Linking.openURL(file.url);
+      await downloadAndSaveFile(fileUrl, name, mimeType);
+    } catch (e) {
+      Alert.alert('Download Error', e.message || 'Could not download image');
     }
   };
 
@@ -150,11 +134,14 @@ function ImageViewer({ visible, file, name, onClose }) {
             </View>
           ) : (
             <Image
-              source={{ uri: file.url }}
+              source={{ uri: fileUrl, headers }}
               style={ms.fullImg}
               resizeMode="contain"
               onLoad={() => setLoaded(true)}
-              onError={() => setError(true)}
+              onError={(err) => {
+                logger.warn('[ImageViewer] Fullscreen image load failed:', fileUrl, err?.nativeEvent);
+                setError(true);
+              }}
             />
           )}
         </TouchableOpacity>
@@ -165,7 +152,7 @@ function ImageViewer({ visible, file, name, onClose }) {
 
 // ─── Fullscreen Video Player ──────────────────────────────────────────────────
 
-function VideoPlayer({ visible, file, name, onClose }) {
+function VideoPlayer({ visible, fileUrl, name, onClose }) {
   const videoRef = useRef(null);
   const [status, setStatus] = useState({});
   const [muted, setMuted] = useState(false);
@@ -202,7 +189,7 @@ function VideoPlayer({ visible, file, name, onClose }) {
         <View style={ms.videoArea}>
           <Video
             ref={videoRef}
-            source={{ uri: file.url }}
+            source={{ uri: fileUrl }}
             style={ms.videoPlayer}
             resizeMode={ResizeMode.CONTAIN}
             onPlaybackStatusUpdate={setStatus}
@@ -235,7 +222,7 @@ function VideoPlayer({ visible, file, name, onClose }) {
 
 // ─── Audio Player Card ────────────────────────────────────────────────────────
 
-function AudioPlayerCard({ file, name, activeColor, colors }) {
+function AudioPlayerCard({ fileUrl, name, activeColor, colors }) {
   const soundRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
@@ -257,7 +244,7 @@ function AudioPlayerCard({ file, name, activeColor, colors }) {
     try {
       await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
       const { sound } = await Audio.Sound.createAsync(
-        { uri: file.url },
+        { uri: fileUrl },
         { shouldPlay: true },
         (s) => {
           if (s.isLoaded) {
@@ -310,20 +297,20 @@ function AudioPlayerCard({ file, name, activeColor, colors }) {
 
 // ─── Code Preview Modal ───────────────────────────────────────────────────────
 
-function CodePreviewModal({ visible, file, name, onClose }) {
+function CodePreviewModal({ visible, fileUrl, name, onClose }) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   React.useEffect(() => {
-    if (!visible) return;
+    if (!visible || !fileUrl) return;
     setLoading(true);
     setError(false);
-    fetch(file.url)
+    fetch(fileUrl)
       .then(r => r.text())
       .then(t => { setCode(t); setLoading(false); })
       .catch(() => { setError(true); setLoading(false); });
-  }, [visible, file.url]);
+  }, [visible, fileUrl]);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
@@ -333,7 +320,7 @@ function CodePreviewModal({ visible, file, name, onClose }) {
             <X size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={ms.codeTitle} numberOfLines={1}>{name}</Text>
-          <TouchableOpacity onPress={() => Linking.openURL(file.url)} style={ms.videoHeaderBtn}>
+          <TouchableOpacity onPress={() => Linking.openURL(fileUrl)} style={ms.videoHeaderBtn}>
             <ExternalLink size={18} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -357,21 +344,18 @@ function CodePreviewModal({ visible, file, name, onClose }) {
 export default function MobileFileCard({ file, colors }) {
   if (!file) return null;
 
-  const name     = file.originalName || file.fileName || file.name || 'File';
-  const size     = file.fileSize || file.size || file.fileSizeBytes;
-  const mime     = file.mimeType || file.type || '';
-  const ext      = (name.split('.').pop() || '').toLowerCase();
-  const kind     = getFileKind(mime, name);
-  let fileUrl = file.url || file.secureUrl || '';
-  if (fileUrl && !fileUrl.startsWith('http://') && !fileUrl.startsWith('https://') && !fileUrl.startsWith('data:') && !fileUrl.startsWith('file:')) {
-    const prefix = 'https://chat-app-api-cyyl.onrender.com';
-    fileUrl = fileUrl.startsWith('/') ? `${prefix}${fileUrl}` : `${prefix}/${fileUrl}`;
-  }
-  let thumbUrl = file.thumbnailUrl || (kind === 'image' ? fileUrl : null);
-  if (thumbUrl && !thumbUrl.startsWith('http://') && !thumbUrl.startsWith('https://') && !thumbUrl.startsWith('data:') && !thumbUrl.startsWith('file:')) {
-    const prefix = 'https://chat-app-api-cyyl.onrender.com';
-    thumbUrl = thumbUrl.startsWith('/') ? `${prefix}${thumbUrl}` : `${prefix}/${thumbUrl}`;
-  }
+  const name = file.originalName || file.fileName || file.name || 'File';
+  const size = file.fileSize || file.size || file.fileSizeBytes;
+  const mime = file.mimeType || file.type || '';
+  const ext  = (name.split('.').pop() || '').toLowerCase();
+  
+  const rawUrl = file.url || file.secureUrl || file.secure_url || file.path || file.uri || file.location || file.fileUrl || file.downloadUrl || '';
+  const fileUrl = normalizeMediaUrl(rawUrl);
+  
+  const rawThumb = file.thumbnailUrl || file.thumbUrl || file.previewUrl || (mime.startsWith('image/') || ext.match(/^(jpg|jpeg|png|gif|webp)$/i) ? rawUrl : null);
+  const thumbUrl = normalizeMediaUrl(rawThumb);
+
+  const kind = getFileKind(mime, name, fileUrl);
 
   const activeColor = (KIND_COLORS[kind] || KIND_COLORS.file);
   const themeColor  = kind === 'image' || kind === 'video' || kind === 'audio'
@@ -382,20 +366,22 @@ export default function MobileFileCard({ file, colors }) {
   const [vidVisible,   setVidVisible]   = useState(false);
   const [codeVisible,  setCodeVisible]  = useState(false);
   const [downloading,  setDownloading]  = useState(false);
+  const [imgLoading,   setImgLoading]   = useState(true);
+  const [imgError,     setImgError]     = useState(false);
 
   // ── Action handlers ──
 
   const openNative = useCallback(async () => {
-    if (!file.url) return;
+    if (!fileUrl) return;
     setDownloading(true);
     try {
-      await downloadAndSaveFile(file.url, name, mime);
+      await downloadAndSaveFile(fileUrl, name, mime);
     } catch {
-      Linking.openURL(file.url);
+      Linking.openURL(fileUrl);
     } finally {
       setDownloading(false);
     }
-  }, [file.url, name, mime]);
+  }, [fileUrl, name, mime]);
 
   const handleCardPress = useCallback(() => {
     switch (kind) {
@@ -407,22 +393,111 @@ export default function MobileFileCard({ file, colors }) {
     }
   }, [kind, openNative]);
 
+  const isPlaceholder = !fileUrl || fileUrl.includes('/placeholder-loading');
+
   // ── IMAGES: render inline thumbnail ──
-  if (kind === 'image') {
+  if (kind === 'image' && isPlaceholder) {
+    return (
+      <View style={[ms.card, { backgroundColor: colors.backgroundSecondary || colors.background, borderColor: colors.border }]}>
+        <ActivityIndicator size="small" color={colors.primary || '#1264a3'} style={{ marginRight: scale(8) }} />
+        <Text style={[ms.fileName, { color: colors.textSecondary, fontSize: moderateScale(12) }]}>Uploading image...</Text>
+      </View>
+    );
+  }
+
+  const token = useAuthStore.getState().accessToken;
+  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+  const imageHeaders = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+  };
+
+  if (kind === 'image' && imgError) {
     return (
       <>
-        <TouchableOpacity onPress={() => setImgVisible(true)} activeOpacity={0.85} style={ms.imgThumbContainer}>
-          <Image
-            source={{ uri: thumbUrl || file.url }}
-            style={ms.imgThumb}
-            resizeMode="cover"
-          />
+        <TouchableOpacity
+          style={[ms.card, { backgroundColor: colors.backgroundSecondary || colors.background, borderColor: colors.border }]}
+          onPress={() => { setImgError(false); setImgLoading(true); }}
+          activeOpacity={0.75}
+        >
+          <View style={[ms.iconBox, { backgroundColor: activeColor + '20' }]}>
+            <ImageIcon size={22} color={activeColor} />
+          </View>
+          <View style={ms.info}>
+            <Text style={[ms.fileName, { color: colors.textPrimary }]} numberOfLines={1}>{name}</Text>
+            <Text style={[ms.sizeText, { color: colors.textTertiary }]}>Tap to retry image loading</Text>
+          </View>
+          <TouchableOpacity
+            style={[ms.actionBtn, { backgroundColor: activeColor + '15' }]}
+            onPress={() => setImgVisible(true)}
+          >
+            <Download size={16} color={activeColor} />
+          </TouchableOpacity>
         </TouchableOpacity>
 
         <ImageViewer
           visible={imgVisible}
-          file={file}
+          fileUrl={fileUrl}
           name={name}
+          mimeType={mime}
+          headers={imageHeaders}
+          onClose={() => setImgVisible(false)}
+        />
+      </>
+    );
+  }
+
+  if (kind === 'image') {
+    const targetUri = thumbUrl || fileUrl;
+
+    logger.info('[MobileFileCard] Final image props:', {
+      name,
+      targetUri,
+      hasAuthToken: !!token,
+      hasWorkspaceId: !!workspaceId,
+    });
+
+    return (
+      <>
+        <TouchableOpacity onPress={() => setImgVisible(true)} activeOpacity={0.85} style={ms.imgThumbContainer}>
+          <Image
+            source={{ uri: targetUri, headers: imageHeaders }}
+            style={ms.imgThumb}
+            resizeMode="cover"
+            onLoadStart={() => {
+              logger.info('[MobileFileCard Image] onLoadStart:', targetUri);
+              setImgLoading(true);
+            }}
+            onLoad={(e) => {
+              const { width, height } = e.nativeEvent.source || {};
+              logger.info('[MobileFileCard Image] onLoad SUCCESS:', { targetUri, width, height });
+            }}
+            onLoadEnd={() => {
+              logger.info('[MobileFileCard Image] onLoadEnd:', targetUri);
+              setImgLoading(false);
+            }}
+            onError={(err) => {
+              logger.warn('[MobileFileCard Image] onError FAILURE:', {
+                targetUri,
+                error: err?.nativeEvent?.error || err?.nativeEvent,
+              });
+              setImgLoading(false);
+              setImgError(true);
+            }}
+          />
+          {imgLoading && (
+            <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.06)' }]} pointerEvents="none">
+              <ActivityIndicator color={colors.primary || '#1264a3'} size="small" />
+            </View>
+          )}
+        </TouchableOpacity>
+
+        <ImageViewer
+          visible={imgVisible}
+          fileUrl={fileUrl}
+          name={name}
+          mimeType={mime}
+          headers={imageHeaders}
           onClose={() => setImgVisible(false)}
         />
       </>
@@ -431,7 +506,7 @@ export default function MobileFileCard({ file, colors }) {
 
   // ── AUDIO: inline player ──
   if (kind === 'audio') {
-    return <AudioPlayerCard file={file} name={name} activeColor={activeColor} colors={colors} />;
+    return <AudioPlayerCard fileUrl={fileUrl} name={name} activeColor={activeColor} colors={colors} />;
   }
 
   // ── VIDEOS: thumbnail poster + play button ──
@@ -456,7 +531,7 @@ export default function MobileFileCard({ file, colors }) {
 
         <VideoPlayer
           visible={vidVisible}
-          file={file}
+          fileUrl={fileUrl}
           name={name}
           onClose={() => setVidVisible(false)}
         />
@@ -509,7 +584,7 @@ export default function MobileFileCard({ file, colors }) {
       {(kind === 'code' || kind === 'text') && (
         <CodePreviewModal
           visible={codeVisible}
-          file={file}
+          fileUrl={fileUrl}
           name={name}
           onClose={() => setCodeVisible(false)}
         />
@@ -523,17 +598,16 @@ export default function MobileFileCard({ file, colors }) {
 const ms = StyleSheet.create({
   // ── Image thumbnail (inline in bubble) ──
   imgThumbContainer: {
-    width: '100%',
-    minWidth: scale(240),
-    maxWidth: scale(340),
+    width: scale(250),
+    height: verticalScale(200),
     borderRadius: moderateScale(12),
     overflow: 'hidden',
     marginVertical: verticalScale(4),
   },
   imgThumb: {
     width: '100%',
-    height: verticalScale(220),
-    backgroundColor: '#111',
+    height: '100%',
+    backgroundColor: '#1e1e1e',
   },
   imgThumbOverlay: {
     position: 'absolute',

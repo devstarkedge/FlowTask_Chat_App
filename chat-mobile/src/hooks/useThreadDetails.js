@@ -3,6 +3,7 @@ import { useThreadStore } from '../stores/threadStore';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
 import { useLaterStore } from '../stores/laterStore';
+import { getMessageAttachments } from '../utils/mediaUtils';
 import Toast from 'react-native-toast-message';
 
 export const useThreadDetails = ({ rootMessageId, channelId, highlightedMessageId }) => {
@@ -58,26 +59,7 @@ export const useThreadDetails = ({ rootMessageId, channelId, highlightedMessageI
   }, []);
 
   const getAttachments = useCallback((msg) => {
-    if (!msg) return [];
-    const refs = msg.fileReferences || [];
-    if (refs.length > 0) {
-      return refs
-        .map((ref) => {
-          if (!ref.fileId) return null;
-          const file = ref.fileId;
-          return {
-            _id: file._id,
-            name: file.originalName || file.fileName || file.name || 'File',
-            fileName: file.originalName || file.fileName || file.name || 'File',
-            url: file.url || file.secureUrl,
-            thumbnailUrl: file.thumbnailUrl,
-            mimeType: file.mimeType,
-            fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
-          };
-        })
-        .filter(Boolean);
-    }
-    return msg.attachments || msg.files || [];
+    return getMessageAttachments(msg);
   }, []);
 
   const handleSendReply = async (content, options) => {

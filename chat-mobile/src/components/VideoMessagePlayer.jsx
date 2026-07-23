@@ -3,12 +3,16 @@ import { View, StyleSheet, TouchableOpacity, Modal, SafeAreaView } from 'react-n
 import { Video, ResizeMode } from 'expo-av';
 import { Play, X, Loader2 } from 'lucide-react-native';
 import { scale, moderateScale } from '../utils/responsive';
+import { normalizeMediaUrl } from '../utils/mediaUtils';
 import logger from '../utils/logger';
 
 const VideoMessagePlayer = ({ videoUrl, thumbnailUrl, colors, width, height }) => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const videoRef = useRef(null);
+
+  const normalizedVideoUrl = normalizeMediaUrl(videoUrl);
+  const normalizedThumbUrl = normalizeMediaUrl(thumbnailUrl);
 
   // Calculate aspect ratio
   const aspectRatio = width && height ? width / height : 16 / 9;
@@ -18,27 +22,27 @@ const VideoMessagePlayer = ({ videoUrl, thumbnailUrl, colors, width, height }) =
   return (
     <>
       <TouchableOpacity 
-        style={[styles.container, { width: displayWidth, height: displayHeight, backgroundColor: colors.border }]} 
+        style={[styles.container, { width: displayWidth, height: displayHeight, backgroundColor: '#1a1a1a' }]} 
         activeOpacity={0.9}
         onPress={() => setIsFullScreen(true)}
-        disabled={videoUrl === '/placeholder-loading'}
+        disabled={normalizedVideoUrl === '/placeholder-loading' || !normalizedVideoUrl}
       >
-        {videoUrl === '/placeholder-loading' ? (
+        {normalizedVideoUrl === '/placeholder-loading' || !normalizedVideoUrl ? (
           <View style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]}>
              <Loader2 size={24} color="#FFF" />
           </View>
         ) : (
           <Video
-            source={{ uri: videoUrl }}
-          posterSource={thumbnailUrl ? { uri: thumbnailUrl } : undefined}
-          style={StyleSheet.absoluteFillObject}
-          resizeMode={ResizeMode.COVER}
-          shouldPlay={false}
-          isMuted={true}
-        />
+            source={{ uri: normalizedVideoUrl }}
+            posterSource={normalizedThumbUrl ? { uri: normalizedThumbUrl } : undefined}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode={ResizeMode.COVER}
+            shouldPlay={false}
+            isMuted={true}
+          />
         )}
         <View style={styles.overlay}>
-          {videoUrl === '/placeholder-loading' ? (
+          {normalizedVideoUrl === '/placeholder-loading' || !normalizedVideoUrl ? (
             <View style={[styles.playButtonContainer, { backgroundColor: 'transparent' }]} />
           ) : (
             <View style={[styles.playButtonContainer, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
@@ -52,7 +56,7 @@ const VideoMessagePlayer = ({ videoUrl, thumbnailUrl, colors, width, height }) =
         <SafeAreaView style={styles.fullScreenContainer}>
           <Video
             ref={videoRef}
-            source={{ uri: videoUrl }}
+            source={{ uri: normalizedVideoUrl }}
             style={styles.fullScreenVideo}
             useNativeControls
             resizeMode={ResizeMode.CONTAIN}

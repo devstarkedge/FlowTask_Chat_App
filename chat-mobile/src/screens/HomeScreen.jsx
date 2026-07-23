@@ -51,6 +51,9 @@ import {
 const HomeScreen = ({ navigation }) => {
   if (!navigation) navigation = { navigate: () => {} };
 
+  React.useEffect(() => {
+    navigation.setOptions({ headerShown: false });
+  }, []);
   const { colors } = useThemeStore();
   
   const {

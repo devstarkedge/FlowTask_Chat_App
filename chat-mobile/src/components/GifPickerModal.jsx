@@ -29,6 +29,7 @@ import {
   Dimensions,
   Platform,
   ScrollView,
+  StatusBar,
 } from 'react-native';
 import { X, Search, Smile, RefreshCw } from 'lucide-react-native';
 import useGiphySearch from '../hooks/useGiphySearch';
@@ -293,7 +294,7 @@ export default function GifPickerModal({ visible, onClose, onSelectGif, colors }
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'ios' ? 44 : 0,
+    paddingTop: Platform.OS === 'ios' ? 44 : (StatusBar.currentHeight || 0),
   },
   header: {
     flexDirection: 'row',

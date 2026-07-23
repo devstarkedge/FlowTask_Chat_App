@@ -94,7 +94,7 @@ export default function NavigationSidebar({
     unreads,
     createDM,
   } = useChannelStore();
-  const { user } = useAuthStore();
+  const { user, channelSync } = useAuthStore();
   const { switchWorkspace } = useWorkspaceStore();
   const drafts = useDraftStore((s) => s.drafts);
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
@@ -260,9 +260,16 @@ export default function NavigationSidebar({
     const currentFlowTaskId = user?.flowTaskUserId?.toString?.();
     const selfIds = new Set([currentChatId, currentFlowTaskId].filter(Boolean));
 
-    const regularDMs = channels.filter(
-      (c) => c.type === "dm" && !c.isArchived && !c.isAI && !c.isSelf && !c.isSelfDM,
-    );
+    const regularDMs = channels.filter((c) => {
+      if (c.type !== "dm" || c.isArchived || c.isAI || c.isSelf || c.isSelfDM) {
+        return false;
+      }
+      
+      // Hide premature DMs from the recipient until the first message is sent
+      const isCreator = c.createdBy && c.createdBy.toString() === currentChatId;
+      const hasMessages = !!c.lastMessageAt;
+      return hasMessages || isCreator;
+    });
 
     const aiDMs = channels.filter(
       (c) => c.type === "dm" && !c.isArchived && c.isAI
@@ -467,6 +474,29 @@ export default function NavigationSidebar({
   return (
     <>
       <SidebarContainer header={header} aria-label="Channels sidebar">
+        {channelSync?.workspaceId === activeWorkspaceId
+          && ['pending', 'running'].includes(channelSync.status) && (
+          <div
+            className="mx-2 mt-2 rounded-md px-3 py-2 text-xs"
+            style={{ color: 'var(--sidebar-text-dim, var(--text-muted))', background: 'var(--bg-active)' }}
+            role="status"
+          >
+            Setting up your project channels…
+            {channelSync.totalBoards > 0 && (
+              <span> {channelSync.completedBoards + channelSync.failedBoards}/{channelSync.totalBoards}</span>
+            )}
+          </div>
+        )}
+        {channelSync?.workspaceId === activeWorkspaceId
+          && ['partial', 'failed'].includes(channelSync.status) && (
+          <div
+            className="mx-2 mt-2 rounded-md px-3 py-2 text-xs"
+            style={{ color: 'var(--accent-red)', background: 'rgba(220,38,38,.06)' }}
+            role="status"
+          >
+            Some project channels could not be synchronized. They will be retried during reconciliation.
+          </div>
+        )}
         {/* ── Quick Nav Items (Home mode only) ── */}
         {!isDMMode && (
           <div className="pt-2 pb-1">

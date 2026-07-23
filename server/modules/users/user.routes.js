@@ -13,6 +13,7 @@ import {
   saveDndSchedule,
   updateThemePreferences,
   getThemePreferences,
+  updateUser,
 } from './user.controller.js';
 import { protect } from '../auth/auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
@@ -55,6 +56,7 @@ router.get('/preferences/theme', protect, getThemePreferences);
 router.put('/presence', protect, setPresence);
 
 // Profile (must be last — :id is a catch-all param)
+router.patch('/:id', protect, updateUser);
 router.get('/:id', protect, getProfile);
 
 export default router;

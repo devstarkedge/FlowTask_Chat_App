@@ -200,31 +200,49 @@ class UserRepository {
    * @param {object} flowTaskUser - User data from FlowTask API
    * @returns {Promise<ChatUser>}
    */
-  async upsertFromFlowTask(flowTaskUser) {
+  async upsertFromFlowTask(flowTaskUser, options = {}) {
     const { _id, name, email, role, department, team, avatar } = flowTaskUser;
+    const markRegistered = typeof options === 'object' && options.markRegistered === true;
+    const createIfMissing = typeof options === 'object' && options.createIfMissing === true;
+    const normalizedEmail = email?.trim().toLowerCase();
 
     const departmentIds = Array.isArray(department)
       ? department.map((d) => (typeof d === 'object' ? d._id || d : d).toString())
       : department ? [department.toString()] : [];
 
-    const filter = { flowTaskUserId: _id.toString() };
+    const [byFlowTaskId, byEmail] = await Promise.all([
+      ChatUser.findOne({ flowTaskUserId: _id.toString() }),
+      normalizedEmail ? ChatUser.findOne({ email: normalizedEmail }) : null,
+    ]);
+    if (
+      byFlowTaskId &&
+      byEmail &&
+      byFlowTaskId._id.toString() !== byEmail._id.toString()
+    ) {
+      throw new Error('FlowTask ID and verified email resolve to different ChatApp users');
+    }
+
+    const existing = byFlowTaskId || byEmail;
+    if (!existing && !createIfMissing) return null;
+    const filter = existing ? { _id: existing._id } : { flowTaskUserId: _id.toString() };
 
     const updated = await ChatUser.findOneAndUpdate(
       filter,
       {
         $set: {
-          authProvider: 'flowtask',
+          authProvider: existing?.authProvider || 'flowtask',
+          flowTaskUserId: _id.toString(),
           name,
-          email,
+          email: normalizedEmail,
           role: role?.toLowerCase() || 'employee',
           departmentIds,
           teamId: team ? (typeof team === 'object' ? team._id || team : team).toString() : null,
           avatar: avatar || null,
           isActive: true,
           emailVerified: true, // FlowTask users are pre-verified
+          ...(markRegistered ? { registeredAt: new Date() } : {}),
         },
         $setOnInsert: {
-          flowTaskUserId: _id.toString(),
           onlineStatus: 'offline',
           chatPreferences: {},
         },
@@ -505,6 +523,42 @@ class UserRepository {
     return ChatUser.find({
       flowTaskUserId: { $in: flowTaskUserIds },
     }).exec();
+  }
+
+  /**
+   * Resolve existing accounts for an authoritative FlowTask participant set.
+   * Email candidates are restricted to verified ChatApp identities; callers
+   * still enforce one-to-one ID/email agreement before granting access.
+   */
+  async findByFlowTaskIdentityCandidates(flowTaskUserIds = [], verifiedEmails = []) {
+    const clauses = [];
+    if (flowTaskUserIds.length > 0) {
+      clauses.push({ flowTaskUserId: { $in: flowTaskUserIds } });
+    }
+    if (verifiedEmails.length > 0) {
+      clauses.push({
+        email: { $in: verifiedEmails.map((email) => email.trim().toLowerCase()) },
+        emailVerified: true,
+      });
+    }
+    if (clauses.length === 0) return [];
+
+    return ChatUser.find({ $or: clauses }).exec();
+  }
+
+  async linkFlowTaskIdentity(userId, flowTaskUserId) {
+    return ChatUser.findOneAndUpdate(
+      {
+        _id: userId,
+        $or: [
+          { flowTaskUserId: { $exists: false } },
+          { flowTaskUserId: null },
+          { flowTaskUserId },
+        ],
+      },
+      { $set: { flowTaskUserId } },
+      { returnDocument: 'after' },
+    );
   }
 
   /**

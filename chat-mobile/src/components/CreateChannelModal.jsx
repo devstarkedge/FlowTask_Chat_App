@@ -19,12 +19,14 @@ import { directoriesAPI } from "../services/api";
 import { useAuthStore } from "../stores/authStore";
 import { AppAvatar } from "./common";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
-
+import useResponsive from '../hooks/useResponsive';
 
 /**
  * CreateChannelModal — Slack-like modal for creating a new channel.
  */
 const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
+  const { isTablet, isDesktop, width } = useResponsive();
+  const isWide = isTablet || isDesktop || width > 640;
   const { colors } = useThemeStore();
   const createChannel = useChannelStore((s) => s.createChannel);
   const user = useAuthStore((s) => s.user);
@@ -131,10 +133,18 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <KeyboardAvoidingView
-        style={[styles.overlay, { backgroundColor: colors.overlay }]}
+        style={[
+          styles.overlay,
+          { backgroundColor: colors.overlay },
+          isWide && styles.wideOverlay,
+        ]}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[
+          styles.container,
+          { backgroundColor: colors.background },
+          isWide && styles.wideContainer,
+        ]}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
@@ -332,11 +342,22 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-end",
   },
+  wideOverlay: {
+    justifyContent: "center",
+    alignItems: "center",
+    padding: scale(24),
+  },
   container: {
     maxHeight: "90%",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     overflow: "hidden",
+  },
+  wideContainer: {
+    width: "100%",
+    maxWidth: 600,
+    borderRadius: 16,
+    maxHeight: "85%",
   },
   header: {
     flexDirection: "row",

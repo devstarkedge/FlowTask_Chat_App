@@ -11,7 +11,7 @@ import {
   Platform,
   Pressable,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../../components/common/ScreenContainer';
 import { Send, CheckCircle2, MessageSquare, X } from 'lucide-react-native';
 import Avatar from '../../components/Avatar';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
@@ -62,11 +62,7 @@ export default function CanvasCommentsSheet({
     >
       <View style={styles.overlay}>
         <Pressable style={styles.dismissArea} onPress={onClose} />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.sheetContainer}
-        >
-          <SafeAreaView style={styles.safeArea}>
+        <ScreenContainer style={styles.sheetContainer}>
             <View style={styles.header}>
               <View style={styles.headerTitleRow}>
                 <MessageSquare size={18} color="#4f46e5" style={styles.headerIcon} />
@@ -178,8 +174,7 @@ export default function CanvasCommentsSheet({
                 <Send size={18} color="#ffffff" />
               </TouchableOpacity>
             </View>
-          </SafeAreaView>
-        </KeyboardAvoidingView>
+        </ScreenContainer>
       </View>
     </Modal>
   );

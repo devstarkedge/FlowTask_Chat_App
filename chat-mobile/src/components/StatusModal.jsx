@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,18 +11,20 @@ import {
 } from "react-native";
 import AccessibleModal from "./AccessibleModal";
 import { useThemeStore } from "../stores/themeStore";
+import { useAuthStore } from "../stores/authStore";
 import { usersAPI } from "../services/api";
-import { X, Clock } from "lucide-react-native";
+import { X, Clock, Check } from "lucide-react-native";
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import logger from '../utils/logger';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 
-const StatusModal = ({ visible, onClose }) => {
+const StatusModal = ({ visible, onClose, initialStatus }) => {
   const { colors } = useThemeStore();
-  const [statusText, setStatusText] = useState("");
-  const [selectedEmoji, setSelectedEmoji] = useState("");
-  const [selectedExpiration, setSelectedExpiration] = useState(null);
+  const [statusText, setStatusText] = useState(initialStatus?.text || "");
+  const [selectedEmoji, setSelectedEmoji] = useState(initialStatus?.emoji || "");
+  const [selectedPresetIndex, setSelectedPresetIndex] = useState(null);
+  const [expiration, setExpiration] = useState(initialStatus?.expiration || 60);
 
   const statusPresets = [
     { emoji: "🟢", label: "Available", text: "Available" },
@@ -44,10 +46,80 @@ const StatusModal = ({ visible, onClose }) => {
     { label: "Don't clear", value: null },
   ];
 
+  useEffect(() => {
+    if (visible) {
+      const textVal = initialStatus?.text || "";
+      const emojiVal = initialStatus?.emoji || "";
+      const expVal = initialStatus?.expiration !== undefined ? initialStatus.expiration : 60;
+      
+      setStatusText(textVal);
+      setSelectedEmoji(emojiVal);
+      setExpiration(expVal);
+
+      if (textVal) {
+        const index = statusPresets.findIndex(
+          (p) =>
+            (p.label.toLowerCase() === textVal.toLowerCase() ||
+              p.text.toLowerCase() === textVal.toLowerCase()) &&
+            (p.emoji === emojiVal || !emojiVal)
+        );
+        setSelectedPresetIndex(index !== -1 ? index : null);
+      } else {
+        setSelectedPresetIndex(null);
+      }
+    }
+  }, [visible, initialStatus]);
+
   const handleClose = () => {
     if (Platform.OS === "web") {
       document.activeElement?.blur();
     }
+    onClose();
+  };
+
+  const handleSave = async () => {
+    try {
+      const statusObj = {
+        text: statusText.trim(),
+        emoji: selectedEmoji || '💬',
+        expiration: expiration,
+      };
+      await usersAPI.setCustomStatus(statusObj);
+
+      // Update local auth store so user state updates immediately across components
+      const authState = useAuthStore.getState();
+      if (authState.user) {
+        authState.setUser({
+          ...authState.user,
+          customStatus: statusObj.text ? statusObj : null,
+        });
+      }
+    } catch (err) {
+      logger.error('Failed to set status:', err);
+    }
+    if (Platform.OS === "web") {
+      document.activeElement?.blur();
+    }
+    onClose();
+  };
+
+  const handleClear = async () => {
+    try {
+      await usersAPI.setCustomStatus({ text: '', emoji: '', expiration: null });
+
+      const authState = useAuthStore.getState();
+      if (authState.user) {
+        authState.setUser({
+          ...authState.user,
+          customStatus: null,
+        });
+      }
+    } catch (err) {
+      logger.error('Failed to clear status:', err);
+    }
+    setStatusText("");
+    setSelectedEmoji("");
+    setSelectedPresetIndex(null);
     onClose();
   };
 
@@ -101,7 +173,10 @@ const StatusModal = ({ visible, onClose }) => {
                   placeholder="What's your status?"
                   placeholderTextColor={colors.textTertiary}
                   value={statusText}
-                  onChangeText={setStatusText}
+                  onChangeText={(text) => {
+                    setStatusText(text);
+                    setSelectedPresetIndex(null);
+                  }}
                 />
               </View>
             </View>
@@ -119,8 +194,8 @@ const StatusModal = ({ visible, onClose }) => {
                   style={styles.presetItem}
                   onPress={() => {
                     setSelectedEmoji(preset.emoji);
-                    setStatusText(preset.label); // use label for display consistency
-                    setSelectedExpiration(null); // reset expiration on new preset
+                    setStatusText(preset.label);
+                    setSelectedPresetIndex(index);
                   }}
                   activeOpacity={0.7}
                   style={[
@@ -131,10 +206,13 @@ const StatusModal = ({ visible, onClose }) => {
                 >
                   <Text style={styles.presetEmoji}>{preset.emoji}</Text>
                   <Text
-                    style={[styles.presetLabel, { color: colors.textPrimary }]}
+                    style={[styles.presetLabel, { color: selectedPresetIndex === index ? colors.primary : colors.textPrimary }]}
                   >
                     {preset.label}
                   </Text>
+                  {selectedPresetIndex === index && (
+                    <Check size={18} color={colors.primary} style={{ marginLeft: 'auto' }} />
+                  )}
                 </TouchableOpacity>
               ))}
             </View>
@@ -150,21 +228,14 @@ const StatusModal = ({ visible, onClose }) => {
                 <TouchableOpacity
                   key={index}
                   style={styles.expirationItem}
-                  onPress={() => {
-                    setSelectedExpiration(option.value);
-                  }}
-                  activeOpacity={0.7}
-                  style={[
-                    styles.expirationItem,
-                    selectedExpiration === option.value && { backgroundColor: colors.backgroundSecondary },
-                  ]}
+                  onPress={() => setExpiration(option.value)}
                   activeOpacity={0.7}
                 >
-                  <Clock size={18} color={colors.textSecondary} />
+                  <Clock size={18} color={expiration === option.value ? colors.primary : colors.textSecondary} />
                   <Text
                     style={[
                       styles.expirationLabel,
-                      { color: colors.textPrimary },
+                      { color: expiration === option.value ? colors.primary : colors.textPrimary },
                     ]}
                   >
                     {option.label}
@@ -181,16 +252,7 @@ const StatusModal = ({ visible, onClose }) => {
                   styles.clearButton,
                   { backgroundColor: colors.backgroundSecondary },
                 ]}
-                onPress={async () => {
-                  try {
-                    await usersAPI.setCustomStatus({ text: '', emoji: '', expiration: null });
-                  } catch (err) {
-                    console.error('Failed to clear status:', err);
-                  }
-                  setStatusText("");
-                  setSelectedEmoji("");
-                  setSelectedExpiration(null);
-                }}
+                onPress={handleClear}
                 activeOpacity={0.7}
               >
                 <Text
@@ -205,21 +267,7 @@ const StatusModal = ({ visible, onClose }) => {
                   styles.saveButton,
                   { backgroundColor: colors.primary },
                 ]}
-                onPress={async () => {
-                  try {
-                    await usersAPI.setCustomStatus({
-                      text: statusText,
-                      emoji: selectedEmoji || '😊',
-                      expiration: selectedExpiration,
-                    });
-                  } catch (err) {
-                    console.error('Failed to set status:', err);
-                  }
-                  if (Platform.OS === "web") {
-                    document.activeElement?.blur();
-                  }
-                  onClose();
-                }}
+                onPress={handleSave}
                 activeOpacity={0.7}
               >
                 <Text

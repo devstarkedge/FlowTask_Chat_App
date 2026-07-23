@@ -7,8 +7,8 @@ import logger from '../utils/logger';
  */
 
 const ENV = {
-  API_BASE_URL: Constants.expoConfig?.extra?.API_BASE_URL || 'https://chat-app-api-cyyl.onrender.com/api/chat',
-  SOCKET_URL: Constants.expoConfig?.extra?.SOCKET_URL || 'https://chat-app-api-cyyl.onrender.com',
+  API_BASE_URL: process.env.EXPO_PUBLIC_API_BASE_URL || Constants.expoConfig?.extra?.apiUrl || Constants.expoConfig?.extra?.API_BASE_URL || 'https://chat-app-api-cyyl.onrender.com/api/chat',
+  SOCKET_URL: process.env.EXPO_PUBLIC_SOCKET_URL || Constants.expoConfig?.extra?.socketUrl || Constants.expoConfig?.extra?.SOCKET_URL || 'https://chat-app-api-cyyl.onrender.com',
   FLOWTASK_ENABLED: Constants.expoConfig?.extra?.FLOWTASK_ENABLED !== 'false',
 };
 

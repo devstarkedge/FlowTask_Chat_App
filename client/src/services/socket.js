@@ -68,10 +68,14 @@ const SOCKET_EVENTS = {
   CHANNEL_ADDED: 'channel:added',
   CHANNEL_REMOVED: 'channel:removed',
   CHANNEL_UPDATED: 'channel:updated',
-  MEMBER_JOINED: 'channel:member_joined',
-  MEMBER_LEFT: 'channel:member_left',
+  MEMBER_JOINED: 'member:joined',
+  MEMBER_LEFT: 'member:left',
   CHANNEL_MEMBERS_UPDATED: 'channel:members:updated',
   CHANNEL_CREATED: 'channel:created',
+  CHANNEL_LIST_INVALIDATED: 'channel:list:invalidated',
+  CHANNEL_SYNC_PROGRESS: 'channel-sync:progress',
+  CHANNEL_SYNC_COMPLETED: 'channel-sync:completed',
+  CHANNEL_SYNC_FAILED: 'channel-sync:failed',
   USER_ACTIVATED: 'user:activated',
 
   // Threads
@@ -156,12 +160,16 @@ export function connectSocket() {
     logger.log('[Socket] Connected:', socket.id)
     useChatStore.getState().setConnectionStatus('connected')
 
-    // Join all channel rooms on initial connect
+    // Reconcile against the server before joining rooms. Cached sidebar state
+    // must never restore access removed while this device was disconnected.
     try {
-      const channels = useChannelStore.getState().channels
-      for (const ch of channels) {
-        socket.emit('channel:join', ch._id)
-      }
+      useChannelStore.getState().fetchChannels().then(() => {
+        const channels = useChannelStore.getState().channels
+        for (const ch of channels) {
+          socket.emit('channel:join', ch._id)
+        }
+      })
+      useAuthStore.getState().fetchChannelSyncStatus()
       
       // Sync active conversation focus with the server upon connect
       const activeChannelId = useChannelStore.getState().activeChannelId
@@ -234,12 +242,12 @@ export function connectSocket() {
     // tiny gaps. No need to refetch channels, messages, unreads, pins, etc.
     if (disconnectDuration < BRIEF_DISCONNECT_THRESHOLD_MS) {
       logger.log('[Socket] Brief disconnect — skipping full re-sync', { disconnectDuration })
-      return
     }
 
     // ── Long disconnect: full re-sync to catch missed data ──
     logger.log('[Socket] Long disconnect — running full re-sync', { disconnectDuration })
     try {
+      useAuthStore.getState().fetchChannelSyncStatus()
       const channelStore = useChannelStore.getState()
       channelStore.fetchChannels().then(() => {
         const channels = useChannelStore.getState().channels
@@ -419,6 +427,9 @@ export function connectSocket() {
     const exists = store.channels.some((c) => c._id === channelId)
     if (exists) {
       store.updateChannel(channelId, updates)
+      if (updates?.visibility !== undefined) {
+        store.fetchChannels()
+      }
     } else if (updates?.visibility !== undefined) {
       // Channel not in local list (e.g. non-member received workspace-wide
       // visibility change). Refetch to pick up the newly-visible channel.
@@ -478,8 +489,26 @@ export function connectSocket() {
     }
   })
 
+  socket.on(SOCKET_EVENTS.CHANNEL_SYNC_PROGRESS, (payload) => {
+    useAuthStore.getState().setChannelSync(payload)
+  })
+
+  socket.on(SOCKET_EVENTS.CHANNEL_SYNC_COMPLETED, (payload) => {
+    useAuthStore.getState().setChannelSync(payload)
+    useChannelStore.getState().fetchChannels()
+  })
+
+  socket.on(SOCKET_EVENTS.CHANNEL_SYNC_FAILED, (payload) => {
+    useAuthStore.getState().setChannelSync(payload)
+    useChannelStore.getState().fetchChannels()
+  })
+
+  socket.on(SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED, () => {
+    useChannelStore.getState().fetchChannels()
+  })
+
   // Handles faded → active user transitions (re-fetches member list)
-  socket.on(SOCKET_EVENTS.USER_ACTIVATED, ({ userId, channelId }) => {
+  socket.on(SOCKET_EVENTS.USER_ACTIVATED, ({ channelId }) => {
     const activeId = useChannelStore.getState().activeChannelId
     if (channelId === activeId) {
       useChannelStore.getState().fetchMembers(channelId)

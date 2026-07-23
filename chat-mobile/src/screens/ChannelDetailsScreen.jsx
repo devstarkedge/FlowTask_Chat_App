@@ -11,10 +11,11 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
-import { Hash, Users, Pin, Bell, LogOut, FolderOpen, FileText, UserPlus, X, Search, Plus, Lock, Edit2, Star, MessageSquare } from 'lucide-react-native';
+import { Hash, Users, Pin, Bell, LogOut, FolderOpen, FileText, UserPlus, X, Search, Plus, Lock, Edit2, Star, MessageSquare, FolderInput } from 'lucide-react-native';
 import { AppAvatar, HeaderBackButton } from '../components/common';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { useChannelDetails } from '../hooks/useChannelDetails';
@@ -37,6 +38,11 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
     currentUser,
     channel,
     isOneToOneDM,
+    canAddMember,
+    categories,
+    showMoveCategoryModal,
+    setShowMoveCategoryModal,
+    handleAssignCategory,
     members,
     isLoadingMembers,
     showMembersList,
@@ -93,10 +99,6 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
             <Text style={[styles.dmUsername, { color: colors.textSecondary }]}>{username}</Text>
 
             <View style={styles.actionButtonsRow}>
-              <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => {}}>
-                <UserPlus size={18} color={colors.textPrimary} />
-                <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Add</Text>
-              </TouchableOpacity>
               <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={handleToggleStar}>
                 <Star size={18} color={isStarred ? '#E5A443' : colors.textPrimary} fill={isStarred ? '#E5A443' : 'transparent'} />
                 <Text style={[styles.actionBtnText, { color: isStarred ? '#E5A443' : colors.textPrimary }]}>Star</Text>
@@ -109,7 +111,6 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
           </View>
           
           <View style={{ width: '100%', marginTop: verticalScale(12), borderBottomWidth: 1, borderBottomColor: colors.border }}>
-            <DetailItem icon={MessageSquare} label="Messages" colors={colors} onPress={() => navigation.goBack()} />
             <DetailItem icon={Users} label="View Profile" colors={colors} onPress={() => navigation.navigate('UserProfile', { user: displayUser, channelId })} />
           </View>
 
@@ -199,7 +200,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
           </Text>
 
           <View style={styles.actionButtonsRow}>
-            {!(channel?.type === 'project' && channel?.systemManaged) && (
+            {canAddMember && (
               <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => { setMemberSearchQuery(""); setShowAddMemberModal(true); }}>
                 <UserPlus size={18} color={colors.textPrimary} />
                 <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Add</Text>
@@ -209,15 +210,10 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               <Star size={18} color={isStarred ? '#E5A443' : colors.textPrimary} fill={isStarred ? '#E5A443' : 'transparent'} />
               <Text style={[styles.actionBtnText, { color: isStarred ? '#E5A443' : colors.textPrimary }]}>Star</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => navigation.navigate('Search', { channelId })}>
-              <Search size={18} color={colors.textPrimary} />
-              <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Search</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.section}>
-          <DetailItem icon={FileText} label="Canvas Documents" colors={colors} onPress={() => navigation.navigate("CanvasList", { channelId, channelName })} />
           <DetailItem icon={Users} label="View Members" colors={colors} onPress={() => setShowMembersList(!showMembersList)} />
 
           {showMembersList && (
@@ -244,6 +240,8 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
           <DetailItem icon={FileText} label="Canvases" colors={colors} onPress={() => navigation.navigate('CanvasList', { channelId, channelName })} />
           <DetailItem icon={Pin} label="Pinned Messages" colors={colors} onPress={() => navigation.navigate('PinnedMessages', { channelId, channelName })} />
           
+          <DetailItem icon={FolderInput} label="Move to Category" colors={colors} onPress={() => setShowMoveCategoryModal(true)} />
+          
           <DetailItem icon={Bell} label="Mute Notifications" colors={colors} onPress={null}>
             {isMuteLoading ? (
               <ActivityIndicator size="small" color={colors.primary} />
@@ -255,6 +253,37 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
           <DetailItem icon={LogOut} label="Leave Channel" colors={colors} onPress={handleLeaveChannel} />
         </View>
       </ScrollView>
+
+      {/* Move to Category Modal */}
+      <Modal visible={showMoveCategoryModal} animationType="slide" transparent>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowMoveCategoryModal(false)}>
+          <View style={[styles.modalContainer, { backgroundColor: colors.background, height: 'auto', maxHeight: '60%' }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Move to Category</Text>
+              <TouchableOpacity onPress={() => setShowMoveCategoryModal(false)} style={styles.modalCloseBtn}>
+                <X size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ padding: moderateScale(16) }}>
+              <TouchableOpacity
+                style={[styles.searchResultItem, { borderBottomColor: colors.border }]}
+                onPress={() => handleAssignCategory(null)}
+              >
+                <Text style={{ fontSize: moderateScale(15), color: colors.textPrimary, fontWeight: '500' }}>(No Category)</Text>
+              </TouchableOpacity>
+              {categories.filter(c => c.type === 'custom').map((cat) => (
+                <TouchableOpacity
+                  key={cat._id}
+                  style={[styles.searchResultItem, { borderBottomColor: colors.border }]}
+                  onPress={() => handleAssignCategory(cat._id)}
+                >
+                  <Text style={{ fontSize: moderateScale(15), color: colors.textPrimary }}>{cat.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
 
       {/* Add Members Modal */}
       <Modal visible={showAddMemberModal} animationType="slide" transparent>

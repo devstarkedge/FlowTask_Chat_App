@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+import useResponsive from '../../hooks/useResponsive';
 import { useWindowDimensions } from 'react-native';
 
 import {
@@ -9,7 +10,6 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Keyboard,
   Platform,
   ActivityIndicator,
@@ -29,6 +29,7 @@ import { useLaterStore } from "../../stores/laterStore";
 import { laterAPI, pinsAPI, messageAPI, threadAPI, channelAPI } from "../../services/api";
 import { emitTyping } from "../../services/socket";
 import { AppAvatar, AppScreen, HeaderBackButton, MobileFileCard } from "../../components/common";
+import ScreenContainer from "../../components/common/ScreenContainer";
 import RichText from "../../components/RichText";
 import ReactionBar from "../../components/ReactionBar";
 import MediaPickerSheet from "../../components/MediaPickerSheet";
@@ -63,15 +64,25 @@ import {
   Copy,
   ExternalLink,
 } from "lucide-react-native";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SearchBar from "../../components/SearchBar";
 import MessageComposer from "../../components/MessageComposer";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { formatMessageTime } from '../../utils/dateUtils';
 import logger from '../../utils/logger';
-import Toast from 'react-native-toast-message';
+import ENV from '../../config/environment';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const normalizeMediaUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('file:')) {
+    return url;
+  }
+  const prefix = ENV.SOCKET_URL || 'https://chat-app-api-cyyl.onrender.com';
+  return url.startsWith('/') ? `${prefix}${url}` : `${prefix}/${url}`;
+};
 
 const getAuthorId = (msg) => {
   if (!msg) return null;
@@ -83,23 +94,50 @@ const getMessageAttachments = (msg) => {
   if (!msg) return [];
   const refs = msg.fileReferences || [];
   if (refs.length > 0) {
-    return refs
+    const list = refs
       .map((ref) => {
-        if (!ref.fileId) return null;
-        const file = ref.fileId;
+        if (!ref) return null;
+        const file = (typeof ref.fileId === 'object' && ref.fileId) ? ref.fileId : ref;
+        if (!file) return null;
+        const rawUrl = file.url || file.secureUrl || file.path;
+        if (!rawUrl) return null;
+        const url = normalizeMediaUrl(rawUrl);
+        const thumbnailUrl = normalizeMediaUrl(file.thumbnailUrl) || url;
         return {
-          _id: file._id,
+          _id: file._id || ref._id || String(Math.random()),
           name: file.originalName || file.fileName || file.name || 'File',
           fileName: file.originalName || file.fileName || file.name || 'File',
-          url: file.url || file.secureUrl,
-          thumbnailUrl: file.thumbnailUrl,
-          mimeType: file.mimeType,
+          url: url,
+          secureUrl: url,
+          thumbnailUrl: thumbnailUrl,
+          mimeType: file.mimeType || file.type || '',
           fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
         };
       })
       .filter(Boolean);
+    if (list.length > 0) return list;
   }
-  return msg.attachments || msg.files || [];
+
+  const rawAttachments = msg.attachments || msg.files || msg.media || [];
+  return rawAttachments
+    .map((file) => {
+      if (!file) return null;
+      const rawUrl = file.url || file.secureUrl || file.path;
+      if (!rawUrl) return null;
+      const url = normalizeMediaUrl(rawUrl);
+      const thumbnailUrl = normalizeMediaUrl(file.thumbnailUrl) || url;
+      return {
+        _id: file._id || String(Math.random()),
+        name: file.originalName || file.fileName || file.name || 'File',
+        fileName: file.originalName || file.fileName || file.name || 'File',
+        url: url,
+        secureUrl: url,
+        thumbnailUrl: thumbnailUrl,
+        mimeType: file.mimeType || file.type || '',
+        fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
+      };
+    })
+    .filter(Boolean);
 };
 
 const isSameDay = (d1, d2) => {
@@ -142,9 +180,15 @@ import GifRenderer from '../../components/GifRenderer';
 
 const ChatScreen = ({ route, navigation }) => {
   const { channelId, channelName, initialTab, canvasId: deepLinkCanvasId, messageId: targetMessageId } = route.params || {};
+  const { isTablet, isDesktop, width } = useResponsive();
+  const maxBubbleWidth = isTablet || isDesktop || width > 600 ? 580 : '85%';
 
-  const KeyboardContainer = KeyboardAvoidingView;
-  const keyboardProps = Platform.OS === 'ios' ? { behavior: 'padding', keyboardVerticalOffset: 0 } : { behavior: 'height', keyboardVerticalOffset: 0 };
+  const insets = useSafeAreaInsets();
+  const [headerHeight, setHeaderHeight] = useState(56);
+  const KeyboardContainer = ScreenContainer;
+  const keyboardProps = Platform.OS === 'ios' 
+    ? { behavior: 'padding', keyboardVerticalOffset: insets.top + headerHeight } 
+    : { behavior: undefined };
 
   // Granular store subscriptions — prevent unnecessary re-renders
   const messages = useChatStore(useShallow((s) => s.messagesByChannel[channelId] || []));
@@ -618,7 +662,7 @@ const ChatScreen = ({ route, navigation }) => {
           )}
           {!isMe && isCompact && <View style={{ width: scale(32) }} />}
 
-          <View style={{ flexShrink: 1 }}>
+          <View style={{ flexShrink: 1, alignItems: isMe ? 'flex-end' : 'flex-start' }}>
             {/* Sender name (hidden for compact) */}
             {!isMe && !isCompact && (
               <View style={styles.senderRow}>
@@ -655,7 +699,7 @@ const ChatScreen = ({ route, navigation }) => {
             )}
 
             {/* Message bubble */}
-            <View style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: "100%" }}>
+            <View style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: maxBubbleWidth }}>
               <View
               style={[
                 styles.bubble,
@@ -889,7 +933,10 @@ const ChatScreen = ({ route, navigation }) => {
     > 
 
       {/* Custom Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <View
+        style={[styles.header, { borderBottomColor: colors.border }]}
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+      >
         <HeaderBackButton onPress={() => navigation.goBack()} />
 
         <TouchableOpacity 
@@ -1361,6 +1408,7 @@ const createStyles = (colors) =>
       paddingVertical: verticalScale(8),
       borderRadius: moderateScale(18),
       maxWidth: "100%",
+      minWidth: scale(40),
     },
     senderRow: {
       flexDirection: "row",

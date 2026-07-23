@@ -117,8 +117,18 @@ export const authAPI = {
   login: (data) => api.post("/auth/login", data),
 
   // FlowTask SSO
-  loginFlowTask: (token) => api.post("/auth/login/flowtask", { token }),
+  loginFlowTask: (token, attemptId) => api.post(
+    "/auth/login/flowtask",
+    { token },
+    {
+      headers: {
+        "X-Auth-Attempt-Id": attemptId,
+        "X-Request-Id": attemptId,
+      },
+    },
+  ),
   sync: () => api.post("/auth/sync"),
+  channelSyncStatus: () => api.get("/auth/channel-sync/status"),
 
   // Token management
   refresh: (refreshToken) => api.post("/auth/refresh", { refreshToken }),
@@ -485,7 +495,8 @@ export const categoryAPI = {
   list: () => api.get('/categories'),
   create: (data) => api.post('/categories', data),
   update: (id, data) => api.put(`/categories/${id}`, data),
-  delete: (id) => api.delete(`/categories/${id}`),
+    delete: (id) => api.delete(`/categories/${id}`),
+    clearAll: () => api.delete('/categories'),
   reorder: (categoryOrders) => api.put('/categories/reorder', { categoryOrders }),
   suggestChannels: (name) => api.post('/categories/suggest-channels', { name }),
   addChannelToCategory: (id, channelId) => api.post(`/categories/${id}/channels`, { channelId }),

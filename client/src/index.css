@@ -112,7 +112,7 @@
   --sidebar-border-color: color-mix(in srgb, var(--sidebar-text, #f8edf7) 10%, transparent);
 
   /* Dimmed text for muted labels, placeholders, and icons */
-  --sidebar-text-dim: color-mix(in srgb, var(--sidebar-text, #f8edf7) 62%, transparent);
+  --sidebar-text-dim: color-mix(in srgb, var(--sidebar-text, #f8edf7) 90%, transparent);
 }
 
 /* ─── Dark Theme (default) ──────────────────────────────────────────────── */
@@ -3203,23 +3203,28 @@ body {
   border: none;
   cursor: pointer;
   font-size: 11.5px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  /* Use dim sidebar text for headings — visible but not overpowering */
-  color: var(--sidebar-text-dim, var(--text-muted));
+  letter-spacing: 0.05em;
+  color: var(--sidebar-text, var(--text-white));
   padding: 0;
-  transition: color var(--transition-fast);
+  /* Removed opacity dimming to ensure crisp visibility */
+  transition: color var(--transition-fast), transform var(--transition-fast);
 }
 
 .sidebar-section-toggle:hover {
-  color: var(--sidebar-text, var(--text-white));
+  color: #fff; /* Always pop to pure white on hover if possible */
 }
 
 .sidebar-section-count {
-  font-weight: 400;
-  opacity: 0.5;
-  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--sidebar-text, #fff) 12%, transparent);
+  color: color-mix(in srgb, var(--sidebar-text, #fff) 85%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sidebar-text, #fff) 8%, transparent);
 }
 
 .sidebar-section-add {
@@ -3256,36 +3261,37 @@ body {
   width: 100%;
   text-align: left;
   position: relative;
-  /* Full-width flat item — no horizontal margin so it bleeds edge-to-edge */
-  padding: 6px 16px;
-  padding-left: 13px;
+  padding: 5px 16px 5px 13px;
   border-radius: 0;
   border: none;
   background: transparent;
-  color: var(--sidebar-text, var(--text-primary));
+  /* Use full sidebar-text — no dim. Items must be crisp and legible */
+  color: var(--sidebar-text, #fff);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 400;
   cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
-  min-height: 34px;
+  transition: background var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
+  min-height: 32px;
   border-left: 3px solid transparent;
+  /* Slightly dim non-active items so active ones pop */
+  opacity: 0.82;
 }
 
 .sidebar-item:hover {
-  /* Soft tint hover — same as Slack, not a card */
   background: var(--sidebar-icon-hover);
-  color: var(--sidebar-text, var(--text-primary));
-  border-left-color: var(--sidebar-icon-hover);
+  color: var(--sidebar-text, #fff);
+  opacity: 1;
+  border-left-color: transparent;
 }
 
 .sidebar-item.active {
-  /* Accent-colored active state with enhanced visual indicator */
   background: var(--sidebar-active, var(--accent-primary));
   color: var(--sidebar-active-text, #fff);
   font-weight: 600;
-  border-left-color: var(--sidebar-active-text, #fff);
-  box-shadow: inset -2px 0 0 0 rgba(0, 0, 0, 0.1);
+  opacity: 1;
+  border-left-color: rgba(255,255,255,0.5);
+  box-shadow: none;
 }
 
 .sidebar-item.active .sidebar-item-sublabel,
@@ -3298,9 +3304,12 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  transition: opacity var(--transition-fast);
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  /* Icons inherit the item's opacity — always fully rendered within the item */
+  opacity: 1;
+  color: inherit;
 }
 
 .sidebar-item.active .sidebar-item-icon {
@@ -3316,16 +3325,18 @@ body {
 
 .sidebar-item-label {
   display: block;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 400;
   color: inherit;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.35;
 }
 
 .sidebar-item.active .sidebar-item-label {
-  color: #fff;
+  color: var(--sidebar-active-text, #fff);
+  font-weight: 600;
 }
 
 .sidebar-item-sublabel {

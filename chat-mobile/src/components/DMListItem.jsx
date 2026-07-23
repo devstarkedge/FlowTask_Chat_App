@@ -7,24 +7,16 @@ import { AppAvatar } from './common';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { Archive, BellOff, CheckCircle, Clock } from 'lucide-react-native';
 import { useChannelStore } from '../stores/channelStore';
+import { useNotificationPrefStore } from '../stores/notificationPrefStore';
 import Toast from 'react-native-toast-message';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
-
-/**
- * Shared DM list row used in both HomeScreen DM section and DMListScreen.
- * Renders identical avatar, name, last message, presence, and unread badge.
- *
- * @param {object}   props.channel      - DM channel object (from channelStore)
- * @param {Function} props.onPress      - Called with (channel) when row is tapped
- * @param {number}   [props.unreadCount=0] - Unread message count for badge
- * @param {object}   [props.containerStyle] - Optional outer container style override
- * @param {boolean}  [props.touchable=true] - When false, renders without TouchableOpacity (for use inside another touchable)
- */
 const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerStyle, touchable = true }) => {
   const { colors } = useThemeStore();
   const { swipeDmLeft, swipeDmRight } = usePreferencesStore();
   const markAsRead = useChannelStore(s => s.markAsRead);
+  const isMuted = useNotificationPrefStore(s => !!s.mutedChannels?.[channel._id]);
+  const toggleChannelMute = useNotificationPrefStore(s => s.toggleChannelMute);
   const swipeableRef = React.useRef(null);
 
   const rawTargetId = channel.dmRecipientId;
@@ -32,7 +24,6 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
   const targetIdStr = targetId?.toString ? targetId.toString() : targetId;
   const liveOnlineStatus = useWorkspaceStore(s => s.presenceMap?.[targetIdStr]);
 
-  // Build the same dmUser object used across the app
   const dmUser = {
     _id: channel.dmRecipientId,
     name: channel.name,
@@ -45,16 +36,21 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
       <AppAvatar user={dmUser} size={44} showStatus />
 
       <View style={styles.info}>
-        <Text
-          style={[
-            styles.name,
-            { color: colors.textPrimary },
-            unreadCount > 0 && styles.unreadName,
-          ]}
-          numberOfLines={1}
-        >
-          {dmUser.name}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text
+            style={[
+              styles.name,
+              { color: colors.textPrimary, flex: 1 },
+              unreadCount > 0 && styles.unreadName,
+            ]}
+            numberOfLines={1}
+          >
+            {dmUser.name}
+          </Text>
+          {isMuted && (
+            <BellOff size={14} color={colors.textSecondary} />
+          )}
+        </View>
         {!!channel.lastMessagePreview && (
           <Text
             style={[styles.lastMessage, { color: colors.textSecondary }]}
@@ -94,7 +90,7 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
   };
 
   const renderLeftActions = (progress, dragX) => {
-    if (!swipeDmLeft || swipeDmLeft === 'None') return null;
+    if (!swipeDmLeft || swipeDmLeft === 'None' || swipeDmLeft === 'Nothing') return null;
     return (
       <View style={[styles.swipeAction, styles.swipeLeft, { backgroundColor: colors.primary }]}>
         {getActionIcon(swipeDmLeft, '#FFF')}
@@ -103,7 +99,7 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
   };
 
   const renderRightActions = (progress, dragX) => {
-    if (!swipeDmRight || swipeDmRight === 'None') return null;
+    if (!swipeDmRight || swipeDmRight === 'None' || swipeDmRight === 'Nothing') return null;
     return (
       <View style={[styles.swipeAction, styles.swipeRight, { backgroundColor: colors.statusDanger || '#ef4444' }]}>
         {getActionIcon(swipeDmRight, '#FFF')}
@@ -111,14 +107,13 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
     );
   };
 
-  const handleSwipeAction = (actionStr) => {
+  const handleSwipeAction = async (actionStr) => {
     switch(actionStr) {
       case 'Mark as Read/Unread':
         if (unreadCount > 0) {
           markAsRead(channel._id);
           Toast.show({ type: 'success', text1: 'Marked as read' });
         } else {
-          // If we had a markAsUnread, we'd call it here
           Toast.show({ type: 'info', text1: 'Already read' });
         }
         break;
@@ -126,7 +121,13 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
         Toast.show({ type: 'success', text1: 'Archived' });
         break;
       case 'Mute/Unmute':
-        Toast.show({ type: 'success', text1: 'Muted' });
+        try {
+          const newMuteState = !isMuted;
+          await toggleChannelMute(channel._id, newMuteState);
+          Toast.show({ type: 'success', text1: newMuteState ? 'Muted conversation' : 'Unmuted conversation' });
+        } catch (e) {
+          Toast.show({ type: 'error', text1: 'Failed to update mute state' });
+        }
         break;
       case 'Remind me':
         Toast.show({ type: 'success', text1: 'Reminder set' });

@@ -194,6 +194,7 @@ export const authAPI = {
   me: () => api.get('/auth/me'),
   logout: (refreshToken) => api.post('/auth/logout', { refreshToken }),
   refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken }),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
 };
 
 // Workspace API
@@ -329,9 +330,8 @@ export const fileAPI = {
       timeout: 60000,
       onUploadProgress: onProgress,
       headers: {
-        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json',
       },
-      transformRequest: [(data) => data],
     }),
 };
 
@@ -340,6 +340,7 @@ export const usersAPI = {
   getUser: (id) => api.get(`/users/${id}`),
   setPresence: (status) => api.put('/users/presence', { status }),
   setCustomStatus: (data) => api.put('/users/status', data),
+  updateUser: (id, data) => api.patch(`/users/${id}`, data),
   getChannelMembers: (channelId) => api.get(`/channels/${channelId}/members`),
   getDMContacts: (search) => api.get('/users/dm-contacts', { params: { search } }),
   pauseNotifications: (data) => api.post('/users/dnd/pause', data),

@@ -16,7 +16,7 @@ import {
   Dimensions,
   Switch,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../../components/common/ScreenContainer';
 import {
   Plus,
   Search,
@@ -403,7 +403,7 @@ export default function CanvasListScreen({ route, navigation }) {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+    <ScreenContainer style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -851,7 +851,7 @@ export default function CanvasListScreen({ route, navigation }) {
           </Animated.View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

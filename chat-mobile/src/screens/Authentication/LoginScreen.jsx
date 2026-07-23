@@ -7,17 +7,14 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
-  Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Eye, EyeOff, MessageCircle, CircleChevronRight, Lock, Shield, Zap } from 'lucide-react-native';
+import ScreenContainer from '../../components/common/ScreenContainer';
+import { Eye, EyeOff, CircleChevronRight, Lock, Shield, Zap } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-
 
 const LoginScreen = ({ navigation, route }) => {
   const { loginNative, loginFlowTask, isLoading, error, clearError, flowtaskEnabled } = useAuthStore();
@@ -54,12 +51,12 @@ const LoginScreen = ({ navigation, route }) => {
 
   if (autoLoginInProgress) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}> 
+      <ScreenContainer style={styles.container}>
         <View style={styles.loaderContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loaderText}>Signing in from FlowTask…</Text>
         </View>
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
@@ -69,7 +66,6 @@ const LoginScreen = ({ navigation, route }) => {
       Toast.show({ type: 'error', text1: 'Please enter email and password', position: 'top' });
       return;
     }
-
     try {
       await loginNative({ email: email.toLowerCase(), password });
       Toast.show({ type: 'success', text1: 'Welcome back!', position: 'top' });
@@ -84,7 +80,6 @@ const LoginScreen = ({ navigation, route }) => {
       Toast.show({ type: 'error', text1: 'Please enter your FlowTask token', position: 'top' });
       return;
     }
-
     try {
       await loginFlowTask(flowtaskToken.trim());
       Toast.show({ type: 'success', text1: 'FlowTask login successful!', position: 'top' });
@@ -94,121 +89,160 @@ const LoginScreen = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}> 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <View style={[styles.header, { borderBottomColor: colors.borderLight }]}> 
-            <View style={styles.logo}>
-              <Image source={require('../../../assets/logo.png')} style={styles.logoIcon} />
-              <Text style={[styles.logoText, { color: colors.textPrimary }]}>FlowTask-Chat</Text>
-            </View>
-          </View>
+    <ScreenContainer style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.introSection}>
+          <Text style={styles.heading}>Welcome back</Text>
+          <Text style={[styles.subheading, { color: colors.textSecondary }]}>Sign in to your workspace and continue collaborating</Text>
+        </View>
 
-          <View style={styles.introSection}>
-            <Text style={styles.heading}>Welcome back</Text>
-            <Text style={styles.subheading}>Sign in to your workspace and continue collaborating</Text>
-          </View>
-
-          <View style={styles.card}>
-            {flowtaskEnabled && (
-              <View style={styles.tabs}>
-                <TouchableOpacity style={[styles.tab, activeTab === 'flowtask' && styles.tabActive]} onPress={() => { setActiveTab('flowtask'); clearError(); }}>
-                  <Text style={[styles.tabText, activeTab === 'flowtask' && styles.tabTextActive]}>FlowTask SSO</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.tab, activeTab === 'native' && styles.tabActive]} onPress={() => { setActiveTab('native'); clearError(); }}>
-                  <Text style={[styles.tabText, activeTab === 'native' && styles.tabTextActive]}>Email</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {!!error && (
-              <View style={styles.errorBox}>
-                <Lock size={14} color={colors.error} style={{ marginRight: scale(8) }} />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            )}
-
-            {activeTab === 'flowtask' && (
-              <View>
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>FlowTask JWT Token</Text>
-                  <TextInput style={styles.tokenInput} placeholder="Paste your JWT token…" placeholderTextColor={colors.inputPlaceholder} value={flowtaskToken} onChangeText={setFlowtaskToken} multiline numberOfLines={3} />
-                  <Text style={styles.hint}>Get your token from FlowTask → Settings → API Access</Text>
-                </View>
-
-                <TouchableOpacity style={[styles.submitButton, isLoading && styles.submitButtonDisabled]} onPress={handleFlowTaskLogin} disabled={isLoading} activeOpacity={0.85}>
-                  {isLoading ? <ActivityIndicator size="small" color={colors.messageTextSent} /> : (
-                    <>
-                      <Text style={styles.submitButtonText}>Sign in with FlowTask</Text>
-                      <CircleChevronRight size={16} color={colors.messageTextSent} />
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {activeTab === 'native' && (
-              <View>
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Email Address</Text>
-                  <TextInput style={styles.input} placeholder="you@company.com" placeholderTextColor={colors.inputPlaceholder} keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={(text) => setEmail(text.toLowerCase())} />
-                </View>
-
-                <View style={styles.formGroup}>
-                  <View style={styles.labelRow}>
-                    <Text style={styles.label}>Password</Text>
-                    <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-                      <Text style={styles.forgotLink}>Forgot?</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.passwordWrapper}>
-                    <TextInput style={styles.passwordInput} placeholder="Enter password" placeholderTextColor={colors.inputPlaceholder} secureTextEntry={!showPassword} value={password} onChangeText={setPassword} />
-                    <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
-                      {showPassword ? <EyeOff size={18} color={colors.textTertiary} /> : <Eye size={18} color={colors.textTertiary} />}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <TouchableOpacity style={[styles.submitButton, isLoading && styles.submitButtonDisabled]} onPress={handleNativeLogin} disabled={isLoading} activeOpacity={0.85}>
-                  {isLoading ? <ActivityIndicator size="small" color={colors.messageTextSent} /> : (
-                    <>
-                      <Text style={styles.submitButtonText}>Sign in</Text>
-                      <CircleChevronRight size={16} color={colors.messageTextSent} />
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
-
-            <View style={styles.footerLink}>
-              <Text style={styles.footerText}>New here? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-                <Text style={styles.linkText}>Create account</Text>
+        <View style={styles.card}>
+          {flowtaskEnabled && (
+            <View style={styles.tabs}>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 'flowtask' && styles.tabActive]}
+                onPress={() => { setActiveTab('flowtask'); clearError(); }}
+              >
+                <Text style={[styles.tabText, activeTab === 'flowtask' && styles.tabTextActive]}>FlowTask SSO</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 'native' && styles.tabActive]}
+                onPress={() => { setActiveTab('native'); clearError(); }}
+              >
+                <Text style={[styles.tabText, activeTab === 'native' && styles.tabTextActive]}>Email</Text>
               </TouchableOpacity>
             </View>
+          )}
+
+          {!!error && (
+            <View style={styles.errorBox}>
+              <Lock size={14} color={colors.error} style={{ marginRight: scale(8) }} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+
+          {activeTab === 'flowtask' && (
+            <View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>FlowTask JWT Token</Text>
+                <TextInput
+                  style={styles.tokenInput}
+                  placeholder="Paste your JWT token…"
+                  placeholderTextColor={colors.inputPlaceholder}
+                  value={flowtaskToken}
+                  onChangeText={setFlowtaskToken}
+                  multiline
+                  numberOfLines={3}
+                />
+                <Text style={styles.hint}>Get your token from FlowTask → Settings → API Access</Text>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
+                onPress={handleFlowTaskLogin}
+                disabled={isLoading}
+                activeOpacity={0.85}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={colors.messageTextSent} />
+                ) : (
+                  <>
+                    <Text style={styles.submitButtonText}>Sign in with FlowTask</Text>
+                    <CircleChevronRight size={16} color={colors.messageTextSent} />
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {activeTab === 'native' && (
+            <View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Email Address</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.inputText }]}
+                  placeholder="you@company.com"
+                  placeholderTextColor={colors.inputPlaceholder}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={email}
+                  onChangeText={(text) => setEmail(text.toLowerCase())}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>Password</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
+                    <Text style={styles.forgotLink}>Forgot?</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={[styles.passwordWrapper, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
+                  <TextInput
+                    style={[styles.passwordInput, { color: colors.inputText }]}
+                    placeholder="Enter password"
+                    placeholderTextColor={colors.inputPlaceholder}
+                    secureTextEntry={!showPassword}
+                    value={password}
+                    onChangeText={setPassword}
+                  />
+                  <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
+                    {showPassword
+                      ? <EyeOff size={18} color={colors.textTertiary} />
+                      : <Eye size={18} color={colors.textTertiary} />}
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
+                onPress={handleNativeLogin}
+                disabled={isLoading}
+                activeOpacity={0.85}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={colors.messageTextSent} />
+                ) : (
+                  <>
+                    <Text style={styles.submitButtonText}>Sign in</Text>
+                    <CircleChevronRight size={16} color={colors.messageTextSent} />
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={styles.footerLink}>
+            <Text style={styles.footerText}>New here? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+              <Text style={styles.linkText}>Create account</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.featuresSection}>
+          <View style={styles.feature}>
+            <Zap size={20} color={colors.warning} style={styles.featureIcon} />
+            <View>
+              <Text style={styles.featureTitle}>Real-Time Messaging</Text>
+              <Text style={styles.featureDesc}>Instant delivery with WebSocket</Text>
+            </View>
           </View>
 
-          <View style={styles.featuresSection}>
-            <View style={styles.feature}>
-              <Zap size={20} color={colors.warning} style={styles.featureIcon} />
-              <View>
-                <Text style={styles.featureTitle}>Real-Time Messaging</Text>
-                <Text style={styles.featureDesc}>Instant delivery with WebSocket</Text>
-              </View>
-            </View>
-
-            <View style={styles.feature}>
-              <Shield size={20} color={colors.primary} style={styles.featureIcon} />
-              <View>
-                <Text style={styles.featureTitle}>Enterprise Security</Text>
-                <Text style={styles.featureDesc}>JWT auth and RBAC protection</Text>
-              </View>
+          <View style={styles.feature}>
+            <Shield size={20} color={colors.primary} style={styles.featureIcon} />
+            <View>
+              <Text style={styles.featureTitle}>Enterprise Security</Text>
+              <Text style={styles.featureDesc}>JWT auth and RBAC protection</Text>
             </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </View>
+      </ScrollView>
+    </ScreenContainer>
   );
 };
 
@@ -232,29 +266,6 @@ const createStyles = (colors) =>
       color: colors.textSecondary,
       fontWeight: '500',
     },
-    header: {
-      paddingHorizontal: scale(20),
-      paddingVertical: verticalScale(16),
-      borderBottomWidth: 1,
-      borderBottomColor: colors.borderLight,
-      backgroundColor: colors.card,
-    },
-    logo: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-    },
-    logoIcon: {
-      width: scale(32),
-      height: verticalScale(32),
-      borderRadius: moderateScale(8),
-    },
-    logoText: {
-      fontSize: moderateScale(15),
-      fontWeight: '700',
-      color: colors.textPrimary,
-      letterSpacing: -0.5,
-    },
     introSection: {
       paddingHorizontal: scale(20),
       paddingVertical: verticalScale(24),
@@ -268,7 +279,6 @@ const createStyles = (colors) =>
     },
     subheading: {
       fontSize: moderateScale(14),
-      color: colors.textSecondary,
       lineHeight: 22,
     },
     card: {
@@ -336,14 +346,11 @@ const createStyles = (colors) =>
       marginBottom: verticalScale(6),
     },
     input: {
-      backgroundColor: colors.inputBackground,
       borderWidth: 1,
-      borderColor: colors.inputBorder,
       borderRadius: moderateScale(10),
       paddingVertical: verticalScale(12),
       paddingHorizontal: scale(14),
       fontSize: moderateScale(15),
-      color: colors.inputText,
     },
     tokenInput: {
       backgroundColor: colors.inputBackground,
@@ -366,9 +373,7 @@ const createStyles = (colors) =>
     passwordWrapper: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.inputBackground,
       borderWidth: 1,
-      borderColor: colors.inputBorder,
       borderRadius: moderateScale(10),
     },
     passwordInput: {
@@ -376,7 +381,6 @@ const createStyles = (colors) =>
       paddingVertical: verticalScale(12),
       paddingHorizontal: scale(14),
       fontSize: moderateScale(15),
-      color: colors.inputText,
     },
     eyeButton: {
       paddingHorizontal: scale(12),

@@ -70,6 +70,43 @@ function collectProjectOwnerId(payload) {
  */
 
 export function registerProjectEventHandlers() {
+  eventBus.register(FLOWTASK_EVENTS.PROJECT_MEMBERSHIP_SYNCED, async (payload) => {
+    const wsId = requireWorkspaceId(
+      payload,
+      FLOWTASK_EVENTS.PROJECT_MEMBERSHIP_SYNCED,
+    );
+    if (!wsId) return;
+
+    const board = payload.board || payload.project;
+    const boardId = normalizeEntityId(board?._id || board?.id);
+    if (!boardId) {
+      logger.warn('project.membership_synced: missing project ID');
+      return;
+    }
+
+    const channel = await channelService.createProjectChannel(
+      { ...board, _id: boardId, visibility: 'private' },
+      payload.actor?.id,
+      wsId,
+    );
+    await channelService.reconcileProjectMembers(
+      channel._id,
+      payload.participants || payload.memberIds || [],
+      wsId,
+      {
+        ownerFlowTaskId: payload.project?.owner || payload.board?.owner,
+        membershipVersion: payload.membershipVersion || 0,
+      },
+    );
+
+    logger.info('project.membership_synced handled', {
+      boardId,
+      channelId: channel._id,
+      membershipVersion: payload.membershipVersion || 0,
+      participantCount: payload.participants?.length || 0,
+    });
+  });
+
   // ─── project.created ────────────────────────────────────────────────────
   eventBus.register(FLOWTASK_EVENTS.PROJECT_CREATED, async (payload) => {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.PROJECT_CREATED);
@@ -104,7 +141,10 @@ export function registerProjectEventHandlers() {
     const memberIds = collectProjectMemberIds(payload);
     const ownerId = collectProjectOwnerId(payload) || userId;
 
-    if (memberIds.length > 0 || ownerId) {
+    if (
+      !payload.authoritativeSnapshotFollows &&
+      (memberIds.length > 0 || ownerId)
+    ) {
       await channelService.reconcileProjectMembers(channel._id, memberIds, wsId, {
         ownerFlowTaskId: ownerId,
       });
@@ -292,8 +332,12 @@ export function registerProjectEventHandlers() {
 
     const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
+    if (payload.authoritativeSnapshotFollows) return;
 
-    if (memberIds.length > 0 || ownerId) {
+    if (
+      !payload.authoritativeSnapshotFollows &&
+      (memberIds.length > 0 || ownerId)
+    ) {
       await channelService.reconcileProjectMembers(channel._id, memberIds, wsId, {
         ownerFlowTaskId: ownerId,
       });
@@ -329,6 +373,7 @@ export function registerProjectEventHandlers() {
 
     const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
+    if (payload.authoritativeSnapshotFollows) return;
 
     const member = await userRepository.findByFlowTaskId(memberId, wsId);
     const removedBy = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -385,6 +430,7 @@ export function registerProjectEventHandlers() {
 
     const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
+    if (payload.authoritativeSnapshotFollows) return;
 
     if (memberIds.length > 0 || ownerId) {
       await channelService.reconcileProjectMembers(channel._id, memberIds, wsId, {

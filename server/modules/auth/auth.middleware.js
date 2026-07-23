@@ -149,13 +149,22 @@ export function requireChannelAccess() {
       }
 
       // Admin can access all channels
-      if (req.user.role === 'admin') {
+      if (
+        req.user.role === 'admin' &&
+        channel.type !== 'project' &&
+        channel.flowTaskRef?.entityType !== 'board'
+      ) {
         req.channel = channel;
         return next();
       }
 
       // Public non-DM channels are accessible to all workspace members
-      if (channel.visibility === 'public' && channel.type !== 'dm') {
+      if (
+        channel.visibility === 'public' &&
+        channel.type !== 'dm' &&
+        channel.type !== 'project' &&
+        channel.flowTaskRef?.entityType !== 'board'
+      ) {
         req.channel = channel;
         return next();
       }
@@ -237,14 +246,23 @@ export function requireMessageAccess(options = { allowMissing: false }) {
       }
 
       // Admin can access all
-      if (req.user.role === 'admin') {
+      if (
+        req.user.role === 'admin' &&
+        channel.type !== 'project' &&
+        channel.flowTaskRef?.entityType !== 'board'
+      ) {
         req.message = message;
         req.channel = channel;
         return next();
       }
 
       // Public non-DM channels are accessible to all
-      if (channel.visibility === 'public' && channel.type !== 'dm') {
+      if (
+        channel.visibility === 'public' &&
+        channel.type !== 'dm' &&
+        channel.type !== 'project' &&
+        channel.flowTaskRef?.entityType !== 'board'
+      ) {
         req.message = message;
         req.channel = channel;
         return next();

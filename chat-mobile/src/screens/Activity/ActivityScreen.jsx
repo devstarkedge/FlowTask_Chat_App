@@ -23,11 +23,18 @@ const FILTERS = [
 ];
 
 
+import Swipeable from 'react-native-gesture-handler/Swipeable';
+import { Archive, BellOff, CheckCircle, Clock, Trash2 } from 'lucide-react-native';
+import Toast from 'react-native-toast-message';
+import { usePreferencesStore } from "../../stores/preferencesStore";
+
 const ActivityRow = React.memo(({ item, colors, navigation }) => {
   const senderName = item.senderName || item.sender?.name || "Someone";
   const sender = { name: senderName, avatar: item.senderAvatar || item.sender?.avatar };
 
   const markAsRead = React.useRef(useNotificationStore.getState().markAsRead).current;
+  const { swipeActivityLeft, swipeActivityRight } = usePreferencesStore();
+  const swipeableRef = React.useRef(null);
   
   const channelName = item.channelName || item.channel?.name || "";
   const body = item.body || item.content || item.message || item.messagePreview || "";
@@ -77,10 +84,6 @@ const ActivityRow = React.memo(({ item, colors, navigation }) => {
     }
 
     if (isThread || tId) {
-      // Navigate to Chat first to load channel context + messages into store,
-      // then auto-navigate to ThreadDetail from ChatScreen.
-      // This ensures ThreadDetailScreen has the channel messages available
-      // for the rootMessageLive lookup and MessageComposer works correctly.
       navigation.navigate('Chat', {
         channelId: cId,
         channelName: item.channelName || item.channel?.name || '',
@@ -92,41 +95,105 @@ const ActivityRow = React.memo(({ item, colors, navigation }) => {
     }
   };
 
-  return (
-    <TouchableOpacity onPress={handlePress} style={[arStyles.container, !item.isRead && !item.read && { backgroundColor: colors.backgroundSecondary || (colors.primary + '08') }]} activeOpacity={0.7}>
-      <View style={arStyles.avatarContainer}>
-        <AppAvatar user={sender} size={40} showStatus={false} />
-        <View style={[arStyles.badge, { backgroundColor: colors.background, borderColor: colors.background }]}>
-          {isMention ? <AtSign size={10} color={colors.textPrimary} />
-            : isThread ? <MessageSquare size={10} color={colors.textPrimary} />
-            : <MessageCircle size={10} color={colors.textPrimary} />
-          }
-        </View>
-      </View>
+  const getActionIcon = (actionStr, color) => {
+    switch(actionStr) {
+      case 'Mark as Read/Unread': return <CheckCircle size={24} color={color} />;
+      case 'Clear/Restore': return <Trash2 size={24} color={color} />;
+      case 'Remind me': return <Clock size={24} color={color} />;
+      default: return <CheckCircle size={24} color={color} />;
+    }
+  };
 
-      <View style={arStyles.textCol}>
-        <View style={arStyles.headerRow}>
-          <Text style={[arStyles.nameText, { color: colors.textPrimary }]} numberOfLines={1}>
-            {sender.name} {isDM && isThread ? "and you" : ""}
-          </Text>
-          <View style={arStyles.timeRow}>
-            <Text style={[arStyles.time, { color: colors.textTertiary }]}>{timeStr}</Text>
-            {isThread && (
-              <View style={[arStyles.repliedBadge, { backgroundColor: '#dcfce7' }]}>
-                <Text style={[arStyles.repliedText, { color: '#166534' }]}>Replied</Text>
-              </View>
-            )}
+  const renderLeftActions = () => {
+    if (!swipeActivityLeft || swipeActivityLeft === 'None' || swipeActivityLeft === 'Nothing') return null;
+    return (
+      <View style={[arStyles.swipeAction, arStyles.swipeLeft, { backgroundColor: colors.primary }]}>
+        {getActionIcon(swipeActivityLeft, '#FFF')}
+      </View>
+    );
+  };
+
+  const renderRightActions = () => {
+    if (!swipeActivityRight || swipeActivityRight === 'None' || swipeActivityRight === 'Nothing') return null;
+    return (
+      <View style={[arStyles.swipeAction, arStyles.swipeRight, { backgroundColor: colors.statusDanger || '#ef4444' }]}>
+        {getActionIcon(swipeActivityRight, '#FFF')}
+      </View>
+    );
+  };
+
+  const handleSwipeAction = (actionStr) => {
+    switch(actionStr) {
+      case 'Mark as Read/Unread':
+        if (!item.isRead && !item.read && markAsRead) {
+          markAsRead(item._id);
+          Toast.show({ type: 'success', text1: 'Marked as read' });
+        } else {
+          Toast.show({ type: 'info', text1: 'Notification read' });
+        }
+        break;
+      case 'Clear/Restore':
+        if (useNotificationStore.getState()?.deleteNotification) {
+          useNotificationStore.getState().deleteNotification(item._id);
+        } else if (useNotificationStore.getState()?.clearNotifications) {
+          useNotificationStore.setState((state) => ({
+            notifications: state.notifications.filter(n => n._id !== item._id)
+          }));
+        }
+        Toast.show({ type: 'success', text1: 'Notification deleted' });
+        break;
+      case 'Remind me':
+        Toast.show({ type: 'success', text1: 'Reminder set' });
+        break;
+    }
+    setTimeout(() => {
+      swipeableRef.current?.close();
+    }, 300);
+  };
+
+  return (
+    <Swipeable
+      ref={swipeableRef}
+      renderLeftActions={renderLeftActions}
+      renderRightActions={renderRightActions}
+      onSwipeableLeftOpen={() => handleSwipeAction(swipeActivityLeft)}
+      onSwipeableRightOpen={() => handleSwipeAction(swipeActivityRight)}
+    >
+      <TouchableOpacity onPress={handlePress} style={[arStyles.container, !item.isRead && !item.read && { backgroundColor: colors.backgroundSecondary || (colors.primary + '08') }]} activeOpacity={0.7}>
+        <View style={arStyles.avatarContainer}>
+          <AppAvatar user={sender} size={40} showStatus={false} />
+          <View style={[arStyles.badge, { backgroundColor: colors.background, borderColor: colors.background }]}>
+            {isMention ? <AtSign size={10} color={colors.textPrimary} />
+              : isThread ? <MessageSquare size={10} color={colors.textPrimary} />
+              : <MessageCircle size={10} color={colors.textPrimary} />
+            }
           </View>
         </View>
-        <Text style={[arStyles.context, { color: colors.textSecondary }]}>{contextStr}</Text>
-        
-        {body ? (
-          <Text style={[arStyles.preview, { color: colors.textPrimary }]} numberOfLines={2}>
-            {body}
-          </Text>
-        ) : null}
-      </View>
-    </TouchableOpacity>
+
+        <View style={arStyles.textCol}>
+          <View style={arStyles.headerRow}>
+            <Text style={[arStyles.nameText, { color: colors.textPrimary }]} numberOfLines={1}>
+              {sender.name} {isDM && isThread ? "and you" : ""}
+            </Text>
+            <View style={arStyles.timeRow}>
+              <Text style={[arStyles.time, { color: colors.textTertiary }]}>{timeStr}</Text>
+              {isThread && (
+                <View style={[arStyles.repliedBadge, { backgroundColor: '#dcfce7' }]}>
+                  <Text style={[arStyles.repliedText, { color: '#166534' }]}>Replied</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          <Text style={[arStyles.context, { color: colors.textSecondary }]}>{contextStr}</Text>
+          
+          {body ? (
+            <Text style={[arStyles.preview, { color: colors.textPrimary }]} numberOfLines={2}>
+              {body}
+            </Text>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+    </Swipeable>
   );
 });
 
@@ -191,6 +258,18 @@ const arStyles = StyleSheet.create({
   preview: {
     fontSize: moderateScale(15),
     lineHeight: 20,
+  },
+  swipeAction: {
+    justifyContent: 'center',
+    width: scale(75),
+  },
+  swipeLeft: {
+    alignItems: 'flex-start',
+    paddingLeft: scale(20),
+  },
+  swipeRight: {
+    alignItems: 'flex-end',
+    paddingRight: scale(20),
   },
 });
 

@@ -39,8 +39,7 @@ const CategoryGroup = ({
     setActiveCategoryMenu(isMenuOpen ? null : category._id);
   };
 
-  // Only custom categories get the actions menu
-  const actionMenu = category.type !== 'department' ? (
+  const actionMenu = (
     <div className="relative">
       <button
         ref={btnRef}
@@ -61,15 +60,17 @@ const CategoryGroup = ({
             style={{ padding: "8px 16px" }}
             onClick={() => { setCategoryToEdit(category); setActiveCategoryMenu(null); }}
           >
-            Rename / Edit
+            Edit / Change Type
           </button>
-          <button
-            className="w-full text-left hover:bg-[#3584E4] hover:text-white transition-colors"
-            style={{ padding: "8px 16px" }}
-            onClick={() => { setChannelToMove({ categoryId: category._id }); setActiveCategoryMenu(null); }}
-          >
-            Add Channels
-          </button>
+          {category.type === 'custom' && (
+            <button
+              className="w-full text-left hover:bg-[#3584E4] hover:text-white transition-colors"
+              style={{ padding: "8px 16px" }}
+              onClick={() => { setChannelToMove({ categoryId: category._id }); setActiveCategoryMenu(null); }}
+            >
+              Add Channels
+            </button>
+          )}
           <button
             className="w-full text-left hover:bg-[#E01E5A] hover:text-white transition-colors"
             style={{ padding: "8px 16px" }}
@@ -81,7 +82,7 @@ const CategoryGroup = ({
         document.body
       )}
     </div>
-  ) : null;
+  );
 
   return (
     <SidebarSection
@@ -144,9 +145,6 @@ export default function CategoryList({
         } else {
           categoryChannels = channels.filter(c => category.channelIds?.includes(c._id));
         }
-
-        // Hide empty department categories automatically mapped
-        if (category.type === "department" && categoryChannels.length === 0) return null;
 
         return (
           <CategoryGroup

@@ -21,8 +21,11 @@ import WorkspaceSwitcher from "../components/WorkspaceSwitcher";
 
 // Unauth Screens
 import LandingScreen from "../screens/Authentication/LandingScreen";
+import EditContactScreen from "../screens/Authentication/EditContactScreen";
+import EditProfileScreen from "../screens/Authentication/EditProfileScreen";
 import LoginScreen from "../screens/Authentication/LoginScreen";
 import RegisterScreen from "../screens/Authentication/RegisterScreen";
+import ForgotPasswordScreen from "../screens/Authentication/ForgotPasswordScreen";
 
 // Auth Screens
 import WorkspaceSelectorScreen from "../screens/WorkspaceSelectorScreen";
@@ -61,6 +64,7 @@ import CanvasEditorScreen from "../screens/Canvas/CanvasEditorScreen";
 import WorkspaceSettingsScreen from "../screens/workspace/WorkspaceSettingsScreen";
 import StarredMessagesScreen from "../screens/StarredMessagesScreen";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import useResponsive from '../hooks/useResponsive';
 
 
 
@@ -117,6 +121,8 @@ function BottomTabs({ navigation }) {
   const insets = useSafeAreaInsets();
   const unreadCount = useNotificationStore((s) => s.unreadCount) || 0;
   const { t } = useTranslation();
+  const { isTablet, isDesktop } = useResponsive();
+  const isWide = isTablet || isDesktop;
 
   return (
     <>
@@ -130,10 +136,10 @@ function BottomTabs({ navigation }) {
             borderTopColor: colors.border,
             paddingBottom: insets.bottom > 0 ? insets.bottom : verticalScale(6),
             paddingTop: verticalScale(4),
-            height: 50 + (insets.bottom > 0 ? insets.bottom : 6),
+            height: (isWide ? 58 : 50) + (insets.bottom > 0 ? insets.bottom : 6),
           },
           tabBarLabelStyle: {
-            fontSize: moderateScale(10),
+            fontSize: moderateScale(isWide ? 12 : 10),
             fontWeight: "600",
             marginTop: verticalScale(1),
           },
@@ -190,20 +196,9 @@ function BottomTabs({ navigation }) {
           name="SearchTab"
           component={SearchScreen}
           options={{
-            tabBarLabel: "",
-            tabBarIcon: ({ focused }) => (
-              <View
-                style={{
-                  width: scale(32),
-                  height: verticalScale(32),
-                  borderRadius: moderateScale(16),
-                  backgroundColor: focused ? colors.primary : colors.backgroundTertiary,
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <Search size={18} color={focused ? colors.textInverse : colors.textPrimary} />
-              </View>
+            tabBarLabel: t("Search"),
+            tabBarIcon: ({ color }) => (
+              <Search size={22} color={color} />
             ),
           }}
         />
@@ -240,6 +235,7 @@ export default function AppNavigation() {
           <Stack.Screen name="Landing" component={LandingScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
         </>
       ) : !activeWorkspaceId ? (
         <>
@@ -361,6 +357,16 @@ export default function AppNavigation() {
           <Stack.Screen
             name="Profile"
             component={ProfileScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="EditContact"
+            component={EditContactScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="EditProfile"
+            component={EditProfileScreen}
             options={{ headerShown: false }}
           />
           <Stack.Screen

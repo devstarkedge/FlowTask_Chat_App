@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
 import AppNavigator from "./src/navigation/AppNavigation";
 import { useAuthStore } from "./src/stores/authStore";
 import { useThemeStore } from "./src/stores/themeStore";
@@ -13,6 +14,10 @@ import ErrorBoundary from "./src/components/ErrorBoundary";
 import Toast from "react-native-toast-message";
 import ThemeProvider from './src/theme/ThemeProvider';
 
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+
+import { useNotificationPrefStore } from "./src/stores/notificationPrefStore";
+
 const navigationRef = createNavigationContainerRef();
 const queryClient = new QueryClient();
 
@@ -20,9 +25,12 @@ export default function App() {
   const init = useAuthStore((state) => state.init);
   const initTheme = useThemeStore((state) => state.init);
   const initPrefs = usePreferencesStore((state) => state.init);
+  const fetchNotifPrefs = useNotificationPrefStore((state) => state.fetchPreferences);
   const accessToken = useAuthStore((state) => state.accessToken);
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
   const themeSubscriptionRef = useRef(null);
+
+
 
   // Initialize auth FIRST (primes token cache), then theme
   useEffect(() => {
@@ -34,6 +42,7 @@ export default function App() {
       // 2. Now safe to init theme (API call requires auth token)
       const subscription = await initTheme();
       await initPrefs();
+      fetchNotifPrefs();
       if (cancelled) {
         subscription?.remove();
         return;
@@ -74,17 +83,19 @@ export default function App() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <SafeAreaProvider>
-        <ErrorBoundary>
-          <ThemeProvider>
-            <NavigationContainer ref={navigationRef}>
-              <AppNavigator />
-              <Toast />
-            </NavigationContainer>
-          </ThemeProvider>
-        </ErrorBoundary>
-      </SafeAreaProvider>
-    </QueryClientProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <SafeAreaProvider>
+          <ErrorBoundary>
+            <ThemeProvider>
+              <NavigationContainer ref={navigationRef}>
+                <AppNavigator />
+                <Toast />
+              </NavigationContainer>
+            </ThemeProvider>
+          </ErrorBoundary>
+        </SafeAreaProvider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }

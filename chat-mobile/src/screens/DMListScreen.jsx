@@ -34,6 +34,8 @@ import {
 import logger from '../utils/logger';
 import { formatRelativeTime } from '../utils/dateUtils';
 
+import DMListItem from "../components/DMListItem";
+
 // ─── DM Item (Slack mobile: avatar + name + preview + time, flat) ────────────
 
 const DMItem = React.memo(({ channel, onPress, isSelf }) => {
@@ -66,58 +68,12 @@ const DMItem = React.memo(({ channel, onPress, isSelf }) => {
     onlineStatus: liveOnlineStatus,
   };
 
-  const previewPrefix = channel.lastMessage?.senderId === currentUser?._id ? "You: " : "";
-  let preview = channel.lastMessagePreview || "No messages yet";
-  if (channel.lastMessagePreview && channel.lastMessage?.senderId === currentUser?._id) {
-    preview = `${previewPrefix}${preview}`;
-  }
-
-  const timeStr = channel.lastMessageAt ? formatRelativeTime(channel.lastMessageAt) : "";
-
   return (
-    <TouchableOpacity
-      style={dmItem.row}
-      onPress={() => onPress(channel)}
-      activeOpacity={0.5}
-    >
-      <AppAvatar user={dmUser} size={40} showStatus={true} statusSize={10} style={{ borderRadius: moderateScale(8) }} />
-      <View style={dmItem.textCol}>
-        <View style={dmItem.topRow}>
-          <Text
-            style={[
-              dmItem.name,
-              {
-                color: colors.textPrimary,
-                fontWeight: unreadCount > 0 ? "700" : "600",
-              },
-            ]}
-            numberOfLines={1}
-          >
-            {displayName}
-          </Text>
-          {timeStr ? (
-            <Text style={[dmItem.time, { color: colors.textTertiary }]}>{timeStr}</Text>
-          ) : null}
-        </View>
-        <Text
-          style={[
-            dmItem.preview,
-            {
-              color: unreadCount > 0 ? colors.textPrimary : colors.textTertiary,
-              fontWeight: unreadCount > 0 ? "600" : "400",
-            },
-          ]}
-          numberOfLines={2}
-        >
-          {preview}
-        </Text>
-      </View>
-      {unreadCount > 0 && (
-        <View style={[dmItem.badge, { backgroundColor: colors.primary }]}>
-          <Text style={dmItem.badgeText}>{unreadCount}</Text>
-        </View>
-      )}
-    </TouchableOpacity>
+    <DMListItem 
+      channel={{ ...channel, name: displayName, avatar: channel.avatar }}
+      onPress={onPress}
+      unreadCount={unreadCount}
+    />
   );
 });
 
@@ -310,6 +266,10 @@ const DMListScreen = ({ navigation }) => {
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={12}
+        maxToRenderPerBatch={10}
+        windowSize={11}
+        removeClippedSubviews={Platform.OS !== 'web'}
         contentContainerStyle={{ paddingTop: verticalScale(4), paddingBottom: verticalScale(80) }}
         ListEmptyComponent={
           <View style={styles.empty}>

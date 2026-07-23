@@ -1,4 +1,5 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import {
   View,
@@ -192,13 +193,18 @@ const ThreadDetailScreen = ({ route, navigation }) => {
   if (!effectiveRootSender.name && !effectiveRootSender.email && rootAuthor) {
     effectiveRootSender = resolveAuthor({ authorId: rootAuthor, senderSnapshot: rootAuthor });
   }
+  const insets = useSafeAreaInsets();
+  const [headerHeight, setHeaderHeight] = useState(54);
   const rootDateStr = new Date(effectiveRoot.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const rootTimeStr = formatMessageTime(effectiveRoot.createdAt);
   const effectiveRootAttachments = getAttachments(effectiveRoot);
 
   return (
     <ScreenLayout>
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <View
+        style={[styles.header, { borderBottomColor: colors.border }]}
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+      >
         <HeaderBackButton onPress={() => navigation.goBack()} />
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>Thread</Text>
@@ -209,7 +215,11 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         <View style={styles.headerRight} />
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={0}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? (insets.top + headerHeight) : 0}
+      >
         <FlatList
           ref={flatListRef}
           onScrollToIndexFailed={(info) => {

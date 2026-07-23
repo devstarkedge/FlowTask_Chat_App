@@ -26,12 +26,11 @@ import {
 import WorkspaceAvatar from "./WorkspaceAvatar";
 import AddWorkspaceScreen from "./workspace/AddWorkspaceScreen";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
-
-
-const { width } = Dimensions.get("window");
-const SIDEBAR_WIDTH = Math.min(width * 0.82, 320);
+import useResponsive from '../hooks/useResponsive';
 
 const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
+  const { width } = useResponsive();
+  const SIDEBAR_WIDTH = Math.min(width * 0.82, 360);
   const insets = useSafeAreaInsets();
   const {
     workspaces,
@@ -57,7 +56,7 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
       duration: 220,
       useNativeDriver: Platform.OS !== "web",
     }).start();
-  }, [visible]);
+  }, [visible, SIDEBAR_WIDTH]);
 
   const handleInvite = (ws) => {
     const code = ws?.inviteCode || ws?.code || 'WS123';
@@ -119,7 +118,6 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
             backgroundColor: colors.background,
             transform: [{ translateX: slideAnim }],
             paddingTop: insets.top,
-            paddingBottom: insets.bottom,
           },
         ]}
       >
@@ -131,7 +129,7 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Workspace list */}
+        {/* Workspace list (scrollable) */}
         <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
           {isLoading ? (
             <View style={styles.loadingBox}>
@@ -202,43 +200,34 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
               })}
             </View>
           )}
-
-          {/* Divider */}
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-          {/* Footer options */}
-          <View style={styles.footerOptions}>
-            <TouchableOpacity
-              style={styles.footerRow}
-              onPress={() => setAddWorkspaceVisible(true)}
-              activeOpacity={0.6}
-            >
-              <Plus size={20} color={colors.textSecondary} strokeWidth={1.5} />
-              <Text style={[styles.footerLabel, { color: colors.textPrimary }]}>Add a Workspace</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.footerRow}
-              onPress={() => {
-                onClose();
-                navigation?.navigate("Preferences");
-              }}
-              activeOpacity={0.6}
-            >
-              <Settings size={20} color={colors.textSecondary} strokeWidth={1.5} />
-              <Text style={[styles.footerLabel, { color: colors.textPrimary }]}>Preferences</Text>
-            </TouchableOpacity>
-
-            {/* <TouchableOpacity
-              style={styles.footerRow}
-              onPress={() => { onClose(); }}
-              activeOpacity={0.6}
-            >
-              <HelpCircle size={20} color={colors.textSecondary} strokeWidth={1.5} />
-              <Text style={[styles.footerLabel, { color: colors.textPrimary }]}>Help</Text>
-            </TouchableOpacity> */}
-          </View>
         </ScrollView>
+
+        {/* Divider */}
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+        {/* Fixed Footer options dynamically padded for all devices */}
+        <View style={[styles.footerOptions, { paddingBottom: Math.max(insets.bottom, verticalScale(12)) }]}>
+          <TouchableOpacity
+            style={styles.footerRow}
+            onPress={() => setAddWorkspaceVisible(true)}
+            activeOpacity={0.6}
+          >
+            <Plus size={20} color={colors.textSecondary} strokeWidth={1.5} />
+            <Text style={[styles.footerLabel, { color: colors.textPrimary }]}>Add a Workspace</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.footerRow}
+            onPress={() => {
+              onClose();
+              navigation?.navigate("Preferences");
+            }}
+            activeOpacity={0.6}
+          >
+            <Settings size={20} color={colors.textSecondary} strokeWidth={1.5} />
+            <Text style={[styles.footerLabel, { color: colors.textPrimary }]}>Preferences</Text>
+          </TouchableOpacity>
+        </View>
       </Animated.View>
 
       {/* Slack-style Add Workspace screen */}
@@ -318,7 +307,6 @@ const styles = StyleSheet.create({
   },
   footerOptions: {
     paddingHorizontal: scale(4),
-    paddingBottom: verticalScale(20),
   },
   footerRow: {
     flexDirection: "row",

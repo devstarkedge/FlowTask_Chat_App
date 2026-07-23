@@ -125,6 +125,14 @@ const StatusModal = ({ visible, onClose, initialStatus }) => {
 
   const styles = createStyles(colors);
 
+  // Helper to determine if a preset is currently selected
+  const isPresetSelected = (preset) => {
+    return (
+      (preset.emoji && preset.emoji === selectedEmoji) ||
+      (preset.text && preset.text === statusText)
+    );
+  };
+
   return (
     <AccessibleModal
       visible={visible}
@@ -189,6 +197,11 @@ const StatusModal = ({ visible, onClose, initialStatus }) => {
                     setStatusText(preset.label);
                     setSelectedPresetIndex(index);
                   }}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.presetItem,
+                    isPresetSelected(preset) && { backgroundColor: colors.backgroundSecondary },
+                  ]}
                   activeOpacity={0.7}
                 >
                   <Text style={styles.presetEmoji}>{preset.emoji}</Text>
@@ -372,10 +385,14 @@ const createStyles = (colors) =>
     },
     clearButton: {},
     saveButton: {},
-    buttonText: {
-      fontSize: moderateScale(16),
-      fontWeight: "600",
-    },
+    bustatusCardText: {
+        fontSize: moderateScale(15),
+        fontWeight: "600",
+      },
+      statusExpiration: {
+        fontSize: moderateScale(12),
+        marginTop: verticalScale(4),
+      },
   });
 
 export default StatusModal;

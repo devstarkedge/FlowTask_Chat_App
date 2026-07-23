@@ -13,6 +13,7 @@
  */
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Linking } from 'react-native';
+import { pellToTipTap } from '../utils/formatConverter';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 
@@ -495,10 +496,11 @@ const RichText = React.memo(function RichText({ html, text, colors, baseStyle, m
 
     const ctx = { colors: colors || {}, mentions, onMentionPress };
 
-    // Use HTML directly if available, otherwise compile Markdown fallback to HTML
-    const targetHtml = (html && html.trim() && html.trim() !== '<p></p>')
+    const rawHtml = (html && html.trim() && html.trim() !== '<p></p>')
       ? html
       : markdownToHtml(text || '');
+
+    const targetHtml = pellToTipTap(rawHtml);
 
     if (targetHtml && targetHtml.trim() && targetHtml.trim() !== '<p></p>') {
       try {
@@ -519,10 +521,12 @@ const RichText = React.memo(function RichText({ html, text, colors, baseStyle, m
 
 const styles = StyleSheet.create({
   container: {
-    flexShrink: 1,
+    minWidth: scale(20),
   },
   paragraphView: {
     marginVertical: verticalScale(1),
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   paragraphText: {
     fontSize: moderateScale(15),

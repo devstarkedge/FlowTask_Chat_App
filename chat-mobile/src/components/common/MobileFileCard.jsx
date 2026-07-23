@@ -16,6 +16,7 @@ import {
 import { Video, Audio, ResizeMode } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { downloadAndSaveFile } from '../../utils/fileDownload';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 import {
@@ -119,13 +120,7 @@ function ImageViewer({ visible, file, name, onClose }) {
 
   const handleDownload = async () => {
     try {
-      if (await Sharing.isAvailableAsync()) {
-        const localUri = FileSystem.cacheDirectory + name;
-        const dl = await FileSystem.downloadAsync(file.url, localUri);
-        await Sharing.shareAsync(dl.uri);
-      } else {
-        Linking.openURL(file.url);
-      }
+      await downloadAndSaveFile(file.url, name, file.mimeType || 'image/jpeg');
     } catch {
       Linking.openURL(file.url);
     }
@@ -367,7 +362,16 @@ export default function MobileFileCard({ file, colors }) {
   const mime     = file.mimeType || file.type || '';
   const ext      = (name.split('.').pop() || '').toLowerCase();
   const kind     = getFileKind(mime, name);
-  const thumbUrl = file.thumbnailUrl || (kind === 'image' ? file.url : null);
+  let fileUrl = file.url || file.secureUrl || '';
+  if (fileUrl && !fileUrl.startsWith('http://') && !fileUrl.startsWith('https://') && !fileUrl.startsWith('data:') && !fileUrl.startsWith('file:')) {
+    const prefix = 'https://chat-app-api-cyyl.onrender.com';
+    fileUrl = fileUrl.startsWith('/') ? `${prefix}${fileUrl}` : `${prefix}/${fileUrl}`;
+  }
+  let thumbUrl = file.thumbnailUrl || (kind === 'image' ? fileUrl : null);
+  if (thumbUrl && !thumbUrl.startsWith('http://') && !thumbUrl.startsWith('https://') && !thumbUrl.startsWith('data:') && !thumbUrl.startsWith('file:')) {
+    const prefix = 'https://chat-app-api-cyyl.onrender.com';
+    thumbUrl = thumbUrl.startsWith('/') ? `${prefix}${thumbUrl}` : `${prefix}/${thumbUrl}`;
+  }
 
   const activeColor = (KIND_COLORS[kind] || KIND_COLORS.file);
   const themeColor  = kind === 'image' || kind === 'video' || kind === 'audio'
@@ -385,20 +389,13 @@ export default function MobileFileCard({ file, colors }) {
     if (!file.url) return;
     setDownloading(true);
     try {
-      const fileExt   = name.includes('.') ? name.split('.').pop() : ext || 'bin';
-      const localPath = FileSystem.cacheDirectory + name;
-      const { uri }   = await FileSystem.downloadAsync(file.url, localPath);
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: mime || 'application/octet-stream' });
-      } else {
-        Linking.openURL(file.url);
-      }
+      await downloadAndSaveFile(file.url, name, mime);
     } catch {
       Linking.openURL(file.url);
     } finally {
       setDownloading(false);
     }
-  }, [file.url, name, ext, mime]);
+  }, [file.url, name, mime]);
 
   const handleCardPress = useCallback(() => {
     switch (kind) {

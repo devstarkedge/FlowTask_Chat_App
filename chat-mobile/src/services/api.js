@@ -330,9 +330,8 @@ export const fileAPI = {
       timeout: 60000,
       onUploadProgress: onProgress,
       headers: {
-        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json',
       },
-      transformRequest: [(data) => data],
     }),
 };
 

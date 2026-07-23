@@ -10,7 +10,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.mohitgahlyan.chatmobilejs",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "FlowTask-Chat needs access to your photo library to save downloaded images and videos.",
+        "NSPhotoLibraryAddUsageDescription": "FlowTask-Chat needs permission to save images and videos to your photo library."
       }
     },
     "android": {
@@ -21,7 +23,14 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.mohitgahlyan.chatmobilejs"
+      "package": "com.mohitgahlyan.chatmobilejs",
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
+        "READ_MEDIA_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -37,7 +46,14 @@
       "expo-secure-store",
       "@react-native-community/datetimepicker",
       "expo-audio",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow FlowTask-Chat to access your photos.",
+          "savePhotosPermission": "Allow FlowTask-Chat to save photos and videos to your gallery."
+        }
+      ]
     ]
   }
 }

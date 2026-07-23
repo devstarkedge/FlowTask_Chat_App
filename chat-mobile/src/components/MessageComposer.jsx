@@ -53,6 +53,9 @@ import {
   Loader2,
   Mic,
   Camera as CameraIcon,
+  ChevronDown,
+  Maximize2,
+  Minimize2,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import logger from "../utils/logger";
@@ -266,11 +269,28 @@ const MessageComposer = React.memo(function MessageComposer({
     });
   }, []);
 
+  const toggleExpand = useCallback(() => {
+    isAnimating.current = true;
+    const nextState = !isExpandedRef.current;
+    const targetHeight = nextState ? maxExpandedHeightRef.current : collapsedHeightRef.current;
+
+    setIsExpanded(nextState);
+    Animated.spring(animatedHeight, {
+      toValue: targetHeight,
+      useNativeDriver: false,
+      tension: 45,
+      friction: 8,
+    }).start(() => {
+      setIsDragging(false);
+      isAnimating.current = false;
+    });
+  }, [animatedHeight]);
+
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dy) > 5;
+        return Math.abs(gestureState.dy) > 4;
       },
       onPanResponderGrant: (evt, gestureState) => {
         setIsDragging(true);
@@ -288,32 +308,37 @@ const MessageComposer = React.memo(function MessageComposer({
       },
       onPanResponderRelease: (evt, gestureState) => {
         setIsDragging(false);
-        const currentHeight = dragStartY.current - gestureState.dy;
         const cHeight = collapsedHeightRef.current;
         const mHeight = maxExpandedHeightRef.current;
-        const threshold = cHeight + (mHeight - cHeight) * 0.25;
+
+        if (Math.abs(gestureState.dy) < 6) {
+          toggleExpand();
+          return;
+        }
+
+        const currentHeight = dragStartY.current - gestureState.dy;
+        const threshold = cHeight + (mHeight - cHeight) * 0.3;
         
         isAnimating.current = true;
-        if (gestureState.vy < -0.5 || currentHeight > threshold) {
+        if (gestureState.vy < -0.3 || currentHeight > threshold) {
+          setIsExpanded(true);
           Animated.spring(animatedHeight, {
             toValue: mHeight,
             useNativeDriver: false,
-            tension: 40,
-            friction: 7,
+            tension: 45,
+            friction: 8,
           }).start(() => {
-            setIsExpanded(true);
             isAnimating.current = false;
           });
         } else {
+          setIsExpanded(false);
           Animated.spring(animatedHeight, {
             toValue: cHeight,
             useNativeDriver: false,
-            tension: 40,
-            friction: 7,
+            tension: 45,
+            friction: 8,
           }).start(() => {
-            setIsExpanded(false);
             isAnimating.current = false;
-            Keyboard.dismiss();
           });
         }
       },
@@ -616,10 +641,7 @@ const MessageComposer = React.memo(function MessageComposer({
           }
 
           formData.append("files", {
-            uri:
-              Platform.OS === "ios"
-                ? file.uri.replace("file://", "")
-                : file.uri,
+            uri: file.uri,
             name,
             type,
           });
@@ -739,7 +761,7 @@ const MessageComposer = React.memo(function MessageComposer({
     try {
       const formData = new FormData();
       formData.append("files", {
-        uri: Platform.OS === "ios" ? uri.replace("file://", "") : uri,
+        uri: uri,
         name: file.name,
         type: file.type,
       });
@@ -931,12 +953,14 @@ const MessageComposer = React.memo(function MessageComposer({
         ]}
       >
         {/* Top Drag Handle */}
-        <View
+        <TouchableOpacity
           {...panResponder.panHandlers}
+          onPress={toggleExpand}
+          activeOpacity={0.8}
           style={styles.dragHandleContainer}
         >
           <View style={[styles.dragHandle, { backgroundColor: colors.border }]} />
-        </View>
+        </TouchableOpacity>
 
         <View
           style={[
@@ -987,13 +1011,25 @@ const MessageComposer = React.memo(function MessageComposer({
                       color={showToolbar ? colors.primary : colors.textSecondary}
                     />
                   </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.iconButton, { marginBottom: verticalScale(4) }]}
+                    onPress={toggleExpand}
+                  >
+                    <Maximize2
+                      size={17}
+                      color={colors.textSecondary}
+                    />
+                  </TouchableOpacity>
                 </>
               )}
 
               {/* Editor wrapper - always mounted with a stable key to preserve focus and typed text */}
-              <View 
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => richText.current?.focusContentEditor()}
                 key="editor-wrapper"
-                style={(isExpanded || isDragging) ? { flex: 1, width: '100%' } : { flex: 1, minHeight: verticalScale(40), height: Math.min(maxComposerHeight, Math.max(verticalScale(40), editorHeight)) }}
+                style={(isExpanded || isDragging) ? { flex: 1, width: '100%', minHeight: verticalScale(140) } : { flex: 1, minHeight: verticalScale(40), height: Math.min(maxComposerHeight, Math.max(verticalScale(40), editorHeight)) }}
               >
                 <RichEditor
                   ref={richText}
@@ -1007,14 +1043,14 @@ const MessageComposer = React.memo(function MessageComposer({
                     backgroundColor: colors.inputBackground,
                     color: colors.inputText,
                     placeholderColor: colors.inputPlaceholder,
-                    contentCSSText: "font-size: 15px; font-family: sans-serif; overflow-y: auto !important; body { margin: 0 !important; padding: 0 !important; padding-top: 0px !important; } p { margin-top: 0px !important; margin-bottom: 0px !important; line-height: 1.4 !important; } ul, ol { padding-left: 24px !important; margin: 0 !important; margin-top: 4px !important; margin-bottom: 4px !important; } li { margin: 0 !important; padding: 0 !important; list-style-position: outside !important; }",
+                    contentCSSText: `font-size: 15px; font-family: sans-serif; overflow-y: auto !important; ${(isExpanded || isDragging) ? 'min-height: 160px !important; height: 100% !important;' : ''} body { margin: 0 !important; padding: 0 !important; padding-top: 0px !important; ${(isExpanded || isDragging) ? 'min-height: 160px !important; height: 100% !important;' : ''} } p { margin-top: 0px !important; margin-bottom: 0px !important; line-height: 1.4 !important; } ul, ol { padding-left: 24px !important; margin: 0 !important; margin-top: 4px !important; margin-bottom: 4px !important; } li { margin: 0 !important; padding: 0 !important; list-style-position: outside !important; }`,
                   }}
                   onChange={(html) => {
                     handleTextChange(html);
                   }}
                   editorInitializedCallback={() => setIsEditorReady(true)}
                 />
-              </View>
+              </TouchableOpacity>
 
               {/* Right Buttons (only when collapsed) */}
               {!(isExpanded || isDragging) && (
@@ -1102,6 +1138,13 @@ const MessageComposer = React.memo(function MessageComposer({
                         onPress={() => setShowRecentCanvases(true)}
                       >
                         <FileText size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.iconButton}
+                        onPress={toggleExpand}
+                      >
+                        <ChevronDown size={20} color={colors.textSecondary} />
                       </TouchableOpacity>
                     </View>
 

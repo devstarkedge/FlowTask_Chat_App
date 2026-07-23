@@ -71,9 +71,18 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { formatMessageTime } from '../../utils/dateUtils';
 import logger from '../../utils/logger';
-import Toast from 'react-native-toast-message';
+import ENV from '../../config/environment';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const normalizeMediaUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('file:')) {
+    return url;
+  }
+  const prefix = ENV.SOCKET_URL || 'https://chat-app-api-cyyl.onrender.com';
+  return url.startsWith('/') ? `${prefix}${url}` : `${prefix}/${url}`;
+};
 
 const getAuthorId = (msg) => {
   if (!msg) return null;
@@ -85,23 +94,50 @@ const getMessageAttachments = (msg) => {
   if (!msg) return [];
   const refs = msg.fileReferences || [];
   if (refs.length > 0) {
-    return refs
+    const list = refs
       .map((ref) => {
-        if (!ref.fileId) return null;
-        const file = ref.fileId;
+        if (!ref) return null;
+        const file = (typeof ref.fileId === 'object' && ref.fileId) ? ref.fileId : ref;
+        if (!file) return null;
+        const rawUrl = file.url || file.secureUrl || file.path;
+        if (!rawUrl) return null;
+        const url = normalizeMediaUrl(rawUrl);
+        const thumbnailUrl = normalizeMediaUrl(file.thumbnailUrl) || url;
         return {
-          _id: file._id,
+          _id: file._id || ref._id || String(Math.random()),
           name: file.originalName || file.fileName || file.name || 'File',
           fileName: file.originalName || file.fileName || file.name || 'File',
-          url: file.url || file.secureUrl,
-          thumbnailUrl: file.thumbnailUrl,
-          mimeType: file.mimeType,
+          url: url,
+          secureUrl: url,
+          thumbnailUrl: thumbnailUrl,
+          mimeType: file.mimeType || file.type || '',
           fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
         };
       })
       .filter(Boolean);
+    if (list.length > 0) return list;
   }
-  return msg.attachments || msg.files || [];
+
+  const rawAttachments = msg.attachments || msg.files || msg.media || [];
+  return rawAttachments
+    .map((file) => {
+      if (!file) return null;
+      const rawUrl = file.url || file.secureUrl || file.path;
+      if (!rawUrl) return null;
+      const url = normalizeMediaUrl(rawUrl);
+      const thumbnailUrl = normalizeMediaUrl(file.thumbnailUrl) || url;
+      return {
+        _id: file._id || String(Math.random()),
+        name: file.originalName || file.fileName || file.name || 'File',
+        fileName: file.originalName || file.fileName || file.name || 'File',
+        url: url,
+        secureUrl: url,
+        thumbnailUrl: thumbnailUrl,
+        mimeType: file.mimeType || file.type || '',
+        fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
+      };
+    })
+    .filter(Boolean);
 };
 
 const isSameDay = (d1, d2) => {
@@ -626,7 +662,7 @@ const ChatScreen = ({ route, navigation }) => {
           )}
           {!isMe && isCompact && <View style={{ width: scale(32) }} />}
 
-          <View style={{ flexShrink: 1 }}>
+          <View style={{ flexShrink: 1, alignItems: isMe ? 'flex-end' : 'flex-start' }}>
             {/* Sender name (hidden for compact) */}
             {!isMe && !isCompact && (
               <View style={styles.senderRow}>
@@ -1372,6 +1408,7 @@ const createStyles = (colors) =>
       paddingVertical: verticalScale(8),
       borderRadius: moderateScale(18),
       maxWidth: "100%",
+      minWidth: scale(40),
     },
     senderRow: {
       flexDirection: "row",

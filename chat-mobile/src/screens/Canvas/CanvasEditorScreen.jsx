@@ -12,6 +12,7 @@ import {
   Image,
 } from 'react-native';
 import ScreenContainer from '../../components/common/ScreenContainer';
+import ScreenLayout from '../../components/common/ScreenLayout';
 import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
 import { useCanvasStore } from '../../stores/canvasStore';
@@ -181,7 +182,7 @@ export default function CanvasEditorScreen({ route, navigation }) {
         const asset = result.assets[0];
         const formData = new FormData();
         formData.append('files', {
-          uri: Platform.OS === 'ios' ? asset.uri.replace('file://', '') : asset.uri,
+          uri: asset.uri,
           name: asset.fileName || 'upload.jpg',
           type: asset.mimeType || 'image/jpeg',
         });
@@ -213,7 +214,8 @@ export default function CanvasEditorScreen({ route, navigation }) {
   };
 
   return (
-    <ScreenContainer style={styles.container}>
+    <ScreenLayout edges={['top', 'left', 'right']} style={styles.container}>
+      <ScreenContainer style={styles.container}>
       <CanvasHeader
         title={activeCanvas?.title || ''}
         presence={presence}
@@ -309,6 +311,7 @@ export default function CanvasEditorScreen({ route, navigation }) {
         canvasId={canvasId}
       />
     </ScreenContainer>
+    </ScreenLayout>
   );
 }
 

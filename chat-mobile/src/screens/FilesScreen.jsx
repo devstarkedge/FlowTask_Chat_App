@@ -30,6 +30,7 @@ import {
 import Toast from "react-native-toast-message";
 import * as Clipboard from "expo-clipboard";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { downloadAndSaveFile } from "../utils/fileDownload";
 import logger from '../utils/logger';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
@@ -146,10 +147,7 @@ export default function FilesScreen({ route, navigation }) {
       const url = file.url || messageAPI.getFileProxyUrl(file._id);
       if (!url)
         return Toast.show({ type: "error", text1: "No URL to download" });
-      // Use Linking to open in browser / download manager
-      const supported = await Linking.canOpenURL(url);
-      if (supported) Linking.openURL(url);
-      else Toast.show({ type: "error", text1: "Cannot download file" });
+      await downloadAndSaveFile(url, file.fileName || 'download', file.mimeType);
     } catch (err) {
       logger.error(err);
       Toast.show({ type: "error", text1: "Download failed" });

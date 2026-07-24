@@ -17,7 +17,7 @@ export const sendMessageSchema = z
     content: z.string().max(10000).optional().default(""),
     htmlContent: z.string().max(50000).optional(),
     contentType: z
-      .enum(["text", "system", "bot", "file", "gif", "task_update", "activity"])
+      .enum(["text", "system", "bot", "file", "gif", "task_update", "activity", "audio", "video"])
       .optional(),
     attachments: z
       .array(
@@ -55,6 +55,21 @@ export const sendMessageSchema = z
         }),
       )
       .max(50)
+      .optional(),
+    audioMeta: z
+      .object({
+        duration: z.number().optional(),
+        audioUrl: z.string().url().optional(),
+      })
+      .optional(),
+    videoMeta: z
+      .object({
+        duration: z.number().optional(),
+        videoUrl: z.string().url().optional(),
+        thumbnailUrl: z.string().url().optional(),
+        width: z.number().optional(),
+        height: z.number().optional(),
+      })
       .optional(),
     gifMeta: z
       .object({

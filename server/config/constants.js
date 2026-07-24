@@ -109,6 +109,8 @@ export const MESSAGE_CONTENT_TYPES = Object.freeze({
   GIF: 'gif',
   TASK_UPDATE: 'task_update',
   ACTIVITY: 'activity',
+  AUDIO: 'audio',
+  VIDEO: 'video',
 });
 
 // ─── Attachment Sources ──────────────────────────────────────────────────────

@@ -140,6 +140,19 @@ const gifMetaSchema = new Schema({
   title: { type: String, default: '' },
 }, { _id: false });
 
+const audioMetaSchema = new Schema({
+  duration: { type: Number },
+  audioUrl: { type: String },
+}, { _id: false });
+
+const videoMetaSchema = new Schema({
+  duration: { type: Number },
+  videoUrl: { type: String },
+  thumbnailUrl: { type: String },
+  width: { type: Number },
+  height: { type: Number },
+}, { _id: false });
+
 const messageSchema = new Schema({
   // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────
   workspaceId: {
@@ -200,6 +213,14 @@ const messageSchema = new Schema({
   },
   gifMeta: {
     type: gifMetaSchema,
+    default: null,
+  },
+  audioMeta: {
+    type: audioMetaSchema,
+    default: null,
+  },
+  videoMeta: {
+    type: videoMetaSchema,
     default: null,
   },
   attachments: {

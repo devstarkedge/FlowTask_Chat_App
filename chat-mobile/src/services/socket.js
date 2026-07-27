@@ -69,6 +69,7 @@ export const connectSocket = async () => {
       token,
       workspaceId,
     },
+    transports: ['websocket'],
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,

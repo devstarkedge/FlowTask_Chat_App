@@ -58,6 +58,11 @@ function categorySingular(category) {
  * @returns {string|null} Human-readable attachment preview, or null if none
  */
 export function getAttachmentPreview(message) {
+  // ── Native Media Overrides (Audio/Video messages) ─────────
+  if (message?.audioMeta?.audioUrl) return '🎵 Audio';
+  if (message?.videoMeta?.videoUrl) return '🎥 Video';
+  if (message?.gifMeta?.url) return 'GIF';
+
   const items = [];
 
   // 1) Embedded attachments (legacy / direct upload metadata)

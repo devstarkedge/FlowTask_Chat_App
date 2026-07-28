@@ -122,11 +122,21 @@ class MessageService {
       thread = await threadRepository.findById(threadId, { workspaceId: threadWorkspaceId?.toString() });
       if (!thread) {
         // Create the thread if this is the first reply to a message
+        // Fetch the root message to get its author and include them as a participant
+        const rootMessage = await messageRepository.findById(threadId, { workspaceId: threadWorkspaceId?.toString() });
+        const rootAuthorId = rootMessage?.authorId?._id?.toString() || rootMessage?.authorId?.toString();
+        
+        // Build participant list: always include both the replier AND the root message author
+        // This ensures the original message author can see the thread in their thread list
+        const participantIds = rootAuthorId
+          ? [...new Set([authorId.toString(), rootAuthorId])]
+          : [authorId];
+
         thread = await threadRepository.create({
           workspaceId: threadWorkspaceId,
           channelId,
           rootMessageId: threadId,
-          participantIds: [authorId],
+          participantIds,
         });
       }
       actualThreadId = thread._id;

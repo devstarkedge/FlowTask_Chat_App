@@ -6,7 +6,7 @@ import { messageAPI } from "../../services/api";
 import { emitTypingStart, emitTypingStop } from "../../services/socket";
 import useDraftAutoSave from "../../hooks/useDraftAutoSave";
 import useMentions from "../../hooks/useMentions";
-import { Send, Paperclip, Smile, Bold, Plus, AtSign, ChevronDown, Clock, X, Image as ImageIcon } from 'lucide-react';
+import { Send, Paperclip, Smile, Bold, Plus, AtSign, ChevronDown, Clock, X, ImagePlay as ImageIcon } from 'lucide-react';
 import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import EmojiPickerPortal from "./EmojiPickerPortal";

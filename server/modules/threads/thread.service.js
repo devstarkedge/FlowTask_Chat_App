@@ -41,7 +41,9 @@ class ThreadService {
       channelId,
       rootMessageId,
       title: title ? sanitizeHtml(title) : undefined,
-      participantIds: [authorId],
+      participantIds: rootMessage.authorId 
+        ? [...new Set([authorId.toString(), rootMessage.authorId._id ? rootMessage.authorId._id.toString() : rootMessage.authorId.toString()])]
+        : [authorId],
       flowTaskRef,
       ...(workspaceId && { workspaceId }),
     };

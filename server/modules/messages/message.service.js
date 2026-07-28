@@ -1241,6 +1241,9 @@ class MessageService {
           content: original.content || '',
           htmlContent: original.htmlContent || original.content || '',
           contentType: original.contentType || MESSAGE_CONTENT_TYPES.TEXT,
+          gifMeta: original.gifMeta || null,
+          audioMeta: original.audioMeta || null,
+          videoMeta: original.videoMeta || null,
           attachments: attachmentsToClone.map(att => ({
             fileName: att.fileName,
             originalName: att.originalName,

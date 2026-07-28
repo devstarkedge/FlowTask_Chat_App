@@ -180,6 +180,24 @@ export const updateCategory = asyncHandler(async (req, res, next) => {
         return next(new BadRequestError('channelIds must be an array'));
       }
       update.channelIds = await validateAccessibleCategoryChannels(req, req.body.channelIds);
+      
+      const previousCategories = await Category.find({
+        workspaceId: req.workspaceId,
+        createdBy: req.user._id,
+        _id: { $ne: category._id },
+        channelIds: { $in: update.channelIds }
+      });
+
+      if (previousCategories.length > 0) {
+        await Category.updateMany(
+          { _id: { $in: previousCategories.map(c => c._id) } },
+          { $pullAll: { channelIds: update.channelIds } }
+        );
+        const updatedPrevious = await Category.find({ _id: { $in: previousCategories.map(c => c._id) } }).populate('departmentId');
+        for (const cat of updatedPrevious) {
+          req.app.get("io")?.to(req.workspaceId.toString()).emit("category:updated", cat);
+        }
+      }
     }
   }
 
@@ -311,6 +329,23 @@ export const addChannelToCategory = asyncHandler(async (req, res, next) => {
 
   const [accessibleChannelId] = await validateAccessibleCategoryChannels(req, [channelId]);
 
+  const previousCategories = await Category.find({
+    workspaceId: req.workspaceId,
+    createdBy: req.user._id,
+    _id: { $ne: req.params.id },
+    channelIds: accessibleChannelId
+  });
+
+  if (previousCategories.length > 0) {
+    await Category.updateMany(
+      { _id: { $in: previousCategories.map(c => c._id) } },
+      { $pull: { channelIds: accessibleChannelId } }
+    );
+    const updatedPrevious = await Category.find({ _id: { $in: previousCategories.map(c => c._id) } }).populate('departmentId');
+    for (const cat of updatedPrevious) {
+      req.app.get("io")?.to(req.workspaceId.toString()).emit("category:updated", cat);
+    }
+  }
 
   const category = await Category.findOneAndUpdate(
     { _id: req.params.id, workspaceId: req.workspaceId, createdBy: req.user._id },
@@ -328,9 +363,11 @@ export const addChannelToCategory = asyncHandler(async (req, res, next) => {
 // @route   DELETE /api/categories/:id/channels/:channelId
 // @access  Private
 export const removeChannelFromCategory = asyncHandler(async (req, res, next) => {
+  const [accessibleChannelId] = await validateAccessibleCategoryChannels(req, [req.params.channelId]);
+
   const category = await Category.findOneAndUpdate(
     { _id: req.params.id, workspaceId: req.workspaceId, createdBy: req.user._id },
-    { $pull: { channelIds: req.params.channelId }, lastActivity: new Date() },
+    { $pull: { channelIds: accessibleChannelId }, lastActivity: new Date() },
     { new: true }
   ).populate('departmentId');
 
@@ -347,6 +384,24 @@ export const addBulkChannelsToCategory = asyncHandler(async (req, res, next) => 
   }
 
   const accessibleChannelIds = await validateAccessibleCategoryChannels(req, channelIds);
+
+  const previousCategories = await Category.find({
+    workspaceId: req.workspaceId,
+    createdBy: req.user._id,
+    _id: { $ne: req.params.id },
+    channelIds: { $in: accessibleChannelIds }
+  });
+
+  if (previousCategories.length > 0) {
+    await Category.updateMany(
+      { _id: { $in: previousCategories.map(c => c._id) } },
+      { $pullAll: { channelIds: accessibleChannelIds } }
+    );
+    const updatedPrevious = await Category.find({ _id: { $in: previousCategories.map(c => c._id) } }).populate('departmentId');
+    for (const cat of updatedPrevious) {
+      req.app.get("io")?.to(req.workspaceId.toString()).emit("category:updated", cat);
+    }
+  }
 
   const category = await Category.findOneAndUpdate(
     { _id: req.params.id, workspaceId: req.workspaceId, createdBy: req.user._id, type: 'custom' },

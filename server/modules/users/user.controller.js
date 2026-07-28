@@ -7,6 +7,7 @@ import { WORKSPACE_ROLES } from '../../config/constants.js';
 import ChatUser from './ChatUser.model.js';
 import logger from '../../utils/logger.js';
 import { broadcastPresenceUpdate, broadcastUserPreferences } from '../../sockets/socketManager.js';
+import mongoose from 'mongoose';
 
 /**
  * GET /users/dm-contacts
@@ -171,7 +172,11 @@ export const getDMContacts = asyncHandler(async (req, res) => {
     },
   });
 });
+
 export const getProfile = asyncHandler(async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ success: false, error: 'Invalid user ID' });
+  }
   const profile = await userService.getProfile(req.params.id);
   res.json({ success: true, data: profile });
 });
@@ -430,6 +435,10 @@ export const getThemePreferences = asyncHandler(async (req, res) => {
  */
 export const updateUser = asyncHandler(async (req, res, next) => {
   const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ success: false, error: 'Invalid user ID' });
+  }
 
   // Users can only update their own profile unless they are an admin
   if (req.user._id.toString() !== id && req.user.role !== 'admin') {

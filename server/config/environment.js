@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-dotenv.config();
+dotenv.config({ override: true });
 
 /**
  * Centralized environment configuration with validation.

@@ -21,8 +21,9 @@ import env from './environment.js';
 
 // ─── Connection Options ──────────────────────────────────────────────────────
 const MONGOOSE_OPTIONS = {
-  maxPoolSize: 100,
-  minPoolSize: 5,                    // Prevents cold-start latency on Render
+  maxPoolSize: 20,                   // Reduced from 100 to prevent Atlas 500 connection limit spikes
+  minPoolSize: 2,                    // Reduced from 5 to prevent aggressive cold-start connection hoarding
+  maxIdleTimeMS: 30000,              // CRITICAL: Drops idle connections after 30 seconds
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
   connectTimeoutMS: 10000,
@@ -32,7 +33,7 @@ const MONGOOSE_OPTIONS = {
 
 // ─── Reconnection Config ─────────────────────────────────────────────────────
 const RECONNECT = {
-  INITIAL_MAX_RETRIES: 5,            // Max retries on first connect
+  INITIAL_MAX_RETRIES: 5,            // Changed back to 5 as requested
   RUNTIME_MAX_RETRIES: Infinity,     // Never give up on runtime disconnects
   BASE_DELAY_MS: 1000,               // 1 second
   MAX_DELAY_MS: 30000,               // 30 second cap
@@ -46,6 +47,13 @@ const HEALTH_CHECK_INTERVAL_MS = 30000; // 30 seconds
 let isConnected = false;
 let isReconnecting = false;
 let isShuttingDown = false;
+
+// Global caching for connection reuse across module reloads
+let globalCache = global.mongooseCache;
+if (!globalCache) {
+  globalCache = global.mongooseCache = { conn: null, promise: null };
+}
+
 let healthCheckTimer = null;
 let reconnectAttempt = 0;
 let lastPingMs = -1;
@@ -175,7 +183,19 @@ async function reconnectWithBackoff(mode = 'runtime') {
     if (isShuttingDown) break;
 
     try {
-      await mongoose.connect(env.MONGO_URI, MONGOOSE_OPTIONS);
+      if (mongoose.connection.readyState === 1 || mongoose.connection.readyState === 2) {
+        isConnected = true;
+        isReconnecting = false;
+        return;
+      }
+      
+      if (mongoose.connection.readyState !== 0) {
+        await mongoose.disconnect();
+      }
+
+      const conn = await mongoose.connect(env.MONGO_URI, MONGOOSE_OPTIONS);
+      globalCache.conn = conn;
+
       isConnected = true;
       isReconnecting = false;
       reconnectAttempt = 0;
@@ -189,6 +209,29 @@ async function reconnectWithBackoff(mode = 'runtime') {
       startHealthCheck();
       return;
     } catch (error) {
+      console.log('--- DATABASE CONNECTION FAILURE ---');
+      console.error("--- MONGODB DRIVER ERROR OBJECT ---");
+      console.error("error:", error);
+      console.error("error.name:", error.name);
+      console.error("error.message:", error.message);
+      console.error("error.code:", error.code);
+      console.error("error.reason:", error.reason);
+      console.error("error.cause:", error.cause);
+      console.error("error.stack:", error.stack);
+
+      if (error.reason && error.reason.servers) {
+        for (const [address, server] of error.reason.servers.entries()) {
+          if (server.error) {
+            console.error(`\n--- DEEP INSPECTION FOR: ${address} ---`);
+            console.error("server.error.name:", server.error.name);
+            console.error("server.error.message:", server.error.message);
+            console.error("server.error.code:", server.error.code);
+            console.error("server.error.cause:", server.error.cause);
+            console.error("server.error.stack:", server.error.stack);
+          }
+        }
+      }
+
       logger.error('MongoDB reconnection failed', {
         metric: 'db_reconnect',
         attempt: reconnectAttempt,
@@ -204,12 +247,12 @@ async function reconnectWithBackoff(mode = 'runtime') {
   isReconnecting = false;
 
   if (mode === 'initial') {
-    logger.error('MongoDB initial connection failed after max retries. Exiting.', {
+    logger.error('MongoDB initial connection failed after max retries.', {
       metric: 'db_lifecycle',
       event: 'connection_failed',
       attempts: reconnectAttempt,
     });
-    process.exit(1);
+    // Removed process.exit(1) to prevent Render container from crash-looping
   }
 }
 
@@ -265,15 +308,25 @@ function stopHealthCheck() {
  * Connect to MongoDB with retry logic and lifecycle monitoring.
  */
 export async function connectDatabase() {
+  if (globalCache.conn) {
+    isConnected = true;
+    logger.info('MongoDB Reusing Existing Connection', {
+      metric: 'db_lifecycle',
+      event: 'reusing_connection',
+      poolSize: MONGOOSE_OPTIONS.maxPoolSize,
+    });
+    return globalCache.conn;
+  }
   if (isConnected) return;
 
   try {
     const startTime = performance.now();
     const conn = await mongoose.connect(env.MONGO_URI, MONGOOSE_OPTIONS);
+    globalCache.conn = conn;
     isConnected = true;
 
     const durationMs = Math.round(performance.now() - startTime);
-    logger.info('MongoDB connected', {
+    logger.info('MongoDB Connected', {
       metric: 'db_lifecycle',
       event: 'connected',
       host: conn.connection.host,
@@ -281,8 +334,33 @@ export async function connectDatabase() {
       durationMs,
       poolSize: MONGOOSE_OPTIONS.maxPoolSize,
       minPoolSize: MONGOOSE_OPTIONS.minPoolSize,
+      maxIdleTimeMS: MONGOOSE_OPTIONS.maxIdleTimeMS,
+      activeConnections: conn.connection.base.connections.length,
     });
   } catch (error) {
+    console.log('--- DATABASE CONNECTION FAILURE ---');
+    console.error("--- MONGODB DRIVER ERROR OBJECT ---");
+    console.error("error:", error);
+    console.error("error.name:", error.name);
+    console.error("error.message:", error.message);
+    console.error("error.code:", error.code);
+    console.error("error.reason:", error.reason);
+    console.error("error.cause:", error.cause);
+    console.error("error.stack:", error.stack);
+
+    if (error.reason && error.reason.servers) {
+      for (const [address, server] of error.reason.servers.entries()) {
+        if (server.error) {
+          console.error(`\n--- DEEP INSPECTION FOR: ${address} ---`);
+          console.error("server.error.name:", server.error.name);
+          console.error("server.error.message:", server.error.message);
+          console.error("server.error.code:", server.error.code);
+          console.error("server.error.cause:", server.error.cause);
+          console.error("server.error.stack:", server.error.stack);
+        }
+      }
+    }
+
     logger.error('MongoDB initial connection failed, starting reconnect', {
       metric: 'db_lifecycle',
       event: 'initial_connection_failed',

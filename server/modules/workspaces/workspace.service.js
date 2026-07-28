@@ -227,7 +227,9 @@ class WorkspaceService {
   }
 
   /**
-   * Delete (deactivate) a workspace. Only owner can do this.
+   * Delete a workspace and all associated data. Only owner can do this.
+   * Performs cascading deletion of all channels, messages, threads, files,
+   * memberships, invites, and other workspace-scoped data.
    */
   async deleteWorkspace(workspaceId, requesterId) {
     const workspace = await this.getWorkspace(workspaceId);
@@ -236,10 +238,102 @@ class WorkspaceService {
       throw new ForbiddenError('Only the workspace owner can delete it.');
     }
 
-    await workspaceRepository.deactivate(workspaceId);
-    logger.info(`Workspace deactivated: ${workspace.slug} by user ${requesterId}`);
+    await this._cascadeDeleteWorkspace(workspaceId, workspace.slug, requesterId);
 
-    return { message: 'Workspace deactivated successfully.' };
+    return { message: 'Workspace deleted successfully.' };
+  }
+
+  /**
+   * Perform cascading deletion of all workspace data.
+   * @private
+   */
+  async _cascadeDeleteWorkspace(workspaceId, workspaceSlug, requesterId) {
+    const wsId = workspaceId.toString();
+    const wsObjectId = new mongoose.Types.ObjectId(wsId);
+
+    logger.info(`Starting cascading deletion for workspace ${workspaceSlug} (${wsId}) by user ${requesterId}`);
+
+    try {
+      // 1. Delete all messages in the workspace
+      const { default: Message } = await import('../messages/Message.model.js');
+      const messageResult = await Message.deleteMany({ workspaceId: wsObjectId });
+      logger.info(`[CASCADE] Deleted ${messageResult.deletedCount} messages`);
+
+      // 2. Delete all file references
+      const { default: FileReference } = await import('../files/FileReference.model.js');
+      const fileRefResult = await FileReference.deleteMany({ workspaceId: wsObjectId });
+      logger.info(`[CASCADE] Deleted ${fileRefResult.deletedCount} file references`);
+
+      // 3. Delete all threads
+      const { default: Thread } = await import('../threads/Thread.model.js');
+      const threadResult = await Thread.deleteMany({ workspaceId: wsObjectId });
+      logger.info(`[CASCADE] Deleted ${threadResult.deletedCount} threads`);
+
+      // 4. Delete all channels and channel members
+      const { default: Channel } = await import('../channels/Channel.model.js');
+      const { default: ChannelMember } = await import('../channels/ChannelMember.model.js');
+      const channelResult = await Channel.deleteMany({ workspaceId: wsObjectId });
+      const channelMemberResult = await ChannelMember.deleteMany({ workspaceId: wsObjectId });
+      logger.info(`[CASCADE] Deleted ${channelResult.deletedCount} channels and ${channelMemberResult.deletedCount} channel members`);
+
+      // 5. Delete all categories/departments
+      const { default: Department } = await import('../categories/Department.model.js');
+      const deptResult = await Department.deleteMany({ workspaceId: wsObjectId });
+      logger.info(`[CASCADE] Deleted ${deptResult.deletedCount} categories`);
+
+      // 6. Delete all canvases
+      const { default: Canvas } = await import('../canvas/canvas.model.js');
+      const canvasResult = await Canvas.deleteMany({ workspaceId: wsObjectId });
+      logger.info(`[CASCADE] Deleted ${canvasResult.deletedCount} canvases`);
+
+      // 7. Delete all read receipts
+      const { default: ReadReceipt } = await import('../readReceipts/ReadReceipt.model.js');
+      const readReceiptResult = await ReadReceipt.deleteMany({ workspaceId: wsObjectId });
+      logger.info(`[CASCADE] Deleted ${readReceiptResult.deletedCount} read receipts`);
+
+      // 8. Delete all notifications
+      const { default: Notification } = await import('../notifications/Notification.model.js');
+      const { default: NotificationPreference } = await import('../notifications/NotificationPreference.model.js');
+      const notifResult = await Notification.deleteMany({ workspaceId: wsObjectId });
+      const notifPrefResult = await NotificationPreference.deleteMany({ workspaceId: wsObjectId });
+      logger.info(`[CASCADE] Deleted ${notifResult.deletedCount} notifications`);
+
+      // 9. Delete all drafts
+      const { default: Draft } = await import('../drafts/Draft.model.js');
+      const draftResult = await Draft.deleteMany({ workspaceId: wsObjectId });
+      logger.info(`[CASCADE] Deleted ${draftResult.deletedCount} drafts`);
+
+      // 10. Delete all workspace invites
+      const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
+      const inviteResult = await WorkspaceInvite.deleteMany({ workspaceId: wsObjectId });
+      logger.info(`[CASCADE] Deleted ${inviteResult.deletedCount} workspace invites`);
+
+      // 11. Delete all workspace memberships
+      const { default: WorkspaceMembership } = await import('./WorkspaceMembership.model.js');
+      const membershipResult = await WorkspaceMembership.deleteMany({ workspaceId: wsObjectId });
+      logger.info(`[CASCADE] Deleted ${membershipResult.deletedCount} workspace memberships`);
+
+      // 12. Delete the workspace itself
+      await Workspace.findByIdAndDelete(wsObjectId);
+      logger.info(`[CASCADE] Workspace ${workspaceSlug} deleted`);
+
+      // 13. Emit socket event to notify all connected clients
+      try {
+        const { emitToWorkspace } = await import('../../sockets/socketManager.js');
+        const { SOCKET_EVENTS } = await import('../../config/constants.js');
+        emitToWorkspace(wsId, SOCKET_EVENTS.WORKSPACE_DELETED, {
+          workspaceId: wsId,
+          deletedBy: requesterId,
+        });
+      } catch (err) {
+        logger.warn('[CASCADE] Failed to emit workspace deleted socket event', { error: err.message });
+      }
+
+      logger.info(`Cascading deletion complete for workspace ${workspaceSlug}`);
+    } catch (error) {
+      logger.error(`[CASCADE] Failed to delete workspace ${workspaceSlug}`, { error: error.message });
+      throw error;
+    }
   }
 
   // ─── Membership ──────────────────────────────────────────────────────
@@ -1275,6 +1369,8 @@ class WorkspaceService {
 
   /**
    * Leave a workspace (self-remove).
+   * - Regular members: simply leave the workspace (no effect on others).
+   * - Owner: leaving triggers automatic workspace deletion with all associated data.
    */
   async leaveWorkspace(workspaceId, userId) {
     const role = await workspaceRepository.getUserRole(userId, workspaceId);
@@ -1284,11 +1380,13 @@ class WorkspaceService {
     }
 
     if (role === WORKSPACE_ROLES.OWNER) {
-      throw new ForbiddenError(
-        'Workspace owner cannot leave. Transfer ownership first or delete the workspace.',
-      );
+      // Owner leaving = auto-delete the workspace with all data
+      const workspace = await this.getWorkspace(workspaceId);
+      await this._cascadeDeleteWorkspace(workspaceId, workspace.slug, userId);
+      return { message: 'Workspace deleted successfully because the owner left.' };
     }
 
+    // Regular member: simply leave
     await workspaceRepository.removeMember(userId, workspaceId);
     logger.info(`User ${userId} left workspace ${workspaceId}`);
 

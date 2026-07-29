@@ -1093,10 +1093,27 @@ class ChannelService {
 
     // For guests, only return channels they are explicitly members of
     const isGuest = role === 'guest';
+    const isAdmin = role === 'admin' || role === 'owner';
 
-    const channels = await channelRepository.findByMember(userId, {
-      workspaceId,
-    });
+    let channels;
+    if (isAdmin) {
+      const workspaceChannels = await Channel.find({
+        workspaceId,
+        isArchived: false,
+        type: { $ne: 'dm' }
+      }).lean();
+
+      const memberChannels = await channelRepository.findByMember(userId, {
+        workspaceId,
+      });
+      const dmOnly = memberChannels.filter(c => c.type === 'dm');
+
+      channels = [...workspaceChannels, ...dmOnly];
+    } else {
+      channels = await channelRepository.findByMember(userId, {
+        workspaceId,
+      });
+    }
 
     // Guests only see channels they are explicit members of
     if (isGuest) {
@@ -1145,7 +1162,7 @@ class ChannelService {
       .map((pc) => (pc.toObject ? pc.toObject() : pc));
 
 
-    const all = [...channels, ...missingPublic];
+    const all = isAdmin ? channels : [...channels, ...missingPublic];
     const decorated = await this._decorateDMChannels(all, userId, workspaceId);
 
     // Merge per-user pin/star state

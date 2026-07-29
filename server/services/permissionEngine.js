@@ -122,8 +122,12 @@ class PermissionEngine {
 
     const workspaceId = channel.workspaceId?.toString();
 
-    // FlowTask project channels are assignment-scoped even for admins/managers.
+    // FlowTask project channels are assignment-scoped even for admins/managers, except workspace admins/owners.
     if (channel.type === 'project' || channel.flowTaskRef?.entityType === 'board') {
+      const role = (user.role || '').toLowerCase();
+      if (role === 'admin' || role === 'owner') {
+        return true;
+      }
       return channel.hasMember?.(user._id) === true;
     }
 

@@ -704,6 +704,29 @@ export async function initializeSocket(httpServer, corsOptions) {
       }
     });
 
+    // ─── Real-Time Message Receipts (Delivery & Read) ────────────────
+    socket.on(SOCKET_EVENTS.MESSAGE_DELIVERED, async ({ messageId, channelId }) => {
+      if (await isSocketRateLimited(socket.id)) return;
+      if (!messageId || !channelId) return;
+      try {
+        const { markAsDelivered } = await import('../modules/readReceipts/readReceipt.service.js');
+        await markAsDelivered(messageId, channelId, userId, wsId);
+      } catch (err) {
+        logger.debug('message:delivered handling failed', { userId, messageId, error: err?.message });
+      }
+    });
+
+    socket.on(SOCKET_EVENTS.MESSAGE_READ, async ({ messageId, channelId }) => {
+      if (await isSocketRateLimited(socket.id)) return;
+      if (!messageId || !channelId) return;
+      try {
+        const { markAsRead } = await import('../modules/readReceipts/readReceipt.service.js');
+        await markAsRead(messageId, channelId, userId, wsId);
+      } catch (err) {
+        logger.debug('message:read handling failed', { userId, messageId, error: err?.message });
+      }
+    });
+
     // ─── Disconnection ───────────────────────────────────────────────
     socket.on('disconnect', async (reason) => {
       logger.info('Socket disconnected', {

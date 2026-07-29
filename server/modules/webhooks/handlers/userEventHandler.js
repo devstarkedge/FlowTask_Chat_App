@@ -169,7 +169,7 @@ export function registerUserEventHandlers() {
       // Admin channel
       const adminChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ADMIN.slug, wsId);
       if (adminChannel) {
-        if (effectiveNewRole === 'admin' || effectiveNewRole === 'manager') {
+        if (effectiveNewRole === 'admin') {
           await channelService.addMember(adminChannel._id, chatUser._id, undefined, wsId);
         } else if (effectiveOldRole === 'admin' || effectiveOldRole === 'manager') {
           await channelService.removeMember(adminChannel._id, chatUser._id, 'system', wsId);

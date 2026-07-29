@@ -154,6 +154,14 @@ const videoMetaSchema = new Schema({
 }, { _id: false });
 
 const messageSchema = new Schema({
+  // ─── Client Message ID (for deduplication) ─────────────────────────────
+  clientMessageId: {
+    type: String,
+    sparse: true,
+    unique: true,
+    index: true,
+  },
+
   // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────
   workspaceId: {
     type: Schema.Types.ObjectId,

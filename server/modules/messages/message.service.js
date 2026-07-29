@@ -96,6 +96,7 @@ class MessageService {
 
     // Build message data
     const messageData = {
+      clientMessageId: tempId || null,
       channelId,
       authorId,
       content: sanitizedContent,

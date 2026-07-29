@@ -21,6 +21,12 @@ class MessageRepository {
    * @returns {Promise<Message>}
    */
   async create(data) {
+    if (data.clientMessageId) {
+      const existing = await Message.findOne({ clientMessageId: data.clientMessageId });
+      if (existing) {
+        return existing.populate('authorId', 'name email avatar flowTaskUserId onlineStatus');
+      }
+    }
     const message = new Message(data);
     await message.save();
     return message.populate('authorId', 'name email avatar flowTaskUserId onlineStatus');

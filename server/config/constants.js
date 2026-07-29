@@ -306,6 +306,7 @@ export const SOCKET_EVENTS = Object.freeze({
 
   // Read Receipts
   MESSAGE_READ: 'message:read',
+  MESSAGE_DELIVERED: 'message:delivered',
 
   // Scheduled Messages
   SCHEDULED_MESSAGE_SENT: 'scheduled:sent',

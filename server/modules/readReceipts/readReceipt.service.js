@@ -116,5 +116,13 @@ export const markAsDelivered = async (messageId, channelId, userId, workspaceId)
     { new: true, upsert: true }
   );
 
+  // Emit socket event to channel
+  emitToChannel(channelId, SOCKET_EVENTS.MESSAGE_DELIVERED, {
+    messageId,
+    channelId,
+    userId,
+    deliveredAt: receipt.deliveredAt,
+  });
+
   return receipt;
 };

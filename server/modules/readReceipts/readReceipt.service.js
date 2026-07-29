@@ -1,78 +1,116 @@
-import readReceiptRepository from './readReceipt.repository.js';
-import { emitToUser } from '../../sockets/socketManager.js';
-import logger from '../../utils/logger.js';
-import { SOCKET_EVENTS } from '../../config/constants.js';
-import messageService from '../messages/message.service.js';
+import ReadReceipt from "./readReceipt.model.js";
+import Channel from "../channels/Channel.model.js";
+import ChatUser from "../users/ChatUser.model.js";
+import { emitToChannel } from "../../sockets/socketManager.js";
+import { SOCKET_EVENTS } from "../../config/constants.js";
 
 /**
- * Read Receipt Service — manages unread counts and read state per user per channel.
- * Delegates all data access to readReceiptRepository (Model → Repository → Service pattern).
+ * Get message info: delivery/read status per member
  */
+export const getMessageInfo = async (messageId, channelId, requesterId, workspaceId) => {
+  const channel = await Channel.findById(channelId).populate("members", "name email avatar");
+  if (!channel) throw new Error("Channel not found");
 
-class ReadReceiptService {
-  /**
-   * Mark a channel as read for a user (set unread to 0).
-   * For DM channels, also marks messages as seen (delivery status).
-   */
-  async markAsRead(userId, channelId, lastReadMessageId, workspaceId) {
-    const receipt = await readReceiptRepository.markChannelAsRead(
-      userId,
-      channelId,
-      lastReadMessageId,
-      workspaceId,
-    );
+  // Get all channel members except the sender
+  const members = channel.members || [];
+  const recipientMembers = members.filter(m => m._id.toString() !== requesterId.toString());
 
-    // Emit updated unread count to the user
-    emitToUser(userId.toString(), SOCKET_EVENTS.UNREAD_UPDATED, {
-      channelId,
-      unreadCount: 0,
-      unreadMentionCount: 0,
-    }, workspaceId?.toString());
+  // Get read receipts for this message
+  const receipts = await ReadReceipt.find({
+    messageId,
+    channelId,
+    workspaceId,
+  }).lean();
 
-    // For DM channels, update message delivery status to 'seen'
-    messageService.markDMMessagesAsSeen(channelId, userId, workspaceId).catch((err) => {
-      logger.error('Failed to mark DM messages as seen', { channelId, userId: userId.toString(), error: err.message });
-    });
+  const receiptMap = new Map(receipts.map(r => [r.userId.toString(), r]));
 
-    return receipt;
+  // Build response
+  const deliveredTo = [];
+  const readBy = [];
+  const pending = [];
+
+  for (const member of recipientMembers) {
+    const memberId = member._id.toString();
+    const receipt = receiptMap.get(memberId);
+
+    if (receipt && receipt.readAt) {
+      readBy.push({
+        userId: memberId,
+        name: member.name || "User",
+        avatar: member.avatar || null,
+        status: "read",
+        readAt: receipt.readAt,
+      });
+    } else if (receipt && receipt.deliveredAt) {
+      deliveredTo.push({
+        userId: memberId,
+        name: member.name || "User",
+        avatar: member.avatar || null,
+        status: "delivered",
+        deliveredAt: receipt.deliveredAt,
+      });
+    } else {
+      pending.push({
+        userId: memberId,
+        name: member.name || "User",
+        avatar: member.avatar || null,
+        status: "pending",
+      });
+    }
   }
 
-  /**
-   * Get unread counts for all channels a user belongs to.
-   * Includes lastReadMessageId for unread separator rendering.
-   */
-  async getUnreadCounts(userId, workspaceId) {
-    return readReceiptRepository.getUnreadCounts(userId, workspaceId);
-  }
+  return {
+    messageId,
+    channelId,
+    totalRecipients: recipientMembers.length,
+    deliveredCount: deliveredTo.length,
+    readCount: readBy.length,
+    pendingCount: pending.length,
+    deliveredTo,
+    readBy,
+    pending,
+  };
+};
 
-  /**
-   * Increment unread count for a set of users on a channel.
-   * Called internally when a new message is posted.
-   */
-  async incrementUnread(channelId, userIds, hasMention = false, workspaceId) {
-    return readReceiptRepository.incrementUnread(channelId, userIds, hasMention, workspaceId);
-  }
+/**
+ * Mark a message as read by a user
+ */
+export const markAsRead = async (messageId, channelId, userId, workspaceId) => {
+  const receipt = await ReadReceipt.findOneAndUpdate(
+    { messageId, channelId, userId, workspaceId },
+    {
+      $set: {
+        readAt: new Date(),
+        deliveredAt: new Date(),
+      },
+    },
+    { new: true, upsert: true }
+  );
 
-  /**
-   * Get the read receipt for a specific user in a channel.
-   */
-  async getReceipt(userId, channelId, workspaceId) {
-    return readReceiptRepository.findByUserAndChannel(userId, channelId, workspaceId);
-  }
+  // Emit socket event to channel
+  emitToChannel(channelId, SOCKET_EVENTS.MESSAGE_READ, {
+    messageId,
+    channelId,
+    userId,
+    readAt: receipt.readAt,
+  });
 
-  /**
-   * Ensure a read receipt exists when a user joins a channel.
-   */
-  async ensureReceiptExists(userId, channelId, workspaceId) {
-    return readReceiptRepository.ensureExists(userId, channelId, workspaceId);
-  }
+  return receipt;
+};
 
-  /**
-   * Clean up read receipts when a user leaves a channel.
-   */
-  async removeReceipt(userId, channelId, workspaceId) {
-    return readReceiptRepository.removeByUserAndChannel(userId, channelId, workspaceId);
-  }
-}
+/**
+ * Mark a message as delivered to a user
+ */
+export const markAsDelivered = async (messageId, channelId, userId, workspaceId) => {
+  const receipt = await ReadReceipt.findOneAndUpdate(
+    { messageId, channelId, userId, workspaceId },
+    {
+      $setOnInsert: {
+        deliveredAt: new Date(),
+      },
+    },
+    { new: true, upsert: true }
+  );
 
-export default new ReadReceiptService();
+  return receipt;
+};

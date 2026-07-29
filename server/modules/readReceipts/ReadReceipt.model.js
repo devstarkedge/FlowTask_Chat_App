@@ -3,100 +3,104 @@ import mongoose from 'mongoose';
 const { Schema, model } = mongoose;
 
 /**
- * ReadReceipt — tracks per-user, per-channel read position.
+ * ReadReceipt — tracks per-user, per-channel unread counts and per-message
+ * delivery/read status.
  *
- * Used to compute unread counts and render "new messages" dividers.
- * Compound unique index on (userId, channelId) ensures one record per user per channel.
+ * Two usage modes (unified in one collection):
+ *  1. Channel-level unread tracking  → (userId + channelId) unique document
+ *     Fields: unreadCount, unreadMentionCount, lastReadMessageId, lastReadAt
+ *
+ *  2. Per-message delivery/read status → (userId + channelId + messageId) unique document
+ *     Fields: deliveredAt, readAt
+ *
+ * Both modes share workspaceId for multi-tenant isolation.
  */
 
-const readReceiptSchema = new Schema({
-  // ─── Workspace Scope (multi-tenant isolation) ─────────────────────────────
-  workspaceId: {
-    type: Schema.Types.ObjectId,
-    ref: 'Workspace',
-    required: true,
-    index: true,
-  },
+const readReceiptSchema = new Schema(
+  {
+    // ─── Workspace Scope ───────────────────────────────────────────────────────
+    workspaceId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Workspace',
+      required: true,
+      index: true,
+    },
 
-  userId: {
-    type: Schema.Types.ObjectId,
-    ref: 'ChatUser',
-    required: true,
-  },
-  channelId: {
-    type: Schema.Types.ObjectId,
-    ref: 'Channel',
-    required: true,
-  },
-  lastReadMessageId: {
-    type: Schema.Types.ObjectId,
-    ref: 'Message',
-    default: null,
-  },
-  lastReadAt: {
-    type: Date,
-    default: null,
-  },
-  unreadCount: {
-    type: Number,
-    default: 0,
-    min: 0,
-  },
-  // Track mentions that the user hasn't acknowledged
-  unreadMentionCount: {
-    type: Number,
-    default: 0,
-    min: 0,
-  },
-}, {
-  timestamps: true,
-});
+    // ─── Core References ──────────────────────────────────────────────────────
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: 'ChatUser',
+      required: true,
+    },
 
-// ─── Indexes (all workspace-scoped) ──────────────────────────────────────────
-// One receipt per user per channel per workspace
-readReceiptSchema.index({ workspaceId: 1, userId: 1, channelId: 1 }, { unique: true });
-// All channel readers within workspace (for channel read indicators)
-readReceiptSchema.index({ workspaceId: 1, channelId: 1 });
-// User's unread channels within workspace (for sidebar badges)
+    channelId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Channel',
+      required: true,
+    },
+
+    // Present only for per-message receipts; null for channel-level documents
+    messageId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Message',
+      default: null,
+    },
+
+    // ─── Channel-level Unread Tracking ────────────────────────────────────────
+    unreadCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    unreadMentionCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    lastReadMessageId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Message',
+      default: null,
+    },
+
+    lastReadAt: {
+      type: Date,
+      default: null,
+    },
+
+    // ─── Per-message Delivery / Read Status ───────────────────────────────────
+    deliveredAt: {
+      type: Date,
+      default: null,
+    },
+
+    readAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    timestamps: true,
+  },
+);
+
+// ─── Indexes ──────────────────────────────────────────────────────────────────
+
+// Channel-level unread lookup (primary query pattern from repository)
+readReceiptSchema.index({ workspaceId: 1, userId: 1, channelId: 1 }, { unique: true, sparse: true, partialFilterExpression: { messageId: null } });
+
+// Per-message receipt lookup (used by service for getMessageInfo / markAsRead)
+readReceiptSchema.index({ workspaceId: 1, messageId: 1, channelId: 1 }, { sparse: true });
+
+// All unread channels for a user (getUnreadCounts query)
 readReceiptSchema.index({ workspaceId: 1, userId: 1, unreadCount: 1 });
 
-// ─── Static Methods ──────────────────────────────────────────────────────────
-readReceiptSchema.statics.getUnreadCounts = function (userId, workspaceId) {
-  const filter = { userId, workspaceId, unreadCount: { $gt: 0 } };
-  return this.find(
-    filter,
-    { channelId: 1, unreadCount: 1, unreadMentionCount: 1, lastReadMessageId: 1, _id: 0 },
-  ).populate('channelId', 'lastMessageAt lastMessagePreview').lean();
-};
+// All readers in a channel (getChannelReaders query)
+readReceiptSchema.index({ workspaceId: 1, channelId: 1 });
 
-readReceiptSchema.statics.markChannelAsRead = async function (userId, channelId, lastMessageId, workspaceId) {
-  const filter = { userId, channelId, workspaceId };
-  return this.findOneAndUpdate(
-    filter,
-    {
-      lastReadMessageId: lastMessageId,
-      lastReadAt: new Date(),
-      unreadCount: 0,
-      unreadMentionCount: 0,
-      workspaceId,
-    },
-    { upsert: true, returnDocument: 'after' },
-  );
-};
-
-readReceiptSchema.statics.incrementUnread = async function (channelId, excludeUserId, hasMention = false, workspaceId) {
-  const update = { $inc: { unreadCount: 1 } };
-  if (hasMention) {
-    update.$inc.unreadMentionCount = 1;
-  }
-  const filter = {
-    channelId,
-    workspaceId,
-    userId: { $ne: excludeUserId },
-  };
-  return this.updateMany(filter, update);
-};
-
-const ReadReceipt = model('ReadReceipt', readReceiptSchema);
+const ReadReceipt =
+  mongoose.models.ReadReceipt || model('ReadReceipt', readReceiptSchema);
 
 export default ReadReceipt;

@@ -148,12 +148,8 @@ export function requireChannelAccess() {
         return next(new ForbiddenError('Channel not found'));
       }
 
-      // Admin can access all channels
-      if (
-        req.user.role === 'admin' &&
-        channel.type !== 'project' &&
-        channel.flowTaskRef?.entityType !== 'board'
-      ) {
+      // Admin and owner can access all channels
+      if (req.user.role === 'admin' || req.user.role === 'owner') {
         req.channel = channel;
         return next();
       }
@@ -245,12 +241,8 @@ export function requireMessageAccess(options = { allowMissing: false }) {
         return next(new NotFoundError('Channel not found'));
       }
 
-      // Admin can access all
-      if (
-        req.user.role === 'admin' &&
-        channel.type !== 'project' &&
-        channel.flowTaskRef?.entityType !== 'board'
-      ) {
+      // Admin and owner can access all
+      if (req.user.role === 'admin' || req.user.role === 'owner') {
         req.message = message;
         req.channel = channel;
         return next();

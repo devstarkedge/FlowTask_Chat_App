@@ -8,12 +8,14 @@ import { SOCKET_EVENTS } from "../../config/constants.js";
  * Get message info: delivery/read status per member
  */
 export const getMessageInfo = async (messageId, channelId, requesterId, workspaceId) => {
-  const channel = await Channel.findById(channelId).populate("members", "name email avatar");
-  if (!channel) throw new Error("Channel not found");
+  const { default: channelRepository } = await import("../channels/channel.repository.js");
+  const members = await channelRepository.listActiveMembers(channelId);
 
   // Get all channel members except the sender
-  const members = channel.members || [];
-  const recipientMembers = members.filter(m => m._id.toString() !== requesterId.toString());
+  const recipientMembers = members.filter(m => {
+    const uid = m.userId?._id?.toString() || m.userId?.toString();
+    return uid && uid !== requesterId.toString();
+  });
 
   // Get read receipts for this message
   const receipts = await ReadReceipt.find({
@@ -30,30 +32,32 @@ export const getMessageInfo = async (messageId, channelId, requesterId, workspac
   const pending = [];
 
   for (const member of recipientMembers) {
-    const memberId = member._id.toString();
+    const userObj = member.userId;
+    if (!userObj) continue;
+    const memberId = userObj._id?.toString();
     const receipt = receiptMap.get(memberId);
 
     if (receipt && receipt.readAt) {
       readBy.push({
         userId: memberId,
-        name: member.name || "User",
-        avatar: member.avatar || null,
+        name: userObj.name || "User",
+        avatar: userObj.avatar || null,
         status: "read",
         readAt: receipt.readAt,
       });
     } else if (receipt && receipt.deliveredAt) {
       deliveredTo.push({
         userId: memberId,
-        name: member.name || "User",
-        avatar: member.avatar || null,
+        name: userObj.name || "User",
+        avatar: userObj.avatar || null,
         status: "delivered",
         deliveredAt: receipt.deliveredAt,
       });
     } else {
       pending.push({
         userId: memberId,
-        name: member.name || "User",
-        avatar: member.avatar || null,
+        name: userObj.name || "User",
+        avatar: userObj.avatar || null,
         status: "pending",
       });
     }

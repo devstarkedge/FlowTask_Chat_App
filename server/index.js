@@ -19,7 +19,7 @@ import authRoutes from './modules/auth/auth.routes.js';
 import channelRoutes from './modules/channels/channel.routes.js';
 import messageRoutes, { channelMessageRouter } from './modules/messages/message.routes.js';
 import threadRoutes, { channelThreadRouter } from './modules/threads/thread.routes.js';
-import readReceiptRoutes, { channelReadRouter } from './modules/readReceipts/readReceipt.routes.js';
+import readReceiptRoutes from './modules/readReceipts/readReceipt.routes.js';
 import webhookRoutes from './modules/webhooks/webhook.routes.js';
 import botRoutes from './modules/bot/bot.routes.js';
 import userRoutes from './modules/users/user.routes.js';
@@ -254,7 +254,6 @@ app.use('/api/chat/workspaces', workspaceRoutes);
 app.use('/api/chat/channels', channelRoutes);
 app.use('/api/chat/channels/:channelId', channelMessageRouter);
 app.use('/api/chat/channels/:channelId', channelThreadRouter);
-app.use('/api/chat/channels/:channelId', channelReadRouter);
 app.use('/api/chat/messages', messageRoutes);
 app.use('/api/chat/threads', threadRoutes);
 if (env.FLOWTASK_ENABLED) {
@@ -268,6 +267,7 @@ app.use('/api/chat/directories', directoriesRoutes);
 app.use('/api/chat/drafts', draftRoutes);
 app.use('/api/chat/search', searchRoutes);
 app.use('/api/chat/categories', categoryRoutes);
+// Mount read receipt routes
 app.use('/api/chat', readReceiptRoutes);
 // Debug routes (local dev only)
 app.use('/api/chat/debug', debugRoutes);

@@ -1,36 +1,33 @@
-import readReceiptService from './readReceipt.service.js';
-import asyncHandler from '../../middleware/asyncHandler.js';
+import asyncHandler from "../../middleware/asyncHandler.js";
+import { getMessageInfo as getMessageInfoService, markAsRead } from "./readReceipt.service.js";
 
 /**
- * Read Receipt Controller — REST endpoints for unread management.
+ * GET /api/chat/messages/:messageId/info
+ * Get message info: delivery/read status per member
  */
+export const getMessageInfo = asyncHandler(async (req, res) => {
+  const { messageId } = req.params;
+  const { channelId } = req.query;
+  const userId = req.user._id;
+  const workspaceId = req.workspaceId;
 
-/**
- * POST /api/chat/channels/:channelId/read
- * Mark a channel as read for the current user.
- */
-export const markAsRead = asyncHandler(async (req, res) => {
-  const { lastReadMessageId } = req.body;
+  if (!channelId) {
+    return res.status(400).json({ success: false, message: "channelId is required" });
+  }
 
-  await readReceiptService.markAsRead(
-    req.user._id,
-    req.params.channelId,
-    lastReadMessageId,
-    req.workspaceId,
-  );
-
-  res.json({ success: true });
+  const info = await getMessageInfoService(messageId, channelId, userId, workspaceId);
+  res.json({ success: true, data: info });
 });
 
 /**
- * GET /api/chat/unread
- * Get unread counts for all user's channels.
+ * POST /api/chat/channels/:channelId/messages/:messageId/mark-read
+ * Mark a message as read by current user
  */
-export const getUnreadCounts = asyncHandler(async (req, res) => {
-  const unreads = await readReceiptService.getUnreadCounts(req.user._id, req.workspaceId);
+export const markMessageRead = asyncHandler(async (req, res) => {
+  const { messageId, channelId } = req.params;
+  const userId = req.user._id;
+  const workspaceId = req.workspaceId;
 
-  res.json({
-    success: true,
-    data: { unreads },
-  });
+  await markAsRead(messageId, channelId, userId, workspaceId);
+  res.json({ success: true });
 });

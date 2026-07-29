@@ -1,4 +1,4 @@
-import ReadReceipt from './ReadReceipt.model.js';
+import ReadReceipt from './readReceipt.model.js';
 import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
 
 /**

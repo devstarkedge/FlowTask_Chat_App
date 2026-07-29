@@ -1,29 +1,21 @@
 import { Router } from 'express';
-import { markAsRead, getUnreadCounts } from './readReceipt.controller.js';
-import { protect } from '../auth/auth.middleware.js';
+import {
+  getMessageInfo,
+  markMessageRead,
+} from './readReceipt.controller.js';
+import { protect, requireMessageAccess } from '../auth/auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
 
 const router = Router();
 
-/**
- * Read Receipt Routes — all protected
- *
- * GET  /api/chat/unread                       — Get unread counts
- * POST /api/chat/channels/:channelId/read     — Mark channel as read
- */
-
+// All routes require authentication
 router.use(protect);
 router.use(resolveWorkspace);
 
-router.get('/unread', getUnreadCounts);
+// GET /api/chat/messages/:messageId/info?channelId=xxx
+router.get('/messages/:messageId/info', requireMessageAccess(), getMessageInfo);
+
+// POST /api/chat/channels/:channelId/messages/:messageId/mark-read
+router.post('/channels/:channelId/messages/:messageId/mark-read', markMessageRead);
 
 export default router;
-
-/**
- * Channel-scoped read receipt route.
- * Mounted on: /api/chat/channels/:channelId
- */
-export const channelReadRouter = Router({ mergeParams: true });
-channelReadRouter.use(protect);
-channelReadRouter.use(resolveWorkspace);
-channelReadRouter.post('/read', markAsRead);

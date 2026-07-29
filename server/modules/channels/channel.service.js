@@ -1163,7 +1163,13 @@ class ChannelService {
 
 
     const all = isAdmin ? channels : [...channels, ...missingPublic];
-    const decorated = await this._decorateDMChannels(all, userId, workspaceId);
+
+    const hiddenSlugs = Object.values(SYSTEM_CHANNELS)
+      .filter((sc) => sc.uiHidden)
+      .map((sc) => sc.slug);
+    const visibleChannels = all.filter((c) => !hiddenSlugs.includes(c.slug));
+
+    const decorated = await this._decorateDMChannels(visibleChannels, userId, workspaceId);
 
     // Merge per-user pin/star state
     const pins = await ChannelPin.getPinsForUser(userId, workspaceId);

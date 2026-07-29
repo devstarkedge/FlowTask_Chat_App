@@ -257,7 +257,7 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
       }
 
       try {
-        const userChannels = await channelRepository.findByMember(chatUser._id, { workspaceId: wsId });
+        const userChannels = await channelService.getChannelsForUser(chatUser._id, wsId);
         channels = userChannels.map(summarizeChannel);
       } catch (error) {
         logger.warn('Initial authorized channel list unavailable during login', {
@@ -389,7 +389,7 @@ export const syncUser = asyncHandler(async (req, res) => {
       });
     }
 
-    const userChannels = await channelRepository.findByMember(chatUser._id, { workspaceId: wsId });
+    const userChannels = await channelService.getChannelsForUser(chatUser._id, wsId);
     channels = userChannels.map(summarizeChannel);
   }
 

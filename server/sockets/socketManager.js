@@ -301,7 +301,8 @@ export async function initializeSocket(httpServer, corsOptions) {
     // Channel rooms (all channels user belongs to)
     let initialChannelIds = [];
     try {
-      const channels = await channelRepository.findByMember(userId, { workspaceId: wsId });
+      const { default: channelService } = await import('../modules/channels/channel.service.js');
+      const channels = await channelService.getChannelsForUser(userId, wsId);
       for (const channel of channels) {
         const chRoom = buildRoomName(wsId, 'channel', channel._id);
         socket.join(chRoom);
@@ -602,7 +603,8 @@ export async function initializeSocket(httpServer, corsOptions) {
           socket.join(buildRoomName(newWorkspaceId, 'dept', deptId));
         }
 
-        const newChannels = await channelRepository.findByMember(userId, { workspaceId: newWorkspaceId });
+        const { default: channelService } = await import('../modules/channels/channel.service.js');
+        const newChannels = await channelService.getChannelsForUser(userId, newWorkspaceId);
         initialChannelIds = newChannels.map((c) => c._id.toString());
 
         for (const channel of newChannels) {
@@ -720,11 +722,10 @@ export async function initializeSocket(httpServer, corsOptions) {
 
       // Only broadcast offline if all sockets are gone (multi-tab support)
       if (updatedUser && updatedUser.socketIds.length === 0) {
-        // Re-fetch current channel list instead of using stale closure
-        // This ensures offline is broadcast to channels joined mid-session
         let currentChannelIds = initialChannelIds;
         try {
-          const currentChannels = await channelRepository.findByMember(userId, { workspaceId: wsId });
+          const { default: channelService } = await import('../modules/channels/channel.service.js');
+          const currentChannels = await channelService.getChannelsForUser(userId, wsId);
           currentChannelIds = currentChannels.map((c) => c._id.toString());
         } catch {
           // Fall back to initial channel list if query fails

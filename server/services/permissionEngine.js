@@ -121,10 +121,18 @@ class PermissionEngine {
     if (!user || !channel) return false;
 
     const workspaceId = channel.workspaceId?.toString();
+    const role = (user.role || '').toLowerCase();
+
+    // Strict system channel RBAC validation
+    if (channel.slug === 'flowtask-admin') {
+      return role === 'admin';
+    }
+    if (channel.slug === 'flowtask-managers') {
+      return role === 'manager';
+    }
 
     // FlowTask project channels are assignment-scoped even for admins/managers, except workspace admins/owners.
     if (channel.type === 'project' || channel.flowTaskRef?.entityType === 'board') {
-      const role = (user.role || '').toLowerCase();
       if (role === 'admin' || role === 'owner') {
         return true;
       }

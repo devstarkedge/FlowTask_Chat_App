@@ -237,6 +237,24 @@ export const addMember = asyncHandler(async (req, res) => {
     });
   }
 
+  if (channel && channel.slug === 'flowtask-admin') {
+    return res.status(403).json({
+      success: false,
+      error: { message: "Admin channel membership is fully automated based on user roles." }
+    });
+  }
+
+  if (channel && channel.slug === 'flowtask-managers') {
+    const userRepository = (await import("../users/user.repository.js")).default;
+    const userToAdd = await userRepository.findById(userId);
+    if ((userToAdd?.role || '').toLowerCase() !== 'manager') {
+      return res.status(403).json({
+        success: false,
+        error: { message: "Only users with the Manager role can be added to the Managers channel." }
+      });
+    }
+  }
+
   const updatedChannel = await channelService.addMember(
     channelId,
     userId,
@@ -267,6 +285,13 @@ export const removeMember = asyncHandler(async (req, res) => {
     });
   }
 
+  if (req.channel && (req.channel.slug === 'flowtask-admin' || req.channel.slug === 'flowtask-managers')) {
+    return res.status(403).json({
+      success: false,
+      error: { message: "System channel membership is fully automated and cannot be changed manually." }
+    });
+  }
+
   const channel = await channelService.removeMember(
     req.params.id,
     req.params.userId,
@@ -293,6 +318,13 @@ export const leaveChannel = asyncHandler(async (req, res) => {
         message:
           "Project channel members are synced from FlowTask and cannot be changed manually",
       },
+    });
+  }
+
+  if (req.channel && (req.channel.slug === 'flowtask-admin' || req.channel.slug === 'flowtask-managers')) {
+    return res.status(403).json({
+      success: false,
+      error: { message: "You cannot leave a system channel manually. Access is managed by your role." }
     });
   }
 

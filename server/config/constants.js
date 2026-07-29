@@ -221,7 +221,7 @@ export const DEFAULT_CHANNELS = Object.freeze([]);
 // ─── FlowTask System Channels (only when FlowTask integration enabled) ───
 export const SYSTEM_CHANNELS = Object.freeze({
   GENERAL: { slug: 'flowtask-general', name: 'General', description: 'Company-wide general discussion', visibility: 'public' },
-  ADMIN: { slug: 'flowtask-admin', name: 'Admin', description: 'Admin-only channel', visibility: 'private' },
+  ADMIN: { slug: 'flowtask-admin', name: 'Admin', description: 'Admin-only channel', visibility: 'private', uiHidden: true },
   MANAGERS: { slug: 'flowtask-managers', name: 'Managers', description: 'Manager-level discussion', visibility: 'private' },
   ANNOUNCEMENTS: { slug: 'flowtask-announcements', name: 'Announcements', description: 'Company announcements', visibility: 'public' },
 });

@@ -40,8 +40,8 @@ export default function ChatPanel({
   // subscription focused and stable.
   const fetchMessages = useChatStore((s) => s.fetchMessages);
   const fetchPinnedMessages = useChatStore((s) => s.fetchPinnedMessages);
-  const legacyMessages = useChatStore((s) => s.messagesByChannel[channelId] || EMPTY_LIST);
-  const channelMessageIds = useChatStore((s) => s.channelMessageIds[channelId] || EMPTY_LIST);
+  const legacyMessages = useChatStore((s) => s.messagesByChannel?.[channelId] || EMPTY_LIST);
+  const channelMessageIds = useChatStore((s) => s.channelMessageIds?.[channelId] || EMPTY_LIST);
   const messagesById = useChatStore((s) => s.messagesById);
   const connectionStatus = useChatStore((s) => s.connectionStatus);
   const editingMessageId = useChatStore((s) => s.editingMessageId);

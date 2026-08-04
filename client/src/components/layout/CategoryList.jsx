@@ -146,6 +146,10 @@ export default function CategoryList({
           categoryChannels = channels.filter(c => category.channelIds?.includes(c._id));
         }
 
+        if (category.type === "department" && categoryChannels.length === 0) {
+          return null;
+        }
+
         return (
           <CategoryGroup
             key={category._id}

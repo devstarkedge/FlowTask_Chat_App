@@ -76,33 +76,27 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
       setIsSearchingMembers(true);
       try {
         const query = memberSearchQuery.trim();
-        const activeWorkspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+        const params = { limit: 1000 };
+        if (query) params.search = query;
         
-        let rawUsers = [];
-        if (activeWorkspaceId) {
-          const params = { limit: 1000 };
-          if (query) params.search = query;
-          const { data } = await workspaceAPI.getMembers(activeWorkspaceId, params);
-          const raw = data.data?.members || data.data || [];
-          rawUsers = raw.map(m => m.user || m.userId || m);
-        } else {
-          const params = { limit: 100 };
-          if (query) params.search = query;
-          const { data } = await directoriesAPI.getUsers(params);
-          const contacts = data.data || data;
-          rawUsers = Array.isArray(contacts) ? contacts : contacts?.users || [];
-        }
+        const { data } = await directoriesAPI.getUsers(params);
+        const rawUsers = data.data?.users || data.data || [];
 
-        const existingIds = new Set(members.map(m => m._id));
+        const existingIds = new Set(members.map(m => m.userId?._id || m.userId));
         
-        const filtered = rawUsers
+        let filtered = rawUsers
           .map(u => ({
             _id: u._id || u.chatUserId || u.id,
             name: u.name || u.displayName,
             email: u.email,
-            avatar: u.avatar
+            avatar: u.avatar,
+            role: u.role
           }))
           .filter(u => u._id && u._id !== currentUser?._id && !existingIds.has(u._id));
+        
+        if (channel?.slug === 'flowtask-managers') {
+          filtered = filtered.filter(u => (u.role || '').toLowerCase() === 'manager');
+        }
         
         if (query) {
           const lowerQ = query.toLowerCase();
@@ -230,7 +224,7 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
   const isSystemAdminOrManager = userRole === 'admin' || userRole === 'manager' || currentUser?.isAdmin;
   const isChannelCreator = channel?.createdBy === currentUser?._id;
   const isChannelAdmin = channel?.admins?.includes(currentUser?._id);
-  const canAddMember = !isOneToOneDM && (isSystemAdminOrManager || isChannelCreator || isChannelAdmin || !channel?.systemManaged);
+  const canAddMember = !isOneToOneDM && (isSystemAdminOrManager || isChannelCreator || isChannelAdmin || (!channel?.systemManaged || channel?.slug === 'flowtask-managers')) && channel?.slug !== 'flowtask-admin';
 
   const categories = useChannelStore((s) => s.categories) || [];
   const fetchCategories = useChannelStore((s) => s.fetchCategories);

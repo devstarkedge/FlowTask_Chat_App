@@ -22,7 +22,7 @@ import { useThemeStore } from "../../stores/themeStore";
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 
-const { width } = Dimensions.get("window");
+
 
 const LandingScreen = ({ navigation }) => {
   const { colors } = useThemeStore();

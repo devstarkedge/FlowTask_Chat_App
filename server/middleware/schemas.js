@@ -98,7 +98,7 @@ export const editMessageSchema = z.object({
 });
 
 export const reactionSchema = z.object({
-  emoji: z.string().min(1, "Emoji is required").max(10), // Limit length since some emojis use multiple codepoints
+  emoji: z.string().min(1, "Emoji is required").max(50), // Limit length since some emojis use multiple codepoints
 });
 
 export const searchMessagesSchema = z.object({

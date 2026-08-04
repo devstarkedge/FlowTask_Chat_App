@@ -20,6 +20,7 @@ import {
   MessageSquare,
   Star,
   Pin,
+  Info,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
@@ -91,6 +92,7 @@ const MessageActionSheet = ({
   onMarkUnread,
   onToggleNotifications,
   onPin,
+  onMessageInfo,
 }) => {
   const { isTablet, isDesktop, width } = useResponsive();
   const isWide = isTablet || isDesktop || width > 640;
@@ -254,6 +256,16 @@ const MessageActionSheet = ({
               </TouchableOpacity>
             )}
 
+            {!!onMessageInfo && (
+              <TouchableOpacity
+                style={styles.listItem}
+                onPress={() => { onClose(); setTimeout(() => onMessageInfo(message), 100); }}
+              >
+                <Info size={20} color={colors.textPrimary} />
+                <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Message Info</Text>
+              </TouchableOpacity>
+            )}
+
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
             {showCopyText && (
@@ -311,8 +323,8 @@ const styles = StyleSheet.create({
   },
   wideSheetContainer: {
     width: '100%',
-    maxWidth: 540,
-    borderRadius: 20,
+    maxWidth: scale(540),
+    borderRadius: moderateScale(20),
     maxHeight: '85%',
   },
   indicatorContainer: {

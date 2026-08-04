@@ -304,21 +304,13 @@ export async function initializeSocket(httpServer, corsOptions) {
       const { default: channelService } = await import('../modules/channels/channel.service.js');
       const channels = await channelService.getChannelsForUser(userId, wsId);
       for (const channel of channels) {
-        const chRoom = buildRoomName(wsId, 'channel', channel._id);
-        socket.join(chRoom);
+        // LAZY JOIN: We no longer socket.join(chRoom) here for all channels.
+        // Clients must explicitly emit 'channel:join' when they navigate to a channel.
+        // We still collect initialChannelIds to broadcast this user's presence to those rooms.
         initialChannelIds.push(channel._id.toString());
-        // Send persisted canvas tabs for this channel to the connecting socket
-        try {
-          if (Array.isArray(channel.canvasTabs) && channel.canvasTabs.length > 0) {
-            const tabs = channel.canvasTabs.map((t) => ({ _id: t.canvasId ? String(t.canvasId) : null, title: t.title || "" })).filter((x) => x._id);
-            if (tabs.length > 0) socket.emit('canvas:tabs:state', { channelId: channel._id.toString(), tabs });
-          }
-        } catch (err) {
-          logger.debug('Failed to emit canvas tabs on initial join', { error: err.message, channelId: channel._id });
-        }
       }
     } catch (error) {
-      logger.error('Failed to join channel rooms', {
+      logger.error('Failed to get channels for presence', {
         userId,
         error: error.message,
       });
@@ -607,17 +599,8 @@ export async function initializeSocket(httpServer, corsOptions) {
         const newChannels = await channelService.getChannelsForUser(userId, newWorkspaceId);
         initialChannelIds = newChannels.map((c) => c._id.toString());
 
-        for (const channel of newChannels) {
-          socket.join(buildRoomName(newWorkspaceId, 'channel', channel._id));
-          try {
-            if (Array.isArray(channel.canvasTabs) && channel.canvasTabs.length > 0) {
-              const tabs = channel.canvasTabs.map((t) => ({ _id: t.canvasId ? String(t.canvasId) : null, title: t.title || "" })).filter((x) => x._id);
-              if (tabs.length > 0) socket.emit('canvas:tabs:state', { channelId: channel._id.toString(), tabs });
-            }
-          } catch (err) {
-            logger.debug('Failed to emit canvas tabs on workspace switch for channel', { error: err.message, channelId: channel._id });
-          }
-        }
+        // LAZY JOIN: We no longer auto-join all channel rooms on workspace switch.
+        // Clients must explicitly emit 'channel:join' for the channel they want to view.
 
         // Broadcast presence to NEW workspace channels
         const onlinePayload = {

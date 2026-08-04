@@ -350,6 +350,7 @@ export const scheduledAPI = {
 // Messages API (partial) — add helper for proxying file assets
 export const messageAPI = {
   get: (messageId) => api.get(`/messages/${messageId}`),
+  getInfo: (messageId, channelId) => api.get(`/messages/${messageId}/info`, { params: { channelId } }),
   getFileProxyUrl: (assetId) => `${api.defaults.baseURL}/messages/files/${encodeURIComponent(assetId)}/proxy`,
   forward: (messageId, data) => api.post(`/messages/${messageId}/forward`, data),
   forwardToNewGroup: (messageId, data) => api.post(`/messages/${messageId}/forward-group`, data),
@@ -459,10 +460,6 @@ export const favoritesAPI = {
   check: (targetType, targetId) => api.get("/favorites/check", { params: { targetType, targetId } }),
 };
 
- 
- 
-
-
 // Pinned messages API
 export const pinsAPI = {
   list: (channelId) => api.get(`/channels/${channelId}/pins`),
@@ -552,6 +549,7 @@ export const categoryAPI = {
   getDepartments: () => api.get('/categories/departments'),
   addBulkChannels: (id, channelIds) => api.post(`/categories/${id}/bulk-channels`, { channelIds }),
   removeChannel: (id, channelId) => api.delete(`/categories/${id}/channels/${channelId}`),
+  clearAll: () => api.delete('/categories'),
 };
 
 export default api;

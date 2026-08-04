@@ -5,12 +5,15 @@ import { reactionAPI } from '../services/api';
 import api from '../services/api';
 import logger from '../utils/logger';
 import { useScheduledStore } from './scheduledStore';
+import { enqueueMessage, dequeueMessage } from '../services/offlineQueue';
 
 export const useChatStore = create((set, get) => ({
   messagesByChannel: {},
   hasMore: {},
   isLoadingMessages: false,
   connectionStatus: 'disconnected',
+  // Track which temp IDs are queued offline (for UI state)
+  offlineQueueStatus: {}, // { [tempId]: 'pending' | 'sent' | 'failed' }
 
   fetchMessages: async (channelId, cursor = null) => {
     set({ isLoadingMessages: true });
@@ -32,8 +35,14 @@ export const useChatStore = create((set, get) => ({
           : messages;
         
         // Dedup by _id
-        const unique = Array.from(new Map(merged.map(m => [m._id, m])).values())
+        const MAX_MESSAGES_IN_MEMORY = 200;
+        let unique = Array.from(new Map(merged.map(m => [m._id, m])).values())
           .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+          
+        if (unique.length > MAX_MESSAGES_IN_MEMORY) {
+          // Keep the newest messages (end of array)
+          unique = unique.slice(unique.length - MAX_MESSAGES_IN_MEMORY);
+        }
 
         logger.info(`[ChatStore State] Stored ${unique.length} unique messages for channel ${channelId}`);
 
@@ -123,8 +132,49 @@ export const useChatStore = create((set, get) => ({
       
       return serverMessage;
     } catch (error) {
-      logger.error('Failed to send message:', error);
-      // Mark as failed
+      const isNetworkError =
+        !error.response ||
+        error.code === 'ECONNABORTED' ||
+        error.code === 'ERR_NETWORK' ||
+        error.message?.includes('Network') ||
+        error.message?.includes('timeout') ||
+        error.message?.includes('socket') ||
+        error.message?.includes('connect');
+
+      if (isNetworkError) {
+        // Network error — enqueue to offline queue instead of marking as failed
+        logger.info('[ChatStore] Network unavailable, enqueuing message to offline queue:', tempId);
+        
+        const payload = { content, tempId };
+        if (htmlContent) payload.htmlContent = htmlContent;
+        if (threadId) payload.threadId = threadId;
+        if (fileReferences?.length) payload.fileReferences = fileReferences;
+        if (attachments?.length) payload.attachments = attachments;
+        if (mentions?.length) payload.mentions = mentions;
+        if (contentType) payload.contentType = contentType;
+        if (gifMeta) payload.gifMeta = gifMeta;
+        if (audioMeta) payload.audioMeta = audioMeta;
+        if (videoMeta) payload.videoMeta = videoMeta;
+
+        // Enqueue to offline queue (fire and forget)
+        enqueueMessage(optimisticMessage, channelId, payload).catch((err) => {
+          logger.error('[ChatStore] Failed to enqueue message:', err);
+        });
+
+        // Update offline queue status in store
+        set((state) => ({
+          offlineQueueStatus: {
+            ...state.offlineQueueStatus,
+            [tempId]: 'pending',
+          },
+        }));
+
+        // Keep the message in pending state (don't mark as failed)
+        return null;
+      }
+
+      // Server-side error (non-network) — mark as failed
+      logger.error('Failed to send message (server error):', error);
       set((state) => ({
         messagesByChannel: {
           ...state.messagesByChannel,
@@ -144,9 +194,14 @@ export const useChatStore = create((set, get) => ({
       const existing = state.messagesByChannel[channelId] || [];
       if (existing.some(m => m._id === message._id)) return state;
       
-      const updated = [...existing, message].sort(
+      const MAX_MESSAGES_IN_MEMORY = 200;
+      let updated = [...existing, message].sort(
         (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
       );
+      
+      if (updated.length > MAX_MESSAGES_IN_MEMORY) {
+        updated = updated.slice(updated.length - MAX_MESSAGES_IN_MEMORY);
+      }
 
       return {
         messagesByChannel: {
@@ -415,6 +470,134 @@ export const useChatStore = create((set, get) => ({
         ),
       },
     }));
+  },
+
+  /**
+   * Update a specific message's status by its temp ID (used by offline queue flush).
+   */
+  updateMessageStatusLocal: (tempId, status) => {
+    set((state) => {
+      const { offlineQueueStatus } = state;
+      // Find which channel contains this temp message
+      for (const channelId of Object.keys(state.messagesByChannel)) {
+        const msgs = state.messagesByChannel[channelId];
+        const idx = msgs.findIndex((m) => m._id === tempId);
+        if (idx !== -1) {
+          const updatedMessages = [...msgs];
+          updatedMessages[idx] = { ...updatedMessages[idx], pending: false, status };
+          return {
+            messagesByChannel: {
+              ...state.messagesByChannel,
+              [channelId]: updatedMessages,
+            },
+            offlineQueueStatus: {
+              ...offlineQueueStatus,
+              [tempId]: status,
+            },
+          };
+        }
+      }
+      // If message not found in any channel, still update the queue status
+      return {
+        offlineQueueStatus: {
+          ...offlineQueueStatus,
+          [tempId]: status,
+        },
+      };
+    });
+  },
+
+  /**
+   * Mark a message as permanently failed (after max retries exceeded).
+   */
+  markMessageFailed: (tempId, error) => {
+    set((state) => {
+      const { offlineQueueStatus } = state;
+      let updatedMessagesByChannel = { ...state.messagesByChannel };
+      for (const channelId of Object.keys(updatedMessagesByChannel)) {
+        const msgs = updatedMessagesByChannel[channelId];
+        const idx = msgs.findIndex((m) => m._id === tempId);
+        if (idx !== -1) {
+          const updatedMessages = [...msgs];
+          updatedMessages[idx] = {
+            ...updatedMessages[idx],
+            pending: false,
+            failed: false,
+            permanentlyFailed: true,
+            lastError: error?.response?.data?.error?.message || error?.message || 'Failed after retries',
+          };
+          updatedMessagesByChannel[channelId] = updatedMessages;
+          break;
+        }
+      }
+      return {
+        messagesByChannel: updatedMessagesByChannel,
+        offlineQueueStatus: {
+          ...offlineQueueStatus,
+          [tempId]: 'failed',
+        },
+      };
+    });
+  },
+
+  /**
+   * Retry sending a permanently failed message.
+   * Removes it from the sent IDs set and re-enqueues it.
+   */
+  retryFailedMessage: async (tempId) => {
+    const { removeSentId, enqueueMessage } = require('../services/offlineQueue');
+    const state = get();
+    
+    // Find the message
+    for (const channelId of Object.keys(state.messagesByChannel)) {
+      const msgs = state.messagesByChannel[channelId];
+      const msg = msgs.find((m) => m._id === tempId);
+      if (msg) {
+        // Clear the permanent failure state
+        set((s) => ({
+          messagesByChannel: {
+            ...s.messagesByChannel,
+            [channelId]: (s.messagesByChannel[channelId] || []).map((m) =>
+              m._id === tempId
+                ? { ...m, permanentlyFailed: false, pending: true, lastError: undefined }
+                : m
+            ),
+          },
+          offlineQueueStatus: {
+            ...s.offlineQueueStatus,
+            [tempId]: 'pending',
+          },
+        }));
+
+        // Remove from sent IDs so it can be retried
+        await removeSentId(tempId);
+        
+        // Re-send immediately if connected
+        if (state.connectionStatus === 'connected') {
+          try {
+            const { data } = await api.post(`/channels/${channelId}/messages`, { content: msg.content, tempId });
+            const serverMessage = data.data?.message || data.data;
+            get().reconcileMessage(tempId, serverMessage);
+            get().updateMessageStatusLocal(tempId, 'sent');
+          } catch (sendError) {
+            // If it fails again, re-enqueue
+            logger.warn('[ChatStore] Retry failed, re-enqueuing:', tempId);
+            const payload = { content: msg.content, tempId };
+            const channelId = msg.channelId;
+            enqueueMessage(msg, channelId, payload).catch((err) => {
+              logger.error('[ChatStore] Failed to re-enqueue on retry:', err);
+            });
+          }
+        } else {
+          // Offline — just re-enqueue
+          const payload = { content: msg.content, tempId };
+          enqueueMessage(msg, channelId, payload).catch((err) => {
+            logger.error('[ChatStore] Failed to re-enqueue on retry:', err);
+          });
+        }
+        break;
+      }
+    }
   },
 
   incrementReplyCount: (rootMessageId, channelId) => {

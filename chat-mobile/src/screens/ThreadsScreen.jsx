@@ -248,52 +248,52 @@ const ThreadsScreen = ({ navigation }) => {
 
 const createStyles = (colors) => StyleSheet.create({
   listContainer: {
-    paddingBottom: verticalScale(40),
+    paddingBottom: moderateScale(40),
   },
   subHeader: {
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(12),
+    paddingHorizontal: moderateScale(16),
+    paddingVertical: moderateScale(12),
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    marginBottom: verticalScale(16),
+    marginBottom: moderateScale(16),
   },
   subHeaderText: {
     fontSize: moderateScale(14),
     fontWeight: '500',
   },
   threadGroup: {
-    marginBottom: verticalScale(16),
+    marginBottom: moderateScale(16),
   },
   threadChannelHeader: {
-    paddingHorizontal: scale(16),
-    marginBottom: verticalScale(12),
+    paddingHorizontal: moderateScale(16),
+    marginBottom: moderateScale(12),
   },
   channelTitle: {
     fontSize: moderateScale(16),
     fontWeight: '700',
-    marginBottom: verticalScale(2),
+    marginBottom: moderateScale(2),
   },
   channelSubtitle: {
     fontSize: moderateScale(13),
   },
   messageRow: {
     flexDirection: 'row',
-    paddingHorizontal: scale(16),
-    marginBottom: verticalScale(12),
+    paddingHorizontal: moderateScale(16),
+    marginBottom: moderateScale(12),
   },
   messageContent: {
     flex: 1,
-    marginLeft: scale(10),
+    marginLeft: moderateScale(10),
   },
   messageHeader: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginBottom: verticalScale(4),
+    marginBottom: moderateScale(4),
   },
   authorName: {
     fontSize: moderateScale(15),
     fontWeight: '700',
-    marginRight: scale(8),
+    marginRight: moderateScale(8),
   },
   timeText: {
     fontSize: moderateScale(12),
@@ -303,19 +303,19 @@ const createStyles = (colors) => StyleSheet.create({
     lineHeight: 22,
   },
   replyWrapper: {
-    marginTop: verticalScale(4),
+    marginTop: moderateScale(4),
   },
   replyButtonContainer: {
-    paddingHorizontal: scale(16),
-    paddingLeft: scale(62), // align with text
-    marginTop: verticalScale(4),
-    marginBottom: verticalScale(16),
+    paddingHorizontal: moderateScale(16),
+    paddingLeft: moderateScale(62), // align with text
+    marginTop: moderateScale(4),
+    marginBottom: moderateScale(16),
   },
   replyButton: {
     borderWidth: 1,
     borderRadius: moderateScale(6),
-    paddingVertical: verticalScale(6),
-    paddingHorizontal: scale(16),
+    paddingVertical: moderateScale(6),
+    paddingHorizontal: moderateScale(16),
     alignSelf: 'flex-start',
   },
   replyButtonText: {
@@ -323,9 +323,9 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '600',
   },
   divider: {
-    height: verticalScale(1),
+    height: moderateScale(1),
     width: '100%',
-    marginTop: verticalScale(8),
+    marginTop: moderateScale(8),
   }
 });
 

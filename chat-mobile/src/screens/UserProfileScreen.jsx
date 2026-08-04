@@ -7,11 +7,9 @@ import {
   ScrollView, 
   ActivityIndicator, 
   Image,
-  Dimensions,
-  Modal,
-  TouchableWithoutFeedback,
   Platform,
-  StatusBar
+  StatusBar,
+  useWindowDimensions,
 } from 'react-native';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
@@ -28,9 +26,9 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 import { usersAPI } from '../services/api';
 
-const { width } = Dimensions.get('window');
 
 const UserProfileScreen = ({ route, navigation }) => {
+  const { width } = useWindowDimensions();
   const { user } = route.params;
   const { colors } = useThemeStore();
   const channels = useChannelStore(s => s.channels);

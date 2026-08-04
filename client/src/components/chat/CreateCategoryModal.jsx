@@ -200,10 +200,12 @@ export default function CreateCategoryModal({ onClose }) {
   ), [categories]);
   const hasDepartmentCategory = existingDepartmentIds.size > 0;
 
-  const missingDepartments = useMemo(() => departments.filter((department) => (
-    !existingDepartmentIds.has(String(department._id))
-    && !existingDepartmentIds.has(String(department.externalId))
-  )), [departments, existingDepartmentIds]);
+  const missingDepartments = useMemo(() => departments.filter((department) => {
+    const isMissing = !existingDepartmentIds.has(String(department._id))
+      && !existingDepartmentIds.has(String(department.externalId));
+    if (!isMissing) return false;
+    return getDeptChannels(department).length > 0;
+  }), [departments, existingDepartmentIds, channels]);
 
   const allDepartmentsImported = !loadingDepts
     && departments.length > 0

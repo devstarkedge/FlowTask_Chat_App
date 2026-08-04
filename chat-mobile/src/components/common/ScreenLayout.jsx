@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StatusBar, StyleSheet } from 'react-native';
+import { View, StatusBar, StyleSheet, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../../stores/themeStore';
 
@@ -28,7 +28,10 @@ const ScreenLayout = React.memo(({ children, style, edges, backgroundColor, stat
       style={[styles.container, { backgroundColor: backgroundColor || colors.background }, style]}
       edges={safeEdges}
     >
-      <StatusBar barStyle={resolvedBarStyle} backgroundColor={backgroundColor || colors.background} />
+      <StatusBar 
+        barStyle={resolvedBarStyle} 
+        backgroundColor={backgroundColor || colors.background} 
+      />
       {children}
     </SafeAreaView>
   );

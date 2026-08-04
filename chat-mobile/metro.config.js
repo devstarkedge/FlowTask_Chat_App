@@ -15,4 +15,11 @@ config.resolver = {
   sourceExts: Array.from(new Set([...(config.resolver && config.resolver.sourceExts ? config.resolver.sourceExts : []), 'jsx', 'cjs']))
 };
 
+// Fix Metro validation warning for unstable_workerThreads
+// Set it explicitly in transformer to avoid watcher validation warning
+if (!config.transformer) {
+  config.transformer = {};
+}
+config.transformer.unstable_workerThreads = false;
+
 module.exports = config;

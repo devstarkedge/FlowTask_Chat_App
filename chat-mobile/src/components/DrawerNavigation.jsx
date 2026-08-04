@@ -104,12 +104,14 @@ const ChannelRow = React.memo(({ channel, unreadCount, onPress, colors }) => {
       onPress={() => onPress(channel)}
       activeOpacity={0.5}
     >
-      <Icon
-        size={14}
-        color={colors.textOnPrimary}
-        style={{ opacity: unreadCount > 0 ? 1 : 0.45 }}
-        strokeWidth={1.5}
-      />
+      <View style={chRow.iconContainer}>
+        <Icon
+          size={18}
+          color={colors.textOnPrimary}
+          style={{ opacity: unreadCount > 0 ? 1 : 0.45 }}
+          strokeWidth={1.5}
+        />
+      </View>
       <Text
         style={[
           chRow.name,
@@ -139,10 +141,16 @@ const chRow = StyleSheet.create({
     paddingHorizontal: scale(16),
     paddingLeft: scale(30),
     paddingVertical: verticalScale(5),
-    gap: 6,
+    gap: 12,
     minHeight: verticalScale(32),
     borderRadius: moderateScale(6),
     marginHorizontal: scale(4),
+  },
+  iconContainer: {
+    width: moderateScale(28),
+    height: moderateScale(28),
+    justifyContent: "center",
+    alignItems: "center",
   },
   name: {
     fontSize: moderateScale(15),
@@ -183,7 +191,9 @@ const DMRow = React.memo(({ channel, unreadCount, onPress, colors }) => {
       onPress={() => onPress(channel)}
       activeOpacity={0.5}
     >
-      <View style={[dmRow.dot, { backgroundColor: isOnline ? colors.online : colors.primaryOverlayLight }]} />
+      <View style={dmRow.iconContainer}>
+        <View style={[dmRow.dot, { backgroundColor: isOnline ? colors.online : colors.primaryOverlayLight }]} />
+      </View>
       <Text
         style={[
           dmRow.name,
@@ -213,10 +223,16 @@ const dmRow = StyleSheet.create({
     paddingHorizontal: scale(16),
     paddingLeft: scale(30),
     paddingVertical: verticalScale(5),
-    gap: 6,
+    gap: 12,
     minHeight: verticalScale(32),
     borderRadius: moderateScale(6),
     marginHorizontal: scale(4),
+  },
+  iconContainer: {
+    width: moderateScale(28),
+    height: moderateScale(28),
+    justifyContent: "center",
+    alignItems: "center",
   },
   dot: {
     width: scale(8),
@@ -322,8 +338,22 @@ const DrawerNavigation = ({ navigation }) => {
   }, [isDrawerOpen, DRAWER_WIDTH]);
 
   const { starredChannels, regularChannels, dmChannels } = useMemo(() => {
+    const categorizedChannelIds = new Set();
+    categories.forEach((cat) => {
+      if (cat.type === 'department' && cat.departmentId) {
+        const deptId = cat.departmentId?._id || cat.departmentId;
+        channels.forEach((ch) => {
+          if (ch.departmentRef?.departmentId === deptId) {
+            categorizedChannelIds.add(String(ch._id));
+          }
+        });
+      } else if (Array.isArray(cat.channelIds)) {
+        cat.channelIds.forEach(id => categorizedChannelIds.add(String(id)));
+      }
+    });
+
     const starred = channels.filter((c) => starredIds.includes(c._id));
-    const regular = channels.filter((c) => c.type !== "dm" && !c.categoryId && !starredIds.includes(c._id));
+    const regular = channels.filter((c) => c.type !== "dm" && !categorizedChannelIds.has(String(c._id)) && !starredIds.includes(c._id));
     const dms = channels.filter((c) => c.type === "dm" && !starredIds.includes(c._id));
     return { starredChannels: starred, regularChannels: regular, dmChannels: dms };
   }, [channels, starredIds]);
@@ -447,7 +477,13 @@ const DrawerNavigation = ({ navigation }) => {
 
           {/* Categories */}
           {categories.map((cat) => {
-            const catChannels = channels.filter(c => c.categoryId === cat._id && !starredIds.includes(c._id));
+            const catChannels = channels.filter(c => {
+              if (starredIds.includes(c._id)) return false;
+              const channelIdStr = c._id?.toString ? c._id.toString() : c._id;
+              const inCustomCategory = Array.isArray(cat.channelIds) && cat.channelIds.includes(channelIdStr);
+              const inDeptCategory = cat.type === 'department' && c.departmentRef?.departmentId === (cat.departmentId?._id || cat.departmentId);
+              return inCustomCategory || inDeptCategory;
+            });
             const isExpanded = expandedCategories[cat._id] !== false; // default true
             const isDepartment = cat.type === 'department';
             return (
@@ -460,19 +496,7 @@ const DrawerNavigation = ({ navigation }) => {
                   onMenu={!isDepartment ? () => handleCategoryAction(cat) : undefined}
                   colors={colors}
                 />
-                {isExpanded && catChannels.length === 0 && !isDepartment && (
-                  <TouchableOpacity 
-                    onPress={() => {
-                      setActiveCategory(cat);
-                      setActionSheetVisible(true);
-                    }} 
-                    style={{ paddingLeft: 12, paddingVertical: 8 }}
-                  >
-                    <Text style={{ fontSize: 13, paddingHorizontal: 30, color: colors.textOnPrimary, opacity: 0.8, fontWeight: "600" }}>
-                      + Add Channels
-                    </Text>
-                  </TouchableOpacity>
-                )}
+
                 {isExpanded && catChannels.map((ch) => (
                   <ChannelRow key={ch._id} channel={ch} unreadCount={unreads[ch._id] || 0} onPress={handleChannelPress} colors={colors} />
                 ))}

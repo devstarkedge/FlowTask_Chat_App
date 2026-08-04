@@ -8,10 +8,10 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
 } from 'react-native';
+import KeyboardAwareContainer from '../common/KeyboardAwareContainer';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, LayoutGrid, UserPlus, Plus } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
@@ -204,9 +204,9 @@ const AddWorkspaceScreen = ({ visible, onClose, navigation }) => {
           style={[styles.container, { backgroundColor: colors.background }]}
           edges={['top', 'bottom']}
         >
-          <KeyboardAvoidingView
+          <KeyboardAwareContainer
             style={{ flex: 1 }}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            disablePadding={false}
           >
             {/* Join Header */}
             <View style={[styles.header, { borderBottomColor: colors.borderLight ?? colors.border }]}>
@@ -276,7 +276,7 @@ const AddWorkspaceScreen = ({ visible, onClose, navigation }) => {
                 it above to join their workspace.
               </Text>
             </View>
-          </KeyboardAvoidingView>
+          </KeyboardAwareContainer>
         </SafeAreaView>
       </Modal>
     </Modal>

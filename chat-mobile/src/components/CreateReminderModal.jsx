@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, Platform, ScrollView } from 'react-native';
+import KeyboardAwareContainer from './common/KeyboardAwareContainer';
 import { X, Check } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { formatMessageTime } from '../utils/dateUtils';
@@ -32,7 +33,7 @@ const CreateReminderModal = ({ visible, onClose, onSubmit, colors }) => {
 
   return (
     <Modal visible={visible} transparent animationType="slide">
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.overlay}>
+      <KeyboardAwareContainer disablePadding={false} style={styles.overlay}>
         <View style={[styles.container, { backgroundColor: colors.background }]}>
           {/* Header */}
           <View style={styles.header}>
@@ -158,7 +159,7 @@ const CreateReminderModal = ({ visible, onClose, onSubmit, colors }) => {
             </TouchableOpacity>
           </Modal>
         )}
-      </KeyboardAvoidingView>
+      </KeyboardAwareContainer>
     </Modal>
   );
 };
@@ -175,7 +176,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(24),
     paddingTop: verticalScale(20),
     paddingBottom: verticalScale(40),
-    height: '90%',
+    maxHeight: '90%',
   },
   header: {
     flexDirection: 'row',

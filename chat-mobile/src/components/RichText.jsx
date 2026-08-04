@@ -106,7 +106,14 @@ function buildAST(tokens) {
 }
 
 // ─── Render AST to React Native elements ────────────────────────────────────
-const HEADING_SIZES = { h1: 22, h2: 20, h3: 18, h4: 16, h5: 15, h6: 14 };
+const HEADING_SIZES = {
+  h1: moderateScale(22),
+  h2: moderateScale(20),
+  h3: moderateScale(18),
+  h4: moderateScale(16),
+  h5: moderateScale(15),
+  h6: moderateScale(14),
+};
 
 let keyCounter = 0;
 
@@ -215,7 +222,7 @@ function renderNode(node, ctx, parentStyles = {}, depth = 0) {
   }
 
   if (node.tag === 'br') {
-    return <Text key={key}>{'\n'}</Text>;
+    return '\n';
   }
 
   // Recursively render children as inline content (Text-compatible)
@@ -532,60 +539,63 @@ const RichText = React.memo(function RichText({ html, text, colors, baseStyle, m
 
 const styles = StyleSheet.create({
   container: {
-    minWidth: scale(20),
+    minWidth: moderateScale(20),
   },
   paragraphView: {
-    marginVertical: verticalScale(1),
+    marginVertical: moderateScale(8),
     flexDirection: 'row',
     flexWrap: 'wrap',
+    flexShrink: 1,
+    maxWidth: '100%',
   },
   paragraphText: {
     fontSize: moderateScale(15),
-    lineHeight: 22,
+    lineHeight: moderateScale(22),
+    flexShrink: 1,
   },
   codeBlock: {
     borderRadius: moderateScale(6),
     borderWidth: 1,
-    paddingVertical: verticalScale(10),
-    paddingHorizontal: scale(14),
-    marginVertical: verticalScale(4),
+    paddingVertical: moderateScale(10),
+    paddingHorizontal: moderateScale(14),
+    marginVertical: moderateScale(4),
   },
   codeBlockText: {
     fontFamily: 'monospace',
     fontSize: moderateScale(13),
-    lineHeight: 18,
+    lineHeight: moderateScale(18),
   },
   blockquote: {
     borderLeftWidth: 3,
-    paddingLeft: scale(10),
-    paddingVertical: verticalScale(2),
-    marginVertical: verticalScale(3),
+    paddingLeft: moderateScale(10),
+    paddingVertical: moderateScale(2),
+    marginVertical: moderateScale(3),
   },
   blockquoteText: {
     fontStyle: 'italic',
     fontSize: moderateScale(15),
-    lineHeight: 22,
+    lineHeight: moderateScale(22),
   },
   listItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginVertical: verticalScale(1),
+    marginVertical: moderateScale(1),
   },
   hr: {
-    height: verticalScale(1),
-    marginVertical: verticalScale(6),
+    height: moderateScale(1),
+    marginVertical: moderateScale(6),
   },
   inlineImageContainer: {
     width: '100%',
-    minWidth: scale(220),
-    maxWidth: scale(320),
+    maxWidth: 400,
+    aspectRatio: 1.5,
     borderRadius: moderateScale(12),
     overflow: 'hidden',
-    marginVertical: verticalScale(4),
+    marginVertical: moderateScale(4),
   },
   inlineImage: {
     width: '100%',
-    height: verticalScale(200),
+    height: '100%',
     borderRadius: moderateScale(12),
   },
 });

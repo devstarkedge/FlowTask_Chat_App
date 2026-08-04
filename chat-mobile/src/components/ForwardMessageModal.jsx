@@ -7,10 +7,10 @@ import {
   Modal,
   FlatList,
   TextInput,
-  KeyboardAvoidingView,
   Platform,
   Alert,
 } from 'react-native';
+import KeyboardAwareContainer from './common/KeyboardAwareContainer';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useChannelStore } from '../stores/channelStore';
@@ -237,7 +237,7 @@ const ForwardMessageModal = ({ visible, onClose, message, colors }) => {
         </View>
 
         {/* List */}
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAwareContainer style={{ flex: 1 }} disablePadding={false}>
           <FlatList
             data={sortedDestinations}
             keyExtractor={(item) => item._id}
@@ -247,7 +247,7 @@ const ForwardMessageModal = ({ visible, onClose, message, colors }) => {
             maxToRenderPerBatch={10}
             windowSize={11}
           />
-        </KeyboardAvoidingView>
+        </KeyboardAwareContainer>
       </SafeAreaView>
     </Modal>
   );

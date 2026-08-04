@@ -8,10 +8,10 @@ import {
   Modal,
   Switch,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
+  FlatList,
   ScrollView,
 } from "react-native";
+import KeyboardAwareContainer from "./common/KeyboardAwareContainer";
 import { useThemeStore } from "../stores/themeStore";
 import { useChannelStore } from "../stores/channelStore";
 import { X, Hash, Lock, Search, Check, Plus } from "lucide-react-native";
@@ -132,13 +132,13 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <KeyboardAvoidingView
+      <KeyboardAwareContainer
         style={[
           styles.overlay,
           { backgroundColor: colors.overlay },
           isWide && styles.wideOverlay,
         ]}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        disablePadding={false}
       >
         <View style={[
           styles.container,
@@ -332,7 +332,7 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
             )}
           </ScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAwareContainer>
     </Modal>
   );
 };
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   wideOverlay: {
     justifyContent: "center",
     alignItems: "center",
-    padding: scale(24),
+    padding: moderateScale(24),
   },
   container: {
     maxHeight: "90%",
@@ -363,17 +363,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(14),
+    paddingHorizontal: moderateScale(16),
+    paddingVertical: moderateScale(14),
     borderBottomWidth: 1,
   },
   closeBtn: { padding: moderateScale(4) },
   title: { fontSize: moderateScale(16), fontWeight: "700" },
   createBtn: {
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(8),
+    paddingHorizontal: moderateScale(16),
+    paddingVertical: moderateScale(8),
     borderRadius: moderateScale(8),
-    minWidth: scale(64),
+    minWidth: moderateScale(64),
     alignItems: "center",
   },
   createBtnText: {
@@ -386,46 +386,46 @@ const styles = StyleSheet.create({
   label: {
     fontSize: moderateScale(13),
     fontWeight: "700",
-    marginBottom: verticalScale(8),
+    marginBottom: moderateScale(8),
   },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
     borderRadius: moderateScale(8),
-    paddingHorizontal: scale(12),
+    paddingHorizontal: moderateScale(12),
     gap: 8,
   },
   input: {
     flex: 1,
     fontSize: moderateScale(15),
-    paddingVertical: verticalScale(10),
+    paddingVertical: moderateScale(10),
   },
   hint: {
     fontSize: moderateScale(12),
-    marginTop: verticalScale(8),
+    marginTop: moderateScale(8),
     lineHeight: 18,
   },
   textArea: {
     borderWidth: 1,
     borderRadius: moderateScale(8),
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(10),
+    paddingHorizontal: moderateScale(12),
+    paddingVertical: moderateScale(10),
     fontSize: moderateScale(14),
-    minHeight: verticalScale(70),
+    minHeight: moderateScale(70),
     textAlignVertical: "top",
   },
   errorText: {
     fontSize: moderateScale(13),
-    marginTop: verticalScale(6),
+    marginTop: moderateScale(6),
     fontWeight: "500",
   },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: verticalScale(24),
-    paddingTop: verticalScale(20),
+    marginTop: moderateScale(24),
+    paddingTop: moderateScale(20),
     borderTopWidth: 0.5,
     gap: 12,
   },
@@ -441,23 +441,23 @@ const styles = StyleSheet.create({
   },
   toggleHint: {
     fontSize: moderateScale(12),
-    marginTop: verticalScale(2),
+    marginTop: moderateScale(2),
   },
   membersSection: {
-    marginTop: verticalScale(24),
+    marginTop: moderateScale(24),
   },
   selectedMembersContainer: {
     flexDirection: "row",
     gap: 12,
-    marginTop: verticalScale(12),
-    marginBottom: verticalScale(12),
-    paddingRight: scale(16),
+    marginTop: moderateScale(12),
+    marginBottom: moderateScale(12),
+    paddingRight: moderateScale(16),
   },
   selectedChip: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: scale(10),
-    paddingVertical: verticalScale(6),
+    paddingHorizontal: moderateScale(10),
+    paddingVertical: moderateScale(6),
     borderRadius: moderateScale(20),
     borderWidth: 1,
     gap: 8,
@@ -465,16 +465,16 @@ const styles = StyleSheet.create({
   selectedChipName: {
     fontSize: moderateScale(14),
     fontWeight: "600",
-    maxWidth: scale(120),
+    maxWidth: moderateScale(120),
   },
   removeChipBtn: {
     padding: moderateScale(4),
   },
   searchResultsContainer: {
-    marginTop: verticalScale(8),
+    marginTop: moderateScale(8),
     borderWidth: 1,
     borderRadius: moderateScale(8),
-    maxHeight: verticalScale(180),
+    maxHeight: moderateScale(180),
     overflow: "hidden",
   },
   noResultsText: {
@@ -491,7 +491,7 @@ const styles = StyleSheet.create({
   },
   searchResultInfo: {
     flex: 1,
-    marginLeft: scale(10),
+    marginLeft: moderateScale(10),
   },
   searchResultName: {
     fontSize: moderateScale(14),
@@ -499,11 +499,11 @@ const styles = StyleSheet.create({
   },
   searchResultEmail: {
     fontSize: moderateScale(12),
-    marginTop: verticalScale(2),
+    marginTop: moderateScale(2),
   },
   searchResultCheck: {
-    width: scale(20),
-    height: verticalScale(20),
+    width: moderateScale(20),
+    height: moderateScale(20),
     borderRadius: moderateScale(10),
     borderWidth: 1,
     alignItems: "center",

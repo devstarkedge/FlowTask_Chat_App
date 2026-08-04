@@ -179,22 +179,17 @@ export default function EmojiPickerModal({ visible, onClose, onSelect, colors })
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity
-        style={[styles.overlay, { backgroundColor: colors.overlay || 'rgba(0,0,0,0.5)' }]}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <TouchableOpacity
-          activeOpacity={1}
+      <View style={[styles.overlay, { backgroundColor: colors.overlay || 'rgba(0,0,0,0.5)' }]}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+        <View
           style={[
             styles.container,
+            isWide && styles.wideContainer,
             {
               backgroundColor: colors.background,
               borderColor: colors.border,
-            },
-            isWide && styles.wideContainer,
+            }
           ]}
-          onPress={(e) => e.stopPropagation()}
         >
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -276,8 +271,8 @@ export default function EmojiPickerModal({ visible, onClose, onSelect, colors })
               }
             />
           </View>
-        </TouchableOpacity>
-      </TouchableOpacity>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -291,19 +286,21 @@ const styles = StyleSheet.create({
   container: {
     width: '90%',
     maxWidth: scale(400),
-    height: verticalScale(420),
+    height: '80%',
+    maxHeight: verticalScale(600),
     borderRadius: moderateScale(20),
-    borderWidth: 1,
-    paddingBottom: verticalScale(12),
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: scale(0), height: verticalScale(10) },
+    shadowOffset: { width: 0, height: verticalScale(5) },
     shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 5,
+    borderWidth: 1,
+    paddingBottom: verticalScale(8),
   },
   wideContainer: {
-    maxWidth: 560,
-    height: 480,
+    maxWidth: scale(560),
+    maxHeight: verticalScale(540),
   },
   header: {
     flexDirection: 'row',
@@ -358,7 +355,6 @@ const styles = StyleSheet.create({
   },
   gridContainer: {
     flex: 1,
-    minHeight: verticalScale(250),
   },
   grid: {
     paddingHorizontal: scale(8),

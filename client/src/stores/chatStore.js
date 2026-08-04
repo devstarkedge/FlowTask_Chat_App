@@ -38,18 +38,7 @@ function getChannelsToEvict() {
   );
 }
 
-function buildNormalizedChannel(messages = []) {
-  const ids = [];
-  const byId = {};
 
-  for (const message of messages) {
-    if (!message?._id) continue;
-    ids.push(message._id);
-    byId[message._id] = message;
-  }
-
-  return { ids, byId };
-}
 
 function mergeChronologicalMessages(existing = [], incoming = []) {
   const map = new Map();
@@ -90,18 +79,7 @@ function scheduleChannelPersist(channelId, messages) {
   persistTimer = setTimeout(flushChannelPersists, 450);
 }
 
-function buildThreadReplyIndex(replies = []) {
-  const ids = [];
-  const byId = {};
 
-  for (const reply of replies) {
-    if (!reply?._id) continue;
-    ids.push(reply._id);
-    byId[reply._id] = reply;
-  }
-
-  return { ids, byId };
-}
 
 function nowMs() {
   return typeof performance !== "undefined" && performance.now
@@ -123,11 +101,29 @@ export const useChatStore = create((set, get) => ({
   // Messages keyed by channelId
   messagesByChannel: {},
   // Normalized message entities (feature-flagged, maintained via subscription)
-  messagesById: {},
-  channelMessageIds: {},
-  messageChannelById: {},
   hasMore: {},
   isLoadingMessages: false,
+
+  // Receipts state
+  deliveryReceipts: {},
+  readReceipts: {},
+  pendingReceipts: {},
+  setMessageReceipts: (messageId, { deliveredTo, readBy, pending }) =>
+    set((state) => ({
+      deliveryReceipts: {
+        ...state.deliveryReceipts,
+        [messageId]: deliveredTo || [],
+      },
+      readReceipts: {
+        ...state.readReceipts,
+        [messageId]: readBy || [],
+      },
+      pendingReceipts: {
+        ...state.pendingReceipts,
+        [messageId]: pending || [],
+      },
+    })),
+
 
   highlightMessageId: null,
   setHighlightMessageId: (id) => set({ highlightMessageId: id }),
@@ -164,9 +160,6 @@ export const useChatStore = create((set, get) => ({
 
   // Thread replies keyed by rootMessageId
   threadRepliesByRoot: {},
-  threadRepliesById: {},
-  threadReplyIdsByRoot: {},
-  threadRootByReplyId: {},
   threadParentMessages: {}, // rootMessageId -> parent message object
   threadHasMore: {},
   isLoadingThread: false,
@@ -221,11 +214,7 @@ export const useChatStore = create((set, get) => ({
     if (!channelId) return [];
     const state = get();
 
-    if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-      const ids = state.channelMessageIds[channelId] || [];
-      if (ids.length === 0) return [];
-      return ids.map((id) => state.messagesById[id]).filter(Boolean);
-    }
+    
 
     return state.messagesByChannel[channelId] || [];
   },
@@ -234,11 +223,7 @@ export const useChatStore = create((set, get) => ({
     if (!rootMessageId) return [];
     const state = get();
 
-    if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-      const ids = state.threadReplyIdsByRoot[rootMessageId] || [];
-      if (ids.length === 0) return [];
-      return ids.map((id) => state.threadRepliesById[id]).filter(Boolean);
-    }
+    
 
     return state.threadRepliesByRoot[rootMessageId] || [];
   },
@@ -252,9 +237,7 @@ export const useChatStore = create((set, get) => ({
     if (!messageId) return null;
     const state = get();
 
-    if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-      return state.messagesById[messageId] || null;
-    }
+    
 
     return (
       state.messagesByChannel[channelId]?.find((m) => m._id === messageId) ||
@@ -472,25 +455,7 @@ export const useChatStore = create((set, get) => ({
           m._id === messageId ? message : m,
         );
 
-        if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-          return {
-            messagesByChannel: {
-              ...state.messagesByChannel,
-              [message.channelId]: updatedChannelMessages,
-            },
-            messagesById: {
-              ...state.messagesById,
-              [message._id]: {
-                ...(state.messagesById[message._id] || {}),
-                ...message,
-              },
-            },
-            messageChannelById: {
-              ...state.messageChannelById,
-              [message._id]: message.channelId,
-            },
-          };
-        }
+        
 
         return {
           messagesByChannel: {
@@ -598,26 +563,7 @@ export const useChatStore = create((set, get) => ({
         // Just remove the temp message
         const nextChannelMessages = existing.filter((m) => m._id !== tempId);
 
-        if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-          const nextMessagesById = { ...state.messagesById };
-          const nextMessageChannelById = { ...state.messageChannelById };
-          delete nextMessagesById[tempId];
-          delete nextMessageChannelById[tempId];
-          nextMessagesById[serverMessage._id] = {
-            ...(nextMessagesById[serverMessage._id] || {}),
-            ...serverMessage,
-          };
-          nextMessageChannelById[serverMessage._id] = channelId;
-
-          return {
-            messagesByChannel: {
-              ...state.messagesByChannel,
-              [channelId]: nextChannelMessages,
-            },
-            messagesById: nextMessagesById,
-            messageChannelById: nextMessageChannelById,
-          };
-        }
+        
 
         return {
           messagesByChannel: {
@@ -634,28 +580,7 @@ export const useChatStore = create((set, get) => ({
           : m,
       );
 
-      if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-        const nextMessagesById = { ...state.messagesById };
-        const nextMessageChannelById = { ...state.messageChannelById };
-        delete nextMessagesById[tempId];
-        delete nextMessageChannelById[tempId];
-        nextMessagesById[serverMessage._id] = {
-          ...(nextMessagesById[serverMessage._id] || {}),
-          ...serverMessage,
-          pending: false,
-          failed: false,
-        };
-        nextMessageChannelById[serverMessage._id] = channelId;
-
-        return {
-          messagesByChannel: {
-            ...state.messagesByChannel,
-            [channelId]: nextChannelMessages,
-          },
-          messagesById: nextMessagesById,
-          messageChannelById: nextMessageChannelById,
-        };
-      }
+      
 
       return {
         messagesByChannel: {
@@ -679,29 +604,7 @@ export const useChatStore = create((set, get) => ({
         m._id === tempId ? { ...m, pending: false, failed: true } : m,
       );
 
-      if (
-        CHAT_FEATURE_FLAGS.normalizedMessageStore &&
-        state.messagesById[tempId]
-      ) {
-        return {
-          messagesByChannel: {
-            ...state.messagesByChannel,
-            [resolvedChannelId]: nextChannelMessages,
-          },
-          messagesById: {
-            ...state.messagesById,
-            [tempId]: {
-              ...state.messagesById[tempId],
-              pending: false,
-              failed: true,
-            },
-          },
-          messageChannelById: {
-            ...state.messageChannelById,
-            [tempId]: resolvedChannelId,
-          },
-        };
-      }
+      
 
       return {
         messagesByChannel: {
@@ -752,25 +655,7 @@ export const useChatStore = create((set, get) => ({
 
       if (!replaced) return state;
 
-      if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-        return {
-          messagesByChannel: {
-            ...state.messagesByChannel,
-            [channelId]: updatedChannelMessages,
-          },
-          messagesById: {
-            ...state.messagesById,
-            [message._id]: {
-              ...(state.messagesById[message._id] || {}),
-              ...message,
-            },
-          },
-          messageChannelById: {
-            ...state.messageChannelById,
-            [message._id]: channelId,
-          },
-        };
-      }
+      
 
       return {
         messagesByChannel: {
@@ -789,33 +674,7 @@ export const useChatStore = create((set, get) => ({
       const existing = state.messagesByChannel[resolvedChannelId] || [];
       const nextChannelMessages = existing.filter((m) => m._id !== messageId);
 
-      if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-        const nextMessagesById = { ...state.messagesById };
-        const nextMessageChannelById = { ...state.messageChannelById };
-        const nextChannelMessageIds = { ...state.channelMessageIds };
-
-        delete nextMessagesById[messageId];
-        delete nextMessageChannelById[messageId];
-
-        const nextIds = (nextChannelMessageIds[resolvedChannelId] || []).filter(
-          (id) => id !== messageId,
-        );
-        if (nextIds.length > 0) {
-          nextChannelMessageIds[resolvedChannelId] = nextIds;
-        } else {
-          delete nextChannelMessageIds[resolvedChannelId];
-        }
-
-        return {
-          messagesByChannel: {
-            ...state.messagesByChannel,
-            [resolvedChannelId]: nextChannelMessages,
-          },
-          messagesById: nextMessagesById,
-          messageChannelById: nextMessageChannelById,
-          channelMessageIds: nextChannelMessageIds,
-        };
-      }
+      
 
       return {
         messagesByChannel: {
@@ -851,25 +710,7 @@ export const useChatStore = create((set, get) => ({
 
       if (!deletedMessage) return state;
 
-      if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-        return {
-          messagesByChannel: {
-            ...state.messagesByChannel,
-            [resolvedChannelId]: updatedChannelMessages,
-          },
-          messagesById: {
-            ...state.messagesById,
-            [messageId]: {
-              ...(state.messagesById[messageId] || {}),
-              ...deletedMessage,
-            },
-          },
-          messageChannelById: {
-            ...state.messageChannelById,
-            [messageId]: resolvedChannelId,
-          },
-        };
-      }
+      
 
       return {
         messagesByChannel: {
@@ -903,35 +744,7 @@ export const useChatStore = create((set, get) => ({
         idSet.has(m._id) ? { ...m, status, ...timestamps } : m,
       );
 
-      if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
-        const nextMessagesById = { ...state.messagesById };
-        let hasNormalizedChange = false;
-
-        for (const id of idsToUpdate) {
-          const existingEntity = nextMessagesById[id];
-          if (!existingEntity) continue;
-          hasNormalizedChange = true;
-          nextMessagesById[id] = {
-            ...existingEntity,
-            status,
-            ...timestamps,
-          };
-        }
-
-        logSlowMutation("updateMessageStatus", startedAt, {
-          channelId,
-          updatedCount: idsToUpdate.length,
-          normalized: true,
-        });
-
-        return {
-          messagesByChannel: {
-            ...state.messagesByChannel,
-            [channelId]: updatedChannelMessages,
-          },
-          ...(hasNormalizedChange ? { messagesById: nextMessagesById } : {}),
-        };
-      }
+      
 
       logSlowMutation("updateMessageStatus", startedAt, {
         channelId,
@@ -1260,28 +1073,7 @@ export const useChatStore = create((set, get) => ({
 
       if (updatedReplyCount === null) return state;
 
-      if (
-        CHAT_FEATURE_FLAGS.normalizedMessageStore &&
-        state.messagesById[rootMessageId]
-      ) {
-        return {
-          messagesByChannel: {
-            ...state.messagesByChannel,
-            [resolvedChannelId]: nextChannelMessages,
-          },
-          messagesById: {
-            ...state.messagesById,
-            [rootMessageId]: {
-              ...state.messagesById[rootMessageId],
-              replyCount: updatedReplyCount,
-            },
-          },
-          messageChannelById: {
-            ...state.messageChannelById,
-            [rootMessageId]: resolvedChannelId,
-          },
-        };
-      }
+      
 
       return {
         messagesByChannel: {
@@ -1309,13 +1101,11 @@ export const useChatStore = create((set, get) => ({
 
       if (!found) return state;
 
-      const nextById = CHAT_FEATURE_FLAGS.normalizedMessageStore && state.messagesById[rootMessageId]
-        ? { ...state.messagesById, [rootMessageId]: { ...state.messagesById[rootMessageId], ...updates } }
-        : state.messagesById;
+      
 
       return {
         messagesByChannel: { ...state.messagesByChannel, [resolvedChannelId]: nextChannelMessages },
-        messagesById: nextById,
+        
         messageChannelById: { ...state.messageChannelById, [rootMessageId]: resolvedChannelId },
       };
     });
@@ -1370,9 +1160,7 @@ export const useChatStore = create((set, get) => ({
       // Prefer indexed channel lookup when normalization is enabled.
       const hintedChannelId =
         channelId ||
-        (CHAT_FEATURE_FLAGS.normalizedMessageStore
-          ? state.messageChannelById[messageId]
-          : null);
+        (null);
       const channelsToScan =
         hintedChannelId && newState[hintedChannelId]
           ? [hintedChannelId]
@@ -1416,9 +1204,7 @@ export const useChatStore = create((set, get) => ({
       const newState = { ...state.messagesByChannel };
       const hintedChannelId =
         channelId ||
-        (CHAT_FEATURE_FLAGS.normalizedMessageStore
-          ? state.messageChannelById[messageId]
-          : null);
+        (null);
       const channelsToScan =
         hintedChannelId && newState[hintedChannelId]
           ? [hintedChannelId]
@@ -1584,9 +1370,7 @@ export const useChatStore = create((set, get) => ({
       await messageAPI.pin(messageId);
       // Optimistic: update isPinned in message list
       set((state) => {
-        const targetChannelId = CHAT_FEATURE_FLAGS.normalizedMessageStore
-          ? state.messageChannelById[messageId]
-          : null;
+        const targetChannelId = null;
 
         const channelsToScan = targetChannelId
           ? [targetChannelId]
@@ -1628,9 +1412,7 @@ export const useChatStore = create((set, get) => ({
     try {
       await messageAPI.unpin(messageId);
       set((state) => {
-        const targetChannelId = CHAT_FEATURE_FLAGS.normalizedMessageStore
-          ? state.messageChannelById[messageId]
-          : null;
+        const targetChannelId = null;
 
         const channelsToScan = targetChannelId
           ? [targetChannelId]
@@ -1714,24 +1496,7 @@ export const useChatStore = create((set, get) => ({
           }
         }
       }
-      if (CHAT_FEATURE_FLAGS.normalizedMessageStore && messageId) {
-        return {
-          messagesByChannel: newMsgs,
-          pinnedMessagesByChannel: newPins,
-          messagesById: {
-            ...state.messagesById,
-            [messageId]: {
-              ...(state.messagesById[messageId] || message || {}),
-              ...(message || {}),
-              isPinned: true,
-            },
-          },
-          messageChannelById: {
-            ...state.messageChannelById,
-            ...(cid ? { [messageId]: cid } : {}),
-          },
-        };
-      }
+      
 
       return { messagesByChannel: newMsgs, pinnedMessagesByChannel: newPins };
     });
@@ -1813,17 +1578,11 @@ export const useChatStore = create((set, get) => ({
 
     set({
       messagesByChannel: {},
-      messagesById: {},
-      channelMessageIds: {},
-      messageChannelById: {},
       hasMore: {},
       pinnedMessagesByChannel: {},
       isPinnedPanelOpen: false,
       allThreads: [],
       threadRepliesByRoot: {},
-      threadRepliesById: {},
-      threadReplyIdsByRoot: {},
-      threadRootByReplyId: {},
       threadParentMessages: {},
       threadHasMore: {},
       typingByChannel: {},
@@ -1834,76 +1593,6 @@ export const useChatStore = create((set, get) => ({
     try { localStorage.removeItem('chat:pinnedPanelOpen'); } catch { /* noop */ }
   },
 }));
-
-useChatStore.subscribe((state, prevState) => {
-  if (!CHAT_FEATURE_FLAGS.indexedDbCache) return;
-
-  const nextMessagesByChannel = state.messagesByChannel;
-  const prevMessagesByChannel = prevState.messagesByChannel;
-  if (nextMessagesByChannel === prevMessagesByChannel) return;
-
-  for (const [channelId, messages] of Object.entries(nextMessagesByChannel)) {
-    if (prevMessagesByChannel[channelId] !== messages) {
-      scheduleChannelPersist(channelId, messages);
-    }
-  }
-});
-
-useChatStore.subscribe((state, prevState) => {
-  if (!CHAT_FEATURE_FLAGS.normalizedMessageStore) return;
-
-  const nextMessagesByChannel = state.messagesByChannel;
-  const prevMessagesByChannel = prevState.messagesByChannel;
-  if (nextMessagesByChannel === prevMessagesByChannel) return;
-
-  const nextMessagesById = { ...state.messagesById };
-  const nextChannelMessageIds = { ...state.channelMessageIds };
-  const nextMessageChannelById = { ...state.messageChannelById };
-
-  const channelIds = new Set([
-    ...Object.keys(prevMessagesByChannel),
-    ...Object.keys(nextMessagesByChannel),
-  ]);
-
-  let hasChanges = false;
-
-  for (const channelId of channelIds) {
-    if (prevMessagesByChannel[channelId] === nextMessagesByChannel[channelId])
-      continue;
-
-    hasChanges = true;
-    const prevIds = prevState.channelMessageIds[channelId] || [];
-
-    for (const messageId of prevIds) {
-      if (nextMessageChannelById[messageId] === channelId) {
-        delete nextMessageChannelById[messageId];
-      }
-      delete nextMessagesById[messageId];
-    }
-
-    const channelMessages = nextMessagesByChannel[channelId] || [];
-    const { ids, byId } = buildNormalizedChannel(channelMessages);
-
-    if (channelMessages.length > 0) {
-      nextChannelMessageIds[channelId] = ids;
-    } else {
-      delete nextChannelMessageIds[channelId];
-    }
-
-    for (const messageId of ids) {
-      nextMessagesById[messageId] = byId[messageId];
-      nextMessageChannelById[messageId] = channelId;
-    }
-  }
-
-  if (hasChanges) {
-    useChatStore.setState({
-      messagesById: nextMessagesById,
-      channelMessageIds: nextChannelMessageIds,
-      messageChannelById: nextMessageChannelById,
-    });
-  }
-});
 
 if (CHAT_FEATURE_FLAGS.indexedDbCache) {
   const originalClearCache = useChatStore.getState().clearCache;

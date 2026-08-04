@@ -26,33 +26,31 @@ import {
   StyleSheet,
   Modal,
   ActivityIndicator,
-  Dimensions,
   Platform,
   ScrollView,
-  StatusBar,
+  useWindowDimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Search, Smile, RefreshCw } from 'lucide-react-native';
 import useGiphySearch from '../hooks/useGiphySearch';
 import { GIF_CATEGORIES } from '../services/gifService';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const NUM_COLS = 2;
 const GRID_PADDING = 12;
 const CELL_GAP = 6;
-const CELL_WIDTH = (SCREEN_WIDTH - GRID_PADDING * 2 - CELL_GAP) / NUM_COLS;
 
 // ─── Skeleton cell ────────────────────────────────────────────────────────────
 
-function SkeletonCell({ colors }) {
+function SkeletonCell({ colors, cellWidth }) {
   return (
     <View
       style={[
         styles.gifCell,
         {
-          width: CELL_WIDTH,
-          height: CELL_WIDTH * 0.75,
+          width: cellWidth,
+          height: cellWidth * 0.75,
           backgroundColor: colors.backgroundSecondary || '#2a2a2a',
           opacity: 0.6,
         },
@@ -63,15 +61,15 @@ function SkeletonCell({ colors }) {
 
 // ─── GIF cell ─────────────────────────────────────────────────────────────────
 
-const GifCell = React.memo(function GifCell({ item, onSelect, colors }) {
+const GifCell = React.memo(function GifCell({ item, onSelect, colors, cellWidth }) {
   const aspectRatio = item.width && item.height ? item.width / item.height : 3 / 2;
-  const cellHeight = Math.round(CELL_WIDTH / aspectRatio);
+  const cellHeight = Math.round(cellWidth / aspectRatio);
   const uri = item.previewUrl || item.gifUrl;
   if (!uri) return null;
 
   return (
     <TouchableOpacity
-      style={[styles.gifCell, { width: CELL_WIDTH, height: cellHeight }]}
+      style={[styles.gifCell, { width: cellWidth, height: cellHeight }]}
       onPress={() => onSelect(item)}
       activeOpacity={0.75}
     >
@@ -86,7 +84,13 @@ const GifCell = React.memo(function GifCell({ item, onSelect, colors }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function GifPickerModal({ visible, onClose, onSelectGif, colors }) {
+export default function GifPickerModal({  visible,
+  onClose,
+  onSelectGif,
+  colors,
+}) {
+  const { width: screenWidth } = useWindowDimensions();
+  const cellWidth = (screenWidth - GRID_PADDING * 2 - CELL_GAP) / NUM_COLS;
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('trending');
   const inputRef = useRef(null);
@@ -136,10 +140,10 @@ export default function GifPickerModal({ visible, onClose, onSelectGif, colors }
   const renderItem = useCallback(
     ({ item }) => {
       if (item._skeleton)
-        return <SkeletonCell key={item.id} colors={colors} />;
-      return <GifCell item={item} onSelect={handleSelect} colors={colors} />;
+        return <SkeletonCell key={item.id} colors={colors} cellWidth={cellWidth} />;
+      return <GifCell item={item} onSelect={handleSelect} colors={colors} cellWidth={cellWidth} />;
     },
-    [handleSelect, colors],
+    [handleSelect, colors, cellWidth],
   );
 
   const renderFooter = useCallback(() => {
@@ -161,7 +165,7 @@ export default function GifPickerModal({ visible, onClose, onSelectGif, colors }
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
         {/* ── Header ── */}
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={{ top: verticalScale(8), bottom: verticalScale(8), left: scale(8), right: scale(8) }}>
@@ -286,7 +290,7 @@ export default function GifPickerModal({ visible, onClose, onSelectGif, colors }
             Powered by GIPHY
           </Text>
         </View>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -294,7 +298,6 @@ export default function GifPickerModal({ visible, onClose, onSelectGif, colors }
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'ios' ? 44 : (StatusBar.currentHeight || 0),
   },
   header: {
     flexDirection: 'row',

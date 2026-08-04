@@ -108,7 +108,7 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
     channel.visibility === "private" ||
     (channel.visibility == null && channel.type === "private");
   const canManageMembership =
-    isAdmin && !isDM && !isSystem && !isSystemManagedProject;
+    isAdmin && !isDM && (!isSystem || channel?.slug === 'flowtask-managers') && !isSystemManagedProject && channel?.slug !== 'flowtask-admin';
   const isLastOwner = isOwner && (isResolvingMembers || ownerCount <= 1)
   const canLeaveChannel = !isSystem && !isSystemManagedProject && !isLastOwner;
   const canEditChannel = !isDM && isAdmin && !isSystemManagedProject;

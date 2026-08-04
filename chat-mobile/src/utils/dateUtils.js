@@ -111,3 +111,15 @@ export const formatMessageTime = (value) => {
   const { time24Hour } = usePreferencesStore.getState();
   return date.toLocaleTimeString([], { hour: time24Hour ? '2-digit' : 'numeric', minute: '2-digit', hour12: !time24Hour });
 };
+
+export const formatTime = formatMessageTime;
+
+export const isSameDay = (d1, d2) => {
+  const a = new Date(d1);
+  const b = new Date(d2);
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+};

@@ -275,12 +275,13 @@ class MessageService {
     // ── Unified Notification Engine ──────────────────────────────────────
     // The engine handles ALL notification logic: mentions, DMs, thread replies,
     // keyword triggers, presence-based suppression, priority, and push delivery.
-    import('../../services/notificationEngine.js').then(({ default: notificationEngine }) => {
-      notificationEngine.processMessage(populated, channel, {
+    // We offload this to a background queue to prevent blocking the HTTP response.
+    import('../../services/notificationQueue.service.js').then(({ default: notificationQueue }) => {
+      notificationQueue.add(populated, channel, {
         threadId: actualThreadId || null,
         mentions: processedMentions,
       }).catch((err) => {
-        logger.error('Notification engine failed', { messageId: message._id, error: err.message });
+        logger.error('Failed to enqueue notification job', { messageId: message._id, error: err.message });
       });
     }).catch(() => {});
 

@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform } from 'react-native';
+import KeyboardAwareContainer from './common/KeyboardAwareContainer';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
 import { categoryAPI } from '../services/api';
 import { X, Check, Edit2, Trash2, FolderInput, FolderOutput } from 'lucide-react-native';
+import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 const CategoryActionSheet = ({ visible, onClose, category, onAddChannels, onRemoveChannels }) => {
   const { colors } = useThemeStore();
@@ -31,25 +33,29 @@ const CategoryActionSheet = ({ visible, onClose, category, onAddChannels, onRemo
   };
 
   const handleDelete = () => {
+    // Capture ID synchronously before closing anything
+    const categoryId = category._id;
+    const categoryName = category.name;
+
     Alert.alert(
       "Delete Category",
-      `Are you sure you want to delete "${category.name}"? The channels will remain in your workspace.`,
+      `Are you sure you want to delete "${categoryName}"? The channels will remain in your workspace.`,
       [
         { text: "Cancel", style: "cancel" },
         { 
           text: "Delete", 
           style: "destructive",
           onPress: async () => {
-            setIsDeleting(true);
+            // Close the sheet first so the parent clears activeCategory safely
+            onClose();
             try {
-              await categoryAPI.delete(category._id);
+              await categoryAPI.delete(categoryId);
+              // Socket category:deleted event will update the store in real-time.
+              // fetchCategories is a fallback in case socket delivery is delayed.
               await fetchCategories();
-              Alert.alert("Success", "Category deleted successfully");
             } catch (err) {
               Alert.alert("Error", err.response?.data?.message || "Failed to delete category");
             }
-            setIsDeleting(false);
-            onClose();
           }
         }
       ]
@@ -66,13 +72,22 @@ const CategoryActionSheet = ({ visible, onClose, category, onAddChannels, onRemo
     onRemoveChannels(category);
   };
 
+  useEffect(() => {
+    if (visible) {
+      setShowRenameInput(false);
+      setNewName(category?.name || '');
+      setIsDeleting(false);
+    }
+  }, [visible, category]);
+
   if (!category) return null;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} transparent>
-      <View style={styles.overlay}>
-        <TouchableOpacity style={styles.backdrop} onPress={onClose} />
-        <View style={[styles.sheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+      <KeyboardAwareContainer style={{ flex: 1 }} disablePadding={false}>
+        <View style={styles.overlay}>
+          <TouchableOpacity style={styles.backdrop} onPress={onClose} />
+          <View style={[styles.sheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <Text style={[styles.title, { color: colors.textPrimary }]}>Category Options</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -132,6 +147,7 @@ const CategoryActionSheet = ({ visible, onClose, category, onAddChannels, onRemo
           )}
         </View>
       </View>
+      </KeyboardAwareContainer>
     </Modal>
   );
 };
@@ -146,21 +162,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
   sheet: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: moderateScale(16),
+    borderTopRightRadius: moderateScale(16),
     borderTopWidth: 1,
-    maxHeight: '50%',
+    maxHeight: '75%',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: moderateScale(16),
+    paddingVertical: moderateScale(12),
     borderBottomWidth: 1,
   },
   title: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '600',
   },
   closeBtn: {

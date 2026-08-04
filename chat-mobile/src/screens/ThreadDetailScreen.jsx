@@ -7,10 +7,9 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
 } from 'react-native';
+import KeyboardAwareContainer from '../components/common/KeyboardAwareContainer';
 import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
 import { useThemeStore } from '../stores/themeStore';
@@ -40,6 +39,10 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     rootContent,
     rootHtmlContent,
     rootAttachments,
+    rootContentType,
+    rootGifMeta,
+    rootAudioMeta,
+    rootVideoMeta,
     replyCount: initialReplyCount,
     rootAuthor,
     rootCreatedAt,
@@ -83,6 +86,10 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     content: rootContent,
     htmlContent: rootHtmlContent,
     attachments: rootAttachments || [],
+    contentType: rootContentType,
+    gifMeta: rootGifMeta,
+    audioMeta: rootAudioMeta,
+    videoMeta: rootVideoMeta,
     senderSnapshot: rootAuthor,
     authorId: rootAuthor,
     createdAt: rootCreatedAt || new Date().toISOString(),
@@ -215,11 +222,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         <View style={styles.headerRight} />
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? (insets.top + headerHeight) : 0}
-      >
+      <KeyboardAwareContainer disablePadding={false}>
         <FlatList
           ref={flatListRef}
           onScrollToIndexFailed={(info) => {
@@ -342,7 +345,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           editingMessage={editingMessage}
           onCancelEdit={() => { setEditingMessage(null); setReplyText(''); }}
         />
-      </KeyboardAvoidingView>
+      </KeyboardAwareContainer>
 
       <EmojiPickerModal visible={!!emojiPickerTarget} onClose={() => setEmojiPickerTarget(null)} onSelect={(emoji) => { if (emojiPickerTarget) { addReaction(emojiPickerTarget, emoji); } setEmojiPickerTarget(null); }} colors={colors} />
 

@@ -6,7 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
-  Dimensions,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useThemeStore } from "../../stores/themeStore";
@@ -17,9 +17,9 @@ import { formatMessageTime } from "../../utils/dateUtils";
 import { scale, verticalScale, moderateScale } from "../../utils/responsive";
 import StatusModal from "../../components/StatusModal";
 
-const { width } = Dimensions.get("window");
 
 const ProfileScreen = ({ navigation }) => {
+  const { width } = useWindowDimensions();
   const { colors } = useThemeStore();
   const { user, logout } = useAuthStore();
   const [statusModalVisible, setStatusModalVisible] = useState(false);

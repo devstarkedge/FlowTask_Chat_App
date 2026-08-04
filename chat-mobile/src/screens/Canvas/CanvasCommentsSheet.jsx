@@ -7,11 +7,10 @@ import {
   Modal,
   FlatList,
   TextInput,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
 } from 'react-native';
-import ScreenContainer from '../../components/common/ScreenContainer';
+import KeyboardAwareContainer from '../../components/common/KeyboardAwareContainer';
 import { Send, CheckCircle2, MessageSquare, X } from 'lucide-react-native';
 import Avatar from '../../components/Avatar';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
@@ -62,7 +61,7 @@ export default function CanvasCommentsSheet({
     >
       <View style={styles.overlay}>
         <Pressable style={styles.dismissArea} onPress={onClose} />
-        <ScreenContainer style={styles.sheetContainer}>
+        <KeyboardAwareContainer style={styles.sheetContainer}>
             <View style={styles.header}>
               <View style={styles.headerTitleRow}>
                 <MessageSquare size={18} color="#4f46e5" style={styles.headerIcon} />
@@ -174,7 +173,7 @@ export default function CanvasCommentsSheet({
                 <Send size={18} color="#ffffff" />
               </TouchableOpacity>
             </View>
-        </ScreenContainer>
+        </KeyboardAwareContainer>
       </View>
     </Modal>
   );
@@ -190,10 +189,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheetContainer: {
-    height: '75%',
+    maxHeight: '75%',
     backgroundColor: '#ffffff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: moderateScale(20),
+    borderTopRightRadius: moderateScale(20),
   },
   safeArea: {
     flex: 1,

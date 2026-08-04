@@ -30,6 +30,8 @@ import {
   ChevronDown,
   X,
   Save,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
 import { useLaterStore } from "../../stores/laterStore";
 import SlackFileCard from "./SlackFileCard";
@@ -38,6 +40,7 @@ import { Avatar } from "./MemberAvatarGroup";
 import EmojiPicker from "./EmojiPicker";
 import EmojiPickerPortal from "./EmojiPickerPortal";
 import FloatingPortal from "./FloatingPortal";
+import MessageInfoModal from "./MessageInfoModal";
 import { sanitizeHtml } from "../../utils/sanitize";
 import { extractPlainText } from "../../utils/extractPlainText";
 import toast from "react-hot-toast";
@@ -441,6 +444,7 @@ const MessageItem = memo(
     const [showActions, setShowActions] = useState(false);
     const [showReactionPicker, setShowReactionPicker] = useState(false);
     const [showMessageDetails, setShowMessageDetails] = useState(false);
+    const [showInfoModal, setShowInfoModal] = useState(false);
 
     const messageRef = useRef(null);
     const moreMenuRef = useRef(null);
@@ -630,23 +634,52 @@ const MessageItem = memo(
     }
 
     const renderDeliveryStatus = () => {
-      if (!isDMChannel || !isOwn || isPending || isFailed) return null;
-      const status = message.status || "sent";
-      if (status === "seen")
+      if (!isOwn) return null;
+      if (message.permanentlyFailed) {
         return (
-          <span title="Seen" className="inline-flex items-center">
-            <CheckCheck size={13} style={{ color: "var(--accent-primary)" }} />
+          <span title="Failed" className="inline-flex items-center ml-1">
+            <AlertCircle size={12} style={{ color: "var(--error-color, #ff3b30)" }} />
           </span>
         );
-      if (status === "delivered")
+      }
+      if (isPending || message.status === "pending" || message.status === "sending") {
         return (
-          <span title="Delivered" className="inline-flex items-center">
-            <CheckCheck size={13} style={{ color: "var(--text-muted)" }} />
+          <span title="Pending" className="inline-flex items-center ml-1">
+            <Clock size={12} style={{ color: "var(--text-muted, #8a8f9d)" }} />
           </span>
         );
+      }
+      if (message.seenAt || message.status === "seen") {
+        return (
+          <span title="Seen" className="inline-flex items-center ml-1">
+            <CheckCheck size={12} style={{ color: "var(--accent-primary, #53BDEB)" }} />
+          </span>
+        );
+      }
+      if (message.deliveredAt || message.status === "delivered") {
+        return (
+          <span title="Delivered" className="inline-flex items-center ml-1">
+            <CheckCheck size={12} style={{ color: "var(--text-muted, #8a8f9d)" }} />
+          </span>
+        );
+      }
+      if (message.status === "sent") {
+        return (
+          <span title="Sent" className="inline-flex items-center ml-1">
+            <Check size={12} style={{ color: "var(--text-muted, #8a8f9d)" }} />
+          </span>
+        );
+      }
+      if (isFailed || message.failed) {
+        return (
+          <span title="Failed" className="inline-flex items-center ml-1">
+            <AlertCircle size={12} style={{ color: "var(--error-color, #ff3b30)" }} />
+          </span>
+        );
+      }
       return (
-        <span title="Sent" className="inline-flex items-center">
-          <Check size={13} style={{ color: "var(--text-muted)" }} />
+        <span title="Pending" className="inline-flex items-center ml-1">
+          <Clock size={12} style={{ color: "var(--text-muted, #8a8f9d)" }} />
         </span>
       );
     };
@@ -656,7 +689,7 @@ const MessageItem = memo(
       if (!isDMChannel || !isOwn || isPending || isFailed) return null;
       return (
         <div
-          className="flex items-center justify-end gap-1 mt-1"
+          className="flex items-center justify-end gap-0.5 mt-1"
           style={{ opacity: 0.75, minHeight: 14 }}
         >
           <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
@@ -1262,7 +1295,7 @@ const MessageItem = memo(
                         document.body.removeChild(ta);
                       }
 
-                      toast.success("Copied to clipboard", { duration: 1500 });
+                    toast.success("Copied to clipboard", { duration: 1500 });
                     } catch {
                       toast.error("Copy failed");
                     }
@@ -1272,9 +1305,20 @@ const MessageItem = memo(
                   }}
                 />
               )}
-              {/* <MoreMenuItem
+              {isOwn && (
+                <MoreMenuItem
+                  icon={Info}
+                  label="Message info"
+                  onClick={() => {
+                    setShowInfoModal(true);
+                    clearActiveMessageMenuId();
+                    setShowActions(false);
+                  }}
+                />
+              )}
+              <MoreMenuItem
                 icon={Link2}
-                laabel="Copy link"
+                label="Copy link"
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(
@@ -1284,10 +1328,10 @@ const MessageItem = memo(
                   } catch {
                     toast.error("Failed to copy link");
                   }
-                  setShowMoreMenu(false);
+                  clearActiveMessageMenuId();
                   setShowActions(false);
                 }}
-              /> */}
+              />
               <MoreMenuItem
                 icon={Forward}
                 label="Forward message"
@@ -1333,6 +1377,14 @@ const MessageItem = memo(
             position="top-start"
             zIndex={1050}
           />
+
+          {showInfoModal && (
+            <MessageInfoModal
+              channelId={message.channelId}
+              messageId={message._id}
+              onClose={() => setShowInfoModal(false)}
+            />
+          )}
         </div>
       </div>
     );

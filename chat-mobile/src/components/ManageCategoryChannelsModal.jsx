@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ActivityIndicator, FlatList, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ActivityIndicator, FlatList, Alert, Platform } from 'react-native';
+import KeyboardAwareContainer from './common/KeyboardAwareContainer';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
-import { categoryAPI } from '../services/api';
+import { categoryAPI, directoriesAPI } from '../services/api';
 import { X, Check, Search, Hash, Lock } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
@@ -23,17 +24,19 @@ const ManageCategoryChannelsModal = ({ visible, onClose, category, mode = 'add' 
       // For remove mode, show channels that ARE in this category
       return channels.filter(c => {
         if (c.type === 'dm' || c.type === 'self' || c.isArchived) return false;
-        const cCatId = c.categoryId?._id ?? c.categoryId;
-        const isInCategory = String(cCatId ?? '') === String(category._id);
-        return isInCategory;
+        const channelIdStr = c._id?.toString ? c._id.toString() : c._id;
+        const inCustomCategory = Array.isArray(category.channelIds) && category.channelIds.includes(channelIdStr);
+        const inDeptCategory = category.type === 'department' && c.departmentRef?.departmentId === (category.departmentId?._id || category.departmentId);
+        return inCustomCategory || inDeptCategory;
       });
     } else {
       // For add mode, show channels that are NOT in this category
       return channels.filter(c => {
         if (c.type === 'dm' || c.type === 'self' || c.isArchived) return false;
-        const cCatId = c.categoryId?._id ?? c.categoryId;
-        const isInCategory = String(cCatId ?? '') === String(category._id);
-        return !isInCategory;
+        const channelIdStr = c._id?.toString ? c._id.toString() : c._id;
+        const inCustomCategory = Array.isArray(category.channelIds) && category.channelIds.includes(channelIdStr);
+        const inDeptCategory = category.type === 'department' && c.departmentRef?.departmentId === (category.departmentId?._id || category.departmentId);
+        return !(inCustomCategory || inDeptCategory);
       });
     }
   }, [channels, category, mode]);
@@ -147,7 +150,11 @@ const ManageCategoryChannelsModal = ({ visible, onClose, category, mode = 'add' 
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
+      <KeyboardAwareContainer 
+        style={[styles.overlay, { backgroundColor: colors.overlay || 'rgba(0,0,0,0.5)' }]} 
+        disablePadding={false}
+      >
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
@@ -225,12 +232,23 @@ const ManageCategoryChannelsModal = ({ visible, onClose, category, mode = 'add' 
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+      </KeyboardAwareContainer>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  overlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  container: {
+    maxHeight: '90%',
+    flex: 1,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

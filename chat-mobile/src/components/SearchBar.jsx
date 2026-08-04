@@ -24,29 +24,31 @@ const SearchBar = ({ query, onChangeQuery, onClose, onNext, onPrev, currentIndex
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(8),
+    paddingHorizontal: moderateScale(12),
+    paddingVertical: moderateScale(8),
+    width: '100%',
   },
   inner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     borderRadius: moderateScale(20),
-    paddingHorizontal: scale(10),
+    paddingHorizontal: moderateScale(10),
     borderWidth: 1,
+    flexShrink: 1,
   },
   input: {
     flex: 1,
     fontSize: moderateScale(15),
-    paddingVertical: verticalScale(6),
+    paddingVertical: moderateScale(6),
   },
   counter: {
     fontSize: moderateScale(12),
-    minWidth: scale(48),
+    minWidth: moderateScale(48),
     textAlign: 'center',
   },
   closeButton: {
-    paddingLeft: scale(8),
+    paddingLeft: moderateScale(8),
   },
 });
 

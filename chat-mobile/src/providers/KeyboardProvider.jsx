@@ -1,93 +1,96 @@
-import React, { createContext, useState, useEffect, useRef } from 'react';
-import { Keyboard, Platform, Animated, Easing, Dimensions, StatusBar, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { createContext, useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Keyboard, Platform, Animated, Easing, View, Dimensions } from 'react-native';
 
 export const KeyboardContext = createContext({
   keyboardHeight: 0,
   keyboardVisible: false,
+  bottomOffset: 0,
   animatedKeyboardHeight: null,
 });
 
+/**
+ * Single source of truth for Android keyboard clearance:
+ * measure how many pixels of OUR root view actually overlap the IME.
+ *
+ * rootBottom (in screen coords) − keyboard.screenY
+ *
+ * - adjustResize already lifted the window → overlap ≈ 0 → no extra pad
+ * - adjustNothing / no resize → overlap ≈ keyboard height → pad that amount
+ * - any OEM / nav mode → exact geometric overlap, no double-counting
+ */
 export const KeyboardProvider = ({ children }) => {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  
-  // Track raw OS keyboard metrics
-  const [rawKeyboardHeight, setRawKeyboardHeight] = useState(0);
-  
-  // Track physical root layout bounds
-  const [rootHeight, setRootHeight] = useState(0);
-  const initialRootHeight = useRef(0);
-  const initialWindowHeight = useRef(Dimensions.get('window').height);
-  
+  const [bottomOffset, setBottomOffset] = useState(0);
   const animatedKeyboardHeight = useRef(new Animated.Value(0)).current;
-  const insets = useSafeAreaInsets();
+  const lastOffsetRef = useRef(0);
+  const rootRef = useRef(null);
+  const coordsRef = useRef(null);
+  const measureGenRef = useRef(0);
 
-  const onRootLayout = React.useCallback((e) => {
-    const h = e.nativeEvent.layout.height;
-    if (initialRootHeight.current === 0) {
-      initialRootHeight.current = h;
+  const publishFromMeasure = useCallback((coords) => {
+    const reported = Math.round(coords?.height || 0);
+    const node = rootRef.current;
+
+    const apply = (overlap) => {
+      const next = Math.max(0, Math.round(overlap));
+      lastOffsetRef.current = next;
+      setKeyboardHeight(reported);
+      setBottomOffset(next);
+      setKeyboardVisible(true);
+    };
+
+    if (!node || typeof node.measureInWindow !== 'function') {
+      apply(reported);
+      return;
     }
-    setRootHeight(h);
+
+    const gen = ++measureGenRef.current;
+    node.measureInWindow((x, y, _w, h) => {
+      // Ignore stale async measures from a previous keyboard event
+      if (gen !== measureGenRef.current) return;
+
+      const keyboardTop =
+        typeof coords?.screenY === 'number'
+          ? coords.screenY
+          : Dimensions.get('screen').height - reported;
+
+      // How far our root extends below the top of the keyboard
+      const overlap = y + h - keyboardTop;
+      apply(overlap);
+    });
   }, []);
-
-  // Synchronize layout changes and keyboard changes
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-
-    if (rawKeyboardHeight > 0) {
-      // In edge-to-edge mode, the OS window doesn't shrink, so windowShrinkage is 0.
-      // rawKeyboardHeight includes the system navigation bar height.
-      const windowShrinkage = Math.max(0, initialRootHeight.current - rootHeight);
-      
-      // If the window did shrink (e.g. not in edge-to-edge), we don't need manual padding 
-      // (or we need less).
-      const finalPadding = Math.max(0, rawKeyboardHeight - windowShrinkage);
-
-      if (__DEV__) {
-        console.log(`[PIPELINE] KeyboardProvider (Sync): rawKeyboard=${rawKeyboardHeight}, rootHeight=${rootHeight}, Shrinkage=${windowShrinkage}, FinalPadding=${finalPadding}`);
-      }
-      setKeyboardHeight(finalPadding);
-    } else {
-      setKeyboardHeight(0);
-    }
-  }, [rawKeyboardHeight, rootHeight]);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
     const onKeyboardShow = (e) => {
-      const h = e.endCoordinates.height;
-      
+      const coords = e?.endCoordinates;
+      coordsRef.current = coords;
+      const reported = Math.round(coords?.height || 0);
+
       if (Platform.OS === 'ios') {
-        setKeyboardHeight(h);
+        lastOffsetRef.current = reported;
+        setKeyboardHeight(reported);
+        setBottomOffset(reported);
         setKeyboardVisible(true);
-      } else {
-        setRawKeyboardHeight(h);
-        setKeyboardVisible(true);
+        return;
       }
 
-      if (__DEV__) {
-        console.log('====== [DIAGNOSTIC] KEYBOARD OPENED ======');
-        console.log(`OS: ${Platform.OS}`);
-        console.log(`Reported Keyboard Height: ${h}`);
-        console.log('==========================================');
-      }
+      // One frame later so any OEM resize layout is committed, then measure once.
+      requestAnimationFrame(() => {
+        publishFromMeasure(coords);
+      });
     };
 
-    const onKeyboardHide = (e) => {
-      if (Platform.OS === 'ios') {
-        setKeyboardHeight(0);
-      } else {
-        setRawKeyboardHeight(0);
-      }
+    const onKeyboardHide = () => {
+      measureGenRef.current += 1; // invalidate in-flight measures
+      coordsRef.current = null;
+      lastOffsetRef.current = 0;
+      setKeyboardHeight(0);
+      setBottomOffset(0);
       setKeyboardVisible(false);
-
-      if (__DEV__) {
-        console.log('====== [DIAGNOSTIC] KEYBOARD CLOSED ======');
-        console.log('==========================================');
-      }
     };
 
     const showSub = Keyboard.addListener(showEvent, onKeyboardShow);
@@ -97,22 +100,30 @@ export const KeyboardProvider = ({ children }) => {
       showSub.remove();
       hideSub.remove();
     };
-  }, []);
+  }, [publishFromMeasure]);
 
   useEffect(() => {
-    // Only animate the transition on iOS, or if requested. 
-    // On Android, Yoga layout updates inherently snap nicely with the native keyboard.
+    const target = Platform.OS === 'ios' ? keyboardHeight : bottomOffset;
+    if (Platform.OS !== 'ios') {
+      animatedKeyboardHeight.setValue(target);
+      return;
+    }
     Animated.timing(animatedKeyboardHeight, {
-      toValue: keyboardHeight,
+      toValue: target,
       duration: 250,
       easing: Easing.out(Easing.ease),
       useNativeDriver: false,
     }).start();
-  }, [keyboardHeight, animatedKeyboardHeight]);
+  }, [keyboardHeight, bottomOffset, animatedKeyboardHeight]);
+
+  const value = useMemo(
+    () => ({ keyboardHeight, keyboardVisible, bottomOffset, animatedKeyboardHeight }),
+    [keyboardHeight, keyboardVisible, bottomOffset, animatedKeyboardHeight]
+  );
 
   return (
-    <KeyboardContext.Provider value={{ keyboardHeight, keyboardVisible, animatedKeyboardHeight }}>
-      <View style={{ flex: 1 }} onLayout={onRootLayout}>
+    <KeyboardContext.Provider value={value}>
+      <View ref={rootRef} style={{ flex: 1 }} collapsable={false}>
         {children}
       </View>
     </KeyboardContext.Provider>

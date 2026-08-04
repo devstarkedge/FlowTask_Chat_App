@@ -1,66 +1,33 @@
 /**
- * MessageComposer — enhanced mobile composer matching web app MessageInput features.
+ * MessageComposer — mobile composer matching web MessageInput.
  *
- * Features:
- *  - Draft auto-save (800ms debounce)
- *  - Draft restore on channel change
- *  - Emoji picker (Smile button)
- *  - File attachment (attach button, uses expo-document-picker)
- *  - Reply mode banner
- *  - Edit mode banner
- *  - Schedule message (long-press send)
- *  - Typing indicators
+ * Uses the same TipTap rich-text architecture as the web app / Canvas editor
+ * (ChatRichTextEditor WebView). Formatting toolbar toggles TipTap marks —
+ * users see bold/italic/underline visually, never raw Markdown.
  *
- * Props:
- *   channelId       – current channel _id
- *   channelName     – channel display name
- *   workspaceId     – current workspace _id
- *   colors          – theme colors
- *   onSend          – (content, options) => void
- *   replyingTo      – message object or null
- *   editingMessage  – message object or null
- *   onCancelReply   – () => void
- *   onCancelEdit    – () => void
- *   onChangeText    – (text) => void
- *   text            – current input text
+ * Send payload mirrors web: content (plain getText) + htmlContent (getHTML).
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
-  Keyboard,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Platform,
   Alert,
   Image,
-  Dimensions,
-  Animated,
-  PanResponder,
   useWindowDimensions,
-  LayoutAnimation,
-  UIManager,
+  TextInput,
 } from "react-native";
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 import {
-  Send,
   Plus,
   Smile,
   Clock,
   X,
   FileText,
-  AtSign,
   CaseSensitive,
   Loader2,
-  Mic,
   Camera as CameraIcon,
-  ChevronDown,
-  Maximize2,
-  Minimize2,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import logger from "../utils/logger";
@@ -74,6 +41,7 @@ import EmojiPickerModal from "./EmojiPickerModal";
 import ScheduleModal from "./ScheduleModal";
 import MentionDropdown from "./MentionDropdown";
 import FormattingToolbar from "./FormattingToolbar";
+import ChatRichTextEditor from "./chat/ChatRichTextEditor";
 import MediaPickerSheet from "./MediaPickerSheet";
 import GifPickerModal from "./GifPickerModal";
 import RecentCanvasesModal from "./RecentCanvasesModal";
@@ -82,7 +50,6 @@ import AudioRecorderUI from "./AudioRecorderUI";
 import VideoRecorderModal from "./VideoRecorderModal";
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
 import { useVideoRecorder } from "../hooks/useVideoRecorder";
-import { pellToTipTap } from "../utils/formatConverter";
 import { scale, verticalScale, moderateScale } from "../utils/responsive";
 
 const stripHtml = (html) => {
@@ -163,18 +130,23 @@ const markdownToHtml = (text) => {
     return `<ol>${items}</ol>`;
   });
 
-  // Wrap paragraphs while explicitly preserving empty lines (WhatsApp style)
+  // Each Enter line → its own <p> so display preserves breaks (WhatsApp / TipTap style)
   html = html
     .split(/\n\n/)
     .map((block) => {
       const trimmed = block.trim();
       if (!trimmed) return "<p><br></p>";
-      if (/^<(pre|blockquote|li|hr)/.test(trimmed)) return trimmed;
-      // Wrap consecutive <li> in <ul>
-      if (trimmed.includes("<li>")) return `<ul>${trimmed}</ul>`;
-      return `<p>${trimmed.replace(/\n/g, "<br>")}</p>`;
+      if (/^<(pre|blockquote|ul|ol|li|hr)/.test(trimmed)) return trimmed;
+      if (trimmed.includes("<li>") && !trimmed.includes("<ul") && !trimmed.includes("<ol")) {
+        return `<ul>${trimmed}</ul>`;
+      }
+      const lines = trimmed.split(/\n/);
+      if (lines.length === 1) {
+        return `<p>${lines[0]}</p>`;
+      }
+      return lines.map((line) => (line ? `<p>${line}</p>` : `<p><br></p>`)).join("");
     })
-    .join("\n");
+    .join("");
 
   return html || "<p></p>";
 };
@@ -204,24 +176,18 @@ const MessageComposer = React.memo(function MessageComposer({
   const [showToolbar, setShowToolbar] = useState(false);
   const [mentionVisible, setMentionVisible] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
-  const [mentionRangeStart, setMentionRangeStart] = useState(-1);
   const [pendingMentions, setPendingMentions] = useState([]);
-  const [selStart, setSelStart] = useState(0);
-  const [selEnd, setSelEnd] = useState(0);
+  const [formatState, setFormatState] = useState({});
+  const [linkModalVisible, setLinkModalVisible] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('https://');
   const draftTimerRef = useRef(null);
   const lastSavedRef = useRef("");
-  const richText = useRef(null);
-  const [isEditorReady, setIsEditorReady] = useState(false);
-  const [editorHeight, setEditorHeight] = useState(40);
+  const editorRef = useRef(null);
+  const latestContentRef = useRef({ html: '', text: '' });
   const insets = useSafeAreaInsets();
   const { keyboardHeight } = useKeyboard();
-
-  useEffect(() => {
-    if (__DEV__) {
-      console.log(`[PIPELINE] MessageComposer: received keyboardHeight = ${keyboardHeight}`);
-    }
-  }, [keyboardHeight]);
-
+  // Android window already resizes; only iOS needs height subtracted for expand math.
+  const imeInset = Platform.OS === 'android' ? 0 : keyboardHeight;
   const audioRecorder = useAudioRecorder();
   const videoRecorder = useVideoRecorder();
   const [showVideoModal, setShowVideoModal] = useState(false);
@@ -229,147 +195,13 @@ const MessageComposer = React.memo(function MessageComposer({
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const isTablet = screenWidth >= 600;
 
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [collapsedHeight, setCollapsedHeight] = useState(verticalScale(60));
-
-  const isExpandedRef = useRef(false);
-  isExpandedRef.current = isExpanded;
-
-  const collapsedHeightRef = useRef(verticalScale(60));
-  collapsedHeightRef.current = collapsedHeight;
-
-  // Visible height subtracting status bar / safe area / header (~60px) and keyboard
-  const visibleHeight = screenHeight - insets.top - (Platform.OS === 'ios' ? 44 : 56) - keyboardHeight;
-  const maxExpandedHeight = Math.max(100, visibleHeight * (isTablet ? 0.65 : 0.85));
-
-  const maxExpandedHeightRef = useRef(maxExpandedHeight);
-  maxExpandedHeightRef.current = maxExpandedHeight;
-
-  const maxComposerHeight = Math.floor(screenHeight * 0.3);
-
-  const dragStartY = useRef(0);
-  const animatedHeight = useRef(new Animated.Value(verticalScale(60))).current;
-  const isAnimating = useRef(false);
-
-  const collapseComposer = useCallback((dismissKeyboard = false) => {
-    isAnimating.current = true;
-    Animated.spring(animatedHeight, {
-      toValue: collapsedHeightRef.current,
-      useNativeDriver: false,
-      tension: 40,
-      friction: 7,
-    }).start(() => {
-      setIsExpanded(false);
-      setIsDragging(false);
-      isAnimating.current = false;
-      if (dismissKeyboard) {
-        Keyboard.dismiss();
-      }
-    });
-  }, []);
-
-  const toggleExpand = useCallback(() => {
-    isAnimating.current = true;
-    const nextState = !isExpandedRef.current;
-    const targetHeight = nextState ? maxExpandedHeightRef.current : collapsedHeightRef.current;
-
-    setIsExpanded(nextState);
-    Animated.spring(animatedHeight, {
-      toValue: targetHeight,
-      useNativeDriver: false,
-      tension: 45,
-      friction: 8,
-    }).start(() => {
-      setIsDragging(false);
-      isAnimating.current = false;
-    });
-  }, [animatedHeight]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dy) > 4;
-      },
-      onPanResponderGrant: (evt, gestureState) => {
-        setIsDragging(true);
-        const currentHeight = isExpandedRef.current ? maxExpandedHeightRef.current : collapsedHeightRef.current;
-        animatedHeight.setValue(currentHeight);
-        dragStartY.current = currentHeight;
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        let newHeight = dragStartY.current - gestureState.dy;
-        const cHeight = collapsedHeightRef.current;
-        const mHeight = maxExpandedHeightRef.current;
-        if (newHeight < cHeight) newHeight = cHeight;
-        if (newHeight > mHeight) newHeight = mHeight;
-        animatedHeight.setValue(newHeight);
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        setIsDragging(false);
-        const cHeight = collapsedHeightRef.current;
-        const mHeight = maxExpandedHeightRef.current;
-
-        if (Math.abs(gestureState.dy) < 6) {
-          toggleExpand();
-          return;
-        }
-
-        const currentHeight = dragStartY.current - gestureState.dy;
-        const threshold = cHeight + (mHeight - cHeight) * 0.3;
-        
-        isAnimating.current = true;
-        if (gestureState.vy < -0.3 || currentHeight > threshold) {
-          setIsExpanded(true);
-          Animated.spring(animatedHeight, {
-            toValue: mHeight,
-            useNativeDriver: false,
-            tension: 45,
-            friction: 8,
-          }).start(() => {
-            isAnimating.current = false;
-          });
-        } else {
-          setIsExpanded(false);
-          Animated.spring(animatedHeight, {
-            toValue: cHeight,
-            useNativeDriver: false,
-            tension: 45,
-            friction: 8,
-          }).start(() => {
-            isAnimating.current = false;
-          });
-        }
-      },
-    })
-  ).current;
-
-  const handleComposerLayout = useCallback((event) => {
-    const height = event.nativeEvent.layout.height;
-    if (!isExpanded && !isDragging && !isAnimating.current) {
-      if (height > 0) {
-        setCollapsedHeight(height);
-        animatedHeight.setValue(height);
-      }
-    }
-  }, [isExpanded, isDragging]);
-
-  // Removed custom keyboard listeners in favor of react-native-reanimated useAnimatedKeyboard
-
-  // Keep composer size in sync with visible height adjustments when keyboard state changes
-  useEffect(() => {
-    if (isExpanded && !isDragging && !isAnimating.current) {
-      Animated.spring(animatedHeight, {
-        toValue: maxExpandedHeight,
-        useNativeDriver: false,
-        tension: 40,
-        friction: 7,
-      }).start();
-    }
-  }, [maxExpandedHeight, isExpanded]);
-
-  // useAnimatedKeyboard spacer used instead of bottomPadding
+  // Auto-expand only — grow with content up to a large share of visible screen
+  const visibleHeight =
+    screenHeight - insets.top - (Platform.OS === 'ios' ? 44 : 56) - imeInset;
+  const maxComposerHeight = Math.max(
+    verticalScale(120),
+    Math.floor(visibleHeight * (isTablet ? 0.55 : 0.5)),
+  );
 
   const activeWorkspaceId =
     workspaceId || useWorkspaceStore.getState().activeWorkspaceId;
@@ -377,48 +209,49 @@ const MessageComposer = React.memo(function MessageComposer({
   // ─── Draft restore on channel change ─────────────────────────────────────
   useEffect(() => {
     if (editingMessage) {
-      onChangeText(editingMessage.content || "");
+      const html =
+        editingMessage.htmlContent ||
+        (editingMessage.content ? markdownToHtml(editingMessage.content) : '');
+      latestContentRef.current = {
+        html,
+        text: editingMessage.content || stripHtml(html),
+      };
+      onChangeText(html);
+      editorRef.current?.setContent(html);
       return;
     }
 
     const draft = getDraft(channelId, activeWorkspaceId, null);
-    if (draft?.text) {
-      onChangeText(draft.text);
+    if (draft?.html || draft?.text) {
+      const html = draft.html || markdownToHtml(draft.text || '');
+      latestContentRef.current = { html, text: draft.text || stripHtml(html) };
+      onChangeText(html);
+      editorRef.current?.setContent(html);
     } else {
-      onChangeText("");
+      latestContentRef.current = { html: '', text: '' };
+      onChangeText('');
+      editorRef.current?.clear();
     }
-  }, [channelId, editingMessage]);
+  }, [channelId, editingMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Draft auto-save (800ms debounce) ──────────────────────────────────────
   useEffect(() => {
-    if (editingMessage) return; // Don't auto-save while editing
+    if (editingMessage) return;
 
     if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
 
-    const signature = text.trim();
+    const { html, text: plain } = latestContentRef.current;
+    const signature = (html || '').trim();
     if (signature === lastSavedRef.current) return;
 
     draftTimerRef.current = setTimeout(() => {
-      const rawHtml = text;
-      const plainContent = rawHtml
-        .replace(/<[^>]*>?/gm, "")
-        .replace(/&nbsp;/g, " ")
-        .trim();
-
+      const plainContent = (plain || stripHtml(html)).trim();
       if (plainContent) {
-        setDraft(
-          channelId,
-          rawHtml.includes("<")
-            ? pellToTipTap(rawHtml)
-            : markdownToHtml(rawHtml),
-          plainContent,
-          activeWorkspaceId,
-          null,
-        );
-        lastSavedRef.current = plainContent;
+        setDraft(channelId, html || markdownToHtml(plainContent), plainContent, activeWorkspaceId, null);
+        lastSavedRef.current = signature;
       } else {
         clearDraft(channelId, activeWorkspaceId, null);
-        lastSavedRef.current = "";
+        lastSavedRef.current = '';
       }
     }, 800);
 
@@ -427,84 +260,117 @@ const MessageComposer = React.memo(function MessageComposer({
     };
   }, [text, channelId, editingMessage, activeWorkspaceId]);
 
-  // ─── Typing indicators ─────────────────────────────────────────────────────
-  const handleTextChange = useCallback(
-    (val) => {
-      onChangeText(val);
-      emitTyping(channelId, val.length > 0);
-
-      // Strip HTML to get raw text cursor context
-      const plainContent = val
-        .replace(/<[^>]*>?/gm, "")
-        .replace(/&nbsp;/g, " ");
-
-      // Detect @mention trigger
-      const match = plainContent.match(/@([^\s@]*)$/);
-      if (match) {
-        setMentionQuery(match[1]);
-        // For HTML, accurate range is hard. We can just append the mention string at the end.
-        setMentionRangeStart(val.length - 1);
-        setMentionVisible(true);
-      } else {
-        setMentionVisible(false);
-      }
+  const handleEditorUpdate = useCallback(
+    ({ html, text: plain, isEmpty }) => {
+      latestContentRef.current = { html: html || '', text: plain || '' };
+      onChangeText(html || '');
+      emitTyping(channelId, !isEmpty);
     },
     [channelId, onChangeText],
   );
 
-  // ─── Mention select ───────────────────────────────────────────────────────
+  const handleEditorSelection = useCallback((state) => {
+    setFormatState((prev) => {
+      const keys = [
+        'bold',
+        'italic',
+        'underline',
+        'strike',
+        'code',
+        'codeBlock',
+        'blockquote',
+        'bulletList',
+        'orderedList',
+      ];
+      const same = keys.every((k) => prev[k] === state[k]);
+      return same ? prev : { ...prev, ...state };
+    });
+  }, []);
+
+  const handleEditorCommand = useCallback((command, value = null) => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    switch (command) {
+      case 'toggleBold':
+        ed.toggleBold();
+        break;
+      case 'toggleItalic':
+        ed.toggleItalic();
+        break;
+      case 'toggleUnderline':
+        ed.toggleUnderline();
+        break;
+      case 'toggleStrike':
+        ed.toggleStrike();
+        break;
+      case 'toggleBulletList':
+        ed.toggleBulletList();
+        break;
+      case 'toggleOrderedList':
+        ed.toggleOrderedList();
+        break;
+      case 'toggleBlockquote':
+        ed.toggleBlockquote();
+        break;
+      case 'toggleCode':
+        ed.toggleCode();
+        break;
+      case 'toggleCodeBlock':
+        ed.toggleCodeBlock();
+        break;
+      case 'setLink':
+        ed.setLink(value);
+        break;
+      default:
+        break;
+    }
+  }, []);
+
   const handleMentionSelect = useCallback(
     (member) => {
-      const plainText = text;
-      const mentionText = `@${member.name} `;
-      const newText = plainText.replace(/@([^\s@]*)(?!.*@)/, mentionText);
-
-      onChangeText(newText);
-
+      editorRef.current?.insertMention({
+        id: member._id,
+        label: member.name || member.username,
+      });
       setPendingMentions((prev) => [
         ...prev,
-        { userId: member._id, username: member.name, type: "user" },
+        { userId: member._id, username: member.name || member.username, type: 'user' },
       ]);
       setMentionVisible(false);
-      setMentionRangeStart(-1);
+      setMentionQuery('');
     },
-    [text, mentionRangeStart, onChangeText],
+    [],
   );
 
-  useEffect(() => {
-    if (text === "") {
-      // Handled by TextInput value prop natively
-    }
-  }, [text]);
-
-  useEffect(() => {
-    if (editingMessage) {
-      // Handled by TextInput value prop natively
-    }
-  }, [editingMessage]);
-
+  const handleEmojiSelect = useCallback(
+    (emoji) => {
+      editorRef.current?.insertEmoji(emoji);
+      setShowEmojiPicker(false);
+    },
+    [],
+  );
   // ─── Send ──────────────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
-    const rawHtml = text;
-    // Strip simple HTML tags for plain text fallback
-    const plainContent = rawHtml
-      .replace(/<[^>]*>?/gm, "")
-      .replace(/&nbsp;/g, " ")
-      .trim();
+    const fromEditor = editorRef.current?.getContent?.() || latestContentRef.current;
+    let htmlContent = (fromEditor.html || text || '').trim();
+    let plainContent = (fromEditor.text || stripHtml(htmlContent)).trim();
+
+    if (htmlContent && !/<[a-z][\s\S]*>/i.test(htmlContent)) {
+      plainContent = htmlContent.trim();
+      htmlContent = markdownToHtml(plainContent);
+    }
 
     if (!plainContent && pendingFiles.length === 0) return;
 
-    // Filter to only successfully uploaded files
     const uploadedFiles = pendingFiles.filter((f) => f._id);
     if (
       pendingFiles.length > 0 &&
       uploadedFiles.length === 0 &&
       pendingFiles.some((f) => f.uploading)
     ) {
-      return; // Still uploading, prevent send
+      return;
     }
 
-    const htmlContent = markdownToHtml(rawHtml);
     const mentionPayload =
       pendingMentions.length > 0 ? pendingMentions : undefined;
 
@@ -521,20 +387,21 @@ const MessageComposer = React.memo(function MessageComposer({
     }));
 
     onSend(plainContent, {
-      htmlContent,
+      htmlContent: htmlContent || undefined,
       threadId: replyingTo?._id || null,
       fileReferences: uploadedFiles.map((f) => f._id),
       attachments: attachmentObjects,
       mentions: mentionPayload,
     });
 
-    onChangeText("");
+    latestContentRef.current = { html: '', text: '' };
+    editorRef.current?.clear();
+    onChangeText('');
     setPendingFiles([]);
     setPendingMentions([]);
     clearDraft(channelId, activeWorkspaceId, null);
-    lastSavedRef.current = "";
+    lastSavedRef.current = '';
     emitTyping(channelId, false);
-    collapseComposer();
   }, [
     text,
     onSend,
@@ -545,34 +412,36 @@ const MessageComposer = React.memo(function MessageComposer({
     activeWorkspaceId,
     clearDraft,
     onChangeText,
-    collapseComposer,
   ]);
 
   // ─── Schedule send ─────────────────────────────────────────────────────────
   const handleScheduleSend = useCallback(
     (scheduledAt) => {
-      const rawHtml = text;
-      const plainContent = rawHtml
-        .replace(/<[^>]*>?/gm, "")
-        .replace(/&nbsp;/g, " ")
-        .trim();
+      const fromEditor = editorRef.current?.getContent?.() || latestContentRef.current;
+      let htmlContent = (fromEditor.html || text || '').trim();
+      let plainContent = (fromEditor.text || stripHtml(htmlContent)).trim();
+
+      if (htmlContent && !/<[a-z][\s\S]*>/i.test(htmlContent)) {
+        plainContent = htmlContent.trim();
+        htmlContent = markdownToHtml(plainContent);
+      }
 
       if (!scheduledAt || (!plainContent && pendingFiles.length === 0)) return;
 
-      const htmlContent = markdownToHtml(rawHtml);
       onSend(plainContent, {
-        htmlContent,
+        htmlContent: htmlContent || undefined,
         scheduledAt,
         fileReferences: pendingFiles.filter((f) => f._id).map((f) => f._id),
       });
 
-      onChangeText("");
+      latestContentRef.current = { html: '', text: '' };
+      editorRef.current?.clear();
+      onChangeText('');
       setPendingFiles([]);
       setPendingMentions([]);
       clearDraft(channelId, activeWorkspaceId, null);
-      lastSavedRef.current = "";
+      lastSavedRef.current = '';
       setShowScheduleModal(false);
-      collapseComposer();
     },
     [
       text,
@@ -582,14 +451,7 @@ const MessageComposer = React.memo(function MessageComposer({
       activeWorkspaceId,
       clearDraft,
       onChangeText,
-      collapseComposer,
-    ]);
-  // ─── Emoji select ─────────────────────────────────────────────────────────
-  const handleEmojiSelect = useCallback(
-    (emoji) => {
-      onChangeText(text + emoji);
-    },
-    [text, onChangeText],
+    ],
   );
 
   // ─── File attachment — pick and upload to server ──────────────────────────
@@ -895,43 +757,6 @@ const MessageComposer = React.memo(function MessageComposer({
         colors={colors}
       />
 
-      {/* Formatting Toolbar */}
-      {showToolbar && (
-        <FormattingToolbar
-          colors={colors}
-          onInsertMention={() => {
-            const newText = text + "@";
-            onChangeText(newText);
-            setMentionRangeStart(newText.length - 1);
-            setMentionQuery("");
-            setMentionVisible(true);
-          }}
-          onFormat={(format) => {
-            if (!richText.current) return;
-            let pre = "";
-            let post = "";
-            switch (format) {
-              case "bold": pre = "**"; post = "**"; break;
-              case "italic": pre = "*"; post = "*"; break;
-              case "underline": pre = "__"; post = "__"; break;
-              case "strikethrough": pre = "~~"; post = "~~"; break;
-              case "unorderedList": pre = "\n- "; break;
-              case "orderedList": pre = "\n1. "; break;
-              case "blockquote": pre = "\n> "; break;
-              case "code": pre = "`"; post = "`"; break;
-              case "codeBlock": pre = "\n```\n"; post = "\n```\n"; break;
-              case "link": pre = "["; post = "](url)"; break;
-            }
-            if (pre || post) {
-              const before = text.substring(0, selStart);
-              const selected = text.substring(selStart, selEnd);
-              const after = text.substring(selEnd);
-              onChangeText(before + pre + selected + post + after);
-            }
-          }}
-        />
-      )}
-
       {/* Pending files preview */}
       {pendingFiles.length > 0 && (
         <View style={styles.pendingFilesRow}>
@@ -977,212 +802,181 @@ const MessageComposer = React.memo(function MessageComposer({
       )}
 
       {/* Input bar */}
-      <Animated.View
-        onLayout={handleComposerLayout}
+      <View
         style={[
           styles.inputBar,
-          {
-            backgroundColor: colors.background,
-            paddingBottom: 0,
-          },
-          (isExpanded || isDragging) ? { height: animatedHeight } : null,
+          { backgroundColor: colors.background, paddingBottom: 0 },
         ]}
       >
-        {/* Top Drag Handle */}
-        <TouchableOpacity
-          {...panResponder.panHandlers}
-          onPress={toggleExpand}
-          activeOpacity={0.8}
-          style={styles.dragHandleContainer}
-        >
-          <View style={[styles.dragHandle, { backgroundColor: colors.border }]} />
-        </TouchableOpacity>
-
         <View
           style={[
             styles.inputContainer,
-            (isExpanded || isDragging) ? styles.inputContainerExpanded : { alignItems: "flex-end" },
+            showToolbar && styles.inputContainerWithToolbar,
             {
               borderColor: colors.border,
               backgroundColor: colors.inputBackground,
             },
           ]}
         >
-          <>
-              {/* Left Buttons (only when collapsed) */}
-              {!(isExpanded || isDragging) && (
-                <>
-                  <TouchableOpacity style={[styles.iconButton, { marginBottom: verticalScale(4) }]} onPress={handleAttach}>
-                    <Plus size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
+          {showToolbar && (
+            <FormattingToolbar
+              colors={colors}
+              formatState={formatState}
+              onCommand={handleEditorCommand}
+              onInsertMention={() => {
+                editorRef.current?.insertText('@');
+                setMentionQuery('');
+                setMentionVisible(true);
+              }}
+              onLink={() => {
+                setLinkUrl('https://');
+                setLinkModalVisible(true);
+              }}
+            />
+          )}
 
-                  <TouchableOpacity
-                    style={[styles.iconButton, { marginBottom: verticalScale(4) }]}
-                    onPress={() => setShowToolbar((v) => !v)}
-                  >
-                    <CaseSensitive
-                      size={18}
-                      color={showToolbar ? colors.primary : colors.textSecondary}
-                    />
-                  </TouchableOpacity>
+          <View style={styles.composerRow}>
+            <View style={styles.sideButtons}>
+              <TouchableOpacity style={styles.iconButton} onPress={handleAttach}>
+                <Plus size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[styles.iconButton, { marginBottom: verticalScale(4) }]}
-                    onPress={toggleExpand}
-                  >
-                    <Maximize2
-                      size={17}
-                      color={colors.textSecondary}
-                    />
-                  </TouchableOpacity>
-                </>
-              )}
-
-              {/* Editor wrapper - now uses native TextInput for synchronous auto-expansion */}
               <TouchableOpacity
-                activeOpacity={1}
-                onPress={() => richText.current?.focus()}
-                key="editor-wrapper"
-                style={(isExpanded || isDragging) ? { flex: 1, width: '100%', minHeight: 140 } : { flex: 1 }}
+                style={styles.iconButton}
+                onPress={() => setShowToolbar((v) => !v)}
               >
-                <TextInput
-                  ref={richText}
-                  style={[
-                    styles.input,
-                    { color: colors.inputText },
-                    (isExpanded || isDragging) ? { maxHeight: '100%', textAlignVertical: 'top' } : { maxHeight: maxComposerHeight }
-                  ]}
-                  multiline={true}
-                  placeholder={(isExpanded || isDragging) ? "Jot something down" : (editingMessage ? "Edit message..." : "Message...")}
-                  placeholderTextColor={colors.inputPlaceholder}
-                  value={text}
-                  onChangeText={handleTextChange}
-                  onSelectionChange={(e) => {
-                    setSelStart(e.nativeEvent.selection.start);
-                    setSelEnd(e.nativeEvent.selection.end);
-                  }}
-                  scrollEnabled={true}
-                  keyboardAppearance={colors.background === '#000000' || colors.background === '#1A1D21' ? 'dark' : 'light'}
+                <CaseSensitive
+                  size={18}
+                  color={showToolbar ? colors.primary : colors.textSecondary}
                 />
               </TouchableOpacity>
 
-              {/* Right Buttons (only when collapsed) */}
-              {!(isExpanded || isDragging) && (
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() => setShowEmojiPicker(true)}
+              >
+                <Smile size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View key="editor-wrapper" style={styles.editorSlot}>
+              <ChatRichTextEditor
+                ref={editorRef}
+                placeholder={editingMessage ? 'Edit message...' : 'Message...'}
+                colors={colors}
+                initialHtml={typeof text === 'string' && text.includes('<') ? text : ''}
+                onUpdate={handleEditorUpdate}
+                onSelectionChange={handleEditorSelection}
+                onMentionQuery={(q) => {
+                  setMentionQuery(q);
+                  setMentionVisible(true);
+                }}
+                onMentionClose={() => setMentionVisible(false)}
+                minHeight={verticalScale(40)}
+                maxHeight={maxComposerHeight}
+              />
+            </View>
+
+            <View style={styles.sideButtons}>
+              {stripHtml(text).trim() || pendingFiles.length > 0 ? (
                 <>
-                  {stripHtml(text) || pendingFiles.length > 0 ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(4) }}>
-                      <TouchableOpacity
-                        style={styles.iconButton}
-                        onPress={() => setShowScheduleModal(true)}
-                      >
-                        <Clock size={20} color={colors.textSecondary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.sendButton}
-                        onPress={handleSend}
-                        onLongPress={() => setShowScheduleModal(true)}
-                        delayLongPress={500}
-                      >
-                        <Text
-                          style={{
-                            color: colors.primary,
-                            fontWeight: "bold",
-                            fontSize: moderateScale(15),
-                          }}
-                        >
-                          Send
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <>
-                      <TouchableOpacity style={[styles.iconButton, { marginBottom: verticalScale(4) }]} onPress={() => setShowVideoModal(true)}>
-                        <CameraIcon size={20} color={colors.textSecondary} />
-                      </TouchableOpacity>
-                      <AudioRecorderUI
-                        isRecording={audioRecorder.isRecording}
-                        isPaused={audioRecorder.isPaused}
-                        recordingDuration={audioRecorder.recordingDuration}
-                        onStart={audioRecorder.startRecording}
-                        onPause={audioRecorder.pauseRecording}
-                        onResume={audioRecorder.resumeRecording}
-                        onStop={audioRecorder.stopRecording}
-                        onCancel={audioRecorder.cancelRecording}
-                        onSend={async (data) => {
-                          let finalData = data;
-                          if (!finalData && audioRecorder.recordingUri) {
-                            finalData = { uri: audioRecorder.recordingUri, duration: audioRecorder.recordingDuration };
-                          }
-                          if (finalData) {
-                            await handleMediaSend(finalData.uri, 'audio', finalData.duration);
-                            audioRecorder.cancelRecording();
-                          }
-                        }}
-                        colors={colors}
-                      />
-                    </>
-                  )}
+                  <TouchableOpacity
+                    style={styles.iconButton}
+                    onPress={() => setShowScheduleModal(true)}
+                  >
+                    <Clock size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.sendButton}
+                    onPress={handleSend}
+                    onLongPress={() => setShowScheduleModal(true)}
+                    delayLongPress={500}
+                  >
+                    <Text
+                      style={{
+                        color: colors.primary,
+                        fontWeight: 'bold',
+                        fontSize: moderateScale(15),
+                      }}
+                    >
+                      Send
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity style={styles.iconButton} onPress={() => setShowVideoModal(true)}>
+                    <CameraIcon size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  <AudioRecorderUI
+                    isRecording={audioRecorder.isRecording}
+                    isPaused={audioRecorder.isPaused}
+                    recordingDuration={audioRecorder.recordingDuration}
+                    onStart={audioRecorder.startRecording}
+                    onPause={audioRecorder.pauseRecording}
+                    onResume={audioRecorder.resumeRecording}
+                    onStop={audioRecorder.stopRecording}
+                    onCancel={audioRecorder.cancelRecording}
+                    onSend={async (data) => {
+                      let finalData = data;
+                      if (!finalData && audioRecorder.recordingUri) {
+                        finalData = { uri: audioRecorder.recordingUri, duration: audioRecorder.recordingDuration };
+                      }
+                      if (finalData) {
+                        await handleMediaSend(finalData.uri, 'audio', finalData.duration);
+                        audioRecorder.cancelRecording();
+                      }
+                    }}
+                    colors={colors}
+                  />
                 </>
               )}
-
-              {/* Bottom Toolbar Row (only when expanded) */}
-              {(isExpanded || isDragging) && (
-                <>
-                  <View style={[styles.toolbarDivider, { backgroundColor: colors.border }]} />
-                  <View style={styles.expandedToolbar}>
-                    <View style={styles.expandedToolbarLeft}>
-                      <TouchableOpacity style={styles.iconButton} onPress={handleAttach}>
-                        <Plus size={20} color={colors.textSecondary} />
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.iconButton}
-                        onPress={() => setShowToolbar((v) => !v)}
-                      >
-                        <CaseSensitive
-                          size={18}
-                          color={showToolbar ? colors.primary : colors.textSecondary}
-                        />
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.iconButton}
-                        onPress={() => setShowEmojiPicker(true)}
-                      >
-                        <Smile size={20} color={colors.textSecondary} />
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.iconButton}
-                        onPress={() => {
-                          const newText = text + "@";
-                          onChangeText(newText);
-                          setMentionRangeStart(newText.length - 1);
-                          setMentionQuery("");
-                          setMentionVisible(true);
-                        }}
-                      >
-                        <AtSign size={20} color={colors.textSecondary} />
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.iconButton}
-                        onPress={toggleExpand}
-                      >
-                        <ChevronDown size={20} color={colors.textSecondary} />
-                      </TouchableOpacity>
-                    </View>
-
-                    <TouchableOpacity style={styles.iconButton} onPress={handleSend}>
-                      <Send size={20} color={colors.primary} />
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
-            </>
+            </View>
+          </View>
         </View>
-      </Animated.View>
+      </View>
 
+
+      {/* Link URL prompt */}
+      {linkModalVisible && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24, zIndex: 50 }]}>
+          <View style={{ backgroundColor: colors.card || colors.background, borderRadius: 12, padding: 16, gap: 12 }}>
+            <Text style={{ color: colors.textPrimary, fontWeight: '600', fontSize: 16 }}>Add link</Text>
+            <TextInput
+              value={linkUrl}
+              onChangeText={setLinkUrl}
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              placeholder="https://"
+              placeholderTextColor={colors.inputPlaceholder}
+              style={{
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 8,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                color: colors.inputText || colors.textPrimary,
+              }}
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
+              <TouchableOpacity onPress={() => setLinkModalVisible(false)}>
+                <Text style={{ color: colors.textSecondary }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  const url = (linkUrl || '').trim();
+                  if (url) handleEditorCommand('setLink', url);
+                  setLinkModalVisible(false);
+                }}
+              >
+                <Text style={{ color: colors.primary, fontWeight: '600' }}>Add</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
 
       <VideoRecorderModal
         visible={showVideoModal}
@@ -1331,45 +1125,37 @@ const createStyles = (colors, insets) =>
       paddingBottom: moderateScale(6),
     },
     inputContainer: {
-      flexDirection: "row",
+      flexDirection: 'row',
+      alignItems: 'flex-end',
       borderRadius: moderateScale(24),
       borderWidth: 1,
       paddingHorizontal: moderateScale(4),
       minHeight: moderateScale(48),
+      overflow: 'hidden',
     },
-    dragHandleContainer: {
-      alignItems: "center",
-      paddingVertical: moderateScale(6),
-      width: "100%",
+    inputContainerWithToolbar: {
+      flexDirection: 'column',
+      alignItems: 'stretch',
+      minHeight: undefined,
     },
-    dragHandle: {
-      width: moderateScale(36),
-      height: moderateScale(5),
-      borderRadius: moderateScale(3),
+    composerRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      width: '100%',
+      minHeight: moderateScale(48),
     },
-    inputContainerExpanded: {
+    sideButtons: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexShrink: 0,
+      paddingBottom: verticalScale(2),
+    },
+    editorSlot: {
       flex: 1,
-      flexDirection: "column",
-      alignItems: "stretch",
-      borderRadius: moderateScale(16),
-      padding: moderateScale(8),
-    },
-    toolbarDivider: {
-      height: 1,
-      width: "100%",
-      marginVertical: moderateScale(8),
-    },
-    expandedToolbar: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingHorizontal: moderateScale(4),
-      width: "100%",
-    },
-    expandedToolbarLeft: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: moderateScale(10),
+      minWidth: 0,
+      minHeight: verticalScale(40),
+      justifyContent: 'center',
+      backgroundColor: 'transparent',
     },
     iconButton: {
       padding: moderateScale(8),

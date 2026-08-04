@@ -1,28 +1,14 @@
 /**
- * FormattingToolbar — horizontal scrollable bar with markdown formatting buttons.
- * Mirrors the web app's FormattingToolbar but applies markdown syntax that is
- * converted to HTML by the MessageComposer's markdownToHtml() before sending.
- *
- * Buttons: Bold, Italic, Underline, Strikethrough, Bullet List, Numbered List,
- *          Blockquote, Inline Code, Code Block, Link, Mention (@)
- *
- * Props:
- *   text            – current input text
- *   onChangeText    – (text) => void
- *   colors          – theme colors
- *   onInsertMention – () => void (triggers @mention flow in composer)
+ * FormattingToolbar — TipTap command toolbar for the mobile composer.
+ * Mirrors web FormattingToolbar: toggles TipTap marks via onCommand,
+ * never inserts Markdown syntax.
  */
-import React, { useCallback } from 'react';
-import { scale, verticalScale, moderateScale } from '../utils/responsive';
-
+import React, { memo } from 'react';
 import {
   View,
-  Text,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
-  Linking,
 } from 'react-native';
 import {
   Bold,
@@ -37,111 +23,136 @@ import {
   Link2,
   AtSign,
 } from 'lucide-react-native';
+import { scale, moderateScale } from '../utils/responsive';
 
-/**
- * Wrap the selected portion of text with prefix/suffix markers.
- * If no selection info, wrap the entire text (or append markers at end).
- */
-const wrapSelection = (text, prefix, suffix, selectionStart, selectionEnd) => {
-  if (selectionStart != null && selectionEnd != null && selectionEnd > selectionStart) {
-    const before = text.slice(0, selectionStart);
-    const selected = text.slice(selectionStart, selectionEnd);
-    const after = text.slice(selectionEnd);
-    return `${before}${prefix}${selected}${suffix}${after}`;
-  }
-  
-  // If no selection, but they have typed something, let's wrap the LAST WORD they typed
-  if (text && text.trim().length > 0 && !text.endsWith(' ')) {
-    const match = text.match(/(\S+)(\s*)$/);
-    if (match) {
-      const word = match[1];
-      const trailingSpace = match[2];
-      const before = text.slice(0, match.index);
-      return `${before}${prefix}${word}${suffix}${trailingSpace}`;
-    }
-  }
-
-  // No selection and no preceding word: just append the format tags
-  const space = text && !text.endsWith(' ') ? ' ' : '';
-  return `${text}${space}${prefix}${suffix}`;
-};
-
-const FormattingToolbar = React.memo(function FormattingToolbar({
+const FormattingToolbar = memo(function FormattingToolbar({
   colors,
+  formatState = {},
+  onCommand,
   onInsertMention,
-  onFormat,
+  onLink,
 }) {
-  const btnStyle = [styles.button, { borderColor: colors.border }];
+  const fire = (command, value = null) => {
+    onCommand?.(command, value);
+  };
+
+  const btn = (active) => [
+    styles.button,
+    {
+      borderColor: colors.border,
+      backgroundColor: active ? colors.primary : 'transparent',
+    },
+  ];
+  const iconColor = (active) =>
+    active ? colors.textOnPrimary || '#fff' : colors.textSecondary;
 
   return (
-    <View style={[styles.container, { borderTopColor: colors.border, borderBottomColor: colors.border, backgroundColor: colors.background }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          borderBottomColor: colors.border,
+          backgroundColor: colors.inputBackground || colors.background,
+        },
+      ]}
+    >
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
       >
-        {/* Bold */}
-        <TouchableOpacity style={btnStyle} onPress={() => onFormat('bold')} activeOpacity={0.7}>
-          <Bold size={16} color={colors.textSecondary} />
+        <TouchableOpacity
+          style={btn(formatState.bold)}
+          onPress={() => fire('toggleBold')}
+          activeOpacity={0.7}
+        >
+          <Bold size={16} color={iconColor(formatState.bold)} />
         </TouchableOpacity>
 
-        {/* Italic */}
-        <TouchableOpacity style={btnStyle} onPress={() => onFormat('italic')} activeOpacity={0.7}>
-          <Italic size={16} color={colors.textSecondary} />
+        <TouchableOpacity
+          style={btn(formatState.italic)}
+          onPress={() => fire('toggleItalic')}
+          activeOpacity={0.7}
+        >
+          <Italic size={16} color={iconColor(formatState.italic)} />
         </TouchableOpacity>
 
-        {/* Underline */}
-        <TouchableOpacity style={btnStyle} onPress={() => onFormat('underline')} activeOpacity={0.7}>
-          <Underline size={16} color={colors.textSecondary} />
+        <TouchableOpacity
+          style={btn(formatState.underline)}
+          onPress={() => fire('toggleUnderline')}
+          activeOpacity={0.7}
+        >
+          <Underline size={16} color={iconColor(formatState.underline)} />
         </TouchableOpacity>
 
-        {/* Strikethrough */}
-        <TouchableOpacity style={btnStyle} onPress={() => onFormat('strikethrough')} activeOpacity={0.7}>
-          <Strikethrough size={16} color={colors.textSecondary} />
+        <TouchableOpacity
+          style={btn(formatState.strike)}
+          onPress={() => fire('toggleStrike')}
+          activeOpacity={0.7}
+        >
+          <Strikethrough size={16} color={iconColor(formatState.strike)} />
         </TouchableOpacity>
 
-        {/* Divider */}
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-        {/* Bullet List */}
-        <TouchableOpacity style={btnStyle} onPress={() => onFormat('unorderedList')} activeOpacity={0.7}>
-          <List size={16} color={colors.textSecondary} />
+        <TouchableOpacity
+          style={btn(formatState.bulletList)}
+          onPress={() => fire('toggleBulletList')}
+          activeOpacity={0.7}
+        >
+          <List size={16} color={iconColor(formatState.bulletList)} />
         </TouchableOpacity>
 
-        {/* Numbered List */}
-        <TouchableOpacity style={btnStyle} onPress={() => onFormat('orderedList')} activeOpacity={0.7}>
-          <ListOrdered size={16} color={colors.textSecondary} />
+        <TouchableOpacity
+          style={btn(formatState.orderedList)}
+          onPress={() => fire('toggleOrderedList')}
+          activeOpacity={0.7}
+        >
+          <ListOrdered size={16} color={iconColor(formatState.orderedList)} />
         </TouchableOpacity>
 
-        {/* Blockquote */}
-        <TouchableOpacity style={btnStyle} onPress={() => onFormat('blockquote')} activeOpacity={0.7}>
-          <Quote size={16} color={colors.textSecondary} />
+        <TouchableOpacity
+          style={btn(formatState.blockquote)}
+          onPress={() => fire('toggleBlockquote')}
+          activeOpacity={0.7}
+        >
+          <Quote size={16} color={iconColor(formatState.blockquote)} />
         </TouchableOpacity>
 
-        {/* Divider */}
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-        {/* Inline Code */}
-        <TouchableOpacity style={btnStyle} onPress={() => onFormat('code')} activeOpacity={0.7}>
-          <Code size={16} color={colors.textSecondary} />
+        <TouchableOpacity
+          style={btn(formatState.code)}
+          onPress={() => fire('toggleCode')}
+          activeOpacity={0.7}
+        >
+          <Code size={16} color={iconColor(formatState.code)} />
         </TouchableOpacity>
 
-        {/* Code Block */}
-        <TouchableOpacity style={btnStyle} onPress={() => onFormat('codeBlock')} activeOpacity={0.7}>
-          <FileCode size={16} color={colors.textSecondary} />
+        <TouchableOpacity
+          style={btn(formatState.codeBlock)}
+          onPress={() => fire('toggleCodeBlock')}
+          activeOpacity={0.7}
+        >
+          <FileCode size={16} color={iconColor(formatState.codeBlock)} />
         </TouchableOpacity>
 
-        {/* Divider */}
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-        {/* Link */}
-        <TouchableOpacity style={btnStyle} onPress={() => onFormat('link')} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={btn(false)}
+          onPress={() => (onLink ? onLink() : fire('setLink', 'https://'))}
+          activeOpacity={0.7}
+        >
           <Link2 size={16} color={colors.textSecondary} />
         </TouchableOpacity>
 
-        {/* Mention */}
-        <TouchableOpacity style={btnStyle} onPress={onInsertMention} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={btn(false)}
+          onPress={onInsertMention}
+          activeOpacity={0.7}
+        >
           <AtSign size={16} color={colors.primary || colors.textSecondary} />
         </TouchableOpacity>
       </ScrollView>
@@ -151,12 +162,13 @@ const FormattingToolbar = React.memo(function FormattingToolbar({
 
 const styles = StyleSheet.create({
   container: {
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    paddingVertical: moderateScale(8),
+    width: '100%',
+    flexShrink: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: moderateScale(4),
   },
   scrollContent: {
-    paddingHorizontal: moderateScale(16),
+    paddingHorizontal: moderateScale(12),
     gap: 8,
     alignItems: 'center',
   },
@@ -164,12 +176,15 @@ const styles = StyleSheet.create({
     padding: moderateScale(8),
     borderRadius: moderateScale(8),
     borderWidth: 1,
+    width: scale(36),
+    height: scale(36),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   divider: {
     width: moderateScale(1),
     height: moderateScale(24),
-    backgroundColor: '#e5e7eb',
-    marginHorizontal: moderateScale(6),
+    marginHorizontal: moderateScale(4),
     opacity: 0.7,
   },
 });

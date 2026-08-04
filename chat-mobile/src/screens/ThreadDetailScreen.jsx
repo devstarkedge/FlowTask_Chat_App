@@ -8,6 +8,7 @@ import {
   FlatList,
   TouchableOpacity,
   Alert,
+  Platform,
 } from 'react-native';
 import KeyboardAwareContainer from '../components/common/KeyboardAwareContainer';
 import * as Clipboard from 'expo-clipboard';
@@ -207,7 +208,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
   const effectiveRootAttachments = getAttachments(effectiveRoot);
 
   return (
-    <ScreenLayout>
+    <ScreenLayout edges={Platform.OS === 'ios' ? ['top', 'bottom'] : ['top', 'left', 'right']}>
       <View
         style={[styles.header, { borderBottomColor: colors.border }]}
         onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
@@ -222,7 +223,10 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         <View style={styles.headerRight} />
       </View>
 
-      <KeyboardAwareContainer disablePadding={false}>
+      <KeyboardAwareContainer
+        disablePadding={false}
+        bottomSafeContext={Platform.OS === 'ios'}
+      >
         <FlatList
           ref={flatListRef}
           onScrollToIndexFailed={(info) => {

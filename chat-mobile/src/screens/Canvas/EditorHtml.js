@@ -28,22 +28,31 @@ export const EDITOR_HTML = `
 
     * { box-sizing: border-box; }
 
-    body {
+    html, body {
+      height: 100%;
       margin: 0;
+    }
+
+    body {
       padding: 16px;
+      padding-bottom: 16px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background-color: var(--bg-color);
       color: var(--text-color);
-      transition: background-color 0.2s, color 0.2s;
-      min-height: 100vh;
+      transition: background-color 0.2s, color 0.2s, padding-bottom 0.05s linear;
+      min-height: 100%;
       -webkit-tap-highlight-color: transparent;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     .ProseMirror {
       outline: none;
-      min-height: 200px;
+      min-height: 120px;
       font-size: 16px;
       line-height: 1.6;
+      /* Extra space so caret isn't hidden under the native format toolbar */
+      padding-bottom: 8px;
     }
 
     .ProseMirror p { margin-top: 0; margin-bottom: 8px; }
@@ -475,7 +484,7 @@ img.ProseMirror-separator {
         element: document.querySelector('#editor'),
         extensions: [
           StarterKit.configure({ history: true }),
-          Placeholder.configure({ placeholder: 'Type something or "/" for commands...' }),
+          Placeholder.configure({ placeholder: window.EDITOR_PLACEHOLDER || 'Type something or "/" for commands...' }),
           Underline,
           Highlight.configure({ multicolor: true }),
           Link.configure({ openOnClick: false, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' } }),
@@ -533,6 +542,7 @@ img.ProseMirror-separator {
             underline: e.isActive('underline'),
             strike: e.isActive('strike'),
             code: e.isActive('code'),
+            codeBlock: e.isActive('codeBlock'),
             blockquote: e.isActive('blockquote'),
             bulletList: e.isActive('bulletList'),
             orderedList: e.isActive('orderedList'),
@@ -552,6 +562,11 @@ img.ProseMirror-separator {
         windowHeight: window.innerHeight,
         userAgent: navigator.userAgent
       });
+      
+      const observer = new ResizeObserver(() => {
+        sendToRN('height', { height: document.documentElement.scrollHeight });
+      });
+      observer.observe(document.body);
     } catch(e) {
       sendToRN('error', { message: 'Editor init failed: ' + e.message, stack: e.stack });
     }
@@ -606,6 +621,46 @@ img.ProseMirror-separator {
           if (insertMentionCommand && value) {
             insertMentionCommand(value);
             insertMentionCommand = null;
+          } else if (value) {
+            // Direct insert when suggestion isn't active (toolbar / dropdown)
+            editor.chain().focus().insertContent([
+              { type: 'mention', attrs: { id: value.id, label: value.label || value.username || '' } },
+              { type: 'text', text: ' ' }
+            ]).run();
+          }
+          break;
+        case 'focus':
+          editor.commands.focus('end');
+          break;
+        case 'blur':
+          editor.commands.blur();
+          break;
+        case 'clear':
+          editor.commands.clearContent(true);
+          break;
+        case 'insertContent':
+          editor.chain().focus().insertContent(value || '').run();
+          break;
+        case 'insertText':
+          editor.chain().focus().insertContent(value || '').run();
+          break;
+        case 'setLink':
+          if (value) {
+            editor.chain().focus().extendMarkRange('link').setLink({ href: value }).run();
+          } else {
+            editor.chain().focus().unsetLink().run();
+          }
+          break;
+        case 'toggleCodeBlock':
+          editor.chain().focus().toggleCodeBlock().run();
+          break;
+        case 'setBottomInset':
+          // Native sticky toolbar + keyboard clearance (px). Keep caret usable.
+          // Chat composer keeps padding minimal so the WebView stays tappable.
+          if (window.CHAT_COMPOSER) {
+            document.body.style.paddingBottom = '4px';
+          } else {
+            document.body.style.paddingBottom = Math.max(16, (value || 0) + 16) + 'px';
           }
           break;
       }

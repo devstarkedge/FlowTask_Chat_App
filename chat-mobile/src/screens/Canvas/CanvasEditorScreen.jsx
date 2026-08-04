@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,18 +10,18 @@ import {
   Image,
   Platform,
 } from 'react-native';
-import KeyboardAwareContainer from '../../components/common/KeyboardAwareContainer';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenLayout from '../../components/common/ScreenLayout';
 import useKeyboard from '../../hooks/useKeyboard';
 import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
 import { useCanvasStore } from '../../stores/canvasStore';
+import { useThemeStore } from '../../stores/themeStore';
 import { fileAPI, directoriesAPI } from '../../services/api';
 import CanvasHeader from '../../components/canvas/CanvasHeader';
 import CanvasFormatToolbar from '../../components/canvas/CanvasFormatToolbar';
 import CanvasInsertSheet from '../../components/canvas/CanvasInsertSheet';
 import CanvasCommentsSheet from '../../screens/Canvas/CanvasCommentsSheet';
-import CanvasHistorySheet from '../../components/canvas/CanvasHistorySheet';
 import CanvasShareModal from '../../screens/Canvas/CanvasShareModal';
 import { EDITOR_HTML } from './EditorHtml';
 import ENV from '../../config/environment';
@@ -33,6 +33,10 @@ export default function CanvasEditorScreen({ route, navigation }) {
   const webviewRef = useRef(null);
   const [editorReady, setEditorReady] = useState(false);
   const [selectionState, setSelectionState] = useState({});
+  const insets = useSafeAreaInsets();
+  const { colors, isDarkMode } = useThemeStore();
+  const { keyboardVisible, bottomOffset } = useKeyboard();
+  const toolbarHeight = verticalScale(48);
 
   // Mentions
   const [allUsers, setAllUsers] = useState([]);
@@ -42,28 +46,30 @@ export default function CanvasEditorScreen({ route, navigation }) {
   // Sheets visibility
   const [insertVisible, setInsertVisible] = useState(false);
   const [commentsVisible, setCommentsVisible] = useState(false);
-  const [historyVisible, setHistoryVisible] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
 
   const {
     activeCanvas,
     comments,
-    history,
     presence,
     isLoading,
     loadCanvas,
     updateCanvas,
     clearActiveCanvas,
-    fetchComments,
     createComment,
     replyToComment,
     resolveComment,
     fetchHistory,
-    restoreVersion,
   } = useCanvasStore();
 
+  /**
+   * Dock flush to the IME using KeyboardProvider.bottomOffset
+   * (screen.height - keyboard.screenY) — same on every Android OEM.
+   */
+  const toolbarBottom = keyboardVisible ? bottomOffset : insets.bottom;
+  const editorBottomReserve = toolbarHeight + toolbarBottom;
+
   useEffect(() => {
-    // Fetch users for mentions
     directoriesAPI.getUsers().then((res) => {
       setAllUsers(res.data?.data || []);
     }).catch(() => {});
@@ -77,41 +83,57 @@ export default function CanvasEditorScreen({ route, navigation }) {
     };
   }, [canvasId]);
 
-  // Pass activeCanvas content once ready
-  useEffect(() => {
-    if (editorReady && activeCanvas && webviewRef.current) {
-      logger.info(`[CanvasEditor] Sending setContent for canvas ${activeCanvas._id}, JSON size:`, JSON.stringify(activeCanvas.content || {}).length);
-      const content = activeCanvas.content || '';
-      sendEditorCommand('setContent', content);
-    } else {
-      logger.info(`[CanvasEditor] Waiting to set content. editorReady=${editorReady}, activeCanvas=${!!activeCanvas}`);
-    }
-  }, [editorReady, activeCanvas?._id]);
-
-  const sendEditorCommand = (command, value = null) => {
+  const sendEditorCommand = useCallback((command, value = null) => {
     if (webviewRef.current) {
-      logger.info(`[CanvasEditor] Sending command: ${command}`);
+      // Avoid logging high-frequency inset/selection-related traffic
+      if (command !== 'setBottomInset') {
+        logger.info(`[CanvasEditor] Sending command: ${command}`);
+      }
       webviewRef.current.postMessage(JSON.stringify({ command, value }));
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (editorReady && activeCanvas && webviewRef.current) {
+      const content = activeCanvas.content || '';
+      sendEditorCommand('setContent', content);
+    }
+  }, [editorReady, activeCanvas?._id, sendEditorCommand]);
+
+  // Keep editor theme in sync with the app theme
+  useEffect(() => {
+    if (editorReady && webviewRef.current) {
+      sendEditorCommand('setTheme', isDarkMode ? 'dark' : 'light');
+    }
+  }, [editorReady, isDarkMode, sendEditorCommand]);
+
+  // Keep caret / content above the sticky toolbar + keyboard inside the WebView.
+  useEffect(() => {
+    if (!editorReady) return;
+    sendEditorCommand('setBottomInset', editorBottomReserve);
+  }, [editorReady, editorBottomReserve, sendEditorCommand]);
 
   const handleMessage = (event) => {
     let data;
     try {
       data = JSON.parse(event.nativeEvent.data);
     } catch (e) {
-      logger.warn('[CanvasEditor] Failed to parse WebView message:', event.nativeEvent.data);
       return;
     }
 
     switch (data.type) {
       case 'ready':
-        logger.info(`[CanvasEditor] WebView Ready. BodyHeight: ${data.bodyHeight}, WindowHeight: ${data.windowHeight}, UA: ${data.userAgent}`);
         setEditorReady(true);
         break;
-      case 'selection':
-        setSelectionState(data);
+      case 'selection': {
+        // Skip no-op updates — selection fires very often while typing/caret moves
+        setSelectionState((prev) => {
+          const keys = ['bold', 'italic', 'underline', 'strike', 'code', 'blockquote', 'bulletList', 'orderedList', 'taskList', 'heading', 'table', 'canUndo', 'canRedo'];
+          const same = keys.every((k) => prev[k] === data[k]);
+          return same ? prev : data;
+        });
         break;
+      }
       case 'update':
         if (canvasId) {
           updateCanvas(canvasId, { content: data.json });
@@ -127,13 +149,12 @@ export default function CanvasEditorScreen({ route, navigation }) {
         logger.error('[CanvasEditor] WebView ERROR event:', data);
         break;
       case 'setContentAck':
-        logger.info('[CanvasEditor] WebView acknowledged setContent:', data);
-        break;
       case 'log':
-        logger.info('[CanvasEditor WebView Log]:', data.message);
+      case 'focus':
+      case 'blur':
         break;
       default:
-        logger.info(`[CanvasEditor] Unhandled WebView event type: ${data.type}`);
+        break;
     }
   };
 
@@ -146,8 +167,8 @@ export default function CanvasEditorScreen({ route, navigation }) {
   useEffect(() => {
     if (mentionSearch === null) return;
     const query = mentionSearch.toLowerCase();
-    const matches = allUsers.filter(u => 
-      u.username.toLowerCase().includes(query) || 
+    const matches = allUsers.filter(u =>
+      u.username.toLowerCase().includes(query) ||
       (u.fullName && u.fullName.toLowerCase().includes(query))
     ).slice(0, 5);
     setFilteredUsers(matches);
@@ -195,7 +216,7 @@ export default function CanvasEditorScreen({ route, navigation }) {
           }
           const uploadRes = await fileAPI.uploadFiles(uploadChannelId, formData, undefined, true);
           let uploadedUrl = uploadRes.data?.data?.files?.[0]?.secureUrl || uploadRes.data?.data?.files?.[0]?.url || uploadRes.data?.data?.urls?.[0] || uploadRes.data?.url || uploadRes.data?.data?.[0]?.url;
-          
+
           if (uploadedUrl && !uploadedUrl.startsWith('http')) {
             const prefix = ENV.SOCKET_URL || ENV.API_BASE_URL.replace(/\/api\/.*$/, '');
             uploadedUrl = uploadedUrl.startsWith('/') ? prefix + uploadedUrl : prefix + '/' + uploadedUrl;
@@ -213,30 +234,26 @@ export default function CanvasEditorScreen({ route, navigation }) {
     }
   };
 
-  const { keyboardVisible } = useKeyboard();
-  const screenEdges = Platform.OS === 'ios' 
-    ? ['top', 'bottom'] 
-    : (keyboardVisible ? ['top', 'left', 'right'] : ['top', 'bottom']);
+  // Never apply bottom SafeArea here — toolbarBottom owns nav + keyboard insets.
+  const screenEdges = ['top', 'left', 'right'];
 
   return (
-    <ScreenLayout edges={screenEdges} style={styles.container}>
-      <KeyboardAwareContainer style={styles.container} bottomSafeContext={Platform.OS === 'ios' ? false : true}>
-      <CanvasHeader
-        title={activeCanvas?.title || ''}
-        presence={presence}
-        commentCount={comments.filter((c) => !c.resolved).length}
-        onBack={() => navigation.goBack()}
-        onTitleChange={handleTitleChange}
-        onCommentsPress={() => setCommentsVisible(true)}
-        onHistoryPress={() => {
-          fetchHistory(canvasId);
-          setHistoryVisible(true);
-        }}
-        onOptionsPress={() => setShareVisible(true)}
-      />
+    <ScreenLayout edges={screenEdges} style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <CanvasHeader
+          title={activeCanvas?.title || ''}
+          presence={presence}
+          commentCount={comments.filter((c) => !c.resolved).length}
+          onBack={() => navigation.goBack()}
+          onTitleChange={handleTitleChange}
+          onCommentsPress={() => setCommentsVisible(true)}
+          onHistoryPress={() => {
+            fetchHistory(canvasId);
+          }}
+          onOptionsPress={() => setShareVisible(true)}
+        />
 
-      <View style={styles.keyboardContainer}>
-        <View style={styles.editorWrapper}>
+        <View style={[styles.editorWrapper, { marginBottom: editorBottomReserve }]}>
           {isLoading && !activeCanvas && (
             <View style={styles.loadingOverlay}>
               <ActivityIndicator size="large" color="#4f46e5" />
@@ -246,9 +263,10 @@ export default function CanvasEditorScreen({ route, navigation }) {
             ref={webviewRef}
             source={{ html: EDITOR_HTML, baseUrl: ENV.SOCKET_URL || 'https://chat-app-api-cyyl.onrender.com' }}
             originWhitelist={['*']}
-            style={styles.webview}
+            style={[styles.webview, { backgroundColor: colors.background }]}
             onMessage={handleMessage}
             keyboardDisplayRequiresUserAction={false}
+            hideKeyboardAccessoryView
             javaScriptEnabled
             domStorageEnabled
             mixedContentMode="always"
@@ -256,24 +274,27 @@ export default function CanvasEditorScreen({ route, navigation }) {
             allowFileAccessFromFileURLs={true}
             allowUniversalAccessFromFileURLs={true}
             androidLayerType={Platform.OS === 'android' ? 'hardware' : 'none'}
+            setBuiltInZoomControls={false}
+            setDisplayZoomControls={false}
+            overScrollMode="never"
           />
           {mentionSearch !== null && (
-            <View style={styles.mentionPopup}>
+            <View style={[styles.mentionPopup, { bottom: 0, backgroundColor: colors.surface, borderTopColor: colors.border }]}>
               <FlatList
                 data={filteredUsers}
                 keyExtractor={(item) => item._id}
                 keyboardShouldPersistTaps="always"
                 renderItem={({ item }) => (
                   <TouchableOpacity
-                    style={styles.mentionItem}
+                    style={[styles.mentionItem, { borderBottomColor: colors.border }]}
                     onPress={() => handleInsertMention(item)}
                   >
                     {item.avatarUrl ? (
                       <Image source={{ uri: item.avatarUrl }} style={styles.mentionAvatar} />
                     ) : (
-                      <View style={[styles.mentionAvatar, { backgroundColor: '#e2e8f0' }]} />
+                      <View style={[styles.mentionAvatar, { backgroundColor: colors.surfaceOverlay }]} />
                     )}
-                    <Text style={styles.mentionName}>{item.username}</Text>
+                    <Text style={[styles.mentionName, { color: colors.textPrimary }]}>{item.username}</Text>
                   </TouchableOpacity>
                 )}
               />
@@ -281,11 +302,24 @@ export default function CanvasEditorScreen({ route, navigation }) {
           )}
         </View>
 
-        <CanvasFormatToolbar
-          selectionState={selectionState}
-          onCommand={sendEditorCommand}
-          onInsertPress={() => setInsertVisible(true)}
-        />
+        {/* Sticky format toolbar — always above keyboard / nav bar */}
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.toolbarDock,
+            {
+              bottom: toolbarBottom,
+              height: toolbarHeight,
+              backgroundColor: colors.surface,
+            },
+          ]}
+        >
+          <CanvasFormatToolbar
+            selectionState={selectionState}
+            onCommand={sendEditorCommand}
+            onInsertPress={() => setInsertVisible(true)}
+          />
+        </View>
       </View>
 
       <CanvasInsertSheet
@@ -303,19 +337,11 @@ export default function CanvasEditorScreen({ route, navigation }) {
         onResolveComment={resolveComment}
       />
 
-      {/* <CanvasHistorySheet
-        visible={historyVisible}
-        onClose={() => setHistoryVisible(false)}
-        history={history}
-        onRestore={(historyId) => restoreVersion(canvasId, historyId)}
-      /> */}
-
       <CanvasShareModal
         visible={shareVisible}
         onClose={() => setShareVisible(false)}
         canvasId={canvasId}
       />
-      </KeyboardAwareContainer>
     </ScreenLayout>
   );
 }
@@ -325,15 +351,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ffffff',
   },
-  keyboardContainer: {
-    flex: 1,
-  },
   editorWrapper: {
     flex: 1,
     position: 'relative',
+    minHeight: 0,
   },
   webview: {
     flex: 1,
+  },
+  toolbarDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    elevation: 30,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -344,36 +375,31 @@ const styles = StyleSheet.create({
   },
   mentionPopup: {
     position: 'absolute',
-    bottom: moderateScale(0),
-    left: moderateScale(0),
-    right: moderateScale(0),
-    maxHeight: moderateScale(200),
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    left: 0,
+    right: 0,
+    maxHeight: verticalScale(200),
+    borderTopWidth: StyleSheet.hairlineWidth,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 5,
-    zIndex: 50,
+    zIndex: 40,
   },
   mentionItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: moderateScale(12),
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   mentionAvatar: {
     width: moderateScale(24),
     height: moderateScale(24),
     borderRadius: moderateScale(12),
-    marginRight: moderateScale(8),
+    marginRight: scale(8),
   },
   mentionName: {
     fontSize: moderateScale(14),
-    color: '#1f2937',
     fontWeight: '500',
   },
 });

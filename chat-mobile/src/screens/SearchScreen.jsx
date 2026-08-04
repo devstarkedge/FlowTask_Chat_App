@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Alert, Platform, Animated, Keyboard } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import KeyboardAwareContainer from '../components/common/KeyboardAwareContainer';
 import { useThemeStore } from '../stores/themeStore';
 import { searchAPI } from '../services/api';
@@ -27,6 +28,20 @@ export default function SearchScreen({ navigation }) {
   const [recent, setRecent] = useState([]);
   const [isFocused, setIsFocused] = useState(true);
   const debounceRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Tab screens stay mounted — autoFocus only runs once. Re-focus on every visit.
+  useFocusEffect(
+    useCallback(() => {
+      const t = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+      return () => {
+        clearTimeout(t);
+        inputRef.current?.blur();
+      };
+    }, [])
+  );
 
   useEffect(() => { loadRecent() }, []);
   
@@ -280,23 +295,29 @@ export default function SearchScreen({ navigation }) {
     );
   };
 
-  const { animatedKeyboardHeight } = useKeyboard();
+  const { animatedKeyboardHeight, keyboardVisible, bottomOffset } = useKeyboard();
   const tabBarHeight = React.useContext(BottomTabBarHeightContext) || 0;
+  const closedGap = tabBarHeight > 0 ? verticalScale(8) : insets.bottom + verticalScale(8);
 
-  // Since SearchScreen has NO bottom SafeAreaView, we pad from the absolute bottom.
   const animatedGap = animatedKeyboardHeight.interpolate(
     Platform.OS === 'ios'
-    ? {
-        inputRange: [0, 9999],
-        outputRange: [insets.bottom + 8, 9999 - tabBarHeight + 8],
-        extrapolate: 'clamp'
-      }
-    : {
-        inputRange: [0, 9999],
-        outputRange: [insets.bottom + 8, 9999 + 8],
-        extrapolate: 'clamp'
-      }
+      ? {
+          inputRange: [0, 9999],
+          outputRange: [closedGap, 9999 - (tabBarHeight > 0 ? tabBarHeight : 0) + 8],
+          extrapolate: 'clamp',
+        }
+      : {
+          inputRange: [0, 9999],
+          outputRange: [closedGap, 9999 + 8],
+          extrapolate: 'clamp',
+        }
   );
+
+  // Android: measured bottomOffset (screenH - keyboard.screenY) — flush to IME.
+  const androidSearchPad = keyboardVisible
+    ? Math.max(0, bottomOffset || 0)
+    : closedGap;
+
   const [headerHeight, setHeaderHeight] = useState(0);
 
   return (
@@ -356,33 +377,43 @@ export default function SearchScreen({ navigation }) {
           />
 
           {/* Floating Search Bar */}
-          <Animated.View style={[styles.floatingSearchContainer, { paddingBottom: animatedGap, backgroundColor: colors.background }]}>
+          <Animated.View
+            style={[
+              styles.floatingSearchContainer,
+              {
+                paddingBottom: Platform.OS === 'android' ? androidSearchPad : animatedGap,
+                backgroundColor: colors.background,
+              },
+            ]}
+          >
             <View style={[
-              styles.floatingSearchPill, 
+              styles.floatingSearchPill,
               { backgroundColor: colors.background, shadowColor: colors.shadow || '#000', borderWidth: 1, borderColor: colors.border }
             ]}>
               <Search size={20} color={isFocused ? colors.primary : colors.textSecondary} />
-              <TextInput 
-                style={[styles.searchInput, { color: colors.textPrimary }]} 
-                placeholder="Search" 
+              <TextInput
+                ref={inputRef}
+                style={[styles.searchInput, { color: colors.textPrimary }]}
+                placeholder="Search"
                 placeholderTextColor={colors.textTertiary}
                 value={query}
                 onChangeText={setQuery}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 autoFocus
+                showSoftInputOnFocus
               />
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[
-                styles.closeButton, 
-                { 
-                  backgroundColor: colors.background, 
+                styles.closeButton,
+                {
+                  backgroundColor: colors.background,
                   shadowColor: colors.shadow || '#000',
                   borderColor: colors.border,
                   borderWidth: 1
                 }
-              ]} 
+              ]}
               onPress={() => { setQuery(''); navigation.goBack(); }}
             >
               <X size={24} color={colors.textPrimary} />

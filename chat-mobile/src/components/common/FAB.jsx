@@ -1,11 +1,19 @@
 import React from 'react';
 import { TouchableOpacity, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Plus } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
 import { moderateScale, verticalScale, scale } from '../../utils/responsive';
 
-const FAB = ({ onPress, style, icon: Icon = Plus }) => {
+/**
+ * Floating action button. When `aboveTabBar` is true (default), the parent
+ * scene already clears the system nav via the tab bar. Otherwise we add
+ * insets.bottom so the FAB clears 3-button / gesture navigation.
+ */
+const FAB = ({ onPress, style, icon: Icon = Plus, aboveTabBar = true }) => {
   const { colors } = useThemeStore();
+  const insets = useSafeAreaInsets();
+  const bottom = verticalScale(20) + (aboveTabBar ? 0 : insets.bottom);
 
   return (
     <TouchableOpacity
@@ -14,6 +22,7 @@ const FAB = ({ onPress, style, icon: Icon = Plus }) => {
         {
           backgroundColor: colors.primary,
           shadowColor: colors.shadow || "#000",
+          bottom,
         },
         style,
       ]}
@@ -21,7 +30,7 @@ const FAB = ({ onPress, style, icon: Icon = Plus }) => {
       activeOpacity={0.8}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
     >
-      <Icon size={24} color={colors.textOnPrimary} strokeWidth={2.5} />
+      <Icon size={moderateScale(24)} color={colors.textOnPrimary} strokeWidth={2.5} />
     </TouchableOpacity>
   );
 };
@@ -29,7 +38,6 @@ const FAB = ({ onPress, style, icon: Icon = Plus }) => {
 const styles = StyleSheet.create({
   fab: {
     position: "absolute",
-    bottom: verticalScale(20),
     right: scale(20),
     width: moderateScale(56),
     height: moderateScale(56),

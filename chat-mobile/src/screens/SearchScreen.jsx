@@ -299,13 +299,12 @@ export default function SearchScreen({ navigation }) {
   const tabBarHeight = React.useContext(BottomTabBarHeightContext) || 0;
   const closedGap = tabBarHeight > 0 ? verticalScale(8) : insets.bottom + verticalScale(8);
 
-  // Flush to the IME when open (minus the now-hidden tab bar), the resting
-  // gap otherwise — same formula on Android and iOS, animated on both.
+  // Resting gap when closed, keyboard height plus that same gap when open —
+  // guarantees the pill always clears the IME, same formula on both platforms.
   const floatingSearchAnimatedStyle = useAnimatedStyle(() => {
     const height = Math.max(0, -keyboardHeightShared.value);
-    if (height <= 0) return { paddingBottom: closedGap };
-    return { paddingBottom: Math.max(0, height - tabBarHeight) + 8 };
-  }, [closedGap, tabBarHeight]);
+    return { paddingBottom: closedGap + height };
+  }, [closedGap]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

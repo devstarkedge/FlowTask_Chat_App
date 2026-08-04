@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Platform, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useThemeStore } from '../../stores/themeStore';
 import KeyboardAwareContainer from './KeyboardAwareContainer';
 
@@ -9,13 +9,8 @@ import KeyboardAwareContainer from './KeyboardAwareContainer';
  * A wrapper component that provides keyboard avoidance across iOS and Android
  * using the centralized KeyboardAwareContainer.
  */
-const ScreenContainer = ({ children, style, keyboardVerticalOffset = 0, behavior, onLayout }) => {
+const ScreenContainer = ({ children, style, onLayout }) => {
   const colors = useThemeStore(state => state.colors);
-  const isIOS = Platform.OS === 'ios';
-
-  const effectiveBehavior = behavior !== undefined 
-    ? behavior 
-    : (isIOS ? 'padding' : 'height');
 
   return (
     <View onLayout={onLayout} style={[{ flex: 1, backgroundColor: colors.background }, style]}>

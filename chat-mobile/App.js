@@ -19,7 +19,7 @@ import ThemeProvider from './src/theme/ThemeProvider';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useNotificationPrefStore } from "./src/stores/notificationPrefStore";
-import { KeyboardProvider } from "./src/providers/KeyboardProvider";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 
 const navigationRef = createNavigationContainerRef();
 const queryClient = new QueryClient();

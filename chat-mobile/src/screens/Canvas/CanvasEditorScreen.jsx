@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenLayout from '../../components/common/ScreenLayout';
-import useKeyboard from '../../hooks/useKeyboard';
+import { useKeyboardState } from 'react-native-keyboard-controller';
 import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
 import { useCanvasStore } from '../../stores/canvasStore';
@@ -35,7 +35,8 @@ export default function CanvasEditorScreen({ route, navigation }) {
   const [selectionState, setSelectionState] = useState({});
   const insets = useSafeAreaInsets();
   const { colors, isDarkMode } = useThemeStore();
-  const { keyboardVisible, bottomOffset } = useKeyboard();
+  const keyboardVisible = useKeyboardState((state) => state.isVisible);
+  const keyboardHeight = useKeyboardState((state) => state.height);
   const toolbarHeight = verticalScale(48);
 
   // Mentions
@@ -63,10 +64,10 @@ export default function CanvasEditorScreen({ route, navigation }) {
   } = useCanvasStore();
 
   /**
-   * Dock flush to the IME using KeyboardProvider.bottomOffset
-   * (screen.height - keyboard.screenY) — same on every Android OEM.
+   * Dock flush to the IME using react-native-keyboard-controller's native
+   * keyboard height — same on every Android OEM, no measurement guessing.
    */
-  const toolbarBottom = keyboardVisible ? bottomOffset : insets.bottom;
+  const toolbarBottom = keyboardVisible ? keyboardHeight : insets.bottom;
   const editorBottomReserve = toolbarHeight + toolbarBottom;
 
   useEffect(() => {

@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { Dimensions, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import useKeyboard from './useKeyboard';
+import { useKeyboardState } from 'react-native-keyboard-controller';
 
 export default function useLayoutDiagnostics(screenName) {
   const insets = useSafeAreaInsets();
-  const { keyboardVisible, keyboardHeight } = useKeyboard();
+  const keyboardVisible = useKeyboardState((state) => state.isVisible);
+  const keyboardHeight = useKeyboardState((state) => state.height);
   const measurements = useRef({
     composer: { y: 0, height: 0 },
     list: { height: 0 },

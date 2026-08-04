@@ -31,7 +31,7 @@ import {
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import logger from "../utils/logger";
-import useKeyboard from "../hooks/useKeyboard";
+import { useKeyboardState } from "react-native-keyboard-controller";
 import { useDraftStore } from "../stores/draftStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useScheduledStore } from "../stores/scheduledStore";
@@ -185,7 +185,7 @@ const MessageComposer = React.memo(function MessageComposer({
   const editorRef = useRef(null);
   const latestContentRef = useRef({ html: '', text: '' });
   const insets = useSafeAreaInsets();
-  const { keyboardHeight } = useKeyboard();
+  const keyboardHeight = useKeyboardState((state) => state.height);
   // Android window already resizes; only iOS needs height subtracted for expand math.
   const imeInset = Platform.OS === 'android' ? 0 : keyboardHeight;
   const audioRecorder = useAudioRecorder();

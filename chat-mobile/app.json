@@ -42,7 +42,6 @@
       }
     },
     "plugins": [
-      "./plugins/withAndroidAdjustNothing.js",
       "expo-secure-store",
       "@react-native-community/datetimepicker",
       "expo-audio",

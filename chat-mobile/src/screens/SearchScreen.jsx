@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Alert, Platform, Animated, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Alert, Platform } from 'react-native';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import KeyboardAwareContainer from '../components/common/KeyboardAwareContainer';
 import { useThemeStore } from '../stores/themeStore';
 import { searchAPI } from '../services/api';
 import storage from '../services/storage';
@@ -14,7 +14,7 @@ import Toast from 'react-native-toast-message';
 import logger from '../utils/logger';
 import { useAuthStore } from '../stores/authStore';
 import { useChannelStore } from '../stores/channelStore';
-import useKeyboard from '../hooks/useKeyboard';
+import useKeyboardBottomInset from '../hooks/useKeyboardBottomInset';
 import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
 const RECENT_KEY = 'recent_searches_objects'; // Use new key to avoid conflicts with old string array
 
@@ -295,38 +295,24 @@ export default function SearchScreen({ navigation }) {
     );
   };
 
-  const { animatedKeyboardHeight, keyboardVisible, bottomOffset } = useKeyboard();
+  const { keyboardHeightShared } = useKeyboardBottomInset();
   const tabBarHeight = React.useContext(BottomTabBarHeightContext) || 0;
   const closedGap = tabBarHeight > 0 ? verticalScale(8) : insets.bottom + verticalScale(8);
 
-  const animatedGap = animatedKeyboardHeight.interpolate(
-    Platform.OS === 'ios'
-      ? {
-          inputRange: [0, 9999],
-          outputRange: [closedGap, 9999 - (tabBarHeight > 0 ? tabBarHeight : 0) + 8],
-          extrapolate: 'clamp',
-        }
-      : {
-          inputRange: [0, 9999],
-          outputRange: [closedGap, 9999 + 8],
-          extrapolate: 'clamp',
-        }
-  );
-
-  // Android: measured bottomOffset (screenH - keyboard.screenY) — flush to IME.
-  const androidSearchPad = keyboardVisible
-    ? Math.max(0, bottomOffset || 0)
-    : closedGap;
-
-  const [headerHeight, setHeaderHeight] = useState(0);
+  // Flush to the IME when open (minus the now-hidden tab bar), the resting
+  // gap otherwise — same formula on Android and iOS, animated on both.
+  const floatingSearchAnimatedStyle = useAnimatedStyle(() => {
+    const height = Math.max(0, -keyboardHeightShared.value);
+    if (height <= 0) return { paddingBottom: closedGap };
+    return { paddingBottom: Math.max(0, height - tabBarHeight) + 8 };
+  }, [closedGap, tabBarHeight]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Dark Header */}
-      <SafeAreaView 
-        edges={['top']} 
+      <SafeAreaView
+        edges={['top']}
         style={{ backgroundColor: colors.primary }}
-        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
       >
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.textOnPrimary }]}>Search</Text>
@@ -336,11 +322,7 @@ export default function SearchScreen({ navigation }) {
         </View>
       </SafeAreaView>
 
-      <KeyboardAwareContainer 
-        disablePadding={true}
-        style={styles.keyboardView}
-        keyboardVerticalOffset={headerHeight}
-      >
+      <View style={styles.keyboardView}>
         <View style={{ flex: 1 }}>
           <FlatList
             data={query ? (flattenedResults || []) : recent}
@@ -380,10 +362,8 @@ export default function SearchScreen({ navigation }) {
           <Animated.View
             style={[
               styles.floatingSearchContainer,
-              {
-                paddingBottom: Platform.OS === 'android' ? androidSearchPad : animatedGap,
-                backgroundColor: colors.background,
-              },
+              { backgroundColor: colors.background },
+              floatingSearchAnimatedStyle,
             ]}
           >
             <View style={[
@@ -420,7 +400,7 @@ export default function SearchScreen({ navigation }) {
             </TouchableOpacity>
           </Animated.View>
         </View>
-      </KeyboardAwareContainer>
+      </View>
     </View>
   );
 }

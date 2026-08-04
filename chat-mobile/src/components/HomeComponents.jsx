@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { scale, verticalScale, moderateScale } from "../utils/responsive";
 import { AppAvatar } from "../components/common";
-import { Hash, Lock, Volume2, Plus, ChevronUp, ChevronDown, MoreVertical } from "lucide-react-native";
+import { Hash, Lock, Radio, Plus, ChevronUp, ChevronDown, MoreVertical } from "lucide-react-native";
 
 export const SkeletonCard = ({ colors }) => (
   <View style={[qcStyles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
@@ -143,7 +143,7 @@ const shStyles = StyleSheet.create({
 export const ChannelRow = React.memo(({ channel, unreadCount, onPress, onLongPress, colors, indentLevel = 0 }) => {
   const isPrivate = channel.visibility === "private";
   const isSystem = channel.type === "system";
-  const Icon = isSystem ? Volume2 : isPrivate ? Lock : Hash;
+  const Icon = isSystem ? Radio : isPrivate ? Lock : Hash;
   const paddingLeft = moderateScale(16) + (indentLevel * moderateScale(16));
 
   return (

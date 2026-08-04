@@ -12,6 +12,7 @@ import MobileFileCard from './common/MobileFileCard';
 import MessageStatusTicks from './MessageStatusTicks';
 import ReactionBar from './ReactionBar';
 import logger from '../utils/logger';
+import { getFileKind } from '../utils/mediaUtils';
 
 // Helpers
 const getAuthorId = (item) => item?.authorId?._id || item?.authorId;
@@ -142,15 +143,12 @@ const ChatMessageItem = memo(({
     >
       {showDateSep && renderDateSeparator(item.createdAt)}
 
-      <RNTouchableOpacity
+      <RNView
         style={[
           styles.messageContainer,
           isMe ? styles.myMessage : styles.theirMessage,
           isCompact && styles.messageCompact,
         ]}
-        onLongPress={() => !isDeleted && showMessageActions(item)}
-        activeOpacity={0.85}
-        delayLongPress={300}
       >
         {!isMe && !isCompact && (
           <RNTouchableOpacity 
@@ -171,11 +169,16 @@ const ChatMessageItem = memo(({
         )}
         {!isMe && isCompact && <RNView style={{ width: scale(32) }} />}
 
-        <RNView style={[
-          styles.messageContent,
-          isMe ? styles.messageContentMe : styles.messageContentThem,
-          { maxWidth: maxBubbleWidth, flexShrink: 1 }
-        ]}>
+        <RNTouchableOpacity
+          style={[
+            styles.messageContent,
+            isMe ? styles.messageContentMe : styles.messageContentThem,
+            { maxWidth: maxBubbleWidth, flexShrink: 1 }
+          ]}
+          onLongPress={() => !isDeleted && showMessageActions(item)}
+          activeOpacity={0.85}
+          delayLongPress={300}
+        >
           {!isMe && !isCompact && (
             <RNView style={styles.senderRow}>
               <RNText style={[styles.senderName, { color: colors.textSecondary }]} numberOfLines={1}>
@@ -274,9 +277,22 @@ const ChatMessageItem = memo(({
 
             {!isDeleted && attachments.length > 0 && !['audio', 'video'].includes(item.contentType) && !['audio', 'video'].includes(item.type) && (
               <RNView style={{ marginTop: verticalScale(4), width: '100%', gap: 4 }}>
-                {attachments.map((file, i) => (
-                  <MobileFileCard key={file._id || i} file={file} colors={colors} />
-                ))}
+                {attachments.map((file, i) => {
+                  const kind = getFileKind(file.mimeType, file.name || file.fileName, file.url || file.secureUrl);
+                  if (kind === 'video') {
+                    return (
+                      <VideoMessagePlayer
+                        key={file._id || i}
+                        videoUrl={file.url || file.secureUrl}
+                        thumbnailUrl={file.thumbnailUrl}
+                        width={file.width || 16}
+                        height={file.height || 9}
+                        colors={colors}
+                      />
+                    );
+                  }
+                  return <MobileFileCard key={file._id || i} file={file} colors={colors} />;
+                })}
               </RNView>
             )}
 
@@ -356,8 +372,8 @@ const ChatMessageItem = memo(({
               )}
             </RNTouchableOpacity>
           )}
-        </RNView>
-      </RNTouchableOpacity>
+        </RNTouchableOpacity>
+      </RNView>
     </RNView>
   );
 }, (prevProps, nextProps) => {

@@ -83,9 +83,12 @@ export function getFileKind(mime = '', name = '', url = '') {
     ? nameExt
     : urlExt;
 
+  const isAudioExt = /^(mp3|m4a|wav|aac|ogg|flac|opus|wma)$/.test(ext);
+  const isVideoExt = /^(mp4|mov|avi|mkv|webm|flv|wmv|m4v|3gp)$/.test(ext);
+
   if (cleanMime.startsWith('image/') || /^(jpg|jpeg|png|gif|webp|svg|tiff|tif|bmp|ico|heic|heif)$/.test(ext)) return 'image';
-  if (cleanMime.startsWith('video/') || /^(mp4|mov|avi|mkv|webm|flv|wmv|m4v|3gp)$/.test(ext)) return 'video';
-  if (cleanMime.startsWith('audio/') || /^(mp3|m4a|wav|aac|ogg|flac|opus|wma)$/.test(ext)) return 'audio';
+  if (isAudioExt || cleanMime.startsWith('audio/')) return 'audio';
+  if (cleanMime.startsWith('video/') || isVideoExt) return 'video';
   if (cleanMime === 'application/pdf' || ext === 'pdf') return 'pdf';
   if (/^(doc|docx)$/.test(ext) || cleanMime.includes('word') || cleanMime.includes('msword')) return 'word';
   if (/^(xls|xlsx)$/.test(ext) || cleanMime.includes('excel') || cleanMime.includes('spreadsheet')) return 'spreadsheet';

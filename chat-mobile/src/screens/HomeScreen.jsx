@@ -46,7 +46,8 @@ import {
   Star,
   Folder,
   ChevronDown,
-  TriangleAlert  
+  Radio,
+  Filter
 } from "lucide-react-native";
 
 const HomeScreen = ({ navigation }) => {
@@ -109,7 +110,7 @@ const HomeScreen = ({ navigation }) => {
       result.push({
         key: "unreads",
         title: t("Unreads"),
-        icon: null,
+        icon: Filter,
         data: sectionsExpanded.unreads !== false ? unreadConversations : [],
         type: "mixed",
         showAddChannel: false,
@@ -130,7 +131,7 @@ const HomeScreen = ({ navigation }) => {
       result.push({
         key: "system",
         title: "SYSTEM",
-        icon: TriangleAlert, 
+        icon: Radio, 
         data: sectionsExpanded.system !== false ? systemChannels : [],
         type: "channel",
         showAddChannel: false,

@@ -859,12 +859,12 @@ export default function ChatLayout() {
   );
   const legacyLocalSearchMessages = useChatStore((state) => (
     localSearchConversationId
-      ? state.messagesByChannel[localSearchConversationId] || EMPTY_LIST
+      ? state.messagesByChannel?.[localSearchConversationId] || EMPTY_LIST
       : EMPTY_LIST
   ));
   const localSearchMessageIds = useChatStore((state) => (
     localSearchConversationId
-      ? state.channelMessageIds[localSearchConversationId] || EMPTY_LIST
+      ? state.channelMessageIds?.[localSearchConversationId] || EMPTY_LIST
       : EMPTY_LIST
   ));
   const localSearchMessagesById = useChatStore((state) => state.messagesById);

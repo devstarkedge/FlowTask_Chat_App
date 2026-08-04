@@ -10,6 +10,7 @@ import {
   Image,
 } from 'react-native';
 import ScreenContainer from '../../components/common/ScreenContainer';
+import AppScreen from '../../components/common/AppScreen';
 import { Eye, EyeOff, CircleChevronRight, Lock, Check } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useAuthStore } from '../../stores/authStore';
@@ -109,6 +110,7 @@ const RegisterScreen = ({ navigation }) => {
 
   if (success) {
     return (
+      <AppScreen edges={['top', 'bottom']} style={styles.container}>
       <ScreenContainer style={styles.container}> 
         <View style={[styles.header, { borderBottomColor: colors.borderLight }]}> 
           <View style={styles.logo}>
@@ -139,10 +141,12 @@ const RegisterScreen = ({ navigation }) => {
           </View>
         </View>
       </ScreenContainer>
+      </AppScreen>
     );
   }
 
   return (
+    <AppScreen edges={['top', 'bottom']} style={styles.container}>
     <ScreenContainer style={styles.container}> 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -280,6 +284,7 @@ const RegisterScreen = ({ navigation }) => {
         </View>
       </ScrollView>
     </ScreenContainer>
+    </AppScreen>
   );
 };
 

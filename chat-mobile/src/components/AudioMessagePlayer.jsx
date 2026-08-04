@@ -14,7 +14,15 @@ const formatDuration = (millis) => {
   return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
-const AudioMessagePlayer = ({ audioUrl, duration, colors, isMe }) => {
+const formatBytes = (bytes) => {
+  if (!bytes || isNaN(bytes) || bytes === 0) return '';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+};
+
+const AudioMessagePlayer = ({ audioUrl, duration, fileSize, colors, isMe }) => {
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [positionMillis, setPositionMillis] = useState(0);
@@ -83,31 +91,52 @@ const AudioMessagePlayer = ({ audioUrl, duration, colors, isMe }) => {
 
   const progress = durationMillis > 0 ? (positionMillis / durationMillis) : 0;
 
+  const displayTime = (positionMillis > 0 && positionMillis < durationMillis) 
+    ? formatDuration(positionMillis) 
+    : formatDuration(durationMillis);
+
   return (
     <View style={styles.container}>
       <TouchableOpacity 
         style={[styles.playButton, { backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.05)' }]}
         onPress={togglePlayback}
+        activeOpacity={0.7}
       >
         {isPlaying ? (
           <Pause size={18} color={contentColor} fill={contentColor} />
         ) : (
-          <Play size={18} color={contentColor} fill={contentColor} style={{ marginLeft: 2 }} />
+          <Play size={18} color={contentColor} fill={contentColor} style={{ marginLeft: 3 }} />
         )}
       </TouchableOpacity>
       
       <View style={styles.progressContainer}>
-        {/* Simple Progress Bar */}
-        <View style={[styles.track, { backgroundColor: isMe ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)' }]}>
-          <View style={[styles.progress, { backgroundColor: contentColor, width: `${progress * 100}%` }]} />
+        {/* Slider Track with Thumb */}
+        <View style={[styles.trackContainer]}>
+          <View style={[styles.track, { backgroundColor: isMe ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)' }]}>
+            <View style={[styles.progress, { backgroundColor: contentColor, width: `${progress * 100}%` }]} />
+          </View>
+          <View style={[styles.thumb, { backgroundColor: contentColor, left: `${progress * 100}%` }]} />
         </View>
+        
         <View style={styles.timeContainer}>
-          <Text style={[styles.timeText, { color: contentColor, opacity: 0.8 }]}>
-            {formatDuration(positionMillis)}
-          </Text>
-          <Text style={[styles.timeText, { color: contentColor, opacity: 0.8 }]}>
-            {formatDuration(durationMillis)}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {!!fileSize && (
+              <>
+                <Text style={[styles.timeText, { color: contentColor, opacity: 0.7, marginRight: scale(4) }]}>
+                  {formatBytes(fileSize)}
+                </Text>
+                <View style={{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: contentColor, opacity: 0.5, marginRight: scale(4) }} />
+              </>
+            )}
+            <Text style={[styles.timeText, { color: contentColor, opacity: 0.8 }]}>
+              {displayTime}
+            </Text>
+          </View>
+          {isMe && (
+            <View style={{ marginLeft: 4 }}>
+              {/* Optional: Add read receipt ticks here if available, or just a styling element */}
+            </View>
+          )}
         </View>
       </View>
     </View>
@@ -118,38 +147,65 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: verticalScale(4),
-    minWidth: scale(180),
+    paddingVertical: verticalScale(6),
+    paddingHorizontal: scale(4),
+    flexShrink: 1,
+    minWidth: scale(160),
+    maxWidth: '100%',
   },
   playButton: {
-    width: scale(36),
-    height: scale(36),
-    borderRadius: scale(18),
+    width: scale(38),
+    height: scale(38),
+    borderRadius: scale(19),
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: scale(12),
+    marginRight: scale(14),
   },
   progressContainer: {
     flex: 1,
     justifyContent: 'center',
   },
+  trackContainer: {
+    height: scale(12),
+    justifyContent: 'center',
+    position: 'relative',
+  },
   track: {
-    height: 4,
-    borderRadius: 2,
+    height: scale(3),
+    borderRadius: scale(1.5),
     width: '100%',
     overflow: 'hidden',
   },
   progress: {
     height: '100%',
-    borderRadius: 2,
+    borderRadius: scale(1.5),
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+  },
+  thumb: {
+    position: 'absolute',
+    width: scale(12),
+    height: scale(12),
+    borderRadius: scale(6),
+    top: 0,
+    transform: [{ translateX: -scale(6) }],
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+    elevation: 2,
   },
   timeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: verticalScale(6),
+    alignItems: 'center',
+    marginTop: verticalScale(4),
   },
   timeText: {
     fontSize: moderateScale(11),
+    fontWeight: '500',
   },
 });
 

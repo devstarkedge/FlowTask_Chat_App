@@ -74,14 +74,25 @@ export const useChannelStore = create(
       },
 
       updateCategory: (category) => {
+
+
+
+        const cId = category._id?.toString ? category._id.toString() : category._id;
         set((state) => ({
-          categories: state.categories.map(g => g._id === category._id ? category : g),
+          categories: state.categories.map(g => {
+            const gId = g._id?.toString ? g._id.toString() : g._id;
+            return gId === cId ? category : g;
+          }),
         }));
       },
 
       removeCategory: (categoryId) => {
+        const cidStr = categoryId?.toString ? categoryId.toString() : categoryId;
         set((state) => ({
-          categories: state.categories.filter(g => g._id !== categoryId),
+          categories: state.categories.filter(g => {
+            const gId = g._id?.toString ? g._id.toString() : g._id;
+            return gId !== cidStr;
+          }),
         }));
       },
 

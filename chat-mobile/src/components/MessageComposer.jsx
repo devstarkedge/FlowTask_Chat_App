@@ -25,7 +25,6 @@
  *   text            – current input text
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { RichEditor, actions } from "react-native-pell-rich-editor";
 import {
   View,
   Text,
@@ -40,7 +39,13 @@ import {
   Animated,
   PanResponder,
   useWindowDimensions,
+  LayoutAnimation,
+  UIManager,
 } from "react-native";
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import {
   Send,
   Plus,
@@ -59,6 +64,7 @@ import {
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import logger from "../utils/logger";
+import useKeyboard from "../hooks/useKeyboard";
 import { useDraftStore } from "../stores/draftStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useScheduledStore } from "../stores/scheduledStore";
@@ -157,18 +163,17 @@ const markdownToHtml = (text) => {
     return `<ol>${items}</ol>`;
   });
 
-  // Wrap paragraphs
+  // Wrap paragraphs while explicitly preserving empty lines (WhatsApp style)
   html = html
-    .split(/\n\n+/)
+    .split(/\n\n/)
     .map((block) => {
       const trimmed = block.trim();
-      if (!trimmed) return "";
+      if (!trimmed) return "<p><br></p>";
       if (/^<(pre|blockquote|li|hr)/.test(trimmed)) return trimmed;
       // Wrap consecutive <li> in <ul>
       if (trimmed.includes("<li>")) return `<ul>${trimmed}</ul>`;
       return `<p>${trimmed.replace(/\n/g, "<br>")}</p>`;
     })
-    .filter(Boolean)
     .join("\n");
 
   return html || "<p></p>";
@@ -207,18 +212,22 @@ const MessageComposer = React.memo(function MessageComposer({
   const lastSavedRef = useRef("");
   const richText = useRef(null);
   const [isEditorReady, setIsEditorReady] = useState(false);
-  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const [editorHeight, setEditorHeight] = useState(40);
   const insets = useSafeAreaInsets();
-  
+  const { keyboardHeight } = useKeyboard();
+
+  useEffect(() => {
+    if (__DEV__) {
+      console.log(`[PIPELINE] MessageComposer: received keyboardHeight = ${keyboardHeight}`);
+    }
+  }, [keyboardHeight]);
+
   const audioRecorder = useAudioRecorder();
   const videoRecorder = useVideoRecorder();
   const [showVideoModal, setShowVideoModal] = useState(false);
 
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const isTablet = screenWidth >= 600;
-
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -230,18 +239,9 @@ const MessageComposer = React.memo(function MessageComposer({
   const collapsedHeightRef = useRef(verticalScale(60));
   collapsedHeightRef.current = collapsedHeight;
 
-  const screenPhysicalHeight = Dimensions.get('screen').height;
-  // If the window dimensions height is smaller than the physical screen height by at least 150px,
-  // it means the window has already resized (shrunk) to accommodate the keyboard.
-  const hasResizedForKeyboard = (screenPhysicalHeight - screenHeight) > 150;
-  
-  // If the window has already resized, we don't subtract keyboardHeight again (resizing handles it).
-  // Otherwise, we subtract keyboardHeight to avoid covering the keyboard.
-  const activeKeyboardOffset = hasResizedForKeyboard ? 0 : keyboardHeight;
-
-  // Visible height above keyboard, subtracting status bar / safe area / header (~60px)
-  const visibleHeight = screenHeight - activeKeyboardOffset - insets.top - (Platform.OS === 'ios' ? 44 : 56);
-  const maxExpandedHeight = visibleHeight * (isTablet ? 0.65 : 0.85);
+  // Visible height subtracting status bar / safe area / header (~60px) and keyboard
+  const visibleHeight = screenHeight - insets.top - (Platform.OS === 'ios' ? 44 : 56) - keyboardHeight;
+  const maxExpandedHeight = Math.max(100, visibleHeight * (isTablet ? 0.65 : 0.85));
 
   const maxExpandedHeightRef = useRef(maxExpandedHeight);
   maxExpandedHeightRef.current = maxExpandedHeight;
@@ -250,7 +250,6 @@ const MessageComposer = React.memo(function MessageComposer({
 
   const dragStartY = useRef(0);
   const animatedHeight = useRef(new Animated.Value(verticalScale(60))).current;
-  const animatedKeyboardOffset = useRef(new Animated.Value(0)).current;
   const isAnimating = useRef(false);
 
   const collapseComposer = useCallback((dismissKeyboard = false) => {
@@ -347,8 +346,8 @@ const MessageComposer = React.memo(function MessageComposer({
   ).current;
 
   const handleComposerLayout = useCallback((event) => {
+    const height = event.nativeEvent.layout.height;
     if (!isExpanded && !isDragging && !isAnimating.current) {
-      const height = event.nativeEvent.layout.height;
       if (height > 0) {
         setCollapsedHeight(height);
         animatedHeight.setValue(height);
@@ -356,57 +355,7 @@ const MessageComposer = React.memo(function MessageComposer({
     }
   }, [isExpanded, isDragging]);
 
-  useEffect(() => {
-    const handleKeyboardShow = (e) => {
-      const height = e?.endCoordinates?.height || 0;
-      if (height > 0) {
-        setKeyboardVisible(true);
-        setKeyboardHeight(height);
-        if (Platform.OS === 'android') {
-          Animated.timing(animatedKeyboardOffset, {
-            toValue: height,
-            duration: 180,
-            useNativeDriver: false,
-          }).start();
-        }
-      }
-    };
-
-    const handleKeyboardHide = (e) => {
-      setKeyboardVisible(false);
-      setKeyboardHeight(0);
-      if (Platform.OS === 'android') {
-        Animated.timing(animatedKeyboardOffset, {
-          toValue: 0,
-          duration: 150,
-          useNativeDriver: false,
-        }).start();
-      }
-    };
-
-    const showSub1 = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      handleKeyboardShow
-    );
-    const showSub2 = Keyboard.addListener(
-      'keyboardDidChangeFrame',
-      (e) => {
-        if (e && e.endCoordinates && e.endCoordinates.height > 0) {
-          handleKeyboardShow(e);
-        }
-      }
-    );
-    const hideSub1 = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      handleKeyboardHide
-    );
-
-    return () => {
-      showSub1.remove();
-      showSub2.remove();
-      hideSub1.remove();
-    };
-  }, [animatedKeyboardOffset]);
+  // Removed custom keyboard listeners in favor of react-native-reanimated useAnimatedKeyboard
 
   // Keep composer size in sync with visible height adjustments when keyboard state changes
   useEffect(() => {
@@ -420,11 +369,7 @@ const MessageComposer = React.memo(function MessageComposer({
     }
   }, [maxExpandedHeight, isExpanded]);
 
-  const bottomPadding = isKeyboardVisible
-    ? Platform.OS === "ios"
-      ? 8
-      : 8
-    : Math.max(insets.bottom, 8);
+  // useAnimatedKeyboard spacer used instead of bottomPadding
 
   const activeWorkspaceId =
     workspaceId || useWorkspaceStore.getState().activeWorkspaceId;
@@ -510,14 +455,11 @@ const MessageComposer = React.memo(function MessageComposer({
   // ─── Mention select ───────────────────────────────────────────────────────
   const handleMentionSelect = useCallback(
     (member) => {
-      // It's tricky to remove the typed query safely in HTML string, so we'll
-      // replace the last @... pattern in the rawHtml.
-      const rawHtml = text;
-      const mentionText = `<span data-type="mention" class="mention" data-id="${member._id}">@${member.name}</span>&nbsp;`;
-      const newText = rawHtml.replace(/@([^\s@<]*)(?!.*@)/, mentionText);
+      const plainText = text;
+      const mentionText = `@${member.name} `;
+      const newText = plainText.replace(/@([^\s@]*)(?!.*@)/, mentionText);
 
       onChangeText(newText);
-      richText.current?.setContentHTML(newText);
 
       setPendingMentions((prev) => [
         ...prev,
@@ -530,16 +472,16 @@ const MessageComposer = React.memo(function MessageComposer({
   );
 
   useEffect(() => {
-    if (text === "" && isEditorReady && richText.current) {
-      richText.current?.setContentHTML("");
+    if (text === "") {
+      // Handled by TextInput value prop natively
     }
-  }, [text, isEditorReady]);
+  }, [text]);
 
   useEffect(() => {
-    if (editingMessage && isEditorReady && richText.current) {
-      richText.current?.setContentHTML(text);
+    if (editingMessage) {
+      // Handled by TextInput value prop natively
     }
-  }, [editingMessage, isEditorReady]);
+  }, [editingMessage]);
 
   // ─── Send ──────────────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
@@ -562,9 +504,7 @@ const MessageComposer = React.memo(function MessageComposer({
       return; // Still uploading, prevent send
     }
 
-    const htmlContent = rawHtml.includes("<")
-      ? pellToTipTap(rawHtml)
-      : markdownToHtml(rawHtml);
+    const htmlContent = markdownToHtml(rawHtml);
     const mentionPayload =
       pendingMentions.length > 0 ? pendingMentions : undefined;
 
@@ -619,9 +559,7 @@ const MessageComposer = React.memo(function MessageComposer({
 
       if (!scheduledAt || (!plainContent && pendingFiles.length === 0)) return;
 
-      const htmlContent = rawHtml.includes("<")
-        ? pellToTipTap(rawHtml)
-        : markdownToHtml(rawHtml);
+      const htmlContent = markdownToHtml(rawHtml);
       onSend(plainContent, {
         htmlContent,
         scheduledAt,
@@ -884,6 +822,15 @@ const MessageComposer = React.memo(function MessageComposer({
         onSend("", {
           contentType: type,
           fileReferences: [fileId],
+          attachments: [{
+            fileName: uploadedFile.fileName || uploadedFile.originalName || file.name,
+            originalName: uploadedFile.originalName || file.name,
+            mimeType: uploadedFile.mimeType || (type === 'audio' ? 'audio/m4a' : 'video/mp4'),
+            fileSize: uploadedFile.fileSize || 0,
+            url: uploadedFile.url || uploadedFile.secureUrl,
+            thumbnailUrl: uploadedFile.thumbnailUrl,
+            source: 'chat_upload',
+          }],
           [type === 'audio' ? 'audioMeta' : 'videoMeta']: {
             duration,
             [type === 'audio' ? 'audioUrl' : 'videoUrl']: uploadedFile.url || uploadedFile.secureUrl,
@@ -961,47 +908,25 @@ const MessageComposer = React.memo(function MessageComposer({
           }}
           onFormat={(format) => {
             if (!richText.current) return;
+            let pre = "";
+            let post = "";
             switch (format) {
-              case "bold":
-                richText.current.sendAction(actions.setBold, "result");
-                break;
-              case "italic":
-                richText.current.sendAction(actions.setItalic, "result");
-                break;
-              case "underline":
-                richText.current.sendAction(actions.setUnderline, "result");
-                break;
-              case "strikethrough":
-                richText.current.sendAction(actions.setStrikethrough, "result");
-                break;
-              case "unorderedList":
-                richText.current.sendAction(
-                  actions.insertBulletsList,
-                  "result",
-                );
-                break;
-              case "orderedList":
-                richText.current.sendAction(
-                  actions.insertOrderedList,
-                  "result",
-                );
-                break;
-              case "blockquote":
-                richText.current.sendAction(actions.setBlockQuote, "result");
-                break;
-              case "code":
-                richText.current.sendAction(actions.code, "result");
-                break;
-              case "codeBlock":
-                richText.current.sendAction(actions.code, "result");
-                break;
-              case "link":
-                richText.current.sendAction(
-                  actions.insertLink,
-                  "Add Link",
-                  "https://",
-                );
-                break;
+              case "bold": pre = "**"; post = "**"; break;
+              case "italic": pre = "*"; post = "*"; break;
+              case "underline": pre = "__"; post = "__"; break;
+              case "strikethrough": pre = "~~"; post = "~~"; break;
+              case "unorderedList": pre = "\n- "; break;
+              case "orderedList": pre = "\n1. "; break;
+              case "blockquote": pre = "\n> "; break;
+              case "code": pre = "`"; post = "`"; break;
+              case "codeBlock": pre = "\n```\n"; post = "\n```\n"; break;
+              case "link": pre = "["; post = "](url)"; break;
+            }
+            if (pre || post) {
+              const before = text.substring(0, selStart);
+              const selected = text.substring(selStart, selEnd);
+              const after = text.substring(selEnd);
+              onChangeText(before + pre + selected + post + after);
             }
           }}
         />
@@ -1058,7 +983,7 @@ const MessageComposer = React.memo(function MessageComposer({
           styles.inputBar,
           {
             backgroundColor: colors.background,
-            paddingBottom: bottomPadding,
+            paddingBottom: 0,
           },
           (isExpanded || isDragging) ? { height: animatedHeight } : null,
         ]}
@@ -1083,29 +1008,7 @@ const MessageComposer = React.memo(function MessageComposer({
             },
           ]}
         >
-          {audioRecorder.isRecording || audioRecorder.isPaused || audioRecorder.recordingUri ? (
-            <AudioRecorderUI
-              isRecording={audioRecorder.isRecording}
-              isPaused={audioRecorder.isPaused}
-              recordingDuration={audioRecorder.recordingDuration}
-              onPause={audioRecorder.pauseRecording}
-              onResume={audioRecorder.resumeRecording}
-              onStop={audioRecorder.stopRecording}
-              onCancel={audioRecorder.cancelRecording}
-              onSend={async (data) => {
-                let finalData = data;
-                if (!finalData && audioRecorder.recordingUri) {
-                  finalData = { uri: audioRecorder.recordingUri, duration: audioRecorder.recordingDuration };
-                }
-                if (finalData) {
-                  await handleMediaSend(finalData.uri, 'audio', finalData.duration);
-                  audioRecorder.cancelRecording();
-                }
-              }}
-              colors={colors}
-            />
-          ) : (
-            <>
+          <>
               {/* Left Buttons (only when collapsed) */}
               {!(isExpanded || isDragging) && (
                 <>
@@ -1135,31 +1038,31 @@ const MessageComposer = React.memo(function MessageComposer({
                 </>
               )}
 
-              {/* Editor wrapper - always mounted with a stable key to preserve focus and typed text */}
+              {/* Editor wrapper - now uses native TextInput for synchronous auto-expansion */}
               <TouchableOpacity
                 activeOpacity={1}
-                onPress={() => richText.current?.focusContentEditor()}
+                onPress={() => richText.current?.focus()}
                 key="editor-wrapper"
-                style={(isExpanded || isDragging) ? { flex: 1, width: '100%', minHeight: verticalScale(140) } : { flex: 1, minHeight: verticalScale(40), height: Math.min(maxComposerHeight, Math.max(verticalScale(40), editorHeight)) }}
+                style={(isExpanded || isDragging) ? { flex: 1, width: '100%', minHeight: 140 } : { flex: 1 }}
               >
-                <RichEditor
+                <TextInput
                   ref={richText}
-                  useContainer={false}
-                  onHeightChange={(height) => setEditorHeight(height)}
-                  style={{ flex: 1 }}
-                  scrollEnabled={isExpanded || isDragging || editorHeight >= maxComposerHeight}
+                  style={[
+                    styles.input,
+                    { color: colors.inputText },
+                    (isExpanded || isDragging) ? { maxHeight: '100%', textAlignVertical: 'top' } : { maxHeight: maxComposerHeight }
+                  ]}
+                  multiline={true}
                   placeholder={(isExpanded || isDragging) ? "Jot something down" : (editingMessage ? "Edit message..." : "Message...")}
-                  initialContentHTML={text}
-                  editorStyle={{
-                    backgroundColor: colors.inputBackground,
-                    color: colors.inputText,
-                    placeholderColor: colors.inputPlaceholder,
-                    contentCSSText: `font-size: 15px; font-family: sans-serif; overflow-y: auto !important; ${(isExpanded || isDragging) ? 'min-height: 160px !important; height: 100% !important;' : ''} body { margin: 0 !important; padding: 0 !important; padding-top: 0px !important; ${(isExpanded || isDragging) ? 'min-height: 160px !important; height: 100% !important;' : ''} } p { margin-top: 0px !important; margin-bottom: 0px !important; line-height: 1.4 !important; } ul, ol { padding-left: 24px !important; margin: 0 !important; margin-top: 4px !important; margin-bottom: 4px !important; } li { margin: 0 !important; padding: 0 !important; list-style-position: outside !important; }`,
+                  placeholderTextColor={colors.inputPlaceholder}
+                  value={text}
+                  onChangeText={handleTextChange}
+                  onSelectionChange={(e) => {
+                    setSelStart(e.nativeEvent.selection.start);
+                    setSelEnd(e.nativeEvent.selection.end);
                   }}
-                  onChange={(html) => {
-                    handleTextChange(html);
-                  }}
-                  editorInitializedCallback={() => setIsEditorReady(true)}
+                  scrollEnabled={true}
+                  keyboardAppearance={colors.background === '#000000' || colors.background === '#1A1D21' ? 'dark' : 'light'}
                 />
               </TouchableOpacity>
 
@@ -1192,14 +1095,32 @@ const MessageComposer = React.memo(function MessageComposer({
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(4) }}>
-                      <TouchableOpacity style={styles.iconButton} onPress={() => setShowVideoModal(true)}>
+                    <>
+                      <TouchableOpacity style={[styles.iconButton, { marginBottom: verticalScale(4) }]} onPress={() => setShowVideoModal(true)}>
                         <CameraIcon size={20} color={colors.textSecondary} />
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.iconButton} onPress={audioRecorder.startRecording}>
-                        <Mic size={20} color={colors.textSecondary} />
-                      </TouchableOpacity>
-                    </View>
+                      <AudioRecorderUI
+                        isRecording={audioRecorder.isRecording}
+                        isPaused={audioRecorder.isPaused}
+                        recordingDuration={audioRecorder.recordingDuration}
+                        onStart={audioRecorder.startRecording}
+                        onPause={audioRecorder.pauseRecording}
+                        onResume={audioRecorder.resumeRecording}
+                        onStop={audioRecorder.stopRecording}
+                        onCancel={audioRecorder.cancelRecording}
+                        onSend={async (data) => {
+                          let finalData = data;
+                          if (!finalData && audioRecorder.recordingUri) {
+                            finalData = { uri: audioRecorder.recordingUri, duration: audioRecorder.recordingDuration };
+                          }
+                          if (finalData) {
+                            await handleMediaSend(finalData.uri, 'audio', finalData.duration);
+                            audioRecorder.cancelRecording();
+                          }
+                        }}
+                        colors={colors}
+                      />
+                    </>
                   )}
                 </>
               )}
@@ -1259,9 +1180,9 @@ const MessageComposer = React.memo(function MessageComposer({
                 </>
               )}
             </>
-          )}
         </View>
       </Animated.View>
+
 
       <VideoRecorderModal
         visible={showVideoModal}
@@ -1371,8 +1292,8 @@ const createStyles = (colors, insets) =>
     banner: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: scale(16),
-      paddingVertical: verticalScale(8),
+      paddingHorizontal: moderateScale(16),
+      paddingVertical: moderateScale(8),
       borderLeftWidth: 3,
       gap: 8,
     },
@@ -1382,49 +1303,48 @@ const createStyles = (colors, insets) =>
     },
     bannerText: {
       fontSize: moderateScale(13),
-      marginTop: verticalScale(1),
+      marginTop: moderateScale(1),
     },
     pendingFilesRow: {
       flexDirection: "row",
       flexWrap: "wrap",
-      paddingHorizontal: scale(12),
-      paddingVertical: verticalScale(6),
+      paddingHorizontal: moderateScale(12),
+      paddingVertical: moderateScale(6),
       gap: 6,
     },
     pendingFileChip: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: scale(8),
-      paddingVertical: verticalScale(4),
+      paddingHorizontal: moderateScale(8),
+      paddingVertical: moderateScale(4),
       borderRadius: moderateScale(12),
       gap: 4,
-      maxWidth: scale(160),
+      maxWidth: '60%',
     },
     pendingFileName: {
       fontSize: moderateScale(12),
       flexShrink: 1,
     },
     inputBar: {
-      paddingHorizontal: scale(12),
-      paddingTop: verticalScale(6),
-      paddingBottom: Math.max(verticalScale(6), insets.bottom),
+      paddingHorizontal: moderateScale(12),
+      paddingTop: moderateScale(6),
+      paddingBottom: moderateScale(6),
     },
     inputContainer: {
       flexDirection: "row",
-      alignItems: "center",
       borderRadius: moderateScale(24),
       borderWidth: 1,
-      paddingHorizontal: scale(4),
-      minHeight: verticalScale(48),
+      paddingHorizontal: moderateScale(4),
+      minHeight: moderateScale(48),
     },
     dragHandleContainer: {
       alignItems: "center",
-      paddingVertical: verticalScale(6),
+      paddingVertical: moderateScale(6),
       width: "100%",
     },
     dragHandle: {
-      width: scale(36),
-      height: verticalScale(5),
+      width: moderateScale(36),
+      height: moderateScale(5),
       borderRadius: moderateScale(3),
     },
     inputContainerExpanded: {
@@ -1437,36 +1357,37 @@ const createStyles = (colors, insets) =>
     toolbarDivider: {
       height: 1,
       width: "100%",
-      marginVertical: verticalScale(8),
+      marginVertical: moderateScale(8),
     },
     expandedToolbar: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: scale(4),
+      paddingHorizontal: moderateScale(4),
       width: "100%",
     },
     expandedToolbarLeft: {
       flexDirection: "row",
       alignItems: "center",
-      gap: scale(10),
+      gap: moderateScale(10),
     },
     iconButton: {
       padding: moderateScale(8),
     },
     input: {
-      flex: 1,
+      width: '100%',
+      minHeight: moderateScale(48),
       fontSize: moderateScale(16),
-      maxHeight: verticalScale(100),
-      paddingVertical: Platform.OS === "android" ? 6 : 8,
-      paddingHorizontal: Platform.OS === "android" ? 4 : 4,
-      textAlignVertical: "center",
+      paddingTop: Platform.OS === "android" ? 12 : 14,
+      paddingBottom: Platform.OS === "android" ? 12 : 14,
+      paddingHorizontal: moderateScale(8),
+      textAlignVertical: "top",
       letterSpacing: 0,
       ...(Platform.OS === "web" && { outlineWidth: 0, outlineStyle: "none" }),
     },
     sendButton: {
       padding: moderateScale(8),
-      paddingHorizontal: scale(12),
+      paddingHorizontal: moderateScale(12),
     },
   });
 

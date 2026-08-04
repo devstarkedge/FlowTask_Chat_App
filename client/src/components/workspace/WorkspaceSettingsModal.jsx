@@ -144,7 +144,7 @@ export default function WorkspaceSettingsModal({ onClose }) {
   const handleDeleteWorkspace = async () => {
     const ok = await confirm({
       title: `Delete "${activeWorkspace?.name}"?`,
-      message: 'All channels, messages and files will be permanently erased. This cannot be undone.',
+      message: 'This action will permanently delete this workspace and all its data for every member. This action cannot be undone.',
       confirmLabel: 'Delete workspace',
     })
     if (!ok) return
@@ -391,8 +391,7 @@ function GeneralTab({
             lineHeight: 1.6,
           }}
         >
-          Once you delete a workspace, there is no going back. All channels,
-          messages and files will be permanently erased.
+          Once you delete a workspace, there is no going back. This action will permanently delete this workspace and all its data for every member.
         </p>
         <button className="wsm-btn-danger" onClick={onDelete}>
           <Trash2 size={14} />

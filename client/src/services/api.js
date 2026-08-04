@@ -183,6 +183,7 @@ export const messageAPI = {
     api.get(`/channels/${channelId}/messages/around/${messageId}`, { params }),
   send: (channelId, data) => api.post(`/channels/${channelId}/messages`, data),
   get: (id) => api.get(`/messages/${id}`),
+  getInfo: (id, channelId) => api.get(`/messages/${id}/info`, { params: { channelId } }),
   edit: (id, content) => {
     // Server edit endpoint expects `{ content: string }`.
     // When callers provide an object with `htmlContent`, prefer that

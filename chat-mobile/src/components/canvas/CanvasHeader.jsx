@@ -85,19 +85,19 @@ export default function CanvasHeader({
         )}
 
         {/* History Button */}
-        <TouchableOpacity onPress={onHistoryPress} style={styles.actionPill}>
+        {/* <TouchableOpacity onPress={onHistoryPress} style={styles.actionPill}>
           <History size={16} color={colors.textSecondary} />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
         {/* Comments Button */}
-        <TouchableOpacity onPress={onCommentsPress} style={styles.actionPill}>
+        {/* <TouchableOpacity onPress={onCommentsPress} style={styles.actionPill}>
           <MessageSquare size={16} color={colors.textSecondary} />
           {commentCount > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{commentCount}</Text>
             </View>
           )}
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
         {/* Share Button */}
         <TouchableOpacity onPress={onOptionsPress} style={styles.shareBtn}>

@@ -222,23 +222,30 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   };
 
   const handleLeaveWorkspace = () => {
-    if (isOwner) {
-      Alert.alert('Cannot Leave', 'As the owner, you cannot leave. Transfer ownership or delete the workspace instead.');
-      return;
-    }
-    Alert.alert('Leave Workspace', 'Are you sure you want to leave this workspace?', [
+    const title = isOwner ? 'Delete Workspace' : 'Leave Workspace';
+    const message = isOwner
+      ? 'This action will permanently delete this workspace and all its data for every member. This action cannot be undone.'
+      : 'Are you sure you want to leave this workspace?';
+    const confirmText = isOwner ? 'Delete' : 'Leave';
+
+    Alert.alert(title, message, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Leave',
+        text: confirmText,
         style: 'destructive',
         onPress: async () => {
           try {
-            await workspaceAPI.leave(activeWorkspaceId);
-            Toast.show({ type: 'success', text1: 'Left workspace' });
+            if (isOwner) {
+              await workspaceAPI.delete(activeWorkspaceId);
+              Toast.show({ type: 'success', text1: 'Workspace deleted' });
+            } else {
+              await workspaceAPI.leave(activeWorkspaceId);
+              Toast.show({ type: 'success', text1: 'Left workspace' });
+            }
             await switchWorkspace(null);
             navigation.reset({ index: 0, routes: [{ name: 'CreateWorkspace' }] });
           } catch (error) {
-            Toast.show({ type: 'error', text1: 'Failed to leave workspace' });
+            Toast.show({ type: 'error', text1: isOwner ? 'Failed to delete workspace' : 'Failed to leave workspace' });
           }
         },
       },
@@ -512,9 +519,9 @@ function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, 
           <Text style={styles.dangerTitle}>Danger Zone</Text>
         </View>
         <TouchableOpacity style={styles.leaveButton} onPress={onLeave}>
-          <LogOut size={18} color="#ef4444" />
+          {isOwner ? <Trash2 size={18} color="#ef4444" /> : <LogOut size={18} color="#ef4444" />}
           <Text style={styles.leaveText}>
-            {isOwner ? 'Transfer / Delete Workspace' : 'Leave Workspace'}
+            {isOwner ? 'Delete Workspace' : 'Leave Workspace'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -674,7 +681,7 @@ function InviteTab({ workspace, canManage, inviteLink, colors, onCopyLink, onSha
           </TouchableOpacity>
         </View>
       ) : (
-        <Text style={[styles.noCode, { color: colors.textTertiary }]}>No invite code generated.</Text>
+        <Text style={[styles.noCode, { color: colors.textTertiary }]}>For invite code, please contact workspace's admin or owner.</Text>
       )}
       {canManage && (
         <TouchableOpacity style={[styles.ghostButton, { borderColor: colors.border }]} onPress={onRegenerate}>

@@ -1,32 +1,30 @@
 import React from 'react';
-import { View, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { View, Platform, StyleSheet } from 'react-native';
 import { useThemeStore } from '../../stores/themeStore';
+import KeyboardAwareContainer from './KeyboardAwareContainer';
 
 /**
  * ScreenContainer
  *
- * A wrapper component that provides keyboard avoidance across iOS and Android.
- * On Android, Expo/React Native uses `windowSoftInputMode="adjustResize"`, so
- * KeyboardAvoidingView behavior should be undefined to avoid double-resizing.
- * On iOS, `behavior="padding"` is used with configurable `keyboardVerticalOffset`.
+ * A wrapper component that provides keyboard avoidance across iOS and Android
+ * using the centralized KeyboardAwareContainer.
  */
-const ScreenContainer = ({ children, style, keyboardVerticalOffset = 0, behavior }) => {
+const ScreenContainer = ({ children, style, keyboardVerticalOffset = 0, behavior, onLayout }) => {
   const colors = useThemeStore(state => state.colors);
   const isIOS = Platform.OS === 'ios';
 
   const effectiveBehavior = behavior !== undefined 
     ? behavior 
-    : (isIOS ? 'padding' : undefined);
+    : (isIOS ? 'padding' : 'height');
 
   return (
-    <View style={[{ flex: 1, backgroundColor: colors.background }, style]}>
-      <KeyboardAvoidingView
+    <View onLayout={onLayout} style={[{ flex: 1, backgroundColor: colors.background }, style]}>
+      <KeyboardAwareContainer
         style={styles.keyboardView}
-        behavior={effectiveBehavior}
-        keyboardVerticalOffset={keyboardVerticalOffset}
+        disablePadding={false}
       >
         {children}
-      </KeyboardAvoidingView>
+      </KeyboardAwareContainer>
     </View>
   );
 };

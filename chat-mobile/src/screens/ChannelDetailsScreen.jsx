@@ -9,7 +9,6 @@ import {
   Switch,
   Modal,
   TextInput,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
 } from 'react-native';
@@ -17,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { Hash, Users, Pin, Bell, LogOut, FolderOpen, FileText, UserPlus, X, Search, Plus, Lock, Edit2, Star, MessageSquare, FolderInput } from 'lucide-react-native';
 import { AppAvatar, HeaderBackButton } from '../components/common';
+import KeyboardAwareContainer from '../components/common/KeyboardAwareContainer';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { useChannelDetails } from '../hooks/useChannelDetails';
 
@@ -271,7 +271,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               >
                 <Text style={{ fontSize: moderateScale(15), color: colors.textPrimary, fontWeight: '500' }}>(No Category)</Text>
               </TouchableOpacity>
-              {categories.filter(c => c.type === 'custom').map((cat) => (
+              {categories.filter(c => c.type === 'custom' || c.type === 'department').map((cat) => (
                 <TouchableOpacity
                   key={cat._id}
                   style={[styles.searchResultItem, { borderBottomColor: colors.border }]}
@@ -287,7 +287,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
 
       {/* Add Members Modal */}
       <Modal visible={showAddMemberModal} animationType="slide" transparent>
-        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAwareContainer style={styles.modalOverlay} disablePadding={false}>
           <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Add Members</Text>
@@ -331,7 +331,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               </ScrollView>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </KeyboardAwareContainer>
       </Modal>
     </SafeAreaView>
   );

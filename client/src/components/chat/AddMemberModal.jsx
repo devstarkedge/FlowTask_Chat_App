@@ -346,11 +346,15 @@ export default function AddMemberModal({ channel, onClose }) {
       const contacts = data.data?.contacts || [];
 
       // important filtering
-      const filtered = contacts.filter(
+      let filtered = contacts.filter(
         (u) =>
           getContactUserId(u) !== user?._id &&
           !memberIds.has(getContactUserId(u)),
       );
+
+      if (channel?.slug === 'flowtask-managers') {
+        filtered = filtered.filter((u) => (u.role || '').toLowerCase() === 'manager');
+      }
 
       // Hydrate presence store
       usePresenceStore.getState().updateFromUsers(contacts);

@@ -319,6 +319,7 @@ async function startServer() {
     await cache.initialize();
 
     // 1c. Initialize BullMQ queues AFTER Redis is ready
+    await import('./services/notificationQueue.service.js');
     const { initQueues } = await import('./services/jobQueue.service.js');
     await initQueues();
 

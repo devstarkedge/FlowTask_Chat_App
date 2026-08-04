@@ -42,7 +42,7 @@ const WorkspaceSelectorScreen = () => {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.welcome}>Welcome back,</Text>
+          <Text style={styles.welcome}>Welcome,</Text>
           <Text style={styles.userName}>{user?.name || 'User'}</Text>
         </View>
         <TouchableOpacity onPress={logout} style={styles.logoutButton}>

@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import ScreenContainer from '../../components/common/ScreenContainer';
+import AppScreen from '../../components/common/AppScreen';
 import { Eye, EyeOff, CircleChevronRight, Lock, Shield, Zap } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useAuthStore } from '../../stores/authStore';
@@ -51,12 +52,14 @@ const LoginScreen = ({ navigation, route }) => {
 
   if (autoLoginInProgress) {
     return (
-      <ScreenContainer style={styles.container}>
-        <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loaderText}>Signing in from FlowTask…</Text>
-        </View>
-      </ScreenContainer>
+      <AppScreen edges={['top', 'bottom']} style={styles.container}>
+        <ScreenContainer style={styles.container}>
+          <View style={styles.loaderContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loaderText}>Signing in from FlowTask…</Text>
+          </View>
+        </ScreenContainer>
+      </AppScreen>
     );
   }
 
@@ -89,6 +92,7 @@ const LoginScreen = ({ navigation, route }) => {
   };
 
   return (
+    <AppScreen edges={['top', 'bottom']} style={styles.container}>
     <ScreenContainer style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -243,6 +247,7 @@ const LoginScreen = ({ navigation, route }) => {
         </View>
       </ScrollView>
     </ScreenContainer>
+    </AppScreen>
   );
 };
 

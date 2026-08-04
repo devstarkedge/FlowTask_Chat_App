@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Alert, Platform, KeyboardAvoidingView, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Alert, Platform, Animated, Keyboard } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import KeyboardAwareContainer from '../components/common/KeyboardAwareContainer';
 import { useThemeStore } from '../stores/themeStore';
 import { searchAPI } from '../services/api';
 import storage from '../services/storage';
@@ -12,7 +13,8 @@ import Toast from 'react-native-toast-message';
 import logger from '../utils/logger';
 import { useAuthStore } from '../stores/authStore';
 import { useChannelStore } from '../stores/channelStore';
-
+import useKeyboard from '../hooks/useKeyboard';
+import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
 const RECENT_KEY = 'recent_searches_objects'; // Use new key to avoid conflicts with old string array
 
 export default function SearchScreen({ navigation }) {
@@ -23,6 +25,7 @@ export default function SearchScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
   const [recent, setRecent] = useState([]);
+  const [isFocused, setIsFocused] = useState(true);
   const debounceRef = useRef(null);
 
   useEffect(() => { loadRecent() }, []);
@@ -277,18 +280,33 @@ export default function SearchScreen({ navigation }) {
     );
   };
 
-  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const { animatedKeyboardHeight } = useKeyboard();
+  const tabBarHeight = React.useContext(BottomTabBarHeightContext) || 0;
 
-  useEffect(() => {
-    const showSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardVisible(false));
-    return () => { showSub.remove(); hideSub.remove(); };
-  }, []);
+  // Since SearchScreen has NO bottom SafeAreaView, we pad from the absolute bottom.
+  const animatedGap = animatedKeyboardHeight.interpolate(
+    Platform.OS === 'ios'
+    ? {
+        inputRange: [0, 9999],
+        outputRange: [insets.bottom + 8, 9999 - tabBarHeight + 8],
+        extrapolate: 'clamp'
+      }
+    : {
+        inputRange: [0, 9999],
+        outputRange: [insets.bottom + 8, 9999 + 8],
+        extrapolate: 'clamp'
+      }
+  );
+  const [headerHeight, setHeaderHeight] = useState(0);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Dark Header */}
-      <SafeAreaView edges={['top']} style={{ backgroundColor: colors.primary }}>
+      <SafeAreaView 
+        edges={['top']} 
+        style={{ backgroundColor: colors.primary }}
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+      >
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.textOnPrimary }]}>Search</Text>
           <TouchableOpacity onPress={() => {/* optional profile press */}}>
@@ -297,9 +315,10 @@ export default function SearchScreen({ navigation }) {
         </View>
       </SafeAreaView>
 
-      <KeyboardAvoidingView 
-        style={styles.keyboardView} 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <KeyboardAwareContainer 
+        disablePadding={true}
+        style={styles.keyboardView}
+        keyboardVerticalOffset={headerHeight}
       >
         <View style={{ flex: 1 }}>
           <FlatList
@@ -310,7 +329,7 @@ export default function SearchScreen({ navigation }) {
               return `${base}${id}:${idx}`;
             }}
             renderItem={renderResultItem}
-            contentContainerStyle={{ paddingHorizontal: scale(16), paddingTop: verticalScale(16), paddingBottom: verticalScale(100) }}
+            contentContainerStyle={{ paddingHorizontal: scale(16), paddingTop: verticalScale(16), paddingBottom: verticalScale(16) }}
             ListHeaderComponent={() => (
               <View>
                 {!query && recent && recent.length > 0 && (
@@ -337,27 +356,40 @@ export default function SearchScreen({ navigation }) {
           />
 
           {/* Floating Search Bar */}
-          <View style={[styles.floatingSearchContainer, { paddingBottom: isKeyboardVisible ? 12 : Math.max(insets.bottom + 12, 12) }]}>
-            <View style={[styles.floatingSearchPill, { backgroundColor: colors.background, shadowColor: colors.shadow || '#000' }]}>
-              <Search size={20} color={colors.textSecondary} />
+          <Animated.View style={[styles.floatingSearchContainer, { paddingBottom: animatedGap, backgroundColor: colors.background }]}>
+            <View style={[
+              styles.floatingSearchPill, 
+              { backgroundColor: colors.background, shadowColor: colors.shadow || '#000', borderWidth: 1, borderColor: colors.border }
+            ]}>
+              <Search size={20} color={isFocused ? colors.primary : colors.textSecondary} />
               <TextInput 
                 style={[styles.searchInput, { color: colors.textPrimary }]} 
                 placeholder="Search" 
                 placeholderTextColor={colors.textTertiary}
                 value={query}
                 onChangeText={setQuery}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
                 autoFocus
               />
             </View>
             <TouchableOpacity 
-              style={[styles.closeButton, { backgroundColor: colors.background, shadowColor: colors.shadow || '#000' }]} 
+              style={[
+                styles.closeButton, 
+                { 
+                  backgroundColor: colors.background, 
+                  shadowColor: colors.shadow || '#000',
+                  borderColor: colors.border,
+                  borderWidth: 1
+                }
+              ]} 
               onPress={() => { setQuery(''); navigation.goBack(); }}
             >
               <X size={24} color={colors.textPrimary} />
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAwareContainer>
     </View>
   );
 }
@@ -368,8 +400,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(12),
+    paddingHorizontal: moderateScale(16),
+    paddingVertical: moderateScale(12),
   },
   headerTitle: {
     fontSize: moderateScale(22),
@@ -378,44 +410,42 @@ const styles = StyleSheet.create({
   keyboardView: {
     flex: 1,
   },
-  resultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: verticalScale(10) },
-  resultIcon: { width: scale(32), height: scale(32), borderRadius: moderateScale(8), justifyContent: 'center', alignItems: 'center' },
+  resultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: moderateScale(10) },
+  resultIcon: { width: moderateScale(32), height: moderateScale(32), borderRadius: moderateScale(8), justifyContent: 'center', alignItems: 'center' },
   floatingSearchContainer: {
-    position: 'absolute',
-    bottom: verticalScale(0),
-    left: scale(0),
-    right: scale(0),
     flexDirection: 'row',
-    paddingHorizontal: scale(16),
-    paddingTop: verticalScale(12),
+    paddingHorizontal: moderateScale(16),
+    paddingTop: moderateScale(12),
     alignItems: 'center',
     gap: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'transparent', // keep layout matching
   },
   floatingSearchPill: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: moderateScale(999),
-    paddingHorizontal: scale(16),
-    height: scale(52),
-    shadowOffset: { width: scale(0), height: scale(2) },
+    paddingHorizontal: moderateScale(16),
+    height: moderateScale(52),
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 5,
   },
   searchInput: {
     flex: 1,
-    marginLeft: scale(12),
+    marginLeft: moderateScale(12),
     fontSize: moderateScale(16),
     height: '100%',
   },
   closeButton: {
-    width: scale(52),
-    height: scale(52),
+    width: moderateScale(52),
+    height: moderateScale(52),
     borderRadius: moderateScale(26),
     justifyContent: 'center',
     alignItems: 'center',
-    shadowOffset: { width: scale(0), height: scale(2) },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 5,

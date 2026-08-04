@@ -13,6 +13,7 @@ import {
   Keyboard,
   Platform,
   ActivityIndicator,
+  Dimensions,
   Alert,
   Image,
   Linking,
@@ -21,15 +22,16 @@ import {
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useShallow } from 'zustand/react/shallow';
+import ChatMessageItem from "../../components/ChatMessageItem";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useChannelStore } from "../../stores/channelStore";
 import { useThemeStore } from "../../stores/themeStore";
 import { useLaterStore } from "../../stores/laterStore";
 import { laterAPI, pinsAPI, messageAPI, threadAPI, channelAPI } from "../../services/api";
-import { emitTyping } from "../../services/socket";
+import { emitTyping, getSocket } from "../../services/socket";
 import { AppAvatar, AppScreen, HeaderBackButton, MobileFileCard } from "../../components/common";
-import ScreenContainer from "../../components/common/ScreenContainer";
+import KeyboardAwareContainer from "../../components/common/KeyboardAwareContainer";
 import RichText from "../../components/RichText";
 import ReactionBar from "../../components/ReactionBar";
 import MediaPickerSheet from "../../components/MediaPickerSheet";
@@ -73,7 +75,11 @@ import { formatMessageTime } from '../../utils/dateUtils';
 import logger from '../../utils/logger';
 import ENV from '../../config/environment';
 import { normalizeMediaUrl, getMessageAttachments } from '../../utils/mediaUtils';
-
+import MessageStatusTicks from '../../components/MessageStatusTicks';
+import MessageInfoModal from '../../components/MessageInfoModal';
+import GifRenderer from '../../components/GifRenderer';
+import useLayoutDiagnostics from '../../hooks/useLayoutDiagnostics';
+import useKeyboard from '../../hooks/useKeyboard';
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const getAuthorId = (msg) => {
@@ -116,7 +122,7 @@ const isImageUrl = (url) => {
   return /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$/i.test(url);
 };
 
-import GifRenderer from '../../components/GifRenderer';
+
 
 // ─── ChatScreen ──────────────────────────────────────────────────────────────
 
@@ -127,10 +133,18 @@ const ChatScreen = ({ route, navigation }) => {
 
   const insets = useSafeAreaInsets();
   const [headerHeight, setHeaderHeight] = useState(56);
-  const KeyboardContainer = ScreenContainer;
-  const keyboardProps = Platform.OS === 'ios' 
-    ? { behavior: 'padding', keyboardVerticalOffset: insets.top + headerHeight } 
-    : { behavior: undefined };
+  const { keyboardVisible, keyboardHeight } = useKeyboard();
+  const layoutDiagnostics = useLayoutDiagnostics('ChatScreen');
+
+  useEffect(() => {
+    if (__DEV__) {
+      console.log(`[PIPELINE] ChatScreen: received keyboardHeight = ${keyboardHeight}, keyboardVisible = ${keyboardVisible}`);
+    }
+  }, [keyboardHeight, keyboardVisible]);
+  const KeyboardContainer = KeyboardAwareContainer;
+  const keyboardProps = { 
+    disablePadding: false 
+  };
 
   // Granular store subscriptions — prevent unnecessary re-renders
   const messages = useChatStore(useShallow((s) => s.messagesByChannel[channelId] || []));
@@ -181,6 +195,12 @@ const ChatScreen = ({ route, navigation }) => {
   const [forwardTarget, setForwardTarget] = useState(null);
   const [scrolledToMessageId, setScrolledToMessageId] = useState(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const [messageInfoTarget, setMessageInfoTarget] = useState(null);
+
+  // ─── Message Info handler ─────────────────────────────────────────────
+  const handleMessageInfo = useCallback((message) => {
+    setMessageInfoTarget(message);
+  }, []);
 
    
 
@@ -258,6 +278,10 @@ const ChatScreen = ({ route, navigation }) => {
         rootContent: rootMessage.content || '',
         rootHtmlContent: rootMessage.htmlContent || '',
         rootAttachments: rootMessage.attachments || rootMessage.files || undefined,
+        rootContentType: rootMessage.contentType || rootMessage.type,
+        rootGifMeta: rootMessage.gifMeta || undefined,
+        rootAudioMeta: rootMessage.audioMeta || undefined,
+        rootVideoMeta: rootMessage.videoMeta || undefined,
         replyCount: rootMessage.replyCount || 0,
         rootAuthor: rootMessage.senderSnapshot?.name ? rootMessage.senderSnapshot : rootMessage.authorId,
         rootCreatedAt: rootMessage.createdAt,
@@ -351,6 +375,7 @@ const ChatScreen = ({ route, navigation }) => {
   }, [channel, channelName, isDM, dmUser]);
 
   const flatListRef = useRef(null);
+  const { height } = useWindowDimensions();
 
   useEffect(() => {
     const initData = async () => {
@@ -376,6 +401,16 @@ const ChatScreen = ({ route, navigation }) => {
   useEffect(() => {
     if (channelId) {
       markAsRead(channelId);
+      
+      const socket = getSocket();
+      if (socket && socket.connected && messages.length > 0) {
+        messages.forEach(msg => {
+          const authorId = typeof msg.authorId === 'object' ? msg.authorId?._id : msg.authorId;
+          if (authorId !== user?._id) {
+            socket.emit('message:read', { messageId: msg._id, channelId });
+          }
+        });
+      }
     }
   }, [channelId, messages.length, markAsRead]);
 
@@ -462,389 +497,56 @@ const ChatScreen = ({ route, navigation }) => {
     </View>
   );
 
-  // ─── Render: Message ──────────────────────────────────────────────────────
   const renderMessage = useCallback(({ item, index }) => {
-    const isMe =
-      item.authorId?._id === user?._id || item.authorId === user?._id;
-    const isSystem = item.contentType === "system" && !item.activityMeta;
-
-    if (isSystem) {
-      return (
-        <View style={styles.systemMessageContainer} key={item._id}>
-          <View style={[styles.systemMessageLine, { backgroundColor: colors.border }]} />
-          <Text style={[styles.systemMessageText, { color: colors.textSecondary }]}>
-            {item.content}
-          </Text>
-          <View style={[styles.systemMessageLine, { backgroundColor: colors.border }]} />
-        </View>
-      );
-    }
-
-    const isDeleted = item.isDeleted === true;
-    const deletedText = isMe
-      ? "You deleted this message"
-      : "This message was deleted";
-
-    const textToSearch = item?.content || item?.htmlContent || '';
-    const isMatch =
-      searchQuery &&
-      typeof textToSearch === 'string' &&
-      textToSearch.toLowerCase().includes(searchQuery.toLowerCase());
-    const isHighlighted =
-      isMatch && searchResults.length && searchResults[currentMatch] === index;
-
-    const messageSender = item.senderSnapshot?.name ? item.senderSnapshot : item.authorId;
-
-    // Message grouping: compact if same author and within 5 minutes of prev message (older)
-    const prevItem = displayedMessages[index + 1]; // inverted list, so +1 is previous chronologically
-    const isCompact =
-      prevItem &&
-      getAuthorId(item) === getAuthorId(prevItem) &&
-      !item.isActivity &&
-      !prevItem.isActivity &&
-      Math.abs(new Date(item.createdAt) - new Date(prevItem.createdAt)) <
-        5 * 60 * 1000;
-
-    // Last in group: true if the NEXT chronologically message (index - 1) is not by the same author or is not within 5 mins
-    const nextItem = displayedMessages[index - 1]; // inverted list, so -1 is next chronologically
-    const sameAsNext =
-      nextItem &&
-      getAuthorId(item) === getAuthorId(nextItem) &&
-      !item.isActivity &&
-      !nextItem.isActivity &&
-      Math.abs(new Date(nextItem.createdAt) - new Date(item.createdAt)) <
-        5 * 60 * 1000;
-    const isLastInGroup = !sameAsNext;
-
-    const groupPos =
-      !isCompact && isLastInGroup
-        ? "solo"
-        : !isCompact
-          ? "first"
-          : isLastInGroup
-            ? "last"
-            : "middle";
-
-    // Dynamic border radius matching web index.css (SENT and RECEIVED)
-    let bubbleRadiusStyle = {};
-    if (isMe) {
-      if (groupPos === 'first') {
-        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomRightRadius: 4, borderBottomLeftRadius: 18 };
-      } else if (groupPos === 'middle') {
-        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 4, borderBottomRightRadius: 4, borderBottomLeftRadius: 18 };
-      } else if (groupPos === 'last') {
-        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 4, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
-      } else { // solo
-        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
-      }
-    } else {
-      if (groupPos === 'first') {
-        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 4 };
-      } else if (groupPos === 'middle') {
-        bubbleRadiusStyle = { borderTopLeftRadius: 4, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 4 };
-      } else if (groupPos === 'last') {
-        bubbleRadiusStyle = { borderTopLeftRadius: 4, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
-      } else { // solo
-        bubbleRadiusStyle = { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
-      }
-    }
-
-    // Date separator: show if date differs from previous message
-    const showDateSep =
-      !prevItem || !isSameDay(item.createdAt, prevItem.createdAt);
-
-    // Thread indicator
-    const hasThread = (item.replyCount || 0) > 0;
-
-    const isSaved = savedMessageIds.includes(item._id);
-
-    // File attachments
-    const attachments = getMessageAttachments(item);
-
-    if (attachments.length > 0) {
-      logger.info(`[ChatScreen Render] Message ${item._id} (${item.contentType}) has ${attachments.length} attachment(s)`, {
-        attachmentDetails: attachments.map(a => ({ name: a.name, mimeType: a.mimeType, url: a.url })),
-      });
-    }
-
-    const contentColor = isMe
-      ? colors.messageTextSent
-      : colors.messageTextReceived;
+    const prevItem = displayedMessages[index + 1];
+    const nextItem = displayedMessages[index - 1];
 
     return (
-      <View 
-        key={item._id} 
-        style={highlightedMessageId === item._id 
-          ? { backgroundColor: colors.primary + '20', marginHorizontal: -12, paddingHorizontal: scale(12), paddingVertical: verticalScale(4) } 
-          : null}
-      >
-        {showDateSep && renderDateSeparator(item.createdAt)}
-
-        <TouchableOpacity
-          style={[
-            styles.messageContainer,
-            isMe ? styles.myMessage : styles.theirMessage,
-            isCompact && styles.messageCompact,
-          ]}
-          onLongPress={() => !isDeleted && showMessageActions(item)}
-          activeOpacity={0.85}
-          delayLongPress={300}
-        >
-          {/* Avatar (hidden for compact/grouped messages) */}
-          {!isMe && !isCompact && (
-            <TouchableOpacity 
-              onPress={() => {
-                const members = membersByChannel[channelId] || [];
-                const userObj = members.find((m) => m._id === messageSender?._id) || messageSender;
-                navigation.navigate("UserProfile", { user: userObj, channelId });
-              }}
-              activeOpacity={0.7}
-            >
-              <AppAvatar
-                user={messageSender}
-                size={32}
-                showStatus={false}
-                style={{ marginTop: verticalScale(2) }}
-              />
-            </TouchableOpacity>
-          )}
-          {!isMe && isCompact && <View style={{ width: scale(32) }} />}
-
-          <View style={[
-            styles.messageContent,
-            isMe ? styles.messageContentMe : styles.messageContentThem,
-          ]}>
-            {/* Sender name (hidden for compact) */}
-            {!isMe && !isCompact && (
-              <View style={styles.senderRow}>
-                <Text style={[styles.senderName, { color: colors.textSecondary }]}>
-                  {messageSender?.name || "Unknown"}
-                </Text>
-                <Text style={[styles.timestamp, { color: colors.textTertiary }]}>
-                  {formatTime(item.createdAt)}
-                </Text>
-              </View>
-            )}
-
-            {/* Reply preview */}
-            {item.parentMessageId && item.replyTo && (
-              <View style={[styles.replyPreview, { borderLeftColor: colors.primary }]}>
-                <Reply size={12} color={colors.textSecondary} />
-                <Text
-                  style={[styles.replyPreviewText, { color: colors.textSecondary }]}
-                  numberOfLines={1}
-                >
-                  {item.replyTo.senderName || "User"}:{ " " }
-                  {item.replyTo.content || "..."}
-                </Text>
-              </View>
-            )}
-
-            {/* Message bubble — self-sizes to content, max 85% of screen width */}
-            <View
-              style={[
-                styles.bubble,
-                bubbleRadiusStyle,
-                {
-                  backgroundColor: isMe
-                    ? colors.messageBubbleSent
-                    : colors.messageBubbleReceived,
-                  alignSelf: isMe ? 'flex-end' : 'flex-start',
-                },
-                isHighlighted && {
-                  borderWidth: 2,
-                  borderColor: colors.primary,
-                },
-              ]}
-            >
-              {/* Forwarded indicator */}
-              {item.forwardMeta?.isForwarded && (
-                <View style={[styles.forwardedRow, { borderBottomColor: colors.border }]}>
-                  <Reply size={12} color={contentColor} style={{ marginRight: scale(4), transform: [{ scaleX: -1 }] }} />
-                  <Text style={[styles.forwardedText, { color: contentColor, opacity: 0.8 }]}>
-                    Forwarded from{" "}
-                    <Text style={{ fontWeight: "700" }}>
-                      {item.forwardMeta.originalChannelName
-                        ? (item.forwardMeta.originalChannelType === "dm"
-                            ? item.forwardMeta.originalChannelName
-                            : `#${item.forwardMeta.originalChannelName}`)
-                        : item.forwardMeta.originalSenderName || "Unknown"}
-                    </Text>
-                  </Text>
-                </View>
-              )}
-
-              {/* Content — rich text, plain, or GIF */}
-              {isDeleted ? (
-                <Text style={[styles.messageText, { color: colors.textTertiary, fontStyle: "italic" }]}>
-                  {deletedText}
-                </Text>
-              ) : item.contentType === 'audio' || item.type === 'audio' ? (
-                <AudioMessagePlayer
-                  audioUrl={item.audioUrl || item.audioMeta?.audioUrl || attachments[0]?.url || attachments[0]?.secureUrl}
-                  duration={item.duration || item.audioMeta?.duration}
-                  colors={colors}
-                  isMe={isMe}
-                />
-              ) : item.contentType === 'video' || item.type === 'video' ? (
-                <VideoMessagePlayer
-                  videoUrl={item.videoUrl || item.videoMeta?.videoUrl || attachments[0]?.url || attachments[0]?.secureUrl}
-                  thumbnailUrl={item.thumbnailUrl || item.videoMeta?.thumbnailUrl || attachments[0]?.thumbnailUrl}
-                  width={item.width || item.videoMeta?.width}
-                  height={item.height || item.videoMeta?.height}
-                  colors={colors}
-                />
-              ) : item.contentType === 'gif' && item.gifMeta ? (
-                <GifRenderer item={item} contentColor={contentColor} styles={styles} />
-              ) : item.htmlContent ? (
-                <RichText
-                  html={item.htmlContent}
-                  text={item.content}
-                  mentions={item.mentions}
-                  onMentionPress={(userId) => {
-                    const members = membersByChannel[channelId] || [];
-                    const user = members.find((m) => m._id === userId) || { _id: userId };
-                    navigation.navigate("UserProfile", { user, channelId });
-                  }}
-                  colors={{
-                    ...colors,
-                    textPrimary: contentColor,
-                    codeBackground: isMe ? colors.surfaceOverlayLight : colors.codeBackground,
-                    codeBlockBackground: isMe ? colors.shadowMd : colors.codeBlockBackground,
-                    codeBlockText: isMe ? colors.textOnPrimary : colors.codeBlockText,
-                  }}
-                  baseStyle={{ color: contentColor, fontSize: moderateScale(15), lineHeight: 22 }}
-                />
-              ) : (
-                <Text style={[styles.messageText, { color: contentColor }]}>
-                  {item.content}
-                </Text>
-              )}
-
-              {/* Attachment cards */}
-              {!isDeleted && attachments.length > 0 && (
-                <View style={{ marginTop: verticalScale(4), width: '100%', gap: 4 }}>
-                  {attachments.map((file, i) => (
-                    <MobileFileCard
-                      key={file._id || i}
-                      file={file}
-                      colors={colors}
-                    />
-                  ))}
-                </View>
-              )}
-
-              {/* Timestamp row */}
-              <View style={styles.timestampRow}>
-                <Text
-                  style={[
-                    styles.timestamp,
-                    {
-                      color: isMe ? colors.messageTextSent : colors.textTertiary,
-                      opacity: 0.7,
-                    },
-                  ]}
-                >
-                  {formatTime(item.createdAt)}
-                </Text>
-                {item.isEdited && !isDeleted && (
-                  <Text style={[styles.editedLabel, { color: isMe ? colors.messageTextSent : colors.textTertiary }]}>
-                    {" "}(edited)
-                  </Text>
-                )}
-                {item.pending && (
-                  <Text style={[styles.editedLabel, { color: colors.textTertiary }]}>
-                    {" "}sending...
-                  </Text>
-                )}
-                {item.isPinned && (
-                  <Pin size={10} color={isMe ? colors.messageTextSent : colors.textTertiary} style={{ marginLeft: scale(4), opacity: 0.7 }} />
-                )}
-                {item.failed && (
-                  <Text style={[styles.editedLabel, { color: colors.error }]}>
-                    {" "}failed
-                  </Text>
-                )}
-              </View>
-
-              {isSaved && !isDeleted && (
-                <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: colors.card, borderRadius: moderateScale(10), padding: moderateScale(2), elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: scale(0), height: verticalScale(1) } }}>
-                  <Bookmark size={10} color={colors.primary} fill={colors.primary} />
-                </View>
-              )}
-            </View>
-
-            {/* Reactions */}
-            {!isDeleted && (
-              <ReactionBar
-                reactions={item.reactions}
-                messageId={item._id}
-                currentUserId={user?._id}
-                onAddReaction={(emoji) => addReaction(item._id, emoji)}
-                onRemoveReaction={(emoji) => removeReaction(item._id, emoji)}
-                onOpenPicker={() => setEmojiPickerTarget(item._id)}
-                colors={colors}
-              />
-            )}
-
-            {/* Thread indicator */}
-            {hasThread && (
-              <TouchableOpacity
-                style={[
-                  styles.threadIndicator,
-                  { borderColor: colors.border },
-                ]}
-                onPress={() => {
-                  navigation.navigate("ThreadDetail", {
-                    rootMessageId: item._id,
-                    channelId,
-                    channelName,
-                    rootContent: item.content,
-                    rootHtmlContent: item.htmlContent,
-                    replyCount: item.replyCount || 0,
-                    rootAuthor: item.senderSnapshot?.name ? item.senderSnapshot : item.authorId,
-                  });
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.threadAvatars}>
-                  {(item.threadParticipants || []).slice(0, 3).map((p, i) => (
-                    <AppAvatar
-                      key={p._id || i}
-                      user={p}
-                      size={18}
-                      showStatus={false}
-                      style={{ marginLeft: i > 0 ? -6 : 0 }}
-                    />
-                  ))}
-                </View>
-                {/* <MessageSquare size={14} color={colors.primary} /> */}
-                <Text style={[styles.threadText, { color: colors.primary }]}>
-                  {item.replyCount}{" "}
-                  {item.replyCount === 1 ? "reply" : "replies"}
-                </Text>
-                {item.lastReplyAt && (
-                  <Text
-                    style={[styles.threadTime, { color: colors.textTertiary }]}
-                  >
-                    Last reply {formatTime(item.lastReplyAt)}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
-        </TouchableOpacity>
-      </View>
+      <ChatMessageItem
+        item={item}
+        prevItem={prevItem}
+        nextItem={nextItem}
+        user={user}
+        colors={colors}
+        styles={styles}
+        searchQuery={searchQuery}
+        searchResults={searchResults}
+        currentMatch={currentMatch}
+        index={index}
+        savedMessageIds={savedMessageIds}
+        highlightedMessageId={highlightedMessageId}
+        membersByChannel={membersByChannel}
+        channelId={channelId}
+        channelName={channelName}
+        maxBubbleWidth={maxBubbleWidth}
+        showMessageActions={showMessageActions}
+        addReaction={addReaction}
+        removeReaction={removeReaction}
+        setEmojiPickerTarget={setEmojiPickerTarget}
+        navigation={navigation}
+        renderDateSeparator={renderDateSeparator}
+      />
     );
-  }, [user, colors, searchQuery, searchResults, currentMatch, displayedMessages, showMessageActions, addReaction, removeReaction, navigation, channelId, channelName, savedMessageIds]);
+  }, [
+    displayedMessages, user, colors, styles, searchQuery, searchResults,
+    currentMatch, savedMessageIds, highlightedMessageId, membersByChannel,
+    channelId, channelName, maxBubbleWidth, showMessageActions, addReaction,
+    removeReaction, setEmojiPickerTarget, navigation
+  ]);
 
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  const appScreenEdges = Platform.OS === 'ios' 
+    ? ['top', 'bottom'] 
+    : (keyboardVisible ? ['top', 'left', 'right'] : ['top', 'bottom']);
 
   return (
     <AppScreen 
       style={[styles.container, { backgroundColor: colors.background }]} 
-      edges={['top', 'left', 'right']}
+      edges={appScreenEdges}
     > 
+      <View style={{ flex: 1 }} onLayout={layoutDiagnostics.onContainerLayout}>
+
 
       {/* Custom Header */}
       <View
@@ -1008,13 +710,14 @@ const ChatScreen = ({ route, navigation }) => {
         </View>
       )}
 
-      {/* Messages View — KeyboardAvoidingView + FlatList */}
-      <KeyboardContainer
-        style={{ flex: 1 }}
-        {...keyboardProps}
-      >
-        <FlatList
-          ref={flatListRef}
+        <KeyboardContainer
+          style={{ flex: 1 }}
+          {...keyboardProps}
+        >
+          <FlatList
+            ref={flatListRef}
+            style={{ flex: 1 }}
+            onLayout={layoutDiagnostics.onListLayout}
           data={displayedMessages}
           renderItem={renderMessage}
           keyExtractor={(item) => item._id}
@@ -1022,7 +725,8 @@ const ChatScreen = ({ route, navigation }) => {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           onTouchStart={() => Keyboard.dismiss()}
-          contentContainerStyle={styles.messageList}
+          contentContainerStyle={[styles.messageList, { flexGrow: 1 }]}
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           onEndReached={() => {
             if (channelHasMore && !isLoadingMessages) {
               const oldest = messages[0];
@@ -1033,7 +737,7 @@ const ChatScreen = ({ route, navigation }) => {
           initialNumToRender={15}
           maxToRenderPerBatch={10}
           windowSize={11}
-          removeClippedSubviews={Platform.OS !== 'web'}
+          removeClippedSubviews={Platform.OS === 'ios'}
           ListFooterComponent={
             isLoadingMessages ? (
               <ActivityIndicator
@@ -1081,28 +785,30 @@ const ChatScreen = ({ route, navigation }) => {
         )}
 
         {/* Message Composer */}
-        <MessageComposer
-          channelId={channelId}
-          channelName={channelName}
-          workspaceId={activeWorkspaceId}
-          colors={colors}
-          text={text}
-          onChangeText={setText}
-          members={membersByChannel[channelId] || []}
-          onSend={(content, options) => {
-            if (editingMessage) {
-              editMessage(editingMessage._id, channelId, content, options?.htmlContent);
-              setEditingMessage(null);
-            } else {
-              sendMessage(channelId, content, options);
-            }
-            setReplyingTo(null);
-          }}
-          replyingTo={replyingTo}
-          editingMessage={editingMessage}
-          onCancelReply={() => { setReplyingTo(null); setText(""); }}
-          onCancelEdit={() => { setEditingMessage(null); setText(""); }}
-        />
+        <View onLayout={layoutDiagnostics.onComposerLayout}>
+          <MessageComposer
+            channelId={channelId}
+            channelName={channelName}
+            workspaceId={activeWorkspaceId}
+            colors={colors}
+            text={text}
+            onChangeText={setText}
+            members={membersByChannel[channelId] || []}
+            onSend={(content, options) => {
+              if (editingMessage) {
+                editMessage(editingMessage._id, channelId, content, options?.htmlContent);
+                setEditingMessage(null);
+              } else {
+                sendMessage(channelId, content, options);
+              }
+              setReplyingTo(null);
+            }}
+            replyingTo={replyingTo}
+            editingMessage={editingMessage}
+            onCancelReply={() => { setReplyingTo(null); setText(""); }}
+            onCancelEdit={() => { setEditingMessage(null); setText(""); }}
+          />
+        </View>
       </KeyboardContainer>
 
       {/* Reminder Modal */}
@@ -1212,6 +918,7 @@ const ChatScreen = ({ route, navigation }) => {
             Toast.show({ type: 'error', text1: 'Failed to mute notifications' });
           }
         }}
+        onMessageInfo={isDM ? null : handleMessageInfo}
       />
 
       {/* Forward Message Modal */}
@@ -1221,7 +928,16 @@ const ChatScreen = ({ route, navigation }) => {
         message={forwardTarget}
         colors={colors}
       />
-      </AppScreen>
+
+      {/* Message Info Modal */}
+      <MessageInfoModal
+        visible={!!messageInfoTarget}
+        onClose={() => setMessageInfoTarget(null)}
+        message={messageInfoTarget}
+        colors={colors}
+      />
+      </View>
+    </AppScreen>
   );
 };
 
@@ -1233,8 +949,8 @@ const createStyles = (colors) =>
     header: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: scale(12),
-      paddingVertical: verticalScale(12),
+      paddingHorizontal: moderateScale(12),
+      paddingVertical: moderateScale(12),
       borderBottomWidth: 1,
       gap: 8,
     },
@@ -1258,15 +974,15 @@ const createStyles = (colors) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
-      marginTop: verticalScale(2),
-      marginLeft: scale(28),
+      marginTop: moderateScale(2),
+      marginLeft: moderateScale(28),
     },
     memberCount: {
       fontSize: moderateScale(12),
     },
     onlineDot: {
-      width: scale(6),
-      height: scale(6),
+      width: moderateScale(6),
+      height: moderateScale(6),
       borderRadius: moderateScale(3),
     },
     onlineCount: {
@@ -1274,8 +990,8 @@ const createStyles = (colors) =>
     },
     dmStatusText: {
       fontSize: moderateScale(12),
-      marginTop: verticalScale(2),
-      marginLeft: scale(40),
+      marginTop: moderateScale(2),
+      marginLeft: moderateScale(40),
     },
     headerActions: {
       flexDirection: "row",
@@ -1286,31 +1002,31 @@ const createStyles = (colors) =>
     },
     optionsMenu: {
       borderBottomWidth: 1,
-      paddingVertical: verticalScale(8),
+      paddingVertical: moderateScale(8),
     },
     optionItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: scale(16),
-      paddingVertical: verticalScale(12),
+      paddingHorizontal: moderateScale(16),
+      paddingVertical: moderateScale(12),
       gap: 12,
     },
     optionText: {
       fontSize: moderateScale(15),
     },
     messageList: {
-      paddingHorizontal: scale(12),
-      paddingVertical: verticalScale(12),
+      paddingHorizontal: moderateScale(12),
+      paddingVertical: moderateScale(12),
     },
     messageContainer: {
       flexDirection: "row",
-      marginBottom: verticalScale(4),
+      marginBottom: moderateScale(4),
       gap: 8,
       // Full-width row — alignment is controlled by justifyContent on myMessage/theirMessage
       // Never use alignSelf/maxWidth here as it causes flex-shrink collapse of bubble content
     },
     messageCompact: {
-      marginBottom: verticalScale(1),
+      marginBottom: moderateScale(1),
     },
     myMessage: {
       justifyContent: "flex-end",
@@ -1320,8 +1036,8 @@ const createStyles = (colors) =>
     },
     // Content column (sender name + bubble + reactions + thread)
     messageContent: {
-      maxWidth: "75%",
-      flexShrink: 0,
+      flexShrink: 1,
+      maxWidth: '100%',
     },
     messageContentMe: {
       alignItems: "flex-end",
@@ -1330,24 +1046,30 @@ const createStyles = (colors) =>
       alignItems: "flex-start",
     },
     bubble: {
-      paddingHorizontal: scale(12),
-      paddingVertical: verticalScale(8),
+      paddingHorizontal: moderateScale(12),
+      paddingVertical: moderateScale(8),
       borderRadius: moderateScale(18),
+      flexShrink: 1,
+      maxWidth: '100%',
     },
     senderRow: {
       flexDirection: "row",
       alignItems: "baseline",
       gap: 8,
-      marginBottom: verticalScale(2),
-      marginLeft: scale(4),
+      marginBottom: moderateScale(2),
+      marginLeft: moderateScale(4),
+      flexShrink: 1,
+      maxWidth: '100%',
     },
     senderName: {
       fontSize: moderateScale(12),
       fontWeight: "700",
+      flexShrink: 1,
     },
     messageText: {
       fontSize: moderateScale(15),
       lineHeight: 22,
+      flexShrink: 1,
     },
     timestamp: {
       fontSize: moderateScale(10),
@@ -1355,7 +1077,7 @@ const createStyles = (colors) =>
     timestampRow: {
       flexDirection: "row",
       alignItems: "center",
-      marginTop: verticalScale(4),
+      marginTop: moderateScale(4),
       alignSelf: "flex-end",
     },
     editedLabel: {
@@ -1366,9 +1088,9 @@ const createStyles = (colors) =>
       flexDirection: "row",
       alignItems: "center",
       borderLeftWidth: 3,
-      paddingLeft: scale(8),
-      marginBottom: verticalScale(4),
-      marginLeft: scale(4),
+      paddingLeft: moderateScale(8),
+      marginBottom: moderateScale(4),
+      marginLeft: moderateScale(4),
       gap: 4,
     },
     replyPreviewText: {
@@ -1379,27 +1101,29 @@ const createStyles = (colors) =>
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 6,
-      marginTop: verticalScale(6),
+      marginTop: moderateScale(6),
     },
     imageAttachment: {
-      width: scale(200),
-      height: scale(150),
-      borderRadius: moderateScale(8),
+      width: 250,
+      maxWidth: '100%',
+      aspectRatio: 1.33,
+      height: 'auto',
+      borderRadius: 8,
     },
     fileAttachment: {
       flexDirection: "row",
       alignItems: "center",
       padding: moderateScale(8),
       borderRadius: moderateScale(8),
-      marginTop: verticalScale(4),
+      marginTop: moderateScale(4),
       gap: 8,
     },
     threadIndicator: {
       flexDirection: "row",
       alignItems: "center",
-      marginTop: verticalScale(4),
-      paddingHorizontal: scale(8),
-      paddingVertical: verticalScale(6),
+      marginTop: moderateScale(4),
+      paddingHorizontal: moderateScale(8),
+      paddingVertical: moderateScale(6),
       borderRadius: moderateScale(8),
       borderWidth: 1,
       gap: 6,
@@ -1419,8 +1143,8 @@ const createStyles = (colors) =>
     dateSeparatorContainer: {
       flexDirection: "row",
       alignItems: "center",
-      marginVertical: verticalScale(12),
-      paddingHorizontal: scale(8),
+      marginVertical: moderateScale(12),
+      paddingHorizontal: moderateScale(8),
     },
     dateSeparatorLine: {
       flex: 1,
@@ -1429,13 +1153,13 @@ const createStyles = (colors) =>
     dateSeparatorText: {
       fontSize: moderateScale(12),
       fontWeight: "600",
-      paddingHorizontal: scale(12),
+      paddingHorizontal: moderateScale(12),
     },
     systemMessageContainer: {
       flexDirection: "row",
       alignItems: "center",
-      marginVertical: verticalScale(12),
-      paddingHorizontal: scale(16),
+      marginVertical: moderateScale(12),
+      paddingHorizontal: moderateScale(16),
       gap: 12,
     },
     systemMessageLine: {
@@ -1451,8 +1175,8 @@ const createStyles = (colors) =>
       flexDirection: "row",
       alignItems: "center",
       borderBottomWidth: StyleSheet.hairlineWidth,
-      paddingBottom: verticalScale(4),
-      marginBottom: verticalScale(6),
+      paddingBottom: moderateScale(4),
+      marginBottom: moderateScale(6),
       gap: 4,
     },
     forwardedText: {
@@ -1462,8 +1186,8 @@ const createStyles = (colors) =>
     composerBanner: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: scale(16),
-      paddingVertical: verticalScale(8),
+      paddingHorizontal: moderateScale(16),
+      paddingVertical: moderateScale(8),
       borderLeftWidth: 3,
       gap: 8,
     },
@@ -1473,11 +1197,11 @@ const createStyles = (colors) =>
     },
     composerBannerText: {
       fontSize: moderateScale(13),
-      marginTop: verticalScale(1),
+      marginTop: moderateScale(1),
     },
     typingIndicator: {
-      paddingHorizontal: scale(20),
-      paddingVertical: verticalScale(4),
+      paddingHorizontal: moderateScale(20),
+      paddingVertical: moderateScale(4),
     },
     typingText: {
       fontSize: moderateScale(12),
@@ -1492,7 +1216,7 @@ const createStyles = (colors) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: verticalScale(10),
+      paddingVertical: moderateScale(10),
       gap: 6,
       position: 'relative',
     },
@@ -1506,10 +1230,10 @@ const createStyles = (colors) =>
     },
     tabUnderline: {
       position: 'absolute',
-      bottom: verticalScale(0),
-      left: scale(12),
-      right: scale(12),
-      height: scale(2),
+      bottom: moderateScale(0),
+      left: moderateScale(12),
+      right: moderateScale(12),
+      height: moderateScale(2),
       borderRadius: moderateScale(1),
     },
     canvasTabContent: {
@@ -1525,8 +1249,8 @@ const createStyles = (colors) =>
       borderStyle: 'dashed',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: verticalScale(48),
-      paddingHorizontal: scale(24),
+      paddingVertical: moderateScale(48),
+      paddingHorizontal: moderateScale(24),
       gap: 12,
     },
     canvasPlaceholderTitle: {
@@ -1541,8 +1265,8 @@ const createStyles = (colors) =>
     inputBar: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: scale(12),
-      paddingVertical: verticalScale(8),
+      paddingHorizontal: moderateScale(12),
+      paddingVertical: moderateScale(8),
       borderTopWidth: 1,
       gap: 8,
     },
@@ -1554,22 +1278,22 @@ const createStyles = (colors) =>
       flexDirection: "row",
       alignItems: "center",
       borderRadius: moderateScale(20),
-      paddingHorizontal: scale(12),
-      paddingVertical: verticalScale(4),
+      paddingHorizontal: moderateScale(12),
+      paddingVertical: moderateScale(4),
     },
     input: {
       flex: 1,
       fontSize: moderateScale(15),
-      maxHeight: verticalScale(100),
-      paddingVertical: verticalScale(8),
+      maxHeight: moderateScale(100),
+      paddingVertical: moderateScale(8),
       ...(Platform.OS === "web" && {
         outlineWidth: 0,
         outlineStyle: "none",
       }),
     },
     sendButton: {
-      width: scale(40),
-      height: scale(40),
+      width: moderateScale(40),
+      height: moderateScale(40),
       borderRadius: moderateScale(20),
       justifyContent: "center",
       alignItems: "center",
@@ -1584,19 +1308,19 @@ const createStyles = (colors) =>
     actionsSheet: {
       borderRadius: moderateScale(16),
       width: '100%',
-      maxWidth: scale(300),
-      paddingVertical: verticalScale(12),
+      maxWidth: moderateScale(300),
+      paddingVertical: moderateScale(12),
       borderWidth: 1,
       maxHeight: '80%',
       shadowColor: '#000000',
-      shadowOffset: { width: scale(0), height: scale(4) },
+      shadowOffset: { width: moderateScale(0), height: moderateScale(4) },
       shadowOpacity: 0.15,
       shadowRadius: 10,
       elevation: 5,
     },
     actionsHeader: {
-      paddingHorizontal: scale(20),
-      paddingBottom: verticalScale(12),
+      paddingHorizontal: moderateScale(20),
+      paddingBottom: moderateScale(12),
       borderBottomWidth: StyleSheet.hairlineWidth,
       gap: 4,
     },

@@ -20,10 +20,10 @@ import {
   StyleSheet,
   Modal,
   TextInput,
-  KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
 } from 'react-native';
+import KeyboardAwareContainer from './common/KeyboardAwareContainer';
 import { AppAvatar } from './common';
 import { AtSign, Search, X } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
@@ -67,9 +67,9 @@ const MentionDropdown = React.memo(function MentionDropdown({
     >
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.backdrop}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.keyboardContainer}
+          <KeyboardAwareContainer
+            disablePadding={false}
+            style={[styles.keyboardContainer, { backgroundColor: 'transparent' }]}
           >
             <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
               <View
@@ -156,7 +156,7 @@ const MentionDropdown = React.memo(function MentionDropdown({
                 />
               </View>
             </TouchableWithoutFeedback>
-          </KeyboardAvoidingView>
+          </KeyboardAwareContainer>
         </View>
       </TouchableWithoutFeedback>
     </Modal>

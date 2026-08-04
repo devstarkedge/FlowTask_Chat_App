@@ -37,14 +37,7 @@ class ErrorBoundary extends React.Component {
             <Text style={[styles.message, { color: colors.textSecondary }]}>
               The app encountered an unexpected error. Please try restarting.
             </Text>
-            {__DEV__ && this.state.error && (
-              <View style={[styles.debugContainer, { backgroundColor: colors.backgroundTertiary }]}>
-                <Text style={[styles.debugTitle, { color: colors.textTertiary }]}>Debug Info</Text>
-                <Text style={[styles.debugText, { color: colors.error }]} numberOfLines={8}>
-                  {this.state.error.toString()}
-                </Text>
-              </View>
-            )}
+
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.primary }]} onPress={this.handleReset}>
               <Text style={[styles.buttonText, { color: colors.textOnPrimary }]}>Try Again</Text>
             </TouchableOpacity>

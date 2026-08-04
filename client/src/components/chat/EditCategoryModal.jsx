@@ -111,9 +111,10 @@ export default function EditCategoryModal({ category, onClose }) {
     .map((item) => idOf(item.departmentId))
     .filter(Boolean)), [categories, category._id]);
 
-  const selectableDepartments = useMemo(() => departments.filter(
-    (department) => !usedDepartmentIds.has(idOf(department)),
-  ), [departments, usedDepartmentIds]);
+  const selectableDepartments = useMemo(() => departments.filter((department) => {
+    if (usedDepartmentIds.has(idOf(department))) return false;
+    return channelsForDepartment(accessibleChannels, department).length > 0;
+  }), [departments, usedDepartmentIds, accessibleChannels]);
 
   const visibleChannels = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();

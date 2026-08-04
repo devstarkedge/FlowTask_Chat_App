@@ -314,6 +314,7 @@ class WorkspaceService {
       logger.info(`[CASCADE] Deleted ${membershipResult.deletedCount} workspace memberships`);
 
       // 12. Delete the workspace itself
+      const { default: Workspace } = await import('./Workspace.model.js');
       await Workspace.findByIdAndDelete(wsObjectId);
       logger.info(`[CASCADE] Workspace ${workspaceSlug} deleted`);
 

@@ -46,6 +46,7 @@ import {
   Star,
   Folder,
   ChevronDown,
+  TriangleAlert  
 } from "lucide-react-native";
 
 const HomeScreen = ({ navigation }) => {
@@ -129,7 +130,7 @@ const HomeScreen = ({ navigation }) => {
       result.push({
         key: "system",
         title: "SYSTEM",
-        icon: null, // Just text like web app
+        icon: TriangleAlert, 
         data: sectionsExpanded.system !== false ? systemChannels : [],
         type: "channel",
         showAddChannel: false,
@@ -151,23 +152,26 @@ const HomeScreen = ({ navigation }) => {
       let catChannels = [];
       if (cat.type === 'department') {
         catChannels = channels.filter(c => {
-          if (c.visibility === 'private' || c.isArchived) return false;
-          const targetDeptId = cat.departmentId?.externalId || cat.departmentId?._id || cat.departmentId;
-          if (!targetDeptId) return false;
-          const isDepartmentChannel = c.flowTaskRef?.entityType === "department" && String(c.flowTaskRef?.entityId) === String(targetDeptId);
-          const isProjectInDepartment = c.departmentRef?.departmentId && String(c.departmentRef.departmentId) === String(targetDeptId);
+          if (c.type === 'dm' || c.type === 'self' || c.isArchived) return false;
+          const targetDeptId = String(cat.departmentId?.externalId || cat.departmentId?._id || cat.departmentId);
+          if (!targetDeptId || targetDeptId === "undefined") return false;
+          const fEntityId = String(c.flowTaskRef?.entityId?._id || c.flowTaskRef?.entityId);
+          const isDepartmentChannel = c.flowTaskRef?.entityType === "department" && fEntityId === targetDeptId;
+          const cDeptId = String(c.departmentRef?.departmentId?._id || c.departmentRef?.departmentId);
+          const isProjectInDepartment = c.departmentRef?.departmentId && cDeptId === targetDeptId;
           return isDepartmentChannel || isProjectInDepartment;
         });
       } else {
         catChannels = channels.filter(c => cat.channelIds?.includes(c._id));
       }
-
+   
       // Hide empty department categories
       if (cat.type === "department" && catChannels.length === 0) return;
 
       result.push({
         key: `cat_${cat._id}`,
-        title: `${cat.icon || '📁'} ${cat.name}`,
+        title: cat.name,
+        emojiIcon: cat.icon || '📁',
         icon: null,
         data: sectionsExpanded[`cat_${cat._id}`] !== false ? [cat] : [],
         type: "category_parent",
@@ -175,15 +179,19 @@ const HomeScreen = ({ navigation }) => {
       });
     });
 
-    // Channels section (always rendered, data based on expanded state)
-    result.push({
-      key: "channels",
-      title: t("Channels"),
-      icon: Hash,
-      data: sectionsExpanded.channels !== false ? (showSkeletons ? skeletonData : regularChannels) : [],
-      type: "channel",
-      showAddChannel: true,
-    });
+    // Channels section (only render if there are channels or loading skeletons)
+    const hasRegularChannels = regularChannels && regularChannels.length > 0;
+    if (showSkeletons || hasRegularChannels) {
+      result.push({
+        key: "channels",
+        title: t("Channels"),
+        icon: Hash,
+        data: sectionsExpanded.channels !== false ? (showSkeletons ? skeletonData : regularChannels) : [],
+        type: "channel",
+        showAddChannel: true,
+      });
+    }
+    
     // Direct Messages section (always rendered)
     result.push({
       key: "dms",
@@ -220,11 +228,15 @@ const HomeScreen = ({ navigation }) => {
       <SectionHeader
         title={section.title}
         icon={section.icon}
+        emojiIcon={section.emojiIcon}
+        indentLevel={isCategoryParent ? 1 : 0}
         sectionKey={section.key}
         isExpanded={sectionsExpanded[section.key] ?? true}
-        onToggle={isCategoryHeader ? () => {} : toggleSection}
+        onToggle={isCategoryHeader ? null : toggleSection}
         colors={colors}
         onAdd={isCategoryHeader ? () => setCreateCategoryVisible(true) : undefined}
+        addIconSize={isCategoryHeader ? 22 : 16}
+        hideChevron={isCategoryHeader}
         // Only show menu for custom categories, not departments
         onMenu={isCategoryParent && !isDepartment ? () => {
           if (category) handleCategoryAction(category);
@@ -235,7 +247,7 @@ const HomeScreen = ({ navigation }) => {
 
   const renderSectionFooter = ({ section }) => {
     if (!section.showAddChannel || !sectionsExpanded[section.key]) return null;
-    return <AddChannelRow onPress={() => setCreateChannelVisible(true)} colors={colors} />;
+    return <AddChannelRow onPress={() => setCreateChannelVisible(true)} colors={colors} indentLevel={1} />;
   };
   const renderItem = ({ item, section }) => {
     if (item.isSkeleton) return <SkeletonRow colors={colors} />;
@@ -247,35 +259,23 @@ const HomeScreen = ({ navigation }) => {
       let catChannels = [];
       if (cat.type === 'department') {
         catChannels = channels.filter(c => {
-          if (c.visibility === 'private' || c.isArchived) return false;
-          const targetDeptId = cat.departmentId?.externalId || cat.departmentId?._id || cat.departmentId;
-          if (!targetDeptId) return false;
-          const isDepartmentChannel = c.flowTaskRef?.entityType === "department" && String(c.flowTaskRef?.entityId) === String(targetDeptId);
-          const isProjectInDepartment = c.departmentRef?.departmentId && String(c.departmentRef.departmentId) === String(targetDeptId);
+          if (c.type === 'dm' || c.type === 'self' || c.isArchived) return false;
+          const targetDeptId = String(cat.departmentId?.externalId || cat.departmentId?._id || cat.departmentId);
+          if (!targetDeptId || targetDeptId === "undefined") return false;
+          const fEntityId = String(c.flowTaskRef?.entityId?._id || c.flowTaskRef?.entityId);
+          const isDepartmentChannel = c.flowTaskRef?.entityType === "department" && fEntityId === targetDeptId;
+          const cDeptId = String(c.departmentRef?.departmentId?._id || c.departmentRef?.departmentId);
+          const isProjectInDepartment = c.departmentRef?.departmentId && cDeptId === targetDeptId;
           return isDepartmentChannel || isProjectInDepartment;
         });
       } else {
         catChannels = channels.filter(c => cat.channelIds?.includes(c._id));
       }
       
-      if (catChannels.length === 0 && catExpanded && cat.type !== 'department') {
-        return (
-          <TouchableOpacity 
-            onPress={() => {
-              setActiveCategory(cat);
-              setActionSheetVisible(true);
-            }} 
-            style={{ paddingLeft: 12, paddingVertical: 8 }}
-          >
-            <Text style={{ fontSize: 13, paddingHorizontal: 30, color: colors.textPrimary, opacity: 0.8, fontWeight: "600" }}>
-              + Add Channels
-            </Text>
-          </TouchableOpacity>
-        );
-      }
+
 
       return (
-        <View style={{ paddingLeft: 12 }}>
+        <View>
           {catExpanded && catChannels.map(channel => {
             const unread = unreads[channel._id] || 0;
             return (
@@ -285,6 +285,7 @@ const HomeScreen = ({ navigation }) => {
                 unreadCount={unread}
                 onPress={handleChannelPress}
                 colors={colors}
+                indentLevel={2}
               />
             );
           })}
@@ -295,7 +296,7 @@ const HomeScreen = ({ navigation }) => {
     const unreadCount = unreads[item._id] || 0;
     if (section.type === "dm" || (section.type === "mixed" && item.type === "dm")) {
       const isSelf = item.dmRecipientId === user?._id;
-      return <DMRow channel={item} unreadCount={unreadCount} onPress={handleDMPress} colors={colors} isSelf={isSelf} />;
+      return <DMRow channel={item} unreadCount={unreadCount} onPress={handleDMPress} colors={colors} isSelf={isSelf} indentLevel={1} />;
     }
     
     return (
@@ -304,6 +305,7 @@ const HomeScreen = ({ navigation }) => {
         unreadCount={unreadCount} 
         onPress={handleChannelPress} 
         colors={colors} 
+        indentLevel={1}
       />
     );
   };
@@ -380,11 +382,10 @@ const HomeScreen = ({ navigation }) => {
             <View style={[styles.wsLogo, { backgroundColor: colors.primaryOverlay }]}>
               <Image source={require("../../assets/logo.png")} style={styles.logo} />
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 }}>
               <Text style={[styles.wsName, { color: colors.textOnPrimary }]} numberOfLines={1}>
                 {activeWorkspace?.name || t("Workspace")}
               </Text>
-              <ChevronDown size={16} color={colors.textOnPrimary} strokeWidth={2.5} style={{ opacity: 0.8, marginTop: 2 }} />
             </View>
           </TouchableOpacity>
           <View style={styles.headerRight}>
@@ -455,16 +456,16 @@ const HomeScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: scale(16), paddingVertical: verticalScale(10) },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: moderateScale(16), paddingVertical: moderateScale(10) },
   headerLeft: { flexDirection: "row", alignItems: "center", flex: 1, gap: 8 },
-  wsLogo: { width: scale(28), height: scale(28), borderRadius: moderateScale(6), justifyContent: "center", alignItems: "center" },
-  logo: { width: scale(22), height: scale(22), resizeMode: "contain" },
-  wsName: { fontSize: moderateScale(16), fontWeight: "800", flex: 1 },
+  wsLogo: { width: moderateScale(28), height: moderateScale(28), borderRadius: moderateScale(6), justifyContent: "center", alignItems: "center" },
+  logo: { width: moderateScale(22), height: moderateScale(22), resizeMode: "contain" },
+  wsName: { fontSize: moderateScale(16), fontWeight: "800", flexShrink: 1 },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 12 },
-  cardsRow: { flexDirection: "row", paddingHorizontal: scale(16), paddingVertical: verticalScale(14), gap: 10 },
+  cardsRow: { flexDirection: "row", paddingHorizontal: moderateScale(16), paddingVertical: moderateScale(14), gap: 10 },
   errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: moderateScale(20), gap: 12 },
   errorText: { fontSize: moderateScale(16), fontWeight: "600" },
-  errorBtn: { paddingHorizontal: scale(20), paddingVertical: verticalScale(10), borderRadius: moderateScale(6) },
+  errorBtn: { paddingHorizontal: moderateScale(20), paddingVertical: moderateScale(10), borderRadius: moderateScale(6) },
 });
 
 export default HomeScreen;

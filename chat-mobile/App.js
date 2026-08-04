@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
+import { Keyboard, Dimensions } from "react-native";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import AppNavigator from "./src/navigation/AppNavigation";
@@ -9,6 +10,7 @@ import { useThemeStore } from "./src/stores/themeStore";
 import { usePreferencesStore } from "./src/stores/preferencesStore";
 import { useWorkspaceStore } from "./src/stores/workspaceStore";
 import { connectSocket, disconnectSocket } from "./src/services/socket";
+import { initNetworkMonitor, destroyNetworkMonitor } from "./src/services/networkMonitor";
 import { registerForPushNotifications, setNavigationRef } from "./src/services/pushNotificationService";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 import Toast from "react-native-toast-message";
@@ -17,6 +19,7 @@ import ThemeProvider from './src/theme/ThemeProvider';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useNotificationPrefStore } from "./src/stores/notificationPrefStore";
+import { KeyboardProvider } from "./src/providers/KeyboardProvider";
 
 const navigationRef = createNavigationContainerRef();
 const queryClient = new QueryClient();
@@ -62,11 +65,15 @@ export default function App() {
   useEffect(() => {
     if (accessToken && activeWorkspaceId) {
       connectSocket();
+      // Initialize the network monitor to flush offline queue on reconnect
+      initNetworkMonitor();
     } else {
       disconnectSocket();
+      destroyNetworkMonitor();
     }
     return () => {
       disconnectSocket();
+      destroyNetworkMonitor();
     };
   }, [accessToken, activeWorkspaceId]);
 
@@ -82,16 +89,19 @@ export default function App() {
     setNavigationRef(navigationRef);
   }, []);
 
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <SafeAreaProvider>
           <ErrorBoundary>
             <ThemeProvider>
-              <NavigationContainer ref={navigationRef}>
-                <AppNavigator />
-                <Toast />
-              </NavigationContainer>
+              <KeyboardProvider>
+                <NavigationContainer ref={navigationRef}>
+                  <AppNavigator />
+                  <Toast />
+                </NavigationContainer>
+              </KeyboardProvider>
             </ThemeProvider>
           </ErrorBoundary>
         </SafeAreaProvider>

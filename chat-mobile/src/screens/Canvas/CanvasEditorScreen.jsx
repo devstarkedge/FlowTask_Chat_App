@@ -3,16 +3,16 @@ import {
   View,
   StyleSheet,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
   FlatList,
   TouchableOpacity,
   Text,
   Image,
+  Platform,
 } from 'react-native';
-import ScreenContainer from '../../components/common/ScreenContainer';
+import KeyboardAwareContainer from '../../components/common/KeyboardAwareContainer';
 import ScreenLayout from '../../components/common/ScreenLayout';
+import useKeyboard from '../../hooks/useKeyboard';
 import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
 import { useCanvasStore } from '../../stores/canvasStore';
@@ -213,9 +213,14 @@ export default function CanvasEditorScreen({ route, navigation }) {
     }
   };
 
+  const { keyboardVisible } = useKeyboard();
+  const screenEdges = Platform.OS === 'ios' 
+    ? ['top', 'bottom'] 
+    : (keyboardVisible ? ['top', 'left', 'right'] : ['top', 'bottom']);
+
   return (
-    <ScreenLayout edges={['top', 'left', 'right']} style={styles.container}>
-      <ScreenContainer style={styles.container}>
+    <ScreenLayout edges={screenEdges} style={styles.container}>
+      <KeyboardAwareContainer style={styles.container} bottomSafeContext={Platform.OS === 'ios' ? false : true}>
       <CanvasHeader
         title={activeCanvas?.title || ''}
         presence={presence}
@@ -298,19 +303,19 @@ export default function CanvasEditorScreen({ route, navigation }) {
         onResolveComment={resolveComment}
       />
 
-      <CanvasHistorySheet
+      {/* <CanvasHistorySheet
         visible={historyVisible}
         onClose={() => setHistoryVisible(false)}
         history={history}
         onRestore={(historyId) => restoreVersion(canvasId, historyId)}
-      />
+      /> */}
 
       <CanvasShareModal
         visible={shareVisible}
         onClose={() => setShareVisible(false)}
         canvasId={canvasId}
       />
-    </ScreenContainer>
+      </KeyboardAwareContainer>
     </ScreenLayout>
   );
 }
@@ -326,11 +331,9 @@ const styles = StyleSheet.create({
   editorWrapper: {
     flex: 1,
     position: 'relative',
-    height: '100%',
   },
   webview: {
     flex: 1,
-    height: '100%',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -341,15 +344,15 @@ const styles = StyleSheet.create({
   },
   mentionPopup: {
     position: 'absolute',
-    bottom: verticalScale(0),
-    left: scale(0),
-    right: scale(0),
-    maxHeight: verticalScale(200),
+    bottom: moderateScale(0),
+    left: moderateScale(0),
+    right: moderateScale(0),
+    maxHeight: moderateScale(200),
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
     shadowColor: '#000',
-    shadowOffset: { width: scale(0), height: -2 },
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 5,
@@ -363,10 +366,10 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f3f4f6',
   },
   mentionAvatar: {
-    width: scale(24),
-    height: verticalScale(24),
+    width: moderateScale(24),
+    height: moderateScale(24),
     borderRadius: moderateScale(12),
-    marginRight: scale(8),
+    marginRight: moderateScale(8),
   },
   mentionName: {
     fontSize: moderateScale(14),

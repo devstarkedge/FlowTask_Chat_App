@@ -131,10 +131,12 @@ export const useHomeData = (navigation) => {
     const deptCategories = categories?.filter(c => c.type === 'department') || [];
     deptCategories.forEach(dept => {
       channels.forEach(c => {
-        const targetDeptId = dept.departmentId?.externalId || dept.departmentId?._id || dept.departmentId;
-        if (!targetDeptId) return;
-        const isDepartmentChannel = c.flowTaskRef?.entityType === "department" && String(c.flowTaskRef?.entityId) === String(targetDeptId);
-        const isProjectInDepartment = c.departmentRef?.departmentId && String(c.departmentRef.departmentId) === String(targetDeptId);
+        const targetDeptId = String(dept.departmentId?.externalId || dept.departmentId?._id || dept.departmentId);
+        if (!targetDeptId || targetDeptId === "undefined") return;
+        const fEntityId = String(c.flowTaskRef?.entityId?._id || c.flowTaskRef?.entityId);
+        const isDepartmentChannel = c.flowTaskRef?.entityType === "department" && fEntityId === targetDeptId;
+        const cDeptId = String(c.departmentRef?.departmentId?._id || c.departmentRef?.departmentId);
+        const isProjectInDepartment = c.departmentRef?.departmentId && cDeptId === targetDeptId;
         if (isDepartmentChannel || isProjectInDepartment) {
           categorizedChannelIds.add(String(c._id));
         }
@@ -143,8 +145,8 @@ export const useHomeData = (navigation) => {
 
     const unread = channels.filter((c) => (unreads[c._id] || 0) > 0);
     const starred = channels.filter((c) => starredIds.includes(c._id) && (unreads[c._id] || 0) === 0);
-    const system = channels.filter((c) => c.type === "system" && !c.categoryId && !categorizedChannelIds.has(String(c._id)) && (unreads[c._id] || 0) === 0 && !starredIds.includes(c._id) && !c.isArchived);
-    const regularCh = channels.filter((c) => c.type !== "dm" && c.type !== "system" && !c.categoryId && !categorizedChannelIds.has(String(c._id)) && (unreads[c._id] || 0) === 0 && !starredIds.includes(c._id) && !c.isArchived);
+    const system = channels.filter((c) => c.type === "system" && !categorizedChannelIds.has(String(c._id)) && (unreads[c._id] || 0) === 0 && !starredIds.includes(c._id) && !c.isArchived);
+    const regularCh = channels.filter((c) => c.type !== "dm" && c.type !== "system" && !categorizedChannelIds.has(String(c._id)) && (unreads[c._id] || 0) === 0 && !starredIds.includes(c._id) && !c.isArchived);
     const regularD = channels.filter((c) => c.type === "dm" && (unreads[c._id] || 0) === 0 && !starredIds.includes(c._id) && !c.isArchived);
 
     regularD.sort((a, b) => {
@@ -158,7 +160,7 @@ export const useHomeData = (navigation) => {
     });
 
     return { unreadConversations: unread, starredChannels: starred, systemChannels: system, regularChannels: regularCh, regularDMs: regularD };
-  }, [channels, unreads, starredIds, user]);
+  }, [channels, unreads, starredIds, user, categories]);
 
   return {
     user,

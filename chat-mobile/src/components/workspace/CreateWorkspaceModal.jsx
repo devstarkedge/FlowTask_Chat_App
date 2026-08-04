@@ -7,12 +7,12 @@ import {
   TouchableOpacity,
   Modal,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   Image,
   Alert,
 } from "react-native";
+import KeyboardAwareContainer from "../common/KeyboardAwareContainer";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { useThemeStore } from "../../stores/themeStore";
@@ -139,10 +139,9 @@ const CreateWorkspaceModal = ({ visible, onClose, onSuccess, navigation }) => {
       onRequestClose={handleClose}
     >
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-        <KeyboardAvoidingView
+        <KeyboardAwareContainer
           style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+          disablePadding={false}
         >
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn} hitSlop={{ top: verticalScale(10), bottom: verticalScale(10), left: scale(10), right: scale(10) }}>
@@ -255,7 +254,7 @@ const CreateWorkspaceModal = ({ visible, onClose, onSuccess, navigation }) => {
             </Text>
             <View style={{ height: verticalScale(40) }} />
           </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAwareContainer>
       </SafeAreaView>
     </Modal>
   );

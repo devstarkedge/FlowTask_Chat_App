@@ -128,6 +128,7 @@ function BottomTabs({ navigation }) {
     <>
       <Tab.Navigator
         screenOptions={{
+          tabBarHideOnKeyboard: true,
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textSecondary,
           tabBarStyle: {

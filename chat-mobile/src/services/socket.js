@@ -161,7 +161,57 @@ export const connectSocket = async () => {
   });
 
   socket.on('message:status', ({ messageId, messageIds, channelId, status, deliveredAt, seenAt }) => {
+    // 1. Update tick marks in main chat store
     useChatStore.getState().updateMessageStatus?.(channelId, messageId, messageIds, status, { deliveredAt, seenAt });
+
+    // 2. Update new chat receipts store (Message Info modal)
+    try {
+      const { useChatStore: useNewChatStore } = require('../chat/store');
+      const ids = messageIds || (messageId ? [messageId] : []);
+      ids.forEach(id => {
+        if (status === 'delivered') {
+          useNewChatStore.getState().addDeliveryReceipt(id, { userId: 'system', deliveredAt });
+        } else if (status === 'seen' || status === 'read') {
+          useNewChatStore.getState().addReadReceipt(id, { userId: 'system', readAt: seenAt });
+        }
+      });
+    } catch (e) {}
+  });
+
+  // Delivery receipt updates
+  socket.on('message:delivered', ({ messageId, channelId, userId, deliveredAt }) => {
+    // 1. Update tick marks in main chat store
+    const store = useChatStore.getState();
+    const messages = store.messagesByChannel[channelId];
+    if (messages) {
+      store.updateMessageStatus(channelId, messageId, [messageId], 'delivered', { deliveredAt });
+    }
+    
+    // 2. Update new chat receipts store (Message Info modal)
+    try {
+      const { useChatStore: useNewChatStore } = require('../chat/store');
+      useNewChatStore.getState().addDeliveryReceipt(messageId, { userId, deliveredAt });
+    } catch (e) {
+      console.warn('[Socket] Could not update new chat receipts store on delivery:', e);
+    }
+  });
+
+  // Read receipt updates
+  socket.on('message:read', ({ messageId, channelId, userId, readAt }) => {
+    // 1. Update tick marks in main chat store (use 'seen' instead of 'read' to match MessageStatusTicks checks)
+    const store = useChatStore.getState();
+    const messages = store.messagesByChannel[channelId];
+    if (messages) {
+      store.updateMessageStatus(channelId, messageId, [messageId], 'seen', { seenAt: readAt });
+    }
+
+    // 2. Update new chat receipts store (Message Info modal)
+    try {
+      const { useChatStore: useNewChatStore } = require('../chat/store');
+      useNewChatStore.getState().addReadReceipt(messageId, { userId, readAt });
+    } catch (e) {
+      console.warn('[Socket] Could not update new chat receipts store on read:', e);
+    }
   });
 
   // Typing Events
@@ -220,6 +270,48 @@ export const connectSocket = async () => {
 
   socket.on('customGroup:deleted', ({ customGroupId }) => {
     useChannelStore.getState().removeCustomGroup(customGroupId);
+  });
+
+  // Category Events
+  socket.on('category:created', (category) => {
+    try {
+      useChannelStore.getState().addCategory(category);
+    } catch (err) {
+      logger.error('[Socket] category:created error:', err.message);
+    }
+  });
+
+  socket.on('category:updated', (category) => {
+    try {
+      useChannelStore.getState().updateCategory(category);
+    } catch (err) {
+      logger.error('[Socket] category:updated error:', err.message);
+    }
+  });
+
+  socket.on('category:deleted', (categoryId) => {
+    try {
+      useChannelStore.getState().removeCategory(categoryId);
+    } catch (err) {
+      logger.error('[Socket] category:deleted error:', err.message);
+    }
+  });
+
+  socket.on('category:reordered', (categoryOrders) => {
+    try {
+      // Re-fetch to get consistent server-ordered state
+      useChannelStore.getState().fetchCategories();
+    } catch (err) {
+      logger.error('[Socket] category:reordered error:', err.message);
+    }
+  });
+
+  socket.on('channel:list:invalidated', () => {
+    try {
+      useChannelStore.getState().fetchCategories();
+    } catch (err) {
+      logger.error('[Socket] channel:list:invalidated error:', err.message);
+    }
   });
 
   // Thread Events
@@ -590,6 +682,29 @@ export const connectSocket = async () => {
   socket.on('reconnect', () => {
     logger.info('[Socket] Reconnected, re-syncing state...');
     useChatStore.getState().setConnectionStatus('connected');
+    
+    // Flush the offline message queue
+    try {
+      const { flushQueue } = require('./offlineQueue');
+      flushQueue(
+        (tempId, serverMessage) => {
+          const store = useChatStore.getState();
+          store.reconcileMessage(tempId, serverMessage);
+          store.updateMessageStatusLocal(tempId, 'sent');
+        },
+        (tempId, error) => {
+          const store = useChatStore.getState();
+          store.markMessageFailed(tempId, error);
+        }
+      ).then((result) => {
+        logger.info(`[Socket] Offline queue flushed: ${result.sent} sent, ${result.failed} failed`);
+      }).catch((err) => {
+        logger.error('[Socket] Failed to flush offline queue:', err.message);
+      });
+    } catch (err) {
+      logger.error('[Socket] Failed to flush offline queue:', err.message);
+    }
+
     try {
       const channelStore = useChannelStore.getState();
       channelStore.fetchChannels().then(() => {

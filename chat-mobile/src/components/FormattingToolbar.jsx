@@ -153,10 +153,10 @@ const styles = StyleSheet.create({
   container: {
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    paddingVertical: verticalScale(8),
+    paddingVertical: moderateScale(8),
   },
   scrollContent: {
-    paddingHorizontal: scale(16),
+    paddingHorizontal: moderateScale(16),
     gap: 8,
     alignItems: 'center',
   },
@@ -166,7 +166,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   divider: {
-    width: scale(1),
+    width: moderateScale(1),
+    height: moderateScale(24),
+    backgroundColor: '#e5e7eb',
+    marginHorizontal: moderateScale(6),
     opacity: 0.7,
   },
 });

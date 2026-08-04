@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { fileAPI, messageAPI } from "../services/api";
 import { getSocket } from "../services/socket";
+import { getFileKind } from "../utils/mediaUtils";
 import { useThemeStore } from "../stores/themeStore";
 import {
   FileText,
@@ -53,12 +54,7 @@ function formatDate(value) {
   return date.toLocaleString();
 }
 
-function getFileKind(mimeType = "") {
-  if (mimeType.startsWith("image/")) return "image";
-  if (mimeType.startsWith("video/")) return "video";
-  if (mimeType.startsWith("audio/")) return "audio";
-  return "file";
-}
+
 
 export default function FilesScreen({ route, navigation }) {
   const { channelId, channelName } = route.params || {};
@@ -204,7 +200,7 @@ export default function FilesScreen({ route, navigation }) {
   };
 
   const filtered = files.filter((f) => {
-    const kind = getFileKind(f.mimeType);
+    const kind = getFileKind(f.mimeType, f.fileName, f.url);
     if (
       query &&
       !(
@@ -218,7 +214,7 @@ export default function FilesScreen({ route, navigation }) {
   });
 
   const renderItem = ({ item }) => {
-    const kind = getFileKind(item.mimeType);
+    const kind = getFileKind(item.mimeType, item.fileName, item.url);
     return (
       <View style={[styles.row, { backgroundColor: colors.card }]}>
         <TouchableOpacity style={styles.thumb} onPress={() => handleOpen(item)}>

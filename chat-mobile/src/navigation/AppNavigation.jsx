@@ -123,11 +123,19 @@ function BottomTabs({ navigation }) {
   const { t } = useTranslation();
   const { isTablet, isDesktop } = useResponsive();
   const isWide = isTablet || isDesktop;
+  // Edge-to-edge (Expo 54+): always consume system nav inset. Add a small extra gap so
+  // tab icons aren't flush against 3-button / gesture bars.
+  const tabBarExtra = verticalScale(6);
+  const bottomInset = Math.max(insets.bottom, 0);
+  const tabBarContentHeight = isWide ? 58 : 50;
+  const tabBarBottomPad = bottomInset + tabBarExtra;
 
   return (
     <>
       <Tab.Navigator
         screenOptions={{
+          lazy: true,
+          freezeOnBlur: true,
           tabBarHideOnKeyboard: true,
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textSecondary,
@@ -135,9 +143,9 @@ function BottomTabs({ navigation }) {
             backgroundColor: colors.backgroundSecondary,
             borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: colors.border,
-            paddingBottom: insets.bottom > 0 ? insets.bottom : verticalScale(6),
+            paddingBottom: tabBarBottomPad,
             paddingTop: verticalScale(4),
-            height: (isWide ? 58 : 50) + (insets.bottom > 0 ? insets.bottom : 6),
+            height: tabBarContentHeight + tabBarBottomPad,
           },
           tabBarLabelStyle: {
             fontSize: moderateScale(isWide ? 12 : 10),

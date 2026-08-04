@@ -183,24 +183,83 @@ function renderTextWithLinksAndMentions(text, baseKey, parentStyles, ctx) {
   return parts.length > 0 ? parts : <Text key={baseKey} style={parentStyles}>{text}</Text>;
 }
 
+/**
+ * Convert HTML (or plain text) to a string that preserves line breaks.
+ * RN <Text> reliably shows `\n`; nested Views/`<br>` nodes often collapse on Android.
+ */
+function htmlToPlainWithNewlines(html) {
+  if (!html || typeof html !== 'string') return '';
+  return html
+    .replace(/\r\n?/g, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>\s*<p[^>]*>/gi, '\n')
+    .replace(/<\/div>\s*<div[^>]*>/gi, '\n')
+    .replace(/<\/h[1-6]>\s*<h[1-6][^>]*>/gi, '\n')
+    .replace(/<\/(p|div|h[1-6]|li|blockquote)>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n+$/g, '');
+}
+
+/** True when HTML only uses structural line-break tags (no bold/lists/etc.). */
+function isSimpleBreakHtml(html) {
+  if (!html) return true;
+  const stripped = html
+    .replace(/<\/?(?:p|br|div)\b[^>]*>/gi, '')
+    .replace(/[\n\r]/g, '');
+  return !/<[a-z]/i.test(stripped);
+}
+
+/** Flatten inline AST nodes into Text children, turning <br> into real `\n`. */
+function flattenInlineToTextChildren(children, ctx, parentStyles, depth) {
+  const out = [];
+  for (const child of children || []) {
+    if (child.tag === 'br') {
+      out.push('\n');
+    } else if (child.tag === '#text') {
+      const rendered = renderTextWithLinksAndMentions(
+        child.text,
+        `t-${keyCounter++}`,
+        parentStyles,
+        ctx,
+      );
+      if (Array.isArray(rendered)) out.push(...rendered);
+      else out.push(rendered);
+    } else if (['strong', 'b', 'em', 'i', 'u', 's', 'del', 'strike', 'code', 'a', 'span'].includes(child.tag)) {
+      const rendered = renderNode(child, ctx, parentStyles, depth);
+      if (Array.isArray(rendered)) out.push(...rendered);
+      else if (rendered != null && rendered !== false) out.push(rendered);
+    } else {
+      // Unknown inline — recurse textually
+      out.push(...flattenInlineToTextChildren(child.children, ctx, parentStyles, depth));
+    }
+  }
+  return out;
+}
+
 function renderChildren(children, ctx, parentStyles, depth) {
   const result = [];
   let currentInlineGroup = [];
 
   const flushInline = () => {
-    if (currentInlineGroup.length > 0) {
-      result.push(
-        <Text key={`inline-${keyCounter++}`} style={[styles.paragraphText, parentStyles]}>
-          {currentInlineGroup.map(c => renderNode(c, ctx, parentStyles, depth))}
-        </Text>
-      );
-      currentInlineGroup = [];
-    }
+    if (currentInlineGroup.length === 0) return;
+    result.push(
+      <Text key={`inline-${keyCounter++}`} style={[styles.paragraphText, parentStyles]}>
+        {flattenInlineToTextChildren(currentInlineGroup, ctx, parentStyles, depth)}
+      </Text>,
+    );
+    currentInlineGroup = [];
   };
 
   const blockTags = ['div', 'p', 'ul', 'ol', 'li', 'pre', 'blockquote', 'hr'];
-  
-  (children || []).forEach(c => {
+
+  (children || []).forEach((c) => {
     if (blockTags.includes(c.tag)) {
       flushInline();
       result.push(renderNode(c, ctx, parentStyles, depth));
@@ -209,7 +268,7 @@ function renderChildren(children, ctx, parentStyles, depth) {
     }
   });
   flushInline();
-  
+
   return result;
 }
 
@@ -222,42 +281,59 @@ function renderNode(node, ctx, parentStyles = {}, depth = 0) {
   }
 
   if (node.tag === 'br') {
+    // Must be a raw newline inside a parent <Text> — nested Text `\n` collapses on Android.
     return '\n';
   }
 
   // Recursively render children as inline content (Text-compatible)
-  const renderInlineChildren = (extraStyles = {}) => {
-    const merged = { ...parentStyles, ...extraStyles };
-    return node.children.map((c, i) => renderNode(c, ctx, merged, depth));
-  };
-
-  // Render children that may contain block elements
-  const renderBlockChildren = () => {
-    return node.children.map((c, i) => renderNode(c, ctx, parentStyles, depth));
-  };
-
   switch (node.tag) {
     case 'div':
     case 'p': {
-      // Paragraph — wrap block children safely, grouping inline elements
+      const hasBlockChild = (node.children || []).some((c) =>
+        ['div', 'p', 'ul', 'ol', 'li', 'pre', 'blockquote', 'hr'].includes(c.tag),
+      );
+      if (hasBlockChild) {
+        return (
+          <View key={key} style={styles.paragraphView}>
+            {renderChildren(node.children, ctx, parentStyles, depth)}
+          </View>
+        );
+      }
+      // Single Text with real `\n` for <br> — WhatsApp/Android-safe
       return (
-        <View key={key} style={styles.paragraphView}>
-          {renderChildren(node.children, ctx, parentStyles, depth)}
-        </View>
+        <Text key={key} style={[styles.paragraphText, parentStyles]}>
+          {flattenInlineToTextChildren(node.children, ctx, parentStyles, depth)}
+        </Text>
       );
     }
 
     case 'strong': case 'b':
-      return renderInlineChildren({ fontWeight: '700' });
+      return (
+        <Text key={key} style={[parentStyles, { fontWeight: '700' }]}>
+          {flattenInlineToTextChildren(node.children, ctx, { ...parentStyles, fontWeight: '700' }, depth)}
+        </Text>
+      );
 
     case 'em': case 'i':
-      return renderInlineChildren({ fontStyle: 'italic' });
+      return (
+        <Text key={key} style={[parentStyles, { fontStyle: 'italic' }]}>
+          {flattenInlineToTextChildren(node.children, ctx, { ...parentStyles, fontStyle: 'italic' }, depth)}
+        </Text>
+      );
 
     case 'u':
-      return renderInlineChildren({ textDecorationLine: 'underline' });
+      return (
+        <Text key={key} style={[parentStyles, { textDecorationLine: 'underline' }]}>
+          {flattenInlineToTextChildren(node.children, ctx, { ...parentStyles, textDecorationLine: 'underline' }, depth)}
+        </Text>
+      );
 
     case 's': case 'del': case 'strike':
-      return renderInlineChildren({ textDecorationLine: 'line-through' });
+      return (
+        <Text key={key} style={[parentStyles, { textDecorationLine: 'line-through' }]}>
+          {flattenInlineToTextChildren(node.children, ctx, { ...parentStyles, textDecorationLine: 'line-through' }, depth)}
+        </Text>
+      );
 
     case 'code': {
       // Inline code — if parent is <pre>, just pass through
@@ -404,7 +480,11 @@ function renderNode(node, ctx, parentStyles = {}, depth = 0) {
         );
       }
       // Generic span — pass through
-      return renderInlineChildren();
+      return (
+        <Text key={key} style={parentStyles}>
+          {flattenInlineToTextChildren(node.children, ctx, parentStyles, depth)}
+        </Text>
+      );
     }
 
     case 'hr': {
@@ -502,6 +582,24 @@ function markdownToHtml(text) {
     return `<ol>${items}</ol>`;
   });
 
+  // Wrap paragraphs — single newlines become separate <p> tags (WhatsApp / TipTap style)
+  html = html
+    .split(/\n\n/)
+    .map((block) => {
+      const trimmed = block.trim();
+      if (!trimmed) return "<p><br></p>";
+      if (/^<(pre|blockquote|ul|ol|li|hr)/.test(trimmed)) return trimmed;
+      if (trimmed.includes("<li>") && !trimmed.includes("<ul") && !trimmed.includes("<ol")) {
+        return `<ul>${trimmed}</ul>`;
+      }
+      const lines = trimmed.split(/\n/);
+      if (lines.length === 1) {
+        return `<p>${lines[0]}</p>`;
+      }
+      return lines.map((line) => (line ? `<p>${line}</p>` : `<p><br></p>`)).join("");
+    })
+    .join("");
+
   return html;
 }
 
@@ -513,6 +611,7 @@ const RichText = React.memo(function RichText({ html, text, colors, baseStyle, m
     if (!html && !text) return null;
 
     const ctx = { colors: colors || {}, mentions, onMentionPress };
+    const textStyle = [styles.paragraphText, baseStyle || {}];
 
     const rawHtml = (html && html.trim() && html.trim() !== '<p></p>')
       ? html
@@ -520,38 +619,82 @@ const RichText = React.memo(function RichText({ html, text, colors, baseStyle, m
 
     const targetHtml = pellToTipTap(rawHtml);
 
-    if (targetHtml && targetHtml.trim() && targetHtml.trim() !== '<p></p>') {
-      try {
-        const tokens = tokenize(targetHtml);
-        const ast = buildAST(tokens);
-        return renderChildren(ast.children, ctx, baseStyle || {}, 0);
-      } catch (e) {
-        // Fallback to plain text on parse error
-        return <Text style={baseStyle}>{text || html}</Text>;
-      }
+    if (!targetHtml || !targetHtml.trim() || targetHtml.trim() === '<p></p>') {
+      // Plain text path — preserve newlines from composer
+      const plain = (text || '').replace(/\r\n?/g, '\n');
+      return plain ? <Text style={textStyle}>{plain}</Text> : null;
     }
 
-    return null;
+    // Simple multiline (only p/br/div) — single Text with `\n` (Android-safe)
+    if (isSimpleBreakHtml(targetHtml) && !(mentions && mentions.length)) {
+      const plain =
+        htmlToPlainWithNewlines(targetHtml) ||
+        (text || '').replace(/\r\n?/g, '\n');
+      return plain ? <Text style={textStyle}>{plain}</Text> : null;
+    }
+
+    try {
+      const tokens = tokenize(targetHtml);
+      const ast = buildAST(tokens);
+      const blockTags = new Set(['div', 'p', 'ul', 'ol', 'li', 'pre', 'blockquote', 'hr']);
+      const kids = ast.children || [];
+      const onlySimpleParagraphs =
+        kids.length > 0 &&
+        kids.every(
+          (c) =>
+            (c.tag === 'p' || c.tag === 'div') &&
+            !(c.children || []).some((ch) => blockTags.has(ch.tag)),
+        );
+
+      // Multiple <p> lines → one Text with `\n` (avoids Android View stacking bugs)
+      if (onlySimpleParagraphs) {
+        const parts = [];
+        kids.forEach((pNode, i) => {
+          if (i > 0) parts.push('\n');
+          const inline = flattenInlineToTextChildren(
+            pNode.children,
+            ctx,
+            baseStyle || {},
+            0,
+          );
+          if (inline.length === 0) parts.push('\u00A0');
+          else parts.push(...inline);
+        });
+        return <Text style={textStyle}>{parts}</Text>;
+      }
+
+      return renderChildren(kids, ctx, baseStyle || {}, 0);
+    } catch (e) {
+      const plain =
+        htmlToPlainWithNewlines(targetHtml) ||
+        (text || html || '').replace(/\r\n?/g, '\n');
+      return <Text style={textStyle}>{plain}</Text>;
+    }
   }, [html, text, colors, baseStyle, mentions, onMentionPress]);
 
   return <View style={styles.container}>{elements}</View>;
 });
 
 const styles = StyleSheet.create({
-  container: {
-    minWidth: moderateScale(20),
-  },
   paragraphView: {
-    marginVertical: moderateScale(8),
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    marginVertical: 0,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    alignSelf: 'stretch',
     flexShrink: 1,
     maxWidth: '100%',
+    width: '100%',
   },
   paragraphText: {
     fontSize: moderateScale(15),
     lineHeight: moderateScale(22),
     flexShrink: 1,
+    maxWidth: '100%',
+  },
+  container: {
+    minWidth: moderateScale(20),
+    maxWidth: '100%',
+    alignSelf: 'stretch',
   },
   codeBlock: {
     borderRadius: moderateScale(6),

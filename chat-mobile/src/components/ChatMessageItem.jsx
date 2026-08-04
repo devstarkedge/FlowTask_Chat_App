@@ -251,7 +251,7 @@ const ChatMessageItem = memo(({
               />
             ) : item.contentType === 'gif' && item.gifMeta ? (
               <GifRenderer item={item} contentColor={contentColor} styles={styles} />
-            ) : item.htmlContent ? (
+            ) : (item.htmlContent || item.content) ? (
               <RichText
                 html={item.htmlContent}
                 text={item.content}
@@ -270,11 +270,7 @@ const ChatMessageItem = memo(({
                 }}
                 baseStyle={{ color: contentColor, fontSize: moderateScale(15), lineHeight: 22 }}
               />
-            ) : (
-              <RNText style={[styles.messageText, { color: contentColor }]}>
-                {item.content}
-              </RNText>
-            )}
+            ) : null}
 
             {!isDeleted && attachments.length > 0 && !['audio', 'video'].includes(item.contentType) && !['audio', 'video'].includes(item.type) && (
               <RNView style={{ marginTop: verticalScale(4), width: '100%', gap: 4 }}>

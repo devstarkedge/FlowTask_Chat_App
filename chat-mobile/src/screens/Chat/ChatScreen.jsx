@@ -66,7 +66,6 @@ import {
   Copy,
   ExternalLink,
 } from "lucide-react-native";
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SearchBar from "../../components/SearchBar";
 import MessageComposer from "../../components/MessageComposer";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
@@ -78,8 +77,6 @@ import { normalizeMediaUrl, getMessageAttachments } from '../../utils/mediaUtils
 import MessageStatusTicks from '../../components/MessageStatusTicks';
 import MessageInfoModal from '../../components/MessageInfoModal';
 import GifRenderer from '../../components/GifRenderer';
-import useLayoutDiagnostics from '../../hooks/useLayoutDiagnostics';
-import useKeyboard from '../../hooks/useKeyboard';
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const getAuthorId = (msg) => {
@@ -131,20 +128,16 @@ const ChatScreen = ({ route, navigation }) => {
   const { isTablet, isDesktop, width } = useResponsive();
   const maxBubbleWidth = isTablet || isDesktop || width > 600 ? 580 : '85%';
 
-  const insets = useSafeAreaInsets();
   const [headerHeight, setHeaderHeight] = useState(56);
-  const { keyboardVisible, keyboardHeight } = useKeyboard();
-  const layoutDiagnostics = useLayoutDiagnostics('ChatScreen');
 
-  useEffect(() => {
-    if (__DEV__) {
-      console.log(`[PIPELINE] ChatScreen: received keyboardHeight = ${keyboardHeight}, keyboardVisible = ${keyboardVisible}`);
-    }
-  }, [keyboardHeight, keyboardVisible]);
-  const KeyboardContainer = KeyboardAwareContainer;
-  const keyboardProps = { 
-    disablePadding: false 
+  // Android: container owns bottom inset when closed, measured IME overlap when open
+  // (adapts to 3-button / gesture / edge-to-edge). iOS: AppScreen owns bottom inset.
+  const keyboardProps = {
+    disablePadding: false,
+    bottomSafeContext: Platform.OS === 'ios',
   };
+  const appScreenEdges =
+    Platform.OS === 'ios' ? ['top', 'bottom'] : ['top', 'left', 'right'];
 
   // Granular store subscriptions — prevent unnecessary re-renders
   const messages = useChatStore(useShallow((s) => s.messagesByChannel[channelId] || []));
@@ -536,16 +529,12 @@ const ChatScreen = ({ route, navigation }) => {
 
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const appScreenEdges = Platform.OS === 'ios' 
-    ? ['top', 'bottom'] 
-    : (keyboardVisible ? ['top', 'left', 'right'] : ['top', 'bottom']);
-
   return (
     <AppScreen 
       style={[styles.container, { backgroundColor: colors.background }]} 
       edges={appScreenEdges}
     > 
-      <View style={{ flex: 1 }} onLayout={layoutDiagnostics.onContainerLayout}>
+      <View style={{ flex: 1 }}>
 
 
       {/* Custom Header */}
@@ -710,14 +699,13 @@ const ChatScreen = ({ route, navigation }) => {
         </View>
       )}
 
-        <KeyboardContainer
+        <KeyboardAwareContainer
           style={{ flex: 1 }}
           {...keyboardProps}
         >
           <FlatList
             ref={flatListRef}
             style={{ flex: 1 }}
-            onLayout={layoutDiagnostics.onListLayout}
           data={displayedMessages}
           renderItem={renderMessage}
           keyExtractor={(item) => item._id}
@@ -734,10 +722,11 @@ const ChatScreen = ({ route, navigation }) => {
             }
           }}
           onEndReachedThreshold={0.3}
-          initialNumToRender={15}
-          maxToRenderPerBatch={10}
-          windowSize={11}
-          removeClippedSubviews={Platform.OS === 'ios'}
+          initialNumToRender={12}
+          maxToRenderPerBatch={8}
+          windowSize={7}
+          updateCellsBatchingPeriod={50}
+          removeClippedSubviews={Platform.OS !== 'web'}
           ListFooterComponent={
             isLoadingMessages ? (
               <ActivityIndicator
@@ -785,7 +774,7 @@ const ChatScreen = ({ route, navigation }) => {
         )}
 
         {/* Message Composer */}
-        <View onLayout={layoutDiagnostics.onComposerLayout}>
+        <View>
           <MessageComposer
             channelId={channelId}
             channelName={channelName}
@@ -809,7 +798,7 @@ const ChatScreen = ({ route, navigation }) => {
             onCancelEdit={() => { setEditingMessage(null); setText(""); }}
           />
         </View>
-      </KeyboardContainer>
+      </KeyboardAwareContainer>
 
       {/* Reminder Modal */}
       <ReminderModal
@@ -1104,11 +1093,11 @@ const createStyles = (colors) =>
       marginTop: moderateScale(6),
     },
     imageAttachment: {
-      width: 250,
-      maxWidth: '100%',
+      width: '100%',
+      maxWidth: scale(280),
       aspectRatio: 1.33,
       height: 'auto',
-      borderRadius: 8,
+      borderRadius: moderateScale(8),
     },
     fileAttachment: {
       flexDirection: "row",

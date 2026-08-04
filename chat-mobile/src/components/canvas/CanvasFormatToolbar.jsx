@@ -1,18 +1,22 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Text } from 'react-native';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+import { useThemeStore } from '../../stores/themeStore';
 
 import {
   Undo2, Redo2, Bold, Italic, Underline, Strikethrough, Code,
-  List, ListOrdered, SquareCheck, Quote, Table, Image, Minus,
-  ArrowRightToLine, ArrowDownToLine, Trash, TableProperties
+  List, ListOrdered, SquareCheck, Quote, Table, Minus,
+  ArrowRightToLine, ArrowDownToLine, Trash
 } from 'lucide-react-native';
 
-export default function CanvasFormatToolbar({
+const ICON_SIZE = moderateScale(18);
+
+function CanvasFormatToolbar({
   selectionState = {},
   onCommand,
   onInsertPress,
 }) {
+  const { colors } = useThemeStore();
   const formatButtons = [
     { id: 'undo', icon: Undo2, command: 'undo', disabled: !selectionState.canUndo },
     { id: 'redo', icon: Redo2, command: 'redo', disabled: !selectionState.canRedo },
@@ -31,10 +35,11 @@ export default function CanvasFormatToolbar({
   ];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.backgroundSecondary, borderTopColor: colors.border }]}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="always"
         contentContainerStyle={styles.scrollContent}
       >
         {formatButtons.map((btn) => {
@@ -46,14 +51,15 @@ export default function CanvasFormatToolbar({
               onPress={() => onCommand(btn.command, btn.value)}
               style={[
                 styles.btn,
-                btn.active && styles.activeBtn,
-                btn.disabled && styles.disabledBtn
+                btn.active && { backgroundColor: colors.primary },
+                btn.disabled && { opacity: 0.5 }
               ]}
+              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
             >
               {Icon ? (
-                <Icon size={18} color={btn.active ? '#ffffff' : btn.disabled ? '#d1d5db' : '#4b5563'} />
+                <Icon size={ICON_SIZE} color={btn.active ? colors.textOnPrimary : btn.disabled ? colors.textTertiary : colors.textPrimary} />
               ) : (
-                <Text style={[styles.label, btn.active && styles.activeLabel]}>{btn.label}</Text>
+                <Text style={[styles.label, { color: colors.textPrimary }, btn.active && { color: colors.textOnPrimary }]}>{btn.label}</Text>
               )}
             </TouchableOpacity>
           );
@@ -61,31 +67,31 @@ export default function CanvasFormatToolbar({
 
         {selectionState.table ? (
           <>
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <TouchableOpacity onPress={() => onCommand('addColumnAfter')} style={styles.btn}>
-              <ArrowRightToLine size={18} color="#4b5563" />
+              <ArrowRightToLine size={ICON_SIZE} color={colors.textPrimary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => onCommand('deleteColumn')} style={styles.btn}>
-              <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>-C</Text>
+              <Text style={{ color: colors.error || '#ef4444', fontWeight: 'bold', fontSize: moderateScale(12) }}>-C</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => onCommand('addRowAfter')} style={styles.btn}>
-              <ArrowDownToLine size={18} color="#4b5563" />
+              <ArrowDownToLine size={ICON_SIZE} color={colors.textPrimary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => onCommand('deleteRow')} style={styles.btn}>
-              <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>-R</Text>
+              <Text style={{ color: colors.error || '#ef4444', fontWeight: 'bold', fontSize: moderateScale(12) }}>-R</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => onCommand('deleteTable')} style={styles.btn}>
-              <Trash size={18} color="#ef4444" />
+              <Trash size={ICON_SIZE} color={colors.error || '#ef4444'} />
             </TouchableOpacity>
           </>
         ) : (
           <>
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <TouchableOpacity onPress={onInsertPress} style={styles.btn}>
-              <Table size={18} color="#4b5563" />
+              <Table size={ICON_SIZE} color={colors.textPrimary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => onCommand('insertHorizontalRule')} style={styles.btn}>
-              <Minus size={18} color="#4b5563" />
+              <Minus size={ICON_SIZE} color={colors.textPrimary} />
             </TouchableOpacity>
           </>
         )}
@@ -96,44 +102,33 @@ export default function CanvasFormatToolbar({
 
 const styles = StyleSheet.create({
   container: {
-    height: verticalScale(48),
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    backgroundColor: '#f9fafb',
+    flex: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
   },
   scrollContent: {
     alignItems: 'center',
     paddingHorizontal: scale(8),
+    minHeight: verticalScale(48),
   },
   btn: {
-    width: scale(34),
-    height: verticalScale(34),
+    width: scale(36),
+    height: scale(36),
     borderRadius: moderateScale(6),
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: scale(3),
+    marginHorizontal: scale(2),
     backgroundColor: 'transparent',
-  },
-  activeBtn: {
-    backgroundColor: '#4f46e5',
-  },
-  disabledBtn: {
-    opacity: 0.5,
   },
   label: {
     fontSize: moderateScale(13),
     fontWeight: 'bold',
-    color: '#4b5563',
-  },
-  activeLabel: {
-    color: '#ffffff',
   },
   divider: {
-    width: scale(1),
+    width: StyleSheet.hairlineWidth,
     height: verticalScale(24),
-    backgroundColor: '#e5e7eb',
     marginHorizontal: scale(6),
   },
 });
+
+export default React.memo(CanvasFormatToolbar);

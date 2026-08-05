@@ -287,7 +287,7 @@ class WorkspaceService {
       logger.info(`[CASCADE] Deleted ${canvasResult.deletedCount} canvases`);
 
       // 7. Delete all read receipts
-      const { default: ReadReceipt } = await import('../readReceipts/ReadReceipt.model.js');
+      const { default: ReadReceipt } = await import('../readReceipts/readReceipt.model.js');
       const readReceiptResult = await ReadReceipt.deleteMany({ workspaceId: wsObjectId });
       logger.info(`[CASCADE] Deleted ${readReceiptResult.deletedCount} read receipts`);
 

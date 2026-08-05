@@ -61,8 +61,27 @@ class AuthService {
   async loginNative({ email, password, userAgent = '' }) {
     // Find user with password field
     const user = await userRepository.findByEmail(email);
-    if (!user) {
-      throw new UnauthorizedError('Invalid email or password');
+
+    // If user is not found, or user uses FlowTask SSO, attempt FlowTask login proxy
+    if (!user || user.authProvider !== 'native') {
+      if (env.FLOWTASK_ENABLED) {
+        try {
+          const flowTaskRes = await flowTaskService.login(email, password);
+          const token = flowTaskRes.data?.token || flowTaskRes.token;
+          if (token) {
+            logger.info('Successfully proxied email/password to FlowTask', { email });
+            return this.loginFlowTask({ token, userAgent });
+          }
+        } catch (error) {
+          if (error.response?.status === 401 || error.response?.status === 404 || error.response?.status === 400) {
+            throw new UnauthorizedError('Invalid email or password');
+          }
+          logger.warn('Failed to authenticate against FlowTask API via email/password proxy', { error: error.message });
+          if (!user) throw new UnauthorizedError('Invalid email or password');
+        }
+      } else if (!user) {
+        throw new UnauthorizedError('Invalid email or password');
+      }
     }
 
     // Check account is active
@@ -75,7 +94,7 @@ class AuthService {
       throw new UnauthorizedError('Account is temporarily locked due to too many failed attempts. Please try again later.');
     }
 
-    // Check auth provider
+    // Check auth provider (Should only reach here if user.authProvider === 'native')
     if (user.authProvider !== 'native') {
       throw new UnauthorizedError('This account uses FlowTask SSO. Please log in via FlowTask.');
     }

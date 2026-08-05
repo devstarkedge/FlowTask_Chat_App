@@ -91,7 +91,7 @@ export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   const userAgent = req.get('User-Agent') || '';
 
-  const { chatUser, accessToken, refreshToken, emailWarning } = await authService.loginNative({
+  const { chatUser, accessToken, refreshToken, emailWarning, flowTaskToken } = await authService.loginNative({
     email,
     password,
     userAgent,
@@ -99,6 +99,18 @@ export const login = asyncHandler(async (req, res) => {
 
   if (chatUser.emailVerified) {
     await channelService.activatePendingParticipantsForUser(chatUser);
+  }
+
+  if (flowTaskToken) {
+    await ChatUser.updateOne(
+      { _id: chatUser._id },
+      {
+        $set: {
+          flowTaskToken,
+          flowTaskTokenExpiry: getFlowTaskTokenExpiry(flowTaskToken),
+        },
+      },
+    );
   }
 
   // Fetch user's workspaces for client-side workspace selection
@@ -111,6 +123,7 @@ export const login = asyncHandler(async (req, res) => {
       accessToken,
       refreshToken,
       workspaces,
+      ...(flowTaskToken && { flowTaskToken }),
     },
     ...(emailWarning && { warning: emailWarning }),
   });

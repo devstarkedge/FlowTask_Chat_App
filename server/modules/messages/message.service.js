@@ -877,18 +877,38 @@ class MessageService {
    */
   async _incrementUnreadForChannel(channelId, senderUserId, workspaceId) {
     try {
-      const { default: ReadReceipt } = await import('../readReceipts/ReadReceipt.model.js');
       const { getIO } = await import('../../sockets/socketManager.js');
       const { buildRoomName } = await import('../../config/constants.js');
+      const { default: ReadReceipt } = await import('../readReceipts/ReadReceipt.model.js');
 
-      // Increment for all except sender (existing logic)
-      await ReadReceipt.incrementUnread(channelId, senderUserId, false, workspaceId);
+      const channel = await channelRepository.findById(channelId, { workspaceId });
+      if (!channel) return;
+
+      let memberIds = [];
+      if (channel.type === 'dm') {
+        memberIds = channel.dmParticipants || [];
+      } else {
+        memberIds = (channel.members || []).map(m => m.userId.toString());
+      }
+
+      const targetUserIds = memberIds.filter(id => id.toString() !== senderUserId.toString());
+      if (targetUserIds.length === 0) return;
+
+      // Use bulkWrite with upsert to safely increment or initialize unread counts
+      const bulkOps = targetUserIds.map(userId => ({
+        updateOne: {
+          filter: { userId, channelId, workspaceId },
+          update: { $inc: { unreadCount: 1 } },
+          upsert: true
+        }
+      }));
+      await ReadReceipt.bulkWrite(bulkOps);
 
       // Get all members with unread > 0
       const updatedReceipts = await ReadReceipt.find({
         channelId,
         ...(workspaceId ? { workspaceId } : {}),
-        userId: { $ne: senderUserId },
+        userId: { $in: targetUserIds },
         unreadCount: { $gt: 0 },
       }).select('userId unreadCount').lean();
 
@@ -920,7 +940,7 @@ class MessageService {
             userId, 
             channelId 
           });
-          await ReadReceipt.markChannelAsRead(userId, channelId, null, workspaceId);
+          await readReceiptRepository.markChannelAsRead(userId, channelId, null, workspaceId);
           
           // Emit zero unread count to client
           emitToUser(userId, SOCKET_EVENTS.UNREAD_UPDATED, {

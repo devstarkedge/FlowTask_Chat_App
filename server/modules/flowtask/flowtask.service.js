@@ -158,14 +158,23 @@ class FlowTaskService {
       tokenMasked: token ? `${token.slice(0, 6)}...${token.slice(-6)}` : null,
     });
     return breaker.execute(async () => {
-      const response = await httpClient.post(path, body, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await httpClient.post(path, body, { headers });
       return response.data;
     });
   }
 
   // ─── Domain-specific methods ─────────────────────────────────────────────
+
+  /**
+   * Log in to FlowTask using email and password.
+   * @param {string} email
+   * @param {string} password
+   * @returns {Promise<object>} response containing FlowTask user and token
+   */
+  async login(email, password) {
+    return this.post('/api/auth/login', { email, password }, null);
+  }
 
   /**
    * Get current user profile from FlowTask.

@@ -5,13 +5,15 @@ import { useAuthStore } from '../../stores/authStore'
 const EMPTY = {}
 
 export default function TypingIndicator({ channelId }) {
-  const typingMap = useChatStore((s) => s.typingByChannel?.[channelId] ?? EMPTY)
+  const cid = channelId != null ? String(channelId) : null
+  const typingMap = useChatStore((s) => (cid && s.typingByChannel?.[cid]) || EMPTY)
   const userId = useAuthStore((s) => s.user?._id)
 
-  // Filter out self
+  // Filter out self (normalize IDs — socket payloads are always strings)
   const typers = useMemo(() => {
+    const selfId = userId != null ? String(userId) : null
     return Object.entries(typingMap)
-      .filter(([id]) => id !== userId)
+      .filter(([id]) => id !== selfId)
       .map(([, name]) => name)
   }, [typingMap, userId])
 

@@ -12,6 +12,7 @@ import { useWorkspaceStore } from "./src/stores/workspaceStore";
 import { connectSocket, disconnectSocket } from "./src/services/socket";
 import { initNetworkMonitor, destroyNetworkMonitor } from "./src/services/networkMonitor";
 import { registerForPushNotifications, setNavigationRef } from "./src/services/pushNotificationService";
+import { conversationPresence } from "./src/services/conversationPresence";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 import Toast from "react-native-toast-message";
 import ThemeProvider from './src/theme/ThemeProvider';
@@ -67,11 +68,15 @@ export default function App() {
       connectSocket();
       // Initialize the network monitor to flush offline queue on reconnect
       initNetworkMonitor();
+      conversationPresence.setup();
     } else {
       disconnectSocket();
       destroyNetworkMonitor();
+      conversationPresence.clearActive();
     }
     return () => {
+      conversationPresence.clearActive();
+      conversationPresence.cleanup();
       disconnectSocket();
       destroyNetworkMonitor();
     };

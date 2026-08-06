@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import storage from '../services/storage';
-import { channelAPI, usersAPI, readReceiptAPI, categoryAPI } from '../services/api';
+import { channelAPI, usersAPI, readReceiptAPI, categoryAPI, resolveWorkspaceId } from '../services/api';
 import { getSocket } from '../services/socket';
 import logger from '../utils/logger';
 import Toast from 'react-native-toast-message';
@@ -27,6 +27,10 @@ export const useChannelStore = create(
       isLoading: false,
 
       fetchChannels: async () => {
+        if (!resolveWorkspaceId()) {
+          logger.warn('[ChannelStore] Skipping fetchChannels — no active workspace');
+          return;
+        }
         set({ isLoading: true });
         try {
           const { data } = await channelAPI.list();
@@ -156,19 +160,20 @@ export const useChannelStore = create(
 
       markAsRead: async (channelId, messageId = null) => {
         if (!channelId) return;
+        const cid = channelId?.toString ? channelId.toString() : String(channelId);
         try {
           // Reset locally immediately for fast UI
           set((state) => ({
-            unreads: { ...state.unreads, [channelId]: 0 }
+            unreads: { ...state.unreads, [cid]: 0 }
           }));
 
           // Call REST API
-          await readReceiptAPI.markRead(channelId, messageId);
+          await readReceiptAPI.markRead(cid, messageId);
           
           // Emit socket seen event (in case it is a DM)
           const socket = getSocket();
           if (socket && socket.connected) {
-            socket.emit('dm:markSeen', { channelId });
+            socket.emit('dm:markSeen', { channelId: cid });
           }
         } catch (error) {
           logger.error('[ChannelStore] markAsRead error:', error);
@@ -253,9 +258,12 @@ export const useChannelStore = create(
       },
 
       setActiveChannel: (channelId) => {
-        set({ activeChannelId: channelId });
-        if (channelId) {
-          get().markAsRead(channelId);
+        const cid = channelId != null
+          ? (channelId?.toString ? channelId.toString() : String(channelId))
+          : null;
+        set({ activeChannelId: cid });
+        if (cid) {
+          get().markAsRead(cid);
         }
       },
 
@@ -296,51 +304,37 @@ export const useChannelStore = create(
       },
 
       updateUnread: (channelId, count) => {
+        if (!channelId) return;
+        const cid = channelId?.toString ? channelId.toString() : String(channelId);
         set((state) => ({
-          unreads: { ...state.unreads, [channelId]: count },
+          unreads: { ...state.unreads, [cid]: count },
         }));
       },
 
       handleNewMessage: (message) => {
-        const { channelId, content, createdAt, authorId } = message;
+        const { channelId, content, createdAt } = message;
         if (!channelId) return;
 
-        // Normalise channelId to a string so it reliably matches stored channel._id strings
+        // Preview-only update (mirrors web). Unread increments are handled by UnreadManager.
         const channelIdStr = channelId?.toString ? channelId.toString() : channelId;
-
-        // Build plain-text preview (strip HTML, cap at 80 chars — mirrors web app)
         const rawText = (content || '').replace(/<[^>]*>/g, '').trim();
         const preview = rawText.length > 80 ? rawText.substring(0, 80) + '\u2026' : rawText;
         const timestamp = createdAt || new Date().toISOString();
 
-        const currentUser = getAuthUser();
-        const messageAuthorId = typeof authorId === 'object' ? authorId?._id : authorId;
-        const isSelf = messageAuthorId === currentUser?._id;
-
         set((state) => {
-          const isActive = channelIdStr === state.activeChannelId;
           const channels = state.channels.map((c) => {
             const cId = c._id?.toString ? c._id.toString() : c._id;
             if (cId !== channelIdStr) return c;
-            
-            // Note: We deliberately do NOT prepend "You: " or handle media parsing here.
-            // This strictly mirrors the Web App behavior. Media previews ("📷 Photo", etc.)
-            // will arrive moments later via the server-authoritative 'channel:updated' event.
             return { ...c, lastMessageAt: timestamp, lastMessagePreview: preview };
           });
 
-          // Keep DM channels sorted by most-recent message (mirrors DMListScreen sort)
           channels.sort((a, b) => {
             const aTime = new Date(a.lastMessageAt || 0).getTime();
             const bTime = new Date(b.lastMessageAt || 0).getTime();
             return bTime - aTime;
           });
 
-          const unreads = isActive || isSelf
-            ? state.unreads
-            : { ...state.unreads, [channelIdStr]: (state.unreads[channelIdStr] || 0) + 1 };
-
-          return { channels, unreads };
+          return { channels };
         });
       },
 
@@ -404,6 +398,9 @@ export const useChannelStore = create(
         unreads: state.unreads,
         starredIds: state.starredIds,
         pinnedIds: state.pinnedIds,
+        channels: state.channels,
+        categories: state.categories,
+        membersByChannel: state.membersByChannel,
       }),
     }
   )

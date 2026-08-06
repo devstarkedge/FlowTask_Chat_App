@@ -66,11 +66,12 @@ export function buildChatEditorHtml({
   dark = false,
   textColor,
   placeholderColor,
+  linkColor,
 } = {}) {
   let html = EDITOR_HTML;
 
   const themeCss =
-    (textColor || placeholderColor)
+    (textColor || placeholderColor || linkColor)
       ? `
   body, .ProseMirror {
     color: ${textColor || 'inherit'} !important;
@@ -78,6 +79,7 @@ export function buildChatEditorHtml({
   .ProseMirror p.is-editor-empty:first-child::before {
     color: ${placeholderColor || '#9ca3af'} !important;
   }
+  ${linkColor ? `.ProseMirror a { color: ${linkColor} !important; text-decoration: underline !important; }` : ''}
 `
       : '';
 

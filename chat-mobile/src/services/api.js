@@ -47,7 +47,27 @@ export const setCachedToken = (token) => {
  * Update cached workspace ID after workspace switch.
  */
 export const setCachedWorkspaceId = (workspaceId) => {
-  cachedWorkspaceId = workspaceId;
+  cachedWorkspaceId = workspaceId || null;
+};
+
+/**
+ * Resolve workspace ID for API headers.
+ * Prefer in-memory cache; fall back to workspace store so requests still work
+ * when persist rehydrated activeWorkspaceId but cache was never primed.
+ */
+export const resolveWorkspaceId = () => {
+  if (cachedWorkspaceId) return cachedWorkspaceId;
+  try {
+    const { useWorkspaceStore } = require('../stores/workspaceStore');
+    const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+    if (workspaceId) {
+      cachedWorkspaceId = workspaceId;
+      return workspaceId;
+    }
+  } catch {
+    // Store may not be ready yet during very early boot
+  }
+  return null;
 };
 
 /**
@@ -64,8 +84,9 @@ api.interceptors.request.use((config) => {
   if (cachedToken) {
     config.headers.Authorization = `Bearer ${cachedToken}`;
   }
-  if (cachedWorkspaceId) {
-    config.headers['X-Workspace-Id'] = cachedWorkspaceId;
+  const workspaceId = resolveWorkspaceId();
+  if (workspaceId) {
+    config.headers['X-Workspace-Id'] = workspaceId;
   }
   if (cachedFlowtaskToken) {
     config.headers['X-FlowTask-Token'] = cachedFlowtaskToken;
@@ -191,9 +212,10 @@ api.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
+    const isLoginRoute = originalRequest.url?.includes('/auth/login');
 
-    // If 401 and we haven't already retried, attempt token refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // If 401 and we haven't already retried, attempt token refresh (skip for login routes)
+    if (error.response?.status === 401 && !originalRequest._retry && !isLoginRoute) {
       originalRequest._retry = true;
 
       // Use shared promise so concurrent 401s share a single refresh
@@ -220,6 +242,27 @@ api.interceptors.response.use(
           useAuthStore.getState().logout();
         } catch (storeError) {
           logger.error('[API] Failed to trigger store logout:', storeError);
+        }
+      }
+    }
+
+    // Handle Workspace Not Found or Membership Revoked
+    if (
+      (error.response?.status === 404 && error.response?.data?.message?.includes('Workspace not found')) ||
+      (error.response?.status === 403 && error.response?.data?.message?.includes('Workspace membership required'))
+    ) {
+      if (!originalRequest._workspaceRetry) {
+        originalRequest._workspaceRetry = true;
+        const invalidWorkspaceId = originalRequest.headers['X-Workspace-Id'];
+        if (invalidWorkspaceId) {
+          try {
+            const { useWorkspaceStore } = require('../stores/workspaceStore');
+            logger.warn(`[API] Invalid workspace detected (${invalidWorkspaceId}), attempting recovery...`);
+            // Trigger cleanup which will switch to another workspace or clear state
+            useWorkspaceStore.getState().afterWorkspaceRemoved(invalidWorkspaceId);
+          } catch (storeError) {
+            logger.error('[API] Failed to trigger workspace recovery:', storeError);
+          }
         }
       }
     }
@@ -270,7 +313,7 @@ export const workspaceAPI = {
   getInviteInfo: (token) =>
     api.get(`/workspaces/invite-info/${token}`),
   regenerateInviteCode: (workspaceId) =>
-    api.post(`/workspaces/${workspaceId}/invite-code`),
+    api.post(`/workspaces/${workspaceId}/invite-code/regenerate`, {}),
 
   // ── Settings ──
   updateDomainRestrictions: (workspaceId, payload) =>
@@ -334,7 +377,7 @@ export const laterAPI = {
   updateReminder: (messageId, data) => api.patch(`/messages/${messageId}/save/reminder`, data),
   snoozeReminder: (messageId, minutes) => api.patch(`/messages/${messageId}/save/reminder/snooze`, { minutes }),
   createStandaloneReminder: (data, headers) => api.post('/messages/reminders/standalone', data, headers),
-  delete: (messageId) => api.delete(`/messages/${messageId}/save`),
+  deleteReminder: (id) => api.delete(`/messages/reminders/${id}`),
 };
 
 // Scheduled Messages API
@@ -355,6 +398,7 @@ export const messageAPI = {
   forward: (messageId, data) => api.post(`/messages/${messageId}/forward`, data),
   forwardToNewGroup: (messageId, data) => api.post(`/messages/${messageId}/forward-group`, data),
   markUnread: (channelId, messageId) => api.post(`/channels/${channelId}/messages/${messageId}/mark-unread`),
+  search: (params) => api.get('/messages/search', { params }),
 };
 
 // Reactions API
@@ -379,9 +423,10 @@ export const fileAPI = {
         const fileParts = parts.filter(([_, val]) => val && typeof val === 'object' && val.uri);
         
         if (fileParts.length > 0) {
+          const workspaceId = resolveWorkspaceId();
           const uploadHeaders = {
             ...(cachedToken ? { Authorization: `Bearer ${cachedToken}` } : {}),
-            ...(cachedWorkspaceId ? { 'X-Workspace-Id': cachedWorkspaceId } : {}),
+            ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
           };
 
           const uploadedFiles = [];

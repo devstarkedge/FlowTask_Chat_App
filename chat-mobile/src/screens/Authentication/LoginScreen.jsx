@@ -85,7 +85,7 @@ const LoginScreen = ({ navigation, route }) => {
     }
     try {
       await loginFlowTask(flowtaskToken.trim());
-      Toast.show({ type: 'success', text1: 'FlowTask login successful!', position: 'top' });
+      Toast.show({ type: 'success', text1: 'TryChat login successful!', position: 'top' });
     } catch {
       // handled by store
     }

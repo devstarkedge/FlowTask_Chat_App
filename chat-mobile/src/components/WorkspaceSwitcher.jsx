@@ -21,12 +21,12 @@ import {
   HelpCircle,
   MoreVertical,
   X,
-  LogOut,
 } from "lucide-react-native";
 import WorkspaceAvatar from "./WorkspaceAvatar";
 import AddWorkspaceScreen from "./workspace/AddWorkspaceScreen";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import useResponsive from '../hooks/useResponsive';
+import api from '../services/api';
 
 const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
   const { width } = useResponsive();
@@ -45,9 +45,17 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const [actionMenuVisible, setActionMenuVisible] = useState(null);
   const [addWorkspaceVisible, setAddWorkspaceVisible] = useState(false);
+  const [unreadByWorkspace, setUnreadByWorkspace] = useState({});
 
   useEffect(() => {
-    if (visible) fetchWorkspaces();
+    if (visible) {
+      fetchWorkspaces();
+      // Workspace-level unread badges (parity with web WorkspaceSwitcher)
+      api
+        .get('/notifications/unread-counts-all')
+        .then(({ data }) => setUnreadByWorkspace(data?.data?.counts ?? {}))
+        .catch(() => {});
+    }
   }, [visible]);
 
   useEffect(() => {
@@ -82,27 +90,7 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
     onClose();
   };
 
-  const handleSignOut = (ws) => {
-    setActionMenuVisible(null);
-    Alert.alert(
-      "Sign Out of Workspace",
-      `Are you sure you want to sign out of ${ws.name}? You will need an invite to rejoin.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Sign Out",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await leaveWorkspace(ws._id);
-            } catch (err) {
-              Alert.alert("Error", err.message || "Failed to sign out of workspace");
-            }
-          },
-        },
-      ]
-    );
-  };
+
 
   if (!visible) return null;
 
@@ -146,6 +134,7 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
             <View style={styles.wsList}>
               {workspaces.map((ws) => {
                 const isActive = ws._id === activeWorkspace?._id;
+                const wsUnread = unreadByWorkspace[ws._id] || 0;
                 return (
                   <View key={ws._id}>
                     <TouchableOpacity
@@ -153,46 +142,53 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
                       onPress={() => handleWorkspaceSwitch(ws._id)}
                       activeOpacity={0.7}
                     >
-                      <WorkspaceAvatar workspace={ws} size={40} />
+                      <View style={styles.avatarWrap}>
+                        <WorkspaceAvatar workspace={ws} size={40} />
+                        {!isActive && wsUnread > 0 && (
+                          <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
+                        )}
+                      </View>
                       <View style={styles.wsInfo}>
                         <Text style={[styles.wsName, { color: colors.textPrimary }]} numberOfLines={1}>{ws.name}</Text>
                         <Text style={[styles.wsUrl, { color: colors.textSecondary }]} numberOfLines={1}>
                           {(ws.slug || ws.name || "").toLowerCase().replace(/\s+/g, "")}
                         </Text>
                       </View>
-                      <TouchableOpacity
-                        style={styles.moreBtn}
-                        onPress={(e) => {
-                          e.stopPropagation?.();
-                          setActionMenuVisible(actionMenuVisible === ws._id ? null : ws._id);
-                        }}
-                      >
-                        <MoreVertical size={18} color={colors.textSecondary} style={{ opacity: 0.6 }} />
-                      </TouchableOpacity>
+                      {!isActive && wsUnread > 0 && (
+                        <View style={[styles.unreadBadge, { backgroundColor: colors.primary }]}>
+                          <Text style={styles.unreadBadgeText}>
+                            {wsUnread > 99 ? '99+' : wsUnread}
+                          </Text>
+                        </View>
+                      )}
+                      {['owner', 'admin'].includes(ws.role) && (
+                        <TouchableOpacity
+                          style={styles.moreBtn}
+                          onPress={(e) => {
+                            e.stopPropagation?.();
+                            setActionMenuVisible(actionMenuVisible === ws._id ? null : ws._id);
+                          }}
+                        >
+                          <MoreVertical size={18} color={colors.textSecondary} style={{ opacity: 0.6 }} />
+                        </TouchableOpacity>
+                      )}
                     </TouchableOpacity>
                     {actionMenuVisible === ws._id && (
                       <View style={[styles.actionDropdown, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
-                        <TouchableOpacity
-                          style={styles.dropdownItem}
-                          onPress={() => {
-                            setActionMenuVisible(null);
-                            onClose();
-                            navigation?.navigate("InviteManagement");
-                          }}
-                        >
-                          <Plus size={16} color={colors.primary} />
-                          <Text style={[styles.dropdownText, { color: colors.textPrimary }]}>Invite Members</Text>
-                        </TouchableOpacity>
+                        {['owner', 'admin'].includes(ws.role) && (
+                          <TouchableOpacity
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                              setActionMenuVisible(null);
+                              onClose();
+                              navigation?.navigate("InviteManagement");
+                            }}
+                          >
+                            <Plus size={16} color={colors.primary} />
+                            <Text style={[styles.dropdownText, { color: colors.textPrimary }]}>Invite Members</Text>
+                          </TouchableOpacity>
+                        )}
 
-                        <View style={[styles.dropdownDivider, { backgroundColor: colors.border }]} />
-
-                        <TouchableOpacity
-                          style={styles.dropdownItem}
-                          onPress={() => handleSignOut(ws)}
-                        >
-                          <LogOut size={16} color={colors.error} />
-                          <Text style={[styles.dropdownText, { color: colors.error }]}>Sign Out</Text>
-                        </TouchableOpacity>
                       </View>
                     )}
                   </View>
@@ -283,6 +279,31 @@ const styles = StyleSheet.create({
     borderRadius: moderateScale(8),
     marginHorizontal: scale(4),
     marginVertical: verticalScale(3),
+  },
+  avatarWrap: {
+    position: 'relative',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  unreadBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  unreadBadgeText: {
+    color: '#fff',
+    fontSize: moderateScale(11),
+    fontWeight: '700',
   },
   wsInfo: {
     flex: 1,

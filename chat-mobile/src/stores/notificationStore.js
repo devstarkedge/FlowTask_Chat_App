@@ -128,6 +128,21 @@ export const useNotificationStore = create((set, get) => ({
     }));
   },
 
+  /**
+   * Dismiss a notification locally (cross-device sync via notification:dismiss).
+   */
+  dismissNotification: (notificationId) => {
+    if (!notificationId) return;
+    set((state) => {
+      const target = state.notifications.find((n) => n._id === notificationId);
+      const wasUnread = target && !target.isRead && !target.read;
+      return {
+        notifications: state.notifications.filter((n) => n._id !== notificationId),
+        unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
+      };
+    });
+  },
+
   setFilter: (filter) => set({ activeFilter: filter, notifications: [], cursor: null, hasMore: false, _lastFetchAt: 0 }),
 
   getFilteredNotifications: () => {

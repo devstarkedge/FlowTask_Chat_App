@@ -91,7 +91,9 @@ export default function ChatPanel({
   const location = useLocation();
   const prevChannelForTabRef = useRef(channelId);
 
-  // When channel changes, reset tab, join room and request server tabs
+  // Keep socket room membership tied ONLY to channelId.
+  // Unrelated dep changes (location.state, fetch fn identity) must not leave/rejoin,
+  // or typing indicators and live messages are dropped during the async re-join gap.
   useEffect(() => {
     if (!channelId) return;
 
@@ -100,6 +102,15 @@ export default function ChatPanel({
     }
     joinChannel(channelId);
     prevChannelRef.current = channelId;
+
+    return () => {
+      leaveChannel(channelId);
+    };
+  }, [channelId]);
+
+  // When channel changes, reset tab and load messages
+  useEffect(() => {
+    if (!channelId) return;
 
     fetchMessages(channelId);
     fetchPinnedMessages(channelId);
@@ -130,10 +141,6 @@ export default function ChatPanel({
     } catch (err) {
       // ignore
     }
-
-    return () => {
-      leaveChannel(channelId);
-    };
   }, [channelId, fetchMessages, fetchPinnedMessages, requestChannelTabs, location.state, addOpenTab]);
 
   // Note: persistence now handled by server-side channel tabs; client keeps local view in store

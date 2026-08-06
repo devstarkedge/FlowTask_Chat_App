@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import storage from '../services/storage';
-import { laterAPI } from '../services/api';
+import { laterAPI, resolveWorkspaceId } from '../services/api';
 import logger from '../utils/logger';
 
 export const useLaterStore = create(
@@ -13,6 +13,10 @@ export const useLaterStore = create(
       savedMessageIds: [],
 
       fetchSavedMessages: async () => {
+        if (!resolveWorkspaceId()) {
+          logger.warn('[LaterStore] Skipping fetchSavedMessages — no active workspace');
+          return;
+        }
         set({ isLoading: true });
         try {
           const { data } = await laterAPI.list();
@@ -62,6 +66,33 @@ export const useLaterStore = create(
         } catch (error) {
           set({ savedMessages: prevSavedMessages, savedMessageIds: prevIds });
           logger.error('Failed to toggle save:', error);
+        }
+      },
+
+      deleteSavedItem: async (savedMessageId, messageId) => {
+        if (!savedMessageId) return;
+
+        const prevSavedMessages = [...get().savedMessages];
+        const prevIds = [...get().savedMessageIds];
+
+        try {
+          // Optimistic UI updates
+          set({
+            savedMessages: prevSavedMessages.filter(m => m._id !== savedMessageId),
+            savedMessageIds: messageId ? prevIds.filter(id => id !== messageId) : prevIds,
+            savedCount: Math.max(0, get().savedCount - 1),
+          });
+
+          await laterAPI.deleteReminder(savedMessageId);
+        } catch (error) {
+          logger.error('Failed to delete saved item:', error);
+          // Rollback
+          set({
+            savedMessages: prevSavedMessages,
+            savedMessageIds: prevIds,
+            savedCount: prevSavedMessages.length,
+          });
+          throw error;
         }
       },
 

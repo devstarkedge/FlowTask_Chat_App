@@ -9,6 +9,7 @@ import {
   Animated,
   Platform,
   TouchableWithoutFeedback,
+  Alert,
 } from "react-native";
 import AccessibleModal from "./AccessibleModal";
 import AppAvatar from "./common/AppAvatar";
@@ -76,6 +77,10 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
   const { scheduledCount = 0 } = useScheduledStore();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  
+  const userRole = activeWorkspace?.role || user?.role;
+  const canManage = ['owner', 'admin'].includes(userRole);
+
   const [slideAnim] = useState(new Animated.Value(0));
   const [statusModalVisible, setStatusModalVisible] = useState(false);
   const [pauseNotificationsVisible, setPauseNotificationsVisible] =
@@ -104,10 +109,32 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
     outputRange: [600, 0],
   });
 
-  const handleLogout = async () => {
-    onClose();
-    disconnectSocket();
-    await logout();
+  const handleLogout = () => {
+    if (Platform.OS === "web") {
+      const confirmLogout = window.confirm(t("Are you sure you want to sign out of this account?"));
+      if (confirmLogout) {
+        onClose();
+        disconnectSocket();
+        logout();
+      }
+    } else {
+      Alert.alert(
+        t("Sign Out"),
+        t("Are you sure you want to sign out of this account?"),
+        [
+          { text: t("Cancel"), style: "cancel" },
+          {
+            text: t("Sign Out"),
+            style: "destructive",
+            onPress: async () => {
+              onClose();
+              disconnectSocket();
+              await logout();
+            },
+          },
+        ]
+      );
+    }
   };
 
   const handleClose = () => {
@@ -297,13 +324,15 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
 
             {/* Profile & Account */}
             <View style={styles.section}>
-              <MenuItem
-                icon={UserPlus}
-                label={t("Invite members")}
-                onPress={() => navigateTo("InviteManagement")}
-              />
+              {canManage && (
+                <MenuItem
+                  icon={UserPlus}
+                  label={t("Invite members")}
+                  onPress={() => navigateTo("InviteManagement")}
+                />
+              )}
 
-              {activeWorkspace && (
+              {activeWorkspace && canManage && (
                 <MenuItem
                   icon={Settings}
                   label={t("Workspace Settings")}

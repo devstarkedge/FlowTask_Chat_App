@@ -117,6 +117,11 @@ export const useNotificationStore = create((set, get) => ({
     }))
   },
 
+  setUnreadCount: (count) => {
+    if (typeof count !== 'number' || Number.isNaN(count)) return
+    set({ unreadCount: Math.max(0, count) })
+  },
+
   // ─── Sync read state from another device ─────────────────────────────
   syncReadState: ({ notificationId, channelId }) => {
     set((state) => {

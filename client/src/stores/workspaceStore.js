@@ -344,7 +344,7 @@ export const useWorkspaceStore = create(
         const id = get().activeWorkspaceId
         if (!id) return
         try {
-          const { data } = await api.post(`/workspaces/${id}/invite-code`)
+          const { data } = await api.post(`/workspaces/${id}/invite-code/regenerate`, {})
           const inviteCode = data.data?.inviteCode
           set((state) => ({
             activeWorkspace: state.activeWorkspace

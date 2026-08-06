@@ -25,6 +25,10 @@ const hydrationInFlight = new Set();
 const pendingPersistByChannel = new Map();
 let persistTimer = null;
 
+// Auto-clear timers for typing indicators (keyed by `${channelId}-${userId}`)
+const typingTimeouts = {};
+const TYPING_AUTO_CLEAR_MS = 5000;
+
 function touchChannel(channelId) {
   const idx = channelAccessOrder.indexOf(channelId);
   if (idx !== -1) channelAccessOrder.splice(idx, 1);
@@ -183,6 +187,7 @@ export const useChatStore = create((set, get) => ({
   // Normalized channel message entities (feature-flagged)
   messagesById: {},
   channelMessageIds: {},
+  messageChannelById: {},
 
   // Debounce guard for pagination fetches
   _fetchingChannels: new Set(),
@@ -1258,26 +1263,54 @@ export const useChatStore = create((set, get) => ({
 
   // ─── Typing ─────────────────────────────────────────────────────────
   setTyping: (channelId, userId, name) => {
+    const cid = channelId != null ? String(channelId) : null;
+    const uid = userId != null ? String(userId) : null;
+    if (!cid || !uid) return;
+
     set((state) => ({
       typingByChannel: {
         ...state.typingByChannel,
-        [channelId]: { ...state.typingByChannel[channelId], [userId]: name },
+        [cid]: { ...(state.typingByChannel[cid] || {}), [uid]: name },
       },
     }));
-    // Auto-clear after 5s
-    setTimeout(() => {
-      get().clearTyping(channelId, userId);
-    }, 5000);
+
+    const timeoutKey = `${cid}-${uid}`;
+    if (typingTimeouts[timeoutKey]) {
+      clearTimeout(typingTimeouts[timeoutKey]);
+    }
+
+    typingTimeouts[timeoutKey] = setTimeout(() => {
+      get().clearTyping(cid, uid);
+      delete typingTimeouts[timeoutKey];
+    }, TYPING_AUTO_CLEAR_MS);
   },
 
   clearTyping: (channelId, userId) => {
+    const cid = channelId != null ? String(channelId) : null;
+    const uid = userId != null ? String(userId) : null;
+    if (!cid || !uid) return;
+
+    const timeoutKey = `${cid}-${uid}`;
+    if (typingTimeouts[timeoutKey]) {
+      clearTimeout(typingTimeouts[timeoutKey]);
+      delete typingTimeouts[timeoutKey];
+    }
+
     set((state) => {
-      const typing = { ...state.typingByChannel[channelId] };
-      delete typing[userId];
+      const typing = { ...(state.typingByChannel[cid] || {}) };
+      delete typing[uid];
       return {
-        typingByChannel: { ...state.typingByChannel, [channelId]: typing },
+        typingByChannel: { ...state.typingByChannel, [cid]: typing },
       };
     });
+  },
+
+  clearAllTyping: () => {
+    for (const key of Object.keys(typingTimeouts)) {
+      clearTimeout(typingTimeouts[key]);
+      delete typingTimeouts[key];
+    }
+    set({ typingByChannel: {} });
   },
 
 
@@ -1596,6 +1629,11 @@ export const useChatStore = create((set, get) => ({
       }
       keysToRemove.forEach((k) => sessionStorage.removeItem(k));
     } catch { /* noop */ }
+
+    for (const key of Object.keys(typingTimeouts)) {
+      clearTimeout(typingTimeouts[key]);
+      delete typingTimeouts[key];
+    }
 
     set({
       messagesByChannel: {},

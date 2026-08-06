@@ -34,7 +34,9 @@ export default function AcceptInvitePage() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [expiresIn, setExpiresIn] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
   const autoAcceptTriggered = useRef(false);
+  const appLaunchAttempted = useRef(false);
 
   // ─── Accept invite logic (shared by auto-accept and manual click) ───
   const acceptInvite = async () => {
@@ -132,6 +134,40 @@ export default function AcceptInvitePage() {
     };
 
     fetchInviteInfo();
+  }, [token]);
+
+  // ─── Deep link aggressive launch for mobile devices ───
+  useEffect(() => {
+    if (appLaunchAttempted.current) return;
+    
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
+    const isAndroid = /android/i.test(userAgent);
+    
+    if (isIOS || isAndroid) {
+      setIsMobile(true);
+      appLaunchAttempted.current = true;
+      
+      // Attempt to launch app via custom scheme
+      const customSchemeUrl = `flowtaskchat://invite/${token}`;
+      
+      // Create hidden iframe approach for iOS/Android
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = customSchemeUrl;
+      document.body.appendChild(iframe);
+      
+      // Also try direct window location change as fallback
+      setTimeout(() => {
+        window.location.href = customSchemeUrl;
+      }, 100);
+      
+      setTimeout(() => {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      }, 1000);
+    }
   }, [token]);
 
   // ─── Auto-accept (Scenario A): when authenticated and invite info is loaded ───
@@ -297,6 +333,21 @@ export default function AcceptInvitePage() {
 
         {/* Actions */}
         <div className="aip-actions">
+          {isMobile && (
+            <div className="aip-app-download-section" style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+              <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b' }}>App already installed?</p>
+              <a href={`flowtaskchat://invite/${token}`} className="aip-btn aip-btn-primary aip-full-width" style={{ marginBottom: '8px' }}>
+                Open in App
+              </a>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <a href="https://play.google.com/store" className="aip-btn aip-btn-secondary" style={{ flex: 1, fontSize: '12px' }}>Get Android App</a>
+                <a href="https://apps.apple.com" className="aip-btn aip-btn-secondary" style={{ flex: 1, fontSize: '12px' }}>Get iOS App</a>
+              </div>
+              <div style={{ marginTop: '16px', marginBottom: '8px', borderTop: '1px solid #e2e8f0' }}></div>
+              <p style={{ margin: '8px 0', fontSize: '14px', color: '#64748b' }}>Or continue on web</p>
+            </div>
+          )}
+          
           {accessToken ? (
             <>
               <p className="aip-signed-in-as">

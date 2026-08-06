@@ -38,8 +38,12 @@ function CanvasFormatToolbar({
     <View style={[styles.container, { backgroundColor: colors.backgroundSecondary, borderTopColor: colors.border }]}>
       <ScrollView
         horizontal
+        style={styles.scroll}
         showsHorizontalScrollIndicator={false}
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="always"
+        bounces={false}
+        overScrollMode="never"
         contentContainerStyle={styles.scrollContent}
       >
         {formatButtons.map((btn) => {
@@ -104,12 +108,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     borderTopWidth: StyleSheet.hairlineWidth,
-    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  scroll: {
+    flex: 1,
   },
   scrollContent: {
+    flexGrow: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: scale(8),
-    minHeight: verticalScale(48),
   },
   btn: {
     width: scale(36),

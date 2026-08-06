@@ -177,8 +177,8 @@ const ChatScreen = ({ route, navigation }) => {
 
   const [text, setText] = useState("");
   const [showOptions, setShowOptions] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(!!route.params?.searchQuery);
+  const [searchQuery, setSearchQuery] = useState(route.params?.searchQuery || "");
   const [searchResults, setSearchResults] = useState([]);
   const [currentMatch, setCurrentMatch] = useState(0);
   const [emojiPickerTarget, setEmojiPickerTarget] = useState(null); // messageId or null
@@ -759,6 +759,16 @@ const ChatScreen = ({ route, navigation }) => {
           windowSize={7}
           updateCellsBatchingPeriod={50}
           removeClippedSubviews={Platform.OS !== 'web'}
+          onScrollToIndexFailed={(info) => {
+            flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
+            setTimeout(() => {
+              try {
+                flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
+              } catch (e) {
+                // Ignore if it still fails
+              }
+            }, 100);
+          }}
           ListFooterComponent={
             isLoadingMessages ? (
               <ActivityIndicator

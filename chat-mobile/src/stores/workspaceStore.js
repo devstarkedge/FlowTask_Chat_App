@@ -32,6 +32,9 @@ async function clearScopedAppState() {
   }
 }
 
+// Keep track of recently removed workspaces to handle backend cache lag
+const recentlyRemovedWorkspaces = new Set();
+
 export const useWorkspaceStore = create(
   persist(
     (set, get) => ({
@@ -47,7 +50,11 @@ export const useWorkspaceStore = create(
         set({ isLoading: true, error: null });
         try {
           const { data } = await workspaceAPI.mine();
-          const workspaces = data.data?.workspaces || [];
+          let workspaces = data.data?.workspaces || [];
+          
+          // Filter out recently removed workspaces to prevent backend cache lag
+          workspaces = workspaces.filter(w => !recentlyRemovedWorkspaces.has(w._id));
+          
           set({ workspaces, isLoading: false });
 
           if (skipAutoSelect) return workspaces;
@@ -138,6 +145,10 @@ export const useWorkspaceStore = create(
         try {
           const { data } = await workspaceAPI.joinByInviteCode(inviteCode);
           const workspace = data.data?.workspace || data.data;
+          
+          // Refresh workspaces list to ensure the new workspace is available for switchWorkspace
+          await get().fetchWorkspaces(true);
+          
           set({ isLoading: false });
           return workspace;
         } catch (error) {
@@ -155,6 +166,9 @@ export const useWorkspaceStore = create(
        */
       afterWorkspaceRemoved: async (removedWorkspaceId) => {
         const wasActive = get().activeWorkspaceId === removedWorkspaceId;
+
+        // Add to our cache lag prevention list
+        recentlyRemovedWorkspaces.add(removedWorkspaceId);
 
         // Optimistically drop from local list
         set((state) => ({

@@ -64,6 +64,7 @@ import CanvasListScreen from "../screens/Canvas/CanvasListScreen";
 import CanvasEditorScreen from "../screens/Canvas/CanvasEditorScreen";
 import WorkspaceSettingsScreen from "../screens/workspace/WorkspaceSettingsScreen";
 import StarredMessagesScreen from "../screens/StarredMessagesScreen";
+import InviteProcessingScreen from "../screens/InviteProcessingScreen";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import useResponsive from '../hooks/useResponsive';
 
@@ -246,6 +247,7 @@ export default function AppNavigation() {
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          <Stack.Screen name="InviteProcessing" component={InviteProcessingScreen} options={{ headerShown: false }} />
         </>
       ) : !activeWorkspaceId ? (
         <>
@@ -257,6 +259,7 @@ export default function AppNavigation() {
             name="CreateWorkspace"
             component={CreateWorkspaceScreen}
           />
+          <Stack.Screen name="InviteProcessing" component={InviteProcessingScreen} options={{ headerShown: false }} />
         </>
       ) : (
         <>
@@ -438,6 +441,7 @@ export default function AppNavigation() {
             component={WorkspaceSettingsScreen}
             options={{ headerShown: false }}
           />
+          <Stack.Screen name="InviteProcessing" component={InviteProcessingScreen} options={{ headerShown: false }} />
         </>
       )}
     </Stack.Navigator>

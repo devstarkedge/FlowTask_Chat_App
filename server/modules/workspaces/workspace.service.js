@@ -905,22 +905,36 @@ class WorkspaceService {
     const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
     const { default: ChatUser } = await import('../users/ChatUser.model.js');
 
-    const invite = await WorkspaceInvite.findValidByToken(token);
-    if (!invite) {
-      throw new NotFoundError('Invalid or expired invite.');
-    }
+    // First try it as an email invite token
+    let invite = await WorkspaceInvite.findValidByToken(token);
+    let inviter = null;
+    let workspace = null;
+    let inviteType = 'member';
+    let role = WORKSPACE_ROLES.MEMBER;
+    let expiresAt = null;
 
-    const inviter = await ChatUser.findById(invite.invitedBy).lean();
-    const workspace = invite.workspaceId;
+    if (invite) {
+      inviter = await ChatUser.findById(invite.invitedBy).lean();
+      workspace = invite.workspaceId;
+      inviteType = invite.inviteType;
+      role = invite.role;
+      expiresAt = invite.expiresAt;
+    } else {
+      // If not found, try as a permanent workspace invite code
+      workspace = await workspaceRepository.findByInviteCode(token);
+      if (!workspace || !workspace.isActive) {
+        throw new NotFoundError('Invalid or expired invite.');
+      }
+    }
 
     return {
       workspaceName: workspace.name,
       workspaceLogo: workspace.logo,
       workspaceSlug: workspace.slug,
       inviterName: inviter?.name || 'A team member',
-      inviteType: invite.inviteType,
-      role: invite.role,
-      expiresAt: invite.expiresAt,
+      inviteType,
+      role,
+      expiresAt,
       workspaceId: workspace._id,
     };
   }

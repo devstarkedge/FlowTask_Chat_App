@@ -4,6 +4,7 @@
     "slug": "chat-mobile-js",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "flowtaskchat",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
@@ -13,7 +14,11 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "FlowTask-Chat needs access to your photo library to save downloaded images and videos.",
         "NSPhotoLibraryAddUsageDescription": "FlowTask-Chat needs permission to save images and videos to your photo library."
-      }
+      },
+      "associatedDomains": [
+        "applinks:chat.flowtask.com",
+        "applinks:chat-app-api-cyyl.onrender.com"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -29,6 +34,28 @@
         "READ_MEDIA_IMAGES",
         "READ_MEDIA_VIDEO",
         "READ_MEDIA_AUDIO"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "chat.flowtask.com",
+              "pathPrefix": "/invite"
+            },
+            {
+              "scheme": "https",
+              "host": "chat-app-api-cyyl.onrender.com",
+              "pathPrefix": "/invite"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
       ]
     },
     "web": {

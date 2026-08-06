@@ -6,7 +6,7 @@ import { useChannelStore } from './channelStore'
 import { useChatStore } from './chatStore'
 import { useNotificationStore } from './notificationStore'
 import { useDraftStore } from './draftStore'
-import { reconnectWithWorkspace } from '../services/socket'
+import { reconnectWithWorkspace, disconnectSocket } from '../services/socket'
 import logger from '../utils/logger'
 
 /**
@@ -186,18 +186,46 @@ export const useWorkspaceStore = create(
           set((state) => {
             const remaining = state.workspaces.filter((w) => w._id !== workspaceId)
             const isActive = state.activeWorkspaceId === workspaceId
+            
+            if (isActive) {
+              // 1. Clear channel state
+              useChannelStore.setState({
+                channels: [],
+                activeChannelId: null,
+                unreads: {},
+                membersByChannel: {},
+                showInfoPanel: false,
+              })
+              // 2. Clear chat state
+              useChatStore.getState().clearCache?.()
+              // 3. Clear notification state
+              useNotificationStore.getState().clearNotifications()
+              // 4. Clear drafts
+              useDraftStore.getState().resetSidebarState?.()
+              
+              // 5. Unsubscribe socket immediately
+              disconnectSocket()
+              
+              return {
+                workspaces: remaining,
+                activeWorkspaceId: null,
+                activeWorkspace: null,
+                members: [],
+              }
+            }
+
             return {
               workspaces: remaining,
-              activeWorkspaceId: isActive ? remaining[0]?._id || null : state.activeWorkspaceId,
-              activeWorkspace: isActive ? remaining[0] || null : state.activeWorkspace,
             }
           })
+
+          // Ensure the workspace list is explicitly refreshed from the server in the background
+          get().fetchWorkspaces(true).catch(() => {})
 
           return res.data   
 
         } catch (error) {
           console.error("Delete API error:", error)
-
           throw error
         }
       },
@@ -237,7 +265,9 @@ export const useWorkspaceStore = create(
         try {
           await api.delete(`/workspaces/${id}/members/${userId}`)
           set((state) => ({
-            members: state.members.filter((m) => m.userId !== userId && m._id !== userId),
+            members: state.members.filter((m) => 
+              m.userId?._id !== userId && m.userId !== userId && m._id !== userId
+            ),
           }))
           toast.success('Member removed')
         } catch (error) {
@@ -253,7 +283,9 @@ export const useWorkspaceStore = create(
           await api.patch(`/workspaces/${id}/members/${userId}`, { role })
           set((state) => ({
             members: state.members.map((m) =>
-              (m.userId === userId || m._id === userId) ? { ...m, role } : m,
+              (m.userId?._id === userId || m.userId === userId || m._id === userId)
+                ? { ...m, role }
+                : m,
             ),
           }))
           toast.success('Role updated')

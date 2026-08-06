@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { messageAPI, threadAPI, botAPI } from "../services/api";
 import { useAuthStore } from "./authStore";
 import { useChannelStore } from "./channelStore";
+import { useWorkspaceStore } from "./workspaceStore";
 import toast from "react-hot-toast";
 import logger from "../utils/logger";
 import { CHAT_FEATURE_FLAGS } from "../config/featureFlags";
@@ -54,6 +55,18 @@ function mergeChronologicalMessages(existing = [], incoming = []) {
   return Array.from(map.values()).sort(
     (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
   );
+}
+
+/** Build id list + byId map for thread reply normalized indexes. */
+function buildThreadReplyIndex(replies = []) {
+  const ids = [];
+  const byId = {};
+  for (const reply of replies) {
+    if (!reply?._id) continue;
+    ids.push(reply._id);
+    byId[reply._id] = reply;
+  }
+  return { ids, byId };
 }
 
 function flushChannelPersists() {
@@ -160,9 +173,16 @@ export const useChatStore = create((set, get) => ({
 
   // Thread replies keyed by rootMessageId
   threadRepliesByRoot: {},
+  threadReplyIdsByRoot: {},
+  threadRepliesById: {},
+  threadRootByReplyId: {},
   threadParentMessages: {}, // rootMessageId -> parent message object
   threadHasMore: {},
   isLoadingThread: false,
+
+  // Normalized channel message entities (feature-flagged)
+  messagesById: {},
+  channelMessageIds: {},
 
   // Debounce guard for pagination fetches
   _fetchingChannels: new Set(),
@@ -799,7 +819,7 @@ export const useChatStore = create((set, get) => ({
         const nextRepliesById = { ...state.threadRepliesById };
         const nextRootByReplyId = { ...state.threadRootByReplyId };
 
-        const previousIds = state.threadReplyIdsByRoot[rootMessageId] || [];
+        const previousIds = state.threadReplyIdsByRoot?.[rootMessageId] || [];
         for (const id of previousIds) {
           delete nextRepliesById[id];
           delete nextRootByReplyId[id];
@@ -850,7 +870,7 @@ export const useChatStore = create((set, get) => ({
       if (existing.some((m) => m._id === reply._id)) return state;
       const nextReplies = [...existing, reply];
 
-      const nextIds = [...(state.threadReplyIdsByRoot[rootMessageId] || [])];
+      const nextIds = [...(state.threadReplyIdsByRoot?.[rootMessageId] || [])];
       if (!nextIds.includes(reply._id)) nextIds.push(reply._id);
 
       return {
@@ -877,14 +897,14 @@ export const useChatStore = create((set, get) => ({
   reconcileThreadReply: (rootMessageId, tempId, serverReply) => {
     if (!tempId || !serverReply) return;
     set((state) => {
-      const resolvedRootId = rootMessageId || state.threadRootByReplyId[tempId];
+      const resolvedRootId = rootMessageId || state.threadRootByReplyId?.[tempId];
       if (!resolvedRootId) return state;
 
-      const existing = state.threadRepliesByRoot[resolvedRootId] || [];
+      const existing = state.threadRepliesByRoot?.[resolvedRootId] || [];
       if (existing.some((m) => m._id === serverReply._id)) {
         const nextReplies = existing.filter((m) => m._id !== tempId);
         const nextIds = (
-          state.threadReplyIdsByRoot[resolvedRootId] || []
+          state.threadReplyIdsByRoot?.[resolvedRootId] || []
         ).filter((id) => id !== tempId);
         const nextRepliesById = { ...state.threadRepliesById };
         const nextRootByReplyId = { ...state.threadRootByReplyId };
@@ -916,7 +936,7 @@ export const useChatStore = create((set, get) => ({
           : m,
       );
 
-      const nextIds = (state.threadReplyIdsByRoot[resolvedRootId] || []).map(
+      const nextIds = (state.threadReplyIdsByRoot?.[resolvedRootId] || []).map(
         (id) => (id === tempId ? serverReply._id : id),
       );
 
@@ -1386,7 +1406,7 @@ export const useChatStore = create((set, get) => ({
 
         if (
           CHAT_FEATURE_FLAGS.normalizedMessageStore &&
-          state.messagesById[messageId]
+          state.messagesById?.[messageId]
         ) {
           return {
             messagesByChannel: newState,
@@ -1440,7 +1460,7 @@ export const useChatStore = create((set, get) => ({
 
         if (
           CHAT_FEATURE_FLAGS.normalizedMessageStore &&
-          state.messagesById[messageId]
+          state.messagesById?.[messageId]
         ) {
           return {
             messagesByChannel: newState,
@@ -1525,7 +1545,7 @@ export const useChatStore = create((set, get) => ({
       if (
         CHAT_FEATURE_FLAGS.normalizedMessageStore &&
         messageId &&
-        state.messagesById[messageId]
+        state.messagesById?.[messageId]
       ) {
         return {
           messagesByChannel: newMsgs,
@@ -1547,6 +1567,7 @@ export const useChatStore = create((set, get) => ({
 
   // ─── All Threads ────────────────────────────────────────────────────
   fetchAllThreads: async () => {
+    if (!useWorkspaceStore.getState().activeWorkspaceId) return;
     set({ allThreadsLoading: true });
     try {
       const { data } = await threadAPI.myThreads();
@@ -1578,11 +1599,16 @@ export const useChatStore = create((set, get) => ({
 
     set({
       messagesByChannel: {},
+      messagesById: {},
+      channelMessageIds: {},
       hasMore: {},
       pinnedMessagesByChannel: {},
       isPinnedPanelOpen: false,
       allThreads: [],
       threadRepliesByRoot: {},
+      threadReplyIdsByRoot: {},
+      threadRepliesById: {},
+      threadRootByReplyId: {},
       threadParentMessages: {},
       threadHasMore: {},
       typingByChannel: {},

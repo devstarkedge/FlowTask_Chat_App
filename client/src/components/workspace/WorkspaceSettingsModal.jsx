@@ -113,6 +113,19 @@ export default function WorkspaceSettingsModal({ onClose }) {
 
   const canManage = currentUserRole === "owner" || currentUserRole === "admin";
 
+  // Prevent manual opening of settings modal by non-admins
+  useEffect(() => {
+    if (!canManage && activeWorkspace) {
+      // Allow it to stay open only if the user role is actually admin/owner from the workspace object itself
+      // to avoid premature closing while members array is loading
+      const quickRole = activeWorkspace.role;
+      if (quickRole !== "owner" && quickRole !== "admin") {
+        toast.error("Access Denied: You do not have permission to view Workspace Settings.");
+        onClose();
+      }
+    }
+  }, [canManage, activeWorkspace, onClose]);
+
   const handleSaveGeneral = async () => {
     if (!name.trim() || isSaving) return;
     setIsSaving(true);

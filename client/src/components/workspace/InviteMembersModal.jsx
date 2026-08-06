@@ -141,6 +141,25 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
+  const userRole = activeWorkspace?.role || "member";
+  const canManage = ['owner', 'admin'].includes(userRole);
+
+  // Prevent manual opening of invite modal by non-admins
+  useEffect(() => {
+    if (isOpen && !canManage && activeWorkspace) {
+      toast.error("Access Denied: You do not have permission to invite members.");
+      onClose();
+    }
+  }, [isOpen, canManage, activeWorkspace, onClose]);
+
+  // Close role dropdown on outside click
+  useEffect(() => {
+    if (!roleMenuOpen) return;
+    const handler = () => setRoleMenuOpen(false);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [roleMenuOpen]);
+
   // Close on overlay click
   const handleOverlayClick = (e) => {
     if (e.target === overlayRef.current) onClose();
@@ -330,14 +349,6 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
     else if (role === 'guest') setRole('member');
     setErrors((prev) => ({ ...prev, channels: null }));
   };
-
-  // Close role dropdown on outside click
-  useEffect(() => {
-    if (!roleMenuOpen) return;
-    const handler = () => setRoleMenuOpen(false);
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
-  }, [roleMenuOpen]);
 
   return createPortal(
     <div className="imm-overlay" ref={overlayRef} onClick={handleOverlayClick}>

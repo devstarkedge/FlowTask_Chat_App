@@ -18,6 +18,7 @@ export default function WorkspaceLayout() {
   const {
     activeWorkspaceId,
     workspaces,
+    isLoading,
     switchWorkspace,
     fetchWorkspaces,
   } = useWorkspaceStore()
@@ -37,16 +38,20 @@ export default function WorkspaceLayout() {
     if (!workspaceId) return
 
     if (workspaceId !== activeWorkspaceId) {
-      // Wait until workspaces have been loaded before validating
-      if (workspaces.length === 0) return
+      if (isLoading && workspaces.length === 0) return
+
       const valid = workspaces.find((w) => w._id === workspaceId)
       if (!valid) {
-        navigate('/select-workspace', { replace: true })
+        if (workspaces.length > 0) {
+          navigate(`/workspace/${workspaces[0]._id}`, { replace: true })
+        } else {
+          navigate('/select-workspace', { replace: true })
+        }
         return
       }
       switchWorkspace(workspaceId)
     }
-  }, [workspaceId, activeWorkspaceId, workspaces, switchWorkspace, navigate])
+  }, [workspaceId, activeWorkspaceId, workspaces, isLoading, switchWorkspace, navigate])
 
   // Ensure socket is connected once workspace context is ready
   const connectionStatus = useChatStore((s) => s.connectionStatus)

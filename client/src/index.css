@@ -143,7 +143,7 @@
   --text-secondary: #8b949e;
   --text-muted: #6e7681;
   --text-white: #ffffff;
-  --text-link: #93a4fc;
+  --text-link: var(--accent-primary-hover);
   --text-tooltip: #0d1117;
   --text-inverse: #0a0845;
 
@@ -225,7 +225,7 @@
   --text-secondary: #4b5563;
   --text-muted: #6b7280;
   --text-white: #000000;
-  --text-link: #151259;
+  --text-link: var(--accent-primary);
   --text-tooltip: #f9fafb;
   --text-inverse: #ffffff;
 

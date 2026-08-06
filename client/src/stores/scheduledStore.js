@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { scheduledMessageAPI } from '../services/api'
 import toast from 'react-hot-toast'
+import { useWorkspaceStore } from './workspaceStore'
 
 export const useScheduledStore = create((set, get) => ({
   scheduledMessages: [],
@@ -18,6 +19,7 @@ export const useScheduledStore = create((set, get) => ({
   },
 
   fetchScheduledMessages: async () => {
+    if (!useWorkspaceStore.getState().activeWorkspaceId) return;
     set({ loading: true })
     try {
       const { data } = await scheduledMessageAPI.list()

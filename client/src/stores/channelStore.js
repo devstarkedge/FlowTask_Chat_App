@@ -51,6 +51,13 @@ export const useChannelStore = create(
   showInfoPanel: false,
 
   fetchChannels: async (overrideWorkspaceId = null) => {
+    // Dynamic import avoids circular dependency with workspaceStore
+    let workspaceId = overrideWorkspaceId
+    if (!workspaceId) {
+      const { useWorkspaceStore } = await import('./workspaceStore')
+      workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+    }
+    if (!workspaceId) return
     set({ isLoading: true })
     try {
       const options = overrideWorkspaceId

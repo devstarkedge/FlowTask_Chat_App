@@ -194,7 +194,7 @@ export default function WorkspaceSettingsScreen({ navigation }) {
 
   const currentWorkspace = workspaceData || activeWorkspace;
   const inviteLink = currentWorkspace
-    ? `${ENV.SOCKET_URL}/invite?code=${currentWorkspace.inviteCode || currentWorkspace._id || activeWorkspaceId}`
+    ? `${ENV.CLIENT_URL}/invite/${currentWorkspace.inviteCode || currentWorkspace._id || activeWorkspaceId}`
     : '';
 
   const copyInviteLink = async () => {

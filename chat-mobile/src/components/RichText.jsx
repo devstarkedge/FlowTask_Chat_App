@@ -118,7 +118,7 @@ const HEADING_SIZES = {
 let keyCounter = 0;
 
 function renderTextWithLinksAndMentions(text, baseKey, parentStyles, ctx) {
-  const { colors, mentions, onMentionPress } = ctx;
+  const { colors, mentions, onMentionPress, searchQuery } = ctx;
   const parts = [];
   let lastIndex = 0;
   let match;
@@ -127,10 +127,34 @@ function renderTextWithLinksAndMentions(text, baseKey, parentStyles, ctx) {
   const regexStr = `(https?:\\/\\/[^\\s]+)|(www\\.[^\\s]+)` + (mentionNames.length > 0 ? `|(@(?:${mentionNames.join('|')}))` : '');
   const combinedRegex = new RegExp(regexStr, 'gi');
 
+  const highlightSearchQuery = (plainText, keyPrefix) => {
+    if (!searchQuery) return <Text key={keyPrefix} style={parentStyles}>{plainText}</Text>;
+    const searchParts = [];
+    const searchRegex = new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    let smatch;
+    let slast = 0;
+    let si = 0;
+    while ((smatch = searchRegex.exec(plainText)) !== null) {
+      if (smatch.index > slast) {
+        searchParts.push(<Text key={`${keyPrefix}-sh${si++}`} style={parentStyles}>{plainText.slice(slast, smatch.index)}</Text>);
+      }
+      searchParts.push(
+        <Text key={`${keyPrefix}-sh${si++}`} style={[parentStyles, { backgroundColor: '#F6E05E', color: '#000' }]}>
+          {smatch[0]}
+        </Text>
+      );
+      slast = searchRegex.lastIndex;
+    }
+    if (slast < plainText.length) {
+      searchParts.push(<Text key={`${keyPrefix}-sh${si++}`} style={parentStyles}>{plainText.slice(slast)}</Text>);
+    }
+    return searchParts.length > 0 ? searchParts : <Text key={keyPrefix} style={parentStyles}>{plainText}</Text>;
+  };
+
   let i = 0;
   while ((match = combinedRegex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push(<Text key={`${baseKey}-t${i++}`} style={parentStyles}>{text.slice(lastIndex, match.index)}</Text>);
+      parts.push(highlightSearchQuery(text.slice(lastIndex, match.index), `${baseKey}-t${i++}`));
     }
     
     const matchedText = match[0];
@@ -170,17 +194,17 @@ function renderTextWithLinksAndMentions(text, baseKey, parentStyles, ctx) {
           </Text>
         );
       } else {
-         parts.push(<Text key={`${baseKey}-t${i++}`} style={parentStyles}>{matchedText}</Text>);
+         parts.push(highlightSearchQuery(matchedText, `${baseKey}-t${i++}`));
       }
     }
     lastIndex = combinedRegex.lastIndex;
   }
   
   if (lastIndex < text.length) {
-    parts.push(<Text key={`${baseKey}-t${i++}`} style={parentStyles}>{text.slice(lastIndex)}</Text>);
+    parts.push(highlightSearchQuery(text.slice(lastIndex), `${baseKey}-t${i++}`));
   }
 
-  return parts.length > 0 ? parts : <Text key={baseKey} style={parentStyles}>{text}</Text>;
+  return parts.length > 0 ? parts : highlightSearchQuery(text, baseKey);
 }
 
 /**
@@ -605,12 +629,12 @@ function markdownToHtml(text) {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-const RichText = React.memo(function RichText({ html, text, colors, baseStyle, mentions = [], onMentionPress }) {
+const RichText = React.memo(function RichText({ html, text, colors, baseStyle, mentions = [], onMentionPress, searchQuery }) {
   const elements = useMemo(() => {
     keyCounter = 0; // reset key counter per render
     if (!html && !text) return null;
 
-    const ctx = { colors: colors || {}, mentions, onMentionPress };
+    const ctx = { colors: colors || {}, mentions, onMentionPress, searchQuery };
     const textStyle = [styles.paragraphText, baseStyle || {}];
 
     const rawHtml = (html && html.trim() && html.trim() !== '<p></p>')
@@ -670,7 +694,7 @@ const RichText = React.memo(function RichText({ html, text, colors, baseStyle, m
         (text || html || '').replace(/\r\n?/g, '\n');
       return <Text style={textStyle}>{plain}</Text>;
     }
-  }, [html, text, colors, baseStyle, mentions, onMentionPress]);
+  }, [html, text, colors, baseStyle, mentions, onMentionPress, searchQuery]);
 
   return <View style={styles.container}>{elements}</View>;
 });

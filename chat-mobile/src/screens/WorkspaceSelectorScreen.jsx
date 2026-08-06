@@ -13,6 +13,7 @@ import { useWorkspaceStore } from '../stores/workspaceStore';
 import { LogOut, Plus, CircleChevronRight, Briefcase } from 'lucide-react-native';
 import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
+import { secureGet } from '../utils/secureStorage';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 
@@ -23,7 +24,15 @@ const WorkspaceSelectorScreen = ({ navigation }) => {
   const styles = createStyles(colors);
 
   useEffect(() => {
-    fetchWorkspaces();
+    const checkPendingInvite = async () => {
+      const code = await secureGet('pending_invite_code');
+      if (code) {
+        navigation.replace('InviteProcessing', { inviteCode: code });
+      } else {
+        fetchWorkspaces(true);
+      }
+    };
+    checkPendingInvite();
   }, []);
 
   const handleLogout = () => {

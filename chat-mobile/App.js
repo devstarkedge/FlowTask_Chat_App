@@ -22,8 +22,24 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useNotificationPrefStore } from "./src/stores/notificationPrefStore";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
+import * as Linking from 'expo-linking';
+
 const navigationRef = createNavigationContainerRef();
 const queryClient = new QueryClient();
+
+const linking = {
+  prefixes: [
+    Linking.createURL('/'),
+    'flowtaskchat://',
+    'https://chat.flowtask.com',
+    'https://chat-app-api-cyyl.onrender.com'
+  ],
+  config: {
+    screens: {
+      InviteProcessing: 'invite/:inviteCode',
+    },
+  },
+};
 
 export default function App() {
   const init = useAuthStore((state) => state.init);
@@ -102,7 +118,7 @@ export default function App() {
           <ErrorBoundary>
             <ThemeProvider>
               <KeyboardProvider>
-                <NavigationContainer ref={navigationRef}>
+                <NavigationContainer ref={navigationRef} linking={linking}>
                   <AppNavigator />
                   <Toast />
                 </NavigationContainer>

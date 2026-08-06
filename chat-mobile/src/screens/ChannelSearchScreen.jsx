@@ -129,7 +129,7 @@ export default function ChannelSearchScreen({ route, navigation }) {
     return (
       <TouchableOpacity 
         style={[styles.resultItem, { borderBottomColor: colors.border }]}
-        onPress={() => navigation.navigate('Chat', { channelId: item.channelId, messageId: item._id })}
+        onPress={() => navigation.navigate('Chat', { channelId: item.channelId?._id || item.channelId, messageId: item._id, searchQuery: query })}
       >
         <View style={styles.channelContextRow}>
           {isPrivate ? (

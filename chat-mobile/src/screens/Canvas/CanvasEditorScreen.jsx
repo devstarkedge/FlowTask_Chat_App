@@ -12,7 +12,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenLayout from '../../components/common/ScreenLayout';
-import { useKeyboardState } from 'react-native-keyboard-controller';
+import {
+  KeyboardStickyView,
+  useKeyboardState,
+} from 'react-native-keyboard-controller';
 import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
 import { useCanvasStore } from '../../stores/canvasStore';
@@ -64,11 +67,19 @@ export default function CanvasEditorScreen({ route, navigation }) {
   } = useCanvasStore();
 
   /**
-   * Dock flush to the IME using react-native-keyboard-controller's native
-   * keyboard height — same on every Android OEM, no measurement guessing.
+   * Keep WebView frame stable relative to the closed-keyboard toolbar slot.
+   * KeyboardStickyView moves the format bar with the IME; resizing the WebView
+   * on every keyboard tick fights WKWebView insets on iOS and makes the bar jitter.
    */
-  const toolbarBottom = keyboardVisible ? keyboardHeight : insets.bottom;
-  const editorBottomReserve = toolbarHeight + toolbarBottom;
+  const editorBottomReserve = toolbarHeight + insets.bottom;
+
+  /**
+   * Body padding inside the WebView. The closed-keyboard toolbar slot is already
+   * reserved via marginBottom; only add coverage for the keyboard overlay.
+   */
+  const editorScrollInset = keyboardVisible
+    ? Math.max(0, keyboardHeight - insets.bottom)
+    : 0;
 
   useEffect(() => {
     directoriesAPI.getUsers().then((res) => {
@@ -108,11 +119,11 @@ export default function CanvasEditorScreen({ route, navigation }) {
     }
   }, [editorReady, isDarkMode, sendEditorCommand]);
 
-  // Keep caret / content above the sticky toolbar + keyboard inside the WebView.
+  // Keep caret / content above the sticky format toolbar (and keyboard overlay on iOS).
   useEffect(() => {
     if (!editorReady) return;
-    sendEditorCommand('setBottomInset', editorBottomReserve);
-  }, [editorReady, editorBottomReserve, sendEditorCommand]);
+    sendEditorCommand('setBottomInset', editorScrollInset);
+  }, [editorReady, editorScrollInset, sendEditorCommand]);
 
   const handleMessage = (event) => {
     let data;
@@ -278,6 +289,10 @@ export default function CanvasEditorScreen({ route, navigation }) {
             setBuiltInZoomControls={false}
             setDisplayZoomControls={false}
             overScrollMode="never"
+            // Prevent WKWebView from fighting KeyboardStickyView with its own insets.
+            automaticallyAdjustContentInsets={false}
+            contentInsetAdjustmentBehavior="never"
+            contentInset={{ top: 0, left: 0, bottom: 0, right: 0 }}
           />
           {mentionSearch !== null && (
             <View style={[styles.mentionPopup, { bottom: 0, backgroundColor: colors.surface, borderTopColor: colors.border }]}>
@@ -303,13 +318,13 @@ export default function CanvasEditorScreen({ route, navigation }) {
           )}
         </View>
 
-        {/* Sticky format toolbar — always above keyboard / nav bar */}
-        <View
+        {/* Sticky format toolbar — tracks keyboard animation (no discrete bottom jumps). */}
+        <KeyboardStickyView
           pointerEvents="box-none"
+          offset={{ closed: -insets.bottom, opened: 0 }}
           style={[
             styles.toolbarDock,
             {
-              bottom: toolbarBottom,
               height: toolbarHeight,
               backgroundColor: colors.surface,
             },
@@ -320,7 +335,7 @@ export default function CanvasEditorScreen({ route, navigation }) {
             onCommand={sendEditorCommand}
             onInsertPress={() => setInsertVisible(true)}
           />
-        </View>
+        </KeyboardStickyView>
       </View>
 
       <CanvasInsertSheet
@@ -364,6 +379,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
+    bottom: 0,
     zIndex: 30,
     elevation: 30,
   },

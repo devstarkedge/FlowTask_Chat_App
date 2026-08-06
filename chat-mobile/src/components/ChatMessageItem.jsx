@@ -259,6 +259,7 @@ const ChatMessageItem = memo(({
                 html={item.htmlContent}
                 text={item.content}
                 mentions={item.mentions}
+                searchQuery={searchQuery}
                 onMentionPress={(userId) => {
                   const members = membersByChannel[channelId] || [];
                   const userObj = members.find((m) => m._id === userId) || { _id: userId };

@@ -17,7 +17,7 @@
       },
       "associatedDomains": [
         "applinks:chat.flowtask.com",
-        "applinks:chat-app-api-cyyl.onrender.com"
+        "applinks:chat-app-kte1.onrender.com"
       ]
     },
     "android": {
@@ -47,7 +47,7 @@
             },
             {
               "scheme": "https",
-              "host": "chat-app-api-cyyl.onrender.com",
+              "host": "chat-app-kte1.onrender.com",
               "pathPrefix": "/invite"
             }
           ],

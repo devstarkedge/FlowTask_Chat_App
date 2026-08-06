@@ -119,7 +119,7 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
       // Note: The actual invite token is sent via email. The link here is for the invite code
       // which allows direct workspace joining via the backend.
       const inviteCode = activeWorkspace?.inviteCode || workspaceId;
-      const link = `${window.location.origin}/invite?code=${inviteCode}`;
+      const link = `${window.location.origin}/invite/${inviteCode}`;
       setInviteLink(link);
     }
   }, [isOpen, workspaceId, fetchChannels]);

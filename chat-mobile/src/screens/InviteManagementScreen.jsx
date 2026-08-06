@@ -97,7 +97,7 @@ export default function InviteManagementScreen({ navigation }) {
   // Invite Link
   const inviteLink = useMemo(() => {
     const inviteCode = activeWorkspace?.inviteCode || activeWorkspaceId;
-    return `${ENV.SOCKET_URL}/invite?code=${inviteCode}`;
+    return `${ENV.CLIENT_URL}/invite/${inviteCode}`;
   }, [activeWorkspace, activeWorkspaceId]);
 
   const addEmailChip = () => {

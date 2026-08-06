@@ -12,6 +12,19 @@ import { ValidationError } from './errorHandler.js';
  *   import { z } from 'zod';
  *   router.post('/', validate({ body: z.object({ content: z.string().min(1) }) }), handler);
  */
+/**
+ * Express 5 exposes req.query / req.params as getter-only properties.
+ * Reassign with defineProperty so validated values are readable downstream.
+ */
+function setRequestProp(req, key, value) {
+  Object.defineProperty(req, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
 export function validate(schemas) {
   return (req, _res, next) => {
     try {
@@ -19,10 +32,10 @@ export function validate(schemas) {
         req.body = schemas.body.parse(req.body);
       }
       if (schemas.query) {
-        req.query = schemas.query.parse(req.query);
+        setRequestProp(req, 'query', schemas.query.parse(req.query));
       }
       if (schemas.params) {
-        req.params = schemas.params.parse(req.params);
+        setRequestProp(req, 'params', schemas.params.parse(req.params));
       }
       next();
     } catch (error) {

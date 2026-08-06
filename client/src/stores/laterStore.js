@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { savedMessageAPI } from '../services/api';
 import toast from 'react-hot-toast';
 import { useNotificationStore } from './notificationStore';
+import { useWorkspaceStore } from './workspaceStore';
 
 export const useLaterStore = create((set, get) => ({
   savedMessages: [],
@@ -11,6 +12,7 @@ export const useLaterStore = create((set, get) => ({
   savedMessageIds: new Set(), // Track which messages are saved for instant UI updates
   
   fetchSavedMessages: async (status = null) => {
+    if (!useWorkspaceStore.getState().activeWorkspaceId) return;
     set({ loading: true });
     try {
       // Always fetch all to keep counts in background accurate across all status tabs

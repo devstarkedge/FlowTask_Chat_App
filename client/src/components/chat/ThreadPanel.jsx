@@ -39,6 +39,7 @@ import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
 import { ReactionRenderer } from "../shared/EmojiRenderer";
 
 const EMPTY_LIST = [];
+const EMPTY_MAP = {};
 const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
 // ─── Inject inline-editor styles (once) ──────────────────────────────────────
@@ -899,20 +900,20 @@ export default function ThreadPanel({ thread, onClose }) {
   const fetchThreadReplies = useChatStore((s) => s.fetchThreadReplies);
   const isLoadingThread = useChatStore((s) => s.isLoadingThread);
   const legacyReplies = useChatStore(
-    (s) => s.threadRepliesByRoot[thread.rootMessageId] || EMPTY_LIST,
+    (s) => s.threadRepliesByRoot?.[thread.rootMessageId] || EMPTY_LIST,
   );
   const threadReplyIds = useChatStore(
-    (s) => s.threadReplyIdsByRoot[thread.rootMessageId] || EMPTY_LIST,
+    (s) => s.threadReplyIdsByRoot?.[thread.rootMessageId] || EMPTY_LIST,
   );
-  const threadRepliesById = useChatStore((s) => s.threadRepliesById);
+  const threadRepliesById = useChatStore((s) => s.threadRepliesById || EMPTY_MAP);
   const threadHasMore = useChatStore(
-    (s) => s.threadHasMore[thread.rootMessageId] ?? false,
+    (s) => s.threadHasMore?.[thread.rootMessageId] ?? false,
   );
   const channelMessages = useChatStore(
-    (s) => s.messagesByChannel[thread.channelId] || EMPTY_LIST,
+    (s) => s.messagesByChannel?.[thread.channelId] || EMPTY_LIST,
   );
-  const messagesById = useChatStore((s) => s.messagesById);
-  const threadParentMessages = useChatStore((s) => s.threadParentMessages);
+  const messagesById = useChatStore((s) => s.messagesById || EMPTY_MAP);
+  const threadParentMessages = useChatStore((s) => s.threadParentMessages || EMPTY_MAP);
   const setScrollAndHighlightMessage = useChatStore((s) => s.setScrollAndHighlightMessage);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
 

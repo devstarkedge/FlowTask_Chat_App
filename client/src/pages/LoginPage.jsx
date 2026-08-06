@@ -221,7 +221,7 @@ export default function LoginPage() {
     manualSubmitRef.current = true;
     try {
       await loginFlowTask(flowtaskToken.trim());
-      toast.success("FlowTask login successful!");
+      toast.success("TryChat login successful!");
       // Redirect handled by the user-watch useEffect above
     } catch {
       /* error in store */

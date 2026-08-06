@@ -287,6 +287,7 @@ export const SOCKET_EVENTS = Object.freeze({
   NOTIFICATION_READ_SYNC: 'notification:read:sync',
   NOTIFICATION_PREFERENCES_UPDATED: 'notification:preferences:updated',
   NOTIFICATION_UNREAD_UPDATED: 'notification:unread:updated',
+  UNREAD_UPDATED: 'unread:updated',
 
   // Typing
   TYPING_START: 'typing:start',

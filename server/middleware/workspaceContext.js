@@ -21,6 +21,7 @@ export const resolveWorkspace = async (req, res, next) => {
     const workspaceId = req.headers['x-workspace-id'];
 
     if (!workspaceId) {
+      console.error('[resolveWorkspace] 400: Workspace context is required. Headers:', req.headers);
       return res.status(400).json({
         success: false,
         message: 'Workspace context is required. Provide x-workspace-id header.',
@@ -29,6 +30,7 @@ export const resolveWorkspace = async (req, res, next) => {
 
     // Validate ObjectId format to prevent injection
     if (!/^[0-9a-fA-F]{24}$/.test(workspaceId)) {
+      console.error(`[resolveWorkspace] 400: Invalid workspace ID format: "${workspaceId}"`);
       return res.status(400).json({
         success: false,
         message: 'Invalid workspace ID format.',

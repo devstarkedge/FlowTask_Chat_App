@@ -2,6 +2,8 @@ import asyncHandler from "../../middleware/asyncHandler.js";
 import { getMessageInfo as getMessageInfoService, markAsRead } from "./readReceipt.service.js";
 import ReadReceipt from "./readReceipt.model.js";
 import readReceiptRepository from "./readReceipt.repository.js";
+import { emitToUser } from "../../sockets/socketManager.js";
+import { SOCKET_EVENTS } from "../../config/constants.js";
 
 /**
  * GET /api/chat/unread
@@ -31,6 +33,12 @@ export const markChannelRead = asyncHandler(async (req, res) => {
   const workspaceId = req.workspaceId;
 
   const receipt = await readReceiptRepository.markChannelAsRead(userId, channelId, lastReadMessageId, workspaceId);
+  
+  emitToUser(userId.toString(), SOCKET_EVENTS.UNREAD_UPDATED, {
+    channelId,
+    unreadCount: 0
+  }, workspaceId?.toString());
+
   res.json({ success: true, data: receipt });
 });
 

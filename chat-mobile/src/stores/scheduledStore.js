@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import storage from '../services/storage';
-import { scheduledAPI } from '../services/api';
+import { scheduledAPI, resolveWorkspaceId } from '../services/api';
 import logger from '../utils/logger';
 
 export const useScheduledStore = create(
@@ -21,6 +21,10 @@ export const useScheduledStore = create(
       },
 
       fetchScheduledMessages: async () => {
+        if (!resolveWorkspaceId()) {
+          logger.warn('[ScheduledStore] Skipping fetchScheduledMessages — no active workspace');
+          return;
+        }
         set({ isLoading: true });
         try {
           const { data } = await scheduledAPI.list();

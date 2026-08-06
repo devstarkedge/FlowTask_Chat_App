@@ -85,10 +85,12 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   const members = useWorkspaceStore((s) => s.members);
   const fetchMembers = useWorkspaceStore((s) => s.fetchMembers);
   const membersLoading = useWorkspaceStore((s) => s.membersLoading);
-  const switchWorkspace = useWorkspaceStore((s) => s.switchWorkspace);
+  const deleteWorkspace = useWorkspaceStore((s) => s.deleteWorkspace);
+  const leaveWorkspace = useWorkspaceStore((s) => s.leaveWorkspace);
 
   const [activeTab, setActiveTab] = useState('general');
   const [refreshing, setRefreshing] = useState(false);
+  const [isRemovingWorkspace, setIsRemovingWorkspace] = useState(false);
 
   const [workspaceData, setWorkspaceData] = useState(null);
   const [securitySettings, setSecuritySettings] = useState(null);
@@ -107,6 +109,15 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   const isOwner = userRole === 'owner';
   const isAdmin = isOwner || userRole === 'admin';
   const canManage = isAdmin;
+
+  // ── Redirect if unauthorized ──
+  useEffect(() => {
+    // Rely on activeWorkspace.role for instant checks, otherwise wait for members to load
+    if (!canManage && !membersLoading && activeWorkspace) {
+      Toast.show({ type: 'error', text1: 'Access Denied', text2: 'You do not have permission to view Workspace Settings.' });
+      navigation.goBack();
+    }
+  }, [canManage, membersLoading, activeWorkspace, navigation]);
 
   // ── Load workspace data ──
   useEffect(() => {
@@ -181,8 +192,9 @@ export default function WorkspaceSettingsScreen({ navigation }) {
     setRefreshing(false);
   }, [activeWorkspaceId]);
 
-  const inviteLink = activeWorkspace
-    ? `${ENV.SOCKET_URL}/invite?code=${activeWorkspace.inviteCode || activeWorkspaceId}`
+  const currentWorkspace = workspaceData || activeWorkspace;
+  const inviteLink = currentWorkspace
+    ? `${ENV.SOCKET_URL}/invite?code=${currentWorkspace.inviteCode || currentWorkspace._id || activeWorkspaceId}`
     : '';
 
   const copyInviteLink = async () => {
@@ -222,6 +234,8 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   };
 
   const handleLeaveWorkspace = () => {
+    if (isRemovingWorkspace) return;
+
     const title = isOwner ? 'Delete Workspace' : 'Leave Workspace';
     const message = isOwner
       ? 'This action will permanently delete this workspace and all its data for every member. This action cannot be undone.'
@@ -234,18 +248,31 @@ export default function WorkspaceSettingsScreen({ navigation }) {
         text: confirmText,
         style: 'destructive',
         onPress: async () => {
+          setIsRemovingWorkspace(true);
           try {
-            if (isOwner) {
-              await workspaceAPI.delete(activeWorkspaceId);
-              Toast.show({ type: 'success', text1: 'Workspace deleted' });
-            } else {
-              await workspaceAPI.leave(activeWorkspaceId);
-              Toast.show({ type: 'success', text1: 'Left workspace' });
+            const result = isOwner
+              ? await deleteWorkspace(activeWorkspaceId)
+              : await leaveWorkspace(activeWorkspaceId);
+
+            Toast.show({
+              type: 'success',
+              text1: isOwner ? 'Workspace deleted' : 'Left workspace',
+            });
+
+            if (result?.remaining) {
+              // Switched to another workspace — land on Home
+              navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
             }
-            await switchWorkspace(null);
-            navigation.reset({ index: 0, routes: [{ name: 'CreateWorkspace' }] });
+            // No remaining workspaces → activeWorkspaceId cleared;
+            // AppNavigation automatically shows WorkspaceSelector empty state.
           } catch (error) {
-            Toast.show({ type: 'error', text1: isOwner ? 'Failed to delete workspace' : 'Failed to leave workspace' });
+            Toast.show({
+              type: 'error',
+              text1: isOwner ? 'Failed to delete workspace' : 'Failed to leave workspace',
+              text2: error?.message,
+            });
+          } finally {
+            setIsRemovingWorkspace(false);
           }
         },
       },
@@ -364,6 +391,7 @@ export default function WorkspaceSettingsScreen({ navigation }) {
             userRole={userRole}
             colors={colors}
             onLeave={handleLeaveWorkspace}
+            isRemovingWorkspace={isRemovingWorkspace}
             onRefresh={loadWorkspaceData}
           />
         )}
@@ -381,7 +409,7 @@ export default function WorkspaceSettingsScreen({ navigation }) {
         )}
         {activeTab === 'invite' && (
           <InviteTab
-            workspace={activeWorkspace}
+            workspace={currentWorkspace}
             canManage={canManage}
             inviteLink={inviteLink}
             colors={colors}
@@ -427,7 +455,7 @@ export default function WorkspaceSettingsScreen({ navigation }) {
 /* ───────────────────────────────────────
    GENERAL TAB
    ─────────────────────────────────────── */
-function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, onLeave, onRefresh }) {
+function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, onLeave, isRemovingWorkspace, onRefresh }) {
   const [name, setName] = useState(workspace?.name || '');
   const [description, setDescription] = useState(workspace?.description || '');
   const [saving, setSaving] = useState(false);
@@ -518,10 +546,22 @@ function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, 
           <AlertTriangle size={16} color="#ef4444" />
           <Text style={styles.dangerTitle}>Danger Zone</Text>
         </View>
-        <TouchableOpacity style={styles.leaveButton} onPress={onLeave}>
-          {isOwner ? <Trash2 size={18} color="#ef4444" /> : <LogOut size={18} color="#ef4444" />}
+        <TouchableOpacity
+          style={[styles.leaveButton, isRemovingWorkspace && { opacity: 0.6 }]}
+          onPress={onLeave}
+          disabled={isRemovingWorkspace}
+        >
+          {isRemovingWorkspace ? (
+            <ActivityIndicator size="small" color="#ef4444" />
+          ) : isOwner ? (
+            <Trash2 size={18} color="#ef4444" />
+          ) : (
+            <LogOut size={18} color="#ef4444" />
+          )}
           <Text style={styles.leaveText}>
-            {isOwner ? 'Delete Workspace' : 'Leave Workspace'}
+            {isRemovingWorkspace
+              ? (isOwner ? 'Deleting…' : 'Leaving…')
+              : (isOwner ? 'Delete Workspace' : 'Leave Workspace')}
           </Text>
         </TouchableOpacity>
       </View>

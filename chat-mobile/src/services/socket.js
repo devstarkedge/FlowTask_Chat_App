@@ -86,6 +86,12 @@ export const connectSocket = async () => {
     channels.forEach(ch => {
       socket.emit('channel:join', ch._id);
     });
+
+    // Restore active conversation focus after (re)connect
+    try {
+      const { conversationPresence } = require('./conversationPresence');
+      conversationPresence.reemitFocusIfNeeded();
+    } catch (_) { /* noop */ }
   });
 
   socket.on('disconnect', (reason) => {
@@ -116,11 +122,31 @@ export const connectSocket = async () => {
   // Message Events
   socket.on('message:create', ({ message }) => {
     const currentUserId = useAuthStore.getState().user?._id;
-    if (message.authorId === currentUserId && message.tempId) return;
+
+    // Clear typing for the author as soon as their message arrives (before any early returns)
+    const authorId = message?.authorId || message?.author?._id;
+    if (message?.channelId && authorId) {
+      useChatStore.getState().clearTyping(message.channelId, authorId);
+    }
+
+    // Skip only if THIS exact device sent it (handled via optimistic UI + ACK)
+    // We check if the tempId is currently in our local messages array.
+    const channelMessages = useChatStore.getState().messagesByChannel[message?.channelId] || [];
+    const isLocalPending = message.tempId && channelMessages.some(m => m._id === message.tempId);
+    if (isLocalPending) return;
     // Safety: don't add thread replies to main chat
     if (message.threadId) return;
 
     useChatStore.getState().addMessage(message);
+
+    // Presence-aware unread + auto-mark (parity with web UnreadManager)
+    try {
+      const { unreadManager } = require('./unreadManager');
+      unreadManager.handleMessageReceived(message);
+    } catch (err) {
+      logger.debug('[Socket] unreadManager handleMessageReceived failed:', err?.message);
+    }
+
     useChannelStore.getState().handleNewMessage(message);
   });
 
@@ -407,6 +433,28 @@ export const connectSocket = async () => {
   // Notification Events
   socket.on('notification', ({ notification }) => {
     if (!notification) return;
+
+    // Suppress in-app toast/local notification when actively viewing that chat
+    // (mirrors web). Critical notifications still surface.
+    try {
+      const { conversationPresence } = require('./conversationPresence');
+      const notifChannelId =
+        notification.channelId?._id || notification.channelId || notification.conversationId;
+      const isCritical =
+        ['reminder_overdue', 'system', 'bot_alert'].includes(notification.type) ||
+        notification.priority === 'high';
+
+      if (
+        !isCritical &&
+        notifChannelId &&
+        conversationPresence.isActive(notifChannelId)
+      ) {
+        return;
+      }
+    } catch (err) {
+      logger.debug('[Socket] presence check for notification failed:', err?.message);
+    }
+
     const { useNotificationStore } = require('../stores/notificationStore');
     useNotificationStore.getState().addNotification(notification);
 
@@ -429,13 +477,29 @@ export const connectSocket = async () => {
   });
 
   socket.on('unread:updated', ({ channelId, unreadCount }) => {
-    // Server sends per-channel unread count
-    if (channelId != null) {
-      useChannelStore.getState().updateUnread(channelId, unreadCount);
+    try {
+      const { unreadManager } = require('./unreadManager');
+      unreadManager.handleUnreadUpdate({ channelId, unreadCount });
+    } catch (err) {
+      if (channelId != null) {
+        useChannelStore.getState().updateUnread(channelId, unreadCount);
+      }
     }
-    // Also refresh global unread count
-    const { useNotificationStore } = require('../stores/notificationStore');
-    useNotificationStore.getState().fetchUnreadCount();
+    // Also refresh global notification unread count
+    try {
+      const { useNotificationStore } = require('../stores/notificationStore');
+      useNotificationStore.getState().fetchUnreadCount();
+    } catch (_) { /* noop */ }
+  });
+
+  socket.on('notification:dismiss', ({ notificationId }) => {
+    try {
+      if (!notificationId) return;
+      const { useNotificationStore } = require('../stores/notificationStore');
+      useNotificationStore.getState().dismissNotification?.(notificationId);
+    } catch (err) {
+      logger.error('[Socket] notification:dismiss handler error:', err.message);
+    }
   });
 
   // ─── Notification Sync Events (cross-device) ─────────────────────────
@@ -718,6 +782,19 @@ export const connectSocket = async () => {
           useChatStore.getState().fetchMessages(activeChannelId);
         }
       });
+
+      // Refresh unread badges after reconnect (parity with web)
+      channelStore.fetchUnreads?.();
+      try {
+        const { useNotificationStore } = require('../stores/notificationStore');
+        useNotificationStore.getState().fetchUnreadCount?.();
+      } catch (_) { /* noop */ }
+
+      // Restore server-side active conversation focus
+      try {
+        const { conversationPresence } = require('./conversationPresence');
+        conversationPresence.reemitFocusIfNeeded();
+      } catch (_) { /* noop */ }
     } catch (err) {
       logger.error('[Socket] Failed to re-sync after reconnect:', err.message);
     }
@@ -738,9 +815,9 @@ export const disconnectSocket = () => {
 };
 
 export const emitTyping = (channelId, isTyping) => {
-  if (socket?.connected) {
-    socket.emit(isTyping ? 'typing:start' : 'typing:stop', { channelId });
-  }
+  if (!channelId || !socket?.connected) return;
+  const cid = String(channelId);
+  socket.emit(isTyping ? 'typing:start' : 'typing:stop', { channelId: cid });
 };
 
 export const getSocket = () => socket;

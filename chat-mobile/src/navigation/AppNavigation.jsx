@@ -58,6 +58,7 @@ import SearchScreen from "../screens/SearchScreen";
 import PinnedMessagesScreen from "../screens/PinnedMessagesScreen";
 import PeopleScreen from "../screens/PeopleScreen";
 import InviteManagementScreen from "../screens/InviteManagementScreen";
+import ChannelSearchScreen from "../screens/ChannelSearchScreen";
 import NewMessageScreen from "../screens/NewMessageScreen";
 import CanvasListScreen from "../screens/Canvas/CanvasListScreen";
 import CanvasEditorScreen from "../screens/Canvas/CanvasEditorScreen";
@@ -392,6 +393,11 @@ export default function AppNavigation() {
             name="Search"
             component={SearchScreen}
             options={{ headerShown: true, title: "Search" }}
+          />
+          <Stack.Screen
+            name="ChannelSearch"
+            component={ChannelSearchScreen}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="PinnedMessages"

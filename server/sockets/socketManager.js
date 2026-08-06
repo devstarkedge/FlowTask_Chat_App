@@ -494,35 +494,40 @@ export async function initializeSocket(httpServer, corsOptions) {
       socket.leave(leaveRoom);
     });
 
-    // Typing indicators — server-side throttled (max 1 emit per 2s per user/channel)
+    // Typing indicators — server-side throttled (max 1 start broadcast per 2s per user/channel).
+    // Stop is always broadcast so clients never get stuck showing a typing indicator.
     socket.on('typing:start', async ({ channelId }) => {
-      const throttleKey = `${wsId}-${userId}-${channelId}`;
+      if (!channelId) return;
+
+      const cid = String(channelId);
+      const throttleKey = `${wsId}-${userId}-${cid}`;
       const now = Date.now();
       const lastEmit = typingThrottleMap.get(throttleKey) || 0;
 
       if (now - lastEmit < TYPING_THROTTLE_MS) {
-        return; // Skip — throttled early to prevent eating rate limits
+        return;
       }
-      
+
       typingThrottleMap.set(throttleKey, now);
 
-      const typingRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+      const typingRoom = wsId ? buildRoomName(wsId, 'channel', cid) : `channel-${cid}`;
       socket.to(typingRoom).emit(SOCKET_EVENTS.TYPING_START, {
-        channelId,
+        channelId: cid,
         userId,
         name: user.name,
       });
     });
 
     socket.on('typing:stop', async ({ channelId }) => {
-      const throttleKey = `${wsId}-${userId}-${channelId}`;
-      if (!typingThrottleMap.has(throttleKey)) return; // Already stopped or never started, save rate limit
+      if (!channelId) return;
 
+      const cid = String(channelId);
+      const throttleKey = `${wsId}-${userId}-${cid}`;
       typingThrottleMap.delete(throttleKey);
 
-      const typingRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
+      const typingRoom = wsId ? buildRoomName(wsId, 'channel', cid) : `channel-${cid}`;
       socket.to(typingRoom).emit(SOCKET_EVENTS.TYPING_STOP, {
-        channelId,
+        channelId: cid,
         userId,
       });
     });
@@ -624,9 +629,10 @@ export async function initializeSocket(httpServer, corsOptions) {
       if (!channelId) return;
 
       try {
-        socket.activeChannelId = channelId;
+        const cid = String(channelId);
+        socket.activeChannelId = cid;
         await userRepository.update(userId, {
-          'chatPreferences.activeWindowChannel': channelId,
+          'chatPreferences.activeWindowChannel': cid,
         });
       } catch (err) {
         logger.debug('window:focus update failed', { userId, error: err?.message });

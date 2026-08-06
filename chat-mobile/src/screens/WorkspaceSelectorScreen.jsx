@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useWorkspaceStore } from '../stores/workspaceStore';
@@ -15,7 +16,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 
-const WorkspaceSelectorScreen = () => {
+const WorkspaceSelectorScreen = ({ navigation }) => {
   const { workspaces, isLoading, fetchWorkspaces, switchWorkspace } = useWorkspaceStore();
   const { logout, user } = useAuthStore();
   const { colors } = useThemeStore();
@@ -24,6 +25,17 @@ const WorkspaceSelectorScreen = () => {
   useEffect(() => {
     fetchWorkspaces();
   }, []);
+
+  const handleLogout = () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to sign out of this account?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign Out", style: "destructive", onPress: logout }
+      ]
+    );
+  };
 
   const renderWorkspaceItem = ({ item }) => (
     <TouchableOpacity style={styles.workspaceCard} onPress={() => switchWorkspace(item._id)} activeOpacity={0.7}>
@@ -45,7 +57,7 @@ const WorkspaceSelectorScreen = () => {
           <Text style={styles.welcome}>Welcome,</Text>
           <Text style={styles.userName}>{user?.name || 'User'}</Text>
         </View>
-        <TouchableOpacity onPress={logout} style={styles.logoutButton}>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
           <LogOut size={20} color={colors.error} />
         </TouchableOpacity>
       </View>
@@ -68,7 +80,11 @@ const WorkspaceSelectorScreen = () => {
               <View style={styles.emptyState}>
                 <Briefcase size={48} color={colors.border} />
                 <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No workspaces found</Text>
-                <TouchableOpacity style={styles.createButton}>
+                <TouchableOpacity 
+                  style={styles.createButton}
+                  onPress={() => navigation.navigate('CreateWorkspace')}
+                  activeOpacity={0.8}
+                >
                   <Plus size={20} color={colors.messageTextSent} />
                   <Text style={styles.createButtonText}>Create Workspace</Text>
                 </TouchableOpacity>

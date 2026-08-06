@@ -46,10 +46,11 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data } = await authAPI.login({ email, password });
-      const { user, accessToken, refreshToken } = data.data;
+      const { user, accessToken, refreshToken, flowTaskToken } = data.data;
       
       await secureSet('chat_access_token', accessToken);
       await secureSet('chat_refresh_token', refreshToken);
+      if (flowTaskToken) await secureSet('flowtask_token', flowTaskToken);
       await storage.setItem('chat_user', JSON.stringify(user));
       
       setCachedToken(accessToken);

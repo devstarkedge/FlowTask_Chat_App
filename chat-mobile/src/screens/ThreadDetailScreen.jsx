@@ -345,7 +345,12 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           colors={colors}
           text={replyText}
           onChangeText={setReplyText}
-          onSend={handleSendReply}
+          onSend={(content, options) => {
+            handleSendReply(content, options);
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 100);
+          }}
           editingMessage={editingMessage}
           onCancelEdit={() => { setEditingMessage(null); setReplyText(''); }}
         />

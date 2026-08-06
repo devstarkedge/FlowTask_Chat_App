@@ -15,6 +15,7 @@ import {
   useWindowDimensions,
   Switch,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppScreen from '../../components/common/AppScreen';
 import KeyboardAwareContainer from '../../components/common/KeyboardAwareContainer';
@@ -66,6 +67,7 @@ export default function CanvasListScreen({ route, navigation }) {
   const [isLoadingExisting, setIsLoadingExisting] = useState(false);
 
   const { height: screenHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(screenHeight)).current;
   const { colors } = useThemeStore();
 
@@ -489,11 +491,12 @@ export default function CanvasListScreen({ route, navigation }) {
               {
                 backgroundColor: colors.card,
                 transform: [{ translateY: slideAnim }],
+                maxHeight: screenHeight * 0.92,
                 height: screenHeight * 0.85,
               },
             ]}
           >
-            <KeyboardAwareContainer disablePadding={false} style={{ flex: 1 }}>
+            <KeyboardAwareContainer disablePadding style={styles.modalBody}>
               {/* Modal Drag Handle */}
               <View style={styles.modalDragHandle} />
 
@@ -634,7 +637,7 @@ export default function CanvasListScreen({ route, navigation }) {
 
               {/* ── STEP 3: CUSTOMIZE VIEW ──────────────────────────────────── */}
               {modalStep === 'customize' && selectedTemplate && (
-                <View style={{ flex: 1 }}>
+                <View style={styles.customizeStepContainer}>
                   <View style={[styles.modalHeaderRow, { borderBottomColor: colors.border }]}>
                     <TouchableOpacity onPress={() => setModalStep('templates_list')} style={styles.modalBackIconBtn}>
                       <ChevronLeft size={22} color={colors.textPrimary} />
@@ -647,7 +650,12 @@ export default function CanvasListScreen({ route, navigation }) {
                     </TouchableOpacity>
                   </View>
 
-                  <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                  <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    style={styles.customizeScroll}
+                    contentContainerStyle={styles.customizeScrollContent}
+                    keyboardShouldPersistTaps="handled"
+                  >
                     <View style={styles.customizeContainer}>
                       <View style={styles.selectedBadgeRow}>
                         <View style={[styles.templateRowIconWrap, { backgroundColor: selectedTemplate.iconBg }]}>
@@ -746,7 +754,16 @@ export default function CanvasListScreen({ route, navigation }) {
                     </View>
                   </ScrollView>
 
-                  <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
+                  <View
+                    style={[
+                      styles.modalFooter,
+                      {
+                        borderTopColor: colors.border,
+                        backgroundColor: colors.card,
+                        paddingBottom: Math.max(insets.bottom, moderateScale(14)),
+                      },
+                    ]}
+                  >
                     <TouchableOpacity
                       style={[
                         styles.createCanvasBtn,
@@ -963,6 +980,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
+    overflow: 'hidden',
+  },
+  modalBody: {
+    flex: 1,
+    minHeight: 0,
   },
   modalDragHandle: {
     width: moderateScale(38),
@@ -1110,6 +1132,17 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(11),
   },
   // ── Customization Layout ───────────────────────────────────────────────────
+  customizeStepContainer: {
+    flex: 1,
+    minHeight: 0,
+  },
+  customizeScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  customizeScrollContent: {
+    paddingBottom: moderateScale(8),
+  },
   customizeContainer: {
     padding: moderateScale(20),
   },
@@ -1195,8 +1228,14 @@ const styles = StyleSheet.create({
   },
   modalFooter: {
     paddingHorizontal: moderateScale(20),
-    paddingVertical: moderateScale(14),
+    paddingTop: moderateScale(14),
     borderTopWidth: 1,
+    flexShrink: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 4,
   },
   createCanvasBtn: {
     flexDirection: 'row',

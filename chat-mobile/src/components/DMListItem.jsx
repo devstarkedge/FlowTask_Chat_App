@@ -5,7 +5,7 @@ import { useWorkspaceStore } from '../stores/workspaceStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { AppAvatar } from './common';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
-import { Archive, BellOff, CheckCircle, Clock } from 'lucide-react-native';
+import { Archive, Bell, BellOff, CheckCircle, Clock } from 'lucide-react-native';
 import { useChannelStore } from '../stores/channelStore';
 import { useNotificationPrefStore } from '../stores/notificationPrefStore';
 import Toast from 'react-native-toast-message';
@@ -83,7 +83,7 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
     switch(actionStr) {
       case 'Mark as Read/Unread': return <CheckCircle size={24} color={color} />;
       case 'Archive': return <Archive size={24} color={color} />;
-      case 'Mute/Unmute': return <BellOff size={24} color={color} />;
+      case 'Mute/Unmute': return isMuted ? <Bell size={24} color={color} /> : <BellOff size={24} color={color} />;
       case 'Remind me': return <Clock size={24} color={color} />;
       default: return <CheckCircle size={24} color={color} />;
     }

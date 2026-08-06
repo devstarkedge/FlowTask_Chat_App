@@ -103,10 +103,10 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
                 <Star size={18} color={isStarred ? '#E5A443' : colors.textPrimary} fill={isStarred ? '#E5A443' : 'transparent'} />
                 <Text style={[styles.actionBtnText, { color: isStarred ? '#E5A443' : colors.textPrimary }]}>Star</Text>
               </TouchableOpacity>
-              {/* <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => navigation.navigate('Search', { channelId })}>
+              <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => navigation.navigate('ChannelSearch', { channelId, channelName: dmName, isPrivate: true })}>
                 <Search size={18} color={colors.textPrimary} />
                 <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Search</Text>
-              </TouchableOpacity> */}
+              </TouchableOpacity>
             </View>
           </View>
           
@@ -209,6 +209,10 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
             <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={handleToggleStar}>
               <Star size={18} color={isStarred ? '#E5A443' : colors.textPrimary} fill={isStarred ? '#E5A443' : 'transparent'} />
               <Text style={[styles.actionBtnText, { color: isStarred ? '#E5A443' : colors.textPrimary }]}>Star</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => navigation.navigate('ChannelSearch', { channelId, channelName: channel?.name || channelName, isPrivate: channel?.visibility === 'private' || channel?.type === 'private' })}>
+              <Search size={18} color={colors.textPrimary} />
+              <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Search</Text>
             </TouchableOpacity>
           </View>
         </View>

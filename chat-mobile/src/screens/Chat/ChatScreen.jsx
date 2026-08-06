@@ -19,6 +19,7 @@ import {
   Linking,
   ScrollView,
   Modal,
+  AppState,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useShallow } from 'zustand/react/shallow';
@@ -312,8 +313,15 @@ const ChatScreen = ({ route, navigation }) => {
 
   // Memoize derived values to prevent re-render loops
   const typingUsers = useMemo(
-    () => Object.values(typingByChannel[channelId] || {}),
-    [typingByChannel, channelId]
+    () => {
+      const cid = channelId != null ? String(channelId) : null;
+      const selfId = user?._id != null ? String(user._id) : null;
+      const typingData = (cid && typingByChannel[cid]) || {};
+      return Object.entries(typingData)
+        .filter(([id]) => id !== selfId)
+        .map(([, name]) => name);
+    },
+    [typingByChannel, channelId, user?._id]
   );
   const channel = useMemo(
     () => channels.find((ch) => ch._id === channelId),
@@ -373,6 +381,14 @@ const ChatScreen = ({ route, navigation }) => {
   useEffect(() => {
     const initData = async () => {
       if (!channelId) return;
+
+      // Ensure we are in the channel socket room for typing + live messages.
+      // fetchChannels joins all rooms, but that can race with opening a chat.
+      const socket = getSocket();
+      if (socket?.connected) {
+        socket.emit('channel:join', String(channelId));
+      }
+
       const res = await fetchMessages(channelId);
       if (res?.error && res.status === 403) {
         try {
@@ -391,8 +407,35 @@ const ChatScreen = ({ route, navigation }) => {
     initData();
   }, [channelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Track active conversation for unread/push/receipts parity with web
+  useEffect(() => {
+    if (!channelId) return;
+
+    const { conversationPresence } = require('../../services/conversationPresence');
+    const setActiveChannel = useChannelStore.getState().setActiveChannel;
+    const channel = useChannelStore.getState().channels.find(
+      (ch) => String(ch._id) === String(channelId)
+    );
+    const type = channel?.type === 'dm' ? 'dm' : 'channel';
+
+    setActiveChannel(channelId);
+    conversationPresence.setActive(channelId, type);
+
+    return () => {
+      conversationPresence.clearActive();
+      // Only clear store activeChannel if it still points at this screen's channel
+      const current = useChannelStore.getState().activeChannelId;
+      if (current != null && String(current) === String(channelId)) {
+        useChannelStore.setState({ activeChannelId: null });
+      }
+    };
+  }, [channelId]);
+
   useEffect(() => {
     if (channelId) {
+      // Only auto-mark read while the app is foregrounded
+      if (AppState.currentState !== 'active') return;
+
       markAsRead(channelId);
       
       const socket = getSocket();
@@ -582,21 +625,7 @@ const ChatScreen = ({ route, navigation }) => {
               </>
             </View>
           )}
-          {isDM && dmUser && (
-            <Text
-              style={[
-                styles.dmStatusText,
-                {
-                  color:
-                    dmUser.onlineStatus === "online"
-                      ? colors.online
-                      : colors.textSecondary,
-                },
-              ]}
-            >
-              {dmUser.onlineStatus === "online" ? "Online" : "Offline"}
-            </Text>
-          )}
+
         </TouchableOpacity>
 
         <View style={styles.headerActions}>
@@ -643,7 +672,7 @@ const ChatScreen = ({ route, navigation }) => {
           >
             <Users size={18} color={colors.textSecondary} />
             <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-              {isDM ? "View Profile" : "Channel Info"}
+              {isDM ? "Conversation Details" : "Channel Info"}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -676,7 +705,11 @@ const ChatScreen = ({ route, navigation }) => {
             style={styles.optionItem}
             onPress={() => {
               setShowOptions(false);
-              setShowSearch(true);
+              navigation.navigate('ChannelSearch', { 
+                channelId, 
+                channelName: channelNameToShow, 
+                isPrivate 
+              });
             }}
           >
             <Search size={18} color={colors.textSecondary} />
@@ -711,8 +744,7 @@ const ChatScreen = ({ route, navigation }) => {
           keyExtractor={(item) => item._id}
           inverted
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          onTouchStart={() => Keyboard.dismiss()}
+          keyboardDismissMode="on-drag"
           contentContainerStyle={[styles.messageList, { flexGrow: 1 }]}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           onEndReached={() => {
@@ -789,6 +821,9 @@ const ChatScreen = ({ route, navigation }) => {
                 setEditingMessage(null);
               } else {
                 sendMessage(channelId, content, options);
+                setTimeout(() => {
+                  flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                }, 100);
               }
               setReplyingTo(null);
             }}

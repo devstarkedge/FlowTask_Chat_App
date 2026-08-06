@@ -1,5 +1,7 @@
 import { getSocket } from './socket';
 import logger from '../utils/logger';
+import { useChannelStore } from '../stores/channelStore';
+import { readReceiptAPI } from './api';
 
 /**
  * ConversationPresenceManager — Single source of truth for active conversation tracking.
@@ -47,6 +49,12 @@ class ConversationPresenceManager {
       if (this.tabVisible) {
         if (this.activeConversationId) {
           this.emitSocketFocus(this.activeConversationId);
+          
+          // Clear unreads when tab regains focus on an active channel
+          useChannelStore.getState().updateUnread(this.activeConversationId, 0);
+          readReceiptAPI.markRead(this.activeConversationId).catch(err => {
+            logger.error('Failed to mark read on focus', err.message);
+          });
         }
       } else {
         this.emitSocketBlur();
@@ -106,7 +114,8 @@ class ConversationPresenceManager {
    * @returns {boolean} True if user is actively viewing this conversation
    */
   isActive(conversationId) {
-    return conversationId === this.activeConversationId 
+    if (!conversationId || !this.activeConversationId) return false;
+    return String(conversationId) === String(this.activeConversationId)
       && this.appFocused 
       && this.tabVisible;
   }

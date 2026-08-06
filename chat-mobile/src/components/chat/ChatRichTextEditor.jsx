@@ -56,9 +56,10 @@ const ChatRichTextEditor = forwardRef(function ChatRichTextEditor(
         dark: isDark,
         textColor: colors?.inputText || colors?.textPrimary,
         placeholderColor: colors?.inputPlaceholder || colors?.textTertiary,
+        linkColor: colors?.info || '#3B82F6',
       }),
     }),
-    [placeholder, isDark, colors?.inputText, colors?.textPrimary, colors?.inputPlaceholder, colors?.textTertiary],
+    [placeholder, isDark, colors?.inputText, colors?.textPrimary, colors?.inputPlaceholder, colors?.textTertiary, colors?.info],
   );
 
   // Remounting the document requires a fresh ready handshake

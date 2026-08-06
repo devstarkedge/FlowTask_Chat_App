@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import storage from '../services/storage';
 import { useAuthStore } from './authStore';
 import { useChannelStore } from './channelStore';
 import { reactionAPI } from '../services/api';
@@ -7,7 +9,12 @@ import logger from '../utils/logger';
 import { useScheduledStore } from './scheduledStore';
 import { enqueueMessage, dequeueMessage } from '../services/offlineQueue';
 
-export const useChatStore = create((set, get) => ({
+const typingTimeouts = {};
+const TYPING_AUTO_CLEAR_MS = 5000;
+
+export const useChatStore = create(
+  persist(
+    (set, get) => ({
   messagesByChannel: {},
   hasMore: {},
   isLoadingMessages: false,
@@ -187,8 +194,8 @@ export const useChatStore = create((set, get) => ({
   },
 
   addMessage: (message) => {
-    const channelId = message.channelId;
-    if (!channelId) return;
+    const channelId = message.channelId?.toString ? message.channelId.toString() : String(message.channelId);
+    if (!channelId || channelId === 'undefined' || channelId === 'null') return;
 
     set((state) => {
       const existing = state.messagesByChannel[channelId] || [];
@@ -213,7 +220,7 @@ export const useChatStore = create((set, get) => ({
   },
 
   reconcileMessage: (tempId, serverMessage) => {
-    const channelId = serverMessage.channelId;
+    const channelId = serverMessage.channelId?.toString ? serverMessage.channelId.toString() : String(serverMessage.channelId);
     set((state) => {
       const messages = state.messagesByChannel[channelId] || [];
       const alreadyHasServerMessage = messages.some(m => m._id === serverMessage._id);
@@ -368,27 +375,58 @@ export const useChatStore = create((set, get) => ({
   // ─── Typing Indicators ─────────────────────────────────────────────────────
   typingByChannel: {},
   setTyping: (channelId, userId, name) => {
+    const cid = channelId != null ? String(channelId) : null;
+    const uid = userId != null ? String(userId) : null;
+    if (!cid || !uid) return;
+
     set((state) => ({
       typingByChannel: {
         ...state.typingByChannel,
-        [channelId]: {
-          ...(state.typingByChannel[channelId] || {}),
-          [userId]: name
+        [cid]: {
+          ...(state.typingByChannel[cid] || {}),
+          [uid]: name
         }
       }
     }));
+
+    const timeoutKey = `${cid}-${uid}`;
+    if (typingTimeouts[timeoutKey]) {
+      clearTimeout(typingTimeouts[timeoutKey]);
+    }
+
+    typingTimeouts[timeoutKey] = setTimeout(() => {
+      get().clearTyping(cid, uid);
+      delete typingTimeouts[timeoutKey];
+    }, TYPING_AUTO_CLEAR_MS);
   },
   clearTyping: (channelId, userId) => {
+    const cid = channelId != null ? String(channelId) : null;
+    const uid = userId != null ? String(userId) : null;
+    if (!cid || !uid) return;
+
+    const timeoutKey = `${cid}-${uid}`;
+    if (typingTimeouts[timeoutKey]) {
+      clearTimeout(typingTimeouts[timeoutKey]);
+      delete typingTimeouts[timeoutKey];
+    }
+
     set((state) => {
-      const typing = { ...(state.typingByChannel[channelId] || {}) };
-      delete typing[userId];
+      const typing = { ...(state.typingByChannel[cid] || {}) };
+      delete typing[uid];
       return {
         typingByChannel: {
           ...state.typingByChannel,
-          [channelId]: typing
+          [cid]: typing
         }
       };
     });
+  },
+  clearAllTyping: () => {
+    for (const key of Object.keys(typingTimeouts)) {
+      clearTimeout(typingTimeouts[key]);
+      delete typingTimeouts[key];
+    }
+    set({ typingByChannel: {} });
   },
 
   // ─── Real-time Message Updates (from socket events) ──────────────────────────
@@ -613,4 +651,13 @@ export const useChatStore = create((set, get) => ({
       },
     }));
   },
-}));
+    }),
+    {
+      name: 'flowtask-chat-storage',
+      storage: createJSONStorage(() => storage),
+      partialize: (state) => ({
+        messagesByChannel: state.messagesByChannel,
+      }),
+    }
+  )
+);

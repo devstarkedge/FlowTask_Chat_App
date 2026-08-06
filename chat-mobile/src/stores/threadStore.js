@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import storage from '../services/storage';
-import { threadAPI } from '../services/api';
+import { threadAPI, resolveWorkspaceId } from '../services/api';
 import { useAuthStore } from './authStore';
 import api from '../services/api';
 import logger from '../utils/logger';
@@ -18,6 +18,10 @@ export const useThreadStore = create(
       threadsHasMore: true,
 
       fetchThreads: async (page = 1) => {
+        if (!resolveWorkspaceId()) {
+          logger.warn('[ThreadStore] Skipping fetchThreads — no active workspace');
+          return;
+        }
         // Only show global loading on first page
         if (page === 1) set({ isLoading: true });
         try {

@@ -441,6 +441,8 @@ const MessageItem = memo(
 
     const showMoreMenu = activeMessageMenuId === message._id;
 
+    console.log('DEBUG MSG:', message._id, 'ATTACHMENTS:', message.attachments, 'FILE REFS:', message.fileReferences);
+
     const [showActions, setShowActions] = useState(false);
     const [showReactionPicker, setShowReactionPicker] = useState(false);
     const [showMessageDetails, setShowMessageDetails] = useState(false);
@@ -478,22 +480,31 @@ const MessageItem = memo(
     const handleForwardAttachment = useCallback((file) => {
       if (file) {
         // Re-derive attachments (same logic as the render path below)
-        const atts = message.fileReferences?.length > 0
-          ? message.fileReferences
-              .map((ref) =>
-                ref.fileId
-                  ? {
-                      ...ref.fileId,
-                      url: getFileUrl(ref.fileId) || ref.fileId.url,
-                      messageId: ref.messageId || message._id,
-                      channelId: ref.channelId || message.channelId,
-                      workspaceId: ref.workspaceId || message.workspaceId,
-                      contextType: ref.contextType || (message.threadId ? "thread" : "channel"),
-                    }
-                  : null,
-              )
-              .filter(Boolean)
-          : message.attachments || [];
+        let atts = [];
+        if (message.fileReferences?.length > 0) {
+          atts = message.fileReferences
+            .map((ref) => {
+              if (ref?.fileId) {
+                return {
+                  ...ref.fileId,
+                  url: getFileUrl(ref.fileId) || ref.fileId.url,
+                  messageId: ref.messageId || message._id,
+                  channelId: ref.channelId || message.channelId,
+                  workspaceId: ref.workspaceId || message.workspaceId,
+                  contextType: ref.contextType || (message.threadId ? "thread" : "channel"),
+                };
+              }
+              if (ref?.url || ref?.secureUrl) {
+                return { ...ref, url: getFileUrl(ref) || ref.url };
+              }
+              return null;
+            })
+            .filter(Boolean);
+        }
+        
+        if (atts.length === 0 && message.attachments?.length > 0) {
+          atts = message.attachments;
+        }
 
         // Only filter when the message actually has multiple attachments
         if (atts.length > 1) {
@@ -590,26 +601,32 @@ const MessageItem = memo(
       setShowReactionPicker(false);
     };
 
-    const derivedAttachments =
-      message.fileReferences?.length > 0
-        ? message.fileReferences
-            .map((ref) =>
-              ref.fileId
-                ? {
-                    ...ref.fileId,
-                    url: getFileUrl(ref.fileId) || ref.fileId.url,
-                    // Include FileReference metadata for navigation
-                    messageId: ref.messageId || message._id,
-                    channelId: ref.channelId || message.channelId,
-                    workspaceId: ref.workspaceId || message.workspaceId,
-                    contextType:
-                      ref.contextType ||
-                      (message.threadId ? "thread" : "channel"),
-                  }
-                : null,
-            )
-            .filter(Boolean)
-        : message.attachments || [];
+    let derivedAttachments = [];
+    if (message.fileReferences?.length > 0) {
+      derivedAttachments = message.fileReferences
+        .map((ref) => {
+          if (ref?.fileId) {
+            return {
+              ...ref.fileId,
+              url: getFileUrl(ref.fileId) || ref.fileId.url,
+              messageId: ref.messageId || message._id,
+              channelId: ref.channelId || message.channelId,
+              workspaceId: ref.workspaceId || message.workspaceId,
+              contextType:
+                ref.contextType || (message.threadId ? "thread" : "channel"),
+            };
+          }
+          if (ref?.url || ref?.secureUrl) {
+            return { ...ref, url: getFileUrl(ref) || ref.url };
+          }
+          return null;
+        })
+        .filter(Boolean);
+    }
+    
+    if (derivedAttachments.length === 0 && message.attachments?.length > 0) {
+      derivedAttachments = message.attachments;
+    }
 
     // System messages
     if (isSystem) {

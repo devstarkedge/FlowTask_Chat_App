@@ -168,6 +168,7 @@ const LaterScreen = ({ navigation }) => {
   const updateReminder = useLaterStore(state => state.updateReminder);
   const toggleSaveMessage = useLaterStore(state => state.toggleSaveMessage);
   const addCustomReminder = useLaterStore(state => state.addCustomReminder);
+  const deleteSavedItem = useLaterStore(state => state.deleteSavedItem);
   
   const [filter, setFilter] = useState('in_progress'); 
   const [refreshing, setRefreshing] = useState(false);
@@ -365,7 +366,7 @@ const LaterScreen = ({ navigation }) => {
                 )}
 
                 <TouchableOpacity style={styles.contextMenuItem} onPress={() => {
-                  toggleSaveMessage(contextMenuTarget.messageId?._id || contextMenuTarget._id);
+                  deleteSavedItem(contextMenuTarget._id, contextMenuTarget.messageId?._id);
                   setContextMenuTarget(null);
                 }}>
                   <Trash2 size={20} color="#E53E3E" />
@@ -389,31 +390,31 @@ const LaterScreen = ({ navigation }) => {
                 </Text>
 
                 <TouchableOpacity style={styles.bottomSheetItem} onPress={() => {
-                  toggleSaveMessage(bottomSheetTarget.messageId?._id || bottomSheetTarget._id);
+                  deleteSavedItem(bottomSheetTarget._id, bottomSheetTarget.messageId?._id);
                   setBottomSheetTarget(null);
                 }}>
                   <Bookmark size={20} color={colors.textPrimary} />
                   <Text style={[styles.bottomSheetText, { color: colors.textPrimary }]}>Remove from Later</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.bottomSheetItem} onPress={() => {
+                {/* <TouchableOpacity style={styles.bottomSheetItem} onPress={() => {
                   Toast.show({ type: 'info', text1: 'Sharing coming soon' });
                   setBottomSheetTarget(null);
                 }}>
                   <Share size={20} color={colors.textPrimary} />
                   <Text style={[styles.bottomSheetText, { color: colors.textPrimary }]}>Share in Slack</Text>
-                </TouchableOpacity>
-
+                </TouchableOpacity> */}
+{/* 
                 <TouchableOpacity style={styles.bottomSheetItem} onPress={() => {
                   Toast.show({ type: 'success', text1: 'Link copied to clipboard' });
                   setBottomSheetTarget(null);
                 }}>
                   <Link size={20} color={colors.textPrimary} />
-                  <Text style={[styles.bottomSheetText, { color: colors.textPrimary }]}>Copy Link</Text>
-                </TouchableOpacity>
+                  <Text style={[styles.bottomSheetText, { color: colors.textPrimary }]}>Copy</Text>
+                </TouchableOpacity> */}
 
                 <TouchableOpacity style={styles.bottomSheetItem} onPress={() => {
-                  toggleSaveMessage(bottomSheetTarget.messageId?._id || bottomSheetTarget._id);
+                  deleteSavedItem(bottomSheetTarget._id, bottomSheetTarget.messageId?._id);
                   setBottomSheetTarget(null);
                 }}>
                   <Trash2 size={20} color="#E53E3E" />

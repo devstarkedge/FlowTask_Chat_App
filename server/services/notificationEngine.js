@@ -2,7 +2,7 @@ import NotificationPreference from '../modules/notifications/NotificationPrefere
 import Notification from '../modules/notifications/Notification.model.js';
 import userRepository from '../modules/users/user.repository.js';
 import channelRepository from '../modules/channels/channel.repository.js';
-import { emitToUser } from '../sockets/socketManager.js';
+import { emitToUser, getIO } from '../sockets/socketManager.js';
 import pushService from './push.service.js';
 import logger from '../utils/logger.js';
 import {
@@ -12,6 +12,7 @@ import {
   NOTIFICATION_PRIORITIES,
   NOTIFICATION_CATEGORIES,
   MENTION_TYPES,
+  buildRoomName,
 } from '../config/constants.js';
 import { stripHtml, truncate } from '../utils/sanitize.js';
 import { getAttachmentPreview } from '../utils/getNotificationPreview.js';
@@ -266,14 +267,40 @@ class NotificationEngine {
       return { sent: false, reason: 'level_filter' };
     }
 
-    // 8. Check presence — skip push if user is viewing this exact chat
+    // 8. Check presence — skip push/socket toast if user is viewing this exact chat.
+    // Prefer in-memory socket.activeChannelId (set synchronously by window:focus)
+    // over the async DB chatPreferences.activeWindowChannel field.
     const recipient = await userRepository.findById(recipientIdStr);
-    const activeWindowChannel = recipient?.chatPreferences?.activeWindowChannel;
-    const isViewingSameChat = activeWindowChannel === channelIdStr;
-    const isWindowBlurred = !activeWindowChannel;
+    const activeWindowChannel = recipient?.chatPreferences?.activeWindowChannel?.toString?.()
+      || recipient?.chatPreferences?.activeWindowChannel
+      || null;
+    let isViewingSameChat = false;
+    const io = getIO();
+    if (io && workspaceId) {
+      try {
+        const userRoom = buildRoomName(workspaceId, 'user', recipientIdStr);
+        const sockets = await io.in(userRoom).fetchSockets();
+        isViewingSameChat = sockets.some(
+          (s) => s.activeChannelId && String(s.activeChannelId) === channelIdStr
+        );
+      } catch (err) {
+        logger.debug('NotificationEngine: failed to check socket activeChannelId', {
+          recipientId: recipientIdStr,
+          error: err?.message,
+        });
+      }
+    }
+    if (!isViewingSameChat && activeWindowChannel) {
+      isViewingSameChat = String(activeWindowChannel) === channelIdStr;
+    }
+
     const isOnline = recipient?.socketIds?.length > 0;
     const isAway = recipient?.onlineStatus === 'away';
     const isOffline = !isOnline;
+    // "Blurred" means no focused conversation on any connected client.
+    // Do NOT treat missing activeWindowChannel alone as blurred when sockets
+    // already report the user is viewing this chat.
+    const isWindowBlurred = !isViewingSameChat && !activeWindowChannel;
 
     // 9. Build notification title
     const title = this._buildTitle(notificationType, senderName, channelName, convType, isThreadReply);

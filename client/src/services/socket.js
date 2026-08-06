@@ -242,6 +242,7 @@ export function connectSocket() {
     // tiny gaps. No need to refetch channels, messages, unreads, pins, etc.
     if (disconnectDuration < BRIEF_DISCONNECT_THRESHOLD_MS) {
       logger.log('[Socket] Brief disconnect — skipping full re-sync', { disconnectDuration })
+      return
     }
 
     // ── Long disconnect: full re-sync to catch missed data ──
@@ -294,8 +295,16 @@ export function connectSocket() {
   // ─── Message Events ──────────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.MESSAGE_CREATE, ({ message }) => {
     const currentUserId = useAuthStore.getState().user?._id
-    // Skip if this is our own message (handled via optimistic UI + ACK)
-    if (message.tempId && message.authorId === currentUserId) return
+
+    // Clear typing for the author as soon as their message arrives (before any early returns)
+    const authorId = message?.authorId || message?.author?._id
+    if (message?.channelId && authorId) {
+      useChatStore.getState().clearTyping(message.channelId, authorId)
+    }
+
+    // Skip only if THIS exact device sent it (handled via optimistic UI + ACK)
+    const isLocalPending = message.tempId && useChatStore.getState().messageChannelById[message.tempId] !== undefined
+    if (isLocalPending) return
 
     // Safety guard: never add thread replies to main chat via MESSAGE_CREATE
     if (message.threadId) return
@@ -323,13 +332,15 @@ export function connectSocket() {
     // UnreadManager handles presence-based filtering to prevent unread increment
     // when user is actively viewing the conversation.
     unreadManager.handleMessageReceived(message)
+    useChannelStore.getState().handleNewMessage(message)
   })
 
   // ─── Thread Reply Events ──────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.THREAD_REPLY, ({ message, rootMessageId }) => {
     const currentUserId = useAuthStore.getState().user?._id
-    // Skip if this is our own message (handled via optimistic UI + ACK)
-    if (message.tempId && message.authorId === currentUserId) return
+    // Skip only if THIS exact device sent it (handled via optimistic UI + ACK)
+    const isLocalPending = message.tempId && useChatStore.getState().messageChannelById[message.tempId] !== undefined
+    if (isLocalPending) return
 
     const resolvedRootId = rootMessageId || message.threadId
     if (resolvedRootId) {
@@ -638,9 +649,16 @@ export function connectSocket() {
 
     // Suppress notification if user is actively viewing the channel, EXCEPT for critical system notifications
     const activeChannelId = useChannelStore.getState().activeChannelId
+    const notifChannelId = notification.channelId?._id || notification.channelId || notification.conversationId
     const isCriticalNotification = ['reminder_overdue', 'system', 'bot_alert'].includes(notification.type) || notification.priority === 'high'
     
-    if (!isCriticalNotification && notification.channelId && notification.channelId === activeChannelId && document.hasFocus()) {
+    if (
+      !isCriticalNotification &&
+      notifChannelId &&
+      activeChannelId &&
+      String(notifChannelId) === String(activeChannelId) &&
+      document.hasFocus()
+    ) {
       return
     }
     
@@ -659,6 +677,12 @@ export function connectSocket() {
 
   socket.on('notification:read:sync', ({ notificationId, channelId }) => {
     useNotificationStore.getState().syncReadState({ notificationId, channelId })
+  })
+
+  socket.on('notification:unread:updated', ({ unreadCount }) => {
+    if (unreadCount !== undefined) {
+      useNotificationStore.getState().setUnreadCount?.(unreadCount)
+    }
   })
 
   socket.on('notification:preferences:updated', ({ preferences }) => {
@@ -815,23 +839,33 @@ export function reconnectWithWorkspace() {
 const _throttledTypingEmitters = new Map()
 
 export function emitTypingStart(channelId) {
-  if (!_throttledTypingEmitters.has(channelId)) {
+  if (!channelId || !socket) return
+  const cid = String(channelId)
+
+  if (!_throttledTypingEmitters.has(cid)) {
     _throttledTypingEmitters.set(
-      channelId,
+      cid,
       throttle(() => {
-        socket?.emit('typing:start', { channelId })
+        socket?.emit('typing:start', { channelId: cid })
       }, 2000),
     )
   }
-  _throttledTypingEmitters.get(channelId)()
+  _throttledTypingEmitters.get(cid)()
 }
 
 export function emitTypingStop(channelId) {
-  // Cancel any pending throttled typing start
-  const throttled = _throttledTypingEmitters.get(channelId)
-  if (throttled) throttled.cancel()
+  if (!channelId || !socket) return
+  const cid = String(channelId)
 
-  socket?.emit('typing:stop', { channelId })
+  // Cancel any pending throttled typing start so a trailing start cannot
+  // fire after the user has already stopped typing / sent / cleared.
+  const throttled = _throttledTypingEmitters.get(cid)
+  if (throttled) {
+    throttled.cancel()
+    _throttledTypingEmitters.delete(cid)
+  }
+
+  socket.emit('typing:stop', { channelId: cid })
 }
 
 export function joinChannel(channelId) {

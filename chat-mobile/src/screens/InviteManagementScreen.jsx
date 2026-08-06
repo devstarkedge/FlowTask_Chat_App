@@ -65,6 +65,17 @@ export default function InviteManagementScreen({ navigation }) {
 
   const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 
+  const userRole = activeWorkspace?.role || "member";
+  const canManage = ['owner', 'admin'].includes(userRole);
+
+  // Redirect if unauthorized
+  useEffect(() => {
+    if (!canManage && activeWorkspace) {
+      Toast.show({ type: "error", text1: "Access Denied", text2: "You do not have permission to invite members." });
+      navigation.goBack();
+    }
+  }, [canManage, activeWorkspace, navigation]);
+
   // Load channels
   useEffect(() => {
     if (activeWorkspaceId) {

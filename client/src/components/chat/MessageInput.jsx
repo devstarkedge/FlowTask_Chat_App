@@ -297,6 +297,22 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     }, 3000);
   }, [channelId]);
 
+  // Handle focus loss
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      emitTypingStop(channelId);
+    }
+  }, [channelId]);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      emitTypingStop(channelId);
+    };
+  }, [channelId]);
+
   // ─── Centralized Mention System ──────────────────────────────────────────
 
   const {
@@ -619,7 +635,14 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   const handleEditorInput = useCallback(
     ({ text, isEmpty }) => {
       setHasContent(!isEmpty || pendingFiles.length > 0);
-      handleTyping();
+      if (!isEmpty) {
+        handleTyping();
+      } else {
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+          emitTypingStop(channelId);
+        }
+      }
       saveDraftDebounced();
       detectMention();
       syncFormatState();
@@ -630,6 +653,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       saveDraftDebounced,
       detectMention,
       syncFormatState,
+      channelId,
     ],
   );
 
@@ -690,6 +714,8 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     });
     setShowGifPicker(false);
   }, [channelId, threadId, sendMessage]);
+
+
 
   // ─── Auto focus ───────────────────────────────────────────────────────────
 
@@ -772,7 +798,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
             setIsFocused(true);
             syncFormatState();
           }}
-          onBlur={() => setIsFocused(false)}
+          onBlur={handleBlur}
           onKeyDown={handleKeyDown}
         />
 

@@ -21,7 +21,6 @@ import {
 } from "react-native";
 import {
   Plus,
-  Smile,
   Clock,
   X,
   FileText,
@@ -37,7 +36,6 @@ import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useScheduledStore } from "../stores/scheduledStore";
 import { scheduledAPI, fileAPI } from "../services/api";
 import { emitTyping } from "../services/socket";
-import EmojiPickerModal from "./EmojiPickerModal";
 import ScheduleModal from "./ScheduleModal";
 import MentionDropdown from "./MentionDropdown";
 import FormattingToolbar from "./FormattingToolbar";
@@ -166,7 +164,6 @@ const MessageComposer = React.memo(function MessageComposer({
   members = [],
 }) {
   const { setDraft, getDraft, clearDraft } = useDraftStore();
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
@@ -183,6 +180,7 @@ const MessageComposer = React.memo(function MessageComposer({
   const draftTimerRef = useRef(null);
   const lastSavedRef = useRef("");
   const editorRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
   const latestContentRef = useRef({ html: '', text: '' });
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardState((state) => state.height);
@@ -260,13 +258,32 @@ const MessageComposer = React.memo(function MessageComposer({
     };
   }, [text, channelId, editingMessage, activeWorkspaceId]);
 
+  // ─── Unmount / Channel change cleanup for typing indicator ──────────────
+  useEffect(() => {
+    return () => {
+      emitTyping(channelId, false);
+    };
+  }, [channelId]);
+
   const handleEditorUpdate = useCallback(
     ({ html, text: plain, isEmpty }) => {
       latestContentRef.current = { html: html || '', text: plain || '' };
       onChangeText(html || '');
-      emitTyping(channelId, !isEmpty);
+      if (!isEmpty) {
+        emitTyping(channelId, true);
+        
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+          emitTyping(channelId, false);
+        }, 3000);
+      } else {
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+          emitTyping(channelId, false);
+        }
+      }
     },
-    [channelId, onChangeText],
+    [onChangeText, channelId]
   );
 
   const handleEditorSelection = useCallback((state) => {
@@ -326,6 +343,14 @@ const MessageComposer = React.memo(function MessageComposer({
     }
   }, []);
 
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      emitTyping(channelId, false);
+    }
+  }, [channelId]);
+
   const handleMentionSelect = useCallback(
     (member) => {
       editorRef.current?.insertMention({
@@ -338,14 +363,6 @@ const MessageComposer = React.memo(function MessageComposer({
       ]);
       setMentionVisible(false);
       setMentionQuery('');
-    },
-    [],
-  );
-
-  const handleEmojiSelect = useCallback(
-    (emoji) => {
-      editorRef.current?.insertEmoji(emoji);
-      setShowEmojiPicker(false);
     },
     [],
   );
@@ -401,6 +418,7 @@ const MessageComposer = React.memo(function MessageComposer({
     setPendingMentions([]);
     clearDraft(channelId, activeWorkspaceId, null);
     lastSavedRef.current = '';
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     emitTyping(channelId, false);
   }, [
     text,
@@ -850,13 +868,6 @@ const MessageComposer = React.memo(function MessageComposer({
                   color={showToolbar ? colors.primary : colors.textSecondary}
                 />
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() => setShowEmojiPicker(true)}
-              >
-                <Smile size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
             </View>
 
             <View key="editor-wrapper" style={styles.editorSlot}>
@@ -997,14 +1008,6 @@ const MessageComposer = React.memo(function MessageComposer({
           await handleMediaSend(uri, 'video', videoRecorder.recordingDuration);
           videoRecorder.cancelRecording();
         }}
-        colors={colors}
-      />
-
-      {/* Emoji Picker */}
-      <EmojiPickerModal
-        visible={showEmojiPicker}
-        onClose={() => setShowEmojiPicker(false)}
-        onSelect={handleEmojiSelect}
         colors={colors}
       />
 

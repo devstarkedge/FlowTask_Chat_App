@@ -33,8 +33,11 @@ class UnreadManager {
    * @param {Object} message - Socket message payload
    */
   handleMessageReceived(message) {
-    const { channelId, authorId, _id: messageId } = message;
-    if (!channelId) return;
+    if (!message || !message.channelId) return;
+
+    const channelId = typeof message.channelId === 'object' ? message.channelId._id : message.channelId;
+    const authorId = typeof message.authorId === 'object' ? message.authorId._id : message.authorId;
+    const messageId = message._id;
 
     const currentUserId = useAuthStore.getState().user?._id;
     

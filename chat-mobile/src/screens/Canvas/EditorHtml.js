@@ -228,6 +228,11 @@ export const EDITOR_HTML = `
 
     ::selection { background-color: rgba(79, 70, 229, 0.2); }
 
+    .ProseMirror a {
+      color: var(--accent-color);
+      text-decoration: underline;
+    }
+
     .mention-tag {
       background-color: rgba(79, 70, 229, 0.1);
       color: var(--accent-color);
@@ -564,9 +569,22 @@ img.ProseMirror-separator {
       });
       
       const observer = new ResizeObserver(() => {
-        sendToRN('height', { height: document.documentElement.scrollHeight });
+        var h;
+        var ed = document.getElementById('editor');
+        if (ed) {
+          h = ed.offsetHeight + (window.CHAT_COMPOSER ? 6 : 32);
+        } else {
+          h = document.documentElement.scrollHeight;
+        }
+        sendToRN('height', { height: h });
       });
       observer.observe(document.body);
+      var edNode = document.getElementById('editor');
+      if (edNode) observer.observe(edNode);
+      setTimeout(function() {
+        var pm = document.querySelector('.ProseMirror');
+        if (pm) observer.observe(pm);
+      }, 500);
     } catch(e) {
       sendToRN('error', { message: 'Editor init failed: ' + e.message, stack: e.stack });
     }

@@ -103,9 +103,8 @@ export const useChannelStore = create(
 
       for (const item of data.data.unreads) {
         // channelId might be an object if populated by backend, or just the string ID
-        const cid = typeof item.channelId === 'object' && item.channelId !== null
-          ? item.channelId._id
-          : (item.channelId || item._id)
+        const cid = toStringId(item.channelId) || toStringId(item._id)
+        if (!cid) continue
           
         unreads[cid] = item.unreadCount || 0
         if (item.lastReadMessageId) {
@@ -241,8 +240,10 @@ export const useChannelStore = create(
   },
 
   updateUnread: (channelId, count) => {
+    const id = toStringId(channelId);
+    if (!id) return;
     set((state) => ({
-      unreads: { ...state.unreads, [channelId]: count },
+      unreads: { ...state.unreads, [id]: count },
     }))
   },
 

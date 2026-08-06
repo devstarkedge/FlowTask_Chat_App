@@ -41,7 +41,7 @@ let adapterPubClient = null;
 let adapterSubClient = null;
 const socketRateLimits = new Map(); // Fallback Map<socketId, { count, windowStart }>
 const RATE_LIMIT_WINDOW_MS = 60000;  // 1 minute
-const RATE_LIMIT_MAX_EVENTS = 30;    // Max events per window per socket
+const RATE_LIMIT_MAX_EVENTS = 300;    // Max events per window per socket
 const MAX_SOCKETS_PER_USER = 5;      // Cap concurrent connections per user
 
 // ─── JWT Heartbeat ───────────────────────────────────────────────────────────
@@ -350,11 +350,6 @@ export async function initializeSocket(httpServer, corsOptions) {
 
     // Join a specific channel room — with membership verification
     socket.on('channel:join', async (channelId) => {
-      if (await isSocketRateLimited(socket.id)) {
-        socket.emit('error', { message: 'Rate limited. Please slow down.' });
-        return;
-      }
-
       if (!wsId) {
         socket.emit('error', { message: 'Access denied: workspace context required' });
         return;
@@ -495,22 +490,20 @@ export async function initializeSocket(httpServer, corsOptions) {
 
     // Leave a channel room
     socket.on('channel:leave', async (channelId) => {
-      if (await isSocketRateLimited(socket.id)) return;
       const leaveRoom = buildRoomName(wsId, 'channel', channelId);
       socket.leave(leaveRoom);
     });
 
     // Typing indicators — server-side throttled (max 1 emit per 2s per user/channel)
     socket.on('typing:start', async ({ channelId }) => {
-      if (await isSocketRateLimited(socket.id)) return;
-
-      const throttleKey = `${wsId }-${userId}-${channelId}`;
+      const throttleKey = `${wsId}-${userId}-${channelId}`;
       const now = Date.now();
       const lastEmit = typingThrottleMap.get(throttleKey) || 0;
 
       if (now - lastEmit < TYPING_THROTTLE_MS) {
-        return; // Skip — throttled
+        return; // Skip — throttled early to prevent eating rate limits
       }
+      
       typingThrottleMap.set(throttleKey, now);
 
       const typingRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
@@ -522,9 +515,9 @@ export async function initializeSocket(httpServer, corsOptions) {
     });
 
     socket.on('typing:stop', async ({ channelId }) => {
-      if (await isSocketRateLimited(socket.id)) return;
+      const throttleKey = `${wsId}-${userId}-${channelId}`;
+      if (!typingThrottleMap.has(throttleKey)) return; // Already stopped or never started, save rate limit
 
-      const throttleKey = `${wsId }-${userId}-${channelId}`;
       typingThrottleMap.delete(throttleKey);
 
       const typingRoom = wsId ? buildRoomName(wsId, 'channel', channelId) : `channel-${channelId}`;
@@ -536,7 +529,6 @@ export async function initializeSocket(httpServer, corsOptions) {
 
     // ─── Presence Update (away / back online) ────────────────────────
     socket.on('presence:update', async ({ status }) => {
-      if (await isSocketRateLimited(socket.id)) return;
       if (status !== 'away' && status !== 'online') return;
 
       const event = status === 'away' ? SOCKET_EVENTS.USER_AWAY : SOCKET_EVENTS.USER_ONLINE;

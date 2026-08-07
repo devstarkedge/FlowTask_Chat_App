@@ -564,6 +564,8 @@ export const canvasAPI = {
   toggleSaveForLater: (canvasId) => api.post(`/canvas/save-later/${canvasId}`),
   updateSavedStatus: (canvasId, status) =>
     api.patch(`/canvas/save-later/${canvasId}/status`, { status }),
+  getSavedCanvases: (channelId, status) =>
+    api.get(channelId ? `/canvas/saved/${channelId}` : '/canvas/saved', { params: { status } }),
 };
 
 // ─── Canvas Comment API ────────────────────────────────────────────────────────

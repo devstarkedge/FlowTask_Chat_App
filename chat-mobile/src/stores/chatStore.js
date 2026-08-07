@@ -432,17 +432,24 @@ export const useChatStore = create(
   // ─── Real-time Message Updates (from socket events) ──────────────────────────
   updateMessage: (message) => {
     if (!message?._id) return;
-    const channelId = message.channelId;
-    if (!channelId) return;
+    const channelId = message.channelId?.toString
+      ? message.channelId.toString()
+      : String(message.channelId);
+    if (!channelId || channelId === 'undefined' || channelId === 'null') return;
+
     set((state) => {
-      const msgs = state.messagesByChannel[channelId];
-      if (!msgs) return state;
+      const msgs = state.messagesByChannel[channelId] || [];
+      const exists = msgs.some((m) => m._id === message._id);
+      const updated = exists
+        ? msgs.map((m) => (m._id === message._id ? { ...m, ...message } : m))
+        : [...msgs, message].sort(
+            (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+          );
+
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: msgs.map(m =>
-            m._id === message._id ? { ...m, ...message } : m
-          ),
+          [channelId]: updated,
         },
       };
     });

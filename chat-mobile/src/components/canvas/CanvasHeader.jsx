@@ -100,10 +100,10 @@ export default function CanvasHeader({
         </TouchableOpacity> */}
 
         {/* Share Button */}
-        <TouchableOpacity onPress={onOptionsPress} style={styles.shareBtn}>
+        {/* <TouchableOpacity onPress={onOptionsPress} style={styles.shareBtn}>
           <Users size={16} color={colors.textOnPrimary || '#ffffff'} />
           <Text style={styles.shareText}>Share</Text>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
     </View>
   );

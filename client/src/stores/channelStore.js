@@ -255,18 +255,36 @@ export const useChannelStore = create(
    * is actively viewing the conversation).
    */
   handleNewMessage: (message) => {
-    const { channelId, content, createdAt } = message
+    const channelId = toStringId(message.channelId)
     if (!channelId) return
 
     // Derive a plain-text preview (strip HTML tags, cap at 80 chars)
-    const rawText = (content || '').replace(/<[^>]*>/g, '').trim()
-    const preview = rawText.length > 80 ? rawText.substring(0, 80) + '\u2026' : rawText
-    const timestamp = createdAt || new Date().toISOString()
+    const rawText = (message.content || '').replace(/<[^>]*>/g, '').trim()
+    let preview = rawText.length > 80 ? rawText.substring(0, 80) + '\u2026' : rawText
+
+    if (!preview) {
+      if (message.contentType === 'gif' || message.gifMeta) {
+        preview = 'GIF'
+      } else if (message.audioMeta) {
+        preview = '\u{1F3B5} Audio'
+      } else if (message.videoMeta) {
+        preview = '\u{1F3A5} Video'
+      } else if (message.attachments?.length) {
+        const name = message.attachments[0]?.originalName || message.attachments[0]?.fileName
+        preview = name ? `\u{1F4CE} ${name}` : '\u{1F4CE} File'
+      } else if (message.fileReferences?.length) {
+        const asset = message.fileReferences[0]?.fileId
+        const name = asset?.originalName || asset?.fileName
+        preview = name ? `\u{1F4CE} ${name}` : '\u{1F4CE} File'
+      }
+    }
+
+    const timestamp = message.createdAt || new Date().toISOString()
 
     set((state) => {
       // Update the channel's lastMessageAt + lastMessagePreview in the channels array
       const channels = state.channels.map((c) =>
-        c._id === channelId
+        toStringId(c._id) === channelId
           ? { ...c, lastMessageAt: timestamp, lastMessagePreview: preview }
           : c
       )
@@ -515,7 +533,10 @@ export const useChannelStore = create(
 }),
 {
   name: 'flowtask-channel-storage',
-  partialize: (state) => ({ activeChannelId: state.activeChannelId }),
+  partialize: (state) => ({
+    activeChannelId: state.activeChannelId,
+    channels: state.channels,
+  }),
   onRehydrateStorage: () => (state) => {
     if (state && state.activeChannelId) {
       const cleaned = toStringId(state.activeChannelId)

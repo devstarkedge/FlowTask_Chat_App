@@ -302,8 +302,14 @@ export function connectSocket() {
       useChatStore.getState().clearTyping(message.channelId, authorId)
     }
 
+    const channelId = message?.channelId != null ? String(message.channelId) : null
+    const channelMessages = channelId
+      ? useChatStore.getState().messagesByChannel[channelId] || []
+      : []
+
     // Skip only if THIS exact device sent it (handled via optimistic UI + ACK)
-    const isLocalPending = message.tempId && useChatStore.getState().messageChannelById[message.tempId] !== undefined
+    const isLocalPending =
+      message?.tempId && channelMessages.some((m) => m._id === message.tempId)
     if (isLocalPending) return
 
     // Safety guard: never add thread replies to main chat via MESSAGE_CREATE
@@ -316,7 +322,6 @@ export function connectSocket() {
     // that exact channel, emit dm:markSeen immediately at the socket event level.
     // This fires BEFORE any React render cycle, so it's immune to state race
     // conditions in conversationPresence.isActive() or component re-renders.
-    const { channelId } = message
     if (channelId) {
       const activeChannelId = useChannelStore.getState().activeChannelId
       if (activeChannelId === channelId) {
@@ -338,8 +343,13 @@ export function connectSocket() {
   // ─── Thread Reply Events ──────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.THREAD_REPLY, ({ message, rootMessageId }) => {
     const currentUserId = useAuthStore.getState().user?._id
+    const channelId = message?.channelId != null ? String(message.channelId) : null
+    const channelMessages = channelId
+      ? useChatStore.getState().messagesByChannel[channelId] || []
+      : []
     // Skip only if THIS exact device sent it (handled via optimistic UI + ACK)
-    const isLocalPending = message.tempId && useChatStore.getState().messageChannelById[message.tempId] !== undefined
+    const isLocalPending =
+      message?.tempId && channelMessages.some((m) => m._id === message.tempId)
     if (isLocalPending) return
 
     const resolvedRootId = rootMessageId || message.threadId

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -311,6 +311,22 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
+  const isInitialLoading = (isChannelsLoading || isThreadsLoading) && channels.length === 0;
+  const showHomeLoader = refreshing || isInitialLoading;
+
+  // iOS ignores transparent tintColor on RefreshControl — use scroll-based pull-to-refresh instead.
+  const pullRefreshLock = useRef(false);
+  const handleIOSPullRefreshEndDrag = useCallback((event) => {
+    if (Platform.OS === "android" || refreshing || pullRefreshLock.current) return;
+    const offsetY = event.nativeEvent.contentOffset.y;
+    if (offsetY < -verticalScale(60)) {
+      pullRefreshLock.current = true;
+      onRefresh().finally(() => {
+        pullRefreshLock.current = false;
+      });
+    }
+  }, [refreshing, onRefresh]);
+
   const quickCardsTotal = unreadThreadCount + savedCount + draftCount + scheduledCount;
 
   const visibleCards = useMemo(() => {
@@ -395,7 +411,7 @@ const HomeScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
         </View>
-        {(isChannelsLoading || isThreadsLoading || refreshing) && <HomeHeaderLoader colors={colors} />}
+        {showHomeLoader && <HomeHeaderLoader colors={colors} />}
       </SafeAreaView>
 
       <SectionList
@@ -412,7 +428,20 @@ const HomeScreen = ({ navigation }) => {
         maxToRenderPerBatch={10}
         windowSize={11}
         removeClippedSubviews={Platform.OS !== "web"}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="transparent" colors={["transparent"]} progressBackgroundColor="transparent" />}
+        refreshControl={
+          Platform.OS === "android"
+            ? (
+              <RefreshControl
+                refreshing={false}
+                onRefresh={onRefresh}
+                colors={["transparent"]}
+                progressBackgroundColor="transparent"
+                progressViewOffset={-1000}
+              />
+            )
+            : undefined
+        }
+        onScrollEndDrag={Platform.OS !== "android" ? handleIOSPullRefreshEndDrag : undefined}
         style={{ backgroundColor: colors.backgroundSecondary }}
       />
 

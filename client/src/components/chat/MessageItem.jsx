@@ -441,8 +441,6 @@ const MessageItem = memo(
 
     const showMoreMenu = activeMessageMenuId === message._id;
 
-    console.log('DEBUG MSG:', message._id, 'ATTACHMENTS:', message.attachments, 'FILE REFS:', message.fileReferences);
-
     const [showActions, setShowActions] = useState(false);
     const [showReactionPicker, setShowReactionPicker] = useState(false);
     const [showMessageDetails, setShowMessageDetails] = useState(false);
@@ -1407,10 +1405,21 @@ const MessageItem = memo(
     );
   },
   (prev, next) => {
+    const prevAttachments = prev.message.attachments;
+    const nextAttachments = next.message.attachments;
+    const prevFileRefs = prev.message.fileReferences;
+    const nextFileRefs = next.message.fileReferences;
+
     return (
       prev.message._id === next.message._id &&
       prev.message.content === next.message.content &&
       prev.message.htmlContent === next.message.htmlContent &&
+      prev.message.contentType === next.message.contentType &&
+      prev.message.gifMeta === next.message.gifMeta &&
+      prev.message.audioMeta === next.message.audioMeta &&
+      prev.message.videoMeta === next.message.videoMeta &&
+      prevAttachments === nextAttachments &&
+      prevFileRefs === nextFileRefs &&
       prev.message.reactions === next.message.reactions &&
       prev.message.isEdited === next.message.isEdited &&
       prev.message.isOptimistic === next.message.isOptimistic &&

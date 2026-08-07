@@ -1,6 +1,11 @@
 import 'dotenv/config';
+import { IOS_NOTIFICATION_SOUND_ASSETS } from './src/constants/notificationSounds.js';
 
 export default ({ config }) => {
+  const basePlugins = (config.plugins || []).filter(
+    (plugin) => !(Array.isArray(plugin) && plugin[0] === 'expo-notifications'),
+  );
+
   // Load environment variables based on NODE_ENV
   const env = process.env.NODE_ENV === 'production' ? 'production' : 'staging';
   const envFile = env === 'production' ? '.env.production' : '.env.staging';
@@ -9,6 +14,15 @@ export default ({ config }) => {
 
   return {
     ...config,
+    plugins: [
+      [
+        'expo-notifications',
+        {
+          sounds: IOS_NOTIFICATION_SOUND_ASSETS,
+        },
+      ],
+      ...basePlugins,
+    ],
     extra: {
       ...config.extra,
       apiUrl: process.env.API_URL,

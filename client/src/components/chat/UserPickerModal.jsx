@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useChatStore } from '../../stores/chatStore'
@@ -31,9 +31,21 @@ export default function UserPickerModal({ onClose, onSelect }) {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [flowTaskFetchFailed, setFlowTaskFetchFailed] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [isOffline, setIsOffline] = useState(!navigator.onLine)
   const searchInputRef = useRef(null)
   const listRef = useRef(null)
   const debounceRef = useRef(null)
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false)
+    const handleOffline = () => setIsOffline(true)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   const dmMatchesTarget = useCallback((channel, target) => {
     if (!channel || channel.type !== 'dm') return false
@@ -53,13 +65,17 @@ export default function UserPickerModal({ onClose, onSelect }) {
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (isOffline) {
+      setIsLoading(false)
+      return
+    }
     if (!searchQuery.trim()) {
       debounceRef.current = setTimeout(() => fetchUsers(''), 100)
       return
     }
     debounceRef.current = setTimeout(() => fetchUsers(searchQuery.trim()), 400)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [searchQuery])
+  }, [searchQuery, isOffline])
 
   const fetchUsers = async (query) => {
     setIsLoading(true)
@@ -116,33 +132,6 @@ export default function UserPickerModal({ onClose, onSelect }) {
     }
   }, [isCreating, channels, createDM, onSelect])
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Escape') { onClose(); return }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      const next = Math.min(selectedIndex + 1, users.length - 1)
-      setSelectedIndex(next)
-      scrollToSelected(next)
-    }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      const prev = Math.max(selectedIndex - 1, 0)
-      setSelectedIndex(prev)
-      scrollToSelected(prev)
-    }
-    if (e.key === 'Enter' && users[selectedIndex]) {
-      e.preventDefault()
-      handleSelectUser(users[selectedIndex])
-    }
-  }
-
-  const scrollToSelected = (index) => {
-    const list = listRef.current
-    if (!list) return
-    const item = list.children[index]
-    if (item) item.scrollIntoView({ block: 'nearest' })
-  }
-
   const presenceMap = usePresenceStore((state) => state.presence)
   const isUserOnline = (u) => {
     const status = presenceMap[u.chatUserId] || presenceMap[u.flowTaskUserId] || presenceMap[u._id]
@@ -152,8 +141,72 @@ export default function UserPickerModal({ onClose, onSelect }) {
   const onlineList = users.filter(isUserOnline)
   const offlineList = users.filter(u => !isUserOnline(u))
 
-  /* ─── flat ordered list for keyboard nav ─── */
-  const flatUsers = [...onlineList, ...offlineList]
+  // Cached Channels & DMs when offline/fetch fails
+  const showCached = isOffline || (users.length === 0 && !isLoading)
+
+  const cachedChannels = useMemo(() => {
+    return channels.filter(c => c.type !== 'dm' && c.type !== 'self' && !c.isArchived)
+  }, [channels])
+
+  const cachedDMs = useMemo(() => {
+    return channels.filter(c => c.type === 'dm' || c.type === 'self')
+  }, [channels])
+
+  const filteredCachedChannels = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim()
+    if (!q) return cachedChannels
+    return cachedChannels.filter(c => c.name && c.name.toLowerCase().includes(q))
+  }, [cachedChannels, searchQuery])
+
+  const filteredCachedDMs = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim()
+    if (!q) return cachedDMs
+    return cachedDMs.filter(c => {
+      const nameMatch = c.name && c.name.toLowerCase().includes(q)
+      if (nameMatch) return true
+      if (c.dmParticipantNames && Array.isArray(c.dmParticipantNames)) {
+        return c.dmParticipantNames.some(name => name.toLowerCase().includes(q))
+      }
+      return false
+    })
+  }, [cachedDMs, searchQuery])
+
+  const flatItems = showCached ? [...filteredCachedChannels, ...filteredCachedDMs] : [...onlineList, ...offlineList]
+
+  const handleSelectCachedChannel = useCallback((channel) => {
+    onSelect(channel._id)
+  }, [onSelect])
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape') { onClose(); return }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      const next = Math.min(selectedIndex + 1, flatItems.length - 1)
+      setSelectedIndex(next)
+      scrollToSelected(next)
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const prev = Math.max(selectedIndex - 1, 0)
+      setSelectedIndex(prev)
+      scrollToSelected(prev)
+    }
+    if (e.key === 'Enter' && flatItems[selectedIndex]) {
+      e.preventDefault()
+      if (showCached) {
+        handleSelectCachedChannel(flatItems[selectedIndex])
+      } else {
+        handleSelectUser(flatItems[selectedIndex])
+      }
+    }
+  }
+
+  const scrollToSelected = (index) => {
+    const list = listRef.current
+    if (!list) return
+    const item = list.children[index]
+    if (item) item.scrollIntoView({ block: 'nearest' })
+  }
 
   return (
     <>
@@ -387,7 +440,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
             </div>
           </div>
 
-          {/* ── User list ── */}
+          {/* ── User/Channel list ── */}
           <div className="upm-list" ref={listRef}>
 
             {/* Loading skeleton */}
@@ -397,77 +450,148 @@ export default function UserPickerModal({ onClose, onSelect }) {
               </div>
             )}
 
-            {/* Empty state */}
-            {!isLoading && users.length === 0 && (
-              <div className="upm-empty">
-                <div className="upm-empty-icon">
-                  <User size={20} style={{ color: 'var(--text-muted, #666)' }} />
-                </div>
-                <p className="upm-empty-title">
-                  {searchQuery ? 'No users found' : 'No users available'}
-                </p>
-                {searchQuery && (
-                  <p className="upm-empty-sub">Try a different name or email</p>
-                )}
-              </div>
-            )}
-
-            {/* Online section */}
-            {onlineList.length > 0 && (
+            {/* Cached content when offline/fallback */}
+            {showCached && (
               <>
-                <div className="upm-section-label">
-                  <span className="dot" style={{ background: 'var(--status-online, #3ba55d)' }} />
-                  Online — {onlineList.length}
-                </div>
-                {onlineList.map((u) => {
-                  const flatIdx = flatUsers.indexOf(u)
-                  const uId = u.chatUserId || u.flowTaskUserId
-                  const existingDM = channels.find((c) => dmMatchesTarget(c, uId))
-                  return (
-                    <UserRow
-                      key={u.chatUserId || u.flowTaskUserId || u.email}
-                      u={u}
-                      isSelected={flatIdx === selectedIndex}
-                      isOnline
-                      existingDM={existingDM}
-                      isCreating={isCreating}
-                      onSelect={() => handleSelectUser(u)}
-                      onHover={() => setSelectedIndex(flatIdx)}
-                    />
-                  )
-                })}
+                {/* Channels section */}
+                {filteredCachedChannels.length > 0 && (
+                  <>
+                    <div className="upm-section-label">
+                      Channels — {filteredCachedChannels.length}
+                    </div>
+                    {filteredCachedChannels.map((c) => {
+                      const flatIdx = flatItems.indexOf(c)
+                      return (
+                        <CachedItemRow
+                          key={c._id}
+                          item={c}
+                          isSelected={flatIdx === selectedIndex}
+                          isCreating={isCreating}
+                          onSelect={() => handleSelectCachedChannel(c)}
+                          onHover={() => setSelectedIndex(flatIdx)}
+                        />
+                      )
+                    })}
+                  </>
+                )}
+
+                {/* Divider between sections */}
+                {filteredCachedChannels.length > 0 && filteredCachedDMs.length > 0 && (
+                  <div className="upm-section-divider" />
+                )}
+
+                {/* DMs section */}
+                {filteredCachedDMs.length > 0 && (
+                  <>
+                    <div className="upm-section-label">
+                      Direct Messages — {filteredCachedDMs.length}
+                    </div>
+                    {filteredCachedDMs.map((c) => {
+                      const flatIdx = flatItems.indexOf(c)
+                      return (
+                        <CachedItemRow
+                          key={c._id}
+                          item={c}
+                          isSelected={flatIdx === selectedIndex}
+                          isCreating={isCreating}
+                          onSelect={() => handleSelectCachedChannel(c)}
+                          onHover={() => setSelectedIndex(flatIdx)}
+                        />
+                      )
+                    })}
+                  </>
+                )}
+
+                {/* Empty State for cached list */}
+                {filteredCachedChannels.length === 0 && filteredCachedDMs.length === 0 && (
+                  <div className="upm-empty">
+                    <div className="upm-empty-icon">
+                      <User size={20} style={{ color: 'var(--text-muted, #666)' }} />
+                    </div>
+                    <p className="upm-empty-title">
+                      {searchQuery ? 'No matching channels or DMs' : 'No conversations cached'}
+                    </p>
+                  </div>
+                )}
               </>
             )}
 
-            {/* Divider between sections */}
-            {onlineList.length > 0 && offlineList.length > 0 && (
-              <div className="upm-section-divider" />
-            )}
-
-            {/* Offline section */}
-            {offlineList.length > 0 && (
+            {/* Online/Offline list when online (showCached is false) */}
+            {!showCached && (
               <>
-                <div className="upm-section-label">
-                  <span className="dot" style={{ background: 'rgba(255,255,255,0.2)' }} />
-                  Offline — {offlineList.length}
-                </div>
-                {offlineList.map((u) => {
-                  const flatIdx = flatUsers.indexOf(u)
-                  const uId = u.chatUserId || u.flowTaskUserId
-                  const existingDM = channels.find((c) => dmMatchesTarget(c, uId))
-                  return (
-                    <UserRow
-                      key={u.chatUserId || u.flowTaskUserId || u.email}
-                      u={u}
-                      isSelected={flatIdx === selectedIndex}
-                      isOnline={false}
-                      existingDM={existingDM}
-                      isCreating={isCreating}
-                      onSelect={() => handleSelectUser(u)}
-                      onHover={() => setSelectedIndex(flatIdx)}
-                    />
-                  )
-                })}
+                {/* Empty state */}
+                {!isLoading && users.length === 0 && (
+                  <div className="upm-empty">
+                    <div className="upm-empty-icon">
+                      <User size={20} style={{ color: 'var(--text-muted, #666)' }} />
+                    </div>
+                    <p className="upm-empty-title">
+                      {searchQuery ? 'No users found' : 'No users available'}
+                    </p>
+                    {searchQuery && (
+                      <p className="upm-empty-sub">Try a different name or email</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Online section */}
+                {onlineList.length > 0 && (
+                  <>
+                    <div className="upm-section-label">
+                      <span className="dot" style={{ background: 'var(--status-online, #3ba55d)' }} />
+                      Online — {onlineList.length}
+                    </div>
+                    {onlineList.map((u) => {
+                      const flatIdx = flatItems.indexOf(u)
+                      const uId = u.chatUserId || u.flowTaskUserId
+                      const existingDM = channels.find((c) => dmMatchesTarget(c, uId))
+                      return (
+                        <UserRow
+                          key={u.chatUserId || u.flowTaskUserId || u.email}
+                          u={u}
+                          isSelected={flatIdx === selectedIndex}
+                          isOnline
+                          existingDM={existingDM}
+                          isCreating={isCreating}
+                          onSelect={() => handleSelectUser(u)}
+                          onHover={() => setSelectedIndex(flatIdx)}
+                        />
+                      )
+                    })}
+                  </>
+                )}
+
+                {/* Divider between sections */}
+                {onlineList.length > 0 && offlineList.length > 0 && (
+                  <div className="upm-section-divider" />
+                )}
+
+                {/* Offline section */}
+                {offlineList.length > 0 && (
+                  <>
+                    <div className="upm-section-label">
+                      <span className="dot" style={{ background: 'rgba(255,255,255,0.2)' }} />
+                      Offline — {offlineList.length}
+                    </div>
+                    {offlineList.map((u) => {
+                      const flatIdx = flatItems.indexOf(u)
+                      const uId = u.chatUserId || u.flowTaskUserId
+                      const existingDM = channels.find((c) => dmMatchesTarget(c, uId))
+                      return (
+                        <UserRow
+                          key={u.chatUserId || u.flowTaskUserId || u.email}
+                          u={u}
+                          isSelected={flatIdx === selectedIndex}
+                          isOnline={false}
+                          existingDM={existingDM}
+                          isCreating={isCreating}
+                          onSelect={() => handleSelectUser(u)}
+                          onHover={() => setSelectedIndex(flatIdx)}
+                        />
+                      )
+                    })}
+                  </>
+                )}
               </>
             )}
           </div>
@@ -478,7 +602,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
               <div className="upm-spinner" />
               Starting conversation…
             </div>
-          ) : users.length > 0 && (
+          ) : (flatItems.length > 0 || users.length > 0) && (
             <div className="upm-footer" style={{ gap: 6 }}>
             </div>
           )}
@@ -525,6 +649,49 @@ function UserRow({ u, isSelected, isOnline, existingDM, isCreating, onSelect, on
           Existing
         </span>
       )}
+    </button>
+  )
+}
+
+/* ─── Extracted row component for cached channel/DM ─── */
+function CachedItemRow({ item, isSelected, isCreating, onSelect, onHover }) {
+  const isDM = item.type === 'dm' || item.type === 'self'
+  return (
+    <button
+      className={`upm-user-btn${isSelected ? ' is-selected' : ''}`}
+      onClick={onSelect}
+      disabled={isCreating}
+      onMouseEnter={onHover}
+    >
+      {/* Icon or Avatar */}
+      <div className="upm-avatar-wrap">
+        {isDM ? (
+          <Avatar
+            member={{ name: item.name, avatar: item.avatar }}
+            size={34}
+            showStatus={false}
+          />
+        ) : (
+          <div style={{
+            width: 34, height: 34, borderRadius: '8px',
+            background: 'rgba(255,255,255,0.05)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            border: '1px solid rgba(255,255,255,0.08)'
+          }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-muted, #888)' }}>#</span>
+          </div>
+        )}
+      </div>
+
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="upm-user-name">{item.name}</span>
+        </div>
+        {item.lastMessagePreview && (
+          <span className="upm-user-sub">{item.lastMessagePreview}</span>
+        )}
+      </div>
     </button>
   )
 }

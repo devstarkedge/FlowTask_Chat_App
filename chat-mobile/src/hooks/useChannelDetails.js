@@ -82,7 +82,7 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
         const { data } = await directoriesAPI.getUsers(params);
         const rawUsers = data.data?.users || data.data || [];
 
-        const existingIds = new Set(members.map(m => m.userId?._id || m.userId));
+        const existingIds = new Set(members.map(m => m.userId?._id || m.userId || m._id));
         
         let filtered = rawUsers
           .map(u => ({
@@ -141,6 +141,11 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
   };
 
   const handleAddMemberToChannel = async (userId, userName) => {
+    const isAlreadyMember = members.some(m => (m.userId?._id || m.userId || m._id) === userId);
+    if (isAlreadyMember) {
+      Toast.show({ type: 'error', text1: 'User has already been added to this group' });
+      return;
+    }
     try {
       setAddingMemberId(userId);
       await channelAPI.addMember(channelId, userId);

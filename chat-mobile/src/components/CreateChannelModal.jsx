@@ -27,6 +27,10 @@ import useResponsive from '../hooks/useResponsive';
 const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
   const { isTablet, isDesktop, width } = useResponsive();
   const isWide = isTablet || isDesktop || width > 640;
+  const formPadding = moderateScale(20);
+  const gap = 12;
+  const containerWidth = isWide ? (Math.min(width, 600) - 2 * formPadding) : (width - 2 * formPadding);
+  const chipWidth = (containerWidth - 2 * gap) / 2.5;
   const { colors } = useThemeStore();
   const createChannel = useChannelStore((s) => s.createChannel);
   const user = useAuthStore((s) => s.user);
@@ -265,7 +269,7 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
                     contentContainerStyle={styles.selectedMembersContainer}
                   >
                     {selectedMembers.map((m) => (
-                      <View key={m._id} style={[styles.selectedChip, { backgroundColor: colors.primary + '20', borderColor: colors.primary + '40' }]}>
+                      <View key={m._id} style={[styles.selectedChip, { backgroundColor: colors.primary + '20', borderColor: colors.primary + '40', width: chipWidth }]}>
                         <AppAvatar user={m} size={28} />
                         <Text style={[styles.selectedChipName, { color: colors.textPrimary }]} numberOfLines={1}>
                           {m.name}
@@ -465,7 +469,7 @@ const styles = StyleSheet.create({
   selectedChipName: {
     fontSize: moderateScale(14),
     fontWeight: "600",
-    maxWidth: moderateScale(120),
+    flex: 1,
   },
   removeChipBtn: {
     padding: moderateScale(4),

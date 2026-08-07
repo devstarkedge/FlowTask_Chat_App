@@ -43,6 +43,11 @@ router.get(
 );
 
 router.get(
+  "/saved",
+  canvasController.getSavedCanvases
+);
+
+router.get(
   "/saved/:channelId",
   canvasController.getSavedCanvases
 );

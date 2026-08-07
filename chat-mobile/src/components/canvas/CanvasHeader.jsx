@@ -19,6 +19,7 @@ export default function CanvasHeader({
   const [isEditing, setIsEditing] = useState(false);
   const [tempTitle, setTempTitle] = useState(title);
 
+
   const handleBlur = () => {
     setIsEditing(false);
     if (tempTitle.trim() && tempTitle !== title) {

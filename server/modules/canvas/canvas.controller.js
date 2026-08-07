@@ -207,7 +207,7 @@ const getSavedCanvases = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const { status } = req.query;
 
-  const canvases = await canvasService.getSavedCanvases(userId, workspaceId, status);
+  const canvases = await canvasService.getSavedCanvases(userId, workspaceId, status, channelId);
 
   return res.status(200).json({
     success: true,

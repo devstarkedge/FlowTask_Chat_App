@@ -702,11 +702,11 @@ class CanvasService {
 
     const userIdStr = userId.toString();
     const alreadySaved = canvas.savedForLaterBy?.some(id => id.toString() === userIdStr);
+    const SavedMessage = (await import("../messages/SavedMessage.model.js")).default;
 
     if (alreadySaved) {
       canvas.savedForLaterBy = canvas.savedForLaterBy.filter(id => id.toString() !== userIdStr);
       try {
-        const SavedMessage = (await import("../messages/SavedMessage.model.js")).default;
         await SavedMessage.deleteMany({
           userId,
           workspaceId,
@@ -716,6 +716,12 @@ class CanvasService {
             { canvasRef: canvasId.toString() }
           ]
         });
+        emitToUser(
+          userId,
+          "savedMessage:removed",
+          { messageId: canvasId, canvasId },
+          workspaceId
+        );
       } catch (err) {
         console.error("Failed to delete standalone canvas reminder on unsave:", err);
       }
@@ -723,15 +729,38 @@ class CanvasService {
       if (!canvas.savedForLaterBy) canvas.savedForLaterBy = [];
       canvas.savedForLaterBy.push(userId);
       canvas.savedForLaterStatus = "in_progress";
+      try {
+        const savedMsg = await SavedMessage.create({
+          userId,
+          workspaceId,
+          channelId: canvas.channelId,
+          type: 'standalone',
+          title: canvas.title || 'Untitled Canvas',
+          canvasRef: canvas._id,
+          scope: 'canvas',
+          status: 'in_progress',
+        });
+        const populated = await SavedMessage.findById(savedMsg._id)
+          .populate('channelId', 'name type')
+          .lean();
+        emitToUser(
+          userId,
+          "savedMessage:added",
+          { savedMessage: populated || savedMsg },
+          workspaceId
+        );
+      } catch (err) {
+        console.error("Failed to create standalone canvas entry in SavedMessage:", err);
+      }
     }
     await canvas.save();
 
-    // Broadcast save-later event to the user's other devices
+    // Broadcast save-later event to the user's other devices with full canvas payload
     const saved = !alreadySaved;
     emitToUser(
       userId,
       saved ? "canvas:saved:later" : "canvas:unsaved:later",
-      { canvasId, userId, saved },
+      { canvasId, userId, saved, canvas },
       workspaceId
     );
 
@@ -754,11 +783,36 @@ class CanvasService {
 
     canvas.savedForLaterStatus = status;
     await canvas.save();
+
+    try {
+      const SavedMessage = (await import("../messages/SavedMessage.model.js")).default;
+      const updated = await SavedMessage.findOneAndUpdate(
+        {
+          userId,
+          workspaceId,
+          type: 'standalone',
+          $or: [{ canvasRef: canvasId }, { canvasRef: canvasId.toString() }]
+        },
+        { status },
+        { new: true }
+      );
+      if (updated) {
+        emitToUser(
+          userId,
+          "savedMessage:statusUpdated",
+          { messageId: updated._id, canvasId, status },
+          workspaceId
+        );
+      }
+    } catch (err) {
+      console.error("Failed to sync saved status with SavedMessage:", err);
+    }
+
     return canvas;
   }
 
   // ── Get Saved Canvases
-  async getSavedCanvases(userId, workspaceId, status) {
+  async getSavedCanvases(userId, workspaceId, status, channelId = null) {
     const query = {
       workspaceId,
       savedForLaterBy: userId,
@@ -766,11 +820,36 @@ class CanvasService {
     if (status) {
       query.savedForLaterStatus = status;
     }
+    if (channelId && channelId !== "null" && channelId !== "all") {
+      query.channelId = channelId;
+    }
     const Canvas = (await import("./canvas.model.js")).default;
-    return Canvas.find(query)
+    const SavedMessage = (await import("../messages/SavedMessage.model.js")).default;
+
+    const canvases = await Canvas.find(query)
       .populate("createdBy", "name avatar")
       .sort({ updatedAt: -1 })
       .lean();
+
+    // Attach user-specific SavedMessage status if available
+    const savedMessages = await SavedMessage.find({
+      userId,
+      workspaceId,
+      type: 'standalone',
+      canvasRef: { $in: canvases.map(c => c._id) }
+    }).lean();
+
+    const statusMap = new Map();
+    savedMessages.forEach(sm => {
+      if (sm.canvasRef) {
+        statusMap.set(sm.canvasRef.toString(), sm.status);
+      }
+    });
+
+    return canvases.map(c => ({
+      ...c,
+      savedForLaterStatus: statusMap.get(c._id.toString()) || c.savedForLaterStatus || 'in_progress',
+    }));
   }
 
   // ── Increment View Count

@@ -35,6 +35,7 @@ import favoritesRoutes from './modules/favorites/favorites.routes.js';
 import gifsRoutes from './modules/gifs/gifs.routes.js';
 import categoryRoutes from './modules/categories/category.routes.js';
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
+import { registerFileUploadEventHandlers } from './services/fileUploadEvents.service.js';
 import eventBus from './services/eventBus.js';
 import channelService from './modules/channels/channel.service.js';
 import workspaceService from './modules/workspaces/workspace.service.js';
@@ -327,6 +328,9 @@ async function startServer() {
     if (env.FLOWTASK_ENABLED) {
       registerAllEventHandlers();
     }
+
+    // 2b. Sync media messages when async uploads complete
+    registerFileUploadEventHandlers();
 
     // 3. Initialize Socket.IO
     await initializeSocket(httpServer, corsOptions);

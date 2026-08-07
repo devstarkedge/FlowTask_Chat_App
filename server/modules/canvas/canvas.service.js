@@ -7,7 +7,8 @@ import ChatUser from "../users/ChatUser.model.js";
 import Message from "../messages/Message.model.js";
 import { emitToChannel, emitToUser } from "../../sockets/socketManager.js";
 import logger from "../../utils/logger.js";
-import { MESSAGE_CONTENT_TYPES } from "../../config/constants.js";
+import { MESSAGE_CONTENT_TYPES, SOCKET_EVENTS } from "../../config/constants.js";
+import { messageSocketPayload } from "../../utils/socketPayload.js";
 import {
   ValidationError,
   NotFoundError,
@@ -175,8 +176,8 @@ class CanvasService {
       // Broadcast new message in real-time
       emitToChannel(
         channelId.toString(),
-        "message:created",
-        message.toJSON(),
+        SOCKET_EVENTS.MESSAGE_CREATE,
+        { message: messageSocketPayload(message) },
         workspaceId
       );
     } catch (err) {

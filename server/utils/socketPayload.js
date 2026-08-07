@@ -3,6 +3,72 @@
  * Full data remains in REST responses; sockets only send what clients need for real-time updates.
  */
 
+function toId(value) {
+  if (value == null) return value;
+  if (typeof value === 'string') {
+    return value !== '[object Object]' ? value : null;
+  }
+  if (typeof value === 'object') {
+    if (value._id != null) return toId(value._id);
+    if (typeof value.toString === 'function') {
+      const serialized = value.toString();
+      if (serialized !== '[object Object]') return serialized;
+    }
+  }
+  return String(value);
+}
+
+function toPlainMessage(message) {
+  if (!message) return message;
+  if (typeof message.toObject === 'function') {
+    return message.toObject({ virtuals: true, flattenMaps: true });
+  }
+  return message;
+}
+
+function serializeAttachments(attachments) {
+  if (!Array.isArray(attachments)) return [];
+  return attachments.map((attachment) => {
+    if (!attachment) return attachment;
+    const plain = typeof attachment.toObject === 'function'
+      ? attachment.toObject()
+      : attachment;
+    return {
+      ...plain,
+      _id: plain._id ? toId(plain._id) : plain._id,
+    };
+  });
+}
+
+function serializeFileReferences(fileReferences) {
+  if (!Array.isArray(fileReferences)) return [];
+  return fileReferences.map((reference) => {
+    if (!reference) return reference;
+    const plain = typeof reference.toObject === 'function'
+      ? reference.toObject({ virtuals: true })
+      : reference;
+    const fileId = plain.fileId;
+    const plainFile = fileId && typeof fileId.toObject === 'function'
+      ? fileId.toObject()
+      : fileId;
+
+    return {
+      ...plain,
+      _id: plain._id ? toId(plain._id) : plain._id,
+      fileId: plainFile
+        ? {
+            ...plainFile,
+            _id: toId(plainFile._id),
+          }
+        : plain.fileId,
+      channelId: plain.channelId ? toId(plain.channelId) : plain.channelId,
+      messageId: plain.messageId ? toId(plain.messageId) : plain.messageId,
+      workspaceId: plain.workspaceId ? toId(plain.workspaceId) : plain.workspaceId,
+      referencedBy: plain.referencedBy ? toId(plain.referencedBy) : plain.referencedBy,
+    };
+  });
+}
+
 /**
  * Create a minimal message payload for socket emission.
  * @param {object} message - Mongoose message document (lean or populated)
@@ -10,34 +76,37 @@
  * @returns {object} Slim payload
  */
 export function messageSocketPayload(message, extras = {}) {
-  const authorId = message.authorId?._id || message.authorId;
+  const plain = toPlainMessage(message);
+  const authorId = toId(plain.authorId?._id || plain.authorId);
 
   return {
-    _id: message._id,
-    channelId: message.channelId,
-    threadId: message.threadId || null,
-    content: message.content,
-    htmlContent: message.htmlContent,
-    contentType: message.contentType,
+    _id: toId(plain._id),
+    channelId: toId(plain.channelId),
+    threadId: plain.threadId ? toId(plain.threadId) : null,
+    content: plain.content,
+    htmlContent: plain.htmlContent,
+    contentType: plain.contentType,
     authorId,
-    senderSnapshot: message.senderSnapshot || null,
-    attachments: message.attachments || [],
-    fileReferences: message.fileReferences || [],
-    mentions: message.mentions || [],
-    reactions: message.reactions || [],
-    replyCount: message.replyCount || 0,
-    isEdited: message.isEdited || false,
-    isPinned: message.isPinned || false,
-    isDeleted: message.isDeleted || false,
-    flowTaskRef: message.flowTaskRef || null,
-    activityMeta: message.activityMeta || null,
-    forwardMeta: message.forwardMeta || null,
-    gifMeta: message.gifMeta || null,
-    status: message.status || 'sent',
-    deliveredAt: message.deliveredAt || null,
-    seenAt: message.seenAt || null,
-    createdAt: message.createdAt,
-    updatedAt: message.updatedAt,
+    senderSnapshot: plain.senderSnapshot || null,
+    attachments: serializeAttachments(plain.attachments),
+    fileReferences: serializeFileReferences(plain.fileReferences),
+    mentions: plain.mentions || [],
+    reactions: plain.reactions || [],
+    replyCount: plain.replyCount || 0,
+    isEdited: plain.isEdited || false,
+    isPinned: plain.isPinned || false,
+    isDeleted: plain.isDeleted || false,
+    flowTaskRef: plain.flowTaskRef || null,
+    activityMeta: plain.activityMeta || null,
+    forwardMeta: plain.forwardMeta || null,
+    gifMeta: plain.gifMeta || null,
+    audioMeta: plain.audioMeta || null,
+    videoMeta: plain.videoMeta || null,
+    status: plain.status || 'sent',
+    deliveredAt: plain.deliveredAt || null,
+    seenAt: plain.seenAt || null,
+    createdAt: plain.createdAt,
+    updatedAt: plain.updatedAt,
     ...extras,
   };
 }
@@ -48,7 +117,12 @@ export function messageSocketPayload(message, extras = {}) {
  * @returns {object}
  */
 export function reactionSocketPayload({ messageId, channelId, userId, emoji }) {
-  return { messageId, channelId, userId, emoji };
+  return {
+    messageId: toId(messageId),
+    channelId: toId(channelId),
+    userId: toId(userId),
+    emoji,
+  };
 }
 
 /**
@@ -57,5 +131,8 @@ export function reactionSocketPayload({ messageId, channelId, userId, emoji }) {
  * @returns {object}
  */
 export function deleteSocketPayload({ messageId, channelId }) {
-  return { messageId, channelId };
+  return {
+    messageId: toId(messageId),
+    channelId: toId(channelId),
+  };
 }

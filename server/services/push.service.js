@@ -3,6 +3,7 @@ import env from '../config/environment.js'
 import userRepository from '../modules/users/user.repository.js'
 import logger from '../utils/logger.js'
 import firebaseAdmin from '../config/firebaseAdmin.js'
+import { IOS_NOTIFICATION_SOUND } from '../../shared/notificationSounds.js'
 
 // Expo Push Notifications SDK (for mobile app push)
 let Expo;
@@ -276,7 +277,7 @@ export async function removeFCMToken(userId, token) {
   }, { returnDocument: 'after' })
 }
 
-// ─── Expo Push (Mobile App) ─────────────────────────────────────────────────────
+// ─── Expo Push (Mobile App) ──────────────────────────────────────────────────
 
 /**
  * Send push notification to the mobile app via Expo Push service.
@@ -310,7 +311,7 @@ export async function sendViaExpo(userId, payload) {
       }
       messages.push({
         to: token,
-        sound: 'default',
+        sound: IOS_NOTIFICATION_SOUND,
         title: payload.title,
         body: payload.body,
         data: payload.data || {},

@@ -134,6 +134,9 @@ const env = Object.freeze({
   FCM_SERVER_KEY: process.env.FCM_SERVER_KEY || '',
   FIREBASE_SERVICE_ACCOUNT: process.env.FIREBASE_SERVICE_ACCOUNT || '',
   GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS || '',
+
+  // Expo Push Notifications
+  EXPO_ACCESS_TOKEN: process.env.EXPO_ACCESS_TOKEN || '',
 });
 
 export default env;

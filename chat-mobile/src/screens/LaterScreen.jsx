@@ -40,9 +40,9 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 const LaterItem = React.memo(({ item, onPress, onLongPress, onBottomSheet, filter, handleStatusChange, setReminderTarget, colors }) => {
   const message = item.messageId;
-  const isCanvas = item.type === 'canvas';
-  const isCustom = item.type === 'custom' || item.type === 'standalone';
-  const canvasObj = item.canvasId || {};
+  const isCanvas = item.type === 'canvas' || item.scope === 'canvas' || !!item.canvasRef;
+  const isCustom = (item.type === 'custom' || item.type === 'standalone') && !isCanvas;
+  const canvasObj = item.canvasId || (typeof item.canvasRef === 'object' ? item.canvasRef : {});
 
   let messageText = 'Saved Message';
   if (message) {
@@ -201,17 +201,18 @@ const LaterScreen = ({ navigation }) => {
 
   const handleMessagePress = useCallback((savedMessage) => {
     const channelId = savedMessage.channelId?._id || savedMessage.channelId;
-    if (!channelId) return;
-
-    if (savedMessage.type === 'canvas') {
+    const canvasId = savedMessage.canvasRef?._id || savedMessage.canvasRef || savedMessage.canvasId?._id || savedMessage.canvasId;
+    if (savedMessage.type === 'canvas' || savedMessage.scope === 'canvas' || canvasId) {
+      if (!channelId || !canvasId) return;
       navigation.navigate('CanvasEditor', {
-        canvasId: savedMessage.canvasId?._id || savedMessage.canvasId,
+        canvasId,
         channelId,
       });
     } else if (savedMessage.messageId) {
+      if (!channelId) return;
       navigation.navigate('Chat', {
         channelId,
-        messageId: savedMessage.messageId._id,
+        messageId: savedMessage.messageId._id || savedMessage.messageId,
       });
     }
   }, [navigation]);

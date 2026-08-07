@@ -395,17 +395,52 @@ export const useCanvasStore = create((set, get) => ({
     try {
       const res = await canvasAPI.toggleSaveForLater(canvasId);
       if (res.data?.success) {
+        const saved = res.data.data?.saved;
+        const canvas = res.data.data?.canvas;
         set((s) => {
           const next = new Set(s.savedCanvasIds);
-          const isSaved = next.has(canvasId);
-          if (isSaved) next.delete(canvasId);
-          else next.add(canvasId);
+          if (saved) {
+            next.add(canvasId);
+          } else {
+            next.delete(canvasId);
+          }
           persistSavedIds(next);
-          return { savedCanvasIds: next };
+          const newSavedCanvases = saved && canvas && !s.savedCanvases.find(c => c._id === canvasId)
+            ? [canvas, ...s.savedCanvases]
+            : (!saved ? s.savedCanvases.filter(c => c._id !== canvasId) : s.savedCanvases);
+          return { savedCanvasIds: next, savedCanvases: newSavedCanvases };
         });
       }
     } catch (err) {
       logger.error('[CanvasStore] toggleSaveForLater:', err.message);
+    }
+  },
+
+  fetchSavedCanvases: async (channelId = null, status = null) => {
+    try {
+      const res = await canvasAPI.getSavedCanvases(channelId, status);
+      const list = res.data?.data || [];
+      const ids = new Set(list.map((c) => c._id));
+      set({ savedCanvases: list, savedCanvasIds: ids });
+      persistSavedIds(ids);
+      return list;
+    } catch (err) {
+      logger.error('[CanvasStore] fetchSavedCanvases:', err.message);
+      return [];
+    }
+  },
+
+  updateSavedCanvasStatus: async (canvasId, status) => {
+    set((s) => ({
+      savedCanvases: s.savedCanvases.map((c) =>
+        c._id === canvasId ? { ...c, savedForLaterStatus: status } : c
+      ),
+    }));
+    try {
+      await canvasAPI.updateSavedStatus(canvasId, status);
+    } catch (err) {
+      logger.error('[CanvasStore] updateSavedCanvasStatus:', err.message);
+      get().fetchSavedCanvases();
     }
   },
 
@@ -577,12 +612,15 @@ export const useCanvasStore = create((set, get) => ({
     }));
   },
 
-  handleSocketSavedLater: ({ canvasId }) => {
+  handleSocketSavedLater: ({ canvasId, canvas }) => {
     set((s) => {
       const next = new Set(s.savedCanvasIds);
       next.add(canvasId);
       persistSavedIds(next);
-      return { savedCanvasIds: next };
+      const newSavedCanvases = canvas && !s.savedCanvases.find(c => c._id === canvasId)
+        ? [canvas, ...s.savedCanvases]
+        : s.savedCanvases;
+      return { savedCanvasIds: next, savedCanvases: newSavedCanvases };
     });
   },
 

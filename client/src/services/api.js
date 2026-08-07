@@ -481,7 +481,8 @@ export const canvasAPI = {
   restoreVersion: (canvasId, historyId) => api.post(`/canvas/history/restore/${canvasId}/${historyId}`),
   toggleSaveForLater: (canvasId) => api.post(`/canvas/save-later/${canvasId}`),
   updateSavedStatus: (canvasId, status) => api.patch(`/canvas/save-later/${canvasId}/status`, { status }),
-  getSavedCanvases: (channelId, status) => api.get(`/canvas/saved/${channelId}`, { params: { status } }),
+  getSavedCanvases: (channelId, status) =>
+    api.get(channelId ? `/canvas/saved/${channelId}` : "/canvas/saved", { params: { status } }),
   togglePublicShare: (canvasId) => api.post(`/canvas/share/${canvasId}`),
   getPublic: (token) => api.get(`/canvas/public/${token}`),
 };

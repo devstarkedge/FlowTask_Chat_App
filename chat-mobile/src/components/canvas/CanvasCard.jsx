@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { FileText, Bookmark, BookmarkPlus, MoreVertical, Calendar, Users } from 'lucide-react-native';
+import { FileText, Bookmark, MoreVertical, Calendar, Users } from 'lucide-react-native';
 import { AppAvatar } from '../common';
 import { useThemeStore } from '../../stores/themeStore';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
@@ -147,7 +147,7 @@ export default function CanvasCard({ canvas, isSaved, onSelect, onSaveToggle, on
               {isSaved ? (
                 <Bookmark size={18} color="#eab308" fill="#eab308" />
               ) : (
-                <BookmarkPlus size={18} color={colors.textTertiary} />
+                <Bookmark size={18} color={colors.textTertiary} />
               )}
             </TouchableOpacity>
             <TouchableOpacity

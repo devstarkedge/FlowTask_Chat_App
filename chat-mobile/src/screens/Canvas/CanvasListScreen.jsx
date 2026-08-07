@@ -70,6 +70,11 @@ export default function CanvasListScreen({ route, navigation }) {
   const [customCover, setCustomCover] = useState(null);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
 
+  // Rename Modal States
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [canvasToRename, setCanvasToRename] = useState(null);
+  const [renameTitle, setRenameTitle] = useState('');
+
   const handlePickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -159,6 +164,7 @@ export default function CanvasListScreen({ route, navigation }) {
     isLoading,
     fetchChannelCanvases,
     createCanvas,
+    updateCanvas,
     toggleSaveForLater,
     deleteCanvas,
     duplicateCanvas,
@@ -400,12 +406,33 @@ export default function CanvasListScreen({ route, navigation }) {
     });
   };
 
+  const handleRenamePress = (canvas) => {
+    setCanvasToRename(canvas);
+    setRenameTitle(canvas.title || '');
+    setRenameModalVisible(true);
+  };
+
+  const submitRenameCanvas = async () => {
+    if (!canvasToRename || !renameTitle.trim()) return;
+    try {
+      await updateCanvas(canvasToRename._id, { title: renameTitle.trim() });
+      setRenameModalVisible(false);
+      fetchChannelCanvases(channelId);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to rename canvas.');
+    }
+  };
+
   const handleCardOptions = (canvas) => {
     Alert.alert(
       canvas.title || 'Canvas Options',
       'Select an action:',
       [
         { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Rename',
+          onPress: () => handleRenamePress(canvas),
+        },
         {
           text: 'Duplicate',
           onPress: async () => {
@@ -570,6 +597,37 @@ export default function CanvasListScreen({ route, navigation }) {
           )}
         />
       )}
+
+      {/* Rename Canvas Modal */}
+      <Modal
+        visible={renameModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRenameModalVisible(false)}
+      >
+        <View style={[styles.modalOverlay, { justifyContent: 'center', alignItems: 'center' }]}>
+          <TouchableOpacity style={styles.modalBackdrop} onPress={() => setRenameModalVisible(false)} activeOpacity={1} />
+          <View style={[styles.renameDialogContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.renameDialogTitle, { color: colors.textPrimary }]}>Rename Canvas</Text>
+            <TextInput
+              style={[styles.renameDialogInput, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.background }]}
+              value={renameTitle}
+              onChangeText={setRenameTitle}
+              autoFocus
+              selectTextOnFocus
+              maxLength={80}
+            />
+            <View style={styles.renameDialogButtons}>
+              <TouchableOpacity onPress={() => setRenameModalVisible(false)} style={styles.renameDialogBtn}>
+                <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={submitRenameCanvas} style={[styles.renameDialogBtn, { backgroundColor: colors.primary, borderRadius: 6 }]}>
+                <Text style={{ color: '#ffffff', fontWeight: 'bold' }}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── CREATE CANVAS & TEMPLATE SELECTOR MODAL ───────────────────────── */}
       <Modal
@@ -1437,5 +1495,39 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: moderateScale(15),
     fontWeight: '600',
+  },
+  renameDialogContainer: {
+    width: '85%',
+    borderRadius: moderateScale(12),
+    borderWidth: 1,
+    padding: moderateScale(20),
+    alignSelf: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  renameDialogTitle: {
+    fontSize: moderateScale(16),
+    fontWeight: '700',
+    marginBottom: moderateScale(12),
+  },
+  renameDialogInput: {
+    borderWidth: 1,
+    borderRadius: moderateScale(6),
+    paddingHorizontal: moderateScale(12),
+    paddingVertical: moderateScale(8),
+    fontSize: moderateScale(14),
+    marginBottom: moderateScale(16),
+  },
+  renameDialogButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  renameDialogBtn: {
+    paddingHorizontal: moderateScale(14),
+    paddingVertical: moderateScale(8),
   },
 });

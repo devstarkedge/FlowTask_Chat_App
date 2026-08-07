@@ -591,12 +591,23 @@ const STYLES = `
   /* ── Selected users chips ── */
   .ccm-selected-users {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
     margin-bottom: 8px;
-    max-height: 90px;
-    overflow-y: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
     padding: 2px;
+    scrollbar-width: thin;
+  }
+  .ccm-selected-users::-webkit-scrollbar {
+    height: 4px;
+  }
+  .ccm-selected-users::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .ccm-selected-users::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
   }
   .ccm-selected-chip {
     display: inline-flex;
@@ -607,12 +618,15 @@ const STYLES = `
     padding: 4px 8px;
     border-radius: 999px;
     animation: ccm-badge-pop 200ms cubic-bezier(0.34,1.56,0.64,1) both;
+    flex-shrink: 0;
+    width: calc((100% - 12px) / 2.5);
   }
   .ccm-selected-chip__name {
     font-size: 11.5px;
     font-weight: 600;
     color: var(--text-primary);
-    max-width: 100px;
+    flex: 1;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

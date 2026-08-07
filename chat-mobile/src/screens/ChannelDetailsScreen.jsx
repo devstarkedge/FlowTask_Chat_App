@@ -167,37 +167,35 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
             )}
           </View>
           {isEditingName ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: verticalScale(12) }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%', paddingHorizontal: scale(20), marginTop: verticalScale(12), gap: scale(8) }}>
               <TextInput
-                style={[styles.channelName, { color: colors.textPrimary, borderBottomWidth: 1, borderColor: colors.primary, minWidth: scale(150), padding: 0 }]}
+                style={[styles.channelName, { color: colors.textPrimary, borderBottomWidth: 1, borderColor: colors.primary, flex: 1, padding: 0 }]}
                 value={newName}
                 onChangeText={setNewName}
                 autoFocus
                 onSubmitEditing={handleSaveName}
                 returnKeyType="done"
               />
-              <TouchableOpacity onPress={handleSaveName} style={{ marginLeft: scale(12), padding: scale(4) }}>
+              <TouchableOpacity onPress={handleSaveName} style={{ padding: scale(4) }}>
                 <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Save</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setIsEditingName(false)} style={{ marginLeft: scale(8), padding: scale(4) }}>
+              <TouchableOpacity onPress={() => setIsEditingName(false)} style={{ padding: scale(4) }}>
                 <X size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: verticalScale(12) }}>
-              <Text style={[styles.channelName, { color: colors.textPrimary, marginTop: 0 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%', paddingHorizontal: scale(20), marginTop: verticalScale(12) }}>
+              <Text style={[styles.channelName, { color: colors.textPrimary, flexShrink: 1, marginTop: 0 }]} numberOfLines={2}>
                 {channel?.name || channelName}
               </Text>
               {!(channel?.type === 'project' && channel?.systemManaged) && (
-                <TouchableOpacity onPress={() => { setNewName(channel?.name || channelName); setIsEditingName(true); }} style={{ marginLeft: scale(8) }}>
+                <TouchableOpacity onPress={() => { setNewName(channel?.name || channelName); setIsEditingName(true); }} style={{ marginLeft: scale(8), padding: scale(4) }}>
                   <Edit2 size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               )}
             </View>
           )}
-          <Text style={[styles.memberCount, { color: colors.textSecondary }]}>
-            {members.length || initialMemberCount} members
-          </Text>
+
 
           <View style={styles.actionButtonsRow}>
             {canAddMember && (
@@ -218,7 +216,11 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
         </View>
 
         <View style={styles.section}>
-          <DetailItem icon={Users} label="View Members" colors={colors} onPress={() => setShowMembersList(!showMembersList)} />
+          <DetailItem icon={Users} label="View Members" colors={colors} onPress={() => setShowMembersList(!showMembersList)}>
+            <Text style={{ fontSize: moderateScale(14), color: colors.textSecondary }}>
+              {members.length || initialMemberCount}
+            </Text>
+          </DetailItem>
 
           {showMembersList && (
             <View style={[styles.membersContainer, { backgroundColor: colors.backgroundSecondary }]}>
@@ -347,7 +349,7 @@ const styles = StyleSheet.create({
   navTitle: { fontSize: moderateScale(18), fontWeight: '700' },
   header: { alignItems: 'center', paddingVertical: verticalScale(24), borderBottomWidth: 1 },
   channelIcon: { width: scale(72), height: verticalScale(72), borderRadius: moderateScale(36), justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(12) },
-  channelName: { fontSize: moderateScale(22), fontWeight: '700' },
+  channelName: { fontSize: moderateScale(22), fontWeight: '700', textAlign: 'center' },
   memberCount: { fontSize: moderateScale(13), marginTop: verticalScale(4) },
   section: { paddingVertical: verticalScale(8) },
   detailItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: scale(16), paddingVertical: verticalScale(15), borderBottomWidth: StyleSheet.hairlineWidth, gap: 12 },

@@ -650,86 +650,99 @@ const ChatScreen = ({ route, navigation }) => {
 
       {/* Options Menu */}
       {showOptions && (
-        <View
-          style={[
-            styles.optionsMenu,
-            {
-              backgroundColor: colors.background,
-              borderBottomColor: colors.border,
-            },
-          ]}
-        >
+        <>
           <TouchableOpacity
-            style={styles.optionItem}
-            onPress={() => {
-              setShowOptions(false);
-              navigation.navigate("ChannelDetails", {
-                channelId,
-                channelName,
-                memberCount,
-              });
-            }}
+            activeOpacity={1}
+            style={[StyleSheet.absoluteFill, { zIndex: 999, backgroundColor: 'transparent' }]}
+            onPress={() => setShowOptions(false)}
+          />
+          <View
+            style={[
+              styles.optionsMenu,
+              {
+                backgroundColor: colors.background,
+                borderBottomColor: colors.border,
+                position: 'absolute',
+                top: headerHeight,
+                left: 0,
+                right: 0,
+                zIndex: 1000,
+                elevation: 5,
+              },
+            ]}
           >
-            <Users size={18} color={colors.textSecondary} />
-            <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-              {isDM ? "Conversation Details" : "Channel Info"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.optionItem}
-            onPress={() => {
-              setShowOptions(false);
-              navigation.navigate("Files", { channelId, channelName });
-            }}
-          >
-            <FileText size={18} color={colors.textSecondary} />
-            <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-              Files
-            </Text>
-          </TouchableOpacity>
-          {!isDM && (
             <TouchableOpacity
               style={styles.optionItem}
               onPress={() => {
                 setShowOptions(false);
-                navigation.navigate("CanvasList", { channelId, channelName });
+                navigation.navigate("ChannelDetails", {
+                  channelId,
+                  channelName,
+                  memberCount,
+                });
+              }}
+            >
+              <Users size={18} color={colors.textSecondary} />
+              <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+                {isDM ? "Conversation Details" : "Channel Info"}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => {
+                setShowOptions(false);
+                navigation.navigate("Files", { channelId, channelName });
               }}
             >
               <FileText size={18} color={colors.textSecondary} />
               <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-                Canvas Documents
+                Files
               </Text>
             </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={styles.optionItem}
-            onPress={() => {
-              setShowOptions(false);
-              navigation.navigate('ChannelSearch', { 
-                channelId, 
-                channelName: channelNameToShow, 
-                isPrivate 
-              });
-            }}
-          >
-            <Search size={18} color={colors.textSecondary} />
-            <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-              Search
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.optionItem}
-            onPress={() => {
-              setShowOptions(false);
-              navigation.navigate('PinnedMessages', { channelId, channelName });
-            }}
-          >
-            <Pin size={18} color={colors.textSecondary} />
-            <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-              Pinned Messages
-            </Text>
-          </TouchableOpacity>
-        </View>
+            {!isDM && (
+              <TouchableOpacity
+                style={styles.optionItem}
+                onPress={() => {
+                  setShowOptions(false);
+                  navigation.navigate("CanvasList", { channelId, channelName });
+                }}
+              >
+                <FileText size={18} color={colors.textSecondary} />
+                <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+                  Canvas Documents
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => {
+                setShowOptions(false);
+                navigation.navigate('ChannelSearch', { 
+                  channelId, 
+                  channelName: channelNameToShow, 
+                  isPrivate 
+                });
+              }}
+            >
+              <Search size={18} color={colors.textSecondary} />
+              <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+                Search
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => {
+                setShowOptions(false);
+                navigation.navigate('PinnedMessages', { channelId, channelName });
+              }}
+            >
+              <Pin size={18} color={colors.textSecondary} />
+              <Text style={[styles.optionText, { color: colors.textPrimary }]}>
+                Pinned Messages
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </>
       )}
 
         <KeyboardAwareContainer

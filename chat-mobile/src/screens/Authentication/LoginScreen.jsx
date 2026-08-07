@@ -71,7 +71,7 @@ const LoginScreen = ({ navigation, route }) => {
     }
     try {
       await loginNative({ email: email.toLowerCase(), password });
-      Toast.show({ type: 'success', text1: 'Welcome back!', position: 'top' });
+      Toast.show({ type: 'success', text1: 'TryChat logged in successfully!', position: 'top' });
     } catch {
       // handled by store
     }

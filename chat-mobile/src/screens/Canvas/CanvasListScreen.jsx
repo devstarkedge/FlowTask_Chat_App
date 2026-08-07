@@ -14,6 +14,7 @@ import {
   Animated,
   useWindowDimensions,
   Switch,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/common/ScreenContainer';
@@ -33,12 +34,18 @@ import {
   Copy,
   Clock,
   Link as LinkIcon,
+  Upload,
+  Camera,
 } from 'lucide-react-native';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { useThemeStore } from '../../stores/themeStore';
 import CanvasCard from '../../components/canvas/CanvasCard';
 import { CATEGORIES, TEMPLATES, buildTemplateContent } from '../../utils/templates';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+import * as ImagePicker from 'expo-image-picker';
+import Toast from 'react-native-toast-message';
+import { fileAPI } from '../../services/api';
+import ENV from '../../config/environment';
 
 
 
@@ -60,6 +67,81 @@ export default function CanvasListScreen({ route, navigation }) {
   const [variableValues, setVariableValues] = useState({});
   const [prefillVars, setPrefillVars] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [customCover, setCustomCover] = useState(null);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
+
+  const handlePickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission Denied', 'Gallery access is required to upload a cover.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets?.[0]) {
+      uploadCoverFile(result.assets[0]);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission Denied', 'Camera access is required to take a photo.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets?.[0]) {
+      uploadCoverFile(result.assets[0]);
+    }
+  };
+
+  const uploadCoverFile = async (asset) => {
+    setIsUploadingCover(true);
+    const formData = new FormData();
+    formData.append('files', {
+      uri: asset.uri,
+      name: asset.fileName || 'cover.jpg',
+      type: asset.mimeType || 'image/jpeg',
+    });
+
+    try {
+      const uploadRes = await fileAPI.uploadFiles(channelId, formData, undefined, true);
+      let uploadedUrl = uploadRes.data?.data?.files?.[0]?.secureUrl || 
+                        uploadRes.data?.data?.files?.[0]?.url || 
+                        uploadRes.data?.data?.urls?.[0] || 
+                        uploadRes.data?.url || 
+                        uploadRes.data?.data?.[0]?.url;
+
+      if (uploadedUrl && !uploadedUrl.startsWith('http')) {
+        const prefix = ENV.SOCKET_URL || 'https://chat-app-api-cyyl.onrender.com';
+        uploadedUrl = uploadedUrl.startsWith('/') ? prefix + uploadedUrl : prefix + '/' + uploadedUrl;
+      }
+
+      if (uploadedUrl) {
+        setCustomCover({ type: 'image', value: uploadedUrl });
+        Toast.show({
+          type: 'success',
+          text1: 'Cover uploaded successfully!',
+        });
+      } else {
+        Alert.alert('Upload Failed', 'Failed to retrieve media URL.');
+      }
+    } catch (err) {
+      Alert.alert('Upload Error', 'Error uploading image to server.');
+    } finally {
+      setIsUploadingCover(false);
+    }
+  };
 
   // Existing Canvases List States
   const [existingSearch, setExistingSearch] = useState('');
@@ -111,6 +193,7 @@ export default function CanvasListScreen({ route, navigation }) {
     setSelectedCategory('All');
     setNewCanvasTitle('');
     setSelectedCoverIndex(0);
+    setCustomCover(null);
     setVariableValues({});
     setPrefillVars(false);
     setExistingSearch('');
@@ -264,7 +347,9 @@ export default function CanvasListScreen({ route, navigation }) {
 
     // 3. Cover configuration
     let canvasCover = null;
-    if (template.cover) {
+    if (customCover) {
+      canvasCover = customCover;
+    } else if (template.cover) {
       const variations = Array.isArray(template.cover) 
         ? template.cover 
         : (template.cover.variations || [template.cover]);
@@ -306,7 +391,7 @@ export default function CanvasListScreen({ route, navigation }) {
     } finally {
       setIsCreating(false);
     }
-  }, [isCreating, selectedTemplate, newCanvasTitle, selectedCoverIndex, variableValues, prefillVars, channelId, createCanvas, closeCreateModal, navigation]);
+  }, [isCreating, selectedTemplate, newCanvasTitle, selectedCoverIndex, customCover, variableValues, prefillVars, channelId, createCanvas, closeCreateModal, navigation]);
 
   const handleSelect = (canvas) => {
     navigation.navigate('CanvasEditor', {
@@ -359,6 +444,17 @@ export default function CanvasListScreen({ route, navigation }) {
   );
 
   // Filter templates list in modal (fallback to local TEMPLATES if store is empty)
+  const availableCategories = useMemo(() => {
+    const list = (templates && templates.length > 0) ? templates : TEMPLATES;
+    const cats = new Set(['All']);
+    list.forEach((t) => {
+      if (t.category) {
+        cats.add(t.category);
+      }
+    });
+    return Array.from(cats);
+  }, [templates]);
+
   const filteredTemplates = useMemo(() => {
     const q = templateSearch.trim().toLowerCase();
     const listToFilter = (templates && templates.length > 0) ? templates : TEMPLATES;
@@ -415,7 +511,6 @@ export default function CanvasListScreen({ route, navigation }) {
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={[styles.title, { color: colors.textPrimary }]}>Canvas Documents</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>#{channelName || 'channel'}</Text>
           </View>
           <TouchableOpacity style={[styles.createBtn, { backgroundColor: colors.primary }]} onPress={openCreateModal}>
             <Plus size={20} color="#ffffff" />
@@ -601,7 +696,7 @@ export default function CanvasListScreen({ route, navigation }) {
                       showsHorizontalScrollIndicator={false}
                       contentContainerStyle={styles.categoryScroll}
                     >
-                      {CATEGORIES.map((cat) => {
+                      {availableCategories.map((cat) => {
                         const isSelected = selectedCategory === cat;
                         return (
                           <TouchableOpacity
@@ -680,41 +775,107 @@ export default function CanvasListScreen({ route, navigation }) {
                       </View>
 
                       {/* Cover selection */}
-                      {selectedTemplate.cover && (
-                        <View style={styles.formGroup}>
-                          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Select Cover Variation</Text>
-                          <View style={styles.coverSelectorRow}>
-                            {((Array.isArray(selectedTemplate.cover) ? selectedTemplate.cover : (selectedTemplate.cover.variations || [selectedTemplate.cover]))).map((cov, index) => {
-                              const isSelected = selectedCoverIndex === index;
-                              const isGradient = cov.type === 'gradient';
+                      <View style={styles.formGroup}>
+                        <Text style={[styles.inputLabel, { color: colors.textSecondary, marginBottom: verticalScale(4) }]}>Cover Image</Text>
+                        
+                        {/* Preview of current cover */}
+                        <View style={[styles.coverPreviewContainer, { borderColor: colors.border }]}>
+                          {isUploadingCover ? (
+                            <View style={[styles.coverPreviewImage, { backgroundColor: colors.surfaceHover, alignItems: 'center', justifyContent: 'center' }]}>
+                              <ActivityIndicator size="small" color={colors.primary} />
+                              <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 6 }}>Uploading image...</Text>
+                            </View>
+                          ) : customCover ? (
+                            customCover.type === 'image' ? (
+                              <Image source={{ uri: customCover.value }} style={styles.coverPreviewImage} />
+                            ) : (
+                              <View style={[styles.coverPreviewImage, { backgroundColor: customCover.value }]} />
+                            )
+                          ) : selectedTemplate.cover ? (
+                            (() => {
+                              const variations = Array.isArray(selectedTemplate.cover) 
+                                ? selectedTemplate.cover 
+                                : (selectedTemplate.cover.variations || [selectedTemplate.cover]);
+                              const variation = variations[selectedCoverIndex] || variations[0];
+                              if (variation?.url) {
+                                return <Image source={{ uri: variation.url }} style={styles.coverPreviewImage} />;
+                              }
+                              if (variation?.colorPalette) {
+                                return <View style={[styles.coverPreviewImage, { backgroundColor: variation.colorPalette[0] }]} />;
+                              }
                               return (
-                                <TouchableOpacity
-                                  key={index}
-                                  onPress={() => setSelectedCoverIndex(index)}
-                                  style={[
-                                    styles.coverOptionBtn,
-                                    {
-                                      borderColor: isSelected ? colors.primary : colors.border,
-                                      borderWidth: isSelected ? 2 : 1,
-                                    },
-                                  ]}
-                                >
-                                  {isGradient ? (
-                                    <View style={[styles.coverOptionPreview, { backgroundColor: cov.colorPalette?.[0] || '#4f46e5' }]}>
-                                      <Text style={styles.coverOptionText}>Gradient</Text>
-                                    </View>
-                                  ) : (
-                                    <View style={[styles.coverOptionPreview, { backgroundColor: '#f3f4f6' }]}>
-                                      <ImageIcon size={14} color="#6b7280" />
-                                      <Text style={[styles.coverOptionText, { color: '#4b5563' }]}>Photo</Text>
-                                    </View>
-                                  )}
-                                </TouchableOpacity>
+                                <View style={[styles.coverPreviewImage, { backgroundColor: colors.surfaceHover, alignItems: 'center', justifyContent: 'center' }]}>
+                                  <ImageIcon size={32} color={colors.textTertiary} />
+                                </View>
                               );
-                            })}
-                          </View>
+                            })()
+                          ) : (
+                            <View style={[styles.coverPreviewImage, { backgroundColor: colors.surfaceHover, alignItems: 'center', justifyContent: 'center' }]}>
+                              <ImageIcon size={32} color={colors.textTertiary} />
+                              <Text style={{ color: colors.textTertiary, fontSize: 12, marginTop: 4 }}>No Cover Selected</Text>
+                            </View>
+                          )}
                         </View>
-                      )}
+
+                        {/* Upload Cover Buttons */}
+                        <View style={{ flexDirection: 'row', gap: scale(8), marginTop: verticalScale(8) }}>
+                          <TouchableOpacity 
+                            onPress={handlePickImage} 
+                            style={[styles.uploadOptionBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
+                          >
+                            <Upload size={16} color={colors.textSecondary} />
+                            <Text style={[styles.uploadOptionText, { color: colors.textPrimary }]}>Choose Photo</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity 
+                            onPress={handleTakePhoto} 
+                            style={[styles.uploadOptionBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
+                          >
+                            <Camera size={16} color={colors.textSecondary} />
+                            <Text style={[styles.uploadOptionText, { color: colors.textPrimary }]}>Take Photo</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Preset variations selector */}
+                        {selectedTemplate.cover && (
+                          <View style={{ marginTop: verticalScale(12) }}>
+                            <Text style={[styles.inputLabel, { color: colors.textTertiary, fontSize: 12, marginBottom: verticalScale(4) }]}>Template Variations</Text>
+                            <View style={styles.coverSelectorRow}>
+                              {((Array.isArray(selectedTemplate.cover) ? selectedTemplate.cover : (selectedTemplate.cover.variations || [selectedTemplate.cover]))).map((cov, index) => {
+                                const isSelected = !customCover && selectedCoverIndex === index;
+                                const isGradient = cov.type === 'gradient';
+                                return (
+                                  <TouchableOpacity
+                                    key={index}
+                                    onPress={() => {
+                                      setCustomCover(null);
+                                      setSelectedCoverIndex(index);
+                                    }}
+                                    style={[
+                                      styles.coverOptionBtn,
+                                      {
+                                        borderColor: isSelected ? colors.primary : colors.border,
+                                        borderWidth: isSelected ? 2 : 1,
+                                      },
+                                    ]}
+                                  >
+                                    {isGradient ? (
+                                      <View style={[styles.coverOptionPreview, { backgroundColor: cov.colorPalette?.[0] || '#4f46e5' }]}>
+                                        <Text style={styles.coverOptionText}>Gradient</Text>
+                                      </View>
+                                    ) : (
+                                      <View style={[styles.coverOptionPreview, { backgroundColor: '#f3f4f6' }]}>
+                                        <ImageIcon size={14} color="#6b7280" />
+                                        <Text style={[styles.coverOptionText, { color: '#4b5563' }]}>Preset</Text>
+                                      </View>
+                                    )}
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          </View>
+                        )}
+                      </View>
 
                       {/* Variables Form */}
                       {selectedTemplate.variables && selectedTemplate.variables.length > 0 && (
@@ -1196,6 +1357,33 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(10),
     fontWeight: '600',
     color: '#ffffff',
+  },
+  coverPreviewContainer: {
+    width: '100%',
+    height: verticalScale(120),
+    borderRadius: moderateScale(8),
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginTop: verticalScale(4),
+  },
+  coverPreviewImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  uploadOptionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: verticalScale(10),
+    borderRadius: moderateScale(8),
+    borderWidth: 1,
+    gap: scale(6),
+  },
+  uploadOptionText: {
+    fontSize: moderateScale(13),
+    fontWeight: '600',
   },
   prefillToggleRow: {
     flexDirection: 'row',

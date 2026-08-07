@@ -70,22 +70,30 @@ export const useHomeData = (navigation) => {
     });
   }, []);
 
-  const loadData = useCallback(() => {
-    if (!activeWorkspace?._id) return;
+  const loadData = useCallback((options = {}) => {
+    const silent = options?.silent === true;
+    if (!activeWorkspace?._id) return Promise.resolve();
     setError(null);
-    fetchChannels?.().catch((err) => setError(err.message));
-    fetchThreads?.().catch(console.error);
-    fetchSavedMessages?.().catch(console.error);
-    fetchDrafts?.(activeWorkspace?._id).catch(console.error);
-    fetchScheduledMessages?.().catch(console.error);
+
+    const channelFetchOptions = silent ? { silent: true } : undefined;
+    const threadFetchOptions = silent ? { silent: true } : undefined;
     
-    categoryAPI.getDepartments()
-      .then(res => {
-        if (res.data && res.data.data) {
-          setDepartments(res.data.data);
-        }
-      })
-      .catch(console.error);
+    const promises = [
+      fetchChannels?.(channelFetchOptions).catch((err) => setError(err.message)),
+      fetchThreads?.(1, threadFetchOptions).catch(console.error),
+      fetchSavedMessages?.().catch(console.error),
+      fetchDrafts?.(activeWorkspace?._id).catch(console.error),
+      fetchScheduledMessages?.().catch(console.error),
+      categoryAPI.getDepartments()
+        .then(res => {
+          if (res.data && res.data.data) {
+            setDepartments(res.data.data);
+          }
+        })
+        .catch(console.error)
+    ];
+
+    return Promise.all(promises);
   }, [
     activeWorkspace?._id,
     fetchChannels,
@@ -101,8 +109,11 @@ export const useHomeData = (navigation) => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
+    try {
+      await loadData({ silent: true });
+    } finally {
+      setRefreshing(false);
+    }
   }, [loadData]);
 
   const handleChannelPress = useCallback((channel) => {

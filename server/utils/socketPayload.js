@@ -9,7 +9,10 @@ function toId(value) {
     return value !== '[object Object]' ? value : null;
   }
   if (typeof value === 'object') {
-    if (value._id != null) return toId(value._id);
+    if (typeof value.toHexString === 'function') {
+      return value.toHexString();
+    }
+    if (value._id != null && value._id !== value) return toId(value._id);
     if (typeof value.toString === 'function') {
       const serialized = value.toString();
       if (serialized !== '[object Object]') return serialized;

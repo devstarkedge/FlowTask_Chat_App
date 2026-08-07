@@ -353,7 +353,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     try {
       const formData = new FormData();
       files.forEach((f) => formData.append("files", f));
-      const { data } = await messageAPI.uploadFiles(
+      const { data } = await messageAPI.uploadFilesSync(
         channelId,
         formData,
         (progressEvent) => {

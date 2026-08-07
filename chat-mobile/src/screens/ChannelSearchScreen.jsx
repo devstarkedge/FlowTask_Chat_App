@@ -238,10 +238,19 @@ export default function ChannelSearchScreen({ route, navigation }) {
       renderItemFn = renderCanvasResult;
     }
 
+    if (!query) {
+      return (
+        <View style={styles.centerContainer}>
+          <Search size={40} color={colors.textTertiary} style={{ marginBottom: 12 }} />
+          <Text style={{ color: colors.textSecondary, fontSize: moderateScale(15) }}>Search messages, files, and canvases</Text>
+        </View>
+      );
+    }
+
     if (data.length === 0 && query) {
       return (
         <View style={styles.centerContainer}>
-          <Text style={{ color: colors.textSecondary }}>No results found for "{query}"</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: moderateScale(15) }}>No results found for "{query}"</Text>
         </View>
       );
     }

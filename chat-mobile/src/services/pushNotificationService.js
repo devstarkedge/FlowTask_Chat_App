@@ -15,25 +15,32 @@ import { Platform } from 'react-native';
 import storage from './storage';
 import { pushAPI } from './api';
 import logger from '../utils/logger';
+import {
+  ANDROID_NOTIFICATION_SOUND,
+  getNotificationSound,
+} from '../constants/notificationSounds';
 
 const PUSH_TOKEN_KEY = 'expo_push_token';
 
-// Navigation ref set from App.js
+// Re-export for callers that need the bundled iOS sound filename.
+export { IOS_NOTIFICATION_SOUND as FLOWTASK_NOTIFICATION_SOUND } from '../constants/notificationSounds';
 let _navigationRef = null;
 export const setNavigationRef = (ref) => { _navigationRef = ref; };
 
 // ─── Foreground Presentation ─────────────────────────────────────────────────
 
-// Suppress OS-level banners when app is foregrounded.
-// The socket notification event triggers a local notification manually,
-// preventing duplicates with the server's Expo push.
+// Suppress duplicate remote pushes when foregrounded; socket shows a local notification instead.
+// Local notifications still play the custom Flowtask sound.
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: false,
-    shouldSetBadge: true,
-    shouldShowBanner: false,
-    shouldShowList: false,
-  }),
+  handleNotification: async (notification) => {
+    const isRemotePush = notification.request.trigger?.type === 'push';
+    return {
+      shouldPlaySound: !isRemotePush,
+      shouldSetBadge: true,
+      shouldShowBanner: false,
+      shouldShowList: false,
+    };
+  },
 });
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -56,7 +63,13 @@ export async function registerForPushNotifications() {
     let finalStatus = existingStatus;
 
     if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
+      const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+        },
+      });
       finalStatus = status;
     }
 
@@ -72,7 +85,7 @@ export async function registerForPushNotifications() {
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#4F46E5',
-        sound: 'default',
+        sound: ANDROID_NOTIFICATION_SOUND,
         enableVibrate: true,
       });
     }
@@ -158,7 +171,7 @@ export async function showLocalNotification({ title, body, data = {} }) {
         title,
         body,
         data,
-        sound: 'default',
+        sound: getNotificationSound(Platform.OS),
         priority: Notifications.AndroidNotificationPriority.HIGH,
       },
       trigger: null, // immediate

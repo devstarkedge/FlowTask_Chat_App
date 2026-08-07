@@ -17,13 +17,14 @@ export const useThreadStore = create(
       threadsPage: 1,
       threadsHasMore: true,
 
-      fetchThreads: async (page = 1) => {
+      fetchThreads: async (page = 1, options = {}) => {
+        const silent = options?.silent === true;
         if (!resolveWorkspaceId()) {
           logger.warn('[ThreadStore] Skipping fetchThreads — no active workspace');
           return;
         }
         // Only show global loading on first page
-        if (page === 1) set({ isLoading: true });
+        if (page === 1 && !silent) set({ isLoading: true });
         try {
           const { data } = await threadAPI.getMyThreads({ page, limit: 20 });
           const raw = data.data?.threads || [];

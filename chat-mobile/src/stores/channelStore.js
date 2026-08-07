@@ -26,12 +26,13 @@ export const useChannelStore = create(
       pinnedIds: [],
       isLoading: false,
 
-      fetchChannels: async () => {
+      fetchChannels: async (options = {}) => {
+        const silent = options?.silent === true;
         if (!resolveWorkspaceId()) {
           logger.warn('[ChannelStore] Skipping fetchChannels — no active workspace');
           return;
         }
-        set({ isLoading: true });
+        if (!silent) set({ isLoading: true });
         try {
           const { data } = await channelAPI.list();
           const channels = data.data.channels;

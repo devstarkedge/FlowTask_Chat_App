@@ -34,6 +34,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { downloadAndSaveFile } from "../utils/fileDownload";
 import logger from '../utils/logger';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { HeaderBackButton } from "../components/common";
 
 
 function formatSize(bytes) {
@@ -283,19 +284,8 @@ export default function FilesScreen({ route, navigation }) {
           },
         ]}
       >
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.back}
-        >
-          <Text style={{ color: colors.primary }}>
-            <CircleChevronLeft
-              size={28}
-              color={colors.primary}
-              strokeWidth={2}
-            />
-          </Text>
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>
+        <HeaderBackButton onPress={() => navigation.goBack()} />
+        <Text style={[styles.title, { color: colors.textPrimary, marginLeft: scale(12), flex: 1 }]} numberOfLines={1} ellipsizeMode="tail">
           {channelName ? `${channelName} — Files` : "Files"}
         </Text>
       </View>
@@ -356,7 +346,14 @@ export default function FilesScreen({ route, navigation }) {
           data={filtered}
           keyExtractor={(item) => item.referenceId || item._id}
           renderItem={renderItem}
-          contentContainerStyle={{ padding: moderateScale(12) }}
+          contentContainerStyle={{ padding: moderateScale(12), flexGrow: 1 }}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                {query ? "No files match your search" : "No files have been sent yet"}
+              </Text>
+            </View>
+          }
           initialNumToRender={10}
           maxToRenderPerBatch={10}
           windowSize={5}
@@ -436,4 +433,14 @@ const styles = StyleSheet.create({
   sub: { fontSize: moderateScale(12), marginTop: verticalScale(4) },
   actions: { flexDirection: "row", alignItems: "center", gap: 6 },
   actionBtn: { padding: moderateScale(6), marginLeft: scale(6) },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: verticalScale(60),
+  },
+  emptyText: {
+    fontSize: moderateScale(15),
+    textAlign: "center",
+  },
 });

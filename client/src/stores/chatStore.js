@@ -29,6 +29,27 @@ let persistTimer = null;
 const typingTimeouts = {};
 const TYPING_AUTO_CLEAR_MS = 5000;
 
+function normalizeChannelId(channelId) {
+  if (channelId == null) return null;
+  if (typeof channelId === "string") {
+    return channelId !== "[object Object]" ? channelId : null;
+  }
+  if (typeof channelId === "object") {
+    if (channelId._id != null) return normalizeChannelId(channelId._id);
+    if (typeof channelId.toString === "function") {
+      const serialized = channelId.toString();
+      if (serialized !== "[object Object]") return serialized;
+    }
+  }
+  return String(channelId);
+}
+
+function normalizeMessage(message) {
+  if (!message) return message;
+  const channelId = normalizeChannelId(message.channelId);
+  return channelId ? { ...message, channelId } : message;
+}
+
 function touchChannel(channelId) {
   const idx = channelAccessOrder.indexOf(channelId);
   if (idx !== -1) channelAccessOrder.splice(idx, 1);
@@ -506,36 +527,56 @@ export const useChatStore = create((set, get) => ({
 
   // ─── Real-time message handlers ─────────────────────────────────────
   addMessage: (message) => {
+    const normalized = normalizeMessage(message);
+    const channelId = normalizeChannelId(normalized.channelId);
+    if (!channelId) return;
+
     set((state) => {
       // Never add thread replies to main chat timeline
-      if (message.threadId) return state;
-      const channelId = message.channelId;
+      if (normalized.threadId) return state;
       const existing = state.messagesByChannel[channelId] || [];
       // Avoid duplicates by _id
-      if (existing.some((m) => m._id === message._id)) return state;
+      if (existing.some((m) => m._id === normalized._id)) return state;
       // Semantic dedup for activity messages: skip if an identical activity
       // (same eventType + taskId) already arrived within the last 60 seconds.
       // This guards against duplicate socket events caused by any future
       // regression in dual-dispatch on the FlowTask side.
-      if (message.activityMeta?.eventType && message.activityMeta?.taskId) {
+      if (normalized.activityMeta?.eventType && normalized.activityMeta?.taskId) {
         const sixtySecsAgo = Date.now() - 60000;
         const isDupe = existing.some(
           (m) =>
-            m.activityMeta?.eventType === message.activityMeta.eventType &&
-            String(m.activityMeta?.taskId) === String(message.activityMeta.taskId) &&
+            m.activityMeta?.eventType === normalized.activityMeta.eventType &&
+            String(m.activityMeta?.taskId) === String(normalized.activityMeta.taskId) &&
             new Date(m.createdAt).getTime() >= sixtySecsAgo,
         );
         if (isDupe) return state;
       }
-      const merged = [...existing, message].sort(
+      const merged = [...existing, normalized].sort(
         (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
       );
-      return {
+
+      const nextState = {
         messagesByChannel: {
           ...state.messagesByChannel,
           [channelId]: merged,
         },
       };
+
+      if (CHAT_FEATURE_FLAGS.normalizedMessageStore && normalized._id) {
+        const channelIds = state.channelMessageIds[channelId] || [];
+        if (!channelIds.includes(normalized._id)) {
+          nextState.messagesById = {
+            ...state.messagesById,
+            [normalized._id]: normalized,
+          };
+          nextState.channelMessageIds = {
+            ...state.channelMessageIds,
+            [channelId]: [...channelIds, normalized._id],
+          };
+        }
+      }
+
+      return nextState;
     });
   },
 
@@ -577,18 +618,19 @@ export const useChatStore = create((set, get) => ({
   reconcileMessage: (tempId, serverMessage) => {
     if (!tempId || !serverMessage) return;
 
+    const normalized = normalizeMessage(serverMessage);
+    const channelId =
+      normalizeChannelId(normalized.channelId) ||
+      normalizeChannelId(get().messageChannelById[tempId]);
+    if (!channelId) return;
+
     set((state) => {
-      const channelId =
-        serverMessage.channelId || state.messageChannelById[tempId];
-      if (!channelId) return state;
       const existing = state.messagesByChannel[channelId] || [];
 
       // Check if already reconciled (edge case: both HTTP response and socket ACK arrive)
-      if (existing.some((m) => m._id === serverMessage._id)) {
+      if (existing.some((m) => m._id === normalized._id)) {
         // Just remove the temp message
         const nextChannelMessages = existing.filter((m) => m._id !== tempId);
-
-        
 
         return {
           messagesByChannel: {
@@ -601,18 +643,36 @@ export const useChatStore = create((set, get) => ({
       // Replace temp message with server message
       const nextChannelMessages = existing.map((m) =>
         m._id === tempId
-          ? { ...serverMessage, pending: false, failed: false }
+          ? { ...normalized, pending: false, failed: false }
           : m,
       );
 
-      
-
-      return {
+      const nextState = {
         messagesByChannel: {
           ...state.messagesByChannel,
           [channelId]: nextChannelMessages,
         },
       };
+
+      if (CHAT_FEATURE_FLAGS.normalizedMessageStore && normalized._id) {
+        nextState.messagesById = {
+          ...state.messagesById,
+          [normalized._id]: { ...normalized, pending: false, failed: false },
+        };
+        if (state.messagesById[tempId]) {
+          const { [tempId]: _removed, ...rest } = nextState.messagesById;
+          nextState.messagesById = rest;
+        }
+        const channelIds = (state.channelMessageIds[channelId] || []).map((id) =>
+          id === tempId ? normalized._id : id,
+        );
+        nextState.channelMessageIds = {
+          ...state.channelMessageIds,
+          [channelId]: [...new Set(channelIds)],
+        };
+      }
+
+      return nextState;
     });
   },
 
@@ -665,29 +725,52 @@ export const useChatStore = create((set, get) => ({
   },
 
   updateMessage: (message) => {
+    const normalized = normalizeMessage(message);
+    if (!normalized?._id) return;
+
+    const channelId =
+      normalizeChannelId(normalized.channelId) ||
+      normalizeChannelId(get().messageChannelById[normalized._id]);
+    if (!channelId) return;
+
     set((state) => {
-      const channelId =
-        message.channelId || state.messageChannelById[message._id];
-      if (!channelId) return state;
       const existing = state.messagesByChannel[channelId] || [];
+      const index = existing.findIndex((m) => m._id === normalized._id);
 
-      let replaced = false;
-      const updatedChannelMessages = existing.map((m) => {
-        if (m._id !== message._id) return m;
-        replaced = true;
-        return message;
-      });
+      let nextChannelMessages;
+      if (index === -1) {
+        nextChannelMessages = [...existing, normalized].sort(
+          (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+        );
+      } else {
+        nextChannelMessages = existing.map((m) =>
+          m._id === normalized._id ? { ...m, ...normalized } : m,
+        );
+      }
 
-      if (!replaced) return state;
-
-      
-
-      return {
+      const nextState = {
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: updatedChannelMessages,
+          [channelId]: nextChannelMessages,
         },
       };
+
+      if (CHAT_FEATURE_FLAGS.normalizedMessageStore) {
+        const current = state.messagesById[normalized._id];
+        nextState.messagesById = {
+          ...state.messagesById,
+          [normalized._id]: current ? { ...current, ...normalized } : normalized,
+        };
+        const channelIds = state.channelMessageIds[channelId] || [];
+        if (!channelIds.includes(normalized._id)) {
+          nextState.channelMessageIds = {
+            ...state.channelMessageIds,
+            [channelId]: [...channelIds, normalized._id],
+          };
+        }
+      }
+
+      return nextState;
     });
   },
 

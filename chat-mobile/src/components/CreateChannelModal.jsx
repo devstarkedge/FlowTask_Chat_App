@@ -96,7 +96,6 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
     }
 
     setLoading(true);
-    setError(null);
     try {
       const channel = await createChannel({
         name: trimmedName,
@@ -378,7 +377,9 @@ const styles = StyleSheet.create({
     paddingVertical: moderateScale(8),
     borderRadius: moderateScale(8),
     minWidth: moderateScale(64),
+    minHeight: moderateScale(36),
     alignItems: "center",
+    justifyContent: "center",
   },
   createBtnText: {
     fontWeight: "700",

@@ -217,7 +217,7 @@ export default function SearchScreen({ navigation }) {
       saveRecentItem(it);
       
       if (it.type === 'channel' || it.type === 'dm') {
-        navigation.navigate('Chat', { channelId: it._id, channelName: it.name });
+       navigation.navigate('Chat', { channelId: it._id || it.id, channelName: it.name || it.slug });
       } else if (it.type === 'user') {
         try {
           const userId = it.id || it._id;
@@ -229,19 +229,21 @@ export default function SearchScreen({ navigation }) {
           Toast.show({ type: 'error', text1: 'Failed to open DM' });
         }
       } else if (it.type === 'file') {
-        navigation.navigate('Chat', { channelId: it.channelId });
+        const actualChannelId = it.channelId?._id || it.channelId || it.channel?._id || it.channel;
+        navigation.navigate('Chat', { channelId: actualChannelId });
       } else if (it.type === 'message' || it.type === 'saved' || it.type === 'pin') {
-        const chId = it.channelId?._id || it.channelId;
+        const actualChannelId = it.channelId?._id || it.channelId || it.channel?._id || it.channel;
         navigation.navigate('Chat', {
-          channelId: chId || it.channel,
-          channelName: it.channelName || 'Chat',
+          channelId: actualChannelId,
+          channelName: it.channelName || it.channel?.name || 'Chat',
           messageId: it._id || it.messageId,
         });
       } else if (it.type === 'thread') {
+        const actualChannelId = it.channelId?._id || it.channelId || it.channel?._id || it.channel;
         navigation.navigate('ThreadDetail', {
           rootMessageId: it._id || it.rootMessageId,
-          channelId: it.channelId?._id || it.channelId,
-          channelName: it.channelName || 'Thread',
+          channelId: actualChannelId,
+          channelName: it.channelName || it.channel?.name || 'Thread',
           rootContent: it.snippet || it.content || '',
           replyCount: it.replyCount || 0,
         });

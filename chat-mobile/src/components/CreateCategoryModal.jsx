@@ -142,12 +142,12 @@ export default function CreateCategoryModal({ visible, onClose }) {
   const loadDepartments = useCallback(async () => {
     const seq = ++deptSeq.current;
     setLoadingDepts(true);
-    setDeptError(null);
     try {
       const response = await syncDepartmentsSingleton();
       if (seq !== deptSeq.current) return;
       const list = response?.data?.data || response?.data || [];
       setDepartments(Array.isArray(list) ? list : []);
+      setDeptError(null);
     } catch (syncErr) {
       try {
         const fallbackResponse = await categoryAPI.getDepartments();
@@ -157,6 +157,8 @@ export default function CreateCategoryModal({ visible, onClose }) {
         if (cached.length === 0) {
           setDeptError(syncErr.response?.data?.error?.message
             || 'Unable to synchronize departments from FlowTask.');
+        } else {
+          setDeptError(null);
         }
       } catch {
         if (seq !== deptSeq.current) return;
@@ -381,17 +383,20 @@ export default function CreateCategoryModal({ visible, onClose }) {
 
                 <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>FLOWTASK DEPARTMENTS</Text>
 
-                {loadingDepts ? (
+                {deptError ? (
+                  <View style={[styles.errorBox, { backgroundColor: '#fff1f2', borderColor: '#fda4af' }]}>
+                    <Text style={styles.errorText}>{deptError}</Text>
+                    <TouchableOpacity onPress={loadDepartments} style={styles.retryBtn} disabled={loadingDepts}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        {loadingDepts && <ActivityIndicator size="small" color="#9f1239" />}
+                        <Text style={styles.retryText}>{loadingDepts ? 'Retrying...' : 'Retry'}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                ) : loadingDepts ? (
                   <View style={styles.center}>
                     <ActivityIndicator size="small" color={colors.primary} />
                     <Text style={[styles.helperText, { color: colors.textSecondary }]}>Loading...</Text>
-                  </View>
-                ) : deptError ? (
-                  <View style={[styles.errorBox, { backgroundColor: '#fff1f2', borderColor: '#fda4af' }]}>
-                    <Text style={styles.errorText}>{deptError}</Text>
-                    <TouchableOpacity onPress={loadDepartments} style={styles.retryBtn}>
-                      <Text style={styles.retryText}>Retry</Text>
-                    </TouchableOpacity>
                   </View>
                 ) : departments.length === 0 ? (
                   <View style={styles.center}>

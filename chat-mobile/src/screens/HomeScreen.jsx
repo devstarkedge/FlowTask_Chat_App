@@ -377,18 +377,7 @@ const HomeScreen = ({ navigation }) => {
     </View>
   ), [visibleCards, colors]);
 
-  if (error) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, { color: colors.textPrimary }]}>{t("Error loading data")}</Text>
-          <TouchableOpacity style={[styles.errorBtn, { backgroundColor: colors.primary }]} onPress={loadData}>
-            <Text style={{ color: colors.textInverse, fontWeight: "600" }}>{t("Try Again")}</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+
 
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundSecondary }]}>
@@ -414,38 +403,54 @@ const HomeScreen = ({ navigation }) => {
         {showHomeLoader && <HomeHeaderLoader colors={colors} />}
       </SafeAreaView>
 
-      <SectionList
-        sections={sections}
-        keyExtractor={(item) => item._id}
-        renderItem={renderItem}
-        renderSectionHeader={renderSectionHeader}
-        renderSectionFooter={renderSectionFooter}
-        ListHeaderComponent={ListHeader}
-        ListFooterComponent={<View style={{ height: scale(100) }} />}
-        showsVerticalScrollIndicator={false}
-        stickySectionHeadersEnabled={false}
-        initialNumToRender={20}
-        maxToRenderPerBatch={10}
-        windowSize={11}
-        removeClippedSubviews={Platform.OS !== "web"}
-        refreshControl={
-          Platform.OS === "android"
-            ? (
-              <RefreshControl
-                refreshing={false}
-                onRefresh={onRefresh}
-                colors={["transparent"]}
-                progressBackgroundColor="transparent"
-                progressViewOffset={-1000}
-              />
-            )
-            : undefined
-        }
-        onScrollEndDrag={Platform.OS !== "android" ? handleIOSPullRefreshEndDrag : undefined}
-        style={{ backgroundColor: colors.backgroundSecondary }}
-      />
+      {error ? (
+        <View style={styles.errorContainer}>
+          <Text style={[styles.errorText, { color: colors.textPrimary, marginBottom: 4 }]}>
+            {t("No Internet Connection")}
+          </Text>
+          <Text style={{ color: colors.textSecondary, marginBottom: 12, textAlign: 'center' }}>
+            {t("Please check your network and try again.")}
+          </Text>
+          <TouchableOpacity style={[styles.errorBtn, { backgroundColor: colors.primary }]} onPress={loadData}>
+            <Text style={{ color: colors.textInverse, fontWeight: "600" }}>{t("Try Again")}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
+          <SectionList
+            sections={sections}
+            keyExtractor={(item) => item._id}
+            renderItem={renderItem}
+            renderSectionHeader={renderSectionHeader}
+            renderSectionFooter={renderSectionFooter}
+            ListHeaderComponent={ListHeader}
+            ListFooterComponent={<View style={{ height: scale(100) }} />}
+            showsVerticalScrollIndicator={false}
+            stickySectionHeadersEnabled={false}
+            initialNumToRender={20}
+            maxToRenderPerBatch={10}
+            windowSize={11}
+            removeClippedSubviews={Platform.OS !== "web"}
+            refreshControl={
+              Platform.OS === "android"
+                ? (
+                  <RefreshControl
+                    refreshing={false}
+                    onRefresh={onRefresh}
+                    colors={["transparent"]}
+                    progressBackgroundColor="transparent"
+                    progressViewOffset={-1000}
+                  />
+                )
+                : undefined
+            }
+            onScrollEndDrag={Platform.OS !== "android" ? handleIOSPullRefreshEndDrag : undefined}
+            style={{ backgroundColor: colors.backgroundSecondary }}
+          />
 
-      <FAB onPress={() => setCreateNewVisible(true)} />
+          <FAB onPress={() => setCreateNewVisible(true)} />
+        </>
+      )}
       <AccountDrawer visible={accountDrawerVisible} onClose={() => setAccountDrawerVisible(false)} navigation={navigation} />
       <CustomizeHomeModal visible={customizeModalVisible} onClose={() => setCustomizeModalVisible(false)} enabledCards={enabledHomeCards} onToggleCard={toggleHomeCard} />
       <CreateNewBottomSheet visible={createNewVisible} onClose={() => setCreateNewVisible(false)} navigation={navigation} />

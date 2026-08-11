@@ -9,9 +9,9 @@
 export const NOTIFICATION_SOUNDS = {
   ios: {
     /** Bundled filename referenced in APNs / local notification payloads */
-    default: 'flowtask-arpeggio.wav',
+    default: 'flowtask_arpeggio.wav',
     /** Files copied into the native iOS bundle via expo-notifications */
-    bundleAssets: ['flowtask-arpeggio.wav'],
+    bundleAssets: ['flowtask_arpeggio.wav'],
   },
   android: {
     default: 'default',

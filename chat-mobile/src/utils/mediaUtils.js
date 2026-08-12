@@ -79,14 +79,14 @@ export function getFileKind(mime = '', name = '', url = '') {
   const urlExt = (urlPath.split('.').pop() || '').toLowerCase();
 
   // Combine extensions to check
-  const ext = /^(jpg|jpeg|png|gif|webp|svg|tiff|tif|bmp|ico|heic|heif|mp4|mov|avi|mkv|webm|flv|wmv|m4v|3gp|mp3|m4a|wav|aac|ogg|flac|opus|wma|pdf|doc|docx|xls|xlsx|csv|ppt|pptx|zip|rar|tar|gz|7z|bz2|xz|js|ts|jsx|tsx|py|java|c|cpp|cs|go|rs|rb|php|swift|kt|sh|bash|json|xml|html|htm|css|yaml|yml|toml|ini|env|md|mdx|txt)$/.test(nameExt)
+  const ext = /^(jpg|jpeg|png|gif|webp|svg|tiff|tif|bmp|ico|heic|heif|avif|dng|raw|mp4|mov|avi|mkv|webm|flv|wmv|m4v|3gp|mp3|m4a|wav|aac|ogg|flac|opus|wma|pdf|doc|docx|xls|xlsx|csv|ppt|pptx|zip|rar|tar|gz|7z|bz2|xz|js|ts|jsx|tsx|py|java|c|cpp|cs|go|rs|rb|php|swift|kt|sh|bash|json|xml|html|htm|css|yaml|yml|toml|ini|env|md|mdx|txt)$/.test(nameExt)
     ? nameExt
     : urlExt;
 
   const isAudioExt = /^(mp3|m4a|wav|aac|ogg|flac|opus|wma)$/.test(ext);
   const isVideoExt = /^(mp4|mov|avi|mkv|webm|flv|wmv|m4v|3gp)$/.test(ext);
 
-  if (cleanMime.startsWith('image/') || /^(jpg|jpeg|png|gif|webp|svg|tiff|tif|bmp|ico|heic|heif)$/.test(ext)) return 'image';
+  if (cleanMime.startsWith('image/') || /^(jpg|jpeg|png|gif|webp|svg|tiff|tif|bmp|ico|heic|heif|avif|dng|raw)$/.test(ext)) return 'image';
   if (isAudioExt || cleanMime.startsWith('audio/')) return 'audio';
   if (cleanMime.startsWith('video/') || isVideoExt) return 'video';
   if (cleanMime === 'application/pdf' || ext === 'pdf') return 'pdf';

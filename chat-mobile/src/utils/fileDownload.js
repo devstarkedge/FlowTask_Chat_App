@@ -11,7 +11,7 @@ import logger from './logger';
 function isMediaFile(mime = '', filename = '') {
   const ext = (filename.split('.').pop() || '').toLowerCase();
   if (mime.startsWith('image/') || mime.startsWith('video/')) return true;
-  return /^(jpg|jpeg|png|gif|webp|bmp|heic|heif|mp4|mov|avi|mkv|webm|m4v|3gp)$/.test(ext);
+  return /^(jpg|jpeg|png|gif|webp|bmp|heic|heif|tiff|tif|avif|dng|raw|mp4|mov|avi|mkv|webm|m4v|3gp)$/.test(ext);
 }
 
 /**

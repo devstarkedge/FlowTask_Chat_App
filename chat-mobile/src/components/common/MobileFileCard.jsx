@@ -405,7 +405,13 @@ export default function MobileFileCard({ file, colors, onLongPress }) {
   }
 
   if (kind === 'image') {
-    const targetUri = thumbUrl || fileUrl;
+    let targetUri = thumbUrl || fileUrl;
+
+    // Fix for Android not natively supporting HEIC rendering:
+    // Ask Cloudinary to deliver it as JPG
+    if (targetUri && targetUri.includes('res.cloudinary.com')) {
+      targetUri = targetUri.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
+    }
 
     logger.info('[MobileFileCard] Final image props:', {
       name,
@@ -451,7 +457,7 @@ export default function MobileFileCard({ file, colors, onLongPress }) {
 
         <ImageViewer
           visible={imgVisible}
-          fileUrl={fileUrl}
+          fileUrl={targetUri}
           name={name}
           mimeType={mime}
           headers={imageHeaders}

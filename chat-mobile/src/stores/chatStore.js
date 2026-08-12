@@ -3,11 +3,56 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import storage from '../services/storage';
 import { useAuthStore } from './authStore';
 import { useChannelStore } from './channelStore';
-import { reactionAPI } from '../services/api';
+import { reactionAPI, messageAPI } from '../services/api';
 import api from '../services/api';
 import logger from '../utils/logger';
 import { useScheduledStore } from './scheduledStore';
 import { enqueueMessage, dequeueMessage } from '../services/offlineQueue';
+import { hasValidReplyTo } from '../utils/replyUtils';
+
+function sanitizeMessageReplyFields(message) {
+  if (!message) return message;
+  if (!hasValidReplyTo(message.replyTo, message.parentMessageId)) {
+    return { ...message, replyTo: null, parentMessageId: message.parentMessageId || null };
+  }
+  return message;
+}
+
+function collectMissingParentIds(messages) {
+  const present = new Set(messages.map((m) => String(m._id)));
+  const missing = [];
+  for (const m of messages) {
+    const parentId = m.parentMessageId || m.replyTo?.messageId;
+    if (!parentId) continue;
+    const id = String(parentId);
+    if (!present.has(id)) {
+      missing.push(id);
+      present.add(id);
+    }
+  }
+  return missing;
+}
+
+function keepParentsWithMessages(messages, maxCount) {
+  if (messages.length <= maxCount) return messages;
+  const newest = messages.slice(messages.length - maxCount);
+  const keepIds = new Set(newest.map((m) => String(m._id)));
+  const extras = [];
+  for (const m of newest) {
+    const pid = m.parentMessageId || m.replyTo?.messageId;
+    if (!pid) continue;
+    const id = String(pid);
+    if (keepIds.has(id)) continue;
+    const parent = messages.find((x) => String(x._id) === id);
+    if (parent) {
+      extras.push(parent);
+      keepIds.add(id);
+    }
+  }
+  return [...extras, ...newest].sort(
+    (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+  );
+}
 
 const typingTimeouts = {};
 const TYPING_AUTO_CLEAR_MS = 5000;
@@ -27,8 +72,31 @@ export const useChatStore = create(
     try {
       const params = cursor ? { cursor } : {};
       const { data } = await api.get(`/channels/${channelId}/messages`, { params });
-      const messages = data.data.items || [];
+      let messages = (data.data.items || []).map(sanitizeMessageReplyFields);
       const hasMore = data.data.hasMore || false;
+
+      // If quote-replies reference parents outside this page, fetch and inject them
+      // so the original message remains visible after refresh.
+      const missingParentIds = collectMissingParentIds(messages);
+      if (missingParentIds.length > 0) {
+        const fetchedParents = await Promise.all(
+          missingParentIds.map(async (id) => {
+            try {
+              const res = await messageAPI.get(id);
+              return sanitizeMessageReplyFields(res?.data?.data?.message || res?.data?.message || res?.data);
+            } catch (err) {
+              logger.warn('[ChatStore] Failed to fetch reply parent message:', id, err?.message);
+              return null;
+            }
+          })
+        );
+        const parents = fetchedParents.filter(
+          (p) => p && p._id && String(p.channelId) === String(channelId) && !p.threadId
+        );
+        if (parents.length > 0) {
+          messages = [...messages, ...parents];
+        }
+      }
 
       logger.info(`[API Response] Channel ${channelId} fetched ${messages.length} messages`, {
         mediaMessagesCount: messages.filter(m => (m.attachments?.length || m.fileReferences?.length || m.imageUrl || m.mediaUrl)).length,
@@ -46,10 +114,7 @@ export const useChatStore = create(
         let unique = Array.from(new Map(merged.map(m => [m._id, m])).values())
           .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
           
-        if (unique.length > MAX_MESSAGES_IN_MEMORY) {
-          // Keep the newest messages (end of array)
-          unique = unique.slice(unique.length - MAX_MESSAGES_IN_MEMORY);
-        }
+        unique = keepParentsWithMessages(unique, MAX_MESSAGES_IN_MEMORY);
 
         logger.info(`[ChatStore State] Stored ${unique.length} unique messages for channel ${channelId}`);
 
@@ -114,8 +179,9 @@ export const useChatStore = create(
       createdAt: new Date().toISOString(),
       pending: true,
       attachments: attachments?.length ? attachments : (fileReferences || []),
-      parentMessageId,
-      replyTo,
+      ...(parentMessageId && replyTo
+        ? { parentMessageId, replyTo }
+        : {}),
     };
 
     // Add locally (don't add to channel list if scheduled)
@@ -202,27 +268,32 @@ export const useChatStore = create(
     const channelId = message.channelId?.toString ? message.channelId.toString() : String(message.channelId);
     if (!channelId || channelId === 'undefined' || channelId === 'null') return;
 
+    // Thread replies belong in the thread view, not the main channel timeline
+    if (message.threadId) return;
+
+    const sanitized = sanitizeMessageReplyFields(message);
+
     set((state) => {
       const existing = state.messagesByChannel[channelId] || [];
-      if (existing.some(m => m._id === message._id)) return state;
+      if (existing.some(m => m._id === sanitized._id)) return state;
       
       const MAX_MESSAGES_IN_MEMORY = 200;
       
-      const newDate = new Date(message.createdAt).getTime();
+      const newDate = new Date(sanitized.createdAt).getTime();
       const lastMsg = existing[existing.length - 1];
       const lastDate = lastMsg ? new Date(lastMsg.createdAt).getTime() : 0;
       
       let updated;
       if (newDate >= lastDate) {
-        updated = [...existing, message];
+        updated = [...existing, sanitized];
       } else {
-        updated = [...existing, message].sort(
+        updated = [...existing, sanitized].sort(
           (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
         );
       }
       
       if (updated.length > MAX_MESSAGES_IN_MEMORY) {
-        updated = updated.slice(updated.length - MAX_MESSAGES_IN_MEMORY);
+        updated = keepParentsWithMessages(updated, MAX_MESSAGES_IN_MEMORY);
       }
 
       return {
@@ -241,7 +312,7 @@ export const useChatStore = create(
       const alreadyHasServerMessage = messages.some(m => m._id === serverMessage._id);
       const tempMsg = messages.find(m => m._id === tempId);
       
-      // Prefer a real client-resolved sender name over generic server fallbacks
+      // Prefer a real client-resolved sender name/content over empty/generic server data
       const serverReplyName = String(serverMessage?.replyTo?.senderName || '').trim().toLowerCase();
       const isGenericServerName =
         !serverReplyName ||
@@ -249,24 +320,39 @@ export const useChatStore = create(
         serverReplyName === 'someone' ||
         serverReplyName === 'unknown' ||
         serverReplyName === 'unknown user';
-      const mergedServerMessage = {
+      const serverReplyContent = String(serverMessage?.replyTo?.content || '').trim();
+      const clientReplyContent = String(tempMsg?.replyTo?.content || '').trim();
+      const shouldKeepClientContent =
+        (!serverReplyContent || serverReplyContent === '...' || serverReplyContent.toLowerCase() === 'message') &&
+        !!clientReplyContent &&
+        clientReplyContent.toLowerCase() !== 'message';
+
+      const rawMerged = {
         ...serverMessage,
         replyTo:
           serverMessage.replyTo || tempMsg?.replyTo
             ? {
+                ...(tempMsg?.replyTo || {}),
                 ...(serverMessage.replyTo || {}),
                 ...(isGenericServerName && tempMsg?.replyTo?.senderName
-                  ? {
-                      senderName: tempMsg.replyTo.senderName,
-                      authorId:
-                        serverMessage.replyTo?.authorId ||
-                        tempMsg.replyTo?.authorId ||
-                        null,
-                    }
+                  ? { senderName: tempMsg.replyTo.senderName }
                   : {}),
+                ...(shouldKeepClientContent
+                  ? { content: tempMsg.replyTo.content }
+                  : {}),
+                authorId:
+                  serverMessage.replyTo?.authorId ||
+                  tempMsg?.replyTo?.authorId ||
+                  null,
+                messageId:
+                  serverMessage.replyTo?.messageId ||
+                  tempMsg?.replyTo?.messageId ||
+                  serverMessage.parentMessageId ||
+                  null,
               }
             : serverMessage.replyTo,
       };
+      const mergedServerMessage = sanitizeMessageReplyFields(rawMerged);
       
       let updatedMessages;
       if (alreadyHasServerMessage) {

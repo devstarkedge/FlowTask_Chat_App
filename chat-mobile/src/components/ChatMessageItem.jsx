@@ -14,7 +14,7 @@ import ReactionBar from './ReactionBar';
 import ReplyQuotePreview from './ReplyQuotePreview';
 import logger from '../utils/logger';
 import { getFileKind, getMessageAttachments } from '../utils/mediaUtils';
-import { resolveReplyToSenderName, isGenericName } from '../utils/replyUtils';
+import { resolveReplyToSenderName, isGenericName, hasValidReplyTo, resolveReplyToContent, resolveReplyToAttachment } from '../utils/replyUtils';
 
 // Helpers
 const getAuthorId = (item) => item?.authorId?._id || item?.authorId;
@@ -137,15 +137,14 @@ const ChatMessageItem = memo(({
   const contentColor = isMe ? colors.messageTextSent : colors.messageTextReceived;
 
   const replySenderOverride = (() => {
-    if (!item.replyTo) return null;
+    if (!hasValidReplyTo(item.replyTo, item.parentMessageId)) return null;
     const members = membersByChannel?.[channelId] || [];
     const existing = (item.replyTo.senderName || "").trim();
     if (existing && !isGenericName(existing)) return existing;
-
-    // Resolve via authorId on replyTo, or look up nothing further here
-    // (ChatScreen already enriches; this is a safety net)
     return resolveReplyToSenderName(item.replyTo, null, members);
   })();
+
+  const showReplyQuote = hasValidReplyTo(item.replyTo, item.parentMessageId);
 
   return (
     <RNView 
@@ -187,14 +186,12 @@ const ChatMessageItem = memo(({
         )}
         {!isMe && isCompact && <RNView style={{ width: scale(32) }} />}
 
-        <Pressable
+        <RNView
           style={[
             styles.messageContent,
             isMe ? styles.messageContentMe : styles.messageContentThem,
             { maxWidth: maxBubbleWidth, flexShrink: 1 }
           ]}
-          onLongPress={() => !isDeleted && showMessageActions(item)}
-          delayLongPress={350}
         >
           {!isMe && !isCompact && (
             <RNView style={styles.senderRow}>
@@ -227,7 +224,7 @@ const ChatMessageItem = memo(({
               },
             ]}
           >
-            {item.replyTo ? (
+            {showReplyQuote ? (
               <ReplyQuotePreview
                 replyTo={item.replyTo}
                 colors={colors}
@@ -244,6 +241,10 @@ const ChatMessageItem = memo(({
                 }
               />
             ) : null}
+            <Pressable
+              onLongPress={() => !isDeleted && showMessageActions(item)}
+              delayLongPress={350}
+            >
             {item.forwardMeta?.isForwarded && (
               <RNView style={[styles.forwardedRow, { borderBottomColor: colors.border }]}>
                 <Reply size={12} color={contentColor} style={{ marginRight: scale(4), transform: [{ scaleX: -1 }] }} />
@@ -353,6 +354,7 @@ const ChatMessageItem = memo(({
                 <Bookmark size={10} color={colors.primary} fill={colors.primary} />
               </RNView>
             )}
+            </Pressable>
           </RNView>
 
           {!isDeleted && (
@@ -404,7 +406,7 @@ const ChatMessageItem = memo(({
               )}
             </RNTouchableOpacity>
           )}
-        </Pressable>
+        </RNView>
       </RNView>
     </RNView>
   );

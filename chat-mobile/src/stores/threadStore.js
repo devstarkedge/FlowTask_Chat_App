@@ -216,22 +216,24 @@ export const useThreadStore = create(
           pending: true,
           fileReferences: fileReferences || [],
           mentions: mentions || [],
-          parentMessageId,
-          replyTo,
+          ...(parentMessageId && replyTo
+            ? { parentMessageId, replyTo }
+            : {}),
         };
 
         get().addThreadReply(rootMessageId, optimisticReply);
 
         try {
-          const { data } = await api.post(`/channels/${channelId}/messages`, {
+          const payload = {
             content,
             htmlContent,
             threadId: rootMessageId,
-            parentMessageId,
             fileReferences,
             mentions,
             tempId,
-          });
+          };
+          if (parentMessageId) payload.parentMessageId = parentMessageId;
+          const { data } = await api.post(`/channels/${channelId}/messages`, payload);
           const serverReply = data.data?.message || data.data;
           // Replace temp with server reply, then dedup (socket may have already added it)
           set((state) => {

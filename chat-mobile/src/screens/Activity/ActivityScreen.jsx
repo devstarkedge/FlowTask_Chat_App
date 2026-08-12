@@ -16,6 +16,7 @@ import { useNotificationStore } from "../../stores/notificationStore";
 import { useThemeStore } from "../../stores/themeStore";
 import { AppAvatar, AppScreen } from "../../components/common";
 import ReplyQuotePreview from "../../components/ReplyQuotePreview";
+import { hasValidReplyTo } from "../../utils/replyUtils";
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -207,7 +208,7 @@ const ActivityRow = React.memo(({ item, colors, navigation }) => {
           </View>
           <Text style={[arStyles.context, { color: colors.textSecondary }]}>{contextStr}</Text>
 
-          {item.replyTo?.senderName || item.replyTo?.content ? (
+          {hasValidReplyTo(item.replyTo) ? (
             <ReplyQuotePreview
               replyTo={item.replyTo}
               colors={colors}

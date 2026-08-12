@@ -2,16 +2,17 @@ import React, { memo } from "react";
 import {
   View,
   Text,
-  Pressable,
+  TouchableOpacity,
   Image,
   StyleSheet,
 } from "react-native";
+import { File, Film, Image as ImageIcon, Music } from "lucide-react-native";
 import { moderateScale, scale, verticalScale } from "../utils/responsive";
-import { getReplyToSnippet } from "../utils/replyUtils";
+import { getReplyToSnippet, hasValidReplyTo, hasValidAttachment } from "../utils/replyUtils";
 
 /**
  * Quoted original-message preview for Chat / Thread / Activity.
- * WhatsApp-style: accent bar + name + snippet. Tap scrolls to original.
+ * WhatsApp-style: accent bar + name + snippet/media. Tap scrolls to original.
  */
 const ReplyQuotePreview = memo(function ReplyQuotePreview({
   replyTo,
@@ -21,20 +22,30 @@ const ReplyQuotePreview = memo(function ReplyQuotePreview({
   isMe = false,
   senderNameOverride = null,
 }) {
-  if (!replyTo) return null;
+  if (!hasValidReplyTo(replyTo)) return null;
 
   const rawName = (senderNameOverride || replyTo.senderName || "").trim();
   const senderName = rawName || "Someone";
   const snippet = getReplyToSnippet(replyTo);
+  const attachment = hasValidAttachment(replyTo.attachment) ? replyTo.attachment : null;
 
+  const type = String(attachment?.type || "").toLowerCase();
   const thumbUri =
-    replyTo.attachment?.thumbnailUrl ||
-    (["gif", "image", "video"].includes(replyTo.attachment?.type)
-      ? replyTo.attachment?.url
-      : null);
+    attachment?.thumbnailUrl ||
+    (type.includes("gif") || type.includes("image") || type.includes("photo")
+      ? attachment?.url
+      : null) ||
+    (type.includes("video") ? attachment?.thumbnailUrl : null);
 
-  // Show image/gif/video thumbs when available (alongside text is fine)
   const showThumb = !!thumbUri;
+  const mediaIcon = (() => {
+    if (!attachment || showThumb) return null;
+    if (type.includes("video")) return Film;
+    if (type.includes("audio")) return Music;
+    if (type.includes("image") || type.includes("photo") || type.includes("gif")) return ImageIcon;
+    return File;
+  })();
+  const MediaIcon = mediaIcon;
 
   const accent = colors.primary || "#6366F1";
   const nameColor = accent;
@@ -48,7 +59,7 @@ const ReplyQuotePreview = memo(function ReplyQuotePreview({
         ? "rgba(0,0,0,0.06)"
         : "rgba(0,0,0,0.05)";
 
-  const content = (
+  const body = (
     <View
       style={[
         styles.container,
@@ -68,7 +79,23 @@ const ReplyQuotePreview = memo(function ReplyQuotePreview({
 
       <View style={styles.bodyRow}>
         {showThumb ? (
-          <Image source={{ uri: thumbUri }} style={styles.thumb} resizeMode="cover" />
+          <View style={styles.thumbWrap}>
+            <Image source={{ uri: thumbUri }} style={styles.thumb} resizeMode="cover" />
+            {type.includes("video") ? (
+              <View style={styles.videoBadge}>
+                <Film size={10} color="#fff" />
+              </View>
+            ) : null}
+          </View>
+        ) : MediaIcon ? (
+          <View
+            style={[
+              styles.thumbPlaceholder,
+              { backgroundColor: colors.border || "rgba(0,0,0,0.08)" },
+            ]}
+          >
+            <MediaIcon size={14} color={textColor} />
+          </View>
         ) : null}
         <Text
           style={[
@@ -78,24 +105,34 @@ const ReplyQuotePreview = memo(function ReplyQuotePreview({
           ]}
           numberOfLines={2}
         >
-          {snippet || "Message"}
+          {snippet || (attachment ? inferFallback(attachment) : "Original message")}
         </Text>
       </View>
     </View>
   );
 
-  if (!onPress) return content;
+  if (!onPress) return body;
 
   return (
-    <Pressable
+    <TouchableOpacity
       onPress={onPress}
-      hitSlop={4}
-      style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+      activeOpacity={0.7}
+      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      delayPressIn={0}
     >
-      {content}
-    </Pressable>
+      {body}
+    </TouchableOpacity>
   );
 });
+
+function inferFallback(attachment) {
+  const type = String(attachment?.type || "").toLowerCase();
+  if (type.includes("gif")) return "GIF";
+  if (type.includes("video")) return "Video";
+  if (type.includes("audio")) return "Voice note";
+  if (type.includes("image") || type.includes("photo")) return "Photo";
+  return attachment?.name || "Attachment";
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -106,7 +143,7 @@ const styles = StyleSheet.create({
     paddingLeft: scale(10),
     paddingRight: scale(10),
     marginBottom: verticalScale(8),
-    minWidth: scale(120),
+    minWidth: scale(140),
     alignSelf: "stretch",
   },
   activityContainer: {
@@ -127,10 +164,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  thumb: {
+  thumbWrap: {
     width: scale(36),
     height: scale(36),
     borderRadius: moderateScale(6),
+    overflow: "hidden",
+  },
+  thumb: {
+    width: "100%",
+    height: "100%",
+  },
+  videoBadge: {
+    position: "absolute",
+    right: 2,
+    bottom: 2,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 8,
+    padding: 2,
+  },
+  thumbPlaceholder: {
+    width: scale(36),
+    height: scale(36),
+    borderRadius: moderateScale(6),
+    alignItems: "center",
+    justifyContent: "center",
   },
   snippet: {
     flex: 1,

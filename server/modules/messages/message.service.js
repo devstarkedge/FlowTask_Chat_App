@@ -140,7 +140,10 @@ class MessageService {
         }
         pSenderName = pSenderName || 'Someone';
 
-        const pContent = parentMsg.content || stripHtml(parentMsg.htmlContent) || '';
+        const pContent =
+          parentMsg.content ||
+          stripHtml(parentMsg.htmlContent || '') ||
+          '';
         
         let pAttachment = null;
         // Prefer real media thumbs; skip empty attachment shells that clutter the quote UI

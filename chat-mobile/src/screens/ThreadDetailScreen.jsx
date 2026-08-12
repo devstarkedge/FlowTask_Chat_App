@@ -29,7 +29,7 @@ import MessageComposer from '../components/MessageComposer';
 import ReplyQuotePreview from '../components/ReplyQuotePreview';
 import GifRenderer from '../components/GifRenderer';
 import AudioMessagePlayer from '../components/AudioMessagePlayer';
-import { resolveMessageSenderName, resolveReplyToSenderName } from '../utils/replyUtils';
+import { resolveMessageSenderName, resolveReplyToSenderName, resolveReplyToContent, resolveReplyToAttachment, hasValidReplyTo } from '../utils/replyUtils';
 import { useChannelStore } from '../stores/channelStore';
 import VideoMessagePlayer from '../components/VideoMessagePlayer';
 import { Bookmark, Share, MoreVertical } from 'lucide-react-native';
@@ -154,7 +154,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                 {formatRelativeTimeLong(item.createdAt).replace(' minutes', 'm').replace(' hours', 'h').replace(' days', 'd')}
               </Text>
             </View>
-            {item.replyTo && (
+            {hasValidReplyTo(item.replyTo, item.parentMessageId) && (
               <ReplyQuotePreview
                 replyTo={{
                   ...item.replyTo,
@@ -169,6 +169,26 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                         ),
                     channelMembers
                   ),
+                  content: resolveReplyToContent(
+                    item.replyTo,
+                    String(item.replyTo?.messageId || item.parentMessageId) === String(rootMessageId)
+                      ? effectiveRoot
+                      : replies.find(
+                          (r) =>
+                            String(r._id) ===
+                            String(item.replyTo?.messageId || item.parentMessageId)
+                        )
+                  ),
+                  attachment: resolveReplyToAttachment(
+                    item.replyTo,
+                    String(item.replyTo?.messageId || item.parentMessageId) === String(rootMessageId)
+                      ? effectiveRoot
+                      : replies.find(
+                          (r) =>
+                            String(r._id) ===
+                            String(item.replyTo?.messageId || item.parentMessageId)
+                        )
+                  ) || item.replyTo?.attachment,
                 }}
                 colors={colors}
                 variant="thread"

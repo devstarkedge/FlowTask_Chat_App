@@ -75,7 +75,7 @@ import { formatMessageTime } from '../../utils/dateUtils';
 import logger from '../../utils/logger';
 import ENV from '../../config/environment';
 import { normalizeMediaUrl, getMessageAttachments } from '../../utils/mediaUtils';
-import { resolveReplyToSenderName, resolveMessageSenderName } from '../../utils/replyUtils';
+import { resolveReplyToSenderName, resolveMessageSenderName, resolveReplyToContent, resolveReplyToAttachment, hasValidReplyTo } from '../../utils/replyUtils';
 import MessageStatusTicks from '../../components/MessageStatusTicks';
 import MessageInfoModal from '../../components/MessageInfoModal';
 import GifRenderer from '../../components/GifRenderer';
@@ -190,6 +190,7 @@ const ChatScreen = ({ route, navigation }) => {
   const [forwardTarget, setForwardTarget] = useState(null);
   const [scrolledToMessageId, setScrolledToMessageId] = useState(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const [jumpToMessageId, setJumpToMessageId] = useState(null);
   const [messageInfoTarget, setMessageInfoTarget] = useState(null);
 
   // Auto-scroll refs
@@ -291,30 +292,49 @@ const ChatScreen = ({ route, navigation }) => {
     loadThreadAndNavigate();
   }, [threadId, isLoadingMessages, messages, channelId, channelName, navigation, highlightedMessageIdFromParam, route.params]);
 
-  // Scrolling and highlighting target message from Later Panel
-  useEffect(() => {
-    if (targetMessageId && displayedMessages.length > 0 && scrolledToMessageId !== targetMessageId) {
-      const index = displayedMessages.findIndex(m => m._id === targetMessageId);
-      if (index !== -1) {
-        setScrolledToMessageId(targetMessageId);
-        setHighlightedMessageId(targetMessageId);
-
-        setTimeout(() => {
-          flatListRef.current?.scrollToIndex({
-            index,
-            animated: true,
-            viewPosition: 0.5,
-          });
-        }, 400);
-
-        setTimeout(() => {
-          setHighlightedMessageId(null);
-        }, 2500);
-      }
-    }
-  }, [targetMessageId, displayedMessages, scrolledToMessageId]);
-
   const displayedMessages = useMemo(() => [...messages].reverse(), [messages]);
+
+  // Scrolling and highlighting target message from Later Panel / reply taps
+  useEffect(() => {
+    const targetId = jumpToMessageId || targetMessageId;
+    if (!targetId || displayedMessages.length === 0) return;
+    if (scrolledToMessageId && String(scrolledToMessageId) === String(targetId) && !jumpToMessageId) {
+      return;
+    }
+
+    const index = displayedMessages.findIndex(
+      (m) => String(m._id) === String(targetId)
+    );
+    if (index === -1) return;
+
+    setScrolledToMessageId(targetId);
+    setHighlightedMessageId(String(targetId));
+
+    const scroll = () => {
+      try {
+        flatListRef.current?.scrollToIndex({
+          index,
+          animated: true,
+          viewPosition: 0.4,
+        });
+      } catch (_) {
+        // ignore; onScrollToIndexFailed will retry
+      }
+    };
+
+    requestAnimationFrame(scroll);
+    setTimeout(scroll, 150);
+    setTimeout(scroll, 400);
+
+    setTimeout(() => {
+      setHighlightedMessageId((current) =>
+        String(current) === String(targetId) ? null : current
+      );
+      setJumpToMessageId((current) =>
+        current && String(current) === String(targetId) ? null : current
+      );
+    }, 2800);
+  }, [targetMessageId, jumpToMessageId, displayedMessages, scrolledToMessageId]);
 
   // Memoize derived values to prevent re-render loops
   const typingUsers = useChatStore(useShallow((s) => {
@@ -536,43 +556,42 @@ const ChatScreen = ({ route, navigation }) => {
     </View>
   );
 
-  const handleReplyPreviewPress = useCallback((parentId) => {
+  const handleReplyPreviewPress = useCallback(async (parentId) => {
     if (!parentId) return;
     const targetId = String(parentId);
-    const index = displayedMessages.findIndex(
-      (m) => String(m._id) === targetId
-    );
-    if (index === -1) return;
 
-    // Flash highlight first so the user sees the target even if already nearby
+    // Always highlight intent immediately
     setHighlightedMessageId(targetId);
+    setScrolledToMessageId(null); // allow re-jump to same message
+    setJumpToMessageId(targetId);
 
-    const scroll = () => {
-      try {
-        flatListRef.current?.scrollToIndex({
-          index,
-          animated: true,
-          viewPosition: 0.45,
-        });
-      } catch (_) {
-        // Fallback: approximate offset for inverted list
-        flatListRef.current?.scrollToOffset({
-          offset: Math.max(0, index * 80),
-          animated: true,
-        });
-      }
+    // If not loaded yet, page older history until we find it (or give up)
+    const findIndex = () => {
+      const list = [...(useChatStore.getState().messagesByChannel[channelId] || [])].reverse();
+      return list.findIndex((m) => String(m._id) === targetId);
     };
 
-    // Two-phase scroll helps when the cell isn't mounted yet
-    requestAnimationFrame(scroll);
-    setTimeout(scroll, 120);
+    let index = findIndex();
+    if (index !== -1) return; // effect will scroll
 
-    setTimeout(() => {
-      setHighlightedMessageId((current) =>
-        String(current) === targetId ? null : current
-      );
-    }, 2800);
-  }, [displayedMessages]);
+    let attempts = 0;
+    while (attempts < 12) {
+      const hasMore = useChatStore.getState().hasMore[channelId];
+      const msgs = useChatStore.getState().messagesByChannel[channelId] || [];
+      if (!hasMore || msgs.length === 0) break;
+      const oldest = msgs[0];
+      if (!oldest?._id) break;
+      try {
+        await fetchMessages(channelId, oldest._id);
+      } catch (_) {
+        break;
+      }
+      attempts += 1;
+      index = findIndex();
+      if (index !== -1) break;
+    }
+    // jumpToMessageId + displayedMessages update will trigger scroll effect
+  }, [channelId, fetchMessages]);
 
   const renderMessage = useCallback(({ item, index }) => {
     const prevItem = displayedMessages[index + 1];
@@ -580,13 +599,13 @@ const ChatScreen = ({ route, navigation }) => {
 
     // Enrich incomplete replyTo snapshots from the live parent message / members
     let enrichedItem = item;
-    if (item.replyTo || item.parentMessageId) {
+    if (hasValidReplyTo(item.replyTo, item.parentMessageId)) {
       const parentId = item.replyTo?.messageId || item.parentMessageId;
       const parent = displayedMessages.find((m) => String(m._id) === String(parentId));
       const members = membersByChannel[channelId] || [];
       const resolvedName = resolveReplyToSenderName(item.replyTo, parent, members);
-      const existingContent = (item.replyTo?.content || "").trim();
-      const contentFromParent = (parent?.content || "").trim();
+      const resolvedContent = resolveReplyToContent(item.replyTo, parent);
+      const resolvedAttachment = resolveReplyToAttachment(item.replyTo, parent);
 
       enrichedItem = {
         ...item,
@@ -599,10 +618,13 @@ const ChatScreen = ({ route, navigation }) => {
             parent?.authorId ||
             null,
           senderName: resolvedName,
-          content: existingContent || contentFromParent || item.replyTo?.content || "",
-          attachment: item.replyTo?.attachment,
+          content: resolvedContent,
+          ...(resolvedAttachment ? { attachment: resolvedAttachment } : {}),
         },
       };
+    } else if (item.replyTo) {
+      // Strip empty schema-default replyTo so UI never treats this as a reply
+      enrichedItem = { ...item, replyTo: null };
     }
 
     return (
@@ -836,6 +858,8 @@ const ChatScreen = ({ route, navigation }) => {
           }}
           scrollEventThrottle={16}
           onContentSizeChange={() => {
+            // Don't fight reply-jump navigation by snapping back to bottom
+            if (jumpToMessageId) return;
             if (pendingAutoScroll.current || isAtBottomRef.current) {
               flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
               pendingAutoScroll.current = false;
@@ -855,14 +879,19 @@ const ChatScreen = ({ route, navigation }) => {
           updateCellsBatchingPeriod={50}
           removeClippedSubviews={Platform.OS !== 'web'}
           onScrollToIndexFailed={(info) => {
-            flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
+            const approx = Math.max(0, (info.averageItemLength || 72) * info.index);
+            flatListRef.current?.scrollToOffset({ offset: approx, animated: true });
             setTimeout(() => {
               try {
-                flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
+                flatListRef.current?.scrollToIndex({
+                  index: info.index,
+                  animated: true,
+                  viewPosition: 0.4,
+                });
               } catch (e) {
                 // Ignore if it still fails
               }
-            }, 100);
+            }, 250);
           }}
           ListFooterComponent={
             isLoadingMessages ? (

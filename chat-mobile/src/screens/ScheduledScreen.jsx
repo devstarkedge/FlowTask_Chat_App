@@ -145,7 +145,7 @@ const ScheduledScreen = ({ navigation }) => {
 
       <ScheduledMessageDetailsModal
         visible={!!selectedMessage}
-        message={selectedMessage}
+        message={scheduledMessages.find(m => m._id === selectedMessage?._id) || selectedMessage}
         onClose={() => setSelectedMessage(null)}
         colors={colors}
       />

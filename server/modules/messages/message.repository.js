@@ -134,6 +134,55 @@ class MessageRepository {
     messages.reverse();
   }
 
+  // Normalize empty replyTo objects (legacy docs / schema defaults) to null
+  for (const m of messages) {
+    if (m.replyTo && !m.replyTo.messageId && !m.parentMessageId && !m.replyTo.senderName && !m.replyTo.content) {
+      const att = m.replyTo.attachment;
+      const hasAtt = att && (att.url || att.thumbnailUrl || att.name || att.fileId);
+      if (!hasAtt) m.replyTo = null;
+    }
+  }
+
+  // Ensure quoted parent messages stay visible in the channel timeline after refresh.
+  // Quote-replies can reference older parents that fall outside the current page window.
+  const presentIds = new Set(messages.map((m) => m._id.toString()));
+  const missingParentIds = [];
+  for (const m of messages) {
+    const parentId = (m.parentMessageId || m.replyTo?.messageId)?.toString?.()
+      || (m.parentMessageId || m.replyTo?.messageId);
+    if (!parentId) continue;
+    const idStr = parentId.toString();
+    if (!presentIds.has(idStr) && mongoose.isValidObjectId(idStr)) {
+      missingParentIds.push(idStr);
+      presentIds.add(idStr); // de-dupe
+    }
+  }
+
+  if (missingParentIds.length > 0) {
+    const parentFilter = {
+      _id: { $in: missingParentIds.map((id) => new mongoose.Types.ObjectId(id)) },
+      channelId,
+      threadId: null,
+      ...(workspaceId && { workspaceId }),
+    };
+    const parents = await Message.find(parentFilter)
+      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate({
+        path: 'fileReferences',
+        populate: { path: 'fileId' },
+      })
+      .lean();
+
+    if (parents.length > 0) {
+      messages.push(...parents);
+      messages.sort((a, b) => {
+        const aId = a._id.toString();
+        const bId = b._id.toString();
+        return aId < bId ? -1 : aId > bId ? 1 : 0;
+      });
+    }
+  }
+
   // Enrich root messages that have replies with thread participant data
   // so the ThreadPreview in the UI can show replier avatars without extra requests.
   const rootIds = messages.filter((m) => m.replyCount > 0).map((m) => m._id);

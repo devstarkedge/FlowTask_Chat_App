@@ -72,6 +72,37 @@ function serializeFileReferences(fileReferences) {
   });
 }
 
+function serializeReplyTo(replyTo) {
+  if (!replyTo) return null;
+  const plain = typeof replyTo.toObject === 'function' ? replyTo.toObject() : replyTo;
+  const messageId = plain.messageId ? toId(plain.messageId) : null;
+  const authorId = plain.authorId ? toId(plain.authorId) : null;
+  const senderName = plain.senderName || null;
+  const content = plain.content || '';
+  const attachment = plain.attachment && (plain.attachment.url || plain.attachment.thumbnailUrl || plain.attachment.name || plain.attachment.fileId)
+    ? {
+        fileId: plain.attachment.fileId ? toId(plain.attachment.fileId) : null,
+        type: plain.attachment.type || null,
+        name: plain.attachment.name || null,
+        url: plain.attachment.url || null,
+        thumbnailUrl: plain.attachment.thumbnailUrl || null,
+      }
+    : null;
+
+  // Omit empty schema-default objects so clients don't treat every message as a reply
+  if (!messageId && !authorId && !senderName && !content && !attachment) {
+    return null;
+  }
+
+  return {
+    messageId,
+    authorId,
+    senderName,
+    content,
+    ...(attachment ? { attachment } : {}),
+  };
+}
+
 /**
  * Create a minimal message payload for socket emission.
  * @param {object} message - Mongoose message document (lean or populated)
@@ -86,6 +117,8 @@ export function messageSocketPayload(message, extras = {}) {
     _id: toId(plain._id),
     channelId: toId(plain.channelId),
     threadId: plain.threadId ? toId(plain.threadId) : null,
+    parentMessageId: plain.parentMessageId ? toId(plain.parentMessageId) : null,
+    replyTo: serializeReplyTo(plain.replyTo),
     content: plain.content,
     htmlContent: plain.htmlContent,
     contentType: plain.contentType,

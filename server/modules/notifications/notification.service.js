@@ -110,6 +110,7 @@ class NotificationService {
           conversationType: notification.conversationType,
           messageId: notification.sourceType === 'message' ? notification.sourceId : null,
           messagePreview: notification.messagePreview || notification.body || '',
+          replyTo: notification.replyTo || null,
           isRead: false,
           createdAt: notification.createdAt,
         },
@@ -252,7 +253,7 @@ class NotificationService {
   /**
    * Create a thread reply notification.
    */
-  async createThreadReplyNotification({ workspaceId, recipientId, senderId, senderName, senderAvatar, channelId, channelName, threadId, messageId, preview }) {
+  async createThreadReplyNotification({ workspaceId, recipientId, senderId, senderName, senderAvatar, channelId, channelName, threadId, messageId, preview, replyTo }) {
     return this.create({
       workspaceId,
       recipientId,
@@ -270,6 +271,7 @@ class NotificationService {
       conversationId: channelId,
       conversationType: 'channel',
       messagePreview: preview || '',
+      ...(replyTo && { replyTo }),
     });
   }
 

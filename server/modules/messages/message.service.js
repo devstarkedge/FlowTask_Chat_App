@@ -96,7 +96,6 @@ class MessageService {
 
     // Build message data
     const messageData = {
-      clientMessageId: tempId || null,
       channelId,
       authorId,
       content: sanitizedContent,
@@ -111,6 +110,10 @@ class MessageService {
       ...(workspaceId && { workspaceId }),
     };
 
+    if (tempId) {
+      messageData.clientMessageId = tempId;
+    }
+
     if (flowTaskRef) {
       messageData.flowTaskRef = flowTaskRef;
     }
@@ -120,25 +123,44 @@ class MessageService {
       const parentMsg = await messageRepository.findById(parentMessageId, { workspaceId: (workspaceId || channel.workspaceId)?.toString() });
       if (parentMsg) {
         messageData.parentMessageId = parentMessageId;
-        const pSenderName = parentMsg.authorId?.name || parentMsg.senderSnapshot?.name || 'Unknown';
+        const parentAuthorId = parentMsg.authorId?._id || parentMsg.authorId || null;
+        let pSenderName =
+          parentMsg.senderSnapshot?.name ||
+          parentMsg.authorId?.name ||
+          null;
+
+        // If snapshot/populate didn't give a name, fetch the user directly
+        if (!pSenderName && parentAuthorId) {
+          try {
+            const parentAuthor = await userRepository.findById(parentAuthorId);
+            pSenderName = parentAuthor?.name || parentAuthor?.email?.split?.('@')?.[0] || null;
+          } catch (_) {
+            // ignore lookup failure
+          }
+        }
+        pSenderName = pSenderName || 'Someone';
+
         const pContent = parentMsg.content || stripHtml(parentMsg.htmlContent) || '';
         
         let pAttachment = null;
+        // Prefer real media thumbs; skip empty attachment shells that clutter the quote UI
         if (parentMsg.attachments && parentMsg.attachments.length > 0) {
           const firstAtt = parentMsg.attachments[0];
-          pAttachment = {
-            type: 'attachment',
-            name: firstAtt.originalName || firstAtt.fileName,
-            url: firstAtt.url,
-            thumbnailUrl: firstAtt.thumbnailUrl,
-          };
+          if (firstAtt?.url || firstAtt?.thumbnailUrl || firstAtt?.originalName || firstAtt?.fileName) {
+            pAttachment = {
+              type: 'attachment',
+              name: firstAtt.originalName || firstAtt.fileName || 'Attachment',
+              url: firstAtt.url,
+              thumbnailUrl: firstAtt.thumbnailUrl,
+            };
+          }
         } else if (parentMsg.fileReferences && parentMsg.fileReferences.length > 0) {
           const firstFile = parentMsg.fileReferences[0]?.fileId;
-          if (firstFile) {
+          if (firstFile && (firstFile.secureUrl || firstFile.url || firstFile.originalName)) {
             pAttachment = {
               fileId: firstFile._id,
               type: firstFile.resourceType || 'file',
-              name: firstFile.originalName,
+              name: firstFile.originalName || 'Attachment',
               url: firstFile.secureUrl || firstFile.url,
               thumbnailUrl: firstFile.thumbnailUrl,
             };
@@ -166,6 +188,7 @@ class MessageService {
         
         messageData.replyTo = {
           messageId: parentMsg._id,
+          authorId: parentAuthorId,
           senderName: pSenderName,
           content: pContent,
           ...(pAttachment && { attachment: pAttachment }),

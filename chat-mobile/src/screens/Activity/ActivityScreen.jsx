@@ -15,6 +15,7 @@ import { MessageSquare, AtSign, MessageCircle } from 'lucide-react-native';
 import { useNotificationStore } from "../../stores/notificationStore";
 import { useThemeStore } from "../../stores/themeStore";
 import { AppAvatar, AppScreen } from "../../components/common";
+import ReplyQuotePreview from "../../components/ReplyQuotePreview";
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -205,6 +206,14 @@ const ActivityRow = React.memo(({ item, colors, navigation }) => {
             </View>
           </View>
           <Text style={[arStyles.context, { color: colors.textSecondary }]}>{contextStr}</Text>
+
+          {item.replyTo?.senderName || item.replyTo?.content ? (
+            <ReplyQuotePreview
+              replyTo={item.replyTo}
+              colors={colors}
+              variant="activity"
+            />
+          ) : null}
           
           {body ? (
             <Text style={[arStyles.preview, { color: colors.textPrimary }]} numberOfLines={2}>

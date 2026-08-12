@@ -119,6 +119,12 @@ const notificationSchema = new Schema({
     maxlength: 500,
     default: '',
   },
+  // Snapshot of the message being replied to (quote reply or thread root)
+  replyTo: {
+    messageId: { type: Schema.Types.ObjectId, default: null },
+    senderName: { type: String, default: null },
+    content: { type: String, default: null },
+  },
   // Structured deep-link data for exact navigation on click
   deepLink: {
     workspaceId: { type: Schema.Types.ObjectId, default: null },

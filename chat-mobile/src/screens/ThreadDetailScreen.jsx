@@ -457,10 +457,15 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         onForward={() => setForwardTarget(actionAttachmentTarget || actionMenuTarget)}
         onPin={async (msg) => {
           try {
-            await pinsAPI.pin(msg._id);
-            Toast.show({ type: 'success', text1: 'Message pinned' });
+            if (msg.isPinned) {
+              await pinsAPI.unpin(msg._id);
+              Toast.show({ type: 'success', text1: 'Message unpinned' });
+            } else {
+              await pinsAPI.pin(msg._id);
+              Toast.show({ type: 'success', text1: 'Message pinned' });
+            }
           } catch (error) {
-            Toast.show({ type: 'error', text1: 'Failed to pin message' });
+            Toast.show({ type: 'error', text1: msg.isPinned ? 'Failed to unpin message' : 'Failed to pin message' });
           }
           setActionMenuTarget(null);
         }}

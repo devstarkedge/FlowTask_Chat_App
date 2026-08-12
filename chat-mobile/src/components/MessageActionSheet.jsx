@@ -20,6 +20,7 @@ import {
   MessageSquare,
   Star,
   Pin,
+  PinOff,
   Info,
   Download,
 } from 'lucide-react-native';
@@ -236,23 +237,19 @@ const MessageActionSheet = ({
           {/* List Actions */}
           <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
 
-            {!!onReply && (
-              <TouchableOpacity
-                style={styles.listItem}
-                onPress={() => { onClose(); setTimeout(() => onReply(message), 100); }}
-              >
-                <MessageSquare size={20} color={colors.textPrimary} />
-                <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Quote Reply</Text>
-              </TouchableOpacity>
-            )}
-
             {!!onPin && (
               <TouchableOpacity
                 style={styles.listItem}
                 onPress={() => { onClose(); setTimeout(() => onPin(message), 100); }}
               >
-                <Pin size={20} color={colors.textPrimary} />
-                <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Pin Message</Text>
+                {message?.isPinned ? (
+                  <PinOff size={20} color={colors.textPrimary} />
+                ) : (
+                  <Pin size={20} color={colors.textPrimary} />
+                )}
+                <Text style={[styles.listItemText, { color: colors.textPrimary }]}>
+                  {message?.isPinned ? 'Unpin Message' : 'Pin Message'}
+                </Text>
               </TouchableOpacity>
             )}
 

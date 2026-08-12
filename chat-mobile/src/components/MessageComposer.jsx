@@ -669,6 +669,13 @@ const MessageComposer = React.memo(function MessageComposer({
     async (pickedFiles) => {
       if (!pickedFiles || !pickedFiles.length) return;
 
+      const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+      const oversizedFiles = pickedFiles.filter(f => (f.fileSize || f.size || 0) > MAX_FILE_SIZE);
+      if (oversizedFiles.length > 0) {
+        Alert.alert('File Too Large', 'One or more files exceed the 50MB size limit. Please choose smaller files.');
+        return;
+      }
+
       if (pendingFiles.length + pickedFiles.length > 10) {
         Alert.alert('Upload Limit', 'You can upload up to 10 files at a time.');
         return;

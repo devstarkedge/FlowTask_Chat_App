@@ -21,7 +21,7 @@ if (!fs.existsSync(uploadDir)) {
 // Allowed MIME types
 const ALLOWED_TYPES = new Set([
   // ── Images (SVG allowed — sanitized by Cloudinary, served as attachment) ──
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/heic', 'image/heif',
 
   // ── Video ─────────────────────────────────────────────────────────────
   'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/mpeg',
@@ -64,6 +64,7 @@ const ALLOWED_TYPES = new Set([
 // Mime-to-extension mapping for safe filename generation
 const MIME_TO_EXT = {
   'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp',
+  'image/heic': '.heic', 'image/heif': '.heif',
   'video/mp4': '.mp4', 'video/quicktime': '.mov', 'video/x-msvideo': '.avi',
   'image/svg+xml': '.svg',
   'video/webm': '.webm', 'video/mpeg': '.mpeg',

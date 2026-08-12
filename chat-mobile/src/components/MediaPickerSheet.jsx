@@ -118,7 +118,7 @@ export default function MediaPickerSheet({
     if (!fileName) {
       const cleanUri = (localUri || '').split('?')[0];
       const uriExt = cleanUri.split('.').pop().toLowerCase();
-      if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'mov'].includes(uriExt)) {
+      if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'mov', 'heic', 'heif'].includes(uriExt)) {
         fileName = `media_${Date.now()}.${uriExt}`;
       } else {
         fileName = `media_${Date.now()}.${asset.mediaType === 'video' ? 'mp4' : 'png'}`;
@@ -131,6 +131,8 @@ export default function MediaPickerSheet({
       else if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg';
       else if (ext === 'gif') mimeType = 'image/gif';
       else if (ext === 'webp') mimeType = 'image/webp';
+      else if (ext === 'heic') mimeType = 'image/heic';
+      else if (ext === 'heif') mimeType = 'image/heif';
       else if (ext === 'mp4') mimeType = 'video/mp4';
       else if (ext === 'mov') mimeType = 'video/quicktime';
       else mimeType = asset.mediaType === 'video' ? 'video/mp4' : 'image/jpeg';

@@ -45,6 +45,7 @@ export const sendMessageSchema = z
       })
       .optional(),
     threadId: z.string().optional(),
+    parentMessageId: z.string().optional(),
     tempId: z.string().max(100).optional(),
     mentions: z
       .array(
@@ -228,6 +229,7 @@ export const scheduleMessageSchema = z
     content: z.string().max(10000).optional().default(""),
     htmlContent: z.string().max(50000).optional().default(""),
     threadId: z.string().optional(),
+    parentMessageId: z.string().optional(),
     scheduledAt: z.string().min(1, "scheduledAt is required"),
     attachments: z
       .array(

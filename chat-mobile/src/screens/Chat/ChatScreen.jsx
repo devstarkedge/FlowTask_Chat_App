@@ -196,6 +196,8 @@ const ChatScreen = ({ route, navigation }) => {
   // Auto-scroll refs
   const isAtBottomRef = useRef(true);
   const pendingAutoScroll = useRef(false);
+  const isAutoScrolling = useRef(false);
+  const autoScrollTimeout = useRef(null);
 
   // ─── Message Info handler ─────────────────────────────────────────────
   const handleMessageInfo = useCallback((message) => {
@@ -853,16 +855,24 @@ const ChatScreen = ({ route, navigation }) => {
           onScroll={(e) => {
             // Inverted list: offset 0 is the bottom
             const offsetY = e.nativeEvent.contentOffset.y;
-            // Increased threshold to 300 to tolerate rapid layout shifts when receiving multiple messages
-            isAtBottomRef.current = offsetY <= 300;
+            // Increased threshold to tolerate layout shifts
+            if (!isAutoScrolling.current) {
+              isAtBottomRef.current = offsetY <= 300;
+            }
           }}
           scrollEventThrottle={16}
           onContentSizeChange={() => {
             // Don't fight reply-jump navigation by snapping back to bottom
             if (jumpToMessageId) return;
             if (pendingAutoScroll.current || isAtBottomRef.current) {
+              isAutoScrolling.current = true;
               flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
               pendingAutoScroll.current = false;
+              
+              if (autoScrollTimeout.current) clearTimeout(autoScrollTimeout.current);
+              autoScrollTimeout.current = setTimeout(() => {
+                isAutoScrolling.current = false;
+              }, 400);
             }
           }}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
@@ -1031,6 +1041,23 @@ const ChatScreen = ({ route, navigation }) => {
         }}
         onSave={() => toggleSaveMessage?.(actionMenuTarget?._id)}
         onRemind={() => setReminderTarget(actionMenuTarget?._id)}
+        onReplyInThread={() => {
+          const msg = actionMenuTarget;
+          navigation.navigate('ThreadDetail', {
+            rootMessageId: msg._id,
+            channelId,
+            channelName: channelName || route.params?.channelName || '',
+            rootContent: msg.content || '',
+            rootHtmlContent: msg.htmlContent || '',
+            rootAttachments: msg.attachments || msg.files || undefined,
+            rootContentType: msg.contentType || msg.type,
+            rootGifMeta: msg.gifMeta || undefined,
+            rootAudioMeta: msg.audioMeta || undefined,
+            replyCount: msg.replyCount || 0,
+            rootAuthor: msg.authorId,
+          });
+          setActionMenuTarget(null);
+        }}
         onReply={() => {
           const msg = actionMenuTarget;
           const members = membersByChannel[channelId] || [];
@@ -1042,10 +1069,12 @@ const ChatScreen = ({ route, navigation }) => {
               name: resolvedName,
               avatar: msg?.senderSnapshot?.avatar || msg?.authorId?.avatar || null,
             },
-            attachmentContext: actionAttachmentTarget,
+            snapshotType: msg.contentType || msg.type
           });
+          if (textInputRef.current) {
+            textInputRef.current.focus();
+          }
           setActionMenuTarget(null);
-          setActionAttachmentTarget(null);
         }}
         onEdit={() => {
           setEditingMessage(actionMenuTarget);

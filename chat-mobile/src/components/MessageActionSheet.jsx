@@ -90,6 +90,7 @@ const MessageActionSheet = ({
   onEdit,
   onDelete,
   onCopyLink,
+  onReplyInThread,
   onReply,
   onMarkUnread,
   onToggleNotifications,
@@ -220,6 +221,16 @@ const MessageActionSheet = ({
                 {isSaved ? 'Unsave' : 'Save'}
               </Text>
             </TouchableOpacity>
+
+            {!!onReplyInThread && (
+              <TouchableOpacity
+                style={[styles.bigActionBtn, { backgroundColor: colors.backgroundSecondary }]}
+                onPress={() => { onClose(); setTimeout(() => onReplyInThread(message), 100); }}
+              >
+                <MessageSquare size={24} color={colors.textPrimary} style={{ marginBottom: verticalScale(8) }} />
+                <Text style={[styles.bigActionText, { color: colors.textPrimary }]}>Reply in thread</Text>
+              </TouchableOpacity>
+            )}
 
             {!!onReply && (
               <TouchableOpacity

@@ -65,6 +65,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
     fileReferences,
     flowTaskRef,
     threadId,
+    parentMessageId,
     tempId,
     mentions,
     gifMeta,
@@ -88,6 +89,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
     fileReferences,
     flowTaskRef,
     threadId,
+    parentMessageId,
     tempId,
     workspaceId,
     mentions,
@@ -1232,7 +1234,7 @@ export const updateScheduledMessage = asyncHandler(async (req, res) => {
       status: "pending",
     },
     { $set: updateData },
-    { returnDocument: "after" },
+    { new: true },
   ).populate("authorId", "name avatar");
 
   if (!scheduled) {
@@ -1258,7 +1260,7 @@ export const sendScheduledNow = asyncHandler(async (req, res) => {
       status: 'pending',
     },
     { $set: { status: 'processing' } },
-    { returnDocument: 'after' },
+    { new: true },
   );
 
   if (!scheduled) {
@@ -1273,7 +1275,12 @@ export const sendScheduledNow = asyncHandler(async (req, res) => {
       htmlContent: scheduled.htmlContent,
       threadId: scheduled.threadId,
       workspaceId: scheduled.workspaceId,
-      attachments: scheduled.attachments || [],
+      attachments: (scheduled.attachments || []).map(att => ({
+        ...att.toObject(),
+        originalName: att.fileName || 'attachment',
+        source: 'chat_upload',
+      })),
+      fileReferences: (scheduled.attachments || []).map(att => att.fileId).filter(Boolean),
       mentions: (scheduled.mentions || []).map((m) => ({
         userId: m.targetId,
         username: m.name,

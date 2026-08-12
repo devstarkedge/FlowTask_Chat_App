@@ -131,8 +131,8 @@ const ChatScreen = ({ route, navigation }) => {
 
   const [headerHeight, setHeaderHeight] = useState(56);
 
-  // Android: container owns bottom inset when closed, measured IME overlap when open
-  // (adapts to 3-button / gesture / edge-to-edge). iOS: AppScreen owns bottom inset.
+  // Android: KeyboardAwareContainer needs to apply padding to keep composer above keyboard.
+  // iOS: AppScreen owns bottom inset.
   const keyboardProps = {
     disablePadding: false,
     bottomSafeContext: Platform.OS === 'ios',
@@ -143,7 +143,6 @@ const ChatScreen = ({ route, navigation }) => {
   // Granular store subscriptions — prevent unnecessary re-renders
   const messages = useChatStore(useShallow((s) => s.messagesByChannel[channelId] || []));
   const isLoadingMessages = useChatStore((s) => s.isLoadingMessages);
-  const typingByChannel = useChatStore((s) => s.typingByChannel);
   const channelHasMore = useChatStore((s) => s.hasMore[channelId]);
   const savedMessageIds = useLaterStore((s) => s.savedMessageIds);
   const {
@@ -186,10 +185,15 @@ const ChatScreen = ({ route, navigation }) => {
   const [editingMessage, setEditingMessage] = useState(null); // message object or null
   const [reminderTarget, setReminderTarget] = useState(null); // messageId or null
   const [actionMenuTarget, setActionMenuTarget] = useState(null); // message object or null
+  const [actionAttachmentTarget, setActionAttachmentTarget] = useState(null); // attachment object or null
   const [forwardTarget, setForwardTarget] = useState(null);
   const [scrolledToMessageId, setScrolledToMessageId] = useState(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [messageInfoTarget, setMessageInfoTarget] = useState(null);
+
+  // Auto-scroll refs
+  const isAtBottomRef = useRef(true);
+  const pendingAutoScroll = useRef(false);
 
   // ─── Message Info handler ─────────────────────────────────────────────
   const handleMessageInfo = useCallback((message) => {
@@ -312,17 +316,14 @@ const ChatScreen = ({ route, navigation }) => {
   const displayedMessages = useMemo(() => [...messages].reverse(), [messages]);
 
   // Memoize derived values to prevent re-render loops
-  const typingUsers = useMemo(
-    () => {
-      const cid = channelId != null ? String(channelId) : null;
-      const selfId = user?._id != null ? String(user._id) : null;
-      const typingData = (cid && typingByChannel[cid]) || {};
-      return Object.entries(typingData)
-        .filter(([id]) => id !== selfId)
-        .map(([, name]) => name);
-    },
-    [typingByChannel, channelId, user?._id]
-  );
+  const typingUsers = useChatStore(useShallow((s) => {
+    const cid = channelId != null ? String(channelId) : null;
+    const selfId = user?._id != null ? String(user._id) : null;
+    const typingData = (cid && s.typingByChannel[cid]) || {};
+    return Object.entries(typingData)
+      .filter(([id]) => id !== selfId)
+      .map(([, name]) => name);
+  }));
   const channel = useMemo(
     () => channels.find((ch) => ch._id === channelId),
     [channels, channelId]
@@ -516,8 +517,9 @@ const ChatScreen = ({ route, navigation }) => {
 
   // ─── Long-Press Context Menu ──────────────────────────────────────────────
   const showMessageActions = useCallback(
-    (item) => {
+    (item, attachment = null) => {
       setActionMenuTarget(item);
+      setActionAttachmentTarget(attachment);
     },
     []
   );
@@ -759,6 +761,19 @@ const ChatScreen = ({ route, navigation }) => {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           contentContainerStyle={[styles.messageList, { flexGrow: 1 }]}
+          onScroll={(e) => {
+            // Inverted list: offset 0 is the bottom
+            const offsetY = e.nativeEvent.contentOffset.y;
+            // Increased threshold to 300 to tolerate rapid layout shifts when receiving multiple messages
+            isAtBottomRef.current = offsetY <= 300;
+          }}
+          scrollEventThrottle={16}
+          onContentSizeChange={() => {
+            if (pendingAutoScroll.current || isAtBottomRef.current) {
+              flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+              pendingAutoScroll.current = false;
+            }
+          }}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           onEndReached={() => {
             if (channelHasMore && !isLoadingMessages) {
@@ -840,13 +855,11 @@ const ChatScreen = ({ route, navigation }) => {
             members={membersByChannel[channelId] || []}
             onSend={(content, options) => {
               if (editingMessage) {
-                editMessage(editingMessage._id, channelId, content, options?.htmlContent);
+                editMessage(editingMessage._id, channelId, content, options?.htmlContent, options?.fileReferences);
                 setEditingMessage(null);
               } else {
+                pendingAutoScroll.current = true;
                 sendMessage(channelId, content, options);
-                setTimeout(() => {
-                  flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-                }, 100);
               }
               setReplyingTo(null);
             }}
@@ -890,8 +903,12 @@ const ChatScreen = ({ route, navigation }) => {
       {/* Custom Message Actions Modal (replaces inline modal) */}
       <MessageActionSheet
         visible={!!actionMenuTarget}
-        onClose={() => setActionMenuTarget(null)}
+        onClose={() => {
+          setActionMenuTarget(null);
+          setActionAttachmentTarget(null);
+        }}
         message={actionMenuTarget}
+        attachment={actionAttachmentTarget}
         colors={colors}
         user={user}
         isSaved={isMessageSaved?.(actionMenuTarget?._id)}
@@ -899,7 +916,13 @@ const ChatScreen = ({ route, navigation }) => {
           if (actionMenuTarget) addReaction(actionMenuTarget._id, emoji);
         }}
         onOpenEmojiPicker={() => setEmojiPickerTarget(actionMenuTarget?._id)}
-        onForward={() => setForwardTarget(actionMenuTarget)}
+        onForward={() => {
+          if (actionAttachmentTarget) {
+            setForwardTarget({ ...actionMenuTarget, forwardAttachment: actionAttachmentTarget });
+          } else {
+            setForwardTarget(actionMenuTarget);
+          }
+        }}
         onPin={async (msg) => {
           try {
             await pinsAPI.pin(msg._id);
@@ -908,31 +931,31 @@ const ChatScreen = ({ route, navigation }) => {
             Toast.show({ type: 'error', text1: 'Failed to pin message' });
           }
           setActionMenuTarget(null);
+          setActionAttachmentTarget(null);
         }}
         onSave={() => toggleSaveMessage?.(actionMenuTarget?._id)}
         onRemind={() => setReminderTarget(actionMenuTarget?._id)}
+        onReply={() => {
+          setReplyingTo({
+            ...actionMenuTarget,
+            attachmentContext: actionAttachmentTarget
+          });
+          setActionMenuTarget(null);
+          setActionAttachmentTarget(null);
+        }}
         onEdit={() => {
           setEditingMessage(actionMenuTarget);
           setReplyingTo(null);
           setText(actionMenuTarget.htmlContent || actionMenuTarget.content || "");
         }}
-        onReply={(msg) => {
-          navigation.navigate('ThreadDetail', {
-            rootMessageId: msg._id,
-            channelId,
-            channelName,
-            rootContent: msg.content,
-            rootHtmlContent: msg.htmlContent,
-            replyCount: msg.replyCount || 0,
-            rootAuthor: msg.senderSnapshot?.name ? msg.senderSnapshot : msg.authorId,
-            rootCreatedAt: msg.createdAt,
-          });
-          setActionMenuTarget(null);
-        }}
         onDelete={() => {
           const msgId = actionMenuTarget._id;
+          const isAttachment = !!actionAttachmentTarget;
           setTimeout(() => {
-            Alert.alert("Delete Message", "Are you sure?", [
+            Alert.alert(
+              isAttachment ? "Delete Entire Message" : "Delete Message",
+              isAttachment ? "You can only delete the entire message, not individual attachments. Are you sure?" : "Are you sure you want to delete this message?",
+              [
               { text: "Cancel", style: "cancel" },
               {
                 text: "Delete",

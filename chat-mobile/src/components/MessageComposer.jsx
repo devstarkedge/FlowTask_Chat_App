@@ -18,7 +18,10 @@ import {
   Image,
   useWindowDimensions,
   TextInput,
+  ScrollView,
+  Modal,
 } from "react-native";
+import { Video } from "expo-av";
 import {
   Plus,
   Clock,
@@ -27,6 +30,11 @@ import {
   CaseSensitive,
   Loader2,
   Camera as CameraIcon,
+  Smile,
+  AtSign,
+  Send,
+  Play,
+  File,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import logger from "../utils/logger";
@@ -184,11 +192,12 @@ const MessageComposer = React.memo(function MessageComposer({
   const latestContentRef = useRef({ html: '', text: '' });
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardState((state) => state.height);
-  // Android window already resizes; only iOS needs height subtracted for expand math.
-  const imeInset = Platform.OS === 'android' ? 0 : keyboardHeight;
+  // Subtract keyboard height on both platforms so the composer doesn't grow taller than available space.
+  const imeInset = keyboardHeight || 0;
   const audioRecorder = useAudioRecorder();
   const videoRecorder = useVideoRecorder();
   const [showVideoModal, setShowVideoModal] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null);
 
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const isTablet = screenWidth >= 600;
@@ -204,6 +213,21 @@ const MessageComposer = React.memo(function MessageComposer({
   const activeWorkspaceId =
     workspaceId || useWorkspaceStore.getState().activeWorkspaceId;
 
+  const saveDraftNow = useCallback((files = pendingFiles) => {
+    if (editingMessage || !channelId || !activeWorkspaceId) return;
+    const { html, text: plain } = latestContentRef.current;
+    const plainContent = (plain || stripHtml(html)).trim();
+    const hasFiles = Array.isArray(files) && files.length > 0;
+    
+    if (plainContent || hasFiles) {
+      setDraft(channelId, html || markdownToHtml(plainContent), plainContent, activeWorkspaceId, null, { pendingFiles: files });
+      lastSavedRef.current = (html || '').trim();
+    } else {
+      clearDraft(channelId, activeWorkspaceId, null);
+      lastSavedRef.current = '';
+    }
+  }, [channelId, activeWorkspaceId, setDraft, clearDraft, pendingFiles, editingMessage]);
+
   // ─── Draft restore on channel change ─────────────────────────────────────
   useEffect(() => {
     if (editingMessage) {
@@ -216,47 +240,78 @@ const MessageComposer = React.memo(function MessageComposer({
       };
       onChangeText(html);
       editorRef.current?.setContent(html);
+      let existingFiles = [];
+      const fileReferences = editingMessage.fileReferences?.filter((r) => r.fileId) || [];
+      const rawFiles = editingMessage.files || editingMessage.attachments || [];
+      const attachments = fileReferences.length > 0 ? fileReferences.map((r) => r.fileId) : rawFiles;
+      
+      if (attachments && attachments.length > 0) {
+        existingFiles = attachments.map(f => ({
+          ...f,
+          _id: f._id,
+          name: f.originalName || f.fileName || f.name,
+          url: f.url || f.secureUrl,
+          thumbnailUrl: f.thumbnailUrl,
+          mimeType: f.mimeType,
+          fileSize: f.fileSize,
+          status: 'completed',
+          progress: 100,
+          uploading: false,
+          uploadFailed: false,
+        }));
+      }
+
+      setPendingFiles(existingFiles);
       return;
     }
 
     const draft = getDraft(channelId, activeWorkspaceId, null);
-    if (draft?.html || draft?.text) {
+    if (draft) {
       const html = draft.html || markdownToHtml(draft.text || '');
       latestContentRef.current = { html, text: draft.text || stripHtml(html) };
       onChangeText(html);
       editorRef.current?.setContent(html);
+      
+      if (draft.pendingFiles && draft.pendingFiles.length > 0) {
+        // Any previously 'uploading' files should now be marked as 'failed' (interrupted) so they can be retried
+        const restoredFiles = draft.pendingFiles.map(f => ({
+          ...f,
+          status: f.status === 'uploading' ? 'failed' : (f.status || 'pending'),
+          uploading: false,
+          uploadFailed: f.status === 'uploading' || f.status === 'failed' || f.uploadFailed
+        }));
+        setPendingFiles(restoredFiles);
+      } else {
+        setPendingFiles([]);
+      }
     } else {
       latestContentRef.current = { html: '', text: '' };
       onChangeText('');
       editorRef.current?.clear();
+      setPendingFiles([]);
     }
-  }, [channelId, editingMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [channelId, editingMessage, activeWorkspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Draft auto-save (800ms debounce) ──────────────────────────────────────
+  // ─── Draft auto-save (800ms debounce for text) ───────────────────────────
   useEffect(() => {
     if (editingMessage) return;
 
     if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
 
-    const { html, text: plain } = latestContentRef.current;
+    const { html } = latestContentRef.current;
     const signature = (html || '').trim();
+    // Only skip if the signature hasn't changed (prevents thrashing).
+    // Note: pendingFiles changes trigger saveDraftNow synchronously, this is just for text typing.
     if (signature === lastSavedRef.current) return;
 
     draftTimerRef.current = setTimeout(() => {
-      const plainContent = (plain || stripHtml(html)).trim();
-      if (plainContent) {
-        setDraft(channelId, html || markdownToHtml(plainContent), plainContent, activeWorkspaceId, null);
-        lastSavedRef.current = signature;
-      } else {
-        clearDraft(channelId, activeWorkspaceId, null);
-        lastSavedRef.current = '';
-      }
+      saveDraftNow(pendingFiles);
     }, 800);
 
     return () => {
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
     };
-  }, [text, channelId, editingMessage, activeWorkspaceId]);
+  }, [text, channelId, editingMessage, activeWorkspaceId, pendingFiles, saveDraftNow]);
 
   // ─── Unmount / Channel change cleanup for typing indicator ──────────────
   useEffect(() => {
@@ -405,7 +460,7 @@ const MessageComposer = React.memo(function MessageComposer({
 
     onSend(plainContent, {
       htmlContent: htmlContent || undefined,
-      threadId: replyingTo?._id || null,
+      parentMessageId: replyingTo?._id || null,
       fileReferences: uploadedFiles.map((f) => f._id),
       attachments: attachmentObjects,
       mentions: mentionPayload,
@@ -474,49 +529,49 @@ const MessageComposer = React.memo(function MessageComposer({
 
   // ─── File attachment — pick and upload to server ──────────────────────────
   const uploadFilesToServer = useCallback(
-    async (pickedFiles, localEntries) => {
-      try {
-        const formData = new FormData();
-        for (let i = 0; i < pickedFiles.length; i++) {
-          const file = pickedFiles[i];
-          let name = file.name || file.fileName || localEntries[i]?.name || `file_${Date.now()}`;
+    async (filesToUpload) => {
+      // Process files concurrently
+      const uploadPromises = filesToUpload.map(async (localEntry) => {
+        if (localEntry.status === 'completed') return; // Don't re-upload
+
+        try {
+          // Update status to uploading immediately
+          let nextState = [];
+          setPendingFiles((prev) => {
+            nextState = prev.map(f => f._tempUri === localEntry._tempUri ? { ...f, status: 'uploading', uploading: true, uploadFailed: false, progress: 0 } : f);
+            return nextState;
+          });
+          // Persist transition to uploading outside the updater
+          saveDraftNow(nextState);
+
+          const formData = new FormData();
+          let name = localEntry.name || `file_${Date.now()}`;
+          let type = localEntry.mimeType || localEntry.type || '';
           
-          let type = file.mimeType || file.type || '';
-          
-          // Extension to MIME map
           const extToMime = {
-            png: 'image/png',
-            jpg: 'image/jpeg',
-            jpeg: 'image/jpeg',
-            gif: 'image/gif',
-            webp: 'image/webp',
-            mp4: 'video/mp4',
-            mov: 'video/quicktime',
-            pdf: 'application/pdf',
-            doc: 'application/msword',
+            png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+            gif: 'image/gif', webp: 'image/webp', mp4: 'video/mp4',
+            mov: 'video/quicktime', pdf: 'application/pdf', doc: 'application/msword',
             docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            xls: 'application/vnd.ms-excel',
-            xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             zip: 'application/zip',
           };
 
           const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
-
           if (!type || type === 'image' || type === 'video' || type === 'application/octet-stream') {
             type = extToMime[ext] || (ext ? `image/${ext}` : 'image/jpeg');
           }
-
           if (!name.includes('.')) {
             const mimeExtMap = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'video/mp4': 'mp4', 'application/pdf': 'pdf' };
             name += `.${mimeExtMap[type] || 'jpg'}`;
           }
 
-          let fileUri = file.uri || '';
+          let fileUri = localEntry._tempUri || localEntry.uri || '';
           if (fileUri.startsWith('ph://') || fileUri.startsWith('assets-library://')) {
             try {
               const FileSystem = require('expo-file-system/legacy');
               const fileExt = name.split('.').pop() || 'jpg';
-              const destPath = `${FileSystem.cacheDirectory}upload_${Date.now()}_${i}.${fileExt}`;
+              const destPath = `${FileSystem.cacheDirectory}upload_${Date.now()}.${fileExt}`;
               await FileSystem.copyAsync({ from: fileUri, to: destPath });
               fileUri = destPath;
             } catch (e) {
@@ -528,100 +583,56 @@ const MessageComposer = React.memo(function MessageComposer({
             fileUri = `file://${fileUri}`;
           }
 
-          logger.info('[Composer Audit] Appending file to FormData:', {
-            index: i,
-            uri: fileUri,
-            name,
-            type,
-          });
+          formData.append("files", { uri: fileUri, name, type });
 
-          formData.append("files", {
-            uri: fileUri,
-            name,
-            type,
-          });
-        }
-
-        const { data } = await fileAPI.uploadFiles(channelId, formData, undefined, true);
-        const uploadedFiles = data.data?.files || [];
-
-        // Replace pending local file entries with server file objects using exact matching
-        setPendingFiles((prev) => {
-          const result = [...prev];
-          uploadedFiles.forEach((serverFile, i) => {
-            // Find the pending item by matching the temporary URI or name
-            const sourceLocalEntry = localEntries[i];
-            const localIdx = result.findIndex(
-              (f) =>
-                f._tempUri === sourceLocalEntry?._tempUri ||
-                f.name === sourceLocalEntry?.name ||
-                f.name === serverFile.originalName ||
-                f.name === serverFile.fileName,
-            );
-
-            if (localIdx >= 0) {
-              result[localIdx] = {
-                _id: serverFile._id,
-                name:
-                  serverFile.originalName ||
-                  serverFile.fileName ||
-                  serverFile.name,
-                url: serverFile.url || serverFile.secureUrl,
-                thumbnailUrl: serverFile.thumbnailUrl,
-                mimeType: serverFile.mimeType,
-                fileSize: serverFile.fileSize,
-                uploading: false,
-              };
-            } else {
-              result.push({
-                _id: serverFile._id,
-                name:
-                  serverFile.originalName ||
-                  serverFile.fileName ||
-                  serverFile.name,
-                url: serverFile.url || serverFile.secureUrl,
-                thumbnailUrl: serverFile.thumbnailUrl,
-                mimeType: serverFile.mimeType,
-                fileSize: serverFile.fileSize,
-                uploading: false,
-              });
+          const onProgress = (progressEvent) => {
+            if (progressEvent.total > 0) {
+              const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+              // Update progress in local state only (throttle draft persistence)
+              setPendingFiles((prev) => 
+                prev.map(f => f._tempUri === localEntry._tempUri ? { ...f, progress } : f)
+              );
             }
+          };
+
+          const { data } = await fileAPI.uploadFiles(channelId, formData, onProgress, true);
+          const uploadedFile = (data.data?.files || [])[0];
+
+          if (uploadedFile) {
+            let nextState = [];
+            setPendingFiles((prev) => {
+              nextState = prev.map(f => f._tempUri === localEntry._tempUri ? {
+                ...f,
+                _id: uploadedFile._id,
+                name: uploadedFile.originalName || uploadedFile.fileName || uploadedFile.name,
+                url: uploadedFile.url || uploadedFile.secureUrl,
+                thumbnailUrl: uploadedFile.thumbnailUrl,
+                mimeType: uploadedFile.mimeType,
+                fileSize: uploadedFile.fileSize,
+                status: 'completed',
+                progress: 100,
+                uploading: false,
+                uploadFailed: false,
+              } : f);
+              return nextState;
+            });
+            // Persist completion outside the updater
+            saveDraftNow(nextState);
+          }
+        } catch (err) {
+          logger.error("[Composer Audit] File upload failed for file:", localEntry.name, err.message);
+          let nextState = [];
+          setPendingFiles((prev) => {
+            nextState = prev.map(f => f._tempUri === localEntry._tempUri ? { ...f, status: 'failed', uploading: false, uploadFailed: true, progress: 0 } : f);
+            return nextState;
           });
-          return result;
-        });
-      } catch (err) {
-        const serverErrorMessage =
-          err.response?.data?.error?.message ||
-          err.response?.data?.message ||
-          err.response?.data?.error ||
-          err.message;
-
-        logger.error("[Composer Audit] File upload failed details:", {
-          message: err.message,
-          code: err.code,
-          isAxiosError: err.isAxiosError,
-          responseStatus: err.response?.status,
-          responseData: err.response?.data,
-          requestSent: !!err.request,
-          requestUrl: err.config?.url,
-          requestHeaders: err.config?.headers,
-        });
-
-        // Mark the failed files so user can remove them
-        setPendingFiles((prev) =>
-          prev.map((f) =>
-            pickedFiles.some((p) => p.name === f.name) && !f._id
-              ? { ...f, uploading: false, uploadFailed: true }
-              : f,
-          ),
-        );
-        Alert.alert(
-          "Upload Failed",
-          serverErrorMessage ? `Upload failed: ${serverErrorMessage}` : "Could not upload files. Please remove them and try again.",
-        );
-      }
+          // Persist failure outside the updater
+          saveDraftNow(nextState);
+        }
+      });
+      await Promise.all(uploadPromises);
     },
-    [channelId],
+    [channelId, saveDraftNow],
   );
 
   const handleAttach = useCallback(() => {
@@ -632,24 +643,51 @@ const MessageComposer = React.memo(function MessageComposer({
     async (pickedFiles) => {
       if (!pickedFiles || !pickedFiles.length) return;
 
-      // Add local files as "uploading" pending entries
+      if (pendingFiles.length + pickedFiles.length > 10) {
+        Alert.alert('Upload Limit', 'You can upload up to 10 files at a time.');
+        return;
+      }
+
+      // Add local files as "pending" entries
       const localEntries = pickedFiles.map((f) => ({
         name: f.name || f.fileName || f.filename || `file_${Date.now()}.jpg`,
+        mimeType: f.mimeType || f.type,
+        fileSize: f.fileSize || f.size,
+        status: 'pending',
+        progress: 0,
         uploading: true,
         uploadFailed: false,
-        _tempUri: f.uri, // Use URI as a reliable matching fallback
+        _tempUri: f.uri,
       }));
-      setPendingFiles((prev) => [...prev, ...localEntries]);
+      
+      let nextState = [];
+      setPendingFiles((prev) => {
+        nextState = [...prev, ...localEntries];
+        return nextState;
+      });
+      // Persist initial add outside the updater
+      saveDraftNow(nextState);
 
-      // Upload to server
-      await uploadFilesToServer(pickedFiles, localEntries);
+      // Upload concurrently
+      await uploadFilesToServer(localEntries);
     },
-    [uploadFilesToServer],
+    [uploadFilesToServer, pendingFiles.length, saveDraftNow],
   );
 
   const removePendingFile = useCallback((index) => {
-    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
-  }, []);
+    let nextState = [];
+    setPendingFiles((prev) => {
+      nextState = prev.filter((_, i) => i !== index);
+      return nextState;
+    });
+    saveDraftNow(nextState);
+  }, [saveDraftNow]);
+  
+  const retryUpload = useCallback(async (index) => {
+    const fileToRetry = pendingFiles[index];
+    if (!fileToRetry || fileToRetry.status === 'completed') return;
+    await uploadFilesToServer([fileToRetry]);
+  }, [pendingFiles, uploadFilesToServer]);
 
   const handleMediaSend = useCallback(async (uri, type, duration) => {
     const file = {
@@ -740,18 +778,35 @@ const MessageComposer = React.memo(function MessageComposer({
             },
           ]}
         >
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.bannerLabel, { color: colors.textSecondary }]}>
-              {editingMessage
-                ? "Editing message"
-                : `Replying to ${replyingTo?.senderSnapshot?.name || replyingTo?.authorId?.name || "User"}`}
-            </Text>
-            <Text
-              style={[styles.bannerText, { color: colors.textTertiary }]}
-              numberOfLines={1}
-            >
-              {editingMessage?.content || replyingTo?.content || ""}
-            </Text>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+            {replyingTo?.attachmentContext && (
+              <View style={{ marginRight: moderateScale(8), borderRadius: moderateScale(4), overflow: 'hidden', backgroundColor: colors.border, width: scale(32), height: scale(32), justifyContent: 'center', alignItems: 'center' }}>
+                {(replyingTo.attachmentContext.thumbnailUrl || replyingTo.attachmentContext.url || replyingTo.attachmentContext.secureUrl) ? (
+                  <Image 
+                    source={{ uri: replyingTo.attachmentContext.thumbnailUrl || replyingTo.attachmentContext.url || replyingTo.attachmentContext.secureUrl }} 
+                    style={{ width: '100%', height: '100%' }} 
+                    resizeMode="cover" 
+                  />
+                ) : (
+                  <File size={16} color={colors.textSecondary} />
+                )}
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bannerLabel, { color: colors.textSecondary }]}>
+                {editingMessage
+                  ? "Editing message"
+                  : `Replying to ${replyingTo?.senderSnapshot?.name || replyingTo?.authorId?.name || "User"}`}
+              </Text>
+              <Text
+                style={[styles.bannerText, { color: colors.textTertiary }]}
+                numberOfLines={1}
+              >
+                {replyingTo?.attachmentContext 
+                  ? (replyingTo.attachmentContext.name || replyingTo.attachmentContext.fileName || 'Media attached')
+                  : (editingMessage?.content || replyingTo?.content || "[Media attached]")}
+              </Text>
+            </View>
           </View>
           <TouchableOpacity
             onPress={() => {
@@ -775,49 +830,7 @@ const MessageComposer = React.memo(function MessageComposer({
         colors={colors}
       />
 
-      {/* Pending files preview */}
-      {pendingFiles.length > 0 && (
-        <View style={styles.pendingFilesRow}>
-          {pendingFiles.map((file, i) => (
-            <View
-              key={i}
-              style={[
-                styles.pendingFileChip,
-                { backgroundColor: colors.inputBackground },
-                file.uploadFailed && {
-                  borderColor: colors.error,
-                  borderWidth: 1,
-                },
-              ]}
-            >
-              {file.uploading ? (
-                <Loader2 size={12} color={colors.primary} />
-              ) : file.uploadFailed ? (
-                <X size={12} color={colors.error} />
-              ) : (
-                <FileText size={12} color={colors.textSecondary} />
-              )}
-              <Text
-                style={[
-                  styles.pendingFileName,
-                  { color: colors.textSecondary },
-                ]}
-                numberOfLines={1}
-              >
-                {file.name}
-                {file.uploading
-                  ? " (uploading...)"
-                  : file.uploadFailed
-                    ? " (failed)"
-                    : ""}
-              </Text>
-              <TouchableOpacity onPress={() => removePendingFile(i)}>
-                <X size={14} color={colors.textTertiary} />
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
-      )}
+      {/* Pending files preview moved inside inputContainer */}
 
       {/* Input bar */}
       <View
@@ -853,10 +866,119 @@ const MessageComposer = React.memo(function MessageComposer({
             />
           )}
 
-          <View style={styles.composerRow}>
-            <View style={styles.sideButtons}>
-              <TouchableOpacity style={styles.iconButton} onPress={handleAttach}>
-                <Plus size={20} color={colors.textSecondary} />
+          {pendingFiles.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ flexGrow: 0, paddingHorizontal: moderateScale(8), paddingTop: moderateScale(8) }}
+              contentContainerStyle={{ gap: 8, paddingRight: moderateScale(16) }}
+            >
+              {pendingFiles.map((file, i) => {
+                const isImage = file.mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
+                const isVideo = file.mimeType?.startsWith('video/') || /\.(mp4|mov|mkv)$/i.test(file.name);
+                return (
+                  <View
+                    key={i}
+                    style={[
+                      { 
+                        position: 'relative',
+                        width: scale(70), 
+                        height: scale(70), 
+                        borderRadius: moderateScale(8), 
+                        backgroundColor: colors.background,
+                        overflow: 'hidden',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                      },
+                      file.uploadFailed && { borderColor: colors.error }
+                    ]}
+                  >
+                    <TouchableOpacity
+                      activeOpacity={isImage || isVideo ? 0.8 : 1}
+                      style={{ width: '100%', height: '100%' }}
+                      onPress={() => {
+                        if (isImage || isVideo) {
+                          setPreviewFile(file);
+                        }
+                      }}
+                    >
+                      {isImage ? (
+                        <Image source={{ uri: file.url || file._tempUri || file.thumbnailUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                      ) : isVideo ? (
+                        <View style={{ width: '100%', height: '100%' }}>
+                          <Video source={{ uri: file.url || file._tempUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" shouldPlay={false} useNativeControls={false} />
+                          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
+                            <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, padding: 4 }}>
+                              <Play size={16} color="#FFF" />
+                            </View>
+                          </View>
+                        </View>
+                      ) : (
+                        <View style={{ alignItems: 'center', padding: 4, flex: 1, justifyContent: 'center' }}>
+                          <FileText size={24} color={colors.textSecondary} />
+                          <Text style={{ fontSize: moderateScale(10), color: colors.textSecondary, marginTop: 4, textAlign: 'center' }} numberOfLines={1}>
+                            {file.name}
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                    {file.status === 'uploading' && (
+                      <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+                        <Loader2 size={24} color="#FFF" />
+                        <Text style={{ color: '#FFF', fontSize: 10, marginTop: 4, fontWeight: 'bold' }}>{file.progress || 0}%</Text>
+                      </View>
+                    )}
+                    {file.status === 'failed' && (
+                      <TouchableOpacity 
+                        style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}
+                        onPress={() => retryUpload(i)}
+                      >
+                        <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>Retry</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity 
+                      onPress={() => removePendingFile(i)}
+                      style={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4,
+                        backgroundColor: 'rgba(0,0,0,0.5)',
+                        borderRadius: 12,
+                        padding: 4,
+                      }}
+                    >
+                      <X size={12} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
+
+          <View key="editor-wrapper" style={{ minHeight: verticalScale(40), width: '100%', paddingHorizontal: moderateScale(12), paddingTop: moderateScale(12) }}>
+            <ChatRichTextEditor
+              ref={editorRef}
+              placeholder="Jot something down"
+              colors={colors}
+              initialHtml={typeof text === 'string' && text.includes('<') ? text : ''}
+              onUpdate={handleEditorUpdate}
+              onSelectionChange={handleEditorSelection}
+              onMentionQuery={(q) => {
+                setMentionQuery(q);
+                setMentionVisible(true);
+              }}
+              onMentionClose={() => setMentionVisible(false)}
+              minHeight={verticalScale(40)}
+              maxHeight={maxComposerHeight}
+            />
+          </View>
+
+          <View style={[styles.composerRow, { justifyContent: 'space-between', paddingHorizontal: moderateScale(8), paddingBottom: moderateScale(8) }]}>
+            <View style={[styles.sideButtons, { gap: moderateScale(10) }]}>
+              <TouchableOpacity style={[styles.iconButton, { backgroundColor: colors.border, borderRadius: moderateScale(16), padding: moderateScale(6), marginLeft: moderateScale(4) }]} onPress={handleAttach}>
+                <Plus size={18} color={colors.textPrimary} />
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -864,83 +986,47 @@ const MessageComposer = React.memo(function MessageComposer({
                 onPress={() => setShowToolbar((v) => !v)}
               >
                 <CaseSensitive
-                  size={18}
+                  size={20}
                   color={showToolbar ? colors.primary : colors.textSecondary}
                 />
               </TouchableOpacity>
-            </View>
 
-            <View key="editor-wrapper" style={styles.editorSlot}>
-              <ChatRichTextEditor
-                ref={editorRef}
-                placeholder={editingMessage ? 'Edit message...' : 'Message...'}
-                colors={colors}
-                initialHtml={typeof text === 'string' && text.includes('<') ? text : ''}
-                onUpdate={handleEditorUpdate}
-                onSelectionChange={handleEditorSelection}
-                onMentionQuery={(q) => {
-                  setMentionQuery(q);
-                  setMentionVisible(true);
-                }}
-                onMentionClose={() => setMentionVisible(false)}
-                minHeight={verticalScale(40)}
-                maxHeight={maxComposerHeight}
-              />
+              <TouchableOpacity style={styles.iconButton} onPress={() => {
+                editorRef.current?.insertText('@');
+                setMentionQuery('');
+                setMentionVisible(true);
+              }}>
+                <AtSign size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+        
             </View>
 
             <View style={styles.sideButtons}>
-              {stripHtml(text).trim() || pendingFiles.length > 0 ? (
-                <>
+              {stripHtml(text).trim() || pendingFiles.length > 0 ?  (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <TouchableOpacity
-                    style={styles.iconButton}
+                    style={[styles.iconButton, { padding: moderateScale(4), marginRight: moderateScale(4) }]}
                     onPress={() => setShowScheduleModal(true)}
                   >
                     <Clock size={20} color={colors.textSecondary} />
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.sendButton}
+                    style={[styles.sendButton, { backgroundColor: colors.primary, borderRadius: moderateScale(20), padding: moderateScale(8), marginRight: moderateScale(4) }]}
                     onPress={handleSend}
                     onLongPress={() => setShowScheduleModal(true)}
                     delayLongPress={500}
                   >
-                    <Text
-                      style={{
-                        color: colors.primary,
-                        fontWeight: 'bold',
-                        fontSize: moderateScale(15),
-                      }}
-                    >
-                      Send
-                    </Text>
+                    <Send size={16} color={colors.background} />
                   </TouchableOpacity>
-                </>
+                </View>
               ) : (
-                <>
-                  <TouchableOpacity style={styles.iconButton} onPress={() => setShowVideoModal(true)}>
-                    <CameraIcon size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                  <AudioRecorderUI
-                    isRecording={audioRecorder.isRecording}
-                    isPaused={audioRecorder.isPaused}
-                    recordingDuration={audioRecorder.recordingDuration}
-                    onStart={audioRecorder.startRecording}
-                    onPause={audioRecorder.pauseRecording}
-                    onResume={audioRecorder.resumeRecording}
-                    onStop={audioRecorder.stopRecording}
-                    onCancel={audioRecorder.cancelRecording}
-                    onSend={async (data) => {
-                      let finalData = data;
-                      if (!finalData && audioRecorder.recordingUri) {
-                        finalData = { uri: audioRecorder.recordingUri, duration: audioRecorder.recordingDuration };
-                      }
-                      if (finalData) {
-                        await handleMediaSend(finalData.uri, 'audio', finalData.duration);
-                        audioRecorder.cancelRecording();
-                      }
-                    }}
-                    colors={colors}
-                  />
-                </>
+                <TouchableOpacity
+                  style={[styles.sendButton, { backgroundColor: colors.backgroundSecondary || colors.border, borderRadius: moderateScale(20), padding: moderateScale(8), marginRight: moderateScale(4) }]}
+                  onPress={() => {}}
+                  activeOpacity={1}
+                >
+                  <Send size={16} color={colors.textTertiary} />
+                </TouchableOpacity>
               )}
             </View>
           </View>
@@ -1065,7 +1151,7 @@ const MessageComposer = React.memo(function MessageComposer({
           onSend('', {
             contentType: 'gif',
             gifMeta: gif,
-            threadId: replyingTo?._id || null,
+            parentMessageId: replyingTo?._id || null,
           });
           if (editingMessage) onCancelEdit?.();
           else onCancelReply?.();
@@ -1080,6 +1166,40 @@ const MessageComposer = React.memo(function MessageComposer({
         onSchedule={handleScheduleSend}
         colors={colors}
       />
+
+      {/* Media Preview Modal */}
+      <Modal
+        visible={!!previewFile}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setPreviewFile(null)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' }}>
+          <TouchableOpacity
+            style={{ position: 'absolute', top: 50, right: 20, zIndex: 100, padding: 10 }}
+            onPress={() => setPreviewFile(null)}
+          >
+            <X size={30} color="#FFF" />
+          </TouchableOpacity>
+          {previewFile && (
+            (previewFile.mimeType?.startsWith('video/') || /\.(mp4|mov|mkv)$/i.test(previewFile.name)) ? (
+              <Video
+                source={{ uri: previewFile.url || previewFile._tempUri }}
+                style={{ width: '100%', height: '80%' }}
+                resizeMode="contain"
+                useNativeControls
+                shouldPlay
+              />
+            ) : (
+              <Image
+                source={{ uri: previewFile.url || previewFile._tempUri || previewFile.thumbnailUrl }}
+                style={{ width: '100%', height: '80%' }}
+                resizeMode="contain"
+              />
+            )
+          )}
+        </View>
+      </Modal>
     </View>
   );
 });
@@ -1128,8 +1248,8 @@ const createStyles = (colors, insets) =>
       paddingBottom: moderateScale(6),
     },
     inputContainer: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
+      flexDirection: 'column',
+      alignItems: 'stretch',
       borderRadius: moderateScale(24),
       borderWidth: 1,
       paddingHorizontal: moderateScale(4),
@@ -1137,8 +1257,6 @@ const createStyles = (colors, insets) =>
       overflow: 'hidden',
     },
     inputContainerWithToolbar: {
-      flexDirection: 'column',
-      alignItems: 'stretch',
       minHeight: undefined,
     },
     composerRow: {

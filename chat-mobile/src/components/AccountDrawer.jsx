@@ -81,6 +81,10 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
   const userRole = activeWorkspace?.role || user?.role;
   const canManage = ['owner', 'admin'].includes(userRole);
 
+  const targetIdStr = user?._id?.toString ? user._id.toString() : user?._id;
+  const presenceMap = useWorkspaceStore((s) => s.presenceMap);
+  const liveOnlineStatus = presenceMap?.[targetIdStr] || user?.onlineStatus || 'offline';
+
   const [slideAnim] = useState(new Animated.Value(0));
   const [statusModalVisible, setStatusModalVisible] = useState(false);
   const [pauseNotificationsVisible, setPauseNotificationsVisible] =
@@ -242,13 +246,21 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
                     <View
                       style={[
                         styles.statusDot,
-                        { backgroundColor: user?.onlineStatus === 'away' ? colors.away : user?.onlineStatus === 'dnd' ? colors.busy : colors.online },
+                        { 
+                          backgroundColor: liveOnlineStatus === 'away' ? colors.away 
+                            : liveOnlineStatus === 'dnd' ? colors.busy 
+                            : liveOnlineStatus === 'online' ? colors.online 
+                            : colors.textTertiary 
+                        },
                       ]}
                     />
                     <Text
                       style={[styles.statusText, { color: colors.textSecondary }]}
                     >
-                      {user?.onlineStatus === 'away' ? t("Away") : user?.onlineStatus === 'dnd' ? t("Do Not Disturb") : t("Active")}
+                      {liveOnlineStatus === 'away' ? t("Away") 
+                        : liveOnlineStatus === 'dnd' ? t("Do Not Disturb") 
+                        : liveOnlineStatus === 'online' ? t("Active") 
+                        : t("Offline")}
                     </Text>
                   </View>
                 </View>

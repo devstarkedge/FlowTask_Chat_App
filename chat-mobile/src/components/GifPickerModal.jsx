@@ -30,7 +30,7 @@ import {
   ScrollView,
   useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Search, Smile, RefreshCw } from 'lucide-react-native';
 import useGiphySearch from '../hooks/useGiphySearch';
 import { GIF_CATEGORIES } from '../services/gifService';
@@ -90,6 +90,7 @@ export default function GifPickerModal({  visible,
   colors,
 }) {
   const { width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const cellWidth = (screenWidth - GRID_PADDING * 2 - CELL_GAP) / NUM_COLS;
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('trending');
@@ -165,7 +166,7 @@ export default function GifPickerModal({  visible,
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         {/* ── Header ── */}
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={{ top: verticalScale(8), bottom: verticalScale(8), left: scale(8), right: scale(8) }}>
@@ -290,7 +291,7 @@ export default function GifPickerModal({  visible,
             Powered by GIPHY
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }

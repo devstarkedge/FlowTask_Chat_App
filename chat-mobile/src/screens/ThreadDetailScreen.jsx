@@ -66,21 +66,27 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     setReplyText,
     editingMessage,
     setEditingMessage,
-    emojiPickerTarget,
-    setEmojiPickerTarget,
+    replyingTo,
+    setReplyingTo,
     actionMenuTarget,
     setActionMenuTarget,
+    actionAttachmentTarget,
+    setActionAttachmentTarget,
     reminderTarget,
     setReminderTarget,
     forwardTarget,
     setForwardTarget,
     flatListRef,
-    showMessageActions,
     getAttachments,
     handleSendReply,
     getAuthorId,
     resolveAuthor
   } = useThreadDetails({ rootMessageId, channelId, highlightedMessageId });
+
+  const showMessageActions = useCallback((item, attachment = null) => {
+    setActionMenuTarget(item);
+    setActionAttachmentTarget(attachment);
+  }, []);
 
   const effectiveRoot = rootMessageLive || {
     _id: rootMessageId,
@@ -352,7 +358,9 @@ const ThreadDetailScreen = ({ route, navigation }) => {
             }, 100);
           }}
           editingMessage={editingMessage}
+          replyingTo={replyingTo}
           onCancelEdit={() => { setEditingMessage(null); setReplyText(''); }}
+          onCancelReply={() => setReplyingTo(null)}
         />
       </KeyboardAwareContainer>
 
@@ -362,14 +370,18 @@ const ThreadDetailScreen = ({ route, navigation }) => {
 
       <MessageActionSheet
         visible={!!actionMenuTarget}
-        onClose={() => setActionMenuTarget(null)}
+        onClose={() => {
+          setActionMenuTarget(null);
+          setActionAttachmentTarget(null);
+        }}
         message={actionMenuTarget}
+        attachment={actionAttachmentTarget}
         colors={colors}
         user={user}
         isSaved={isMessageSaved?.(actionMenuTarget?._id)}
         onReact={(emoji) => { if (actionMenuTarget) addReaction(actionMenuTarget._id, emoji); }}
         onOpenEmojiPicker={() => setEmojiPickerTarget(actionMenuTarget?._id)}
-        onForward={() => setForwardTarget(actionMenuTarget)}
+        onForward={() => setForwardTarget(actionAttachmentTarget || actionMenuTarget)}
         onPin={async (msg) => {
           try {
             await pinsAPI.pin(msg._id);
@@ -381,12 +393,24 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         }}
         onSave={() => toggleSaveMessage?.(actionMenuTarget?._id)}
         onRemind={() => setReminderTarget(actionMenuTarget?._id)}
-        onEdit={() => { setEditingMessage(actionMenuTarget); setReplyText(actionMenuTarget.htmlContent || actionMenuTarget.content || ''); setActionMenuTarget(null); }}
+        onReply={() => {
+          setReplyingTo({
+            ...actionMenuTarget,
+            attachmentContext: actionAttachmentTarget
+          });
+          setActionMenuTarget(null);
+          setActionAttachmentTarget(null);
+        }}
+        onEdit={() => { setEditingMessage(actionMenuTarget); setReplyText(actionMenuTarget.htmlContent || actionMenuTarget.content || ''); setActionMenuTarget(null); setReplyingTo(null); }}
         onDelete={() => {
           const targetId = actionMenuTarget._id;
           const isRoot = targetId === rootMessageId;
+          const isAttachment = !!actionAttachmentTarget;
           setTimeout(() => {
-            Alert.alert('Delete Message', 'Are you sure you want to delete this message?', [
+            Alert.alert(
+              isAttachment ? 'Delete Entire Message' : 'Delete Message',
+              isAttachment ? 'You can only delete the entire message, not individual attachments. Are you sure?' : 'Are you sure you want to delete this message?',
+              [
               { text: 'Cancel', style: 'cancel' },
               {
                 text: 'Delete',
@@ -422,6 +446,8 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           } catch (error) {
             Toast.show({ type: 'error', text1: 'Failed to mute notifications' });
           }
+          setActionMenuTarget(null);
+          setActionAttachmentTarget(null);
         }}
       />
 

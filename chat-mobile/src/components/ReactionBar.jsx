@@ -30,16 +30,7 @@ const ReactionBar = React.memo(function ReactionBar({
   colors,
 }) {
   if (!reactions || reactions.length === 0) {
-    // Show only the add button if no reactions
-    return (
-      <TouchableOpacity
-        style={[styles.addButton, { borderColor: colors.border }]}
-        onPress={onOpenPicker}
-        activeOpacity={0.7}
-      >
-        <SmilePlus size={14} color={colors.textTertiary} />
-      </TouchableOpacity>
-    );
+    return null;
   }
 
   return (
@@ -79,13 +70,6 @@ const ReactionBar = React.memo(function ReactionBar({
           </TouchableOpacity>
         );
       })}
-      <TouchableOpacity
-        style={[styles.addButton, { borderColor: colors.border }]}
-        onPress={onOpenPicker}
-        activeOpacity={0.7}
-      >
-        <SmilePlus size={14} color={colors.textTertiary} />
-      </TouchableOpacity>
     </View>
   );
 });

@@ -21,6 +21,7 @@ import {
   Star,
   Pin,
   Info,
+  Download,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
@@ -77,6 +78,7 @@ const MessageActionSheet = ({
   visible,
   onClose,
   message,
+  attachment,
   colors,
   user,
   isSaved,
@@ -104,8 +106,10 @@ const MessageActionSheet = ({
     message.authorId?._id === user?._id || message.authorId === user?._id;
 
   const imageOnly = hasImageOnly(message);
-  const showCopyText = !imageOnly && hasText(message);
-  const showCopyLink = !imageOnly && hasLink(message);
+  const showCopyText = !attachment && !imageOnly && hasText(message);
+  
+  // Show copy link if it's an attachment, or if the message has a link
+  const showCopyLink = !!attachment || (!imageOnly && hasLink(message));
 
   const handleCopyText = async () => {
     await Clipboard.setStringAsync(message.content || '');
@@ -114,9 +118,13 @@ const MessageActionSheet = ({
   };
 
   const handleCopyLink = async () => {
-    const textWithoutImages = (message.content || '').replace(MD_IMAGE_REGEX_GLOBAL, '');
-    const url = textWithoutImages.match(URL_REGEX)?.[0] || '';
-    await Clipboard.setStringAsync(url);
+    if (attachment && (attachment.url || attachment.secureUrl)) {
+      await Clipboard.setStringAsync(attachment.url || attachment.secureUrl);
+    } else {
+      const textWithoutImages = (message.content || '').replace(MD_IMAGE_REGEX_GLOBAL, '');
+      const url = textWithoutImages.match(URL_REGEX)?.[0] || '';
+      await Clipboard.setStringAsync(url);
+    }
     Toast.show({ type: 'success', text1: 'Link copied to clipboard' });
     onClose();
   };
@@ -129,6 +137,14 @@ const MessageActionSheet = ({
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Failed to star/unstar message' });
     }
+  };
+
+  const handleDownloadAttachment = async () => {
+    // Add logic to download the attachment here
+    // For now, we can show a toast indicating it's downloading
+    Toast.show({ type: 'info', text1: 'Downloading...' });
+    onClose();
+    // Implementation for downloading would require expo-file-system or similar
   };
 
   return (
@@ -218,15 +234,6 @@ const MessageActionSheet = ({
 
           {/* List Actions */}
           <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
-            <TouchableOpacity
-              style={styles.listItem}
-              onPress={() => { onClose(); setTimeout(() => handleStarToggle(), 100); }}
-            >
-              <Star size={20} color={colors.textPrimary} fill={isStarred ? colors.textPrimary : 'transparent'} />
-              <Text style={[styles.listItemText, { color: colors.textPrimary }]}>
-                {isStarred ? 'Unstar Message' : 'Star Message'}
-              </Text>
-            </TouchableOpacity>
 
             {!!onPin && (
               <TouchableOpacity
@@ -238,13 +245,15 @@ const MessageActionSheet = ({
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity
-              style={styles.listItem}
-              onPress={() => { onClose(); setTimeout(() => onRemind(), 100); }}
-            >
-              <Clock size={20} color={colors.textPrimary} />
-              <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Remind Me</Text>
-            </TouchableOpacity>
+            {!!onRemind && (
+              <TouchableOpacity
+                style={styles.listItem}
+                onPress={() => { onClose(); setTimeout(() => onRemind(), 100); }}
+              >
+                <Clock size={20} color={colors.textPrimary} />
+                <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Remind Me</Text>
+              </TouchableOpacity>
+            )}
 
             {isAuthor && (
               <TouchableOpacity
@@ -275,12 +284,6 @@ const MessageActionSheet = ({
               </TouchableOpacity>
             )}
 
-            {showCopyLink && (
-              <TouchableOpacity style={styles.listItem} onPress={handleCopyLink}>
-                <LinkIcon size={20} color={colors.primary} />
-                <Text style={[styles.listItemText, { color: colors.primary }]}>Copy Link</Text>
-              </TouchableOpacity>
-            )}
 
             {isAuthor && (
               <>

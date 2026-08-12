@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { MessageSquare, AtSign, MessageCircle } from 'lucide-react-native';
 import { useNotificationStore } from "../../stores/notificationStore";
@@ -129,19 +130,38 @@ const ActivityRow = React.memo(({ item, colors, navigation }) => {
           markAsRead(item._id);
           Toast.show({ type: 'success', text1: 'Marked as read' });
         } else {
-          Toast.show({ type: 'info', text1: 'Notification read' });
+          Toast.show({ type: 'info', text1: 'Already read' });
         }
         break;
       case 'Clear/Restore':
-        if (useNotificationStore.getState()?.deleteNotification) {
-          useNotificationStore.getState().deleteNotification(item._id);
-        } else if (useNotificationStore.getState()?.clearNotifications) {
-          useNotificationStore.setState((state) => ({
-            notifications: state.notifications.filter(n => n._id !== item._id)
-          }));
-        }
-        Toast.show({ type: 'success', text1: 'Notification deleted' });
-        break;
+        Alert.alert(
+          "Delete Activity",
+          "Are you sure you want to delete this activity?",
+          [
+            {
+              text: "Cancel",
+              style: "cancel",
+              onPress: () => {
+                swipeableRef.current?.close();
+              }
+            },
+            {
+              text: "Delete",
+              style: "destructive",
+              onPress: () => {
+                if (useNotificationStore.getState()?.deleteNotification) {
+                  useNotificationStore.getState().deleteNotification(item._id);
+                } else if (useNotificationStore.getState()?.clearNotifications) {
+                  useNotificationStore.setState((state) => ({
+                    notifications: state.notifications.filter(n => n._id !== item._id)
+                  }));
+                }
+                Toast.show({ type: 'success', text1: 'Notification deleted' });
+              }
+            }
+          ]
+        );
+        return;
       case 'Remind me':
         Toast.show({ type: 'success', text1: 'Reminder set' });
         break;

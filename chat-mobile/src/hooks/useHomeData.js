@@ -9,12 +9,15 @@ import { useDraftStore } from "../stores/draftStore";
 import { useScheduledStore } from "../stores/scheduledStore";
 import { categoryAPI } from "../services/api";
 import { useTranslation } from "../utils/i18n";
+import { useShallow } from 'zustand/react/shallow';
 
 export const useHomeData = (navigation) => {
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const { t } = useTranslation();
-  const { enabledHomeCards, toggleHomeCard } = useUIStore();
+  const { enabledHomeCards, toggleHomeCard } = useUIStore(
+    useShallow((s) => ({ enabledHomeCards: s.enabledHomeCards, toggleHomeCard: s.toggleHomeCard }))
+  );
   
   const channels = useChannelStore((s) => s.channels) || [];
   const categories = useChannelStore((s) => s.categories) || [];

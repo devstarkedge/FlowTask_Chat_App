@@ -4,26 +4,27 @@ import storage from '../services/storage';
 
 const DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-export const getDraftKey = (channelId, workspaceId, threadId) => {
-  if (!channelId || !workspaceId) return null;
+export const getDraftKey = (channelId, workspaceId, threadId, userId) => {
+  if (!channelId || !workspaceId || !userId) return null;
   const threadKey = threadId || 'root';
-  return `${workspaceId}:${channelId}:${threadKey}`;
+  return `${userId}:${workspaceId}:${channelId}:${threadKey}`;
 };
 
 function isDraftExpired(draft, now = Date.now()) {
   return !draft?.timestamp || now - draft.timestamp > DRAFT_MAX_AGE_MS;
 }
 
-function isContentEmpty(html, text) {
+function isContentEmpty(html, text, files) {
   const trimmedText = (text || '').trim();
   const trimmedHtml = (html || '').trim();
-  return !trimmedText && !trimmedHtml;
+  const hasFiles = Array.isArray(files) && files.length > 0;
+  return !trimmedText && !trimmedHtml && !hasFiles;
 }
 
-export function getWorkspaceDrafts(drafts, workspaceId) {
-  if (!workspaceId) return [];
+export function getWorkspaceDrafts(drafts, workspaceId, userId) {
+  if (!workspaceId || !userId) return [];
 
-  const prefix = `${workspaceId}:`;
+  const prefix = `${userId}:${workspaceId}:`;
   const now = Date.now();
 
   return Object.entries(drafts)
@@ -36,14 +37,14 @@ export function getWorkspaceDrafts(drafts, workspaceId) {
       return (
         draft.channelId &&
         !isDraftExpired(draft, now) &&
-        !isContentEmpty(draft.html, draft.text)
+        !isContentEmpty(draft.html, draft.text, draft.pendingFiles)
       );
     })
     .sort((left, right) => right.timestamp - left.timestamp);
 }
 
-export function countWorkspaceDrafts(drafts, workspaceId) {
-  return getWorkspaceDrafts(drafts, workspaceId).length;
+export function countWorkspaceDrafts(drafts, workspaceId, userId) {
+  return getWorkspaceDrafts(drafts, workspaceId, userId).length;
 }
 
 export const useDraftStore = create(
@@ -53,13 +54,15 @@ export const useDraftStore = create(
       draftCount: 0,
 
       setDraft: (channelId, html, text, workspaceId, threadId, metadata = {}) => {
-        const key = getDraftKey(channelId, workspaceId, threadId);
+        const userId = require('./authStore').useAuthStore.getState().user?._id;
+        const key = getDraftKey(channelId, workspaceId, threadId, userId);
         if (!key) return;
 
         const trimmed = (text || '').trim();
         const trimmedHtml = (html || '').trim();
+        const pendingFiles = metadata.pendingFiles || [];
 
-        if (isContentEmpty(trimmedHtml, trimmed)) {
+        if (isContentEmpty(trimmedHtml, trimmed, pendingFiles)) {
           get().clearDraft(channelId, workspaceId, threadId);
           return;
         }
@@ -74,17 +77,20 @@ export const useDraftStore = create(
               channelId,
               threadId: threadId || null,
               workspaceId,
+              userId,
               mentions: metadata.mentions || [],
               scheduledTime: metadata.scheduledTime || null,
+              pendingFiles,
             },
           };
-          const count = countWorkspaceDrafts(newDrafts, workspaceId);
+          const count = countWorkspaceDrafts(newDrafts, workspaceId, userId);
           return { drafts: newDrafts, draftCount: count };
         });
       },
 
       getDraft: (channelId, workspaceId, threadId) => {
-        const key = getDraftKey(channelId, workspaceId, threadId);
+        const userId = require('./authStore').useAuthStore.getState().user?._id;
+        const key = getDraftKey(channelId, workspaceId, threadId, userId);
         if (!key) return null;
 
         const draft = get().drafts[key];
@@ -99,7 +105,8 @@ export const useDraftStore = create(
       },
 
       clearDraft: (channelId, workspaceId, threadId) => {
-        const key = getDraftKey(channelId, workspaceId, threadId);
+        const userId = require('./authStore').useAuthStore.getState().user?._id;
+        const key = getDraftKey(channelId, workspaceId, threadId, userId);
         if (!key) return;
 
         set((state) => {
@@ -108,18 +115,20 @@ export const useDraftStore = create(
               ([draftKey]) => draftKey !== key
             )
           );
-          const count = countWorkspaceDrafts(newDrafts, workspaceId);
+          const count = countWorkspaceDrafts(newDrafts, workspaceId, userId);
           return { drafts: newDrafts, draftCount: count };
         });
       },
 
       fetchDrafts: async (workspaceId) => {
-        const count = countWorkspaceDrafts(get().drafts, workspaceId);
+        const userId = require('./authStore').useAuthStore.getState().user?._id;
+        const count = countWorkspaceDrafts(get().drafts, workspaceId, userId);
         set({ draftCount: count });
       },
 
       clearWorkspaceDrafts: (workspaceId) => {
-        const wsPrefix = `${workspaceId}:`;
+        const userId = require('./authStore').useAuthStore.getState().user?._id;
+        const wsPrefix = `${userId}:${workspaceId}:`;
         set((state) => ({
           drafts: Object.fromEntries(
             Object.entries(state.drafts).filter(

@@ -47,7 +47,11 @@ const ForwardMessageModal = ({ visible, onClose, message, colors }) => {
   const executeForward = async (destinationIds) => {
     setIsSending(true);
     try {
-      await messageAPI.forward(message._id, { destinationIds });
+      const data = { destinationIds };
+      if (message.forwardAttachment && message.forwardAttachment._id) {
+        data.attachmentFileIds = [message.forwardAttachment._id];
+      }
+      await messageAPI.forward(message._id, data);
       Toast.show({ type: 'success', text1: 'Message forwarded successfully' });
       handleClose();
       
@@ -74,7 +78,11 @@ const ForwardMessageModal = ({ visible, onClose, message, colors }) => {
   const executeGroupForward = async (memberIds) => {
     setIsSending(true);
     try {
-      await messageAPI.forwardToNewGroup(message._id, { memberIds, groupName: "Group Chat" });
+      const data = { memberIds, groupName: "Group Chat" };
+      if (message.forwardAttachment && message.forwardAttachment._id) {
+        data.attachmentFileIds = [message.forwardAttachment._id];
+      }
+      await messageAPI.forwardToNewGroup(message._id, data);
       Toast.show({ type: 'success', text1: 'Message forwarded to new group' });
       handleClose();
     } catch (error) {

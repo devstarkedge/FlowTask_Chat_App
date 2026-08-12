@@ -28,9 +28,12 @@ export const useThreadDetails = ({ rootMessageId, channelId, highlightedMessageI
   const [editingMessage, setEditingMessage] = useState(null);
   const [emojiPickerTarget, setEmojiPickerTarget] = useState(null);
   const [actionMenuTarget, setActionMenuTarget] = useState(null);
+  const [actionAttachmentTarget, setActionAttachmentTarget] = useState(null);
   const [reminderTarget, setReminderTarget] = useState(null);
   const [forwardTarget, setForwardTarget] = useState(null);
   const flatListRef = useRef(null);
+
+  const [replyingTo, setReplyingTo] = useState(null);
 
   const rawReplies = threadRepliesByRoot[rootMessageId];
   const replies = rawReplies || [];
@@ -54,8 +57,9 @@ export const useThreadDetails = ({ rootMessageId, channelId, highlightedMessageI
     }
   }, [highlightedMessageId, replies.length > 0]);
 
-  const showMessageActions = useCallback((item) => {
+  const showMessageActions = useCallback((item, attachment = null) => {
     setActionMenuTarget(item);
+    setActionAttachmentTarget(attachment);
   }, []);
 
   const getAttachments = useCallback((msg) => {
@@ -67,14 +71,15 @@ export const useThreadDetails = ({ rootMessageId, channelId, highlightedMessageI
       if (editingMessage) {
         if (editingMessage._id === rootMessageId) {
           const { editMessage } = useChatStore.getState();
-          await editMessage(rootMessageId, channelId, content, options?.htmlContent);
+          await editMessage(rootMessageId, channelId, content, options?.htmlContent, options?.fileReferences);
         } else {
-          await useThreadStore.getState().editThreadReply(rootMessageId, editingMessage._id, content, options?.htmlContent);
+          await useThreadStore.getState().editThreadReply(rootMessageId, editingMessage._id, content, options?.htmlContent, options?.fileReferences);
         }
         setEditingMessage(null);
       } else {
         await sendThreadReply(rootMessageId, channelId, content, options);
       }
+      setReplyingTo(null);
     } catch (err) {
       console.error('Failed to send reply:', err);
       Toast.show({ type: 'error', text1: 'Failed to send reply' });
@@ -110,10 +115,14 @@ export const useThreadDetails = ({ rootMessageId, channelId, highlightedMessageI
     setReplyText,
     editingMessage,
     setEditingMessage,
+    replyingTo,
+    setReplyingTo,
     emojiPickerTarget,
     setEmojiPickerTarget,
     actionMenuTarget,
     setActionMenuTarget,
+    actionAttachmentTarget,
+    setActionAttachmentTarget,
     reminderTarget,
     setReminderTarget,
     forwardTarget,
@@ -126,3 +135,4 @@ export const useThreadDetails = ({ rootMessageId, channelId, highlightedMessageI
     resolveAuthor
   };
 };
+

@@ -54,7 +54,7 @@ class MessageService {
    * Supports optimistic UI via tempId — client generates a temporary ID,
    * server includes it in the ACK so the client can reconcile.
    */
-  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, tempId, workspaceId, mentions, gifMeta, audioMeta, videoMeta }) {
+  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, parentMessageId, tempId, workspaceId, mentions, gifMeta, audioMeta, videoMeta }) {
     const startTime = performance.now();
 
     // Validate channel exists and is not archived
@@ -113,6 +113,64 @@ class MessageService {
 
     if (flowTaskRef) {
       messageData.flowTaskRef = flowTaskRef;
+    }
+
+    // ─── Resolve parent message (for Quote Replies) ───
+    if (parentMessageId) {
+      const parentMsg = await messageRepository.findById(parentMessageId, { workspaceId: (workspaceId || channel.workspaceId)?.toString() });
+      if (parentMsg) {
+        messageData.parentMessageId = parentMessageId;
+        const pSenderName = parentMsg.authorId?.name || parentMsg.senderSnapshot?.name || 'Unknown';
+        const pContent = parentMsg.content || stripHtml(parentMsg.htmlContent) || '';
+        
+        let pAttachment = null;
+        if (parentMsg.attachments && parentMsg.attachments.length > 0) {
+          const firstAtt = parentMsg.attachments[0];
+          pAttachment = {
+            type: 'attachment',
+            name: firstAtt.originalName || firstAtt.fileName,
+            url: firstAtt.url,
+            thumbnailUrl: firstAtt.thumbnailUrl,
+          };
+        } else if (parentMsg.fileReferences && parentMsg.fileReferences.length > 0) {
+          const firstFile = parentMsg.fileReferences[0]?.fileId;
+          if (firstFile) {
+            pAttachment = {
+              fileId: firstFile._id,
+              type: firstFile.resourceType || 'file',
+              name: firstFile.originalName,
+              url: firstFile.secureUrl || firstFile.url,
+              thumbnailUrl: firstFile.thumbnailUrl,
+            };
+          }
+        } else if (parentMsg.gifMeta) {
+          pAttachment = {
+            type: 'gif',
+            name: 'GIF',
+            url: parentMsg.gifMeta.gifUrl || parentMsg.gifUrl,
+          };
+        } else if (parentMsg.videoMeta || parentMsg.videoUrl) {
+          pAttachment = {
+            type: 'video',
+            name: 'Video',
+            url: parentMsg.videoUrl || parentMsg.videoMeta?.videoUrl,
+            thumbnailUrl: parentMsg.thumbnailUrl || parentMsg.videoMeta?.thumbnailUrl,
+          };
+        } else if (parentMsg.audioMeta || parentMsg.audioUrl) {
+           pAttachment = {
+             type: 'audio',
+             name: 'Audio Voice Note',
+             url: parentMsg.audioUrl || parentMsg.audioMeta?.audioUrl,
+           };
+        }
+        
+        messageData.replyTo = {
+          messageId: parentMsg._id,
+          senderName: pSenderName,
+          content: pContent,
+          ...(pAttachment && { attachment: pAttachment }),
+        };
+      }
     }
 
     let actualThreadId = null;

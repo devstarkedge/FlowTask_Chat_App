@@ -184,6 +184,25 @@ const messageSchema = new Schema({
     default: null,
     // index: removed — covered by compound { threadId: 1, createdAt: 1 }
   },
+  // If this message is a quote reply, parentMessageId points to the specific message being quoted.
+  parentMessageId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Message',
+    default: null,
+  },
+  // Canonical backend-generated snapshot of the quoted message for rendering (so if parent is deleted, quote persists)
+  replyTo: {
+    messageId: { type: Schema.Types.ObjectId, default: null },
+    senderName: { type: String, default: null },
+    content: { type: String, default: null },
+    attachment: {
+      fileId: { type: Schema.Types.ObjectId, default: null },
+      type: { type: String, default: null },
+      name: { type: String, default: null },
+      url: { type: String, default: null },
+      thumbnailUrl: { type: String, default: null },
+    },
+  },
   authorId: {
     type: Schema.Types.ObjectId,
     ref: 'ChatUser',

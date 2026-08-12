@@ -228,23 +228,23 @@ const MessageActionSheet = ({
                 onPress={() => { onClose(); setTimeout(() => onReplyInThread(message), 100); }}
               >
                 <MessageSquare size={24} color={colors.textPrimary} style={{ marginBottom: verticalScale(8) }} />
-                <Text style={[styles.bigActionText, { color: colors.textPrimary }]}>Reply in thread</Text>
-              </TouchableOpacity>
-            )}
-
-            {!!onReply && (
-              <TouchableOpacity
-                style={[styles.bigActionBtn, { backgroundColor: colors.backgroundSecondary }]}
-                onPress={() => { onClose(); setTimeout(() => onReply(message), 100); }}
-              >
-                <MessageSquare size={24} color={colors.textPrimary} style={{ marginBottom: verticalScale(8) }} />
-                <Text style={[styles.bigActionText, { color: colors.textPrimary }]}>Reply</Text>
+                <Text style={[styles.bigActionText, { color: colors.textPrimary, textAlign: 'center' }]}>Reply in thread</Text>
               </TouchableOpacity>
             )}
           </View>
 
           {/* List Actions */}
           <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
+
+            {!!onReply && (
+              <TouchableOpacity
+                style={styles.listItem}
+                onPress={() => { onClose(); setTimeout(() => onReply(message), 100); }}
+              >
+                <MessageSquare size={20} color={colors.textPrimary} />
+                <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Quote Reply</Text>
+              </TouchableOpacity>
+            )}
 
             {!!onPin && (
               <TouchableOpacity

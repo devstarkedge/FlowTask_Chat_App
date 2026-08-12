@@ -38,7 +38,7 @@ import {
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import logger from "../utils/logger";
-import { buildReplyToSnapshot, resolveMessageSenderName } from "../utils/replyUtils";
+import { buildReplyToSnapshot, resolveMessageSenderName, getMessagePlainText } from "../utils/replyUtils";
 import { useKeyboardState } from "react-native-keyboard-controller";
 import { useDraftStore } from "../stores/draftStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
@@ -459,16 +459,24 @@ const MessageComposer = React.memo(function MessageComposer({
       source: 'chat_upload',
     }));
 
-    const replyTo = buildReplyToSnapshot(replyingTo, members);
+    const replyTo = replyingTo?._id ? buildReplyToSnapshot(replyingTo, members) : null;
 
     onSend(plainContent, {
       htmlContent: htmlContent || undefined,
-      parentMessageId: replyingTo?._id || null,
-      replyTo: replyTo || undefined,
+      ...(replyTo
+        ? {
+            parentMessageId: replyingTo._id,
+            replyTo,
+          }
+        : {}),
       fileReferences: uploadedFiles.map((f) => f._id),
       attachments: attachmentObjects,
       mentions: mentionPayload,
     });
+
+    // Clear reply/edit banner after send so it never sticks onto the next message
+    if (replyingTo) onCancelReply?.();
+    else if (editingMessage) onCancelEdit?.();
 
     latestContentRef.current = { html: '', text: '' };
     editorRef.current?.clear();
@@ -483,6 +491,7 @@ const MessageComposer = React.memo(function MessageComposer({
     text,
     onSend,
     replyingTo,
+    editingMessage,
     pendingFiles,
     pendingMentions,
     channelId,
@@ -490,6 +499,8 @@ const MessageComposer = React.memo(function MessageComposer({
     clearDraft,
     onChangeText,
     members,
+    onCancelReply,
+    onCancelEdit,
   ]);
 
   // ─── Schedule send ─────────────────────────────────────────────────────────
@@ -506,13 +517,17 @@ const MessageComposer = React.memo(function MessageComposer({
 
       if (!scheduledAt || (!plainContent && pendingFiles.length === 0)) return;
 
-      const replyTo = buildReplyToSnapshot(replyingTo, members);
+      const replyTo = replyingTo?._id ? buildReplyToSnapshot(replyingTo, members) : null;
 
       onSend(plainContent, {
         htmlContent: htmlContent || undefined,
         scheduledAt,
-        parentMessageId: replyingTo?._id || null,
-        replyTo: replyTo || undefined,
+        ...(replyTo
+          ? {
+              parentMessageId: replyingTo._id,
+              replyTo,
+            }
+          : {}),
         fileReferences: pendingFiles.filter((f) => f._id).map((f) => f._id),
       });
 
@@ -748,11 +763,15 @@ const MessageComposer = React.memo(function MessageComposer({
       
       if (fileId) {
         setPendingFiles(prev => prev.filter(f => f._tempUri !== uri));
-        const replyTo = buildReplyToSnapshot(replyingTo, members);
+        const replyTo = replyingTo?._id ? buildReplyToSnapshot(replyingTo, members) : null;
         onSend("", {
           contentType: type,
-          parentMessageId: replyingTo?._id || null,
-          replyTo: replyTo || undefined,
+          ...(replyTo
+            ? {
+                parentMessageId: replyingTo._id,
+                replyTo,
+              }
+            : {}),
           fileReferences: [fileId],
           attachments: [{
             fileName: uploadedFile.fileName || uploadedFile.originalName || file.name,
@@ -818,7 +837,9 @@ const MessageComposer = React.memo(function MessageComposer({
               >
                 {replyingTo?.attachmentContext 
                   ? (replyingTo.attachmentContext.name || replyingTo.attachmentContext.fileName || 'Media attached')
-                  : (editingMessage?.content || replyingTo?.content || "[Media attached]")}
+                  : (editingMessage
+                      ? (getMessagePlainText(editingMessage) || editingMessage?.content || "Editing message")
+                      : (getMessagePlainText(replyingTo) || "[Media attached]"))}
               </Text>
             </View>
           </View>
@@ -1162,12 +1183,16 @@ const MessageComposer = React.memo(function MessageComposer({
         onClose={() => setShowGifPicker(false)}
         colors={colors}
         onSelectGif={(gif) => {
-          const replyTo = buildReplyToSnapshot(replyingTo, members);
+          const replyTo = replyingTo?._id ? buildReplyToSnapshot(replyingTo, members) : null;
           onSend('', {
             contentType: 'gif',
             gifMeta: gif,
-            parentMessageId: replyingTo?._id || null,
-            replyTo: replyTo || undefined,
+            ...(replyTo
+              ? {
+                  parentMessageId: replyingTo._id,
+                  replyTo,
+                }
+              : {}),
           });
           if (editingMessage) onCancelEdit?.();
           else onCancelReply?.();

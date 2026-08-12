@@ -393,8 +393,8 @@ export const connectSocket = async () => {
     }
   });
 
-  // Scheduled Message Events (server emits scheduledMessage:* — NOT scheduled:*)
-  socket.on('scheduledMessage:sent', (payload) => {
+  // Scheduled Message Events
+  socket.on('scheduled:sent', (payload) => {
     const { scheduledMessageId, message } = payload;
     useScheduledStore.getState().handleScheduledSent(payload);
     // Add the sent message to chat if provided
@@ -403,17 +403,17 @@ export const connectSocket = async () => {
     }
   });
 
-  socket.on('scheduledMessage:cancelled', (payload) => {
+  socket.on('scheduled:cancelled', (payload) => {
     useScheduledStore.getState().handleScheduledCancelled(payload);
   });
 
-  socket.on('scheduledMessage:failed', (payload) => {
+  socket.on('scheduled:failed', (payload) => {
     const { scheduledMessageId, error } = payload;
     useScheduledStore.getState().handleScheduledFailed(payload);
     logger.error('[Socket] Scheduled message failed:', scheduledMessageId, error);
   });
 
-  socket.on('scheduledMessage:deleted', (payload) => {
+  socket.on('scheduled:deleted', (payload) => {
     useScheduledStore.getState().handleScheduledCancelled(payload);
   });
 

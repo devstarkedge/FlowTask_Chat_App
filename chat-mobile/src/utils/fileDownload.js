@@ -44,7 +44,22 @@ export async function downloadAndSaveFile(url, filename = 'download', mimeType =
     });
 
     // 1. Download to temporary cache
-    const downloadRes = await FileSystem.downloadAsync(url, tempUri);
+    const headers = {};
+    const isInternalUrl = url && (url.includes('/api/chat') || url.includes('/messages/files/'));
+    if (isInternalUrl) {
+      try {
+        const { useAuthStore } = require('../stores/authStore');
+        const { useWorkspaceStore } = require('../stores/workspaceStore');
+        const token = useAuthStore.getState().accessToken;
+        const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
+      } catch (err) {
+        logger.warn('[FileDownload] Could not fetch auth headers:', err);
+      }
+    }
+
+    const downloadRes = await FileSystem.downloadAsync(url, tempUri, { headers });
     if (!downloadRes || downloadRes.status !== 200) {
       throw new Error(`Download failed with status ${downloadRes?.status || 'unknown'}`);
     }

@@ -23,6 +23,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import logger from '../../utils/logger';
 import DocumentPreviewModal from '../chat/DocumentPreviewModal';
+import ENV from '../../config/environment';
 
 import {
   FileText,
@@ -316,6 +317,13 @@ export default function MobileFileCard({ file, colors, onLongPress }) {
 
   const kind = getFileKind(mime, name, fileUrl);
 
+  const apiBase = (ENV.API_BASE_URL || '').replace(/\/api\/chat\/?$/i, '');
+  const isMongoId = /^[0-9a-fA-F]{24}$/.test(file._id);
+  const proxyUrl = isMongoId ? `${apiBase}/api/chat/messages/files/${file._id}/proxy` : fileUrl;
+  
+  // Use proxyUrl for documents to avoid Cloudinary 401 on raw files
+  const finalDocUrl = (kind === 'image' || kind === 'video' || kind === 'audio') ? fileUrl : proxyUrl;
+
   const activeColor = (KIND_COLORS[kind] || KIND_COLORS.file);
   const themeColor  = kind === 'image' || kind === 'video' || kind === 'audio'
     ? activeColor
@@ -519,7 +527,7 @@ export default function MobileFileCard({ file, colors, onLongPress }) {
       {/* Document Preview Modal */}
       <DocumentPreviewModal
         visible={docVisible}
-        fileUrl={fileUrl}
+        fileUrl={finalDocUrl}
         name={name}
         mimeType={mime}
         kind={kind}

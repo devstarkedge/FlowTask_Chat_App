@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system/legacy';
+import ENV from '../../config/environment';
 import { X, Download, FileText, File as FileIcon } from 'lucide-react-native';
 import { downloadAndSaveFile } from '../../utils/fileDownload';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
@@ -45,18 +46,30 @@ export default function DocumentPreviewModal({ visible, fileUrl, name, mimeType,
         const token = useAuthStore.getState().accessToken;
         const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
         const headers = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
+        const apiBase = (ENV.API_BASE_URL || '').replace(/\/api\/chat\/?$/i, '');
+        const isInternalUrl = fileUrl && (
+          fileUrl.includes('/api/chat') || 
+          fileUrl.includes('/messages/files/') ||
+          (apiBase && fileUrl.startsWith(apiBase)) ||
+          fileUrl.startsWith('http://localhost') ||
+          fileUrl.startsWith('http://10.0.2.2')
+        );
+
+        if (isInternalUrl) {
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+          if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
+        }
 
         const safeFilename = name.replace(/[^a-zA-Z0-9._-]/g, '_');
         const tempUri = `${FileSystem.cacheDirectory}preview_${Date.now()}_${safeFilename}`;
 
+        logger.info('[DocumentPreviewModal] Downloading preview:', { fileUrl, isInternalUrl, hasToken: !!token });
         const downloadRes = await FileSystem.downloadAsync(fileUrl, tempUri, { headers });
         
         if (!isMounted) return;
 
         if (downloadRes.status !== 200) {
-          throw new Error('Failed to download preview file');
+          throw new Error(`Failed to download preview file (status: ${downloadRes.status})`);
         }
 
         setLocalUri(downloadRes.uri);

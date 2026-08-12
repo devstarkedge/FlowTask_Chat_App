@@ -202,7 +202,7 @@ export const useThreadStore = create(
       },
 
       sendThreadReply: async (rootMessageId, channelId, content, options = {}) => {
-        const { htmlContent, fileReferences, mentions } = options;
+        const { htmlContent, fileReferences, mentions, parentMessageId, replyTo } = options;
         const user = useAuthStore.getState().user;
         const tempId = `temp-reply-${Date.now()}`;
 
@@ -216,6 +216,8 @@ export const useThreadStore = create(
           pending: true,
           fileReferences: fileReferences || [],
           mentions: mentions || [],
+          parentMessageId,
+          replyTo,
         };
 
         get().addThreadReply(rootMessageId, optimisticReply);
@@ -225,6 +227,7 @@ export const useThreadStore = create(
             content,
             htmlContent,
             threadId: rootMessageId,
+            parentMessageId,
             fileReferences,
             mentions,
             tempId,
@@ -265,10 +268,11 @@ export const useThreadStore = create(
         }));
       },
 
-      editThreadReply: async (rootMessageId, replyId, content, htmlContent) => {
+      editThreadReply: async (rootMessageId, replyId, content, htmlContent, fileReferences) => {
         try {
           const payload = { content };
           if (htmlContent) payload.htmlContent = htmlContent;
+          if (fileReferences) payload.fileReferences = fileReferences;
           const { data } = await api.put(`/messages/${replyId}`, payload);
           const updated = data.data?.message || data.data;
           set((state) => ({

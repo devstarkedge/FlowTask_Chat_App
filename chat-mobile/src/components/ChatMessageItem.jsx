@@ -12,15 +12,10 @@ import MobileFileCard from './common/MobileFileCard';
 import MessageStatusTicks from './MessageStatusTicks';
 import ReactionBar from './ReactionBar';
 import logger from '../utils/logger';
-import { getFileKind } from '../utils/mediaUtils';
+import { getFileKind, getMessageAttachments } from '../utils/mediaUtils';
 
 // Helpers
 const getAuthorId = (item) => item?.authorId?._id || item?.authorId;
-const getMessageAttachments = (item) => {
-  if (item.attachments && item.attachments.length > 0) return item.attachments;
-  if (item.fileRefs && item.fileRefs.length > 0) return item.fileRefs;
-  return [];
-};
 
 const ChatMessageItem = memo(({
   item,
@@ -243,6 +238,7 @@ const ChatMessageItem = memo(({
                 fileSize={item.audioMeta?.fileSize || attachments[0]?.fileSize}
                 colors={colors}
                 isMe={isMe}
+                onLongPress={() => !isDeleted && showMessageActions(item, attachments[0] || { url: item.audioUrl || item.audioMeta?.audioUrl })}
               />
             ) : item.contentType === 'video' || item.type === 'video' ? (
               <VideoMessagePlayer
@@ -251,6 +247,7 @@ const ChatMessageItem = memo(({
                 width={item.width || item.videoMeta?.width}
                 height={item.height || item.videoMeta?.height}
                 colors={colors}
+                onLongPress={() => !isDeleted && showMessageActions(item, attachments[0] || { url: item.videoUrl || item.videoMeta?.videoUrl, thumbnailUrl: item.thumbnailUrl || item.videoMeta?.thumbnailUrl })}
               />
             ) : item.contentType === 'gif' && item.gifMeta ? (
               <GifRenderer item={item} contentColor={contentColor} styles={styles} />
@@ -289,10 +286,11 @@ const ChatMessageItem = memo(({
                         width={file.width || 16}
                         height={file.height || 9}
                         colors={colors}
+                        onLongPress={() => !isDeleted && showMessageActions(item, file)}
                       />
                     );
                   }
-                  return <MobileFileCard key={file._id || i} file={file} colors={colors} />;
+                  return <MobileFileCard key={file._id || i} file={file} colors={colors} onLongPress={() => !isDeleted && showMessageActions(item, file)} />;
                 })}
               </RNView>
             )}
@@ -379,12 +377,22 @@ const ChatMessageItem = memo(({
   );
 }, (prevProps, nextProps) => {
   // Custom memo comparison for extreme performance
+  const prevIsSaved = prevProps.savedMessageIds.includes(prevProps.item._id);
+  const nextIsSaved = nextProps.savedMessageIds.includes(nextProps.item._id);
+
+  const prevIsHighlighted = prevProps.highlightedMessageId === prevProps.item._id || 
+    (prevProps.searchQuery && prevProps.searchResults.length > 0 && prevProps.searchResults[prevProps.currentMatch] === prevProps.index);
+    
+  const nextIsHighlighted = nextProps.highlightedMessageId === nextProps.item._id || 
+    (nextProps.searchQuery && nextProps.searchResults.length > 0 && nextProps.searchResults[nextProps.currentMatch] === nextProps.index);
+
   return (
     prevProps.item === nextProps.item &&
     prevProps.prevItem === nextProps.prevItem &&
     prevProps.nextItem === nextProps.nextItem &&
-    prevProps.isHighlighted === nextProps.isHighlighted &&
-    prevProps.isMatch === nextProps.isMatch &&
+    prevIsSaved === nextIsSaved &&
+    prevIsHighlighted === nextIsHighlighted &&
+    prevProps.searchQuery === nextProps.searchQuery &&
     prevProps.colors.background === nextProps.colors.background
   );
 });

@@ -15,6 +15,12 @@ import { registerForPushNotifications, setNavigationRef } from "./src/services/p
 import { conversationPresence } from "./src/services/conversationPresence";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 import Toast from "react-native-toast-message";
+import { toastConfig } from "./src/config/toastConfig";
+import { GlobalToastProvider } from "./src/components/common/GlobalToastProvider";
+import { useToastStore } from "./src/utils/toastStore";
+
+Toast.show = (options) => useToastStore.getState().show(options);
+Toast.hide = () => useToastStore.getState().hide();
 import ThemeProvider from './src/theme/ThemeProvider';
 
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -120,7 +126,7 @@ export default function App() {
               <KeyboardProvider>
                 <NavigationContainer ref={navigationRef} linking={linking}>
                   <AppNavigator />
-                  <Toast />
+                  <GlobalToastProvider />
                 </NavigationContainer>
               </KeyboardProvider>
             </ThemeProvider>

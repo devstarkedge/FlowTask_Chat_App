@@ -436,13 +436,35 @@ export const fileAPI = {
               fileUri = `file://${fileUri}`;
             }
 
-            const response = await FileSystem.uploadAsync(uploadUrl, fileUri, {
+            const uploadOptions = {
               fieldName: fieldName || 'files',
               httpMethod: 'POST',
               uploadType: FileSystem.FileSystemUploadType.MULTIPART,
               headers: uploadHeaders,
               mimeType: fileObj.type || 'image/jpeg',
-            });
+            };
+
+            let response;
+            if (onProgress) {
+              const uploadTask = FileSystem.createUploadTask(
+                uploadUrl,
+                fileUri,
+                uploadOptions,
+                (data) => {
+                  if (data.totalBytesExpectedToSend > 0) {
+                    // Normalize to Axios-like progress event
+                    onProgress({
+                      loaded: data.totalBytesSent,
+                      total: data.totalBytesExpectedToSend,
+                      progress: data.totalBytesSent / data.totalBytesExpectedToSend,
+                    });
+                  }
+                }
+              );
+              response = await uploadTask.uploadAsync();
+            } else {
+              response = await FileSystem.uploadAsync(uploadUrl, fileUri, uploadOptions);
+            }
 
             if (response.status >= 200 && response.status < 300) {
               const resJson = JSON.parse(response.body);

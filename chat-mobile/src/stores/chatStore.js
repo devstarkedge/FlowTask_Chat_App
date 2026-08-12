@@ -72,7 +72,7 @@ export const useChatStore = create(
   sendMessage: async (channelId, content, options = {}) => {
     const user = useAuthStore.getState().user;
     const tempId = `temp-${Date.now()}`;
-    const { htmlContent, threadId, fileReferences, attachments, mentions, scheduledAt, contentType, gifMeta, audioMeta, videoMeta } = options;
+    const { htmlContent, threadId, parentMessageId, replyTo, fileReferences, attachments, mentions, scheduledAt, contentType, gifMeta, audioMeta, videoMeta } = options;
     
     // If scheduledAt is present, delegate to scheduledStore
     if (scheduledAt) {
@@ -80,6 +80,7 @@ export const useChatStore = create(
         const payload = { content, scheduledAt };
         if (htmlContent) payload.htmlContent = htmlContent;
         if (threadId) payload.threadId = threadId;
+        if (parentMessageId) payload.parentMessageId = parentMessageId;
         if (fileReferences?.length) payload.fileReferences = fileReferences;
         if (attachments?.length) payload.attachments = attachments;
         if (mentions?.length) payload.mentions = mentions;
@@ -113,6 +114,8 @@ export const useChatStore = create(
       createdAt: new Date().toISOString(),
       pending: true,
       attachments: attachments?.length ? attachments : (fileReferences || []),
+      parentMessageId,
+      replyTo,
     };
 
     // Add locally (don't add to channel list if scheduled)
@@ -123,6 +126,7 @@ export const useChatStore = create(
       const payload = { content, tempId };
       if (htmlContent) payload.htmlContent = htmlContent;
       if (threadId) payload.threadId = threadId;
+      if (parentMessageId) payload.parentMessageId = parentMessageId;
       if (fileReferences?.length) payload.fileReferences = fileReferences;
       if (attachments?.length) payload.attachments = attachments;
       if (mentions?.length) payload.mentions = mentions;
@@ -155,6 +159,7 @@ export const useChatStore = create(
         const payload = { content, tempId };
         if (htmlContent) payload.htmlContent = htmlContent;
         if (threadId) payload.threadId = threadId;
+        if (parentMessageId) payload.parentMessageId = parentMessageId;
         if (fileReferences?.length) payload.fileReferences = fileReferences;
         if (attachments?.length) payload.attachments = attachments;
         if (mentions?.length) payload.mentions = mentions;
@@ -202,9 +207,19 @@ export const useChatStore = create(
       if (existing.some(m => m._id === message._id)) return state;
       
       const MAX_MESSAGES_IN_MEMORY = 200;
-      let updated = [...existing, message].sort(
-        (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-      );
+      
+      const newDate = new Date(message.createdAt).getTime();
+      const lastMsg = existing[existing.length - 1];
+      const lastDate = lastMsg ? new Date(lastMsg.createdAt).getTime() : 0;
+      
+      let updated;
+      if (newDate >= lastDate) {
+        updated = [...existing, message];
+      } else {
+        updated = [...existing, message].sort(
+          (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+        );
+      }
       
       if (updated.length > MAX_MESSAGES_IN_MEMORY) {
         updated = updated.slice(updated.length - MAX_MESSAGES_IN_MEMORY);
@@ -336,10 +351,11 @@ export const useChatStore = create(
   },
 
   // ─── Edit / Delete Message ──────────────────────────────────────────────────
-  editMessage: async (messageId, channelId, content, htmlContent) => {
+  editMessage: async (messageId, channelId, content, htmlContent, fileReferences) => {
     try {
       const payload = { content };
       if (htmlContent) payload.htmlContent = htmlContent;
+      if (fileReferences) payload.fileReferences = fileReferences;
 
       const { data } = await api.put(`/messages/${messageId}`, payload);
       const updated = data.data?.message || data.data;
@@ -440,11 +456,22 @@ export const useChatStore = create(
     set((state) => {
       const msgs = state.messagesByChannel[channelId] || [];
       const exists = msgs.some((m) => m._id === message._id);
-      const updated = exists
-        ? msgs.map((m) => (m._id === message._id ? { ...m, ...message } : m))
-        : [...msgs, message].sort(
-            (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+      let updated;
+      if (exists) {
+        updated = msgs.map((m) => (m._id === message._id ? { ...m, ...message } : m));
+      } else {
+        const newDate = new Date(message.createdAt).getTime();
+        const lastMsg = msgs[msgs.length - 1];
+        const lastDate = lastMsg ? new Date(lastMsg.createdAt).getTime() : 0;
+        
+        if (newDate >= lastDate) {
+          updated = [...msgs, message];
+        } else {
+          updated = [...msgs, message].sort(
+            (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
           );
+        }
+      }
 
       return {
         messagesByChannel: {

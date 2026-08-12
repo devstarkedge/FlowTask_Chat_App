@@ -17,7 +17,7 @@ import logger from '../utils/logger.js';
  */
 
 let intervalHandle = null;
-const POLL_INTERVAL_MS = 30_000; // 30 seconds
+const POLL_INTERVAL_MS = 2000; // 2 seconds
 const QUEUE_NAME = 'scheduled-messages';
 let bullMQEnabled = false;
 
@@ -30,7 +30,7 @@ async function processScheduledMessage(scheduled) {
     const claimed = await ScheduledMessage.findOneAndUpdate(
       { _id: scheduled._id, status: 'pending' },
       { $set: { status: 'processing' } },
-      { returnDocument: 'after' },
+      { new: true },
     );
     if (!claimed) return; // Another instance claimed it
 
@@ -41,7 +41,12 @@ async function processScheduledMessage(scheduled) {
       htmlContent: scheduled.htmlContent,
       threadId: scheduled.threadId,
       workspaceId: scheduled.workspaceId,
-      attachments: scheduled.attachments || [],
+      attachments: (scheduled.attachments || []).map(att => ({
+        ...att.toObject(),
+        originalName: att.fileName || 'attachment',
+        source: 'chat_upload',
+      })),
+      fileReferences: (scheduled.attachments || []).map(att => att.fileId).filter(Boolean),
       mentions: (scheduled.mentions || []).map((m) => ({
         userId: m.targetId,
         username: m.name,

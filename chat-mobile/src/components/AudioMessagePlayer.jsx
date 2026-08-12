@@ -22,7 +22,7 @@ const formatBytes = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
-const AudioMessagePlayer = ({ audioUrl, duration, fileSize, colors, isMe }) => {
+const AudioMessagePlayer = ({ audioUrl, duration, fileSize, colors, isMe, onLongPress }) => {
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [positionMillis, setPositionMillis] = useState(0);
@@ -96,7 +96,12 @@ const AudioMessagePlayer = ({ audioUrl, duration, fileSize, colors, isMe }) => {
     : formatDuration(durationMillis);
 
   return (
-    <View style={styles.container}>
+    <TouchableOpacity 
+      style={styles.container}
+      onLongPress={onLongPress}
+      activeOpacity={0.9}
+      delayLongPress={300}
+    >
       <TouchableOpacity 
         style={[styles.playButton, { backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.05)' }]}
         onPress={togglePlayback}
@@ -139,7 +144,7 @@ const AudioMessagePlayer = ({ audioUrl, duration, fileSize, colors, isMe }) => {
           )}
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 

@@ -6,7 +6,7 @@ import { scale, moderateScale } from '../utils/responsive';
 import { normalizeMediaUrl } from '../utils/mediaUtils';
 import logger from '../utils/logger';
 
-const VideoMessagePlayer = ({ videoUrl, thumbnailUrl, colors, width, height }) => {
+const VideoMessagePlayer = ({ videoUrl, thumbnailUrl, colors, width, height, onLongPress }) => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const videoRef = useRef(null);
@@ -25,6 +25,7 @@ const VideoMessagePlayer = ({ videoUrl, thumbnailUrl, colors, width, height }) =
         style={[styles.container, { width: displayWidth, height: displayHeight, backgroundColor: '#1a1a1a' }]} 
         activeOpacity={0.9}
         onPress={() => setIsFullScreen(true)}
+        onLongPress={onLongPress}
         disabled={normalizedVideoUrl === '/placeholder-loading' || !normalizedVideoUrl}
       >
         {normalizedVideoUrl === '/placeholder-loading' || !normalizedVideoUrl ? (

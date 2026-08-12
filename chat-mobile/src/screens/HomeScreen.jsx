@@ -56,7 +56,7 @@ const HomeScreen = ({ navigation }) => {
   React.useEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, []);
-  const { colors } = useThemeStore();
+  const colors = useThemeStore((s) => s.colors);
   
   const {
     user,
@@ -101,10 +101,6 @@ const HomeScreen = ({ navigation }) => {
 
   const sections = useMemo(() => {
     const result = [];
-    const showSkeletons = isChannelsLoading && channels.length === 0;
-    const skeletonData = showSkeletons 
-      ? [{ _id: "skel1", isSkeleton: true }, { _id: "skel2", isSkeleton: true }, { _id: "skel3", isSkeleton: true }] 
-      : [];
 
     if (unreadConversations.length > 0) {
       result.push({
@@ -180,14 +176,14 @@ const HomeScreen = ({ navigation }) => {
       });
     });
 
-    // Channels section (only render if there are channels or loading skeletons)
+    // Channels section (only render if there are regular channels)
     const hasRegularChannels = regularChannels && regularChannels.length > 0;
-    if (showSkeletons || hasRegularChannels) {
+    if (hasRegularChannels) {
       result.push({
         key: "channels",
         title: t("Channels"),
         icon: Hash,
-        data: sectionsExpanded.channels !== false ? (showSkeletons ? skeletonData : regularChannels) : [],
+        data: sectionsExpanded.channels !== false ? regularChannels : [],
         type: "channel",
         showAddChannel: true,
       });
@@ -198,7 +194,7 @@ const HomeScreen = ({ navigation }) => {
       key: "dms",
       title: t("Direct Messages"),
       icon: MessageSquare,
-      data: sectionsExpanded.dms !== false ? (showSkeletons ? skeletonData : regularDMs) : [],
+      data: sectionsExpanded.dms !== false ? regularDMs : [],
       type: "dm",
       showAddChannel: false,
     });
@@ -251,8 +247,6 @@ const HomeScreen = ({ navigation }) => {
     return <AddChannelRow onPress={() => setCreateChannelVisible(true)} colors={colors} indentLevel={1} />;
   };
   const renderItem = ({ item, section }) => {
-    if (item.isSkeleton) return <SkeletonRow colors={colors} />;
-    
     if (section.type === "category_parent") {
       const cat = item;
       const catExpanded = sectionsExpanded[`cat_${cat._id}`] !== false;
@@ -330,16 +324,6 @@ const HomeScreen = ({ navigation }) => {
   const quickCardsTotal = unreadThreadCount + savedCount + draftCount + scheduledCount;
 
   const visibleCards = useMemo(() => {
-    const isLoadingCards = isThreadsLoading && quickCardsTotal === 0;
-    if (isLoadingCards) {
-      return [
-        { key: "skel1", isSkeleton: true },
-        { key: "skel2", isSkeleton: true },
-        { key: "skel3", isSkeleton: true },
-        { key: "skel4", isSkeleton: true },
-      ];
-    }
-
     const cards = [];
     
     if (enabledHomeCards.threads !== false) {
@@ -367,9 +351,7 @@ const HomeScreen = ({ navigation }) => {
     <View style={{ backgroundColor: colors.backgroundSecondary }}>
       {visibleCards.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cardsRow} style={{ backgroundColor: colors.backgroundSecondary }}>
-          {visibleCards.map((card) => card.isSkeleton ? (
-            <SkeletonCard key={card.key} colors={colors} />
-          ) : (
+          {visibleCards.map((card) => (
             <QuickCard key={card.key} icon={card.icon} label={card.label} subtitle={card.subtitle} onPress={card.onPress} colors={colors} />
           ))}
         </ScrollView>

@@ -22,6 +22,7 @@ import { normalizeMediaUrl, getFileKind } from '../../utils/mediaUtils';
 import { useAuthStore } from '../../stores/authStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import logger from '../../utils/logger';
+import DocumentPreviewModal from '../chat/DocumentPreviewModal';
 
 import {
   FileText,
@@ -295,53 +296,11 @@ function AudioPlayerCard({ fileUrl, name, activeColor, colors }) {
   );
 }
 
-// ─── Code Preview Modal ───────────────────────────────────────────────────────
-
-function CodePreviewModal({ visible, fileUrl, name, onClose }) {
-  const [code, setCode] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  React.useEffect(() => {
-    if (!visible || !fileUrl) return;
-    setLoading(true);
-    setError(false);
-    fetch(fileUrl)
-      .then(r => r.text())
-      .then(t => { setCode(t); setLoading(false); })
-      .catch(() => { setError(true); setLoading(false); });
-  }, [visible, fileUrl]);
-
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <View style={ms.codeModalBg}>
-        <View style={ms.codeHeader}>
-          <TouchableOpacity onPress={onClose} style={ms.videoHeaderBtn}>
-            <X size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={ms.codeTitle} numberOfLines={1}>{name}</Text>
-          <TouchableOpacity onPress={() => Linking.openURL(fileUrl)} style={ms.videoHeaderBtn}>
-            <ExternalLink size={18} color="#fff" />
-          </TouchableOpacity>
-        </View>
-        <ScrollView style={ms.codeScroll} horizontal={false}>
-          <ScrollView horizontal showsHorizontalScrollIndicator>
-            {loading
-              ? <ActivityIndicator color="#a5f3fc" style={{ margin: moderateScale(40) }} />
-              : error
-                ? <Text style={ms.codeError}>Failed to load file content.</Text>
-                : <Text style={ms.codeText} selectable>{code}</Text>
-            }
-          </ScrollView>
-        </ScrollView>
-      </View>
-    </Modal>
-  );
-}
+// Code Preview Modal has been migrated to DocumentPreviewModal
 
 // ─── Main MobileFileCard ──────────────────────────────────────────────────────
 
-export default function MobileFileCard({ file, colors }) {
+export default function MobileFileCard({ file, colors, onLongPress }) {
   if (!file) return null;
 
   const name = file.originalName || file.fileName || file.name || 'File';
@@ -364,44 +323,33 @@ export default function MobileFileCard({ file, colors }) {
 
   const [imgVisible,   setImgVisible]   = useState(false);
   const [vidVisible,   setVidVisible]   = useState(false);
-  const [codeVisible,  setCodeVisible]  = useState(false);
-  const [downloading,  setDownloading]  = useState(false);
+  const [docVisible,   setDocVisible]   = useState(false);
   const [imgLoading,   setImgLoading]   = useState(true);
   const [imgError,     setImgError]     = useState(false);
 
   // ── Action handlers ──
 
-  const openNative = useCallback(async () => {
-    if (!fileUrl) return;
-    setDownloading(true);
-    try {
-      await downloadAndSaveFile(fileUrl, name, mime);
-    } catch {
-      Linking.openURL(fileUrl);
-    } finally {
-      setDownloading(false);
-    }
-  }, [fileUrl, name, mime]);
-
   const handleCardPress = useCallback(() => {
     switch (kind) {
       case 'image': setImgVisible(true);  break;
       case 'video': setVidVisible(true);  break;
-      case 'code':
-      case 'text':  setCodeVisible(true); break;
-      default:      openNative();         break;
+      default:      setDocVisible(true);  break;
     }
-  }, [kind, openNative]);
+  }, [kind]);
 
   const isPlaceholder = !fileUrl || fileUrl.includes('/placeholder-loading');
 
   // ── IMAGES: render inline thumbnail ──
   if (kind === 'image' && isPlaceholder) {
     return (
-      <View style={[ms.card, { backgroundColor: colors.backgroundSecondary || colors.background, borderColor: colors.border }]}>
+      <TouchableOpacity 
+        style={[ms.card, { backgroundColor: colors.backgroundSecondary || colors.background, borderColor: colors.border }]}
+        onLongPress={onLongPress}
+        activeOpacity={0.75}
+      >
         <ActivityIndicator size="small" color={colors.primary || '#1264a3'} style={{ marginRight: scale(8) }} />
         <Text style={[ms.fileName, { color: colors.textSecondary, fontSize: moderateScale(12) }]}>Uploading image...</Text>
-      </View>
+      </TouchableOpacity>
     );
   }
 
@@ -418,6 +366,7 @@ export default function MobileFileCard({ file, colors }) {
         <TouchableOpacity
           style={[ms.card, { backgroundColor: colors.backgroundSecondary || colors.background, borderColor: colors.border }]}
           onPress={() => { setImgError(false); setImgLoading(true); }}
+          onLongPress={onLongPress}
           activeOpacity={0.75}
         >
           <View style={[ms.iconBox, { backgroundColor: activeColor + '20' }]}>
@@ -459,7 +408,7 @@ export default function MobileFileCard({ file, colors }) {
 
     return (
       <>
-        <TouchableOpacity onPress={() => setImgVisible(true)} activeOpacity={0.85} style={ms.imgThumbContainer}>
+        <TouchableOpacity onPress={() => setImgVisible(true)} onLongPress={onLongPress} activeOpacity={0.85} style={ms.imgThumbContainer}>
           <Image
             source={{ uri: targetUri, headers: imageHeaders }}
             style={ms.imgThumb}
@@ -513,7 +462,7 @@ export default function MobileFileCard({ file, colors }) {
   if (kind === 'video') {
     return (
       <>
-        <TouchableOpacity onPress={() => setVidVisible(true)} activeOpacity={0.85} style={ms.vidPoster}>
+        <TouchableOpacity onPress={() => setVidVisible(true)} onLongPress={onLongPress} activeOpacity={0.85} style={ms.vidPoster}>
           {thumbUrl ? (
             <Image source={{ uri: thumbUrl }} style={ms.vidPosterImg} resizeMode="cover" />
           ) : (
@@ -545,6 +494,7 @@ export default function MobileFileCard({ file, colors }) {
       <TouchableOpacity
         style={[ms.card, { backgroundColor: colors.backgroundSecondary || colors.background, borderColor: colors.border }]}
         onPress={handleCardPress}
+        onLongPress={onLongPress}
         activeOpacity={0.75}
       >
         {/* Icon */}
@@ -564,31 +514,17 @@ export default function MobileFileCard({ file, colors }) {
             {size > 0 && <Text style={[ms.sizeText, { color: colors.textTertiary }]}>{formatFileSize(size)}</Text>}
           </View>
         </View>
-
-        {/* Action button */}
-        <TouchableOpacity
-          style={[ms.actionBtn, { backgroundColor: activeColor + '15' }]}
-          onPress={kind === 'code' || kind === 'text' ? () => setCodeVisible(true) : openNative}
-          disabled={downloading}
-        >
-          {downloading
-            ? <ActivityIndicator size="small" color={activeColor} />
-            : kind === 'code' || kind === 'text'
-              ? <FileCode size={16} color={activeColor} />
-              : <Download size={16} color={activeColor} />
-          }
-        </TouchableOpacity>
       </TouchableOpacity>
 
-      {/* Code Preview Modal */}
-      {(kind === 'code' || kind === 'text') && (
-        <CodePreviewModal
-          visible={codeVisible}
-          fileUrl={fileUrl}
-          name={name}
-          onClose={() => setCodeVisible(false)}
-        />
-      )}
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        visible={docVisible}
+        fileUrl={fileUrl}
+        name={name}
+        mimeType={mime}
+        kind={kind}
+        onClose={() => setDocVisible(false)}
+      />
     </>
   );
 }

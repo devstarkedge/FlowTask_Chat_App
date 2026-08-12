@@ -12,6 +12,7 @@ import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useChatStore } from '../stores/chatStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
+import { useAuthStore } from '../stores/authStore';
 import { formatRelativeTime } from '../utils/dateUtils';
 import { ScreenLayout, ScreenHeader, EmptyState } from '../components/common';
 import { 
@@ -82,7 +83,8 @@ const DraftItem = React.memo(({ item, onPress, onSchedule, onDelete, onSend, col
         style={[styles.draftContent, { color: colors.textPrimary }]} 
         numberOfLines={3}
       >
-        {item.text || item.html?.replace(/<[^>]*>/g, '') || 'Empty draft'}
+        {item.pendingFiles?.length > 0 ? `[${item.pendingFiles.length} Attachment${item.pendingFiles.length > 1 ? 's' : ''}] ` : ''}
+        {item.text || item.html?.replace(/<[^>]*>/g, '') || (item.pendingFiles?.length > 0 ? '' : 'Empty draft')}
       </Text>
 
       <View style={styles.draftMeta}>
@@ -107,8 +109,8 @@ const DraftsScreen = ({ navigation }) => {
 
   const fetchDraftsRef = useRef(fetchDrafts);
   fetchDraftsRef.current = fetchDrafts;
-
-  const workspaceDrafts = useMemo(() => getWorkspaceDrafts(drafts, activeWorkspace?._id), [drafts, activeWorkspace?._id]);
+  const userId = useAuthStore(state => state.user?._id);
+  const workspaceDrafts = useMemo(() => getWorkspaceDrafts(drafts, activeWorkspace?._id, userId), [drafts, activeWorkspace?._id, userId]);
 
   useEffect(() => {
     fetchDraftsRef.current(activeWorkspace?._id);

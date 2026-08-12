@@ -30,15 +30,14 @@ export default function SearchScreen({ navigation }) {
   const debounceRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Tab screens stay mounted — autoFocus only runs once. Re-focus on every visit.
+  // Tab screens stay mounted — autoFocus on TextInput handles initial mount focus.
+  // We no longer manually focus on every focus effect to prevent the keyboard from popping up
+  // when returning from a channel.
   useFocusEffect(
     useCallback(() => {
-      const t = setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
+      // Intentionally left empty to avoid reopening keyboard on back navigation
       return () => {
-        clearTimeout(t);
-        inputRef.current?.blur();
+        // cleanup if needed
       };
     }, [])
   );

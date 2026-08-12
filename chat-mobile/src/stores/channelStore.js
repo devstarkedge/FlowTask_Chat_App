@@ -323,19 +323,28 @@ export const useChannelStore = create(
         const timestamp = createdAt || new Date().toISOString();
 
         set((state) => {
-          const channels = state.channels.map((c) => {
-            const cId = c._id?.toString ? c._id.toString() : c._id;
-            if (cId !== channelIdStr) return c;
-            return { ...c, lastMessageAt: timestamp, lastMessagePreview: preview };
-          });
+          const cIndex = state.channels.findIndex(c => (c._id?.toString ? c._id.toString() : c._id) === channelIdStr);
+          if (cIndex === -1) return state;
 
-          channels.sort((a, b) => {
-            const aTime = new Date(a.lastMessageAt || 0).getTime();
-            const bTime = new Date(b.lastMessageAt || 0).getTime();
-            return bTime - aTime;
-          });
+          const oldChannel = state.channels[cIndex];
+          const newTime = new Date(timestamp).getTime();
+          const oldTime = new Date(oldChannel.lastMessageAt || 0).getTime();
 
-          return { channels };
+          if (oldTime >= newTime) return state;
+
+          const updatedChannel = { ...oldChannel, lastMessageAt: timestamp, lastMessagePreview: preview };
+          const newChannels = [...state.channels];
+          newChannels.splice(cIndex, 1);
+
+          let insertIdx = 0;
+          while (insertIdx < newChannels.length) {
+            const time = new Date(newChannels[insertIdx].lastMessageAt || 0).getTime();
+            if (newTime >= time) break;
+            insertIdx++;
+          }
+          
+          newChannels.splice(insertIdx, 0, updatedChannel);
+          return { channels: newChannels };
         });
       },
 

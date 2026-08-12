@@ -239,6 +239,34 @@ export const useChatStore = create(
     set((state) => {
       const messages = state.messagesByChannel[channelId] || [];
       const alreadyHasServerMessage = messages.some(m => m._id === serverMessage._id);
+      const tempMsg = messages.find(m => m._id === tempId);
+      
+      // Prefer a real client-resolved sender name over generic server fallbacks
+      const serverReplyName = String(serverMessage?.replyTo?.senderName || '').trim().toLowerCase();
+      const isGenericServerName =
+        !serverReplyName ||
+        serverReplyName === 'user' ||
+        serverReplyName === 'someone' ||
+        serverReplyName === 'unknown' ||
+        serverReplyName === 'unknown user';
+      const mergedServerMessage = {
+        ...serverMessage,
+        replyTo:
+          serverMessage.replyTo || tempMsg?.replyTo
+            ? {
+                ...(serverMessage.replyTo || {}),
+                ...(isGenericServerName && tempMsg?.replyTo?.senderName
+                  ? {
+                      senderName: tempMsg.replyTo.senderName,
+                      authorId:
+                        serverMessage.replyTo?.authorId ||
+                        tempMsg.replyTo?.authorId ||
+                        null,
+                    }
+                  : {}),
+              }
+            : serverMessage.replyTo,
+      };
       
       let updatedMessages;
       if (alreadyHasServerMessage) {
@@ -247,7 +275,7 @@ export const useChatStore = create(
       } else {
         // Otherwise replace the temp one with the real one
         updatedMessages = messages.map(m => 
-          m._id === tempId ? { ...serverMessage, pending: false } : m
+          m._id === tempId ? { ...mergedServerMessage, pending: false } : m
         );
       }
 

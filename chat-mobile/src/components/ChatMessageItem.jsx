@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { View as RNView, Text as RNText, TouchableOpacity as RNTouchableOpacity, Platform, Linking } from 'react-native';
+import { View as RNView, Text as RNText, TouchableOpacity as RNTouchableOpacity, Pressable, Platform, Linking } from 'react-native';
 import { Reply, Pin, Bookmark } from 'lucide-react-native';
 import AppAvatar from './common/AppAvatar';
 import { formatTime, isSameDay } from '../utils/dateUtils';
@@ -11,8 +11,10 @@ import RichText from './RichText';
 import MobileFileCard from './common/MobileFileCard';
 import MessageStatusTicks from './MessageStatusTicks';
 import ReactionBar from './ReactionBar';
+import ReplyQuotePreview from './ReplyQuotePreview';
 import logger from '../utils/logger';
 import { getFileKind, getMessageAttachments } from '../utils/mediaUtils';
+import { resolveReplyToSenderName, isGenericName } from '../utils/replyUtils';
 
 // Helpers
 const getAuthorId = (item) => item?.authorId?._id || item?.authorId;
@@ -39,7 +41,8 @@ const ChatMessageItem = memo(({
   removeReaction,
   setEmojiPickerTarget,
   navigation,
-  renderDateSeparator
+  renderDateSeparator,
+  onReplyPreviewPress,
 }) => {
   const isMe = item.authorId?._id === user?._id || item.authorId === user?._id;
   const isSystem = item.contentType === "system" && !item.activityMeta;
@@ -68,6 +71,9 @@ const ChatMessageItem = memo(({
     textToSearch.toLowerCase().includes(searchQuery.toLowerCase());
   const isHighlighted =
     isMatch && searchResults.length && searchResults[currentMatch] === index;
+  const isReplyTarget =
+    highlightedMessageId != null &&
+    String(highlightedMessageId) === String(item._id);
 
   const messageSender = item.senderSnapshot?.name ? item.senderSnapshot : item.authorId;
 
@@ -130,10 +136,27 @@ const ChatMessageItem = memo(({
 
   const contentColor = isMe ? colors.messageTextSent : colors.messageTextReceived;
 
+  const replySenderOverride = (() => {
+    if (!item.replyTo) return null;
+    const members = membersByChannel?.[channelId] || [];
+    const existing = (item.replyTo.senderName || "").trim();
+    if (existing && !isGenericName(existing)) return existing;
+
+    // Resolve via authorId on replyTo, or look up nothing further here
+    // (ChatScreen already enriches; this is a safety net)
+    return resolveReplyToSenderName(item.replyTo, null, members);
+  })();
+
   return (
     <RNView 
-      style={highlightedMessageId === item._id 
-        ? { backgroundColor: colors.primary + '20', marginHorizontal: -12, paddingHorizontal: scale(12), paddingVertical: verticalScale(4) } 
+      style={isReplyTarget
+        ? {
+            backgroundColor: (colors.primary || "#6366F1") + "28",
+            marginHorizontal: -12,
+            paddingHorizontal: scale(12),
+            paddingVertical: verticalScale(6),
+            borderRadius: moderateScale(8),
+          }
         : null}
     >
       {showDateSep && renderDateSeparator(item.createdAt)}
@@ -164,15 +187,14 @@ const ChatMessageItem = memo(({
         )}
         {!isMe && isCompact && <RNView style={{ width: scale(32) }} />}
 
-        <RNTouchableOpacity
+        <Pressable
           style={[
             styles.messageContent,
             isMe ? styles.messageContentMe : styles.messageContentThem,
             { maxWidth: maxBubbleWidth, flexShrink: 1 }
           ]}
           onLongPress={() => !isDeleted && showMessageActions(item)}
-          activeOpacity={0.85}
-          delayLongPress={300}
+          delayLongPress={350}
         >
           {!isMe && !isCompact && (
             <RNView style={styles.senderRow}>
@@ -181,19 +203,6 @@ const ChatMessageItem = memo(({
               </RNText>
               <RNText style={[styles.timestamp, { color: colors.textTertiary }]}>
                 {formatTime(item.createdAt)}
-              </RNText>
-            </RNView>
-          )}
-
-          {item.parentMessageId && item.replyTo && (
-            <RNView style={[styles.replyPreview, { borderLeftColor: colors.primary }]}>
-              <Reply size={12} color={colors.textSecondary} />
-              <RNText
-                style={[styles.replyPreviewText, { color: colors.textSecondary }]}
-                numberOfLines={1}
-              >
-                {item.replyTo.senderName || "User"}:{ " " }
-                {item.replyTo.content || "..."}
               </RNText>
             </RNView>
           )}
@@ -208,9 +217,33 @@ const ChatMessageItem = memo(({
                   : colors.messageBubbleReceived,
                 alignSelf: isMe ? 'flex-end' : 'flex-start',
               },
-              isHighlighted && { borderWidth: 2, borderColor: colors.primary },
+              isReplyTarget && {
+                borderWidth: 2,
+                borderColor: colors.primary,
+              },
+              isHighlighted && !isReplyTarget && {
+                borderWidth: 2,
+                borderColor: colors.primary,
+              },
             ]}
           >
+            {item.replyTo ? (
+              <ReplyQuotePreview
+                replyTo={item.replyTo}
+                colors={colors}
+                isMe={isMe}
+                variant="bubble"
+                senderNameOverride={replySenderOverride}
+                onPress={
+                  onReplyPreviewPress
+                    ? () =>
+                        onReplyPreviewPress(
+                          item.replyTo?.messageId || item.parentMessageId
+                        )
+                    : undefined
+                }
+              />
+            ) : null}
             {item.forwardMeta?.isForwarded && (
               <RNView style={[styles.forwardedRow, { borderBottomColor: colors.border }]}>
                 <Reply size={12} color={contentColor} style={{ marginRight: scale(4), transform: [{ scaleX: -1 }] }} />
@@ -371,7 +404,7 @@ const ChatMessageItem = memo(({
               )}
             </RNTouchableOpacity>
           )}
-        </RNTouchableOpacity>
+        </Pressable>
       </RNView>
     </RNView>
   );
@@ -380,19 +413,31 @@ const ChatMessageItem = memo(({
   const prevIsSaved = prevProps.savedMessageIds.includes(prevProps.item._id);
   const nextIsSaved = nextProps.savedMessageIds.includes(nextProps.item._id);
 
-  const prevIsHighlighted = prevProps.highlightedMessageId === prevProps.item._id || 
-    (prevProps.searchQuery && prevProps.searchResults.length > 0 && prevProps.searchResults[prevProps.currentMatch] === prevProps.index);
-    
-  const nextIsHighlighted = nextProps.highlightedMessageId === nextProps.item._id || 
-    (nextProps.searchQuery && nextProps.searchResults.length > 0 && nextProps.searchResults[nextProps.currentMatch] === nextProps.index);
+  const prevIsReplyTarget =
+    prevProps.highlightedMessageId != null &&
+    String(prevProps.highlightedMessageId) === String(prevProps.item._id);
+  const nextIsReplyTarget =
+    nextProps.highlightedMessageId != null &&
+    String(nextProps.highlightedMessageId) === String(nextProps.item._id);
+
+  const prevIsSearchHighlight =
+    prevProps.searchQuery &&
+    prevProps.searchResults.length > 0 &&
+    prevProps.searchResults[prevProps.currentMatch] === prevProps.index;
+  const nextIsSearchHighlight =
+    nextProps.searchQuery &&
+    nextProps.searchResults.length > 0 &&
+    nextProps.searchResults[nextProps.currentMatch] === nextProps.index;
 
   return (
     prevProps.item === nextProps.item &&
     prevProps.prevItem === nextProps.prevItem &&
     prevProps.nextItem === nextProps.nextItem &&
     prevIsSaved === nextIsSaved &&
-    prevIsHighlighted === nextIsHighlighted &&
+    prevIsReplyTarget === nextIsReplyTarget &&
+    prevIsSearchHighlight === nextIsSearchHighlight &&
     prevProps.searchQuery === nextProps.searchQuery &&
+    prevProps.onReplyPreviewPress === nextProps.onReplyPreviewPress &&
     prevProps.colors.background === nextProps.colors.background
   );
 });

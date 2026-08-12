@@ -342,6 +342,27 @@ const STYLES = `
   color: #cbd5e1;
 }
 
+/* Quoted original message for replies */
+.acs3-reply-quote {
+  display: block;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--accent-primary, #9394fb);
+  border-radius: 4px;
+  background: rgba(255,255,255,0.04);
+  font-family: "Inter", sans-serif;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.acs3-reply-name {
+  font-weight: 600;
+  color: var(--accent-primary, #9394fb);
+}
+
 /* ─── Right indicators ───────────────────────────── */
 .acs3-right {
   display:flex; flex-direction:column;
@@ -582,6 +603,16 @@ function NotifRow({ notification, isSelected, animDelay, onSelect, onKeyDown }) 
         </span>
         {notification.body && (
           <span className="acs3-sub">{notification.body}</span>
+        )}
+        {(notification.replyTo?.senderName || notification.replyTo?.content) && (
+          <span className="acs3-reply-quote">
+            <span className="acs3-reply-name">
+              {notification.replyTo.senderName || "User"}
+            </span>
+            {notification.replyTo.content
+              ? ` — ${notification.replyTo.content}`
+              : ""}
+          </span>
         )}
       </div>
 

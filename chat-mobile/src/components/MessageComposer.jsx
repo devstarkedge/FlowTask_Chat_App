@@ -38,6 +38,7 @@ import {
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import logger from "../utils/logger";
+import { buildReplyToSnapshot, resolveMessageSenderName } from "../utils/replyUtils";
 import { useKeyboardState } from "react-native-keyboard-controller";
 import { useDraftStore } from "../stores/draftStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
@@ -458,9 +459,12 @@ const MessageComposer = React.memo(function MessageComposer({
       source: 'chat_upload',
     }));
 
+    const replyTo = buildReplyToSnapshot(replyingTo, members);
+
     onSend(plainContent, {
       htmlContent: htmlContent || undefined,
       parentMessageId: replyingTo?._id || null,
+      replyTo: replyTo || undefined,
       fileReferences: uploadedFiles.map((f) => f._id),
       attachments: attachmentObjects,
       mentions: mentionPayload,
@@ -485,6 +489,7 @@ const MessageComposer = React.memo(function MessageComposer({
     activeWorkspaceId,
     clearDraft,
     onChangeText,
+    members,
   ]);
 
   // ─── Schedule send ─────────────────────────────────────────────────────────
@@ -501,9 +506,13 @@ const MessageComposer = React.memo(function MessageComposer({
 
       if (!scheduledAt || (!plainContent && pendingFiles.length === 0)) return;
 
+      const replyTo = buildReplyToSnapshot(replyingTo, members);
+
       onSend(plainContent, {
         htmlContent: htmlContent || undefined,
         scheduledAt,
+        parentMessageId: replyingTo?._id || null,
+        replyTo: replyTo || undefined,
         fileReferences: pendingFiles.filter((f) => f._id).map((f) => f._id),
       });
 
@@ -524,6 +533,8 @@ const MessageComposer = React.memo(function MessageComposer({
       activeWorkspaceId,
       clearDraft,
       onChangeText,
+      replyingTo,
+      members,
     ],
   );
 
@@ -737,8 +748,11 @@ const MessageComposer = React.memo(function MessageComposer({
       
       if (fileId) {
         setPendingFiles(prev => prev.filter(f => f._tempUri !== uri));
+        const replyTo = buildReplyToSnapshot(replyingTo, members);
         onSend("", {
           contentType: type,
+          parentMessageId: replyingTo?._id || null,
+          replyTo: replyTo || undefined,
           fileReferences: [fileId],
           attachments: [{
             fileName: uploadedFile.fileName || uploadedFile.originalName || file.name,
@@ -761,7 +775,7 @@ const MessageComposer = React.memo(function MessageComposer({
       Alert.alert(`Upload Error`, `Failed to upload ${type}: ${serverMessage}`);
       setPendingFiles(prev => prev.map(f => f._tempUri === uri ? { ...f, uploading: false, uploadFailed: true } : f));
     }
-  }, [channelId, onSend]);
+  }, [channelId, onSend, replyingTo, members]);
 
   const styles = createStyles(colors, insets);
 
@@ -796,7 +810,7 @@ const MessageComposer = React.memo(function MessageComposer({
               <Text style={[styles.bannerLabel, { color: colors.textSecondary }]}>
                 {editingMessage
                   ? "Editing message"
-                  : `Replying to ${replyingTo?.senderSnapshot?.name || replyingTo?.authorId?.name || "User"}`}
+                  : `Replying to ${resolveMessageSenderName(replyingTo, members) || "Someone"}`}
               </Text>
               <Text
                 style={[styles.bannerText, { color: colors.textTertiary }]}
@@ -1148,10 +1162,12 @@ const MessageComposer = React.memo(function MessageComposer({
         onClose={() => setShowGifPicker(false)}
         colors={colors}
         onSelectGif={(gif) => {
+          const replyTo = buildReplyToSnapshot(replyingTo, members);
           onSend('', {
             contentType: 'gif',
             gifMeta: gif,
             parentMessageId: replyingTo?._id || null,
+            replyTo: replyTo || undefined,
           });
           if (editingMessage) onCancelEdit?.();
           else onCancelReply?.();

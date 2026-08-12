@@ -193,6 +193,7 @@ const messageSchema = new Schema({
   // Canonical backend-generated snapshot of the quoted message for rendering (so if parent is deleted, quote persists)
   replyTo: {
     messageId: { type: Schema.Types.ObjectId, default: null },
+    authorId: { type: Schema.Types.ObjectId, ref: 'ChatUser', default: null },
     senderName: { type: String, default: null },
     content: { type: String, default: null },
     attachment: {

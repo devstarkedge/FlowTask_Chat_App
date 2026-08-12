@@ -94,6 +94,9 @@ class NotificationEngine {
       const senderAvatar = message.senderSnapshot?.avatar || null;
       const channelName = channel.name || 'channel';
 
+      // Resolve original-message snapshot for reply linking in Activity
+      const replyToPreview = await this._resolveReplyToPreview(message, threadId, workspaceId);
+
       // Process each recipient
       const results = await Promise.allSettled(
         recipientIds.map((recipientId) =>
@@ -112,6 +115,7 @@ class NotificationEngine {
             threadId,
             mentionedUserIds,
             hasBroadcastMention,
+            replyToPreview,
           }),
         ),
       );
@@ -157,6 +161,7 @@ class NotificationEngine {
     threadId,
     mentionedUserIds,
     hasBroadcastMention,
+    replyToPreview = null,
   }) {
     const recipientIdStr = recipientId.toString();
 
@@ -339,6 +344,7 @@ class NotificationEngine {
       conversationId: channelIdStr,
       conversationType: isDM ? 'dm' : 'channel',
       messagePreview: preview,
+      ...(replyToPreview && { replyTo: replyToPreview }),
       deepLink,
       bundleKey,
     });
@@ -471,6 +477,54 @@ class NotificationEngine {
   }
 
   /**
+   * Build a replyTo snapshot for Activity: prefer quote-reply data,
+   * otherwise fall back to the thread root message.
+   * @private
+   */
+  async _resolveReplyToPreview(message, threadId, workspaceId) {
+    try {
+      if (message.replyTo?.messageId || message.replyTo?.senderName) {
+        const content = truncate(stripHtml(message.replyTo.content || ''), 120);
+        const attachmentName = message.replyTo.attachment?.name || '';
+        return {
+          messageId: message.replyTo.messageId || message.parentMessageId || null,
+          senderName: message.replyTo.senderName || 'User',
+          content: content || attachmentName || '',
+        };
+      }
+
+      if (!threadId) return null;
+
+      const { default: threadRepository } = await import('../modules/threads/thread.repository.js');
+      const { default: messageRepository } = await import('../modules/messages/message.repository.js');
+      const thread = await threadRepository.findById(threadId, { workspaceId });
+      if (!thread?.rootMessageId) return null;
+
+      const rootMessage = await messageRepository.findById(
+        thread.rootMessageId?.toString() || thread.rootMessageId,
+        { workspaceId },
+      );
+      if (!rootMessage) return null;
+
+      const rootContent = truncate(stripHtml(rootMessage.content || ''), 120);
+      const rootAttachment = getAttachmentPreview(rootMessage);
+      return {
+        messageId: rootMessage._id,
+        senderName:
+          rootMessage.senderSnapshot?.name ||
+          rootMessage.authorId?.name ||
+          'User',
+        content: rootContent || rootAttachment || '',
+      };
+    } catch (err) {
+      logger.debug('NotificationEngine: _resolveReplyToPreview failed', {
+        error: err?.message,
+      });
+      return null;
+    }
+  }
+
+  /**
    * Check if a user participated in a thread (posted a reply) OR authored the root message.
    * This ensures the root message author always gets notified when someone replies.
    * @private
@@ -568,6 +622,7 @@ class NotificationEngine {
           conversationId: notification.conversationId,
           conversationType: notification.conversationType,
           messagePreview: notification.messagePreview || notification.body || '',
+          replyTo: notification.replyTo || null,
           deepLink: notification.deepLink,
           bundleKey: notification.bundleKey,
           bundleCount: notification.bundleCount || 1,

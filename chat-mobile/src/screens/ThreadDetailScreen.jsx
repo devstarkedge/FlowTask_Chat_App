@@ -26,8 +26,11 @@ import ReminderModal from '../components/ReminderModal';
 import ForwardMessageModal from '../components/ForwardMessageModal';
 import MessageActionSheet from '../components/MessageActionSheet';
 import MessageComposer from '../components/MessageComposer';
+import ReplyQuotePreview from '../components/ReplyQuotePreview';
 import GifRenderer from '../components/GifRenderer';
 import AudioMessagePlayer from '../components/AudioMessagePlayer';
+import { resolveMessageSenderName, resolveReplyToSenderName } from '../utils/replyUtils';
+import { useChannelStore } from '../stores/channelStore';
 import VideoMessagePlayer from '../components/VideoMessagePlayer';
 import { Bookmark, Share, MoreVertical } from 'lucide-react-native';
 import { useThreadDetails } from '../hooks/useThreadDetails';
@@ -51,6 +54,11 @@ const ThreadDetailScreen = ({ route, navigation }) => {
   } = route.params;
 
   const { colors } = useThemeStore();
+  const membersByChannel = useChannelStore((s) => s.membersByChannel);
+  const channelMembers = membersByChannel?.[channelId] || [];
+  const [activeHighlightId, setActiveHighlightId] = useState(highlightedMessageId || null);
+  const threadDetails = useThreadDetails({ rootMessageId, channelId, highlightedMessageId });
+
   const {
     user,
     replies,
@@ -80,8 +88,11 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     getAttachments,
     handleSendReply,
     getAuthorId,
-    resolveAuthor
-  } = useThreadDetails({ rootMessageId, channelId, highlightedMessageId });
+    resolveAuthor,
+  } = threadDetails;
+
+  const setEmojiPickerTarget = threadDetails.setEmojiPickerTarget;
+  const emojiPickerTarget = threadDetails.emojiPickerTarget;
 
   const showMessageActions = useCallback((item, attachment = null) => {
     setActionMenuTarget(item);
@@ -108,7 +119,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     const name = sender?.name || sender?.email || 'Unknown';
     const isMe = getAuthorId(item) === user?._id;
     const itemAttachments = getAttachments(item);
-    const isHighlighted = item._id === highlightedMessageId;
+    const isHighlighted = item._id === activeHighlightId;
 
     const prevItem = replies[index - 1];
     let showToday = false;
@@ -143,6 +154,47 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                 {formatRelativeTimeLong(item.createdAt).replace(' minutes', 'm').replace(' hours', 'h').replace(' days', 'd')}
               </Text>
             </View>
+            {item.replyTo && (
+              <ReplyQuotePreview
+                replyTo={{
+                  ...item.replyTo,
+                  senderName: resolveReplyToSenderName(
+                    item.replyTo,
+                    String(item.replyTo?.messageId || item.parentMessageId) === String(rootMessageId)
+                      ? effectiveRoot
+                      : replies.find(
+                          (r) =>
+                            String(r._id) ===
+                            String(item.replyTo?.messageId || item.parentMessageId)
+                        ),
+                    channelMembers
+                  ),
+                }}
+                colors={colors}
+                variant="thread"
+                onPress={() => {
+                  const parentId = item.replyTo?.messageId || item.parentMessageId;
+                  if (!parentId) return;
+                  // Highlight parent reply in the list, or the root if it matches
+                  if (String(parentId) === String(rootMessageId)) {
+                    setActiveHighlightId(parentId);
+                    setTimeout(() => setActiveHighlightId(null), 2000);
+                    return;
+                  }
+                  const idx = replies.findIndex((r) => String(r._id) === String(parentId));
+                  if (idx === -1) return;
+                  setActiveHighlightId(parentId);
+                  setTimeout(() => {
+                    flatListRef.current?.scrollToIndex({
+                      index: idx,
+                      animated: true,
+                      viewPosition: 0.4,
+                    });
+                  }, 50);
+                  setTimeout(() => setActiveHighlightId(null), 2500);
+                }}
+              />
+            )}
             <View style={{ maxHeight: verticalScale(250), overflow: 'hidden' }}>
               {item.contentType === 'audio' || item.type === 'audio' ? (
                 <AudioMessagePlayer 
@@ -199,7 +251,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </View>
     );
-  }, [colors, user, replies, getAttachments, highlightedMessageId, showMessageActions, resolveAuthor, addReaction, removeReaction, setEmojiPickerTarget, navigation, channelId]);
+  }, [colors, user, replies, getAttachments, activeHighlightId, showMessageActions, resolveAuthor, addReaction, removeReaction, setEmojiPickerTarget, navigation, channelId, rootMessageId, flatListRef, channelMembers, effectiveRoot]);
 
   const styles = createStyles(colors);
   
@@ -252,7 +304,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
             }
           }}
           ListHeaderComponent={
-            <View style={[styles.rootSection, highlightedMessageId === effectiveRoot._id && { backgroundColor: colors.primary + '20' }]}>
+            <View style={[styles.rootSection, activeHighlightId === effectiveRoot._id && { backgroundColor: colors.primary + '20' }]}>
               <View style={styles.rootMessageRow}>
                 <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { user: effectiveRootSender, channelId })}>
                   <AppAvatar user={effectiveRootSender} size={42} showStatus={false} />
@@ -351,6 +403,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           colors={colors}
           text={replyText}
           onChangeText={setReplyText}
+          members={channelMembers}
           onSend={(content, options) => {
             handleSendReply(content, options);
             setTimeout(() => {
@@ -394,9 +447,16 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         onSave={() => toggleSaveMessage?.(actionMenuTarget?._id)}
         onRemind={() => setReminderTarget(actionMenuTarget?._id)}
         onReply={() => {
+          const msg = actionMenuTarget;
+          const resolvedName = resolveMessageSenderName(msg, channelMembers) || 'Someone';
           setReplyingTo({
-            ...actionMenuTarget,
-            attachmentContext: actionAttachmentTarget
+            ...msg,
+            senderSnapshot: {
+              ...(msg?.senderSnapshot || {}),
+              name: resolvedName,
+              avatar: msg?.senderSnapshot?.avatar || msg?.authorId?.avatar || null,
+            },
+            attachmentContext: actionAttachmentTarget,
           });
           setActionMenuTarget(null);
           setActionAttachmentTarget(null);

@@ -75,6 +75,7 @@ import { formatMessageTime } from '../../utils/dateUtils';
 import logger from '../../utils/logger';
 import ENV from '../../config/environment';
 import { normalizeMediaUrl, getMessageAttachments } from '../../utils/mediaUtils';
+import { resolveReplyToSenderName, resolveMessageSenderName } from '../../utils/replyUtils';
 import MessageStatusTicks from '../../components/MessageStatusTicks';
 import MessageInfoModal from '../../components/MessageInfoModal';
 import GifRenderer from '../../components/GifRenderer';
@@ -535,13 +536,78 @@ const ChatScreen = ({ route, navigation }) => {
     </View>
   );
 
+  const handleReplyPreviewPress = useCallback((parentId) => {
+    if (!parentId) return;
+    const targetId = String(parentId);
+    const index = displayedMessages.findIndex(
+      (m) => String(m._id) === targetId
+    );
+    if (index === -1) return;
+
+    // Flash highlight first so the user sees the target even if already nearby
+    setHighlightedMessageId(targetId);
+
+    const scroll = () => {
+      try {
+        flatListRef.current?.scrollToIndex({
+          index,
+          animated: true,
+          viewPosition: 0.45,
+        });
+      } catch (_) {
+        // Fallback: approximate offset for inverted list
+        flatListRef.current?.scrollToOffset({
+          offset: Math.max(0, index * 80),
+          animated: true,
+        });
+      }
+    };
+
+    // Two-phase scroll helps when the cell isn't mounted yet
+    requestAnimationFrame(scroll);
+    setTimeout(scroll, 120);
+
+    setTimeout(() => {
+      setHighlightedMessageId((current) =>
+        String(current) === targetId ? null : current
+      );
+    }, 2800);
+  }, [displayedMessages]);
+
   const renderMessage = useCallback(({ item, index }) => {
     const prevItem = displayedMessages[index + 1];
     const nextItem = displayedMessages[index - 1];
 
+    // Enrich incomplete replyTo snapshots from the live parent message / members
+    let enrichedItem = item;
+    if (item.replyTo || item.parentMessageId) {
+      const parentId = item.replyTo?.messageId || item.parentMessageId;
+      const parent = displayedMessages.find((m) => String(m._id) === String(parentId));
+      const members = membersByChannel[channelId] || [];
+      const resolvedName = resolveReplyToSenderName(item.replyTo, parent, members);
+      const existingContent = (item.replyTo?.content || "").trim();
+      const contentFromParent = (parent?.content || "").trim();
+
+      enrichedItem = {
+        ...item,
+        replyTo: {
+          ...(item.replyTo || {}),
+          messageId: parentId,
+          authorId:
+            item.replyTo?.authorId ||
+            parent?.authorId?._id ||
+            parent?.authorId ||
+            null,
+          senderName: resolvedName,
+          content: existingContent || contentFromParent || item.replyTo?.content || "",
+          attachment: item.replyTo?.attachment,
+        },
+      };
+    }
+
     return (
       <ChatMessageItem
-        item={item}
+        item={enrichedItem}
         prevItem={prevItem}
         nextItem={nextItem}
         user={user}
@@ -563,13 +629,14 @@ const ChatScreen = ({ route, navigation }) => {
         setEmojiPickerTarget={setEmojiPickerTarget}
         navigation={navigation}
         renderDateSeparator={renderDateSeparator}
+        onReplyPreviewPress={handleReplyPreviewPress}
       />
     );
   }, [
     displayedMessages, user, colors, styles, searchQuery, searchResults,
     currentMatch, savedMessageIds, highlightedMessageId, membersByChannel,
     channelId, channelName, maxBubbleWidth, showMessageActions, addReaction,
-    removeReaction, setEmojiPickerTarget, navigation
+    removeReaction, setEmojiPickerTarget, navigation, handleReplyPreviewPress
   ]);
 
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -936,9 +1003,17 @@ const ChatScreen = ({ route, navigation }) => {
         onSave={() => toggleSaveMessage?.(actionMenuTarget?._id)}
         onRemind={() => setReminderTarget(actionMenuTarget?._id)}
         onReply={() => {
+          const msg = actionMenuTarget;
+          const members = membersByChannel[channelId] || [];
+          const resolvedName = resolveMessageSenderName(msg, members) || "Someone";
           setReplyingTo({
-            ...actionMenuTarget,
-            attachmentContext: actionAttachmentTarget
+            ...msg,
+            senderSnapshot: {
+              ...(msg?.senderSnapshot || {}),
+              name: resolvedName,
+              avatar: msg?.senderSnapshot?.avatar || msg?.authorId?.avatar || null,
+            },
+            attachmentContext: actionAttachmentTarget,
           });
           setActionMenuTarget(null);
           setActionAttachmentTarget(null);

@@ -1138,7 +1138,7 @@ export const getScheduledMessages = asyncHandler(async (req, res) => {
   const messages = await ScheduledMessage.find({
     authorId: req.user._id,
     workspaceId: req.workspaceId,
-    status: "pending",
+    status: { $in: ["pending", "failed"] },
   })
     .populate("authorId", "name avatar")
     .sort({ scheduledAt: 1 });
@@ -1155,7 +1155,7 @@ export const cancelScheduledMessage = asyncHandler(async (req, res) => {
     _id: req.params.id,
     authorId: req.user._id,
     workspaceId: req.workspaceId,
-    status: "pending",
+    status: { $in: ["pending", "failed"] },
   });
 
   if (!scheduled) {
@@ -1192,9 +1192,9 @@ export const rescheduleMessage = asyncHandler(async (req, res) => {
       _id: req.params.id,
       authorId: req.user._id,
       workspaceId: req.workspaceId,
-      status: 'pending',
+      status: { $in: ["pending", "failed"] },
     },
-    { $set: { scheduledAt: schedDate } },
+    { $set: { scheduledAt: schedDate, status: "pending", failedReason: null } },
     { returnDocument: 'after' },
   );
 
@@ -1231,7 +1231,7 @@ export const updateScheduledMessage = asyncHandler(async (req, res) => {
       _id: req.params.id,
       authorId: req.user._id,
       workspaceId: req.workspaceId,
-      status: "pending",
+      status: { $in: ["pending", "failed"] },
     },
     { $set: updateData },
     { new: true },
@@ -1257,7 +1257,7 @@ export const sendScheduledNow = asyncHandler(async (req, res) => {
       _id: req.params.id,
       authorId: req.user._id,
       workspaceId: req.workspaceId,
-      status: 'pending',
+      status: { $in: ["pending", "failed"] },
     },
     { $set: { status: 'processing' } },
     { new: true },

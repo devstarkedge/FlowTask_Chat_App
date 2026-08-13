@@ -31,6 +31,7 @@ import { useStarredStore } from '../stores/useStarredStore';
 import { applySkinTone } from '../utils/emojiUtils';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import useResponsive from '../hooks/useResponsive';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 
 const QUICK_EMOJIS = ['🎉', '👍', '😂', '🙂', '✅'];
@@ -102,6 +103,7 @@ const MessageActionSheet = ({
   const isWide = isTablet || isDesktop || width > 640;
   const { emojiSkinTone } = usePreferencesStore();
   const { toggleFavorite, isFavorited } = useStarredStore();
+  const insets = useSafeAreaInsets();
   if (!message) return null;
 
   const isAuthor =
@@ -155,6 +157,7 @@ const MessageActionSheet = ({
       transparent
       animationType="slide"
       onRequestClose={onClose}
+      statusBarTranslucent={Platform.OS === 'android'}
     >
       <TouchableOpacity
         style={[styles.overlay, isWide && styles.wideOverlay]}
@@ -165,7 +168,12 @@ const MessageActionSheet = ({
           activeOpacity={1}
           style={[
             styles.sheetContainer,
-            { backgroundColor: colors.background },
+            { 
+              backgroundColor: colors.background,
+              paddingBottom: isWide 
+                ? verticalScale(16) 
+                : Math.max(verticalScale(16), insets.bottom)
+            },
             isWide && styles.wideSheetContainer,
           ]}
         >
@@ -382,7 +390,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   listContainer: {
-    marginBottom: Platform.OS === 'ios' ? 20 : 0,
+    marginBottom: 0,
   },
   listItem: {
     flexDirection: 'row',

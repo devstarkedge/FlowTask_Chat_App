@@ -254,7 +254,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
             {itemAttachments.length > 0 && (
                <View style={{ marginTop: verticalScale(4), width: '100%', gap: 4 }}>
                   {itemAttachments.map((file, i) => (
-                    <MobileFileCard key={file._id || i} file={file} colors={colors} />
+                    <MobileFileCard key={file._id || i} file={file} colors={colors} isUploading={item.pending || item.status === 'pending'} />
                   ))}
                </View>
             )}
@@ -383,7 +383,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
               {effectiveRootAttachments.length > 0 && (
                  <View style={{ marginTop: verticalScale(8), width: '100%', gap: 4, paddingHorizontal: scale(16) }}>
                     {effectiveRootAttachments.map((file, i) => (
-                      <MobileFileCard key={file._id || i} file={file} colors={colors} />
+                      <MobileFileCard key={file._id || i} file={file} colors={colors} isUploading={effectiveRoot.pending || effectiveRoot.status === 'pending'} />
                     ))}
                  </View>
               )}

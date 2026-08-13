@@ -7,6 +7,7 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useWorkspaceStore } from '../stores/workspaceStore';
@@ -48,8 +49,12 @@ const WorkspaceSelectorScreen = ({ navigation }) => {
 
   const renderWorkspaceItem = ({ item }) => (
     <TouchableOpacity style={styles.workspaceCard} onPress={() => switchWorkspace(item._id)} activeOpacity={0.7}>
-      <View style={styles.workspaceIcon}>
-        <Text style={styles.workspaceIconText}>{item.name?.substring(0, 1).toUpperCase() || 'W'}</Text>
+      <View style={[styles.workspaceIcon, { overflow: 'hidden' }]}>
+        {item.logo ? (
+          <Image source={{ uri: item.logo }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+        ) : (
+          <Text style={styles.workspaceIconText}>{item.name?.substring(0, 1).toUpperCase() || 'W'}</Text>
+        )}
       </View>
       <View style={styles.workspaceInfo}>
         <Text style={styles.workspaceName}>{item.name}</Text>

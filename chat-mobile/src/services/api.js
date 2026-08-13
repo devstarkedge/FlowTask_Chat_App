@@ -413,7 +413,10 @@ export const fileAPI = {
   listByChannel: (channelId, params) => api.get(`/channels/${channelId}/files`, { params }),
   deleteFromChannel: (channelId, fileId) => api.delete(`/channels/${channelId}/files/${fileId}`),
   uploadFiles: async (channelId, formData, onProgress, isSync = false) => {
-    const uploadUrl = `${BASE_URL}/channels/${channelId}/upload${isSync ? '?sync=true' : ''}`;
+    const isGlobalUpload = !channelId || channelId === 'messages' || channelId === '000000000000000000000000';
+    const uploadUrl = isGlobalUpload 
+      ? `${BASE_URL}/messages/upload${isSync ? '?sync=true' : ''}`
+      : `${BASE_URL}/channels/${channelId}/upload${isSync ? '?sync=true' : ''}`;
     
     // On native platforms (especially Android), use Expo FileSystem.uploadAsync for OkHttp native multipart upload
     if (Platform.OS === 'android' || Platform.OS === 'ios') {

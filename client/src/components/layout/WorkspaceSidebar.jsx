@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useUIStore } from "../../stores/uiStore";
 import { useAuthStore } from "../../stores/authStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useNotificationStore } from "../../stores/notificationStore";
 import { useLaterStore } from "../../stores/laterStore";
 import { useCanvasStore } from "../../stores/canvasStore";
@@ -25,6 +26,14 @@ import HoverPreview from "./HoverPreview";
 import useHoverPanelController from "./hooks/useHoverPanelController";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 
+
+const AVATAR_GRADIENTS = [
+  "linear-gradient(135deg, var(--accent-primary), var(--accent-purple))",
+  "linear-gradient(135deg, var(--accent-yellow), var(--accent-red))",
+  "linear-gradient(135deg, var(--accent-green), var(--accent-primary))",
+  "linear-gradient(135deg, var(--accent-purple), var(--accent-pink, #ec4899))",
+  "linear-gradient(135deg, var(--accent-cyan), var(--accent-primary))",
+];
 
 const NAV_ITEMS = [
   { id: "home", icon: Home, label: "Home", path: "" },
@@ -70,6 +79,8 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
     cancelClose,
     closeNow,
   } = useHoverPanelController({ openDelay: 140, closeDelay: 220 });
+
+  const { workspaces, activeWorkspace } = useWorkspaceStore();
 
   const basePath = `/workspace/${workspaceId}`;
 
@@ -177,7 +188,6 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   return (
     <>
       <nav className="workspace-sidebar" aria-label="Workspace navigation">
-        {/* Logo */}
         <button
           className="flex items-center justify-center transition-all duration-200 hover:scale-105"
           style={{
@@ -185,17 +195,22 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
             height: 42,
             borderRadius: "14px",
             padding: 0,
+            overflow: "hidden",
+            border: "none",
+            cursor: "pointer",
+            background: activeWorkspace?.logo
+              ? `url(${activeWorkspace.logo}) center / cover`
+              : AVATAR_GRADIENTS[(workspaces.findIndex(w => w._id === activeWorkspace?._id) >= 0 ? workspaces.findIndex(w => w._id === activeWorkspace?._id) : 0) % AVATAR_GRADIENTS.length],
+            color: "#fff",
+            fontWeight: "800",
+            fontSize: "17px",
+            fontFamily: "var(--font-sans)",
+            textTransform: "uppercase",
           }}
           onClick={() => navigate(basePath)}
           aria-label="Go to home"
         >
-          <img
-            src="/logo.png"
-            alt="Logo"
-            onClick={
-              () => navigate(basePath)
-            }
-          />
+          {!activeWorkspace?.logo && (activeWorkspace?.name?.charAt(0) ?? "?")}
         </button>
 
         <div className="workspace-sidebar-divider" />

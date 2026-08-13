@@ -137,10 +137,10 @@ export const useWorkspaceStore = create(
       },
 
       // ─── Create workspace ──────────────────────────────────────────────
-      createWorkspace: async ({ name, description, plan }) => {
+      createWorkspace: async ({ name, description, plan, logo }) => {
         set({ isLoading: true, error: null })
         try {
-          const { data } = await api.post('/workspaces', { name, description, plan })
+          const { data } = await api.post('/workspaces', { name, description, plan, logo })
           const workspace = data.data?.workspace || data.data
           set((state) => ({
             workspaces: [...state.workspaces, workspace],
@@ -206,6 +206,21 @@ export const useWorkspaceStore = create(
               // 5. Unsubscribe socket immediately
               disconnectSocket()
               
+              if (remaining.length > 0) {
+                const nextActive = remaining[0]
+                // Reconnect socket with new workspace context
+                setTimeout(() => {
+                  reconnectWithWorkspace()
+                }, 0)
+
+                return {
+                  workspaces: remaining,
+                  activeWorkspaceId: nextActive._id,
+                  activeWorkspace: nextActive,
+                  members: [],
+                }
+              }
+
               return {
                 workspaces: remaining,
                 activeWorkspaceId: null,
@@ -225,7 +240,7 @@ export const useWorkspaceStore = create(
           return res.data   
 
         } catch (error) {
-          console.error("Delete API error:", error)
+          toast.error(error.response?.data?.error?.message || 'Failed to delete workspace')
           throw error
         }
       },

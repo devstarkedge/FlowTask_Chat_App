@@ -4,6 +4,8 @@ import { X, Plus, Check, Sparkles, Layers, ArrowRight } from 'lucide-react';
 import Loader from '../shared/Loader';
 import useRipple from '../../hooks/useRipple'
 import { motion, AnimatePresence } from 'framer-motion'
+import api from '../../services/api'
+import toast from 'react-hot-toast'
 import './custom-css/createWorkspaceModal.css'
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -46,7 +48,7 @@ const itemV = {
 
 const slugV = {
   initial: { opacity: 0, x: -8, scale: .9 },
-  animate: { opacity: 1, x: 0,  scale: 1,  transition: { duration: .22, ease: [.22, 1, .36, 1] } },
+  animate: { opacity: 1, x: 0,  scale: 1,  transition: { duration: .24, ease: [.22, 1, .36, 1] } },
   exit:    { opacity: 0, x: 8,  scale: .9, transition: { duration: .15 } },
 }
 
@@ -63,10 +65,13 @@ export default function CreateWorkspaceModal({ onClose, onCreated }) {
 
   const [name,        setName]        = useState('')
   const [description, setDescription] = useState('')
+  const [logoUrl,     setLogoUrl]     = useState('')
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false)
   const [submitted,   setSubmitted]   = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
 
   const inputRef               = useRef(null)
+  const fileInputRef           = useRef(null)
   const [submitRef, triggerRipple] = useRipple()
 
   useEffect(() => { inputRef.current?.focus() }, [])
@@ -76,6 +81,33 @@ export default function CreateWorkspaceModal({ onClose, onCreated }) {
     return () => document.removeEventListener('keydown', h)
   }, [onClose])
 
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploadingLogo(true)
+    const formData = new FormData()
+    formData.append('files', file)
+
+    try {
+      const { data } = await api.post('/messages/upload?sync=true', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+      const uploadedFile = data.data?.files?.[0] || data.files?.[0];
+      if (uploadedFile?.url) {
+        setLogoUrl(uploadedFile.url)
+        toast.success('Logo uploaded successfully!')
+      }
+    } catch (err) {
+      toast.error('Failed to upload logo')
+      console.error(err)
+    } finally {
+      setIsUploadingLogo(false)
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!name.trim() || isLoading) return
@@ -84,6 +116,7 @@ export default function CreateWorkspaceModal({ onClose, onCreated }) {
       const workspace = await createWorkspace({
         name:        name.trim(),
         description: description.trim() || undefined,
+        logo:        logoUrl || undefined,
       })
       setShowSuccess(true)
       setTimeout(() => { onCreated?.(workspace); onClose() }, 900)
@@ -212,6 +245,39 @@ export default function CreateWorkspaceModal({ onClose, onCreated }) {
                 initial="hidden"
                 animate="visible"
               >
+
+                {/* ── Workspace Logo ── */}
+                <motion.div variants={itemV} className="cw-field-group" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 20 }}>
+                  <div 
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{
+                      width: 80,
+                      height: 80,
+                      borderRadius: 16,
+                      border: '2px dashed var(--border-color, #e2e8f0)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      background: logoUrl ? `url(${logoUrl}) center/cover no-repeat` : 'var(--bg-secondary, #f8fafc)',
+                    }}
+                  >
+                    {!logoUrl && (
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary, #64748b)', fontWeight: 600 }}>
+                        {isUploadingLogo ? 'Uploading...' : 'Upload Logo'}
+                      </span>
+                    )}
+                  </div>
+                  <input 
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    style={{ display: 'none' }}
+                  />
+                </motion.div>
 
                 {/* ── Workspace Name ── */}
                 <motion.div variants={itemV} className="cw-field-group">

@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { MessageSquare, ArrowRight, Check, Sparkles, Layers, Users, Zap, Shield } from 'lucide-react';
 import Loader from '../components/shared/Loader';
 import toast from 'react-hot-toast'
 import { motion, AnimatePresence } from 'framer-motion'
+import api from '../services/api'
 import './custom-css/createWorkspacePage.css'
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -70,12 +71,43 @@ export default function CreateWorkspacePage() {
 
   const [name,         setName]         = useState('')
   const [description,  setDescription]  = useState('')
+  const [logoUrl,      setLogoUrl]      = useState('')
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [done,         setDone]         = useState(false)
+
+  const fileInputRef = useRef(null)
 
   const slug = name.toLowerCase().trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploadingLogo(true)
+    const formData = new FormData()
+    formData.append('files', file)
+
+    try {
+      const { data } = await api.post('/messages/upload?sync=true', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+      const uploadedFile = data.data?.files?.[0] || data.files?.[0];
+      if (uploadedFile?.url) {
+        setLogoUrl(uploadedFile.url)
+        toast.success('Logo uploaded successfully!')
+      }
+    } catch (err) {
+      toast.error('Failed to upload logo')
+      console.error(err)
+    } finally {
+      setIsUploadingLogo(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -86,6 +118,7 @@ export default function CreateWorkspacePage() {
         name:        name.trim(),
         description: description.trim(),
         plan:        selectedPlan,
+        logo:        logoUrl || undefined,
       })
       toast.success(`Workspace "${workspace.name}" created!`)
       setDone(true)
@@ -193,6 +226,40 @@ export default function CreateWorkspacePage() {
               )}
 
               <form onSubmit={handleSubmit}>
+
+                {/* ── Workspace Logo ── */}
+                <div className="cwp-field" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 20 }}>
+                  <label className="cwp-field-label" style={{ width: '100%', textAlign: 'left' }}>Workspace Logo</label>
+                  <div 
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{
+                      width: 80,
+                      height: 80,
+                      borderRadius: 16,
+                      border: '2px dashed var(--border-color, #e2e8f0)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      background: logoUrl ? `url(${logoUrl}) center/cover no-repeat` : 'var(--bg-secondary, #f8fafc)',
+                    }}
+                  >
+                    {!logoUrl && (
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary, #64748b)', fontWeight: 600 }}>
+                        {isUploadingLogo ? 'Uploading...' : 'Upload Logo'}
+                      </span>
+                    )}
+                  </div>
+                  <input 
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    style={{ display: 'none' }}
+                  />
+                </div>
 
                 {/* ── Workspace Name ── */}
                 <div className="cwp-field">

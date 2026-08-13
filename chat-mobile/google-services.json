@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "829925404475",
+    "project_id": "flowtask-chat",
+    "storage_bucket": "flowtask-chat.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:829925404475:android:3b15304292defb0a31511e",
+        "android_client_info": {
+          "package_name": "com.mohitgahlyan.chatmobilejs"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA-GwhzaOp6BpMXMcJ38JUWUAku1WiC5Vw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -898,8 +898,8 @@ export const updateSavedMessageReminder = asyncHandler(async (req, res) => {
         category: 'system',
         channelId: saved.channelId || null,
         channelName: null,
-        senderId: null,
-        senderName: null,
+        senderId: req.user._id,
+        senderName: 'You',
         deepLink: {
           workspaceId: req.workspaceId,
           channelId: saved.channelId || null,
@@ -1002,8 +1002,8 @@ export const createStandaloneReminder = asyncHandler(async (req, res) => {
       category: 'system',
       channelId: channelId || null,
       channelName: null,
-      senderId: null,
-      senderName: null,
+      senderId: req.user._id,
+      senderName: 'You',
       deepLink: {
         workspaceId: req.workspaceId,
         channelId: channelId || null,

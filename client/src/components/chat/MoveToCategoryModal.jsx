@@ -4,6 +4,7 @@ import { X, Search, Check, FolderInput, Hash, Lock, Volume2 } from 'lucide-react
 import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import api from "../../services/api";
+import { isChatAppChannel } from "../../utils/channelOrigin";
 
 const STYLES = `
   .ccm-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--overlay-bg, rgba(0,0,0,0.55)); backdrop-filter: blur(8px); animation: ccm-overlay-in 180ms ease; }
@@ -58,8 +59,7 @@ export default function MoveToCategoryModal({ initialCategory, onClose }) {
 
   const nonDmChannels = useMemo(() => {
     return channels.filter(c => {
-      if (c.type === 'dm' || c.type === 'self' || c.isArchived) return false;
-      // categoryId may be a populated object or a plain string
+      if (!isChatAppChannel(c) || c.isArchived) return false;
       const cCatId = c.categoryId?._id ?? c.categoryId;
       return String(cCatId ?? '') !== String(initialCategory ?? '');
     });

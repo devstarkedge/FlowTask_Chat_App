@@ -7,6 +7,7 @@ import { useChannelStore } from '../stores/channelStore';
 import { categoryAPI, directoriesAPI } from '../services/api';
 import { X, Check, Search, Hash, Lock } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { isChatAppChannel } from '../utils/channelOrigin';
 
 const ManageCategoryChannelsModal = ({ visible, onClose, category, mode = 'add' }) => {
   const { colors } = useThemeStore();
@@ -23,16 +24,16 @@ const ManageCategoryChannelsModal = ({ visible, onClose, category, mode = 'add' 
     if (mode === 'remove') {
       // For remove mode, show channels that ARE in this category
       return channels.filter(c => {
-        if (c.type === 'dm' || c.type === 'self' || c.isArchived) return false;
+        if (!isChatAppChannel(c) || c.isArchived) return false;
         const channelIdStr = c._id?.toString ? c._id.toString() : c._id;
         const inCustomCategory = Array.isArray(category.channelIds) && category.channelIds.includes(channelIdStr);
         const inDeptCategory = category.type === 'department' && c.departmentRef?.departmentId === (category.departmentId?._id || category.departmentId);
         return inCustomCategory || inDeptCategory;
       });
     } else {
-      // For add mode, show channels that are NOT in this category
+      // For add mode, show Chat App channels that are NOT in this category
       return channels.filter(c => {
-        if (c.type === 'dm' || c.type === 'self' || c.isArchived) return false;
+        if (!isChatAppChannel(c) || c.isArchived) return false;
         const channelIdStr = c._id?.toString ? c._id.toString() : c._id;
         const inCustomCategory = Array.isArray(category.channelIds) && category.channelIds.includes(channelIdStr);
         const inDeptCategory = category.type === 'department' && c.departmentRef?.departmentId === (category.departmentId?._id || category.departmentId);

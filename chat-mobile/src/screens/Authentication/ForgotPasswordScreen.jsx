@@ -14,6 +14,7 @@ import Toast from 'react-native-toast-message';
 import { authAPI } from '../../services/api';
 import { useThemeStore } from '../../stores/themeStore';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+import Logo from '../../components/Logo';
 
 const ForgotPasswordScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
@@ -59,7 +60,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
           <ArrowLeft size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.logo}>
-          <Image source={require('../../../assets/logo.png')} style={styles.logoIcon} />
+          <Logo width={32} height={32} style={styles.logoIcon} />
           <Text style={[styles.logoText, { color: colors.textPrimary }]}>FlowTask-Chat</Text>
         </View>
       </View>

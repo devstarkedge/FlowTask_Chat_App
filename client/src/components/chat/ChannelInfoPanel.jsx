@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import {
   X,
   Users,
@@ -23,6 +23,7 @@ import EditChannelModal from "./EditChannelModal";
 import AddMemberModal from "./AddMemberModal";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
+import { isChatAppChannel } from "../../utils/channelOrigin";
 import "./custom-css/channelInfoPanel.css";
 
 
@@ -54,15 +55,6 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const [departments, setDepartments] = useState([]);
-
-  useEffect(() => {
-    if (showCategoryDropdown && departments.length === 0) {
-      api.get('/categories/departments').then(({ data }) => {
-        if (data.success) setDepartments(data.data);
-      }).catch(err => console.error("Failed to fetch departments", err));
-    }
-  }, [showCategoryDropdown]);
 
   const channelId = channel?._id?.toString?.();
   const isStarred = channelId
@@ -112,6 +104,8 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
   const isLastOwner = isOwner && (isResolvingMembers || ownerCount <= 1)
   const canLeaveChannel = !isSystem && !isSystemManagedProject && !isLastOwner;
   const canEditChannel = !isDM && isAdmin && !isSystemManagedProject;
+  const canMoveToCategory = canEditChannel && isChatAppChannel(channel);
+  const customCategories = categories?.filter((c) => c.type === "custom") || [];
 
   // Filter out current user's name from DM channel names
   const displayChannelName = useMemo(() => {
@@ -332,8 +326,8 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
               </button>
             )}
 
-            {/* Move to Category */}
-            {canEditChannel && (
+            {/* Move to Category — Chat App channels and custom categories only */}
+            {canMoveToCategory && (
               <div style={{ position: "relative", flex: 1, display: "flex" }}>
                 <button
                   onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
@@ -368,10 +362,10 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
                       (No Category)
                     </button>
                     
-                    {categories?.filter(c => c.type === "custom").length > 0 && (
+                    {customCategories.length > 0 && (
                       <>
                         <div style={{ padding: "6px 12px", fontSize: "11px", fontWeight: "bold", color: "var(--text-muted)", textTransform: "uppercase", marginTop: 4 }}>Custom Categories</div>
-                        {categories.filter(c => c.type === "custom").map(cat => (
+                        {customCategories.map(cat => (
                           <button
                             key={cat._id}
                             className="w-full text-left transition-colors"

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppScreen from '../../components/common/AppScreen';
+import Logo from '../../components/Logo';
 import { Eye, EyeOff, CircleChevronRight, Lock, Check } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useAuthStore } from '../../stores/authStore';
@@ -114,7 +115,7 @@ const RegisterScreen = ({ navigation }) => {
       <ScreenContainer style={styles.container}> 
         <View style={[styles.header, { borderBottomColor: colors.borderLight }]}> 
           <View style={styles.logo}>
-            <Image source={require('../../../assets/logo.png')} style={styles.logoIcon} />
+            <Logo width={32} height={32} style={styles.logoIcon} />
             <Text style={[styles.logoText, { color: colors.textPrimary }]}>FlowTask-Chat</Text>
           </View>
         </View>
@@ -155,7 +156,7 @@ const RegisterScreen = ({ navigation }) => {
       >
         <View style={[styles.header, { borderBottomColor: colors.borderLight }]}> 
           <View style={styles.logo}>
-            <Image source={require('../../../assets/logo.png')} style={styles.logoIcon} />
+            <Logo width={32} height={32} style={styles.logoIcon} />
             <Text style={[styles.logoText, { color: colors.textPrimary }]}>FlowTask-Chat</Text>
           </View>
         </View>

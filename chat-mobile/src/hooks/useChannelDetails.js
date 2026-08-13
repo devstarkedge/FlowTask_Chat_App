@@ -236,10 +236,16 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
   const [showMoveCategoryModal, setShowMoveCategoryModal] = useState(false);
 
   const handleAssignCategory = async (categoryId) => {
+    const currentCat = categories.find(c => c.channelIds?.includes(channelId));
+    const currentCatId = currentCat?._id?.toString?.();
+    if (String(categoryId) === String(currentCatId || 'null')) {
+      Toast.show({ type: 'error', text1: 'You are already in this category.' });
+      return;
+    }
+
     try {
       if (categoryId === null) {
-        const currentCat = categories.find(c => c.type === "custom" && c.channelIds?.includes(channelId));
-        if (currentCat) {
+        if (currentCat && currentCat.type === "custom") {
           await categoryAPI.removeChannel(currentCat._id, channelId);
         }
       } else {

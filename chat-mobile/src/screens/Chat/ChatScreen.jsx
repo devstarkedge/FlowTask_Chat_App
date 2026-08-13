@@ -752,8 +752,9 @@ const ChatScreen = ({ route, navigation }) => {
               <Hash size={20} color={colors.textSecondary} />
             )}
              <Text
-              style={[styles.headerTitle, { color: colors.textPrimary }]}
+              style={[styles.headerTitle, { color: colors.textPrimary, flex: 1 }]}
               numberOfLines={1}
+              ellipsizeMode="tail"
             >
               {channelNameToShow}
             </Text>
@@ -1257,6 +1258,7 @@ const createStyles = (colors) =>
       flexDirection: "row",
       alignItems: "center",
       gap: scale(10),
+      width: '100%',
     },
     channelIconContainer: {
       width: scale(36),
@@ -1272,6 +1274,8 @@ const createStyles = (colors) =>
     headerTitle: {
       fontSize: moderateScale(15),
       fontWeight: "700",
+      lineHeight: moderateScale(20),
+      paddingVertical: verticalScale(2),
     },
     headerSubtitleText: {
       fontSize: moderateScale(11),

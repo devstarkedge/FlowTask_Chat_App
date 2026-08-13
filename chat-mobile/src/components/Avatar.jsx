@@ -74,7 +74,7 @@ const Avatar = React.memo(
           <Image
             source={{ uri: avatarUrl }}
             resizeMode="cover"
-            style={[{ width: size, height: size, borderRadius: size * 0.2 }]}
+            style={[{ width: size, height: size, borderRadius: size / 2 }]}
             onError={handleError}
           />
         ) : (
@@ -84,7 +84,7 @@ const Avatar = React.memo(
               {
                 width: size,
                 height: size,
-                borderRadius: size * 0.2,
+                borderRadius: size / 2,
                 backgroundColor: bgColor,
               },
             ]}

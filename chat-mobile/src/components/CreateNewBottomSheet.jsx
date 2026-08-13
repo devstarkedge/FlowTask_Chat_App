@@ -9,7 +9,7 @@ import {
   Animated,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { Hash, MessageSquare, Briefcase } from 'lucide-react-native';
 import CreateChannelModal from './CreateChannelModal';
@@ -19,6 +19,7 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 const CreateNewBottomSheet = ({ visible, onClose, navigation }) => {
   const { colors } = useThemeStore();
+  const insets = useSafeAreaInsets();
   const slideAnim = React.useRef(new Animated.Value(0)).current;
   const [channelModalVisible, setChannelModalVisible] = useState(false);
   const [workspaceModalVisible, setWorkspaceModalVisible] = useState(false);
@@ -83,7 +84,7 @@ const CreateNewBottomSheet = ({ visible, onClose, navigation }) => {
             ]}
             onStartShouldSetResponder={() => true}
           >
-            <SafeAreaView edges={['bottom']} style={styles.safeArea}>
+            <View style={[styles.safeArea, { paddingBottom: Math.max(moderateScale(16), insets.bottom) }]}>
               <View style={styles.handleContainer}>
                 <View style={[styles.handle, { backgroundColor: colors.border }]} />
               </View>
@@ -143,7 +144,7 @@ const CreateNewBottomSheet = ({ visible, onClose, navigation }) => {
                   </View>
                 </TouchableOpacity> */}
               </View>
-            </SafeAreaView>
+            </View>
           </Animated.View>
         </Pressable>
       </Modal>

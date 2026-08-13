@@ -301,7 +301,7 @@ function AudioPlayerCard({ fileUrl, name, activeColor, colors }) {
 
 // ─── Main MobileFileCard ──────────────────────────────────────────────────────
 
-export default function MobileFileCard({ file, colors, onLongPress }) {
+export default function MobileFileCard({ file, colors, onLongPress, isUploading = false }) {
   if (!file) return null;
 
   const name = file.originalName || file.fileName || file.name || 'File';
@@ -332,7 +332,6 @@ export default function MobileFileCard({ file, colors, onLongPress }) {
   const [imgVisible,   setImgVisible]   = useState(false);
   const [vidVisible,   setVidVisible]   = useState(false);
   const [docVisible,   setDocVisible]   = useState(false);
-  const [imgLoading,   setImgLoading]   = useState(true);
   const [imgError,     setImgError]     = useState(false);
 
   // ── Action handlers ──
@@ -373,7 +372,7 @@ export default function MobileFileCard({ file, colors, onLongPress }) {
       <>
         <TouchableOpacity
           style={[ms.card, { backgroundColor: colors.backgroundSecondary || colors.background, borderColor: colors.border }]}
-          onPress={() => { setImgError(false); setImgLoading(true); }}
+          onPress={() => { setImgError(false); }}
           onLongPress={onLongPress}
           activeOpacity={0.75}
         >
@@ -429,7 +428,6 @@ export default function MobileFileCard({ file, colors, onLongPress }) {
             resizeMode="cover"
             onLoadStart={() => {
               logger.info('[MobileFileCard Image] onLoadStart:', targetUri);
-              setImgLoading(true);
             }}
             onLoad={(e) => {
               const { width, height } = e.nativeEvent.source || {};
@@ -437,20 +435,18 @@ export default function MobileFileCard({ file, colors, onLongPress }) {
             }}
             onLoadEnd={() => {
               logger.info('[MobileFileCard Image] onLoadEnd:', targetUri);
-              setImgLoading(false);
             }}
             onError={(err) => {
               logger.warn('[MobileFileCard Image] onError FAILURE:', {
                 targetUri,
                 error: err?.nativeEvent?.error || err?.nativeEvent,
               });
-              setImgLoading(false);
               setImgError(true);
             }}
           />
-          {imgLoading && (
-            <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.06)' }]} pointerEvents="none">
-              <ActivityIndicator color={colors.primary || '#1264a3'} size="small" />
+          {isUploading && (
+            <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }]} pointerEvents="none">
+              <ActivityIndicator color={colors.primary || '#1264a3'} size="large" />
             </View>
           )}
         </TouchableOpacity>

@@ -324,7 +324,7 @@ const ChatMessageItem = memo(({
                       />
                     );
                   }
-                  return <MobileFileCard key={file._id || i} file={file} colors={colors} onLongPress={() => !isDeleted && showMessageActions(item, file)} />;
+                  return <MobileFileCard key={file._id || i} file={file} colors={colors} isUploading={item.pending || item.status === 'pending'} onLongPress={() => !isDeleted && showMessageActions(item, file)} />;
                 })}
               </RNView>
             )}

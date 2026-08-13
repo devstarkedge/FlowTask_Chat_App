@@ -83,8 +83,8 @@ const CategoryActionSheet = ({ visible, onClose, category, onAddChannels, onRemo
   if (!category) return null;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
-      <KeyboardAwareContainer style={{ flex: 1 }} disablePadding={false}>
+    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose} statusBarTranslucent={Platform.OS === 'android'}>
+      <KeyboardAwareContainer style={{ flex: 1 }} disablePadding={false} bottomSafeContext={false}>
         <View style={styles.overlay}>
           <TouchableOpacity style={styles.backdrop} onPress={onClose} />
           <View style={[styles.sheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>

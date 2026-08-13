@@ -9,13 +9,14 @@ import {
   Animated,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Table, Image, Minus, Info, Columns, X } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 
 export default function CanvasInsertSheet({ visible, onClose, onInsertOption }) {
   const slideAnim = React.useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
 
   React.useEffect(() => {
     if (visible) {
@@ -64,7 +65,7 @@ export default function CanvasInsertSheet({ visible, onClose, onInsertOption }) 
           ]}
           onStartShouldSetResponder={() => true}
         >
-          <SafeAreaView edges={['bottom']} style={styles.safeArea}>
+          <View style={[styles.safeArea, { paddingBottom: Math.max(moderateScale(16), insets.bottom) }]}>
             <View style={styles.header}>
               <Text style={styles.headerTitle}>Insert Block</Text>
               <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -129,7 +130,7 @@ export default function CanvasInsertSheet({ visible, onClose, onInsertOption }) 
                 </View>
               </TouchableOpacity>
             </View>
-          </SafeAreaView>
+          </View>
         </Animated.View>
       </Pressable>
     </Modal>

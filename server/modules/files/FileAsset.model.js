@@ -11,7 +11,7 @@ const fileAssetSchema = new Schema({
   workspaceId: {
     type: Schema.Types.ObjectId,
     ref: 'Workspace',
-    required: true,
+    required: false,
     index: true,
   },
 

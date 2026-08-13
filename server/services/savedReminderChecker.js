@@ -171,7 +171,6 @@ async function processDueReminders() {
           type: claimed.channelId ? 'channel' : 'workspace',
         };
 
-        // Use the Notification Engine
         await notificationEngine.processSystemNotification({
           workspaceId: claimed.workspaceId,
           recipientId: claimed.userId,
@@ -182,8 +181,8 @@ async function processDueReminders() {
           category: 'system',
           channelId: claimed.channelId || null,
           channelName: null,
-          senderId: null,
-          senderName: null,
+          senderId: claimed.userId,
+          senderName: 'You',
           deepLink,
           forceNotify: true,
         });

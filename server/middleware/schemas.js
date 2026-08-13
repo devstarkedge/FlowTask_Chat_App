@@ -272,6 +272,7 @@ export const createWorkspaceSchema = z.object({
   description: z.string().max(500).optional().default(""),
   plan: z.enum(["free", "pro", "enterprise"]).optional().default("free"),
   slug: z.string().max(100).optional(),
+  logo: z.string().url("Invalid logo URL").optional().nullable(),
 });
 
 // ─── Invites ─────────────────────────────────────────────────────────────────

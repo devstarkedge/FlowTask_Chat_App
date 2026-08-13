@@ -13,7 +13,7 @@ const mockUpdateMany = vi.fn();
 const mockLean = vi.fn();
 const mockFind = vi.fn(() => ({ lean: mockLean }));
 
-vi.mock('../modules/readReceipts/ReadReceipt.model.js', () => ({
+vi.mock('../modules/readReceipts/readReceipt.model.js', () => ({
   default: {
     find: mockFind,
     findOneAndUpdate: mockFindOneAndUpdate,

@@ -63,9 +63,17 @@ import {
   Reply,
   Edit3,
   Trash2,
+  Folder ,
   Bookmark,
   Copy,
   ExternalLink,
+  X,
+  MoreHorizontal,
+  UserPlus,
+  Star,
+  ChevronRight,
+  Settings,
+  User,
 } from "lucide-react-native";
 import SearchBar from "../../components/SearchBar";
 import MessageComposer from "../../components/MessageComposer";
@@ -198,6 +206,40 @@ const ChatScreen = ({ route, navigation }) => {
   const pendingAutoScroll = useRef(false);
   const isAutoScrolling = useRef(false);
   const autoScrollTimeout = useRef(null);
+  const lastMessageIdRef = useRef(null);
+
+  // Smart automatic scrolling on new messages
+  useEffect(() => {
+    if (messages.length === 0) {
+      lastMessageIdRef.current = null;
+      return;
+    }
+
+    const latestMessage = messages[messages.length - 1];
+    const latestMessageId = latestMessage?._id;
+
+    if (latestMessageId && lastMessageIdRef.current !== latestMessageId) {
+      const oldLastId = lastMessageIdRef.current;
+      lastMessageIdRef.current = latestMessageId;
+
+      // Don't auto-scroll on initial load
+      if (oldLastId !== null) {
+        const isMe = latestMessage.authorId?._id === user?._id || latestMessage.authorId === user?._id || pendingAutoScroll.current;
+
+        if (isMe || isAtBottomRef.current) {
+          pendingAutoScroll.current = false;
+          isAutoScrolling.current = true;
+          requestAnimationFrame(() => {
+            flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+            if (autoScrollTimeout.current) clearTimeout(autoScrollTimeout.current);
+            autoScrollTimeout.current = setTimeout(() => {
+              isAutoScrolling.current = false;
+            }, 400);
+          });
+        }
+      }
+    }
+  }, [messages, user?._id]);
 
   // ─── Message Info handler ─────────────────────────────────────────────
   const handleMessageInfo = useCallback((message) => {
@@ -393,6 +435,17 @@ const ChatScreen = ({ route, navigation }) => {
       liveMember?.onlineStatus ?? liveMember?.userId?.onlineStatus;
     return liveStatus ? { ...base, onlineStatus: liveStatus } : base;
   }, [isDM, channelMembers, channel, user, channelName, workspaceMembers]);
+
+  const [isStarred, setIsStarred] = useState(false);
+
+  const getHeaderSubtitle = () => {
+    const tabCount = 1 + (channel?.canvasTabs?.length || 0);
+    const tabStr = tabCount === 1 ? '1 tab' : `${tabCount} tabs`;
+    if (isDM) {
+      return tabStr;
+    }
+    return `${memberCount} members • ${tabStr}`;
+  };
 
   const channelNameToShow = useMemo(() => {
     if (isDM && dmUser) return dmUser.name;
@@ -675,20 +728,20 @@ const ChatScreen = ({ route, navigation }) => {
 
       {/* Custom Header */}
       <View
-        style={[styles.header, { borderBottomColor: colors.border }]}
+        style={[styles.header, { borderBottomColor: 'transparent' }]}
         onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
       >
         <HeaderBackButton onPress={() => navigation.goBack()} />
 
         <TouchableOpacity 
-          style={styles.headerCenter}
+          style={[styles.headerCenter, { backgroundColor: colors.card }]}
           onPress={() => navigation.navigate("ChannelDetails", { channelId, channelName, memberCount })}
         >
-          <View style={styles.headerTitleRow}>
+          <View style={styles.headerPillContent}>
             {isDM ? (
               <AppAvatar
                 user={dmUser || { name: channelName }}
-                size={32}
+                size={36}
                 showStatus={true}
               />
             ) : isSystem ? (
@@ -722,18 +775,19 @@ const ChatScreen = ({ route, navigation }) => {
         </TouchableOpacity>
 
         <View style={styles.headerActions}>
-          {isDM && (
+          {/* Phone and Video icons commented out per user request */}
+          {/* {isDM && (
             <>
-              <TouchableOpacity style={styles.headerButton}>
+              <TouchableOpacity style={[styles.headerActionButton, { backgroundColor: colors.card }]}>
                 <Phone size={20} color={colors.textSecondary} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.headerButton}>
+              <TouchableOpacity style={[styles.headerActionButton, { backgroundColor: colors.card }]}>
                 <Video size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </>
-          )}
+          )} */}
           <TouchableOpacity
-            style={styles.headerButton}
+            style={[styles.headerActionButton, { backgroundColor: colors.card }]}
             onPress={() => setShowOptions(!showOptions)}
           >
             <MoreVertical size={20} color={colors.textPrimary} />
@@ -746,27 +800,29 @@ const ChatScreen = ({ route, navigation }) => {
         <>
           <TouchableOpacity
             activeOpacity={1}
-            style={[StyleSheet.absoluteFill, { zIndex: 999, backgroundColor: 'transparent' }]}
+            style={[StyleSheet.absoluteFill, { zIndex: 999, backgroundColor: 'rgba(0, 0, 0, 0.2)'}]}
             onPress={() => setShowOptions(false)}
           />
           <View
             style={[
-              styles.optionsMenu,
+              styles.optionsMenuCard,
               {
                 backgroundColor: colors.background,
-                borderBottomColor: colors.border,
-                position: 'absolute',
-                top: headerHeight,
-                left: 0,
-                right: 0,
-                zIndex: 1000,
-                elevation: 5,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.12,
+                shadowRadius: 24,
+                elevation: 10,
+                top: headerHeight + verticalScale(8),
               },
             ]}
           >
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => {
+           
+            {/* Options List */}
+            <View style={styles.cardOptionsList}>
+              <TouchableOpacity
+                style={[styles.cardOptionItem, { backgroundColor: colors.backgroundSecondary }]}
+                onPress={() => {
                 setShowOptions(false);
                 navigation.navigate("ChannelDetails", {
                   channelId,
@@ -774,41 +830,50 @@ const ChatScreen = ({ route, navigation }) => {
                   memberCount,
                 });
               }}
-            >
-              <Users size={18} color={colors.textSecondary} />
-              <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-                {isDM ? "Conversation Details" : "Channel Info"}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => {
-                setShowOptions(false);
-                navigation.navigate("Files", { channelId, channelName });
-              }}
-            >
-              <FileText size={18} color={colors.textSecondary} />
-              <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-                Files
-              </Text>
-            </TouchableOpacity>
-            {!isDM && (
+              >
+                <View style={styles.cardOptionLeft}>
+                   <Users size={18} color={colors.textSecondary} />
+                  <Text style={[styles.cardOptionText, { color: colors.textPrimary, fontWeight: '600' }]}>
+                   {isDM ? "Conversation Details" : "Channel Info"}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
               <TouchableOpacity
-                style={styles.optionItem}
+                style={styles.cardOptionItem}
                 onPress={() => {
                   setShowOptions(false);
-                  navigation.navigate("CanvasList", { channelId, channelName });
+                  navigation.navigate("Files", { channelId, channelName });
                 }}
               >
-                <FileText size={18} color={colors.textSecondary} />
-                <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-                  Canvas Documents
-                </Text>
+                <View style={styles.cardOptionLeft}>
+                  <Folder  size={20} color={colors.textPrimary} />
+                  <Text style={[styles.cardOptionText, { color: colors.textPrimary }]}>
+                    Files 
+                  </Text>
+                </View>
               </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => {
+
+              {!isDM && (
+                <TouchableOpacity
+                  style={styles.cardOptionItem}
+                  onPress={() => {
+                    setShowOptions(false);
+                    navigation.navigate("CanvasList", { channelId, channelName });
+                  }}
+                >
+                  <View style={styles.cardOptionLeft}>
+                    <FileText size={20} color={colors.textPrimary} />
+                    <Text style={[styles.cardOptionText, { color: colors.textPrimary }]}>
+                      Canvas Documents
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.cardOptionItem}
+                onPress={() => {
                 setShowOptions(false);
                 navigation.navigate('ChannelSearch', { 
                   channelId, 
@@ -816,24 +881,30 @@ const ChatScreen = ({ route, navigation }) => {
                   isPrivate 
                 });
               }}
-            >
-              <Search size={18} color={colors.textSecondary} />
-              <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-                Search
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => {
-                setShowOptions(false);
-                navigation.navigate('PinnedMessages', { channelId, channelName });
-              }}
-            >
-              <Pin size={18} color={colors.textSecondary} />
-              <Text style={[styles.optionText, { color: colors.textPrimary }]}>
-                Pinned Messages
-              </Text>
-            </TouchableOpacity>
+              >
+                <View style={styles.cardOptionLeft}>
+                  <Search size={20} color={colors.textPrimary} />
+                  <Text style={[styles.cardOptionText, { color: colors.textPrimary }]}>
+                    Search
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cardOptionItem}
+                onPress={() => {
+                  setShowOptions(false);
+                  navigation.navigate('PinnedMessages', { channelId, channelName });
+                }}
+              >
+                <View style={styles.cardOptionLeft}>
+                  <Pin size={20} color={colors.textPrimary} />
+                  <Text style={[styles.cardOptionText, { color: colors.textPrimary }]}>
+                    Pinned Messages
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
         </>
       )}
@@ -864,11 +935,11 @@ const ChatScreen = ({ route, navigation }) => {
           onContentSizeChange={() => {
             // Don't fight reply-jump navigation by snapping back to bottom
             if (jumpToMessageId) return;
-            if (pendingAutoScroll.current || isAtBottomRef.current) {
+            if (pendingAutoScroll.current) {
               isAutoScrolling.current = true;
               flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
               pendingAutoScroll.current = false;
-              
+
               if (autoScrollTimeout.current) clearTimeout(autoScrollTimeout.current);
               autoScrollTimeout.current = setTimeout(() => {
                 isAutoScrolling.current = false;
@@ -1161,22 +1232,50 @@ const createStyles = (colors) =>
       paddingVertical: moderateScale(12),
       borderBottomWidth: 1,
       gap: 8,
+      borderRadius: 40,
+      borderColor: colors.border,
+
     },
     backButton: {
       padding: moderateScale(4),
     },
     headerCenter: {
       flex: 1,
+      borderRadius: scale(24),
+      paddingLeft: scale(6),
+      paddingRight: scale(16),
+      paddingVertical: scale(6),
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+      elevation: 2,
     },
-    headerTitleRow: {
+    headerPillContent: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
+      gap: scale(10),
+    },
+    channelIconContainer: {
+      width: scale(36),
+      height: scale(36),
+      borderRadius: scale(18),
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    headerTextContainer: {
+      flex: 1,
+      justifyContent: 'center',
     },
     headerTitle: {
-      fontSize: moderateScale(17),
+      fontSize: moderateScale(15),
       fontWeight: "700",
-      flex: 1,
+    },
+    headerSubtitleText: {
+      fontSize: moderateScale(11),
+      marginTop: verticalScale(1),
     },
     headerSubtitle: {
       flexDirection: "row",
@@ -1203,24 +1302,111 @@ const createStyles = (colors) =>
     },
     headerActions: {
       flexDirection: "row",
-      gap: 4,
+      gap: scale(6),
+      alignItems: 'center',
     },
-    headerButton: {
-      padding: moderateScale(8),
+    headerActionButton: {
+      width: scale(44),
+      height: scale(44),
+      borderRadius: scale(22),
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+      elevation: 2,
     },
-    optionsMenu: {
-      borderBottomWidth: 1,
-      paddingVertical: moderateScale(8),
+    optionsMenuCard: {
+      position: 'absolute',
+      left: scale(12),
+      right: scale(12),
+      zIndex: 1000,
+      borderRadius: scale(28),
+      padding: scale(18),
     },
-    optionItem: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: moderateScale(16),
-      paddingVertical: moderateScale(12),
-      gap: 12,
+    cardHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: verticalScale(16),
     },
-    optionText: {
+    cardHeaderIconBtn: {
+      width: scale(36),
+      height: scale(36),
+      borderRadius: scale(18),
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0,0,0,0.03)',
+    },
+    cardHeaderCenter: {
+      flex: 1,
+      alignItems: 'center',
+      paddingHorizontal: scale(10),
+    },
+    cardHeaderTitle: {
+      fontSize: moderateScale(16),
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    cardHeaderSubtitle: {
+      fontSize: moderateScale(12),
+      marginTop: verticalScale(2),
+      textAlign: 'center',
+    },
+    cardActionsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: scale(8),
+      marginBottom: verticalScale(16),
+    },
+    cardActionButton: {
+      flex: 1,
+      height: verticalScale(48),
+      borderRadius: scale(14),
+      borderWidth: 1,
+      borderColor: 'rgba(0,0,0,0.06)',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: scale(6),
+    },
+    cardActionButtonText: {
+      fontSize: moderateScale(13),
+      fontWeight: '600',
+    },
+    cardOptionsList: {
+      gap: scale(6),
+    },
+    cardOptionItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      height: verticalScale(50),
+      borderRadius: scale(14),
+      paddingHorizontal: scale(14),
+    },
+    cardOptionLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: scale(12),
+    },
+    cardOptionText: {
       fontSize: moderateScale(15),
+      fontWeight: '500',
+    },
+    proBadge: {
+      backgroundColor: '#7c3aed',
+      borderRadius: scale(6),
+      paddingHorizontal: scale(6),
+      paddingVertical: scale(2),
+    },
+    proBadgeText: {
+      color: '#ffffff',
+      fontSize: moderateScale(10),
+      fontWeight: '800',
     },
     messageList: {
       paddingHorizontal: moderateScale(12),

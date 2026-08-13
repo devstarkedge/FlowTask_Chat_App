@@ -10,7 +10,7 @@ const HeaderBackButton = ({ onPress, style, iconColor }) => {
   
   return (
     <TouchableOpacity 
-      style={[styles.headerBackButton, { backgroundColor: colors.card }, style]} 
+      style={[styles.headerBackButton, { backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.border }, style]} 
       onPress={onPress} 
       hitSlop={{ top: verticalScale(10), bottom: verticalScale(10), left: scale(10), right: scale(10) }}
     >

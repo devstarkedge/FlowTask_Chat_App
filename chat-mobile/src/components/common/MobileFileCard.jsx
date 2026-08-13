@@ -711,10 +711,12 @@ const ms = StyleSheet.create({
     padding: moderateScale(10),
     marginVertical: verticalScale(3),
     gap: 10,
+    width: '100%',
+    minWidth: scale(220),
   },
   iconBox: {
     width: scale(42),
-    height: verticalScale(42),
+    height: scale(42),
     borderRadius: moderateScale(10),
     justifyContent: 'center',
     alignItems: 'center',

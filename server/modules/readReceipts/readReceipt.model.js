@@ -94,6 +94,9 @@ readReceiptSchema.index({ workspaceId: 1, userId: 1, channelId: 1 }, { unique: t
 // Per-message receipt lookup (used by service for getMessageInfo / markAsRead)
 readReceiptSchema.index({ workspaceId: 1, messageId: 1, channelId: 1 }, { sparse: true });
 
+// Compound index for fast per-message status upsert and uniqueness
+readReceiptSchema.index({ workspaceId: 1, channelId: 1, messageId: 1, userId: 1 }, { unique: true });
+
 // All unread channels for a user (getUnreadCounts query)
 readReceiptSchema.index({ workspaceId: 1, userId: 1, unreadCount: 1 });
 

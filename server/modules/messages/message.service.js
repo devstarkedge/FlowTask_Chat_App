@@ -963,7 +963,7 @@ class MessageService {
     try {
       const { getIO } = await import('../../sockets/socketManager.js');
       const { buildRoomName } = await import('../../config/constants.js');
-      const { default: ReadReceipt } = await import('../readReceipts/ReadReceipt.model.js');
+      const { default: ReadReceipt } = await import('../readReceipts/readReceipt.model.js');
 
       const channel = await channelRepository.findById(channelId, { workspaceId });
       if (!channel) return;

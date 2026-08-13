@@ -172,11 +172,17 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
   };
 
   const handleAssignCategory = async (categoryId) => {
+    const currentCat = categories.find(c => c.channelIds?.includes(channelId));
+    const currentCatId = currentCat?._id?.toString?.();
+    if (String(categoryId) === String(currentCatId || 'null')) {
+      toast.error("You are already in this category.");
+      return;
+    }
+
     try {
       if (categoryId === null) {
         // Find which custom category currently has this channel and remove it
-        const currentCat = categories.find(c => c.type === "custom" && c.channelIds?.includes(channelId));
-        if (currentCat) {
+        if (currentCat && currentCat.type === "custom") {
           await api.removeChannelFromCategory(currentCat._id, channelId);
         }
       } else {

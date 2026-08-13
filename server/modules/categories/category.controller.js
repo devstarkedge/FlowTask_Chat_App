@@ -329,6 +329,16 @@ export const addChannelToCategory = asyncHandler(async (req, res, next) => {
 
   const [accessibleChannelId] = await validateAccessibleCategoryChannels(req, [channelId]);
 
+  const alreadyInTarget = await Category.findOne({
+    _id: req.params.id,
+    workspaceId: req.workspaceId,
+    createdBy: req.user._id,
+    channelIds: accessibleChannelId
+  });
+  if (alreadyInTarget) {
+    return next(new BadRequestError("You are already in this category."));
+  }
+
   const previousCategories = await Category.find({
     workspaceId: req.workspaceId,
     createdBy: req.user._id,
@@ -384,6 +394,16 @@ export const addBulkChannelsToCategory = asyncHandler(async (req, res, next) => 
   }
 
   const accessibleChannelIds = await validateAccessibleCategoryChannels(req, channelIds);
+
+  const alreadyInTarget = await Category.findOne({
+    _id: req.params.id,
+    workspaceId: req.workspaceId,
+    createdBy: req.user._id,
+    channelIds: { $all: accessibleChannelIds }
+  });
+  if (alreadyInTarget) {
+    return next(new BadRequestError("You are already in this category."));
+  }
 
   const previousCategories = await Category.find({
     workspaceId: req.workspaceId,

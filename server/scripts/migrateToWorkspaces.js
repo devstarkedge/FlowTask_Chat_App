@@ -32,7 +32,7 @@ import ChatUser from '../modules/users/ChatUser.model.js';
 import Channel from '../modules/channels/Channel.model.js';
 import Message from '../modules/messages/Message.model.js';
 import Thread from '../modules/threads/Thread.model.js';
-import ReadReceipt from '../modules/readReceipts/ReadReceipt.model.js';
+import ReadReceipt from '../modules/readReceipts/readReceipt.model.js';
 import FileAsset from '../modules/files/FileAsset.model.js';
 import FileReference from '../modules/files/FileReference.model.js';
 import ProcessedEvent from '../modules/webhooks/ProcessedEvent.model.js';

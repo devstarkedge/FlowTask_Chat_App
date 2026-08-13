@@ -97,7 +97,7 @@ export const markAsRead = async (messageId, channelId, userId, workspaceId) => {
     channelId,
     userId,
     readAt: receipt.readAt,
-  });
+  }, workspaceId);
 
   return receipt;
 };
@@ -122,7 +122,7 @@ export const markAsDelivered = async (messageId, channelId, userId, workspaceId)
     channelId,
     userId,
     deliveredAt: receipt.deliveredAt,
-  });
+  }, workspaceId);
 
   return receipt;
 };

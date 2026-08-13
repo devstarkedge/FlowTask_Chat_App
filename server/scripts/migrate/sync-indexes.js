@@ -32,7 +32,7 @@ import '../../modules/files/FileAsset.model.js';
 import '../../modules/files/FileReference.model.js';
 import '../../modules/notifications/Notification.model.js';
 import '../../modules/notifications/NotificationPreference.model.js';
-import '../../modules/readReceipts/ReadReceipt.model.js';
+import '../../modules/readReceipts/readReceipt.model.js';
 import '../../modules/drafts/Draft.model.js';
 import '../../modules/dms/DirectMessage.model.js';
 import '../../modules/canvas/canvas.model.js';

@@ -18,7 +18,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useThemeStore } from "../../stores/themeStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { X, Upload, Briefcase } from "lucide-react-native";
-import { workspaceAPI } from "../../services/api";
+import { workspaceAPI, fileAPI } from "../../services/api";
 import Toast from "react-native-toast-message";
 import logger from "../../utils/logger";
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
@@ -85,6 +85,27 @@ const CreateWorkspaceModal = ({ visible, onClose, onSuccess, navigation }) => {
       };
       if (description.trim()) {
         payload.description = description.trim();
+      }
+
+      if (avatar?.uri) {
+        const formData = new FormData();
+        const filename = avatar.uri.split('/').pop() || 'logo.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : 'image/jpeg';
+        
+        formData.append('files', {
+          uri: avatar.uri,
+          name: filename,
+          type,
+        });
+
+        // Use a dummy ObjectId as channelId since the server uploadFiles controller
+        // does not actually check or load the channel from database.
+        const uploadRes = await fileAPI.uploadFiles('000000000000000000000000', formData, null, true);
+        const uploadedFile = uploadRes?.data?.data?.files?.[0] || uploadRes?.data?.files?.[0] || uploadRes?.files?.[0];
+        if (uploadedFile?.url) {
+          payload.logo = uploadedFile.url;
+        }
       }
 
       const { data } = await workspaceAPI.create(payload);

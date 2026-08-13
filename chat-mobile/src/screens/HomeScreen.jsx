@@ -24,6 +24,7 @@ import ManageCategoryChannelsModal from "../components/ManageCategoryChannelsMod
 import CategoryActionSheet from "../components/CategoryActionSheet";
 import CustomizeHomeModal from "../components/CustomizeHomeModal";
 import { useThemeStore } from "../stores/themeStore";
+import WorkspaceAvatar from "../components/WorkspaceAvatar";
 import { useHomeData } from "../hooks/useHomeData";
 import {
   SkeletonCard,
@@ -367,9 +368,7 @@ const HomeScreen = ({ navigation }) => {
       <SafeAreaView edges={["top"]} style={{ backgroundColor: colors.primary }}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerLeft} onPress={() => navigation.navigate("WorkspaceSwitcher")} activeOpacity={0.7}>
-            <View style={[styles.wsLogo, { backgroundColor: colors.primaryOverlay }]}>
-              <Image source={require("../../assets/logo.png")} style={styles.logo} />
-            </View>
+            <WorkspaceAvatar workspace={activeWorkspace} size={32} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 }}>
               <Text style={[styles.wsName, { color: colors.textOnPrimary }]} numberOfLines={1}>
                 {activeWorkspace?.name || t("Workspace")}

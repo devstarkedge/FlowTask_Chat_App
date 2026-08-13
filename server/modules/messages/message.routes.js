@@ -72,6 +72,10 @@ const router = Router();
 
 // All routes require authentication
 router.use(protect);
+
+// ─── Workspace-agnostic routes ──────────────────────────────────────────────
+router.post('/upload', uploadLimiter, uploadMiddleware, handleMulterError, validateUploadedFileMagic, uploadFiles);
+
 router.use(resolveWorkspace);
 
 // ─── Channel-scoped message routes ───────────────────────────────────────────

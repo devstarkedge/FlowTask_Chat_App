@@ -363,22 +363,6 @@ export default function WorkspaceSwitcher({
       >
         {/* Avatar + optional unread dot */}
         <span className="wss-trigger__avatar-wrap">
-          {/* <span
-            className="wss-trigger__avatar"
-            style={{
-              background: activeWorkspace?.logo
-                ? `url(${activeWorkspace.logo}) center / cover`
-                : AVATAR_GRADIENTS[2],
-            }}
-          >
-            {!activeWorkspace?.logo &&
-              (activeWorkspace ? (
-                activeWorkspace.name?.charAt(0)?.toUpperCase()
-              ) : (
-                <MessageCircle size={16} aria-hidden="true" />
-              ))}
-          </span> */}
-
           {totalUnread > 0 && !isOpen && (
             <span
               className="wss-unread-dot"

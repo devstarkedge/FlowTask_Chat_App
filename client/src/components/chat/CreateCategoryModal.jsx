@@ -5,6 +5,7 @@ import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import api, { categoryAPI } from "../../services/api";
 import EmojiPickerPortal from "./EmojiPickerPortal";
+import { isChatAppChannel } from "../../utils/channelOrigin";
 
 let departmentSyncInFlight = null;
 
@@ -183,7 +184,7 @@ export default function CreateCategoryModal({ onClose }) {
 
   const nonDmChannels = useMemo(() => {
     return channels
-      .filter(c => c.type !== 'dm' && c.type !== 'self' && !c.isArchived)
+      .filter((c) => isChatAppChannel(c) && !c.isArchived)
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [channels]);
 
@@ -207,10 +208,16 @@ export default function CreateCategoryModal({ onClose }) {
     return getDeptChannels(department).length > 0;
   }), [departments, existingDepartmentIds, channels]);
 
+  const departmentsWithChannels = useMemo(
+    () => departments.filter((department) => getDeptChannels(department).length > 0),
+    [departments, channels],
+  );
+
   const allDepartmentsImported = !loadingDepts
-    && departments.length > 0
+    && departmentsWithChannels.length > 0
     && missingDepartments.length === 0;
-  const hideDepartmentImportAction = categoryType === 'department' && allDepartmentsImported;
+  const hideDepartmentImportAction = categoryType === 'department'
+    && (allDepartmentsImported || (!loadingDepts && departmentsWithChannels.length === 0));
 
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -383,7 +390,9 @@ export default function CreateCategoryModal({ onClose }) {
               <div className="ccm-field-group">
                 <div style={{ padding: '16px', fontSize: '13px', color: 'var(--text-secondary, #616061)', background: 'var(--bg-secondary, #F8F8F8)', borderRadius: '8px', lineHeight: '1.5', marginBottom: '16px', border: '1px solid var(--border-primary, #EBECEF)' }}>
                   {allDepartmentsImported
-                    ? 'All FlowTask departments are already available in your Categories.'
+                    ? 'All FlowTask departments with channels are already available in your Categories.'
+                    : departmentsWithChannels.length === 0 && !loadingDepts
+                    ? 'No FlowTask departments currently have linked channels.'
                     : <>Departments are synchronized automatically from FlowTask. Click <strong>"Import Departments"</strong> to import all missing departments and their associated channels.</>}
                 </div>
                 
@@ -400,8 +409,10 @@ export default function CreateCategoryModal({ onClose }) {
                     </div>
                   ) : departments.length === 0 ? (
                     <div style={{ padding: '16px', textAlign: 'center', color: '#616061', fontSize: '13px' }}>No FlowTask departments are available for your account.</div>
+                  ) : departmentsWithChannels.length === 0 ? (
+                    <div style={{ padding: '16px', textAlign: 'center', color: '#616061', fontSize: '13px' }}>No departments with channels are available to import.</div>
                   ) : (
-                    departments.map(dept => {
+                    departmentsWithChannels.map(dept => {
                       const isAlreadyImported = existingDepartmentIds.has(String(dept._id))
                         || existingDepartmentIds.has(String(dept.externalId));
                       const isExpanded = expandedDepts[dept._id];

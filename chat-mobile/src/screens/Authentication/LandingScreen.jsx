@@ -10,6 +10,7 @@ import {
   Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Logo from "../../components/Logo";
 import {
   Zap,
   Shield,
@@ -103,7 +104,7 @@ const LandingScreen = ({ navigation }) => {
           style={[styles.header, { borderBottomColor: colors.borderLight }]}
         >
           <View style={styles.logo}>
-            <Image source={require('../../../assets/logo.png')} style={styles.logoIcon} />
+            <Logo width={32} height={32} style={styles.logoIcon} />
             <Text style={[styles.logoText, { color: colors.textPrimary }]}>
               FlowTask-Chat
             </Text>

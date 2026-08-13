@@ -6,6 +6,7 @@ import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useNotificationPrefStore } from '../stores/notificationPrefStore';
 import api, { channelAPI, notificationPrefAPI, usersAPI, directoriesAPI, workspaceAPI, categoryAPI } from '../services/api';
 import logger from '../utils/logger';
+import { isChatAppChannel } from '../utils/channelOrigin';
 import Toast from 'react-native-toast-message';
 
 export const useChannelDetails = (channelId, channelName, navigation) => {
@@ -230,6 +231,7 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
   const isChannelCreator = channel?.createdBy === currentUser?._id;
   const isChannelAdmin = channel?.admins?.includes(currentUser?._id);
   const canAddMember = !isOneToOneDM && (isSystemAdminOrManager || isChannelCreator || isChannelAdmin || (!channel?.systemManaged || channel?.slug === 'flowtask-managers')) && channel?.slug !== 'flowtask-admin';
+  const canMoveToCategory = channel?.type !== 'dm' && isChatAppChannel(channel);
 
   const categories = useChannelStore((s) => s.categories) || [];
   const fetchCategories = useChannelStore((s) => s.fetchCategories);
@@ -266,6 +268,7 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
     channel,
     isOneToOneDM,
     canAddMember,
+    canMoveToCategory,
     categories,
     showMoveCategoryModal,
     setShowMoveCategoryModal,

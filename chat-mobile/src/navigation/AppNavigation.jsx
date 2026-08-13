@@ -125,12 +125,13 @@ function BottomTabs({ navigation }) {
   const { t } = useTranslation();
   const { isTablet, isDesktop } = useResponsive();
   const isWide = isTablet || isDesktop;
-  // Edge-to-edge (Expo 54+): always consume system nav inset. Add a small extra gap so
-  // tab icons aren't flush against 3-button / gesture bars.
-  const tabBarExtra = verticalScale(6);
+  // Edge-to-edge (Expo 54+): always consume system nav inset.
+  // Use a minimum floor so gesture-nav (small inset) still has breathing room.
+  const NAV_BAR_FLOOR = verticalScale(4); // minimum extra gap above gesture bar
   const bottomInset = Math.max(insets.bottom, 0);
   const tabBarContentHeight = isWide ? 58 : 50;
-  const tabBarBottomPad = bottomInset + tabBarExtra;
+  // Ensure at least NAV_BAR_FLOOR padding even when insets.bottom is 0 (rare edge case)
+  const tabBarBottomPad = Math.max(bottomInset, NAV_BAR_FLOOR);
 
   return (
     <>

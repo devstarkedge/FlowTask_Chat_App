@@ -39,6 +39,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
     channel,
     isOneToOneDM,
     canAddMember,
+    canMoveToCategory,
     categories,
     showMoveCategoryModal,
     setShowMoveCategoryModal,
@@ -218,7 +219,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
         <View style={styles.section}>
           <DetailItem icon={Users} label="View Members" colors={colors} onPress={() => setShowMembersList(!showMembersList)}>
             <Text style={{ fontSize: moderateScale(14), color: colors.textSecondary }}>
-              {members.length || initialMemberCount}
+              {isLoadingMembers ? initialMemberCount : members.length}
             </Text>
           </DetailItem>
 
@@ -246,7 +247,9 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
           <DetailItem icon={FileText} label="Canvases" colors={colors} onPress={() => navigation.navigate('CanvasList', { channelId, channelName })} />
           <DetailItem icon={Pin} label="Pinned Messages" colors={colors} onPress={() => navigation.navigate('PinnedMessages', { channelId, channelName })} />
           
-          <DetailItem icon={FolderInput} label="Move to Category" colors={colors} onPress={() => setShowMoveCategoryModal(true)} />
+          {canMoveToCategory && (
+            <DetailItem icon={FolderInput} label="Move to Category" colors={colors} onPress={() => setShowMoveCategoryModal(true)} />
+          )}
           
           <DetailItem icon={Bell} label="Mute Notifications" colors={colors} onPress={null}>
             {isMuteLoading ? (
@@ -277,7 +280,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               >
                 <Text style={{ fontSize: moderateScale(15), color: colors.textPrimary, fontWeight: '500' }}>(No Category)</Text>
               </TouchableOpacity>
-              {categories.filter(c => c.type === 'custom' || c.type === 'department').map((cat) => (
+              {categories.filter(c => c.type === 'custom').map((cat) => (
                 <TouchableOpacity
                   key={cat._id}
                   style={[styles.searchResultItem, { borderBottomColor: colors.border }]}

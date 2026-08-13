@@ -17,12 +17,20 @@ async function validateAccessibleCategoryChannels(req, channelIds) {
   );
   const accessibleIds = new Set(
     accessibleChannels
-      .filter((channel) => channel.type !== 'dm' && channel.type !== 'self' && !channel.isArchived)
+      .filter((channel) => {
+        if (channel.type === 'dm' || channel.type === 'self' || channel.type === 'system' || channel.isArchived) {
+          return false;
+        }
+        if (channel.systemManaged || channel.flowTaskRef?.entityType || channel.flowTaskRef?.entityId) {
+          return false;
+        }
+        return !['project', 'department', 'team'].includes(channel.type);
+      })
       .map((channel) => String(channel._id)),
   );
 
   if (requestedIds.some((channelId) => !accessibleIds.has(channelId))) {
-    throw new ForbiddenError('One or more selected channels are not accessible to this user');
+    throw new ForbiddenError('Only Chat App channels can be added to a custom category');
   }
 
   return requestedIds;

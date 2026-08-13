@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
@@ -17,26 +17,13 @@ import {
   Box,
   PenTool,
   Smile,
-  MessageSquare,
-  Link2,
-  Type,
-  Smartphone,
-  Volume2,
-  ArrowRight,
-  Image as ImageIcon,
   Headphones,
   Globe,
   Clock,
-  Eye,
-  Lock,
+  ArrowRight,
   CreditCard,
   PieChart,
   Info,
-  Book,
-  Activity,
-  Bug,
-  HelpCircle,
-  MessageCircle,
 } from 'lucide-react-native';
 
 const SectionTitle = ({ title, colors }) => (
@@ -152,10 +139,8 @@ const PreferencesScreen = ({ navigation }) => {
 
   const { t } = useTranslation();
 
-  const handleOpenLink = (url) => {
-    Linking.openURL(url).catch(err => {
-      Alert.alert("Error", "Could not open link");
-    });
+  const handleComingSoon = (feature) => {
+    Alert.alert(feature, 'Coming Soon');
   };
 
   const handleClearCache = () => {
@@ -291,18 +276,16 @@ const PreferencesScreen = ({ navigation }) => {
             icon={CreditCard}
             title={t("Billing")}
             subtitle={t("View or manage your Free Plan")}
-            rightIcon="external"
             colors={colors}
-            onPress={() => handleOpenLink('https://slack.com/pricing')}
+            onPress={() => handleComingSoon('Billing')}
           />
           {user?.role === 'admin' && (
             <PreferenceItem
               icon={PieChart}
               title={t("Analytics")}
               subtitle={t("View your analytics dashboard")}
-              rightIcon="external"
               colors={colors}
-              onPress={() => handleOpenLink('https://slack.com/help/articles/218080037')}
+              onPress={() => handleComingSoon('Analytics')}
             />
           )}
         </View>

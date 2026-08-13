@@ -286,7 +286,9 @@ const ThreadDetailScreen = ({ route, navigation }) => {
   const effectiveRootAttachments = getAttachments(effectiveRoot);
 
   return (
-    <ScreenLayout edges={Platform.OS === 'ios' ? ['top', 'bottom'] : ['top', 'left', 'right']}>
+    // KeyboardAwareContainer owns bottom inset — exclude 'bottom' from ScreenLayout
+    // to prevent double-applying the nav bar gap on all Android navigation modes.
+    <ScreenLayout edges={['top', 'left', 'right']}>
       <View
         style={[styles.header, { borderBottomColor: colors.border }]}
         onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}

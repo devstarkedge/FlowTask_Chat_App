@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { useChannelStore } from '../../stores/channelStore';
 import { categoryAPI } from '../../services/api';
 import Loader from '../shared/Loader';
+import { isChatAppChannel } from '../../utils/channelOrigin';
 
 const STYLES = `
   .ecm-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
@@ -102,8 +103,11 @@ export default function EditCategoryModal({ category, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const departmentChannels = useMemo(() => channels
+    .filter((channel) => channel.type !== 'dm' && channel.type !== 'self' && !channel.isArchived), [channels]);
+
   const accessibleChannels = useMemo(() => channels
-    .filter((channel) => channel.type !== 'dm' && channel.type !== 'self' && !channel.isArchived)
+    .filter((channel) => isChatAppChannel(channel) && !channel.isArchived)
     .sort((a, b) => (a.name || '').localeCompare(b.name || '')), [channels]);
 
   const usedDepartmentIds = useMemo(() => new Set(categories
@@ -113,8 +117,8 @@ export default function EditCategoryModal({ category, onClose }) {
 
   const selectableDepartments = useMemo(() => departments.filter((department) => {
     if (usedDepartmentIds.has(idOf(department))) return false;
-    return channelsForDepartment(accessibleChannels, department).length > 0;
-  }), [departments, usedDepartmentIds, accessibleChannels]);
+    return channelsForDepartment(departmentChannels, department).length > 0;
+  }), [departments, usedDepartmentIds, departmentChannels]);
 
   const visibleChannels = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -125,10 +129,12 @@ export default function EditCategoryModal({ category, onClose }) {
 
   useEffect(() => {
     if (category.type !== 'department' || categoryType !== 'custom' || seededDepartmentChannels.current) return;
-    const ids = channelsForDepartment(accessibleChannels, category.departmentId).map((channel) => idOf(channel._id));
+    const ids = channelsForDepartment(departmentChannels, category.departmentId)
+      .filter(isChatAppChannel)
+      .map((channel) => idOf(channel._id));
     setSelectedChannelIds(ids);
     seededDepartmentChannels.current = true;
-  }, [accessibleChannels, category.departmentId, category.type, categoryType]);
+  }, [departmentChannels, category.departmentId, category.type, categoryType]);
 
   const changeType = (nextType) => {
     setCategoryType(nextType);
@@ -140,7 +146,9 @@ export default function EditCategoryModal({ category, onClose }) {
       }
     }
     if (nextType === 'custom' && category.type === 'department') {
-      const ids = channelsForDepartment(accessibleChannels, category.departmentId).map((channel) => idOf(channel._id));
+      const ids = channelsForDepartment(departmentChannels, category.departmentId)
+      .filter(isChatAppChannel)
+      .map((channel) => idOf(channel._id));
       setSelectedChannelIds(ids);
       seededDepartmentChannels.current = true;
     }

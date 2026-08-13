@@ -29,6 +29,7 @@ import {
   Volume2,
 } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { isChatAppChannel } from '../utils/channelOrigin';
 
 // ─── Department sync singleton ────────────────────────────────────────────────
 let _deptSyncInFlight = null;
@@ -119,13 +120,19 @@ export default function CreateCategoryModal({ visible, onClose }) {
     [departments, existingDeptIds, getDeptChannels],
   );
 
-  const allImported = !loadingDepts && departments.length > 0 && missingDepts.length === 0;
-  const hideDeptAction = categoryType === 'department' && allImported;
+  const departmentsWithChannels = useMemo(
+    () => departments.filter(d => getDeptChannels(d).length > 0),
+    [departments, getDeptChannels],
+  );
+
+  const allImported = !loadingDepts && departmentsWithChannels.length > 0 && missingDepts.length === 0;
+  const hideDeptAction = categoryType === 'department'
+    && (allImported || (!loadingDepts && departmentsWithChannels.length === 0));
 
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return channels
-      .filter(c => c.type !== 'dm' && c.type !== 'self' && !c.isArchived)
+      .filter(c => isChatAppChannel(c) && !c.isArchived)
       .filter(c => (!q || c.name?.toLowerCase().includes(q)) && !selectedChannels.some(s => s._id === c._id))
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
       .slice(0, 50);
@@ -370,7 +377,9 @@ export default function CreateCategoryModal({ visible, onClose }) {
                 <View style={[styles.infoBanner, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
                   <Text style={[styles.infoBannerText, { color: colors.textSecondary }]}>
                     {allImported
-                      ? 'All FlowTask departments are already available in your Categories.'
+                      ? 'All FlowTask departments with channels are already available in your Categories.'
+                      : departmentsWithChannels.length === 0 && !loadingDepts
+                      ? 'No FlowTask departments currently have linked channels.'
                       : (
                         <>
                           Departments are synchronized automatically from FlowTask. Tap{' '}
@@ -404,8 +413,14 @@ export default function CreateCategoryModal({ visible, onClose }) {
                       No FlowTask departments are available for your account.
                     </Text>
                   </View>
+                ) : departmentsWithChannels.length === 0 ? (
+                  <View style={styles.center}>
+                    <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+                      No departments with channels are available to import.
+                    </Text>
+                  </View>
                 ) : (
-                  departments.map(dept => {
+                  departmentsWithChannels.map(dept => {
                     const isImported = existingDeptIds.has(String(dept._id)) || existingDeptIds.has(String(dept.externalId));
                     const isExpanded = expandedDepts[dept._id];
                     const deptChannels = getDeptChannels(dept);

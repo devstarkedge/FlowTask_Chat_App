@@ -272,7 +272,7 @@ const HomeScreen = ({ navigation }) => {
 
       return (
         <View>
-          {catExpanded && catChannels.map(channel => {
+          {catExpanded && catChannels.length > 0 && catChannels.map(channel => {
             const unread = unreads[channel._id] || 0;
             return (
               <ChannelRow
@@ -364,7 +364,7 @@ const HomeScreen = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundSecondary }]}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} translucent />
       <SafeAreaView edges={["top"]} style={{ backgroundColor: colors.primary }}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerLeft} onPress={() => navigation.navigate("WorkspaceSwitcher")} activeOpacity={0.7}>

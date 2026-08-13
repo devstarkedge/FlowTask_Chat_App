@@ -123,7 +123,7 @@ export default function App() {
         <SafeAreaProvider initialMetrics={initialWindowMetrics}>
           <ErrorBoundary>
             <ThemeProvider>
-              <KeyboardProvider>
+              <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
                 <NavigationContainer ref={navigationRef} linking={linking}>
                   <AppNavigator />
                   <GlobalToastProvider />

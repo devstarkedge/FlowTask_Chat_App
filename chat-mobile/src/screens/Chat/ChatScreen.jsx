@@ -140,14 +140,15 @@ const ChatScreen = ({ route, navigation }) => {
 
   const [headerHeight, setHeaderHeight] = useState(56);
 
-  // Android: KeyboardAwareContainer needs to apply padding to keep composer above keyboard.
-  // iOS: AppScreen owns bottom inset.
+  // KeyboardAwareContainer owns the bottom inset on both platforms.
+  // AppScreen must NOT consume 'bottom' edge — that would double-apply the inset.
+  // bottomSafeContext=false → KAC always pads by insets.bottom when keyboard is closed,
+  // and by keyboardHeight when keyboard is open (correct for all 3 Android nav modes).
   const keyboardProps = {
     disablePadding: false,
-    bottomSafeContext: Platform.OS === 'ios',
+    bottomSafeContext: false,
   };
-  const appScreenEdges =
-    Platform.OS === 'ios' ? ['top', 'bottom'] : ['top', 'left', 'right'];
+  const appScreenEdges = ['top', 'left', 'right'];
 
   // Granular store subscriptions — prevent unnecessary re-renders
   const messages = useChatStore(useShallow((s) => s.messagesByChannel[channelId] || []));

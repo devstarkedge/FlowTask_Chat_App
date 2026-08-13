@@ -4,19 +4,27 @@ import { useThemeStore } from '../../stores/themeStore';
 import useKeyboardBottomInset from '../../hooks/useKeyboardBottomInset';
 
 /**
- * KeyboardAwareContainer
+ * KeyboardAwareContainer — production-ready keyboard + nav-bar inset handler.
  *
- * Bottom padding, driven by react-native-keyboard-controller's native
- * keyboard height (identical on Android and iOS — no platform branch):
- *  - keyboard closed → bottomSafeContext ? 0 : insets.bottom
- *  - keyboard open   → bottomSafeContext ? max(0, height - insets.bottom) : max(insets.bottom, height)
- *    (bottomSafeContext = true means a parent SafeAreaView already reserves insets.bottom)
+ * Android navigation modes handled:
+ *  - 3-button nav  → insets.bottom ≈ 48 dp
+ *  - Gesture nav   → insets.bottom ≈ 16–24 dp
+ *  - Edge-to-edge  → insets.bottom reported by WindowInsets (any value)
+ *
+ * Logic:
+ *  bottomSafeContext = true  → parent SafeAreaView already consumed insets.bottom
+ *    keyboard closed → paddingBottom = 0          (parent already has the gap)
+ *    keyboard open   → paddingBottom = max(0, keyboardHeight - insets.bottom)
+ *
+ *  bottomSafeContext = false → no parent consuming bottom inset (most Android screens)
+ *    keyboard closed → paddingBottom = insets.bottom   (protect content from nav bar)
+ *    keyboard open   → paddingBottom = keyboardHeight  (keyboard sits above nav bar)
  */
 const KeyboardAwareContainer = ({
   children,
   style,
   disablePadding = false,
-  bottomSafeContext = true,
+  bottomSafeContext = false, // default false — Android screens need bottom inset
 }) => {
   const colors = useThemeStore((state) => state.colors);
   const { keyboardHeightShared, insetsBottom } = useKeyboardBottomInset();
@@ -24,10 +32,17 @@ const KeyboardAwareContainer = ({
   const animatedStyle = useAnimatedStyle(() => {
     if (disablePadding) return { paddingBottom: 0 };
 
-    const height = Math.max(0, -keyboardHeightShared.value);
-    const paddingBottom = bottomSafeContext
-      ? Math.max(0, height - insetsBottom)
-      : Math.max(insetsBottom, height);
+    // keyboardHeightShared is negative (RNKC convention), negate to get positive height
+    const kbHeight = Math.max(0, -keyboardHeightShared.value);
+
+    let paddingBottom;
+    if (bottomSafeContext) {
+      // Parent SafeAreaView already reserves insets.bottom — only add keyboard overshoot
+      paddingBottom = kbHeight > 0 ? Math.max(0, kbHeight - insetsBottom) : 0;
+    } else {
+      // No parent inset — always ensure content clears the nav bar
+      paddingBottom = kbHeight > 0 ? kbHeight : insetsBottom;
+    }
 
     return { paddingBottom };
   }, [disablePadding, bottomSafeContext, insetsBottom]);

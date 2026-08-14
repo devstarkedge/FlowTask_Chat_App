@@ -2,19 +2,59 @@ import 'dotenv/config';
 import fs from 'fs';
 import { IOS_NOTIFICATION_SOUND_ASSETS } from './src/constants/notificationSounds.js';
 
-export default ({ config }) => {
-  // Handle google-services.json creation from environment variable if provided
-  if (process.env.GOOGLE_SERVICES_JSON) {
-    let content = process.env.GOOGLE_SERVICES_JSON;
-    // Decode if base64 encoded
-    if (!content.trim().startsWith('{')) {
-      try {
-        content = Buffer.from(content, 'base64').toString('utf-8');
-      } catch (e) {
-        console.warn('Failed to decode GOOGLE_SERVICES_JSON from base64, using raw value');
-      }
+function parseGoogleServicesEnv(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+
+  let content = raw.trim();
+  if (
+    (content.startsWith("'") && content.endsWith("'")) ||
+    (content.startsWith('"') && content.endsWith('"'))
+  ) {
+    content = content.slice(1, -1).trim();
+  }
+
+  if (!content.startsWith('{')) {
+    try {
+      content = Buffer.from(content, 'base64').toString('utf-8').trim();
+    } catch {
+      return null;
     }
-    fs.writeFileSync('./google-services.json', content);
+  }
+
+  try {
+    let parsed = JSON.parse(content);
+    if (typeof parsed === 'string') {
+      parsed = JSON.parse(parsed);
+    }
+    if (!parsed?.client?.[0]?.client_info?.mobilesdk_app_id) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export default ({ config }) => {
+  // EAS may provide GOOGLE_SERVICES_JSON. Only overwrite the committed file
+  // when the env value is valid JSON — truncated secrets cause
+  // :app:processReleaseGoogleServices (MalformedJsonException).
+  if (process.env.GOOGLE_SERVICES_JSON) {
+    const parsedGoogleServices = parseGoogleServicesEnv(process.env.GOOGLE_SERVICES_JSON);
+    if (parsedGoogleServices) {
+      fs.writeFileSync(
+        './google-services.json',
+        `${JSON.stringify(parsedGoogleServices, null, 2)}\n`,
+      );
+    } else if (!fs.existsSync('./google-services.json')) {
+      console.warn(
+        'GOOGLE_SERVICES_JSON is not valid JSON and google-services.json is missing',
+      );
+    } else {
+      console.warn(
+        'GOOGLE_SERVICES_JSON is not valid JSON; using existing google-services.json',
+      );
+    }
   }
 
   const hasGoogleServices = fs.existsSync('./google-services.json');

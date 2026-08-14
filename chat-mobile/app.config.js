@@ -1,7 +1,30 @@
 import 'dotenv/config';
+import fs from 'fs';
 import { IOS_NOTIFICATION_SOUND_ASSETS } from './src/constants/notificationSounds.js';
 
 export default ({ config }) => {
+  // Handle google-services.json creation from environment variable if provided
+  if (process.env.GOOGLE_SERVICES_JSON) {
+    let content = process.env.GOOGLE_SERVICES_JSON;
+    // Decode if base64 encoded
+    if (!content.trim().startsWith('{')) {
+      try {
+        content = Buffer.from(content, 'base64').toString('utf-8');
+      } catch (e) {
+        console.warn('Failed to decode GOOGLE_SERVICES_JSON from base64, using raw value');
+      }
+    }
+    fs.writeFileSync('./google-services.json', content);
+  }
+
+  const hasGoogleServices = fs.existsSync('./google-services.json');
+  const androidConfig = { ...config.android };
+  if (hasGoogleServices) {
+    androidConfig.googleServicesFile = './google-services.json';
+  } else {
+    delete androidConfig.googleServicesFile;
+  }
+
   const basePlugins = (config.plugins || []).filter(
     (plugin) => !(Array.isArray(plugin) && plugin[0] === 'expo-notifications'),
   );
@@ -14,6 +37,7 @@ export default ({ config }) => {
 
   return {
     ...config,
+    android: androidConfig,
     plugins: [
       [
         'expo-notifications',

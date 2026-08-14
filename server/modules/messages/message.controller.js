@@ -683,12 +683,14 @@ export const toggleSaveMessage = asyncHandler(async (req, res) => {
   // req.message and req.channel are already loaded by requireMessageAccess middleware
   const message = req.message;
   const channel = req.channel;
+  const { attachmentId } = req.body;
 
   const result = await SavedMessage.toggle(
     req.user._id,
     message._id,
     message.channelId,
     req.workspaceId,
+    attachmentId
   );
 
   if (result.saved) {
@@ -712,6 +714,7 @@ export const toggleSaveMessage = asyncHandler(async (req, res) => {
       status: 'in_progress',
       type: 'saved_message',
       createdAt: new Date(),
+      attachmentId,
     };
 
     // Emit to OTHER devices/tabs only — the HTTP response handles this tab.

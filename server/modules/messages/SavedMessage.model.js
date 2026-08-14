@@ -20,6 +20,11 @@ const savedMessageSchema = new Schema({
     ref: 'Message',
     default: null,
   },
+  attachmentId: {
+    type: Schema.Types.ObjectId,
+    ref: 'FileAsset',
+    default: null,
+  },
   type: {
     type: String,
     enum: ['saved_message', 'standalone'],
@@ -116,24 +121,30 @@ const savedMessageSchema = new Schema({
 });
 
 // ─── Indexes ─────────────────────────────────────────────────────────────────
-// Unique: one save per user per message
-savedMessageSchema.index({ userId: 1, messageId: 1 }, { unique: true });
+// Unique: one save per user per message/attachment combo
+savedMessageSchema.index({ userId: 1, messageId: 1, attachmentId: 1 }, { unique: true });
 // User's saved messages sorted by newest
 savedMessageSchema.index({ userId: 1, workspaceId: 1, createdAt: -1 });
 
 // ─── Statics ─────────────────────────────────────────────────────────────────
-savedMessageSchema.statics.toggle = async function (userId, messageId, channelId, workspaceId) {
-  const deleted = await this.findOneAndDelete({ userId, messageId });
+savedMessageSchema.statics.toggle = async function (userId, messageId, channelId, workspaceId, attachmentId = null) {
+  const query = { userId, messageId };
+  if (attachmentId) {
+    query.attachmentId = attachmentId;
+  } else {
+    query.attachmentId = null;
+  }
+  const deleted = await this.findOneAndDelete(query);
   if (deleted) {
     return { saved: false, savedMessageId: deleted._id };
   }
   try {
-    const created = await this.create({ userId, messageId, channelId, workspaceId, type: 'saved_message' });
+    const created = await this.create({ userId, messageId, channelId, workspaceId, type: 'saved_message', attachmentId });
     return { saved: true, savedMessageId: created._id };
   } catch (err) {
     if (err.code === 11000) {
       // Race condition: another request already saved — treat as saved
-      const existing = await this.findOne({ userId, messageId }).select('_id').lean();
+      const existing = await this.findOne(query).select('_id').lean();
       return { saved: true, savedMessageId: existing?._id || null };
     }
     throw err;

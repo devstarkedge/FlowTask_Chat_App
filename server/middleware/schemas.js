@@ -94,9 +94,13 @@ export const sendMessageSchema = z
   );
 
 export const editMessageSchema = z.object({
-  content: z.string().min(1, "Content cannot be empty").max(10000),
+  content: z.string().max(10000).optional().default(""),
   htmlContent: z.string().max(50000).optional().default(""),
-});
+  fileReferences: z.array(objectId).max(10).optional(),
+}).refine(
+  (data) => (data.content && data.content.trim()) || (data.fileReferences && data.fileReferences.length > 0),
+  { message: "Message must have content or file references" }
+);
 
 export const reactionSchema = z.object({
   emoji: z.string().min(1, "Emoji is required").max(50), // Limit length since some emojis use multiple codepoints

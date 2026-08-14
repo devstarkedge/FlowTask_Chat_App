@@ -68,18 +68,18 @@ export default function CanvasEditorScreen({ route, navigation }) {
 
   /**
    * Keep WebView frame stable relative to the closed-keyboard toolbar slot.
-   * KeyboardStickyView moves the format bar with the IME; resizing the WebView
-   * on every keyboard tick fights WKWebView insets on iOS and makes the bar jitter.
+   * When keyboard is visible, resize the WebView container so its viewport
+   * matches the visible area above the keyboard + format toolbar.
    */
-  const editorBottomReserve = toolbarHeight + insets.bottom;
+  const editorBottomReserve = keyboardVisible
+    ? keyboardHeight + toolbarHeight
+    : toolbarHeight + insets.bottom;
 
   /**
-   * Body padding inside the WebView. The closed-keyboard toolbar slot is already
-   * reserved via marginBottom; only add coverage for the keyboard overlay.
+   * Body padding inside the WebView. Since we resize the WebView container itself,
+   * we only need a standard small padding (no extra keyboard overlay coverage).
    */
-  const editorScrollInset = keyboardVisible
-    ? Math.max(0, keyboardHeight - insets.bottom)
-    : 0;
+  const editorScrollInset = 0;
 
   useEffect(() => {
     directoriesAPI.getUsers().then((res) => {

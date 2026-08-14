@@ -578,7 +578,7 @@ class MessageService {
   /**
    * Edit a message. Only the author can edit. Stores edit history.
    */
-  async editMessage(messageId, userId, newContent, workspaceId, htmlContent) {
+  async editMessage(messageId, userId, newContent, workspaceId, htmlContent, fileReferences) {
     const message = await messageRepository.findById(messageId, { workspaceId });
     if (!message) throw new NotFoundError('Message not found');
     this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
@@ -593,12 +593,16 @@ class MessageService {
       throw new ForbiddenError('Cannot edit a deleted message');
     }
 
-    const sanitizedContent = sanitizeHtml(newContent);
-    if (!sanitizedContent) {
-      throw new ValidationError('Content cannot be empty');
-    }
-
+    const sanitizedContent = newContent ? sanitizeHtml(newContent) : '';
     const sanitizedHtml = htmlContent ? sanitizeHtml(htmlContent) : sanitizedContent;
+
+    if (fileReferences) {
+      const cleanFileIds = fileReferences.map(id => id.toString());
+      await FileReference.deleteMany({
+        messageId,
+        fileId: { $nin: cleanFileIds },
+      });
+    }
 
     const updatedMessage = await messageRepository.update(messageId, {
       content: sanitizedContent,

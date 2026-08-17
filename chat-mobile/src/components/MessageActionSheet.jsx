@@ -32,6 +32,9 @@ import { applySkinTone } from '../utils/emojiUtils';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import useResponsive from '../hooks/useResponsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { downloadAndSaveFile } from '../utils/fileDownload';
+import FileService from '../services/FileService';
+import { getFileKind } from '../utils/mediaUtils';
 
 
 const QUICK_EMOJIS = ['🎉', '👍', '😂', '🙂', '✅'];
@@ -123,7 +126,18 @@ const MessageActionSheet = ({
 
   const handleCopyLink = async () => {
     if (attachment && (attachment.url || attachment.secureUrl)) {
-      await Clipboard.setStringAsync(attachment.url || attachment.secureUrl);
+      const url = attachment.url || attachment.secureUrl;
+      const kind = getFileKind(attachment.mimeType || attachment.type || '', attachment.name || attachment.fileName || '', url);
+      if (kind === 'image') {
+        try {
+          await FileService.copyImage(attachment);
+        } catch (err) {
+          console.error(err);
+        }
+        onClose();
+        return;
+      }
+      await Clipboard.setStringAsync(url);
     } else {
       const textWithoutImages = (message.content || '').replace(MD_IMAGE_REGEX_GLOBAL, '');
       const url = textWithoutImages.match(URL_REGEX)?.[0] || '';
@@ -144,11 +158,21 @@ const MessageActionSheet = ({
   };
 
   const handleDownloadAttachment = async () => {
-    // Add logic to download the attachment here
-    // For now, we can show a toast indicating it's downloading
+    if (!attachment) return;
+    const name = attachment.originalName || attachment.fileName || attachment.name || 'File';
+    const mime = attachment.mimeType || attachment.type || 'image/jpeg';
+    const url = attachment.url || attachment.secureUrl;
+    if (!url) {
+      Toast.show({ type: 'error', text1: 'Cannot download: file URL is missing' });
+      return;
+    }
     Toast.show({ type: 'info', text1: 'Downloading...' });
     onClose();
-    // Implementation for downloading would require expo-file-system or similar
+    try {
+      await downloadAndSaveFile(url, name, mime);
+    } catch (e) {
+      Toast.show({ type: 'error', text1: e.message || 'Download failed' });
+    }
   };
 
   return (

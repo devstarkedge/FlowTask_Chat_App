@@ -616,8 +616,24 @@ export const getWorkspaceFiles = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Permission policy helper for deleting channel file references.
+ * File creator, channel creator, and workspace owner/admin are authorized.
+ */
+export function canDeleteChannelFile(user, channel, ref, role) {
+  const userId = user._id.toString();
+  const isAdmin = role === "owner" || role === "admin";
+  const isOwner = ref.referencedBy?.toString() === userId;
+  
+  if (isAdmin) return true;
+  if (isOwner) return true;
+  if (channel?.creatorId?.toString() === userId) return true;
+
+  return false;
+}
+
+/**
  * DELETE /api/chat/channels/:channelId/files/:fileId
- * Delete a file reference from this chat. Owner/admin can delete.
+ * Delete a file reference from this chat.
  */
 export const deleteChannelFile = asyncHandler(async (req, res) => {
   const { channelId, fileId } = req.params;
@@ -633,33 +649,27 @@ export const deleteChannelFile = asyncHandler(async (req, res) => {
   });
 
   if (!ref) {
-    return res.status(404).json({
-      success: false,
-      error: { message: "File not found in this chat" },
-    });
+    // Idempotency: Return success if reference is already deleted
+    return res.json({ success: true, data: { fileId, channelId } });
   }
 
-  const isAdmin = role === "owner" || role === "admin";
-  const isOwner = ref.referencedBy?.toString() === userId;
-  if (!isAdmin && !isOwner) {
+  // Validate permission policy
+  if (!canDeleteChannelFile(req.user, req.channel, ref, role)) {
     return res.status(403).json({
       success: false,
-      error: { message: "You can only delete your own files" },
+      error: { message: "You are not authorized to delete this file reference" },
     });
   }
 
+  // Delete the Mongo reference immediately
   await FileReference.deleteOne({ _id: ref._id });
 
-  const remainingRefs = await FileReference.countDocuments({
-    workspaceId,
-    fileId,
-  });
-
-  if (remainingRefs === 0) {
-    await FileAsset.updateOne(
-      { _id: fileId, workspaceId },
-      { $set: { status: "deleted" } },
-    );
+  // Queue background storage cleanup task
+  try {
+    const fileCleanupService = (await import('../../services/fileCleanup.service.js')).default;
+    await fileCleanupService.queueStorageCleanup(fileId, workspaceId);
+  } catch (err) {
+    logger.error('Failed to queue storage cleanup', { fileId, error: err.message });
   }
 
   res.json({ success: true, data: { fileId, channelId } });

@@ -34,7 +34,7 @@ const UserProfileScreen = ({ route, navigation }) => {
   const channels = useChannelStore(s => s.channels);
   const createDM = useChannelStore(s => s.createDM);
   const setActiveChannel = useChannelStore(s => s.setActiveChannel);
-  const rawTargetId = user?._id;
+  const rawTargetId = user?._id || user?.id;
   const targetId = typeof rawTargetId === 'object' ? rawTargetId?._id || rawTargetId?.id : rawTargetId;
   const targetIdStr = targetId?.toString ? targetId.toString() : targetId;
   const liveOnlineStatus = useWorkspaceStore(s => s.presenceMap?.[targetIdStr]);
@@ -98,13 +98,22 @@ const UserProfileScreen = ({ route, navigation }) => {
   // Find recent DMs involving this user
   const recentDMs = channels.filter(c => 
     c.type === 'dm' && 
-    c.dmParticipants?.some(pId => pId === user._id)
+    c.dmParticipants?.some(pId => pId === targetIdStr)
   );
 
   const handleMessage = async () => {
     setLoadingDM(true);
     try {
-      const channel = await createDM(user._id);
+      // If we have an existing channelId context from the route, go back to it
+      if (route.params?.channelId) {
+        setActiveChannel(route.params.channelId);
+        navigation.navigate("Chat", {
+          channelId: route.params.channelId,
+        });
+        return;
+      }
+
+      const channel = await createDM(targetIdStr);
       if (channel) {
         setActiveChannel(channel._id);
         navigation.navigate("Chat", {
@@ -151,7 +160,13 @@ const UserProfileScreen = ({ route, navigation }) => {
       
       {/* Header */}
       <View style={[styles.header, { paddingTop: verticalScale(12) }]}>
-        <HeaderBackButton onPress={() => navigation.goBack()} />
+        <HeaderBackButton onPress={() => {
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          } else {
+            navigation.navigate('Main');
+          }
+        }} />
         {/* <TouchableOpacity onPress={() => setShowDropdown(true)} style={[styles.headerButton, { backgroundColor: colors.backgroundSecondary }]}>
           <MoreHorizontal size={24} color={colors.textPrimary} />
         </TouchableOpacity> */}

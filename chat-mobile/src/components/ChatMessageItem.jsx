@@ -172,7 +172,7 @@ const ChatMessageItem = memo(({
             onPress={() => {
               const members = membersByChannel[channelId] || [];
               const userObj = members.find((m) => m._id === messageSender?._id) || messageSender;
-              navigation.navigate("UserProfile", { user: userObj, channelId });
+              navigation.navigate("UserProfile", { user: userObj, channelId, messageId: item._id });
             }}
             activeOpacity={0.7}
           >
@@ -294,7 +294,7 @@ const ChatMessageItem = memo(({
                 onMentionPress={(userId) => {
                   const members = membersByChannel[channelId] || [];
                   const userObj = members.find((m) => m._id === userId) || { _id: userId };
-                  navigation.navigate("UserProfile", { user: userObj, channelId });
+                  navigation.navigate("UserProfile", { user: userObj, channelId, messageId: item._id });
                 }}
                 colors={{
                   ...colors,

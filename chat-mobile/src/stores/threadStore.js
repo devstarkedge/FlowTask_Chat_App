@@ -297,7 +297,9 @@ export const useThreadStore = create(
           set((state) => ({
             threadRepliesByRoot: {
               ...state.threadRepliesByRoot,
-              [rootMessageId]: (state.threadRepliesByRoot[rootMessageId] || []).filter(r => r._id !== replyId),
+              [rootMessageId]: (state.threadRepliesByRoot[rootMessageId] || []).map(r =>
+                r._id === replyId ? { ...r, isDeleted: true, content: 'This message was deleted', fileReferences: [], attachments: [], files: [] } : r
+              ),
             },
           }));
         } catch (error) {

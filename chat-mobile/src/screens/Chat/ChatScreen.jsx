@@ -1090,7 +1090,7 @@ const ChatScreen = ({ route, navigation }) => {
         attachment={actionAttachmentTarget}
         colors={colors}
         user={user}
-        isSaved={isMessageSaved?.(actionMenuTarget?._id)}
+        isSaved={isMessageSaved?.(actionMenuTarget?._id, actionAttachmentTarget)}
         onReact={(emoji) => {
           if (actionMenuTarget) addReaction(actionMenuTarget._id, emoji);
         }}
@@ -1117,7 +1117,7 @@ const ChatScreen = ({ route, navigation }) => {
           setActionMenuTarget(null);
           setActionAttachmentTarget(null);
         }}
-        onSave={() => toggleSaveMessage?.(actionMenuTarget?._id)}
+        onSave={() => toggleSaveMessage?.(actionMenuTarget?._id, channelId, actionAttachmentTarget)}
         onRemind={() => setReminderTarget(actionMenuTarget?._id)}
         onReplyInThread={() => {
           const msg = actionMenuTarget;
@@ -1147,12 +1147,14 @@ const ChatScreen = ({ route, navigation }) => {
               name: resolvedName,
               avatar: msg?.senderSnapshot?.avatar || msg?.authorId?.avatar || null,
             },
-            snapshotType: msg.contentType || msg.type
+            snapshotType: msg.contentType || msg.type,
+            attachmentContext: actionAttachmentTarget,
           });
           if (textInputRef.current) {
             textInputRef.current.focus();
           }
           setActionMenuTarget(null);
+          setActionAttachmentTarget(null);
         }}
         onEdit={() => {
           setEditingMessage(actionMenuTarget);
@@ -1160,20 +1162,40 @@ const ChatScreen = ({ route, navigation }) => {
           setText(actionMenuTarget.htmlContent || actionMenuTarget.content || "");
         }}
         onDelete={() => {
-          const msgId = actionMenuTarget._id;
+          const msg = actionMenuTarget;
+          const msgId = msg._id;
           const isAttachment = !!actionAttachmentTarget;
           setTimeout(() => {
             Alert.alert(
-              isAttachment ? "Delete Entire Message" : "Delete Message",
-              isAttachment ? "You can only delete the entire message, not individual attachments. Are you sure?" : "Are you sure you want to delete this message?",
+              isAttachment ? "Delete Image" : "Delete Message",
+              isAttachment ? "Are you sure you want to delete this image?" : "Are you sure you want to delete this message?",
               [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Delete",
-                style: "destructive",
-                onPress: () => deleteMessage(msgId, channelId),
-              },
-            ]);
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete",
+                  style: "destructive",
+                  onPress: async () => {
+                    if (isAttachment) {
+                      try {
+                        const remainingRefs = (msg.fileReferences || [])
+                          .filter(r => {
+                            const rId = r.fileId?._id || r.fileId || r._id;
+                            const targetId = actionAttachmentTarget._id;
+                            return rId !== targetId;
+                          })
+                          .map(r => r.fileId?._id || r.fileId || r._id);
+                        await editMessage(msgId, channelId, msg.content, msg.htmlContent, remainingRefs);
+                        Toast.show({ type: 'success', text1: 'Image deleted' });
+                      } catch (err) {
+                        Toast.show({ type: 'error', text1: 'Failed to delete image' });
+                      }
+                    } else {
+                      deleteMessage(msgId, channelId);
+                    }
+                  },
+                },
+              ]
+            );
           }, 200);
         }}
         onCopyLink={async () => {

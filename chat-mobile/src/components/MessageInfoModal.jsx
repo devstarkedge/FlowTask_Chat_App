@@ -17,11 +17,14 @@ import { useWorkspaceStore } from '../stores/workspaceStore';
 import { Check, CheckCheck, Clock, AlertCircle } from 'lucide-react-native';
 import logger from '../utils/logger';
 import useReceipts from '../chat/hooks/useReceipts';
+import { getMessageAttachments } from '../utils/mediaUtils';
+import MobileFileCard from './common/MobileFileCard';
 
 const MessageInfoModal = ({ visible, onClose, message, colors }) => {
   const user = useAuthStore((s) => s.user);
   const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const channel = useChannelStore((s) => s.channels.find(ch => ch._id === message?.channelId));
+  const attachments = getMessageAttachments(message);
 
   const { deliveredTo, readBy, pending, loading } = useReceipts(
     visible && message ? message.channelId : null,
@@ -83,15 +86,40 @@ const MessageInfoModal = ({ visible, onClose, message, colors }) => {
           {/* Message Preview Area */}
           <View style={[styles.messagePreviewArea, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
             <View style={styles.bubbleContainer}>
-              <View style={[styles.messageBubble, { backgroundColor: colors.primary || '#005c4b' }]}>
-                <Text style={[styles.messageText, { color: '#ffffff' }]}>{message.content}</Text>
-                <View style={styles.metaRow}>
-                  <Text style={[styles.metaTime, { color: 'rgba(255,255,255,0.7)' }]}>
-                    {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
-                  </Text>
-                  <CheckCheck size={16} color="#53bdeb" style={styles.tickIcon} />
+              {attachments.length > 0 ? (
+                <View style={{ gap: 8, alignItems: 'flex-end' }}>
+                  {attachments.map((file, i) => (
+                    <View key={file._id || i} style={{ width: scale(250), borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: colors.border }}>
+                      <MobileFileCard
+                        file={file}
+                        colors={colors}
+                        isUploading={false}
+                      />
+                    </View>
+                  ))}
+                  <View style={[styles.messageBubble, { backgroundColor: colors.primary || '#005c4b', marginTop: 4, alignSelf: 'flex-end' }]}>
+                    {!!message.content && (
+                      <Text style={[styles.messageText, { color: '#ffffff', marginBottom: 4 }]}>{message.content}</Text>
+                    )}
+                    <View style={styles.metaRow}>
+                      <Text style={[styles.metaTime, { color: 'rgba(255,255,255,0.7)' }]}>
+                        {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      </Text>
+                      <CheckCheck size={16} color="#53bdeb" style={styles.tickIcon} />
+                    </View>
+                  </View>
                 </View>
-              </View>
+              ) : (
+                <View style={[styles.messageBubble, { backgroundColor: colors.primary || '#005c4b' }]}>
+                  <Text style={[styles.messageText, { color: '#ffffff' }]}>{message.content}</Text>
+                  <View style={styles.metaRow}>
+                    <Text style={[styles.metaTime, { color: 'rgba(255,255,255,0.7)' }]}>
+                      {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                    </Text>
+                    <CheckCheck size={16} color="#53bdeb" style={styles.tickIcon} />
+                  </View>
+                </View>
+              )}
             </View>
           </View>
 

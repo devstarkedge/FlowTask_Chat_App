@@ -16,7 +16,7 @@ class ReadReceiptRepository {
    */
   async getUnreadCounts(userId, workspaceId) {
     const filter = injectWorkspaceFilter(
-      { userId, unreadCount: { $gt: 0 } },
+      { userId, unreadCount: { $gt: 0 }, messageId: null },
       workspaceId,
     );
     return ReadReceipt.find(
@@ -34,7 +34,7 @@ class ReadReceiptRepository {
    * @returns {Promise<ReadReceipt>}
    */
   async markChannelAsRead(userId, channelId, lastMessageId, workspaceId) {
-    const filter = injectWorkspaceFilter({ userId, channelId }, workspaceId);
+    const filter = injectWorkspaceFilter({ userId, channelId, messageId: null }, workspaceId);
     return ReadReceipt.findOneAndUpdate(
       filter,
       {
@@ -64,6 +64,7 @@ class ReadReceiptRepository {
     const filter = injectWorkspaceFilter({
       channelId,
       userId: { $ne: excludeUserId },
+      messageId: null,
     }, workspaceId);
     return ReadReceipt.updateMany(filter, update);
   }
@@ -76,7 +77,7 @@ class ReadReceiptRepository {
    * @returns {Promise<ReadReceipt|null>}
    */
   async findByUserAndChannel(userId, channelId, workspaceId) {
-    const filter = injectWorkspaceFilter({ userId, channelId }, workspaceId);
+    const filter = injectWorkspaceFilter({ userId, channelId, messageId: null }, workspaceId);
     return ReadReceipt.findOne(filter).lean();
   }
 
@@ -88,7 +89,7 @@ class ReadReceiptRepository {
    * @returns {Promise<ReadReceipt>}
    */
   async ensureExists(userId, channelId, workspaceId) {
-    const filter = injectWorkspaceFilter({ userId, channelId }, workspaceId);
+    const filter = injectWorkspaceFilter({ userId, channelId, messageId: null }, workspaceId);
     return ReadReceipt.findOneAndUpdate(
       filter,
       { $setOnInsert: { unreadCount: 0, unreadMentionCount: 0, workspaceId } },
@@ -104,7 +105,7 @@ class ReadReceiptRepository {
    * @returns {Promise}
    */
   async removeByUserAndChannel(userId, channelId, workspaceId) {
-    const filter = injectWorkspaceFilter({ userId, channelId }, workspaceId);
+    const filter = injectWorkspaceFilter({ userId, channelId, messageId: null }, workspaceId);
     return ReadReceipt.deleteOne(filter);
   }
 

@@ -144,7 +144,10 @@ const DMListScreen = ({ navigation }) => {
     let dms = channels.filter((c) => c.type === "dm");
     
     if (activeFilter === "unreads") {
-      dms = dms.filter(c => (unreads[c._id] || 0) > 0);
+      dms = dms.filter(c => {
+        const cid = c._id?.toString ? c._id.toString() : String(c._id);
+        return (unreads[cid] || 0) > 0;
+      });
     } else if (activeFilter === "external") {
       // Assuming external means they are not in our primary domain or there's an isExternal flag
       dms = dms.filter(c => c.isExternal);

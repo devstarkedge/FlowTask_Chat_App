@@ -140,8 +140,13 @@ export async function unregisterPushNotifications() {
       await pushAPI.removeToken(token).catch(() => {});
     }
     await storage.removeItem(PUSH_TOKEN_KEY);
+    
+    // Dismiss all active notifications and clear application badge count
+    await Notifications.dismissAllNotificationsAsync().catch(() => {});
+    await Notifications.setBadgeCountAsync(0).catch(() => {});
+
     _detachListeners();
-    logger.info('[Push] Token unregistered');
+    logger.info('[Push] Token unregistered and device notifications cleared');
   } catch (error) {
     logger.error('[Push] unregister failed:', error.message);
   }
@@ -238,17 +243,40 @@ function _navigateFromNotification(data) {
   const nav = _navigationRef?.current;
   if (!nav || !nav.isReady?.()) return;
 
-  const { channelId, messageId, threadId, type } = data;
+  const { channelId, messageId, threadId, type, workspaceId } = data;
 
-  if (threadId) {
-    // Navigate to thread detail
-    nav.navigate('ThreadDetail', { threadId, channelId, messageId });
-  } else if (channelId) {
-    // Navigate to channel chat (handles both DMs and channels)
-    nav.navigate('Chat', { channelId, messageId });
-  } else {
-    // Fall back to notifications screen
-    nav.navigate('Notifications');
+  const runNavigation = () => {
+    if (threadId) {
+      // Navigate to thread detail
+      nav.navigate('ThreadDetail', { threadId, channelId, messageId });
+    } else if (channelId) {
+      // Navigate to channel chat (handles both DMs and channels)
+      nav.navigate('Chat', { channelId, messageId });
+    } else {
+      // Fall back to notifications screen
+      nav.navigate('Notifications');
+    }
+  };
+
+  try {
+    const { useWorkspaceStore } = require('../stores/workspaceStore');
+    const { activeWorkspaceId, switchWorkspace } = useWorkspaceStore.getState();
+
+    if (workspaceId && workspaceId !== activeWorkspaceId) {
+      switchWorkspace(workspaceId)
+        .then(() => {
+          // Allow context refresh to finalize state before navigating
+          setTimeout(runNavigation, 600);
+        })
+        .catch((err) => {
+          logger.warn('[Push] Failed to switch workspace on notification tap:', err);
+          runNavigation();
+        });
+    } else {
+      runNavigation();
+    }
+  } catch (error) {
+    runNavigation();
   }
 }
 

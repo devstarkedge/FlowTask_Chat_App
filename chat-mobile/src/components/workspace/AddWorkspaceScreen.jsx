@@ -85,6 +85,27 @@ const AddWorkspaceScreen = ({ visible, onClose, navigation }) => {
     setJoinError('');
     try {
       const workspace = await joinByInviteCode(code);
+      if (workspace?.alreadyMember) {
+        setJoining(false);
+        Alert.alert(
+          'Already a Member',
+          'You are already a member of this workspace.',
+          [
+            {
+              text: 'OK',
+              onPress: async () => {
+                setJoinVisible(false);
+                onClose();
+                if (workspace?._id) {
+                  await switchWorkspace(workspace._id);
+                }
+              }
+            }
+          ]
+        );
+        return;
+      }
+
       Toast.show({
         type: 'success',
         text1: `Joined "${workspace?.name}"`,
@@ -92,7 +113,6 @@ const AddWorkspaceScreen = ({ visible, onClose, navigation }) => {
       });
       setJoinVisible(false);
       onClose();
-      await fetchWorkspaces();
       if (workspace?._id) {
         await switchWorkspace(workspace._id);
       }

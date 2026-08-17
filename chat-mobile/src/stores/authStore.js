@@ -98,33 +98,59 @@ export const useAuthStore = create((set, get) => ({
   },
 
   logout: async () => {
+    console.log('[Logout] Starting complete logout cleanup...');
     try {
       const refreshToken = get().refreshToken;
       if (refreshToken) {
+        console.log('[Logout] Dispatched server logout request for token expiration');
         authAPI.logout(refreshToken).catch(() => {});
       }
-    } catch {}
+    } catch (e) {
+      console.log('[Logout] Server logout notification error (non-blocking):', e.message);
+    }
     
     // Clear API cache
+    console.log('[Logout] Clearing API cache...');
     clearApiCache();
 
     // Clear auth data from storage
+    console.log('[Logout] Clearing Secure Store keys...');
     await secureMultiRemove([
       'chat_access_token',
       'chat_refresh_token',
       'flowtask_token',
-    ]);
-    await storage.removeItem('chat_user');
+      'pending_invite_code',
+    ]).catch((err) => console.log('[Logout] Secure store clearing error:', err?.message));
+    console.log('[Logout] Secure Store keys cleared.');
+
+    console.log('[Logout] Clearing all AsyncStorage keys...');
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const keys = await AsyncStorage.getAllKeys();
+      console.log('[Logout] Found AsyncStorage keys to remove:', keys);
+      if (keys.length > 0) {
+        await AsyncStorage.multiRemove(keys);
+      }
+      console.log('[Logout] AsyncStorage successfully cleared.');
+    } catch (err) {
+      console.log('[Logout] AsyncStorage clearing error:', err?.message);
+    }
     
     // Clear auth store state
+    console.log('[Logout] Resetting auth store state in memory...');
     set({ accessToken: null, refreshToken: null, user: null, error: null });
+    console.log('[Logout] Auth store reset.');
 
     // Clear all other stores to prevent data leakage between sessions
     try {
-      // Unregister push notifications before clearing state
+      console.log('[Logout] Unregistering push notifications...');
       const { unregisterPushNotifications } = await import('../services/pushNotificationService');
-      await unregisterPushNotifications().catch(() => {});
+      await unregisterPushNotifications().catch((err) => {
+        console.log('[Logout] Push notification unregistration failed:', err?.message);
+      });
+      console.log('[Logout] Push notification token and listeners successfully cleared.');
 
+      console.log('[Logout] Resetting in-memory Zustand store states...');
       const { useChannelStore } = await import('./channelStore');
       const { useChatStore } = await import('./chatStore');
       const { useThreadStore } = await import('./threadStore');
@@ -133,17 +159,42 @@ export const useAuthStore = create((set, get) => ({
       const { useScheduledStore } = await import('./scheduledStore');
       const { useWorkspaceStore } = await import('./workspaceStore');
       const { useUIStore } = await import('./uiStore');
+      const { useNotificationStore } = await import('./notificationStore');
 
       useChannelStore.setState({ channels: [], activeChannelId: null, unreads: {} });
+      console.log('[Logout] Channel store reset.');
       useChatStore.setState({ messagesByChannel: {}, hasMore: {}, typingByChannel: {}, connectionStatus: 'disconnected' });
-      useThreadStore.getState().clearThreads?.();
-      useLaterStore.getState().clearSavedMessages?.();
-      useDraftStore.getState().clearAllDrafts?.();
-      useScheduledStore.getState().clearScheduledMessages?.();
-      useWorkspaceStore.getState().clearWorkspaceState?.();
+      console.log('[Logout] Chat store reset.');
+      
+      if (useThreadStore.getState().clearThreads) {
+        useThreadStore.getState().clearThreads();
+        console.log('[Logout] Thread store reset.');
+      }
+      if (useLaterStore.getState().clearSavedMessages) {
+        useLaterStore.getState().clearSavedMessages();
+        console.log('[Logout] Later store reset.');
+      }
+      if (useDraftStore.getState().clearAllDrafts) {
+        useDraftStore.getState().clearAllDrafts();
+        console.log('[Logout] Draft store reset.');
+      }
+      if (useScheduledStore.getState().clearScheduledMessages) {
+        useScheduledStore.getState().clearScheduledMessages();
+        console.log('[Logout] Scheduled store reset.');
+      }
+      if (useWorkspaceStore.getState().clearWorkspaceState) {
+        useWorkspaceStore.getState().clearWorkspaceState();
+        console.log('[Logout] Workspace store reset.');
+      }
+      if (useNotificationStore.getState().clearNotifications) {
+        useNotificationStore.getState().clearNotifications();
+        console.log('[Logout] Notification store reset.');
+      }
       useUIStore.setState({ isDrawerOpen: false });
-    } catch {
-      // Non-critical — stores will be re-initialized on next login
+      console.log('[Logout] UI store reset.');
+      console.log('[Logout] Complete logout cleanup finished successfully.');
+    } catch (e) {
+      console.log('[Logout] Store state reset warning:', e?.message);
     }
   },
 

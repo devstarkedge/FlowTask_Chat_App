@@ -12913,6 +12913,12 @@ textarea:focus-visible,
   border: 1px solid rgba(234, 179, 8, 0.25);
 }
 
+.dir-ext-status-badge.guest {
+  background: rgba(124, 58, 237, 0.12);
+  color: #7c3aed;
+  border: 1px solid rgba(124, 58, 237, 0.25);
+}
+
 /* Remove button */
 .dir-ext-remove-btn {
   display: flex;

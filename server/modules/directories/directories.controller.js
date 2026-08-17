@@ -97,10 +97,15 @@ export const deleteGroup = asyncHandler(async (req, res) => {
  * External/guest users in the workspace.
  */
 export const getExternalUsers = asyncHandler(async (req, res) => {
-  const { search, status } = req.query;
-  const users = await directoriesService.getExternalUsers(req.workspaceId, { search, status });
+  const { search, status, page, limit } = req.query;
+  const result = await directoriesService.getExternalUsers(req.workspaceId, { 
+    search, 
+    status,
+    page: page ? parseInt(page, 10) : 1,
+    limit: limit ? Math.min(parseInt(limit, 10), 100) : 50,
+  });
 
-  res.json({ success: true, data: { users } });
+  res.json({ success: true, data: result });
 });
 
 /**

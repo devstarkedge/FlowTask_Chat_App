@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useAuthStore } from "../stores/authStore";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import {
@@ -109,39 +109,15 @@ const tabContent = {
    COMPONENT
 ───────────────────────────────────────────────────────────────────────── */
 export default function LoginPage() {
-  const {
-    loginNative,
-    loginFlowTask,
-    isLoading,
-    error,
-    clearError,
-    flowtaskEnabled,
-    user,
-  } = useAuthStore();
+  const { loginNative, isLoading, error, clearError, user } = useAuthStore();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const redirectTo = searchParams.get("redirect");
-
-  const [activeTab, setActiveTab] = useState(
-    flowtaskEnabled ? "flowtask" : "native",
-  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [flowtaskToken, setFlowtaskToken] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [autoLoginInProgress, setAutoLoginInProgress] = useState(false);
-  const autoLoginStartedRef = useRef(false);
-  const mountedRef = useRef(true);
-  const manualSubmitRef = useRef(false);
 
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  /* ── Post-login redirect (handles ALL login paths: form, FlowTask SSO, already-authenticated) ── */
+  /* ── Post-login redirect (handles ALL login paths: native email/password, already-authenticated) ── */
   useEffect(() => {
     if (!user) return;
     // User is authenticated — check for pending invite or explicit redirect
@@ -156,47 +132,6 @@ export default function LoginPage() {
     }
   }, [user, navigate, redirectTo]);
 
-  /* ── auto-login from FlowTask redirect ── */
-  useEffect(() => {
-    if (autoLoginStartedRef.current) return;
-    const token = searchParams.get("token");
-    const source = searchParams.get("source");
-    if (token && source === "flowtask") {
-      autoLoginStartedRef.current = true;
-      setAutoLoginInProgress(true);
-      loginFlowTask(token)
-        .then(() => {
-          if (mountedRef.current) toast.success("Welcome from FlowTask!");
-          // Redirect handled by the user-watch useEffect above
-        })
-        .catch(() => {
-          if (mountedRef.current) toast.error("FlowTask auto-login failed. Please try again.");
-        })
-        .finally(() => {
-          if (mountedRef.current) setAutoLoginInProgress(false);
-        });
-    }
-  }, [searchParams, loginFlowTask]);
-
-  /* ── auto-login loading screen ── */
-  if (autoLoginInProgress) {
-    return (
-      <div className="lp">
-        <div className="lp-auto-loader">
-          <div className="lp-auto-spin" />
-          <p
-            style={{
-              fontSize: 15,
-              color: "var(--text-muted)",
-              fontFamily: "Plus Jakarta Sans,system-ui,sans-serif",
-            }}
-          >
-            Signing in from FlowTask…
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   const handleNativeLogin = async (e) => {
     e.preventDefault();
@@ -210,25 +145,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleFlowTaskLogin = async (e) => {
-    e.preventDefault();
-    if (manualSubmitRef.current) return;
-    clearError();
-    if (!flowtaskToken.trim()) {
-      toast.error("Please enter your FlowTask token");
-      return;
-    }
-    manualSubmitRef.current = true;
-    try {
-      await loginFlowTask(flowtaskToken.trim());
-      toast.success("TryChat login successful!");
-      // Redirect handled by the user-watch useEffect above
-    } catch {
-      /* error in store */
-    } finally {
-      manualSubmitRef.current = false;
-    }
-  };
 
   /* ─────────────────────────────────────────────────────────────────────
      RENDER
@@ -300,28 +216,6 @@ export default function LoginPage() {
           </motion.p>
 
           <motion.div variants={fadeUp} className="lp-card">
-            {flowtaskEnabled && (
-              <div className="chat-header-tabs" style={{ marginBottom: 24 }}>
-                <button
-                  className={`chat-header-tab ${activeTab === "flowtask" ? "is-active" : ""}`}
-                  onClick={() => {
-                    setActiveTab("flowtask");
-                    clearError();
-                  }}
-                >
-                  FlowTask SSO
-                </button>
-                <button
-                  className={`chat-header-tab ${activeTab === "native" ? "is-active" : ""}`}
-                  onClick={() => {
-                    setActiveTab("native");
-                    clearError();
-                  }}
-                >
-                  Email & Password
-                </button>
-              </div>
-            )}
 
             <AnimatePresence>
               {error && (
@@ -347,82 +241,9 @@ export default function LoginPage() {
               )}
             </AnimatePresence>
 
-            {/* ── FlowTask SSO tab ── */}
             <AnimatePresence mode="wait">
-              {activeTab === "flowtask" && (
-                <motion.form
-                  key="flowtask"
-                  variants={tabContent}
-                  initial="hidden"
-                  animate="visible"
-                  exit="hidden"
-                  onSubmit={handleFlowTaskLogin}
-                >
-                  <div style={{ marginBottom: 18 }}>
-                    <label className="lp-label">FlowTask JWT Token</label>
-                    <textarea
-                      className="input-field"
-                      style={{
-                        resize: "none",
-                        fontFamily: "monospace",
-                        fontSize: 12,
-                        lineHeight: 1.6,
-                      }}
-                      rows={3}
-                      value={flowtaskToken}
-                      onChange={(e) => setFlowtaskToken(e.target.value)}
-                      placeholder="Paste your FlowTask JWT token here…"
-                    />
-                    <p
-                      style={{
-                        fontSize: 11,
-                        color: "var(--text-muted)",
-                        marginTop: 6,
-                      }}
-                    >
-                      Get your token from FlowTask → Settings → API Access
-                    </p>
-                  </div>
 
-                  <motion.button
-                    type="submit"
-                    disabled={isLoading}
-                    className="lp-submit lp-shimmer-btn"
-                    whileHover={
-                      isLoading
-                        ? {}
-                        : {
-                            y: -2,
-                            boxShadow: "0 8px 28px rgba(99,102,241,.48)",
-                          }
-                    }
-                    whileTap={isLoading ? {} : { y: 0, scale: 0.98 }}
-                  >
-                    {isLoading ? (
-                      <>
-                        <div
-                          className="lp-spin"
-                          style={{
-                            width: 17,
-                            height: 17,
-                            border: "2.5px solid rgba(255,255,255,.35)",
-                            borderTopColor: "rgba(255,255,255,.9)",
-                            borderRadius: "50%",
-                          }}
-                        />
-                        Authenticating…
-                      </>
-                    ) : (
-                      <>
-                        Sign in with FlowTask <ArrowRight size={17} />
-                      </>
-                    )}
-                  </motion.button>
-                </motion.form>
-              )}
-
-              {/* ── Native email/password tab ── */}
-              {activeTab === "native" && (
+              {/* ── Native email/password login ── */}
                 <motion.form
                   key="native"
                   variants={tabContent}
@@ -534,7 +355,6 @@ export default function LoginPage() {
                     )}
                   </motion.button>
                 </motion.form>
-              )}
             </AnimatePresence>
           </motion.div>
           {/* end card */}

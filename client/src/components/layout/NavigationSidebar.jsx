@@ -30,6 +30,8 @@ import {
   Folder,
   FolderPlus,
   Plus,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Avatar } from "../chat/MemberAvatarGroup";
 import CreateChannelModal from "../chat/CreateChannelModal";
@@ -52,6 +54,7 @@ import {
   getChannelPath,
   getDMPath,
   getDirectoriesPath,
+  getDirectoriesTabPath,
 } from "../../utils/chatRoutes";
 import { useDraftStore, countWorkspaceDrafts } from "../../stores/draftStore";
 import { useNotificationStore } from "../../stores/notificationStore";
@@ -59,6 +62,7 @@ import { isContentEmpty } from "../../utils/draftUtils";
 import SidebarContainer from "./sidebar/SidebarContainer";
 import SidebarItem from "./sidebar/SidebarItem";
 import SidebarSection from "./sidebar/SidebarSection";
+import { directoriesAPI } from "../../services/directoriesAPI";
 import ChannelListItem from "./sidebar/ChannelListItem";
 import api, { categoryAPI } from "../../services/api";
 import { useUIStore } from '../../stores/uiStore';
@@ -117,6 +121,7 @@ export default function NavigationSidebar({
   // Derive whether we're on the Directories page
   const path = location.pathname.replace(`/workspace/${workspaceId}`, "");
   const isDirectoriesPage = path.startsWith("/directories");
+  const isExternalPage = path.startsWith("/directories") && window.location.search.includes("tab=external");
 
   const hasDraft = (channelId) => {
     const key = `${activeWorkspaceId}:${channelId}:root`;
@@ -131,6 +136,7 @@ export default function NavigationSidebar({
     privateChannels: true,
     dms: true,
     system: true,
+    external: true,
   });
   
   const [expandedGroups, setExpandedGroups] = useState(() => {
@@ -184,6 +190,23 @@ export default function NavigationSidebar({
       fetchFavorites();
     }
   }, [activeWorkspaceId, fetchFavorites]);
+
+  const [externalUsers, setExternalUsers] = useState([]);
+  useEffect(() => {
+    if (activeWorkspaceId) {
+      directoriesAPI.getExternalUsers({ status: 'active', limit: 50 })
+        .then(({ data }) => {
+          const payload = data?.data ?? data;
+          const users = Array.isArray(payload)
+            ? payload
+            : (payload?.users || payload?.data?.users || []);
+          setExternalUsers(Array.isArray(users) ? users : []);
+        })
+        .catch(err => {
+          console.error("Failed to fetch external users for sidebar:", err);
+        });
+    }
+  }, [activeWorkspaceId]);
 
   const [selfDmLoading, setSelfDmLoading] = useState(false);
 
@@ -526,7 +549,7 @@ export default function NavigationSidebar({
             <NavButton
               icon={Compass}
               label="Directories"
-              active={isDirectoriesPage}
+              active={isDirectoriesPage && !isExternalPage}
               onClick={() => {
                 // Clear active channel so channel highlighting doesn't overlap
                 // with the Directories view.
@@ -536,6 +559,91 @@ export default function NavigationSidebar({
                 onClose?.();
               }}
             />
+            <NavButton
+              icon={Globe}
+              label="External Connections"
+              hasDropdown
+              expanded={expandedSections.external}
+              onClick={() => toggleSection("external")}
+            />
+            {expandedSections.external && externalUsers.length > 0 && (
+              <div style={{ marginLeft: 16 }}>
+                {externalUsers.map((extUser) => (
+                  <SidebarItem
+                    key={extUser._id}
+                    icon={
+                      <div className="relative shrink-0">
+                        <Avatar
+                          member={{
+                            name: extUser.name || extUser.email || "Unknown",
+                            avatar: extUser.avatar,
+                            onlineStatus: onlineUsers[extUser._id] || "offline",
+                          }}
+                          size={20}
+                          showStatus={false}
+                        />
+                        <span
+                          className="absolute rounded-full"
+                          style={{
+                            width: 8,
+                            height: 8,
+                            background: onlineUsers[extUser._id] === "online" ? "var(--status-online)" : "var(--status-offline, transparent)",
+                            border: "2px solid var(--sidebar-bg-inner, var(--bg-sidebar))",
+                            bottom: -2,
+                            right: -2,
+                          }}
+                        />
+                      </div>
+                    }
+                    label={
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="truncate">{extUser.name || extUser.email || "Unknown"}</span>
+                        {extUser.ownWorkspaceName && (
+                          <span 
+                            className="text-[9px] uppercase tracking-wider shrink-0" 
+                            style={{ 
+                              background: 'rgba(255, 255, 255, 0.08)',
+                              color: 'rgba(255, 255, 255, 0.7)',
+                              padding: '2px 6px',
+                              borderRadius: '10px',
+                              fontWeight: 600,
+                              lineHeight: 1
+                            }}
+                          >
+                            {extUser.ownWorkspaceName}
+                          </span>
+                        )}
+                      </div>
+                    }
+                    meta={
+                      <span
+                        className="text-[10px]"
+                        style={{
+                          color: "rgba(255, 255, 255, 0.8)",
+                          background: "rgba(255, 255, 255, 0.15)",
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          fontWeight: 500,
+                        }}
+                      >
+                        Guest
+                      </span>
+                    }
+                    onClick={() => {
+                      useChatStore.getState().handleDirectMessage(extUser._id);
+                      onClose?.();
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+            {expandedSections.external && externalUsers.length === 0 && (
+              <div style={{ marginLeft: 16 }}>
+                 <p className="text-xs px-4 py-2" style={{ color: "var(--sidebar-text-dim, var(--text-muted))" }}>
+                   No external connections
+                 </p>
+              </div>
+            )}
 
             {/* ── Category Header Option ── */}
             {isEnterpriseOrPro && (
@@ -831,21 +939,31 @@ export default function NavigationSidebar({
 
 /* ─── Nav Button ──────────────────────────────────────────────────────── */
 
-function NavButton({ icon: Icon, label, onClick, badge, active }) {
+function NavButton({ icon: Icon, label, onClick, badge, active, hasDropdown, expanded }) {
   return (
     <button
       onClick={onClick}
       className={`sidebar-item ${active ? "active" : ""}`}
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
     >
-      <span className="sidebar-item-icon">
-        <Icon size={18} style={{ opacity: 0.8 }} />
-      </span>
-      <span className="sidebar-item-content">
-        <span className="sidebar-item-label" style={{ fontWeight: 500 }}>
-          {label}
+      <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+        <span className="sidebar-item-icon" style={{ flexShrink: 0 }}>
+          <Icon size={18} style={{ opacity: 0.8 }} />
         </span>
-      </span>
-      {badge > 0 && <span className="badge badge-red">{badge}</span>}
+        <span className="sidebar-item-content" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span className="sidebar-item-label" style={{ fontWeight: 500 }}>
+            {label}
+          </span>
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        {badge > 0 && <span className="badge badge-red" style={{ marginRight: hasDropdown ? 8 : 0 }}>{badge}</span>}
+        {hasDropdown && (
+          <span style={{ opacity: 0.6, display: 'flex', alignItems: 'center' }}>
+            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </span>
+        )}
+      </div>
     </button>
   );
 }

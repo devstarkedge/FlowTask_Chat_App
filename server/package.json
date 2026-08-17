@@ -18,6 +18,8 @@
     "db:migrate-flowtask-project-privacy:apply": "node scripts/migrateFlowTaskProjectPrivacy.js --apply",
     "db:migrate-flowtask-sync-indexes": "node scripts/migrateFlowTaskSyncIndexes.js",
     "db:migrate-flowtask-sync-indexes:apply": "node scripts/migrateFlowTaskSyncIndexes.js --apply",
+    "db:fix-guest-memberships": "node scripts/migrate/fix-guest-memberships.js --dry-run",
+    "db:fix-guest-memberships:apply": "node scripts/migrate/fix-guest-memberships.js",
     "debug:notify": "node scripts/send_debug_notification.js"
   },
   "dependencies": {

@@ -178,6 +178,39 @@ export const getProfile = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid user ID' });
   }
   const profile = await userService.getProfile(req.params.id);
+
+  const workspaceId = req.headers['x-workspace-id'];
+  if (workspaceId && /^[0-9a-fA-F]{24}$/.test(String(workspaceId))) {
+    try {
+      const WorkspaceMembership = (await import('../workspaces/WorkspaceMembership.model.js')).default;
+      const WorkspaceInvite = (await import('../workspaces/WorkspaceInvite.model.js')).default;
+      const membership = await WorkspaceMembership.findOne({
+        userId: req.params.id,
+        workspaceId,
+        isActive: true,
+      }).select('role').lean();
+
+      let workspaceRole = membership?.role || null;
+      if (workspaceRole !== 'guest' && workspaceRole !== 'owner' && workspaceRole !== 'admin') {
+        const guestInvite = await WorkspaceInvite.findOne({
+          workspaceId,
+          status: 'accepted',
+          $or: [{ inviteType: 'guest' }, { role: 'guest' }],
+          $and: [{
+            $or: [
+              { acceptedBy: req.params.id },
+              ...(profile.email ? [{ email: profile.email.toLowerCase() }] : []),
+            ],
+          }],
+        }).select('_id').lean();
+        if (guestInvite) workspaceRole = 'guest';
+      }
+      profile.workspaceRole = workspaceRole;
+    } catch (err) {
+      logger.warn('Failed to attach workspaceRole to profile', { error: err.message });
+    }
+  }
+
   res.json({ success: true, data: profile });
 });
 

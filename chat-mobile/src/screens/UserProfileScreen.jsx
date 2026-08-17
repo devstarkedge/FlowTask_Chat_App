@@ -14,7 +14,7 @@ import {
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
-import { ExternalLink, MessageSquare, MapPin, Clock, Phone, Mail, Hash, Video, ChevronRight, Check, ChevronLeft, MoreHorizontal, Headphones, UserX } from 'lucide-react-native';
+import { ExternalLink, MessageSquare, MapPin, Clock, Phone, Mail, Hash, Video, ChevronRight, Check, ChevronLeft, MoreHorizontal, Headphones, UserX, Shield } from 'lucide-react-native';
 import { formatMessageTime } from '../utils/dateUtils';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
@@ -27,6 +27,8 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { usersAPI } from '../services/api';
 
 
+const KNOWN_WORKSPACE_ROLES = new Set(['owner', 'admin', 'member', 'guest']);
+
 const UserProfileScreen = ({ route, navigation }) => {
   const { width } = useWindowDimensions();
   const { user } = route.params;
@@ -34,6 +36,7 @@ const UserProfileScreen = ({ route, navigation }) => {
   const channels = useChannelStore(s => s.channels);
   const createDM = useChannelStore(s => s.createDM);
   const setActiveChannel = useChannelStore(s => s.setActiveChannel);
+  const members = useWorkspaceStore(s => s.members);
   const rawTargetId = user?._id || user?.id;
   const targetId = typeof rawTargetId === 'object' ? rawTargetId?._id || rawTargetId?.id : rawTargetId;
   const targetIdStr = targetId?.toString ? targetId.toString() : targetId;
@@ -43,7 +46,13 @@ const UserProfileScreen = ({ route, navigation }) => {
   const [isFetchingUser, setIsFetchingUser] = useState(true);
 
   const liveUser = useMemo(() => {
-    if (fetchedUser) return { ...user, ...fetchedUser };
+    if (fetchedUser) {
+      return {
+        ...user,
+        ...fetchedUser,
+        workspaceRole: fetchedUser.workspaceRole || user?.workspaceRole,
+      };
+    }
     if (!user) return null;
     return { ...user };
   }, [user, fetchedUser]);
@@ -154,6 +163,20 @@ const UserProfileScreen = ({ route, navigation }) => {
   const statusColor = isOnline ? colors.online : isAway ? colors.away : colors.textSecondary;
   const statusText = isOnline ? 'Active' : (liveOnlineStatus === 'away' || liveUser.onlineStatus === 'away') ? 'Away' : (liveOnlineStatus === 'dnd' || liveUser.onlineStatus === 'dnd') ? 'Do Not Disturb' : 'Offline';
 
+  const memberRecord = members.find(
+    (m) => (m.userId?._id || m.userId)?.toString() === targetIdStr
+  );
+  const workspaceRole =
+    (KNOWN_WORKSPACE_ROLES.has(liveUser.workspaceRole) ? liveUser.workspaceRole : null) ||
+    (KNOWN_WORKSPACE_ROLES.has(liveUser.role) ? liveUser.role : null) ||
+    memberRecord?.role ||
+    'member';
+  const formattedWorkspaceRole =
+    workspaceRole.charAt(0).toUpperCase() + workspaceRole.slice(1);
+  const jobTitle =
+    liveUser.title ||
+    (KNOWN_WORKSPACE_ROLES.has(liveUser.role) ? '' : liveUser.role);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <StatusBar barStyle={colors.effectiveTheme === 'dark' ? 'light-content' : 'dark-content'} />
@@ -219,11 +242,11 @@ const UserProfileScreen = ({ route, navigation }) => {
             </Text>
           )}
 
-          {(liveUser.title || liveUser.role) && (
+          {jobTitle ? (
             <Text style={[styles.roleText, { color: colors.textSecondary, textTransform: 'capitalize', marginTop: 2, marginBottom: 6 }]}>
-              {liveUser.title || liveUser.role}
+              {jobTitle}
             </Text>
-          )}
+          ) : null}
 
           {liveUser.customStatus?.text && (
             <View style={[styles.customStatusRow, { backgroundColor: colors.backgroundSecondary }]}>
@@ -272,8 +295,20 @@ const UserProfileScreen = ({ route, navigation }) => {
               <Mail size={24} color={colors.textPrimary} />
             </View>
             <View style={styles.contactDetails}>
+              <Text style={[styles.contactLabel, { color: colors.textSecondary }]}>EMAIL</Text>
               <Text style={[styles.contactEmail, { color: colors.textPrimary }]}>{liveUser.email}</Text>
-              <Text style={[styles.contactLabel, { color: colors.textSecondary }]}>Work</Text>
+            </View>
+          </View>
+
+          <View style={[styles.contactRow, { marginTop: verticalScale(16) }]}>
+            <View style={styles.contactIconContainer}>
+              <Shield size={24} color={colors.textPrimary} />
+            </View>
+            <View style={styles.contactDetails}>
+              <Text style={[styles.contactLabel, { color: colors.textSecondary }]}>ROLE</Text>
+              <Text style={[styles.contactEmail, { color: colors.textPrimary, fontWeight: '700' }]}>
+                {formattedWorkspaceRole}
+              </Text>
             </View>
           </View>
         </View>

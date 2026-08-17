@@ -116,6 +116,8 @@ workspaceInviteSchema.index({ email: 1, status: 1 });
 workspaceInviteSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 // Performance: status + workspace lookups
 workspaceInviteSchema.index({ status: 1, workspaceId: 1 });
+// Guest External Connections query: workspace + inviteType + status (avoids full collection scan)
+workspaceInviteSchema.index({ workspaceId: 1, inviteType: 1, status: 1 });
 // Performance: invitedBy lookups
 workspaceInviteSchema.index({ invitedBy: 1 });
 
@@ -231,6 +233,27 @@ workspaceInviteSchema.statics.generateTokenPair = function () {
   const token = crypto.randomBytes(32).toString('hex');
   const tokenHash = hashToken(token);
   return { token, tokenHash };
+};
+
+/**
+ * Identities for users who accepted a guest invite in this workspace.
+ * Used so External Connections / profile ROLE still treat them as guests
+ * even if WorkspaceMembership.role was stored as member.
+ */
+workspaceInviteSchema.statics.getAcceptedGuestIdentities = async function (workspaceId) {
+  const invites = await this.find({
+    workspaceId,
+    status: 'accepted',
+    $or: [{ inviteType: 'guest' }, { role: 'guest' }],
+  }).select('acceptedBy email invitedBy createdAt').lean();
+
+  const userIds = new Set();
+  const emails = new Set();
+  for (const inv of invites) {
+    if (inv.acceptedBy) userIds.add(String(inv.acceptedBy));
+    if (inv.email) emails.add(String(inv.email).toLowerCase());
+  }
+  return { userIds, emails, invites };
 };
 
 const WorkspaceInvite = model('WorkspaceInvite', workspaceInviteSchema);

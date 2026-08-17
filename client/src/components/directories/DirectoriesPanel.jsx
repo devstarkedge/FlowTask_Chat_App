@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Users, Hash, UsersRound, Globe, Mail, Contact } from "lucide-react";
 import PeopleTab from "./PeopleTab";
 import ChannelsTab from "./ChannelsTab";
@@ -20,7 +21,11 @@ const TABS = [
 ];
 
 export default function DirectoriesPanel() {
-  const [activeTab, setActiveTab] = useState("people");
+  const [searchParams] = useSearchParams();
+  const initialTab = TABS.some((t) => t.id === searchParams.get("tab"))
+    ? searchParams.get("tab")
+    : "people";
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [indicatorStyle, setIndicatorStyle] = useState({});
   const tabRefs = useRef({});
   const tabBarRef = useRef(null);

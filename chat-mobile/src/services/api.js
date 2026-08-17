@@ -557,8 +557,10 @@ export const directoriesAPI = {
   getUsers: (params) => api.get('/directories/users', { params }),
   getChannels: (params) => api.get('/directories/channels', { params }),
   getGroups: () => api.get('/directories/groups'),
-  getExternal: () => api.get('/directories/external'),
+  getExternal: (params) => api.get('/directories/external', { params }),
   getInvitations: () => api.get('/directories/invitations'),
+  removeExternalUser: (workspaceId, userId) =>
+    api.delete(`/workspaces/${workspaceId}/members/${userId}`),
 };
 
 // Notification Preferences API

@@ -108,6 +108,60 @@ export function getFileKind(mime = '', name = '', url = '') {
   return 'file';
 }
 
+export function getCleanFileName(name, originalFileName) {
+  const primaryName = originalFileName || name;
+  if (!primaryName || typeof primaryName !== 'string') return 'Untitled file';
+
+  let clean = primaryName.split('/').pop().split('\\').pop();
+
+  // Remove UUID prefix: e.g., "38198f39-1bc9-42b7-84bc-2e790fdfcb1f_myfile.png" -> "myfile.png"
+  const uuidPrefixRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}[_-]/;
+  clean = clean.replace(uuidPrefixRegex, '');
+
+  // Remove MongoDB ObjectId prefix
+  const mongoIdPrefixRegex = /^[0-9a-fA-F]{24}[_-]/;
+  clean = clean.replace(mongoIdPrefixRegex, '');
+
+  // Remove generated prefixes
+  const genPrefixRegex = /^(media|file|pending)_[0-9]+[_-]/i;
+  clean = clean.replace(genPrefixRegex, '');
+
+  const pendingRegex = /^pending_[0-9]+_[a-zA-Z0-9]+[_-]/i;
+  clean = clean.replace(pendingRegex, '');
+
+  return clean || 'Untitled file';
+}
+
+const ALLOWED_MEDIA_DOMAINS = [
+  'res.cloudinary.com',
+  'chat-app-api-cyyl.onrender.com',
+  'localhost',
+  '127.0.0.1',
+  '10.0.2.2',
+];
+
+export function isValidMediaUrl(urlStr) {
+  try {
+    if (!urlStr || typeof urlStr !== 'string') return false;
+    if (!urlStr.startsWith('http://') && !urlStr.startsWith('https://')) return false;
+
+    const cleanUrlPath = urlStr.split('?')[0].split('#')[0];
+    const ext = (cleanUrlPath.split('.').pop() || '').toLowerCase();
+    const isSupportedExt = /^(jpg|jpeg|png|gif|webp|svg|heic|heif|mp4|mov|avi|mkv|webm|mp3|m4a|wav|pdf|doc|docx|xls|xlsx|csv|zip|rar|tar)$/.test(ext);
+    if (!isSupportedExt && !urlStr.includes('/messages/files/')) return false;
+
+    const hostname = urlStr.split('/')[2]?.split(':')[0];
+    if (!hostname) return false;
+
+    const isAllowedDomain = ALLOWED_MEDIA_DOMAINS.some(domain =>
+      hostname === domain || hostname.endsWith('.' + domain)
+    );
+    return isAllowedDomain;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Extracts and normalizes all attachments and media items from a message.
  */
@@ -125,103 +179,166 @@ export const getMessageAttachments = (msg) => {
     const url = normalizeMediaUrl(rawUrl);
     const rawThumb = file.thumbnailUrl || file.thumbUrl || file.previewUrl || file.secureUrl || file.secure_url || rawUrl;
     const thumbnailUrl = normalizeMediaUrl(rawThumb);
-    const name = file.originalName || file.fileName || file.name || file.filename || 'Attachment';
+    
+    const rawName = file.originalFileName || file.originalName || file.displayName || file.fileName || file.name || file.filename || '';
+    const cleanName = getCleanFileName(rawName);
 
     return {
+      id: file._id || item._id || String(Math.random()),
       _id: file._id || item._id || String(Math.random()),
-      name,
-      fileName: name,
-      originalName: name,
+      originalFileName: cleanName,
+      fileName: cleanName,
+      originalName: cleanName,
+      name: cleanName,
       url,
       secureUrl: url,
       thumbnailUrl: thumbnailUrl || url,
       mimeType: file.mimeType || file.type || file.contentType || '',
       fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
+      status: file.status || 'available',
     };
   };
 
   // 1. Check fileReferences
   const refs = msg.fileReferences || [];
+  let list = [];
   if (refs.length > 0) {
-    const list = refs.map(extractFileObject).filter(Boolean);
-    if (list.length > 0) return list;
+    list = refs.map(extractFileObject).filter(Boolean);
   }
 
-  // 2. Check attachments / files / media
-  const rawAttachments = msg.attachments || msg.files || msg.media || [];
-  if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
-    const list = rawAttachments.map(extractFileObject).filter(Boolean);
-    if (list.length > 0) return list;
+  // 2. Check attachments / files / media if no references found
+  if (list.length === 0) {
+    const rawAttachments = msg.attachments || msg.files || msg.media || [];
+    if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
+      list = rawAttachments.map(extractFileObject).filter(Boolean);
+    }
   }
 
   // 3. Fallback: single media properties attached directly to message
-  // If the message is a GIF message handled by GifRenderer, do not duplicate as attachment card
-  if (msg.contentType === 'gif' && msg.gifMeta) {
-    return [];
-  }
+  if (list.length === 0) {
+    if (msg.contentType === 'gif' && msg.gifMeta) {
+      return [];
+    }
 
-  const singleUrl = msg.imageUrl || msg.mediaUrl || msg.videoUrl || msg.audioUrl || msg.fileUrl || msg.audioMeta?.audioUrl || msg.videoMeta?.videoUrl;
-  if (singleUrl) {
-    const url = normalizeMediaUrl(singleUrl);
-    const rawThumb = msg.thumbnailUrl || msg.videoMeta?.thumbnailUrl || singleUrl;
-    const name = msg.fileName || msg.originalName || msg.name || 'Media';
-    return [{
-      _id: msg._id || String(Math.random()),
-      name,
-      fileName: name,
-      originalName: name,
-      url,
-      secureUrl: url,
-      thumbnailUrl: normalizeMediaUrl(rawThumb),
-      mimeType: msg.mimeType || msg.contentType || '',
-      fileSize: msg.fileSize || 0,
-    }];
-  }
-
-  // 4. Fallback: extract images from htmlContent or markdown content if no attachments found
-  const htmlContent = msg.htmlContent || '';
-  if (htmlContent && typeof htmlContent === 'string') {
-    const imgMatches = [...htmlContent.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)];
-    if (imgMatches.length > 0) {
-      return imgMatches.map((m, idx) => {
-        const src = m[1];
-        const url = normalizeMediaUrl(src);
-        return {
-          _id: `${msg._id || 'img'}-html-${idx}`,
-          name: `Image ${idx + 1}`,
-          fileName: `Image_${idx + 1}.png`,
-          originalName: `Image_${idx + 1}.png`,
-          url,
-          secureUrl: url,
-          thumbnailUrl: url,
-          mimeType: 'image/png',
-          fileSize: 0,
-        };
-      });
+    const singleUrl = msg.imageUrl || msg.mediaUrl || msg.videoUrl || msg.audioUrl || msg.fileUrl || msg.audioMeta?.audioUrl || msg.videoMeta?.videoUrl;
+    if (singleUrl) {
+      const url = normalizeMediaUrl(singleUrl);
+      const rawThumb = msg.thumbnailUrl || msg.videoMeta?.thumbnailUrl || singleUrl;
+      const rawName = msg.originalFileName || msg.originalName || msg.displayName || msg.fileName || msg.name || '';
+      const cleanName = getCleanFileName(rawName);
+      list = [{
+        id: msg._id || String(Math.random()),
+        _id: msg._id || String(Math.random()),
+        originalFileName: cleanName,
+        fileName: cleanName,
+        originalName: cleanName,
+        name: cleanName,
+        url,
+        secureUrl: url,
+        thumbnailUrl: normalizeMediaUrl(rawThumb),
+        mimeType: msg.mimeType || msg.contentType || '',
+        fileSize: msg.fileSize || 0,
+        status: 'available',
+      }];
     }
   }
 
+  // 4. Fallback: extract images from htmlContent or markdown content
+  if (list.length === 0) {
+    const htmlContent = msg.htmlContent || '';
+    if (htmlContent && typeof htmlContent === 'string') {
+      const imgMatches = [...htmlContent.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)];
+      if (imgMatches.length > 0) {
+        list = imgMatches.map((m, idx) => {
+          const src = m[1];
+          const url = normalizeMediaUrl(src);
+          return {
+            id: `${msg._id || 'img'}-html-${idx}`,
+            _id: `${msg._id || 'img'}-html-${idx}`,
+            originalFileName: `Image_${idx + 1}.png`,
+            fileName: `Image_${idx + 1}.png`,
+            originalName: `Image_${idx + 1}.png`,
+            name: `Image_${idx + 1}.png`,
+            url,
+            secureUrl: url,
+            thumbnailUrl: url,
+            mimeType: 'image/png',
+            fileSize: 0,
+            status: 'available',
+          };
+        });
+      }
+    }
+  }
+
+  if (list.length === 0) {
+    const textContent = msg.content || '';
+    if (textContent && typeof textContent === 'string') {
+      const mdMatches = [...textContent.matchAll(/!\[.*?\]\((.*?)\)/gi)];
+      if (mdMatches.length > 0) {
+        list = mdMatches.map((m, idx) => {
+          const src = m[1];
+          const url = normalizeMediaUrl(src);
+          return {
+            id: `${msg._id || 'img'}-md-${idx}`,
+            _id: `${msg._id || 'img'}-md-${idx}`,
+            originalFileName: `Image_${idx + 1}.png`,
+            fileName: `Image_${idx + 1}.png`,
+            originalName: `Image_${idx + 1}.png`,
+            name: `Image_${idx + 1}.png`,
+            url,
+            secureUrl: url,
+            thumbnailUrl: url,
+            mimeType: 'image/png',
+            fileSize: 0,
+            status: 'available',
+          };
+        });
+      }
+    }
+  }
+
+  // 5. Fallback: extract any validated, allowlisted URLs from text content
   const textContent = msg.content || '';
-  if (textContent && typeof textContent === 'string') {
-    const mdMatches = [...textContent.matchAll(/!\[.*?\]\((.*?)\)/gi)];
-    if (mdMatches.length > 0) {
-      return mdMatches.map((m, idx) => {
-        const src = m[1];
-        const url = normalizeMediaUrl(src);
-        return {
-          _id: `${msg._id || 'img'}-md-${idx}`,
-          name: `Image ${idx + 1}`,
-          fileName: `Image_${idx + 1}.png`,
-          originalName: `Image_${idx + 1}.png`,
+  if (list.length === 0 && textContent && typeof textContent === 'string') {
+    const urlRegex = /(https?:\/\/[^\s]+)/gi;
+    const matches = [...textContent.matchAll(urlRegex)];
+    const extractedList = [];
+
+    for (const m of matches) {
+      const rawUrl = m[1];
+      if (isValidMediaUrl(rawUrl)) {
+        const url = normalizeMediaUrl(rawUrl);
+        // Avoid duplicates
+        if (extractedList.some(item => item.url === url)) continue;
+
+        const cleanUrlPath = url.split('?')[0].split('#')[0];
+        const filename = cleanUrlPath.split('/').pop() || 'file';
+        const cleanName = getCleanFileName(filename);
+        const ext = (filename.split('.').pop() || '').toLowerCase();
+        let mimeType = '';
+        if (/^(jpg|jpeg|png|gif|webp|svg|tiff|tif|bmp|ico|heic|heif|avif)$/.test(ext)) {
+          mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+        }
+
+        extractedList.push({
+          id: `${msg._id || 'url'}-ext-${extractedList.length}`,
+          _id: `${msg._id || 'url'}-ext-${extractedList.length}`,
+          originalFileName: cleanName,
+          fileName: cleanName,
+          originalName: cleanName,
+          name: cleanName,
           url,
           secureUrl: url,
           thumbnailUrl: url,
-          mimeType: 'image/png',
+          mimeType,
           fileSize: 0,
-        };
-      });
+          status: 'available',
+        });
+      }
     }
+    if (extractedList.length > 0) return extractedList;
   }
 
-  return [];
+  return list;
 };

@@ -144,7 +144,11 @@ export const useWorkspaceStore = create(
         set({ isLoading: true, error: null });
         try {
           const { data } = await workspaceAPI.joinByInviteCode(inviteCode);
-          const workspace = data.data?.workspace || data.data;
+          const workspaceObj = data.data?.workspace || data.data;
+          const workspace = {
+            ...(typeof workspaceObj === 'object' ? workspaceObj : {}),
+            alreadyMember: !!data.data?.alreadyMember,
+          };
           
           // Refresh workspaces list to ensure the new workspace is available for switchWorkspace
           await get().fetchWorkspaces(true);

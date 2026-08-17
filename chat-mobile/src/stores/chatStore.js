@@ -493,7 +493,9 @@ export const useChatStore = create(
       set((state) => ({
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: (state.messagesByChannel[channelId] || []).filter(m => m._id !== messageId),
+          [channelId]: (state.messagesByChannel[channelId] || []).map(m =>
+            m._id === messageId ? { ...m, isDeleted: true, content: 'This message was deleted', fileReferences: [], attachments: [], files: [] } : m
+          ),
         },
       }));
     } catch (error) {

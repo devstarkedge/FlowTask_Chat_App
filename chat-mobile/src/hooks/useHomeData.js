@@ -157,11 +157,26 @@ export const useHomeData = (navigation) => {
       });
     });
 
-    const unread = channels.filter((c) => (unreads[c._id] || 0) > 0);
-    const starred = channels.filter((c) => starredIds.includes(c._id) && (unreads[c._id] || 0) === 0);
-    const system = channels.filter((c) => c.type === "system" && !categorizedChannelIds.has(String(c._id)) && (unreads[c._id] || 0) === 0 && !starredIds.includes(c._id) && !c.isArchived);
-    const regularCh = channels.filter((c) => c.type !== "dm" && c.type !== "system" && !categorizedChannelIds.has(String(c._id)) && (unreads[c._id] || 0) === 0 && !starredIds.includes(c._id) && !c.isArchived);
-    const regularD = channels.filter((c) => c.type === "dm" && (unreads[c._id] || 0) === 0 && !starredIds.includes(c._id) && !c.isArchived);
+    const unread = channels.filter((c) => {
+      const cid = c._id?.toString ? c._id.toString() : String(c._id);
+      return (unreads[cid] || 0) > 0;
+    });
+    const starred = channels.filter((c) => {
+      const cid = c._id?.toString ? c._id.toString() : String(c._id);
+      return starredIds.includes(c._id) && (unreads[cid] || 0) === 0;
+    });
+    const system = channels.filter((c) => {
+      const cid = c._id?.toString ? c._id.toString() : String(c._id);
+      return c.type === "system" && !categorizedChannelIds.has(String(c._id)) && (unreads[cid] || 0) === 0 && !starredIds.includes(c._id) && !c.isArchived;
+    });
+    const regularCh = channels.filter((c) => {
+      const cid = c._id?.toString ? c._id.toString() : String(c._id);
+      return c.type !== "dm" && c.type !== "system" && !categorizedChannelIds.has(String(c._id)) && (unreads[cid] || 0) === 0 && !starredIds.includes(c._id) && !c.isArchived;
+    });
+    const regularD = channels.filter((c) => {
+      const cid = c._id?.toString ? c._id.toString() : String(c._id);
+      return c.type === "dm" && (unreads[cid] || 0) === 0 && !starredIds.includes(c._id) && !c.isArchived;
+    });
 
     regularD.sort((a, b) => {
       const aIsSelf = a.dmRecipientId === user?._id;

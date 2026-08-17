@@ -154,6 +154,52 @@ class FileCleanupService {
       await FileAsset.findByIdAndUpdate(assetId, { status: 'deleted' });
     }
   }
+
+  async queueStorageCleanup(fileId, workspaceId) {
+    const { addJob } = await import('./jobQueue.service.js');
+    await addJob('storage-cleanup', { fileId, workspaceId });
+    logger.info('file.cleanup.job.queued', { fileId, workspaceId });
+  }
 }
 
-export default new FileCleanupService();
+const fileCleanupServiceInstance = new FileCleanupService();
+
+// Register the storage-cleanup background queue processor
+import { registerQueue } from './jobQueue.service.js';
+registerQueue('storage-cleanup', async (job) => {
+  const { fileId, workspaceId } = job.data;
+  logger.info('file.cleanup.job.started', { fileId, workspaceId });
+
+  // 1. Check remaining references
+  const remainingRefs = await FileReference.countDocuments({ fileId });
+  if (remainingRefs > 0) {
+    logger.info('file.cleanup.job.skipped', { fileId, remainingRefs });
+    return;
+  }
+
+  // 2. Fetch the asset
+  const asset = await FileAsset.findOne({ _id: fileId, workspaceId });
+  if (!asset) {
+    logger.info('file.cleanup.job.not_found', { fileId });
+    return;
+  }
+
+  // 3. Delete from Cloudinary
+  if (asset.storageProvider === 'cloudinary' && asset.publicId && !asset.publicId.startsWith('pending_')) {
+    try {
+      await cloudinary.api.delete_resources([asset.publicId], {
+        resource_type: asset.resourceType === 'raw' ? 'raw' : asset.resourceType,
+      });
+      logger.info('file.cleanup.job.cloudinary_deleted', { fileId, publicId: asset.publicId });
+    } catch (cloudErr) {
+      logger.error('file.cleanup.job.cloudinary_failed', { fileId, error: cloudErr.message });
+      throw cloudErr; // Re-throw for BullMQ retry policy
+    }
+  }
+
+  // 4. Delete the Asset document
+  await FileAsset.deleteOne({ _id: fileId });
+  logger.info('file.cleanup.job.success', { fileId });
+}, { concurrency: 2 });
+
+export default fileCleanupServiceInstance;

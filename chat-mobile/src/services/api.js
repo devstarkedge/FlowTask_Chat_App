@@ -372,7 +372,7 @@ export const threadAPI = {
 // Later (Saved Messages) API — endpoints match server routes: /messages/:id/save/*
 export const laterAPI = {
   list: (status) => api.get('/messages/saved', { params: { status } }),
-  toggle: (messageId) => api.post(`/messages/${messageId}/save`),
+  toggle: (messageId, data) => api.post(`/messages/${messageId}/save`, data),
   updateStatus: (messageId, status) => api.patch(`/messages/${messageId}/save/status`, { status }),
   updateReminder: (messageId, data) => api.patch(`/messages/${messageId}/save/reminder`, data),
   snoozeReminder: (messageId, minutes) => api.patch(`/messages/${messageId}/save/reminder/snooze`, { minutes }),

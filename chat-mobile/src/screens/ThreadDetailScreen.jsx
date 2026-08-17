@@ -254,7 +254,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
             {itemAttachments.length > 0 && (
                <View style={{ marginTop: verticalScale(4), width: '100%', gap: 4 }}>
                   {itemAttachments.map((file, i) => (
-                    <MobileFileCard key={file._id || i} file={file} colors={colors} isUploading={item.pending || item.status === 'pending'} />
+                    <MobileFileCard key={file._id || i} file={file} colors={colors} isUploading={item.pending || item.status === 'pending'} onLongPress={() => showMessageActions(item, file)} />
                   ))}
                </View>
             )}
@@ -385,7 +385,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
               {effectiveRootAttachments.length > 0 && (
                  <View style={{ marginTop: verticalScale(8), width: '100%', gap: 4, paddingHorizontal: scale(16) }}>
                     {effectiveRootAttachments.map((file, i) => (
-                      <MobileFileCard key={file._id || i} file={file} colors={colors} isUploading={effectiveRoot.pending || effectiveRoot.status === 'pending'} />
+                      <MobileFileCard key={file._id || i} file={file} colors={colors} isUploading={effectiveRoot.pending || effectiveRoot.status === 'pending'} onLongPress={() => showMessageActions(effectiveRoot, file)} />
                     ))}
                  </View>
               )}
@@ -453,10 +453,16 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         attachment={actionAttachmentTarget}
         colors={colors}
         user={user}
-        isSaved={isMessageSaved?.(actionMenuTarget?._id)}
+        isSaved={isMessageSaved?.(actionMenuTarget?._id, actionAttachmentTarget)}
         onReact={(emoji) => { if (actionMenuTarget) addReaction(actionMenuTarget._id, emoji); }}
         onOpenEmojiPicker={() => setEmojiPickerTarget(actionMenuTarget?._id)}
-        onForward={() => setForwardTarget(actionAttachmentTarget || actionMenuTarget)}
+        onForward={() => {
+          if (actionAttachmentTarget) {
+            setForwardTarget({ ...actionMenuTarget, forwardAttachment: actionAttachmentTarget });
+          } else {
+            setForwardTarget(actionMenuTarget);
+          }
+        }}
         onPin={async (msg) => {
           try {
             if (msg.isPinned) {
@@ -471,7 +477,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           }
           setActionMenuTarget(null);
         }}
-        onSave={() => toggleSaveMessage?.(actionMenuTarget?._id)}
+        onSave={() => toggleSaveMessage?.(actionMenuTarget?._id, channelId, actionAttachmentTarget)}
         onRemind={() => setReminderTarget(actionMenuTarget?._id)}
         onReply={() => {
           const msg = actionMenuTarget;
@@ -490,13 +496,14 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         }}
         onEdit={() => { setEditingMessage(actionMenuTarget); setReplyText(actionMenuTarget.htmlContent || actionMenuTarget.content || ''); setActionMenuTarget(null); setReplyingTo(null); }}
         onDelete={() => {
-          const targetId = actionMenuTarget._id;
+          const msg = actionMenuTarget;
+          const targetId = msg._id;
           const isRoot = targetId === rootMessageId;
           const isAttachment = !!actionAttachmentTarget;
           setTimeout(() => {
             Alert.alert(
-              isAttachment ? 'Delete Entire Message' : 'Delete Message',
-              isAttachment ? 'You can only delete the entire message, not individual attachments. Are you sure?' : 'Are you sure you want to delete this message?',
+              isAttachment ? 'Delete Image' : 'Delete Message',
+              isAttachment ? 'Are you sure you want to delete this image?' : 'Are you sure you want to delete this message?',
               [
               { text: 'Cancel', style: 'cancel' },
               {
@@ -505,12 +512,29 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                 onPress: async () => {
                   setActionMenuTarget(null);
                   try {
-                    if (isRoot) {
-                      const { deleteMessage: del } = useChatStore.getState();
-                      await del(targetId, channelId);
-                      navigation.goBack();
+                    if (isAttachment) {
+                      const remainingRefs = (msg.fileReferences || [])
+                        .filter(r => {
+                          const rId = r.fileId?._id || r.fileId || r._id;
+                          const targetId = actionAttachmentTarget._id;
+                          return rId !== targetId;
+                        })
+                        .map(r => r.fileId?._id || r.fileId || r._id);
+
+                      if (isRoot) {
+                        await editMessage(rootMessageId, channelId, msg.content, msg.htmlContent, remainingRefs);
+                      } else {
+                        await useThreadStore.getState().editThreadReply(rootMessageId, msg._id, msg.content, msg.htmlContent, remainingRefs);
+                      }
+                      Toast.show({ type: 'success', text1: 'Image deleted' });
                     } else {
-                      await useThreadStore.getState().deleteThreadReply(rootMessageId, targetId);
+                      if (isRoot) {
+                        const { deleteMessage: del } = useChatStore.getState();
+                        await del(targetId, channelId);
+                        navigation.goBack();
+                      } else {
+                        await useThreadStore.getState().deleteThreadReply(rootMessageId, targetId);
+                      }
                     }
                   } catch (err) {
                     Toast.show({ type: 'error', text1: 'Failed to delete message' });

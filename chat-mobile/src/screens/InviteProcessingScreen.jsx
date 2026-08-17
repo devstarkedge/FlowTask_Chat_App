@@ -49,14 +49,27 @@ const InviteProcessingScreen = ({ route, navigation }) => {
         return;
       }
 
-      setInviteData(info);
-      
-      // Check if already a member
-      const isAlreadyMember = workspaces.some(w => w._id === info.workspaceId);
+      // Fetch latest workspaces list from server to ensure accurate member check
+      const { fetchWorkspaces } = useWorkspaceStore.getState();
+      await fetchWorkspaces(true);
+
+      const latestWorkspaces = useWorkspaceStore.getState().workspaces || [];
+      const isAlreadyMember = latestWorkspaces.some(w => w._id === info.workspaceId);
       if (isAlreadyMember) {
-        // Auto-accept/open if already member
-        await handleJoin(info.workspaceId, true);
+        Alert.alert(
+          'Already a Member',
+          'You are already a member of this workspace.',
+          [
+            {
+              text: 'OK',
+              onPress: () => handleJoin(info.workspaceId, true)
+            }
+          ]
+        );
+        return;
       }
+
+      setInviteData(info);
     } catch (err) {
       const msg = err.response?.data?.message || err.message;
       if (msg.includes('expired')) {
@@ -67,7 +80,7 @@ const InviteProcessingScreen = ({ route, navigation }) => {
         setErrorState('invalid');
       }
     } finally {
-      setLoading(false);
+      if (!inviteData) setLoading(false);
     }
   };
 
@@ -89,7 +102,11 @@ const InviteProcessingScreen = ({ route, navigation }) => {
       // which reconnects sockets, clears cache, and fetches latest channels.
       await switchWorkspace(workspaceId);
       
-      // Navigation to Main is handled by AppNavigation automatically when activeWorkspaceId is set.
+      // Explicitly navigate/reset to Main stack to prevent screen freezing
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Main' }],
+      });
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to join workspace');
       setLoading(false);
@@ -100,7 +117,9 @@ const InviteProcessingScreen = ({ route, navigation }) => {
     await secureMultiRemove(['pending_invite_code']);
     
     // Go back or to Home
-    if (workspaces.length > 0) {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else if (workspaces.length > 0) {
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } else {
       navigation.replace('WorkspaceSelector');

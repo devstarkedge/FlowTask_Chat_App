@@ -34,10 +34,13 @@ export const useLaterStore = create(
         }
       },
 
-      toggleSaveMessage: async (messageId, channelId) => {
+      toggleSaveMessage: async (messageId, channelId, attachmentId = null) => {
         if (!messageId) return;
         
-        const wasSaved = get().savedMessageIds.includes(messageId);
+        const wasSaved = attachmentId
+          ? get().savedMessages.some(m => m.messageId?._id === messageId && m.attachmentId === attachmentId)
+          : get().savedMessageIds.includes(messageId);
+          
         const prevSavedMessages = [...get().savedMessages];
         const prevIds = [...get().savedMessageIds];
 
@@ -47,21 +50,21 @@ export const useLaterStore = create(
             newIds = prevIds.filter(id => id !== messageId);
             set({ 
               savedMessageIds: newIds,
-              savedMessages: prevSavedMessages.filter(m => m.messageId?._id !== messageId),
+              savedMessages: prevSavedMessages.filter(m => !(m.messageId?._id === messageId && m.attachmentId === attachmentId)),
               savedCount: get().savedCount - 1,
             });
           } else {
-            newIds = [...prevIds, messageId];
+            newIds = attachmentId ? prevIds : [...prevIds, messageId];
             set({ savedMessageIds: newIds, savedCount: get().savedCount + 1 });
           }
 
-          const { data } = await laterAPI.toggle(messageId);
+          const { data } = await laterAPI.toggle(messageId, { attachmentId });
           const { saved, savedMessage } = data.data;
 
           if (saved && savedMessage) {
             get().addSavedMessage(savedMessage);
           } else if (!saved) {
-            get().removeSavedMessage(messageId);
+            get().removeSavedMessage(messageId, attachmentId);
           }
         } catch (error) {
           set({ savedMessages: prevSavedMessages, savedMessageIds: prevIds });
@@ -145,7 +148,13 @@ export const useLaterStore = create(
         }));
       },
 
-      isMessageSaved: (messageId) => {
+      isMessageSaved: (messageId, attachmentId = null) => {
+        if (attachmentId) {
+          const targetId = attachmentId._id || attachmentId;
+          return get().savedMessages.some(
+            (m) => m.messageId?._id === messageId && (m.attachmentId?._id || m.attachmentId) === targetId
+          );
+        }
         return get().savedMessageIds.includes(messageId);
       },
 
@@ -161,7 +170,7 @@ export const useLaterStore = create(
           }
 
           const newIds = [...state.savedMessageIds];
-          if (savedMessage.messageId?._id && !newIds.includes(savedMessage.messageId._id)) {
+          if (savedMessage.messageId?._id && !savedMessage.attachmentId && !newIds.includes(savedMessage.messageId._id)) {
             newIds.push(savedMessage.messageId._id);
           }
           return {
@@ -193,10 +202,16 @@ export const useLaterStore = create(
         }
       },
 
-      removeSavedMessage: (messageId) => {
+      removeSavedMessage: (messageId, attachmentId = null) => {
         set((state) => {
+          const targetId = attachmentId?._id || attachmentId;
           const newIds = state.savedMessageIds.filter(id => id !== messageId);
-          const newMessages = state.savedMessages.filter((m) => m.messageId?._id !== messageId);
+          const newMessages = state.savedMessages.filter((m) => {
+            if (targetId) {
+              return !(m.messageId?._id === messageId && (m.attachmentId?._id || m.attachmentId) === targetId);
+            }
+            return m.messageId?._id !== messageId;
+          });
           return {
             savedMessages: newMessages,
             savedMessageIds: newIds,

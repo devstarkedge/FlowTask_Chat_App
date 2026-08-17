@@ -19,7 +19,11 @@ export default function InviteModal({ onClose, onSuccess }) {
 
     setIsSubmitting(true)
     try {
-      await directoriesAPI.inviteUser(activeWorkspaceId, { email: email.trim().toLowerCase(), role })
+      await directoriesAPI.inviteUser(activeWorkspaceId, {
+        email: email.trim().toLowerCase(),
+        role,
+        inviteType: role === 'guest' ? 'guest' : 'member',
+      })
       toast.success(`Invitation sent to ${email}`)
       onSuccess?.()
       onClose()

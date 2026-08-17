@@ -314,7 +314,7 @@ export default function InviteManagementScreen({ navigation }) {
         )}
 
         {/* Admin Toggle (only if member type) */}
-        {!isGuest && (
+        {/* {!isGuest && (
           <View style={[styles.rowItem, { borderBottomColor: colors.border }]}>
             <View style={styles.rowLeft}>
               <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>Make workspace admin</Text>
@@ -329,7 +329,7 @@ export default function InviteManagementScreen({ navigation }) {
               thumbColor={isAdmin ? colors.primary : "#f4f3f4"}
             />
           </View>
-        )}
+        )} */}
 
         {/* Link Copy Widget */}
         <View style={styles.linkContainer}>

@@ -295,16 +295,6 @@ export const inviteByEmailSchema = z
   })
   .refine(
     (data) => {
-      // If inviteType is guest, channels must not be empty
-      if (data.inviteType === "guest") {
-        return data.channels && data.channels.length > 0;
-      }
-      return true;
-    },
-    { message: "Guest invites must specify at least one channel" }
-  )
-  .refine(
-    (data) => {
       // If inviteType is guest, role must be guest
       if (data.inviteType === "guest") {
         return data.role === "guest";

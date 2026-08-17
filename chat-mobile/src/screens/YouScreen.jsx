@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StatusBar,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "../stores/authStore";
@@ -73,7 +72,7 @@ const MoreScreen = ({ navigation }) => {
           subtitle="Work with people from other organisations"
           showProBadge={true}
           colors={colors}
-          onPress={() => Alert.alert("Coming soon", "This feature will be available soon.")}
+          onPress={() => navigation.navigate("ExternalConnections")}
         />
       </ScrollView>
 

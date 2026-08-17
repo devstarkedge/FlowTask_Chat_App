@@ -18,8 +18,9 @@ import {
   StyleSheet,
   Modal,
   Platform,
+  c
 } from 'react-native';
-import { X, Clock, Bell, Calendar, Repeat as RepeatIcon } from 'lucide-react-native';
+import { X, Clock, Bell, Calendar, Repeat as RepeatIcon, ChevronLeft} from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { formatMessageTime } from '../utils/dateUtils';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
@@ -189,7 +190,7 @@ const ReminderModal = React.memo(function ReminderModal({
             <View style={styles.customContainer}>
               <TouchableOpacity onPress={() => setShowCustom(false)} style={{ marginBottom: verticalScale(12) }}>
                 <Text style={{ color: colors.primary, fontSize: moderateScale(14) }}>
-                  ← Back to quick options
+                    <ChevronLeft />Back to quick options
                 </Text>
               </TouchableOpacity>
 

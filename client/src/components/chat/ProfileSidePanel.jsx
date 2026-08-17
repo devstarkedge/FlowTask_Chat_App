@@ -19,7 +19,10 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useAuthStore } from "../../stores/authStore";
 import { usePresenceStore } from "../../stores/presenceStore";
 import { getDMPath } from "../../utils/chatRoutes";
+import { userAPI } from "../../services/api";
 import toast from "react-hot-toast";
+
+const KNOWN_WORKSPACE_ROLES = new Set(["owner", "admin", "member", "guest"]);
 
 const STATUS_META = {
   online: {
@@ -57,13 +60,35 @@ export default function ProfileSidePanel({ user, onClose }) {
   const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const currentUser = useAuthStore((s) => s.user);
   const presenceMap = usePresenceStore((s) => s.presence);
+  const wsMembers = useWorkspaceStore((s) => s.members);
   const [showMore, setShowMore] = useState(false);
   const [sendingDM, setSendingDM] = useState(false);
+  const [fetchedWorkspaceRole, setFetchedWorkspaceRole] = useState(null);
 
   const userId = user?._id || user?.userId;
   const liveStatus = presenceMap[userId] || presenceMap[user?.flowTaskUserId] || presenceMap[user?.chatUserId] || user?.onlineStatus || "offline";
   const isCurrentUser = userId === currentUser?._id;
   const statusMeta = STATUS_META[liveStatus] || STATUS_META.offline;
+
+  useEffect(() => {
+    if (!userId) return;
+    if (KNOWN_WORKSPACE_ROLES.has(user?.workspaceRole)) {
+      setFetchedWorkspaceRole(null);
+      return;
+    }
+    let cancelled = false;
+    userAPI
+      .getProfile(userId)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const profile = data?.data || data;
+        if (profile?.workspaceRole) setFetchedWorkspaceRole(profile.workspaceRole);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, workspaceId, user?.workspaceRole, user?.role]);
 
   useEffect(() => {
     const h = (e) => {
@@ -106,7 +131,19 @@ export default function ProfileSidePanel({ user, onClose }) {
   const name = user.name || user.displayName || "Unknown User";
   const avatar = user.avatar || user.profilePicture;
   const title = user.title || "";
-  const role = user.role || "member";
+
+  // Prefer the workspace-level role (from WorkspaceMembership / guest invite)
+  // over ChatUser.role which is synced from FlowTask (job titles like "Employee").
+  const memberRecord = wsMembers.find(
+    (m) => (m.userId?._id || m.userId)?.toString() === userId?.toString()
+  );
+  const role =
+    (KNOWN_WORKSPACE_ROLES.has(user.workspaceRole) ? user.workspaceRole : null) ||
+    (KNOWN_WORKSPACE_ROLES.has(fetchedWorkspaceRole) ? fetchedWorkspaceRole : null) ||
+    (KNOWN_WORKSPACE_ROLES.has(user.role) ? user.role : null) ||
+    memberRecord?.role ||
+    "member";
+
   const email = user.email;
   const department = user.departmentNames?.length
     ? user.departmentNames.join(", ")

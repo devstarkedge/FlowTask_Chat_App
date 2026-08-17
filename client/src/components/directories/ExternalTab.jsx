@@ -39,7 +39,11 @@ export default function ExternalTab() {
         search: searchVal,
         status: statusVal,
       })
-      setExternalUsers(data.data?.users || data.data || [])
+      const payload = data?.data ?? data
+      const users = Array.isArray(payload)
+        ? payload
+        : (payload?.users || payload?.data?.users || [])
+      setExternalUsers(Array.isArray(users) ? users : [])
     } catch {
       setExternalUsers([])
     } finally {
@@ -48,6 +52,8 @@ export default function ExternalTab() {
   }, [activeWorkspaceId])
 
   useEffect(() => {
+    // Bust the in-memory cache on every mount so we always show fresh guest data.
+    directoriesAPI.invalidateCache('external');
     fetchExternal(search, status)
   }, [activeWorkspaceId, status]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -158,21 +164,23 @@ export default function ExternalTab() {
               const name = eu.name || eu.displayName || eu.email || 'Unknown'
               const avatar = eu.avatar || eu.profilePicture
               const userId = eu._id || eu.userId
-              const isActive = eu.status === 'active' || eu.isActive
+              const isActive = eu.status === 'active'
+              const inviterName = eu.invitedBy?.name || (typeof eu.invitedBy === 'string' ? eu.invitedBy : null)
               const hue = [...name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360
               const avatarGradient = `linear-gradient(135deg, hsl(${hue},60%,45%), hsl(${(hue + 40) % 360},70%,35%))`
+              const profileUser = { ...eu, workspaceRole: eu.workspaceRole || eu.role || 'guest', role: 'guest' }
 
               return (
                 <div
                   key={userId}
-                  onClick={() => useProfileStore.getState().openProfile(eu)}
+                  onClick={() => useProfileStore.getState().openProfile(profileUser)}
                   className="dir-ext-row"
                   style={{ animationDelay: `${Math.min(index * 25, 250)}ms` }}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
-                      useProfileStore.getState().openProfile(eu)
+                      useProfileStore.getState().openProfile(profileUser)
                     }
                   }}
                 >
@@ -195,20 +203,28 @@ export default function ExternalTab() {
 
                   {/* Info */}
                   <div className="dir-ext-info">
-                    <h6 className="dir-ext-name">{name}</h6>
+                    <h6 className="dir-ext-name">
+                      {name}
+                      {eu.ownWorkspaceName && (
+                        <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>
+                          ({eu.ownWorkspaceName})
+                        </span>
+                      )}
+                    </h6>
                     <div className="dir-ext-meta">
                       {eu.email && (
                         <span className="dir-ext-email" title={eu.email}>{eu.email}</span>
                       )}
-                      {eu.invitedBy && (
+                      {inviterName && (
                         <span className="dir-ext-inviter">
-                          · Invited by {eu.invitedBy}
+                          · Invited by {inviterName}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Status badge */}
+                  {/* Role + status badges */}
+                  <span className="dir-ext-status-badge guest">Guest</span>
                   <span className={`dir-ext-status-badge ${isActive ? 'active' : 'pending'}`}>
                     {isActive ? 'Active' : 'Pending'}
                   </span>

@@ -69,6 +69,10 @@ export function getDirectoriesPath(workspaceId) {
   return `${workspaceBasePath(workspaceId)}/directories`
 }
 
+export function getDirectoriesTabPath(workspaceId, tab) {
+  return `${workspaceBasePath(workspaceId)}/directories?tab=${tab}`
+}
+
 export function getThreadPath(workspaceId, channelId, threadId, messageId = null) {
   const cId = safeString(channelId);
   const tId = safeString(threadId);

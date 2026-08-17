@@ -65,6 +65,7 @@ import CanvasEditorScreen from "../screens/Canvas/CanvasEditorScreen";
 import WorkspaceSettingsScreen from "../screens/workspace/WorkspaceSettingsScreen";
 import StarredMessagesScreen from "../screens/StarredMessagesScreen";
 import InviteProcessingScreen from "../screens/InviteProcessingScreen";
+import ExternalConnectionsScreen from "../screens/ExternalConnectionsScreen";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import useResponsive from '../hooks/useResponsive';
 
@@ -440,6 +441,11 @@ export default function AppNavigation() {
           <Stack.Screen
             name="WorkspaceSettings"
             component={WorkspaceSettingsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="ExternalConnections"
+            component={ExternalConnectionsScreen}
             options={{ headerShown: false }}
           />
           <Stack.Screen name="InviteProcessing" component={InviteProcessingScreen} options={{ headerShown: false }} />

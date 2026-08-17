@@ -5,6 +5,7 @@ import ChannelMember from '../channels/ChannelMember.model.js';
 import UserGroup from './UserGroup.model.js';
 import WorkspaceInvite from '../workspaces/WorkspaceInvite.model.js';
 import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
+import mongoose from 'mongoose';
 
 class DirectoriesRepository {
   /**
@@ -156,6 +157,23 @@ class DirectoriesRepository {
       // Non-fatal — continue without pending invites
     }
 
+    // Treat accepted guest invites as guests even if membership.role is member
+    try {
+      const { userIds, emails } = await WorkspaceInvite.getAcceptedGuestIdentities(workspaceId);
+      if (userIds.size || emails.size) {
+        for (const u of users) {
+          if (u.workspaceRole === 'guest' || u.workspaceRole === 'owner' || u.workspaceRole === 'admin') continue;
+          const id = u._id?.toString();
+          const email = (u.email || '').toLowerCase();
+          if ((id && userIds.has(id)) || (email && emails.has(email))) {
+            u.workspaceRole = 'guest';
+          }
+        }
+      }
+    } catch {
+      // Non-fatal
+    }
+
     return { users, total: users.length, page, limit };
   }
 
@@ -247,68 +265,168 @@ class DirectoriesRepository {
 
   /**
    * Get external/guest users in the workspace.
+   *
+   * A user is a guest if any of:
+   *   - WorkspaceMembership.role === 'guest'
+   *   - they accepted an invite with inviteType 'guest' or role 'guest'
+   *   - they have a pending invite with inviteType 'guest' or role 'guest'
+   *
+   * Uses find()+populate (not aggregate) so Mongoose casts workspaceId/userId.
    */
-  async getExternalUsers(workspaceId, { search, status } = {}) {
-    const filter = { workspaceId, role: 'guest' };
+  async getExternalUsers(workspaceId, { search, status, page = 1, limit = 50 } = {}) {
+    const skip = (page - 1) * limit;
+    const searchRegex = search
+      ? new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+      : null;
 
+    const { userIds: acceptedGuestIds, emails: acceptedGuestEmails } =
+      await WorkspaceInvite.getAcceptedGuestIdentities(workspaceId);
+
+    if (acceptedGuestEmails.size) {
+      const extraUsers = await ChatUser.find({
+        email: { $in: [...acceptedGuestEmails] },
+      }).select('_id').lean();
+      for (const u of extraUsers) acceptedGuestIds.add(String(u._id));
+    }
+
+    const membershipOr = [{ role: 'guest' }];
+    if (acceptedGuestIds.size) {
+      const guestObjectIds = [...acceptedGuestIds]
+        .filter((id) => mongoose.Types.ObjectId.isValid(id))
+        .map((id) => new mongoose.Types.ObjectId(id));
+      if (guestObjectIds.length) {
+        membershipOr.push({
+          userId: { $in: guestObjectIds },
+          role: { $nin: ['owner', 'admin'] },
+        });
+      }
+    }
+
+    const membershipFilter = { workspaceId, $or: membershipOr };
     if (status === 'active') {
-      filter.isActive = true;
+      membershipFilter.isActive = true;
     } else if (status === 'pending') {
-      filter.isActive = false;
-    } else {
-      // Show all (both active and inactive guests)
+      membershipFilter.isActive = false;
     }
 
-    const pipeline = [
-      { $match: filter },
-      {
-        $lookup: {
-          from: 'chatusers',
-          localField: 'userId',
-          foreignField: '_id',
-          as: 'user',
-        },
-      },
-      { $unwind: '$user' },
-    ];
+    const memberships = await WorkspaceMembership.find(membershipFilter)
+      .populate('userId', 'name email avatar')
+      .populate('invitedBy', 'name avatar')
+      .lean();
 
-    if (search) {
-      const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      pipeline.push({ $match: { $or: [{ 'user.name': regex }, { 'user.email': regex }] } });
+    const activeGuests = [];
+    for (const m of memberships) {
+      const user = m.userId;
+      if (!user || typeof user !== 'object' || (!user.email && !user.name)) continue;
+      if (searchRegex) {
+        const name = user.name || '';
+        const email = user.email || '';
+        if (!searchRegex.test(name) && !searchRegex.test(email)) continue;
+      }
+      activeGuests.push({
+        _id: user._id,
+        membershipId: m._id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+        role: 'guest',
+        workspaceRole: 'guest',
+        status: m.isActive ? 'active' : 'pending',
+        invitedBy: m.invitedBy
+          ? { name: m.invitedBy.name, avatar: m.invitedBy.avatar }
+          : null,
+        joinedAt: m.joinedAt,
+        isPendingInvite: false,
+      });
     }
 
-    // Lookup the inviter
-    pipeline.push(
-      {
-        $lookup: {
-          from: 'chatusers',
-          localField: 'invitedBy',
-          foreignField: '_id',
-          as: 'inviter',
-        },
-      },
-      { $unwind: { path: '$inviter', preserveNullAndEmptyArrays: true } },
-    );
+    let allGuests = [...activeGuests];
 
-    pipeline.push({
-      $project: {
-        _id: '$user._id',
-        membershipId: '$_id',
-        name: '$user.name',
-        email: '$user.email',
-        avatar: '$user.avatar',
-        status: { $cond: [{ $eq: ['$isActive', true] }, 'active', 'pending'] },
-        invitedBy: {
-          name: { $ifNull: ['$inviter.name', null] },
-          avatar: { $ifNull: ['$inviter.avatar', null] },
-        },
-        joinedAt: '$joinedAt',
-      },
+    // Include pending guest invites if not specifically filtering for active
+    if (status !== 'active') {
+      const inviteFilter = {
+        workspaceId,
+        status: 'pending',
+        expiresAt: { $gt: new Date() },
+        $or: [{ inviteType: 'guest' }, { role: 'guest' }],
+      };
+
+      if (searchRegex) {
+        inviteFilter.email = searchRegex;
+      }
+
+      const pendingInvites = await WorkspaceInvite.find(inviteFilter)
+        .populate('invitedBy', 'name avatar')
+        .sort({ createdAt: -1 })
+        .lean();
+
+      const existingEmails = new Set(activeGuests.map((g) => (g.email || '').toLowerCase()));
+
+      for (const inv of pendingInvites) {
+        const email = (inv.email || '').toLowerCase();
+        if (!email || existingEmails.has(email)) continue;
+        allGuests.push({
+          _id: inv._id,
+          membershipId: null,
+          name: email.split('@')[0],
+          email: inv.email,
+          avatar: null,
+          role: 'guest',
+          workspaceRole: 'guest',
+          status: 'pending',
+          invitedBy: inv.invitedBy ? { name: inv.invitedBy.name, avatar: inv.invitedBy.avatar } : null,
+          joinedAt: inv.createdAt,
+          isPendingInvite: true,
+          inviteId: inv._id,
+          expiresAt: inv.expiresAt,
+        });
+      }
+    }
+
+    // Sort by joinedAt descending
+    allGuests.sort((a, b) => {
+      const dateA = a.joinedAt ? new Date(a.joinedAt).getTime() : 0;
+      const dateB = b.joinedAt ? new Date(b.joinedAt).getTime() : 0;
+      return dateB - dateA;
     });
 
-    pipeline.push({ $sort: { joinedAt: -1 } });
+    const total = allGuests.length;
+    const paginatedGuests = allGuests.slice(skip, skip + limit);
 
-    return WorkspaceMembership.aggregate(pipeline);
+    // Fetch "own workspace" for paginated active guests
+    const guestUserIds = paginatedGuests
+      .filter((g) => g._id && !g.isPendingInvite)
+      .map((g) => g._id);
+
+    if (guestUserIds.length > 0) {
+      const ownWorkspaces = await WorkspaceMembership.find({
+        userId: { $in: guestUserIds },
+        role: 'owner',
+      })
+        .populate('workspaceId', 'name')
+        .lean();
+
+      const ownWorkspaceMap = {};
+      for (const ow of ownWorkspaces) {
+        if (ow.workspaceId && ow.workspaceId.name) {
+          ownWorkspaceMap[ow.userId.toString()] = ow.workspaceId.name;
+        }
+      }
+
+      for (const g of paginatedGuests) {
+        if (g._id && ownWorkspaceMap[g._id.toString()]) {
+          g.ownWorkspaceName = ownWorkspaceMap[g._id.toString()];
+        }
+      }
+    }
+
+    return {
+      users: paginatedGuests,
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit)
+    };
   }
 
   /**

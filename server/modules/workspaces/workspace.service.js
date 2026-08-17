@@ -350,7 +350,22 @@ class WorkspaceService {
    * Get members of a workspace.
    */
   async getWorkspaceMembers(workspaceId, options = {}) {
-    return workspaceRepository.getWorkspaceMembers(workspaceId, options);
+    const members = await workspaceRepository.getWorkspaceMembers(workspaceId, options);
+    const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
+    const { userIds, emails } = await WorkspaceInvite.getAcceptedGuestIdentities(workspaceId);
+    if (!userIds.size && !emails.size) return members;
+
+    return members.map((m) => {
+      if (m.role === WORKSPACE_ROLES.OWNER || m.role === WORKSPACE_ROLES.ADMIN || m.role === WORKSPACE_ROLES.GUEST) {
+        return m;
+      }
+      const uid = (m.userId?._id || m.userId)?.toString();
+      const email = (m.userId?.email || '').toLowerCase();
+      if ((uid && userIds.has(uid)) || (email && emails.has(email))) {
+        return { ...m, role: WORKSPACE_ROLES.GUEST };
+      }
+      return m;
+    });
   }
 
   /**
@@ -399,12 +414,12 @@ class WorkspaceService {
       throw new ForbiddenError('Cannot remove the workspace owner.');
     }
 
-    // Only owner/admin can remove members
-    if (![WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN].includes(requesterRole)) {
-      throw new ForbiddenError('Only owner or admin can remove members.');
+    const { hasPermission } = await import('../../middleware/permissions.js');
+    if (!hasPermission(requesterRole, 'member:remove')) {
+      throw new ForbiddenError('You do not have permission to remove members.');
     }
 
-    // Admin can't remove other admins
+    // Admin can't remove other admins (owner check logic)
     if (requesterRole === WORKSPACE_ROLES.ADMIN && targetRole === WORKSPACE_ROLES.ADMIN) {
       throw new ForbiddenError('Admins cannot remove other admins.');
     }
@@ -529,7 +544,25 @@ class WorkspaceService {
     const { SOCKET_EVENTS } = await import('../../config/constants.js');
     const { emitToWorkspace } = await import('../../sockets/socketManager.js');
 
-    const { channels = [], inviteType = 'member', domainRestriction } = options;
+    const { channels = [], inviteType: rawInviteType = 'member', domainRestriction } = options;
+
+    const validInviteTypes = ['member', 'guest'];
+    let inviteType = rawInviteType;
+    // People-directory invites often send role=guest without inviteType.
+    if (role === WORKSPACE_ROLES.GUEST) {
+      inviteType = 'guest';
+    }
+    if (!validInviteTypes.includes(inviteType)) {
+      throw new BadRequestError('Invalid invite type.');
+    }
+
+    const validRoles = Object.values(WORKSPACE_ROLES);
+    let finalRole = role;
+    if (inviteType === 'guest') {
+      finalRole = WORKSPACE_ROLES.GUEST;
+    } else if (!validRoles.includes(finalRole)) {
+      throw new BadRequestError('Invalid role specified.');
+    }
 
     // 1. Check workspace exists.
     const workspace = await this.getWorkspace(workspaceId);
@@ -541,9 +574,13 @@ class WorkspaceService {
       throw new ForbiddenError('You do not have permission to invite members to this workspace.');
     }
 
-    // Guest invites validation on input parameters (done early)
+    // Guest channel assignment is preferred but not required for listing/invites
+    // from the People directory (role=guest without a channel picker).
     if (inviteType === 'guest' && (!channels || channels.length === 0)) {
-      throw new BadRequestError('Guest invites must specify at least one channel.');
+      logger.info('[INVITE] Guest invite with no channels — guest will have no channel access until assigned', {
+        workspaceId: String(workspaceId),
+        email,
+      });
     }
 
     // 3. Check if user is already an ACTIVE workspace member.
@@ -649,7 +686,7 @@ class WorkspaceService {
     const invite = await WorkspaceInvite.create({
       workspaceId,
       email: email.toLowerCase(),
-      role,
+      role: finalRole,
       inviteType,
       invitedBy,
       channels: filteredChannels,
@@ -728,9 +765,21 @@ class WorkspaceService {
       }
     }
 
+    const isGuestInvite = invite.inviteType === 'guest' || invite.role === 'guest';
+    const roleToAssign = isGuestInvite ? WORKSPACE_ROLES.GUEST : invite.role;
+
     // Check if already a member
     const isMember = await workspaceRepository.isMember(userId, workspace._id);
     if (isMember) {
+      // FlowTask sync can create a member membership before the guest invite is
+      // accepted. Promote only plain members — never downgrade owner/admin.
+      const existingRole = isMember.role || isMember;
+      if (isGuestInvite && existingRole === WORKSPACE_ROLES.MEMBER) {
+        await workspaceRepository.updateMemberRole(userId, workspace._id, WORKSPACE_ROLES.GUEST);
+        if (invite.channels && invite.channels.length > 0) {
+          await this._joinSpecificChannels(userId, invite.channels, workspace._id);
+        }
+      }
       await WorkspaceInvite.markAccepted(token, userId);
       return {
         workspace,
@@ -741,8 +790,8 @@ class WorkspaceService {
       };
     }
 
-    // Add as member with the invite's role
-    const membership = await workspaceRepository.addMember(userId, workspace._id, invite.role);
+    // Add as member with the invite's role (guest invites always join as guest)
+    const membership = await workspaceRepository.addMember(userId, workspace._id, roleToAssign);
     await WorkspaceInvite.markAccepted(token, userId);
 
     // Auto-join channels based on invite type

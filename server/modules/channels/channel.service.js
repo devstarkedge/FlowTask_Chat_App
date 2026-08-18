@@ -4,6 +4,7 @@ import ChannelMember from "./ChannelMember.model.js";
 import PendingChannelParticipant from "./PendingChannelParticipant.model.js";
 import ChannelPin from "./ChannelPin.model.js";
 import channelRepository from "./channel.repository.js";
+import favoritesService from "../favorites/favorites.service.js";
 import userRepository from "../users/user.repository.js";
 import flowtaskService from "../flowtask/flowtask.service.js";
 import workspaceRepository from "../workspaces/workspace.repository.js";
@@ -2272,6 +2273,28 @@ class ChannelService {
     if (!channel) throw new NotFoundError('Channel not found');
 
     const result = await ChannelPin.toggleStar(userId, channelId, workspaceId);
+
+    // Keep the favorites system (UserFavorite) in sync so the web app's
+    // favorites-driven star UI reflects mobile changes in real time.
+    try {
+      const targetType =
+        channel.visibility === 'private' || channel.type === 'private'
+          ? 'private_channel'
+          : channel.type === 'project'
+            ? 'project'
+            : channel.type === 'dm'
+              ? 'dm'
+              : 'channel';
+      await favoritesService.syncChannelFavorite(
+        userId,
+        workspaceId,
+        channelId,
+        targetType,
+        result.isStarred,
+      );
+    } catch (err) {
+      logger.warn('[Channel] Failed to sync channel favorite:', err?.message || err);
+    }
 
     emitToUser(userId.toString(), SOCKET_EVENTS.CHANNEL_UPDATED, {
       channelId: channelId.toString(),

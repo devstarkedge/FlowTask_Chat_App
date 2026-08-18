@@ -90,11 +90,10 @@ userFavoriteSchema.statics.addFavorite = async function (data) {
 
 /**
  * Remove a favorite by its _id.
- * Returns true if a document was deleted, false if not found.
+ * Returns the deleted document (or null if not found).
  */
 userFavoriteSchema.statics.removeFavoriteById = async function (favoriteId) {
-  const result = await this.findByIdAndDelete(favoriteId);
-  return !!result;
+  return this.findByIdAndDelete(favoriteId);
 };
 
 /**

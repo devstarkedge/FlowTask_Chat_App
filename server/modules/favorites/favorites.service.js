@@ -1,4 +1,5 @@
 import favoritesRepository from './favorites.repository.js';
+import ChannelPin from '../channels/ChannelPin.model.js';
 import {
   emitToUser,
   emitToWorkspace,
@@ -51,6 +52,10 @@ class FavoritesService {
       targetId,
     );
 
+    // Keep the legacy ChannelPin star flag in sync so the mobile app (which
+    // reads isStarred from the channel list) reflects favorites-driven stars.
+    await this._syncChannelStarFromFavorite(userId, workspaceId, targetType, targetId, true);
+
     // Notify the user so other tabs/devices update
     emitToUser(
       userId.toString(),
@@ -80,6 +85,15 @@ class FavoritesService {
     if (!favorite) {
       throw new NotFoundError('Favorite not found');
     }
+
+    // Keep the legacy ChannelPin star flag in sync for channel-type favorites.
+    await this._syncChannelStarFromFavorite(
+      userId,
+      workspaceId,
+      favorite.targetType,
+      favorite.targetId,
+      false,
+    );
 
     // Notify the user so other tabs/devices update
     emitToUser(
@@ -117,6 +131,9 @@ class FavoritesService {
       throw new NotFoundError('Favorite not found');
     }
 
+    // Keep the legacy ChannelPin star flag in sync for channel-type favorites.
+    await this._syncChannelStarFromFavorite(userId, workspaceId, targetType, targetId, false);
+
     // Notify the user so other tabs/devices update
     emitToUser(
       userId.toString(),
@@ -153,6 +170,15 @@ class FavoritesService {
       targetId,
     );
 
+    // Keep the legacy ChannelPin star flag in sync for channel-type favorites.
+    await this._syncChannelStarFromFavorite(
+      userId,
+      workspaceId,
+      targetType,
+      targetId,
+      result.favorited,
+    );
+
     // Notify the user so other tabs/devices update
     emitToUser(
       userId.toString(),
@@ -187,6 +213,80 @@ class FavoritesService {
       targetId,
     );
     return { isFavorited: !!isFav };
+  }
+
+  /**
+   * Sync a channel's starred state into the favorites collection (idempotent).
+   *
+   * Called by the legacy `/channels/:id/star` endpoint so that mobile (which
+   * writes ChannelPin) also updates UserFavorite and emits the favorite socket
+   * events that the web app listens to — keeping both platforms in sync.
+   */
+  async syncChannelFavorite(userId, workspaceId, channelId, targetType, isStarred) {
+    const channelIdStr = channelId?.toString ? channelId.toString() : channelId;
+
+    if (isStarred) {
+      const favorite = await favoritesRepository.addFavorite(
+        userId,
+        workspaceId,
+        targetType,
+        channelId,
+      );
+      emitToUser(
+        userId.toString(),
+        FAVORITE_ADDED_EVENT,
+        { favorite },
+        workspaceId?.toString(),
+      );
+      return { isStarred: true, favorite };
+    }
+
+    const removed = await favoritesRepository.removeFavoriteByTarget(
+      userId,
+      workspaceId,
+      targetType,
+      channelId,
+    );
+    if (removed) {
+      emitToUser(
+        userId.toString(),
+        FAVORITE_REMOVED_EVENT,
+        { targetType, targetId: channelIdStr },
+        workspaceId?.toString(),
+      );
+    }
+    return { isStarred: false, removed };
+  }
+
+  /**
+   * Channel-type favorite target types (everything backed by a Channel doc).
+   */
+  _isChannelFavoriteType(targetType) {
+    return ['channel', 'private_channel', 'project', 'dm'].includes(targetType);
+  }
+
+  /**
+   * Keep the legacy ChannelPin star flag aligned with the favorites system and
+   * emit `channel:updated` so clients that derive star state from isStarred
+   * (mobile sidebar/channel list) update in real time.
+   */
+  async _syncChannelStarFromFavorite(userId, workspaceId, targetType, targetId, isStarred) {
+    if (!this._isChannelFavoriteType(targetType) || !targetId) return;
+
+    try {
+      await ChannelPin.setStarred(userId, targetId, workspaceId, isStarred);
+      emitToUser(
+        userId.toString(),
+        SOCKET_EVENTS.CHANNEL_UPDATED,
+        {
+          channelId: targetId.toString ? targetId.toString() : targetId,
+          updates: { isStarred: !!isStarred },
+        },
+        workspaceId?.toString(),
+      );
+    } catch (err) {
+      logger.warn('[Favorites] Failed to sync ChannelPin star state:', err?.message || err);
+    }
   }
 }
 

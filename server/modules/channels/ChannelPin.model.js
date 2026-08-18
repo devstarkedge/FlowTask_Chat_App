@@ -127,6 +127,38 @@ channelPinSchema.statics.toggleStar = async function (userId, channelId, workspa
   return { isPinned: pin.isPinned, isStarred: pin.isStarred };
 };
 
+/**
+ * Set (not toggle) the starred state for a channel — absolute value.
+ * Used when syncing from the favorites system (UserFavorite) so both
+ * representations of "starred" stay in sync across platforms.
+ */
+channelPinSchema.statics.setStarred = async function (userId, channelId, workspaceId, isStarred) {
+  const shouldStar = !!isStarred;
+  const existing = await this.findOne({ userId, channelId, workspaceId });
+
+  if (existing) {
+    existing.isStarred = shouldStar;
+    if (!existing.isPinned && !existing.isStarred) {
+      await existing.deleteOne();
+      return { isPinned: false, isStarred: false, deleted: true };
+    }
+    await existing.save();
+    return { isPinned: existing.isPinned, isStarred: existing.isStarred };
+  }
+
+  if (!shouldStar) {
+    return { isPinned: false, isStarred: false, deleted: true };
+  }
+
+  const pin = await this.create({
+    userId,
+    channelId,
+    workspaceId,
+    isStarred: true,
+  });
+  return { isPinned: pin.isPinned, isStarred: pin.isStarred };
+};
+
 const ChannelPin = model('ChannelPin', channelPinSchema);
 
 export default ChannelPin;

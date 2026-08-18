@@ -23,7 +23,8 @@ class FavoritesRepository {
   }
 
   /**
-   * Remove favorite by _id.
+   * Remove favorite by _id. Returns the deleted document (or null if not found)
+   * so callers can sync dependent state (e.g. ChannelPin star flags).
    */
   async removeFavoriteById(favoriteId) {
     return UserFavorite.removeFavoriteById(favoriteId);

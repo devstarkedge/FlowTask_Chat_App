@@ -5,6 +5,15 @@ import { channelAPI, usersAPI, readReceiptAPI, categoryAPI, resolveWorkspaceId }
 import { getSocket } from '../services/socket';
 import logger from '../utils/logger';
 import Toast from 'react-native-toast-message';
+
+/** Normalise any id-like value (ObjectId, populated object, string) to a plain string. */
+const toIdString = (id) => {
+  if (id == null) return id;
+  if (typeof id === 'string') return id;
+  if (typeof id.toString === 'function') return id.toString();
+  return String(id);
+};
+
 // Lazy getter to avoid circular deps (channelStore <- chatStore <- authStore)
 const getAuthUser = () => {
   try {
@@ -184,19 +193,13 @@ export const useChannelStore = create(
 
       starChannel: async (channelId) => {
         try {
-          await channelAPI.star(channelId);
-          set((state) => {
-            const isStarred = state.starredIds.includes(channelId);
-            return {
-              starredIds: isStarred
-                ? state.starredIds.filter(id => id !== channelId)
-                : [...state.starredIds, channelId],
-            };
-          });
-          const queryClient = require('../queries/queryClient').queryClient;
-          const queryKeys = require('../queries/queryKeys').queryKeys;
-          const wid = resolveWorkspaceId();
-          if (wid) queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
+          const { data } = await channelAPI.star(channelId);
+          // Server returns the authoritative new state ({ isPinned, isStarred }).
+          const isStarred =
+            data?.data?.isStarred !== undefined
+              ? data.data.isStarred
+              : !get().starredIds.map(toIdString).includes(toIdString(channelId));
+          get().updateChannel(channelId, { isStarred });
         } catch (error) {
           Toast.show({ type: 'error', text1: 'Failed to update star' });
         }
@@ -204,19 +207,12 @@ export const useChannelStore = create(
 
       pinChannel: async (channelId) => {
         try {
-          await channelAPI.pin(channelId);
-          set((state) => {
-            const isPinned = state.pinnedIds.includes(channelId);
-            return {
-              pinnedIds: isPinned
-                ? state.pinnedIds.filter(id => id !== channelId)
-                : [...state.pinnedIds, channelId],
-            };
-          });
-          const queryClient = require('../queries/queryClient').queryClient;
-          const queryKeys = require('../queries/queryKeys').queryKeys;
-          const wid = resolveWorkspaceId();
-          if (wid) queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
+          const { data } = await channelAPI.pin(channelId);
+          const isPinned =
+            data?.data?.isPinned !== undefined
+              ? data.data.isPinned
+              : !get().pinnedIds.map(toIdString).includes(toIdString(channelId));
+          get().updateChannel(channelId, { isPinned });
         } catch (error) {
           Toast.show({ type: 'error', text1: 'Failed to update pin' });
         }
@@ -253,11 +249,67 @@ export const useChannelStore = create(
         if (wid) queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
       },
 
-      updateChannel: (channelId, updates) => {
+      updateChannel: (channelId, updates = {}) => {
+        const cidStr = toIdString(channelId);
         const queryClient = require('../queries/queryClient').queryClient;
         const queryKeys = require('../queries/queryKeys').queryKeys;
         const wid = resolveWorkspaceId();
-        if (wid) queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
+
+        // Channels live in the TanStack Query cache — merge updates in so every
+        // consumer (sidebar, channel details, …) reflects the server state.
+        if (wid) {
+          queryClient.setQueryData(queryKeys.channels(wid), (oldChannels) => {
+            if (!Array.isArray(oldChannels)) return oldChannels;
+            return oldChannels.map((c) =>
+              toIdString(c._id) === cidStr ? { ...c, ...updates } : c,
+            );
+          });
+        }
+
+        // Sync the per-user star/pin lists from server-driven updates
+        // (socket `channel:updated`, favorites events, or the local toggle).
+        if (updates.isStarred === undefined && updates.isPinned === undefined) return;
+
+        set((state) => {
+          const patch = {};
+          if (updates.isStarred !== undefined) {
+            const stars = new Set(state.starredIds.map(toIdString));
+            if (updates.isStarred) stars.add(cidStr);
+            else stars.delete(cidStr);
+            patch.starredIds = [...stars];
+          }
+          if (updates.isPinned !== undefined) {
+            const pins = new Set(state.pinnedIds.map(toIdString));
+            if (updates.isPinned) pins.add(cidStr);
+            else pins.delete(cidStr);
+            patch.pinnedIds = [...pins];
+          }
+          return patch;
+        });
+      },
+
+      updateStarredChannel: (channelId, isStarred) => {
+        get().updateChannel(channelId, { isStarred: !!isStarred });
+      },
+
+      updatePinnedChannel: (channelId, isPinned) => {
+        get().updateChannel(channelId, { isPinned: !!isPinned });
+      },
+
+      // Reconcile the persisted star/pin lists with the server's channel list
+      // (the server populates isStarred/isPinned per user). Runs after every
+      // channels fetch so stars made on other devices/platforms show up after
+      // refreshing or reopening the app.
+      syncStarredFromChannels: (channels = []) => {
+        const stars = new Set();
+        const pins = new Set();
+        for (const c of channels) {
+          if (!c || !c._id) continue;
+          const cid = toIdString(c._id);
+          if (c.isStarred || c.starred) stars.add(cid);
+          if (c.isPinned || c.pinned) pins.add(cid);
+        }
+        set({ starredIds: [...stars], pinnedIds: [...pins] });
       },
 
       updateUnread: (channelId, count) => {

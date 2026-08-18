@@ -37,6 +37,9 @@ const useLaterStore = {
 const useScheduledStore = {
   get getState() { return require('../stores/scheduledStore').useScheduledStore.getState; }
 };
+const useStarredStore = {
+  get getState() { return require('../stores/useStarredStore').useStarredStore.getState; }
+};
 const queryClient = {
   get client() { return require('../queries/queryClient').queryClient; }
 };
@@ -287,15 +290,47 @@ export const connectSocket = async () => {
     // but channel._id in the store may be stored differently depending on how it was fetched.
     const cidStr = channelId?.toString ? channelId.toString() : channelId;
     const store = useChannelStore.getState();
-    const exists = store.channels.some((c) => {
-      const cId = c._id?.toString ? c._id.toString() : c._id;
-      return cId === cidStr;
-    });
-    if (exists) {
-      // Use normalised string ID so updateChannel (which also normalises) always finds the channel.
+    try {
+      // Channels live in the TanStack Query cache; updateChannel merges the
+      // update into the cache AND syncs the per-user starredIds/pinnedIds when
+      // isStarred/isPinned arrive (e.g. star toggles from other devices).
       store.updateChannel(cidStr, updates);
-    } else if (updates?.visibility !== undefined) {
-      store.fetchChannels();
+      // Membership-scoped visibility changes may add/remove channels entirely —
+      // invalidate so the list refetches.
+      if (updates?.visibility !== undefined && currentWorkspaceId) {
+        queryClient.client.invalidateQueries({
+          queryKey: queryKeys.keys.channels(currentWorkspaceId),
+        });
+      }
+    } catch (err) {
+      logger.error('[Socket] Failed to handle channel:updated:', err?.message || err);
+    }
+  });
+
+  // Favorites (starred channels/messages) — keeps both useStarredStore and the
+  // channelStore.starredIds list in sync when stars change on other devices.
+  socket.on('favorite:added', ({ favorite }) => {
+    try {
+      useStarredStore.getState().handleFavoriteAdded(favorite);
+      const targetId = favorite?.targetId?._id || favorite?.targetId;
+      const targetType = favorite?.targetType;
+      if (targetId && (targetType === 'channel' || targetType === 'private_channel' || targetType === 'project' || targetType === 'dm')) {
+        useChannelStore.getState().updateStarredChannel(targetId, true);
+      }
+    } catch (err) {
+      logger.error('[Socket] Failed to handle favorite:added:', err?.message || err);
+    }
+  });
+
+  socket.on('favorite:removed', ({ favoriteId, targetType, targetId }) => {
+    try {
+      useStarredStore.getState().handleFavoriteRemoved(favoriteId, targetType, targetId);
+      const targetIdStr = targetId?._id || targetId;
+      if (targetIdStr && (targetType === 'channel' || targetType === 'private_channel' || targetType === 'project' || targetType === 'dm')) {
+        useChannelStore.getState().updateStarredChannel(targetIdStr, false);
+      }
+    } catch (err) {
+      logger.error('[Socket] Failed to handle favorite:removed:', err?.message || err);
     }
   });
 

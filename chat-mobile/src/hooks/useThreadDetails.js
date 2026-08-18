@@ -4,22 +4,30 @@ import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
 import { useLaterStore } from '../stores/laterStore';
 import { getMessageAttachments } from '../utils/mediaUtils';
+import { useThreadReplies, useSendThreadReply, useEditThreadReply, useDeleteThreadReply } from './queries/useThreadReplies';
+import { useMessages, useEditMessage } from './queries/useMessages';
 import Toast from 'react-native-toast-message';
 
 export const useThreadDetails = ({ rootMessageId, channelId, highlightedMessageId }) => {
   const { user } = useAuthStore();
+  
   const {
-    threadRepliesByRoot,
-    fetchThreadReplies,
-    sendThreadReply,
-    isLoadingReplies,
-    threadHasMore,
-  } = useThreadStore();
+    data: threadRepliesData,
+    isLoading: isLoadingReplies,
+    hasNextPage: threadHasMore,
+    fetchNextPage: fetchThreadReplies,
+  } = useThreadReplies(rootMessageId);
+
+  const { mutateAsync: sendThreadReply } = useSendThreadReply();
+  const { mutateAsync: editThreadReply } = useEditThreadReply();
+  const { mutateAsync: deleteThreadReply } = useDeleteThreadReply();
+  const { mutateAsync: editMessage } = useEditMessage();
+
+  const replies = threadRepliesData?.pages?.flatMap(page => page.items) || [];
   const { addReaction, removeReaction } = useChatStore();
   
-  const rootMessageLive = useChatStore((s) =>
-    (s.messagesByChannel[channelId] || []).find(m => m._id === rootMessageId)
-  );
+  const { data: messagesData } = useMessages(channelId);
+  const rootMessageLive = messagesData?.pages?.flatMap(p => p.items)?.find(m => m._id === rootMessageId);
   
   const toggleSaveMessage = useLaterStore((s) => s.toggleSaveMessage);
   const isMessageSaved = useLaterStore((s) => s.isMessageSaved);
@@ -35,12 +43,9 @@ export const useThreadDetails = ({ rootMessageId, channelId, highlightedMessageI
 
   const [replyingTo, setReplyingTo] = useState(null);
 
-  const rawReplies = threadRepliesByRoot[rootMessageId];
-  const replies = rawReplies || [];
-
   useEffect(() => {
-    fetchThreadReplies(rootMessageId);
-  }, [rootMessageId, fetchThreadReplies]);
+    // React query fetches automatically via enabled: !!rootMessageId
+  }, [rootMessageId]);
 
   useEffect(() => {
     if (highlightedMessageId && replies.length > 0) {
@@ -70,14 +75,29 @@ export const useThreadDetails = ({ rootMessageId, channelId, highlightedMessageI
     try {
       if (editingMessage) {
         if (editingMessage._id === rootMessageId) {
-          const { editMessage } = useChatStore.getState();
-          await editMessage(rootMessageId, channelId, content, options?.htmlContent, options?.fileReferences);
+          await editMessage({ messageId: rootMessageId, channelId, content, htmlContent: options?.htmlContent, fileReferences: options?.fileReferences });
         } else {
-          await useThreadStore.getState().editThreadReply(rootMessageId, editingMessage._id, content, options?.htmlContent, options?.fileReferences);
+          await editThreadReply({
+            rootMessageId, 
+            replyId: editingMessage._id, 
+            content, 
+            htmlContent: options?.htmlContent, 
+            fileReferences: options?.fileReferences
+          });
         }
         setEditingMessage(null);
       } else {
-        await sendThreadReply(rootMessageId, channelId, content, options);
+        await sendThreadReply({
+          rootMessageId, 
+          channelId, 
+          content, 
+          htmlContent: options?.htmlContent,
+          fileReferences: options?.fileReferences,
+          mentions: options?.mentions,
+          parentMessageId: options?.parentMessageId,
+          replyTo: options?.replyTo,
+          tempId: `temp-reply-${Date.now()}`
+        });
       }
       setReplyingTo(null);
     } catch (err) {
@@ -131,6 +151,8 @@ export const useThreadDetails = ({ rootMessageId, channelId, highlightedMessageI
     showMessageActions,
     getAttachments,
     handleSendReply,
+    deleteThreadReply,
+    editThreadReply,
     getAuthorId,
     resolveAuthor
   };

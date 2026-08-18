@@ -6,10 +6,8 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
-  Modal,
   ActivityIndicator,
   TextInput,
-  Linking,
   Share,
   Alert,
   Platform,
@@ -17,21 +15,20 @@ import {
 import { fileAPI, messageAPI } from "../services/api";
 import { getSocket } from "../services/socket";
 import { getFileKind, getCleanFileName } from "../utils/mediaUtils";
+import FileSystemAdapter from "../services/FileSystemAdapter";
+import FileClipboardService from "../services/FileClipboardService";
 import { useThemeStore } from "../stores/themeStore";
+import FilePreviewRenderer from "../components/chat/preview";
 import {
   FileText,
   Copy,
-  Video,
   Download,
   Trash2,
   Share2,
   Search,
-  CircleChevronLeft,
-  X,
 } from "lucide-react-native";
 import Toast from "react-native-toast-message";
-import * as Clipboard from "expo-clipboard";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import logger from '../utils/logger';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { HeaderBackButton } from "../components/common";
@@ -61,7 +58,6 @@ function formatDate(value) {
 export default function FilesScreen({ route, navigation }) {
   const { channelId, channelName } = route.params || {};
   const { colors } = useThemeStore();
-  const insets = useSafeAreaInsets();
   const [files, setFiles] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [query, setQuery] = useState("");
@@ -124,12 +120,7 @@ export default function FilesScreen({ route, navigation }) {
     try {
       const url = file.url || messageAPI.getFileProxyUrl(file._id);
       if (!url) return Toast.show({ type: "error", text1: "No URL available" });
-      const kind = getFileKind(file.mimeType, file.fileName || file.originalName, url);
-      if (kind === "image") {
-        setPreview({ type: "image", src: url, file });
-        return;
-      }
-      await FileService.previewFile(file, navigation, setPreview);
+      setPreview({ ...file, url });
     } catch (err) {
       logger.error(err);
       Toast.show({ type: "error", text1: "Failed to open file" });
@@ -142,8 +133,9 @@ export default function FilesScreen({ route, navigation }) {
 
     setDownloadingFiles(prev => ({ ...prev, [fileId]: true }));
     try {
-      const localUri = await FileService.downloadFile(file);
-      await FileService.saveFile(file, localUri);
+      const fileWithUrl = { ...file, url: file.url || messageAPI.getFileProxyUrl(file._id) };
+      const localUri = await FileService.downloadFile(fileWithUrl);
+      await FileService.saveFile(fileWithUrl, localUri);
     } catch (err) {
       logger.error(err);
       Toast.show({ type: "error", text1: "Download failed" });
@@ -154,8 +146,14 @@ export default function FilesScreen({ route, navigation }) {
 
   const handleShare = async (file) => {
     try {
-      const url = file.url || messageAPI.getFileProxyUrl(file._id);
-      await Share.share({ message: `${file.fileName || file.originalName}\n${url}` });
+      const fileWithUrl = { ...file, url: file.url || messageAPI.getFileProxyUrl(file._id) };
+      const localUri = await FileService.downloadFile(fileWithUrl);
+      const sharingAvailable = await FileSystemAdapter.isSharingAvailable();
+      if (sharingAvailable) {
+        await FileSystemAdapter.share(localUri, file.mimeType);
+      } else {
+        await Share.share({ message: `${file.fileName || file.originalName}\n${fileWithUrl.url}` });
+      }
     } catch (err) {
       logger.error(err);
       Toast.show({ type: "error", text1: "Share failed" });
@@ -178,10 +176,9 @@ export default function FilesScreen({ route, navigation }) {
       }
     } else {
       try {
-        const url = file.url || messageAPI.getFileProxyUrl(file._id);
-        if (!url) return Toast.show({ type: "error", text1: "No URL available" });
-        await Clipboard.setStringAsync(url);
-        Toast.show({ type: "success", text1: "Link copied" });
+        const fileWithUrl = { ...file, url: file.url || messageAPI.getFileProxyUrl(file._id) };
+        await FileClipboardService.copyFile(fileWithUrl);
+        Toast.show({ type: "success", text1: "File copied to clipboard" });
       } catch (err) {
         logger.error(err);
         Toast.show({ type: "error", text1: "Failed to copy link" });
@@ -227,6 +224,9 @@ export default function FilesScreen({ route, navigation }) {
     )
       return false;
     if (filter === "all") return true;
+    if (filter === "file") {
+      return !["image", "video", "audio"].includes(kind);
+    }
     return kind === filter;
   });
 
@@ -388,58 +388,13 @@ export default function FilesScreen({ route, navigation }) {
         />
       )}
 
-      {/* Image preview modal */}
-      <Modal
+      {/* Unified preview pipeline (images, video, audio, documents, fallback) */}
+      <FilePreviewRenderer
         visible={!!preview}
-        animationType="slide"
-        onRequestClose={() => setPreview(null)}
-      >
-        <View style={{ flex: 1, backgroundColor: "#000", paddingTop: insets.top, paddingBottom: insets.bottom }}>
-          {/* Header Row */}
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            height: verticalScale(50),
-            paddingHorizontal: scale(16),
-            borderBottomWidth: 1,
-            borderBottomColor: '#222',
-            backgroundColor: '#111',
-          }}>
-            <TouchableOpacity onPress={() => setPreview(null)} style={{ padding: moderateScale(8), minWidth: scale(44), alignItems: 'flex-start' }}>
-              <X size={22} color="#fff" />
-            </TouchableOpacity>
-            
-            <Text style={{ color: "#fff", fontSize: moderateScale(15), fontWeight: '700', flex: 1, textAlign: 'center', marginHorizontal: scale(12) }} numberOfLines={1}>
-              {preview?.file ? getCleanFileName(preview.file.fileName || preview.file.originalName) : 'Preview'}
-            </Text>
-            
-            <View style={{ flexDirection: 'row', alignItems: 'center', minWidth: scale(44), justifyContent: 'flex-end' }}>
-              <TouchableOpacity
-                onPress={() => preview?.file && handleDownload(preview.file)}
-                style={{ padding: moderateScale(8) }}
-                disabled={preview?.file && downloadingFiles[preview.file._id || preview.file.id]}
-              >
-                {preview?.file && downloadingFiles[preview.file._id || preview.file.id] ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Download size={22} color="#fff" />
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Image content */}
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-            {preview?.type === "image" && (
-              <Image
-                source={{ uri: preview.src }}
-                style={{ width: '100%', height: '100%', resizeMode: "contain" }}
-              />
-            )}
-          </View>
-        </View>
-      </Modal>
+        file={preview}
+        onClose={() => setPreview(null)}
+        colors={colors}
+      />
     </SafeAreaView>
   );
 }

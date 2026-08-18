@@ -4,7 +4,7 @@ import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { workspaceAPI } from "../services/api";
 import { motion } from "framer-motion";
-import { UserPlus, Check, Clock, AlertCircle, Building2, Shield, User } from 'lucide-react';
+import { UserPlus, Check, Clock, AlertCircle, Building2, Shield, User, X } from 'lucide-react';
 import Loader from '../components/shared/Loader';
 import toast from "react-hot-toast";
 import "./custom-css/acceptInvitePage.css";
@@ -31,8 +31,10 @@ export default function AcceptInvitePage() {
   const [inviteInfo, setInviteInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
+  const [declining, setDeclining] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [declined, setDeclined] = useState(false);
   const [expiresIn, setExpiresIn] = useState("");
   const [isMobile, setIsMobile] = useState(false);
   const autoAcceptTriggered = useRef(false);
@@ -83,6 +85,23 @@ export default function AcceptInvitePage() {
       setError(message);
     } finally {
       setAccepting(false);
+    }
+  };
+
+  // ─── Decline invite logic ───
+  const declineInvite = async () => {
+    setDeclining(true);
+    try {
+      await workspaceAPI.declineEmailInvite(token);
+      setDeclined(true);
+      toast.success("Invite declined.");
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+        "Failed to decline invite. Please try again."
+      );
+    } finally {
+      setDeclining(false);
     }
   };
 
@@ -258,6 +277,32 @@ export default function AcceptInvitePage() {
     );
   }
 
+  // ─── Declined state ───
+  if (declined) {
+    return (
+      <div className="aip-container">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="aip-success-card"
+          style={{ borderTop: "4px solid var(--danger-color, #ef4444)" }}
+        >
+          <div className="aip-success-icon" style={{ background: "var(--danger-color, #ef4444)" }}>
+            <X size={48} />
+          </div>
+          <h2>Invite Declined</h2>
+          <p>
+            You have declined the invitation to join{" "}
+            <strong>{inviteInfo?.workspaceName}</strong>.
+          </p>
+          <Link to="/select-workspace" className="aip-btn aip-btn-secondary" style={{ marginTop: 20 }}>
+            Go to My Workspaces
+          </Link>
+        </motion.div>
+      </div>
+    );
+  }
+
   // ─── Main invite display (unauthenticated users or manual accept) ───
   return (
     <div className="aip-container">
@@ -354,26 +399,44 @@ export default function AcceptInvitePage() {
                 Signed in as <strong>{user?.email}</strong>
               </p>
               {error && <p className="aip-inline-error">{error}</p>}
-              <button
-                onClick={acceptInvite}
-                disabled={accepting}
-                className="aip-accept-btn"
-              >
-                {accepting ? (
-                  <>
-                    <Loader size={18} className="aip-spinner-sm" />
-                    Accepting...
-                  </>
-                ) : (
-                  <>
-                    <Check size={18} />
-                    Accept Invite
-                  </>
-                )}
-              </button>
-              <Link to="/select-workspace" className="aip-skip-link">
-                Not now
-              </Link>
+              <div style={{ display: "flex", gap: "10px", width: "100%" }}>
+                <button
+                  onClick={declineInvite}
+                  disabled={declining || accepting}
+                  className="aip-btn aip-btn-secondary"
+                  style={{ flex: 1 }}
+                >
+                  {declining ? (
+                    <>
+                      <Loader size={18} className="aip-spinner-sm" />
+                      Declining...
+                    </>
+                  ) : (
+                    <>
+                      <X size={18} />
+                      Decline
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={acceptInvite}
+                  disabled={accepting || declining}
+                  className="aip-accept-btn"
+                  style={{ flex: 1 }}
+                >
+                  {accepting ? (
+                    <>
+                      <Loader size={18} className="aip-spinner-sm" />
+                      Accepting...
+                    </>
+                  ) : (
+                    <>
+                      <Check size={18} />
+                      Accept
+                    </>
+                  )}
+                </button>
+              </div>
             </>
           ) : (
             <>
@@ -386,9 +449,22 @@ export default function AcceptInvitePage() {
               <Link
                 to={`/register?redirect=${encodeURIComponent(location.pathname)}`}
                 className="aip-btn aip-btn-secondary aip-full-width"
+                style={{ marginBottom: '10px' }}
               >
                 Create Account
               </Link>
+              <button
+                onClick={declineInvite}
+                disabled={declining}
+                className="aip-btn aip-btn-secondary aip-full-width"
+                style={{
+                  background: "transparent",
+                  border: "1px solid #cbd5e1",
+                  color: "#64748b"
+                }}
+              >
+                {declining ? "Declining..." : "Decline Invite"}
+              </button>
             </>
           )}
         </div>

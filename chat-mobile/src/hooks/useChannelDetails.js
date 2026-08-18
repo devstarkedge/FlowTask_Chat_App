@@ -8,6 +8,7 @@ import api, { channelAPI, notificationPrefAPI, usersAPI, directoriesAPI, workspa
 import logger from '../utils/logger';
 import { isChatAppChannel } from '../utils/channelOrigin';
 import Toast from 'react-native-toast-message';
+import { useChannels } from './queries/useChannels';
 
 export const useChannelDetails = (channelId, channelName, navigation) => {
   const createDM = useChannelStore((s) => s.createDM);
@@ -15,8 +16,9 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
   const updateChannel = useChannelStore((s) => s.updateChannel);
   const starChannel = useChannelStore((s) => s.starChannel);
   const starredIds = useChannelStore((s) => s.starredIds) || [];
-  const channels = useChannelStore((s) => s.channels) || [];
   const { user: currentUser } = useAuthStore();
+  const { activeWorkspace } = useWorkspaceStore();
+  const { data: channels = [] } = useChannels(activeWorkspace?._id);
 
   const channel = channels.find((c) => c._id === channelId);
   const isOneToOneDM = channel?.type === 'dm' && (channel?.dmParticipants?.length || 0) <= 2;

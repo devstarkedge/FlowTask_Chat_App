@@ -413,48 +413,7 @@ export default function InviteMembersModal({ isOpen, onClose, workspaceId }) {
               </div>
             )}
           </div>
-
-          {/* Role Selector (member type only) */}
-          {inviteType === 'member' && (
-            <div className="imm-section">
-              <label className="imm-label">
-                <Shield size={13} />
-                <span>Role</span>
-              </label>
-              <div className="imm-role-dropdown">
-                <button
-                  type="button"
-                  className="imm-role-trigger"
-                  onClick={(e) => { e.stopPropagation(); setRoleMenuOpen((v) => !v); }}
-                >
-                  <span>{MEMBER_ROLES.find((r) => r.value === role)?.label ?? 'Member'}</span>
-                  <ChevronDown size={14} className={`imm-role-caret${roleMenuOpen ? ' imm-role-caret--open' : ''}`} />
-                </button>
-                {roleMenuOpen && (
-                  <ul className="imm-role-menu">
-                    {MEMBER_ROLES.map((r) => (
-                      <li key={r.value}>
-                        <button
-                          type="button"
-                          className={`imm-role-option${role === r.value ? ' imm-role-option--selected' : ''}`}
-                          onClick={() => { setRole(r.value); setRoleMenuOpen(false); }}
-                        >
-                          {r.label}
-                          {role === r.value && <Check size={13} />}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <p className="imm-hint">
-                {role === 'admin'
-                  ? 'Admins can manage workspace settings, channels, and members.'
-                  : 'Members can view and participate in all public channels.'}
-              </p>
-            </div>
-          )}
-
+          
           {/* Email Input Section */}
           <div className="imm-section">
             <label className="imm-label">

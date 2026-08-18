@@ -63,7 +63,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/Group 2.svg"
+      "favicon": "./assets/favicon.png"
     },
     "extra": {
       "apiUrl": "https://chat-app-api-cyyl.onrender.com/api/chat",
@@ -76,6 +76,8 @@
       "expo-secure-store",
       "@react-native-community/datetimepicker",
       "expo-audio",
+      "@config-plugins/react-native-blob-util",
+      "@config-plugins/react-native-pdf",
       "expo-asset",
       [
         "expo-media-library",

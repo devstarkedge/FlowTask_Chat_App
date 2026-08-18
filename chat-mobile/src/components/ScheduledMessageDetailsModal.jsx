@@ -20,7 +20,6 @@ import {
 } from 'lucide-react-native';
 import { formatRelativeTime, formatScheduledDate } from '../utils/dateUtils';
 import { useScheduledStore } from '../stores/scheduledStore';
-import { useChannelStore } from '../stores/channelStore';
 import { useConversationDetails } from '../hooks/useConversationDetails';
 import ScheduleModal from './ScheduleModal';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
@@ -41,7 +40,6 @@ const ScheduledMessageDetailsModal = ({
   const cancelScheduledMessage = useScheduledStore(state => state.cancelScheduledMessage);
   const sendNowScheduledMessage = useScheduledStore(state => state.sendNowScheduledMessage);
   const rescheduleMessage = useScheduledStore(state => state.rescheduleMessage);
-  const { channels } = useChannelStore();
   
   const { isDM, displayName } = useConversationDetails(message?.channelId);
 

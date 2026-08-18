@@ -164,6 +164,19 @@ workspaceInviteSchema.statics.markAccepted = function (token, userId) {
 };
 
 /**
+ * Mark an invite as declined.
+ * @param {string} token - Plain text token
+ */
+workspaceInviteSchema.statics.markDeclined = function (token) {
+  const tokenHash = hashToken(token);
+  return this.findOneAndUpdate(
+    { tokenHash, status: 'pending' },
+    { $set: { status: 'declined' } },
+    { returnDocument: 'after' },
+  );
+};
+
+/**
  * Revoke a pending invite.
  */
 workspaceInviteSchema.statics.revoke = function (inviteId, workspaceId, revokedBy) {

@@ -25,6 +25,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { formatMessageTime } from '../utils/dateUtils';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import Button from './common/Button';
+import IconButton from './common/IconButton';
 
 
 const RECURRENCE_OPTIONS = ['None', 'Daily', 'Weekly', 'Monthly', 'Yearly'];
@@ -135,9 +137,14 @@ const ReminderModal = React.memo(function ReminderModal({
                 Set Reminder
               </Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <X size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+            <IconButton 
+              icon={X}
+              size={40}
+              iconSize={20}
+              variant="ghost"
+              onPress={onClose}
+              style={{ marginRight: -4 }}
+            />
           </View>
 
           {/* Quick Options */}
@@ -188,9 +195,13 @@ const ReminderModal = React.memo(function ReminderModal({
             </View>
           ) : (
             <View style={styles.customContainer}>
-              <TouchableOpacity onPress={() => setShowCustom(false)} style={{ marginBottom: verticalScale(12) }}>
+              <TouchableOpacity 
+                onPress={() => setShowCustom(false)} 
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: verticalScale(12) }}
+              >
+                <ChevronLeft size={18} color={colors.primary} />
                 <Text style={{ color: colors.primary, fontSize: moderateScale(14) }}>
-                    <ChevronLeft />Back to quick options
+                  Back to quick options
                 </Text>
               </TouchableOpacity>
 
@@ -254,12 +265,12 @@ const ReminderModal = React.memo(function ReminderModal({
                   <Text style={{ color: colors.primary, fontSize: moderateScale(14), fontWeight: '600' }}>{recurrence}</Text>
                 </TouchableOpacity>
                 
-                <TouchableOpacity
-                  style={[styles.setButton, { backgroundColor: colors.primary, width: '100%', alignItems: 'center' }]}
+                <Button
+                  title="Set Reminder"
+                  variant="primary"
                   onPress={handleCustomSubmit}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: moderateScale(15) }}>Set Reminder</Text>
-                </TouchableOpacity>
+                  fullWidth
+                />
               </View>
             </View>
           )}

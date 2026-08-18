@@ -23,6 +23,7 @@ import CreateChannelModal from "./CreateChannelModal";
 import ManageCategoryChannelsModal from "./ManageCategoryChannelsModal";
 import CategoryActionSheet from "./CategoryActionSheet";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { useChannels } from '../hooks/queries/useChannels';
 import useResponsive from '../hooks/useResponsive';
 
 import {
@@ -314,7 +315,7 @@ const DrawerNavigation = ({ navigation }) => {
   const { activeWorkspace } = useWorkspaceStore();
   const { user, logout } = useAuthStore();
   const { colors } = useThemeStore();
-  const channels = useChannelStore((s) => s.channels) || [];
+  const { data: channels = [] } = useChannels(activeWorkspace?._id);
   const categories = useChannelStore((s) => s.categories) || [];
   const unreads = useChannelStore((s) => s.unreads) || {};
   const starredIds = useChannelStore((s) => s.starredIds) || [];

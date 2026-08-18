@@ -12,7 +12,8 @@ config.watchFolders = [path.resolve(projectRoot)];
 // Ensure .jsx is recognized
 config.resolver = {
   ...config.resolver,
-  sourceExts: Array.from(new Set([...(config.resolver && config.resolver.sourceExts ? config.resolver.sourceExts : []), 'jsx', 'cjs']))
+  sourceExts: Array.from(new Set([...(config.resolver && config.resolver.sourceExts ? config.resolver.sourceExts : []), 'jsx', 'cjs'])),
+  assetExts: [...(config.resolver?.assetExts || []), 'txt'],
 };
 
 // Fix Metro validation warning for unstable_workerThreads

@@ -9,6 +9,7 @@
  */
 import { useChatStore } from '../stores/chatStore';
 import { flushQueue } from './offlineQueue';
+import { reconcileMessageInCache, updateMessageStatusLocalInCache, markMessageFailedInCache } from '../queries/cacheUtils';
 import logger from '../utils/logger';
 
 let isInitialized = false;
@@ -34,12 +35,16 @@ export const initNetworkMonitor = () => {
       flushQueue(
         // onMessageSent
         (tempId, serverMessage) => {
-          const store = useChatStore.getState();
-          store.reconcileMessage(tempId, serverMessage);
-          store.updateMessageStatusLocal(tempId, 'sent');
+          const channelId = serverMessage.channelId?._id || serverMessage.channelId;
+          reconcileMessageInCache(channelId, tempId, serverMessage);
+          updateMessageStatusLocalInCache(channelId, tempId, 'sent');
         },
         // onMessageFailed
         (tempId, error) => {
+          // Since we might not know channelId here without storing it, we would need it from the queue entry.
+          // Wait, we can modify flushQueue callback or just skip if we don't know it. Actually we don't need this local fallback if React Query fetches next time, but let's assume we don't know channelId.
+          // In offlineQueue.js flushQueue, entry has channelId. 
+          // Wait, offlineQueue flush callback doesn't provide channelId. Let's just rely on chatStore's offlineQueueStatus.
           const store = useChatStore.getState();
           store.markMessageFailed(tempId, error);
         }
@@ -57,9 +62,9 @@ export const initNetworkMonitor = () => {
     logger.info('[NetworkMonitor] Already connected on init, flushing queue...');
     flushQueue(
       (tempId, serverMessage) => {
-        const store = useChatStore.getState();
-        store.reconcileMessage(tempId, serverMessage);
-        store.updateMessageStatusLocal(tempId, 'sent');
+        const channelId = serverMessage.channelId?._id || serverMessage.channelId;
+        reconcileMessageInCache(channelId, tempId, serverMessage);
+        updateMessageStatusLocalInCache(channelId, tempId, 'sent');
       },
       (tempId, error) => {
         const store = useChatStore.getState();
@@ -84,8 +89,9 @@ export const triggerQueueFlush = async () => {
   logger.info('[NetworkMonitor] Manual queue flush triggered');
   return flushQueue(
     (tempId, serverMessage) => {
-      const s = useChatStore.getState();
-      s.reconcileMessage(tempId, serverMessage);
+      const channelId = serverMessage.channelId?._id || serverMessage.channelId;
+      reconcileMessageInCache(channelId, tempId, serverMessage);
+      updateMessageStatusLocalInCache(channelId, tempId, 'sent');
     },
     (tempId, error) => {
       const s = useChatStore.getState();

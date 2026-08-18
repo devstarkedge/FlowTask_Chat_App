@@ -231,12 +231,21 @@ const ExternalConnectionsScreen = ({ navigation }) => {
 
         {/* Info */}
         <View style={styles.info}>
-          <Text
-            style={[styles.nameText, { color: colors.textPrimary }]}
-            numberOfLines={1}
-          >
-            {name}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: scale(6) }}>
+            <Text
+              style={[styles.nameText, { color: colors.textPrimary, flexShrink: 1 }]}
+              numberOfLines={1}
+            >
+              {name}
+            </Text>
+            {guest.ownWorkspaceName && (
+              <View style={{ backgroundColor: colors.border, paddingHorizontal: scale(6), paddingVertical: verticalScale(2), borderRadius: moderateScale(10), flexShrink: 1 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: moderateScale(11), fontWeight: "600" }} numberOfLines={1}>
+                  {guest.ownWorkspaceName}
+                </Text>
+              </View>
+            )}
+          </View>
           {guest.email && (
             <Text
               style={[styles.emailText, { color: colors.textSecondary }]}

@@ -25,8 +25,12 @@ export default (socket) => {
     useChatStore.getState().updateMessage(message);
   });
 
-  socket.on('message:delete', ({ messageId, channelId }) => {
+  socket.on('message:delete', ({ messageId, channelId, isDeleted }) => {
     logger.info('[SocketMessage] message:delete received', messageId);
-    useChatStore.getState().softDeleteMessage(messageId, channelId);
+    if (isDeleted) {
+      useChatStore.getState().softDeleteMessage(messageId, channelId);
+    } else {
+      useChatStore.getState().removeMessage(messageId, channelId);
+    }
   });
 };

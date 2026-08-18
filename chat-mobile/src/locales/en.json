@@ -1,0 +1,23 @@
+{
+  "chat": {
+    "search": "Search",
+    "pinnedMessages": "Pinned Messages",
+    "noMessagesYet": "No messages yet",
+    "typing": "{{users}} are typing...",
+    "reply": "Reply",
+    "edited": "(edited)",
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
+  "threads": {
+    "title": "Threads",
+    "noNewReplies": "No new replies",
+    "noThreadsFound": "No threads found"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "save": "Save",
+    "unknown": "Unknown"
+  }
+}

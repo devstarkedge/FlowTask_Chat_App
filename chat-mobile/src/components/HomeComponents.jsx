@@ -124,7 +124,7 @@ const shStyles = StyleSheet.create({
   },
   title: { 
     flex: 1,
-    fontSize: moderateScale(12.5), 
+    fontSize: moderateScale(15), 
     fontWeight: "800", 
     letterSpacing: 0.5 
   },

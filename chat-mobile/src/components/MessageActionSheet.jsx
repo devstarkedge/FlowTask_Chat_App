@@ -34,6 +34,7 @@ import useResponsive from '../hooks/useResponsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { downloadAndSaveFile } from '../utils/fileDownload';
 import FileService from '../services/FileService';
+import FileClipboardService from '../services/FileClipboardService';
 import { getFileKind } from '../utils/mediaUtils';
 
 
@@ -134,6 +135,11 @@ const MessageActionSheet = ({
         } catch (err) {
           console.error(err);
         }
+        onClose();
+        return;
+      } else if (['video', 'file', 'code', 'text', 'csv'].includes(kind)) {
+        await FileClipboardService.copyFile({ ...attachment, url });
+        Toast.show({ type: 'success', text1: 'File copied to clipboard' });
         onClose();
         return;
       }

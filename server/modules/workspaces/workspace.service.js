@@ -104,7 +104,7 @@ class WorkspaceService {
     // Check slug uniqueness
     const existing = await workspaceRepository.findBySlug(slug);
     if (existing) {
-      throw new BadRequestError(`Workspace slug "${slug}" is already taken.`);
+      throw new BadRequestError(`Workspace "${slug}" is already taken.`);
     }
 
     // Atomic: workspace creation + owner membership
@@ -795,10 +795,27 @@ class WorkspaceService {
     await WorkspaceInvite.markAccepted(token, userId);
 
     // Auto-join channels based on invite type
-    if (invite.inviteType === 'guest' && invite.channels && invite.channels.length > 0) {
-      await this._joinSpecificChannels(userId, invite.channels, workspace._id);
+    if (invite.inviteType === 'guest') {
+      if (invite.channels && invite.channels.length > 0) {
+        await this._joinSpecificChannels(userId, invite.channels, workspace._id);
+      }
     } else {
-      await this._autoJoinPublicChannels(userId, workspace._id);
+      const { default: channelRepository } = await import('../channels/channel.repository.js');
+      const systemChannels = await channelRepository.findSystemChannels(workspace._id);
+      
+      const channelsToJoin = new Set();
+      
+      if (invite.channels && invite.channels.length > 0) {
+        invite.channels.forEach(chId => channelsToJoin.add(chId.toString()));
+      }
+      
+      if (systemChannels && systemChannels.length > 0) {
+        systemChannels.forEach(ch => channelsToJoin.add(ch._id.toString()));
+      }
+      
+      if (channelsToJoin.size > 0) {
+        await this._joinSpecificChannels(userId, Array.from(channelsToJoin), workspace._id);
+      }
     }
 
     // Non-blocking audit log — never fails the invitation flow
@@ -823,6 +840,25 @@ class WorkspaceService {
       membership,
       alreadyMember: false,
     };
+  }
+
+  /**
+   * Decline a workspace invite by token.
+   * Can be called by unauthenticated users since the token acts as proof.
+   */
+  async declineInvite(token) {
+    const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
+
+    const invite = await WorkspaceInvite.findValidByToken(token);
+    if (!invite) {
+      throw new NotFoundError('Invalid or expired invite.');
+    }
+
+    await WorkspaceInvite.markDeclined(token);
+    
+    logger.info(`Invite ${invite._id} to workspace ${invite.workspaceId.slug} was declined`);
+    
+    return { success: true };
   }
 
   /**

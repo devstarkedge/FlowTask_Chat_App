@@ -17,6 +17,8 @@ import KeyboardAwareContainer from './common/KeyboardAwareContainer';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
+import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useChannels } from '../hooks/queries/useChannels';
 import { categoryAPI, directoriesAPI } from '../services/api';
 import {
   X,
@@ -30,6 +32,8 @@ import {
 } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { isChatAppChannel } from '../utils/channelOrigin';
+import Button from './common/Button';
+import IconButton from './common/IconButton';
 
 // ─── Department sync singleton ────────────────────────────────────────────────
 let _deptSyncInFlight = null;
@@ -58,9 +62,7 @@ const Chip = ({ channel, onRemove, colors }) => (
     <Text style={[styles.chipName, { color: colors.textPrimary }]} numberOfLines={1}>
       {channel.name}
     </Text>
-    <TouchableOpacity onPress={() => onRemove(channel._id)} hitSlop={6}>
-      <X size={11} color={colors.textSecondary} />
-    </TouchableOpacity>
+    <IconButton icon={X} size={16} iconSize={11} variant="ghost" onPress={() => onRemove(channel._id)} />
   </View>
 );
 
@@ -72,7 +74,9 @@ export default function CreateCategoryModal({ visible, onClose }) {
   const { width: screenWidth } = useWindowDimensions();
   const SHEET_MAX_WIDTH = 480;
   const isWide = screenWidth > SHEET_MAX_WIDTH;
-  const { channels, categories, fetchCategories, fetchChannels, isLoading: channelsLoading } = useChannelStore();
+  const { activeWorkspace } = useWorkspaceStore();
+  const { data: channels = [], isLoading: channelsLoading, refetch: fetchChannels } = useChannels(activeWorkspace?._id);
+  const { categories, fetchCategories } = useChannelStore();
 
   // ── State ──
   const [categoryType, setCategoryType] = useState('department');
@@ -395,12 +399,15 @@ export default function CreateCategoryModal({ visible, onClose }) {
                 {deptError ? (
                   <View style={[styles.errorBox, { backgroundColor: '#fff1f2', borderColor: '#fda4af' }]}>
                     <Text style={styles.errorText}>{deptError}</Text>
-                    <TouchableOpacity onPress={loadDepartments} style={styles.retryBtn} disabled={loadingDepts}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        {loadingDepts && <ActivityIndicator size="small" color="#9f1239" />}
-                        <Text style={styles.retryText}>{loadingDepts ? 'Retrying...' : 'Retry'}</Text>
-                      </View>
-                    </TouchableOpacity>
+                    <Button
+                      title={loadingDepts ? 'Retrying...' : 'Retry'}
+                      variant="ghost"
+                      onPress={loadDepartments}
+                      disabled={loadingDepts}
+                      style={styles.retryBtn}
+                      textStyle={styles.retryText}
+                      loading={loadingDepts}
+                    />
                   </View>
                 ) : loadingDepts ? (
                   <View style={styles.center}>
@@ -605,32 +612,22 @@ export default function CreateCategoryModal({ visible, onClose }) {
 
           {/* ──────────── Footer ──────────── */}
           <View style={[styles.footer, { borderTopColor: colors.border }]}>
-            <TouchableOpacity
-              style={[styles.cancelBtn, { borderColor: colors.border }]}
+            <Button
+              title="Cancel"
+              variant="ghost"
               onPress={onClose}
               disabled={isSubmitting}
-            >
-              <Text style={[styles.cancelText, { color: colors.textPrimary }]}>Cancel</Text>
-            </TouchableOpacity>
+            />
 
             {!hideDeptAction && (
-              <TouchableOpacity
-                style={[
-                  styles.submitBtn,
-                  { backgroundColor: colors.primary },
-                  (!isFormValid() || isSubmitting) && styles.submitDisabled,
-                ]}
+              <Button
+                title={submitLabel}
+                variant="primary"
+                icon={Check}
                 onPress={handleSubmit}
                 disabled={!isFormValid() || isSubmitting}
-                activeOpacity={0.8}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator size="small" color="#fff" style={{ marginRight: 6 }} />
-                ) : (
-                  <Check size={14} color="#fff" strokeWidth={2.5} style={{ marginRight: 4 }} />
-                )}
-                <Text style={styles.submitText}>{submitLabel}</Text>
-              </TouchableOpacity>
+                loading={isSubmitting}
+              />
             )}
           </View>
         </SafeAreaView>

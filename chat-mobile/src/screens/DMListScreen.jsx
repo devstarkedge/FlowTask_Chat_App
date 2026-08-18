@@ -22,6 +22,10 @@ import { useUIStore } from "../stores/uiStore";
 import { useThemeStore } from "../stores/themeStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { directoriesAPI } from "../services/api";
+import { useChannels } from '../hooks/queries/useChannels';
+import { useWorkspaceMembers } from '../hooks/queries/useWorkspaceMembers';
+import { queryClient } from '../queries/queryClient';
+import { queryKeys } from '../queries/queryKeys';
 import {
   Edit3,
   Search,
@@ -130,7 +134,9 @@ const DMListScreen = ({ navigation }) => {
 
   const { colors, effectiveTheme } = useThemeStore();
   const { openDrawer } = useUIStore();
-  const channels = useChannelStore((s) => s.channels) || [];
+  const { activeWorkspace } = useWorkspaceStore();
+  const { data: channels = [] } = useChannels(activeWorkspace?._id);
+  const { data: members = [] } = useWorkspaceMembers(activeWorkspace?._id);
   const unreads = useChannelStore((s) => s.unreads) || {};
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
   const { user: currentUser } = useAuthStore();
@@ -187,7 +193,6 @@ const DMListScreen = ({ navigation }) => {
     ({ item }) => {
       const isSelf = item.dmRecipientId === currentUser?._id;
       let displayName = item.dmRecipientName || item.name || "User";
-      const members = useWorkspaceStore.getState().members || [];
       const liveMember = members.find(m => m._id === item.dmRecipientId || m.userId?._id === item.dmRecipientId);
       const liveOnlineStatus = liveMember?.onlineStatus || liveMember?.userId?.onlineStatus || item.onlineStatus || 'offline';
       if (isSelf) displayName = "You";

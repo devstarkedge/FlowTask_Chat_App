@@ -12,7 +12,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useThemeStore } from "../stores/themeStore";
 import { useChannelStore } from "../stores/channelStore";
-import { directoriesAPI, channelAPI } from "../services/api";
+import { useWorkspaceStore } from "../stores/workspaceStore";
+import { useDirectoryUsers } from "../hooks/queries/useDirectoryUsers";
+import { channelAPI } from "../services/api";
 import { AppAvatar } from "../components/common";
 import Toast from "react-native-toast-message";
 import {
@@ -30,28 +32,9 @@ const PeopleScreen = ({ navigation }) => {
   const { colors, effectiveTheme } = useThemeStore();
   const createDM = useChannelStore((s) => s.createDM);
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const { data: users = [], isLoading: loading, error, refetch: loadUsers } = useDirectoryUsers(activeWorkspaceId, { limit: 100 });
   const [search, setSearch] = useState("");
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    loadUsers();
-  }, []);
-
-  const loadUsers = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data } = await directoriesAPI.getUsers({ limit: 100 });
-      setUsers(data.data?.users || data.data || []);
-    } catch (err) {
-      setError("Failed to load people");
-      logger.error("Failed to load users:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const filteredUsers = useMemo(() => {
     if (!search.trim()) return users;

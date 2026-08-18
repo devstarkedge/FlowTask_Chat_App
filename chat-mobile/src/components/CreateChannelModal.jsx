@@ -22,6 +22,8 @@ import { verticalScale, moderateScale } from '../utils/responsive';
 import useResponsive from '../hooks/useResponsive';
 import Toast from 'react-native-toast-message';
 import AddMembersDrawer from './AddMembersDrawer';
+import Button from './common/Button';
+import IconButton from './common/IconButton';
 
 /**
  * CreateChannelModal — Slack-like modal for creating a new channel.
@@ -119,29 +121,25 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
         ]}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
-              <X size={22} color={colors.textPrimary} />
-            </TouchableOpacity>
+            <IconButton 
+              icon={X} 
+              onPress={handleClose} 
+              size={40} 
+              iconSize={22} 
+              variant="ghost" 
+              style={{ marginLeft: -8 }} 
+            />
             <Text style={[styles.title, { color: colors.textPrimary }]}>
               Create a channel
             </Text>
-            <TouchableOpacity
+            <Button
+              title={isPrivate ? "Next" : "Create"}
+              variant="primary"
               onPress={() => handleSubmit([])}
-              disabled={loading || !name.trim()}
-              style={[
-                styles.createBtn,
-                { backgroundColor: colors.primary },
-                (!name.trim() || loading) && { opacity: 0.4 },
-              ]}
-            >
-              {loading ? (
-                <ActivityIndicator size="small" color={colors.textOnPrimary} />
-              ) : (
-                <Text style={[styles.createBtnText, { color: colors.textOnPrimary }]}>
-                  {isPrivate ? "Next" : "Create"}
-                </Text>
-              )}
-            </TouchableOpacity>
+              disabled={!name.trim() || loading}
+              loading={loading}
+              style={{ minHeight: moderateScale(36), paddingVertical: moderateScale(6) }}
+            />
           </View>
 
           {/* Form */}

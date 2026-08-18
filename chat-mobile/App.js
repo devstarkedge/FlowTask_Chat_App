@@ -1,8 +1,10 @@
 import React, { useEffect, useRef } from "react";
+import './src/i18n';
 import { Keyboard, Dimensions } from "react-native";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './src/queries/queryClient';
 
 import AppNavigator from "./src/navigation/AppNavigation";
 import { useAuthStore } from "./src/stores/authStore";
@@ -31,7 +33,6 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import * as Linking from 'expo-linking';
 
 const navigationRef = createNavigationContainerRef();
-const queryClient = new QueryClient();
 
 const linking = {
   prefixes: [

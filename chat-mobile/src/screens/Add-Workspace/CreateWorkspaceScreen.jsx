@@ -26,12 +26,15 @@ import {
 import CreateWorkspaceModal from '../../components/workspace/CreateWorkspaceModal';
 import Toast from 'react-native-toast-message';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../../queries/queryKeys';
 
 
 const CreateWorkspaceScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
   const { user, logout } = useAuthStore();
-  const { joinByInviteCode, switchWorkspace, fetchWorkspaces } = useWorkspaceStore();
+  const { joinByInviteCode, switchWorkspace } = useWorkspaceStore();
+  const queryClient = useQueryClient();
 
   const [createVisible, setCreateVisible] = useState(false);
   const [joinVisible, setJoinVisible] = useState(false);
@@ -77,7 +80,8 @@ const CreateWorkspaceScreen = ({ navigation }) => {
       setJoinVisible(false);
       setInviteCode('');
       
-      await fetchWorkspaces();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workspaces });
+      
       if (workspace?._id) {
         await switchWorkspace(workspace._id);
         navigation.navigate('Main');

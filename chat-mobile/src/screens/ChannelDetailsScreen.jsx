@@ -274,12 +274,6 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               </TouchableOpacity>
             </View>
             <ScrollView style={{ padding: moderateScale(16) }}>
-              <TouchableOpacity
-                style={[styles.searchResultItem, { borderBottomColor: colors.border }]}
-                onPress={() => handleAssignCategory(null)}
-              >
-                <Text style={{ fontSize: moderateScale(15), color: colors.textPrimary, fontWeight: '500' }}>(No Category)</Text>
-              </TouchableOpacity>
               {categories.filter(c => c.type === 'custom').map((cat) => (
                 <TouchableOpacity
                   key={cat._id}

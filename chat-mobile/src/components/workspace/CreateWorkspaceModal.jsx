@@ -22,11 +22,14 @@ import { workspaceAPI, fileAPI } from "../../services/api";
 import Toast from "react-native-toast-message";
 import logger from "../../utils/logger";
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../../queries/queryKeys';
 
 
 const CreateWorkspaceModal = ({ visible, onClose, onSuccess, navigation }) => {
   const { colors } = useThemeStore();
-  const { fetchWorkspaces, switchWorkspace } = useWorkspaceStore();
+  const { switchWorkspace } = useWorkspaceStore();
+  const queryClient = useQueryClient();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -123,7 +126,8 @@ const CreateWorkspaceModal = ({ visible, onClose, onSuccess, navigation }) => {
       onClose();
       if (onSuccess) onSuccess();
 
-      await fetchWorkspaces();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workspaces });
+      
       if (workspace?._id) {
         await switchWorkspace(workspace._id);
       }
@@ -134,8 +138,13 @@ const CreateWorkspaceModal = ({ visible, onClose, onSuccess, navigation }) => {
         }, 200);
       }
     } catch (err) {
-      const msg =
-        err.response?.data?.message || err.message || "Failed to create workspace";
+      let msg =
+        err.response?.data?.error?.message || err.response?.data?.message || err.message || "Failed to create workspace";
+        
+      if (err.response?.status === 400 || msg.includes("status code 400")) {
+        msg = "You already have a workspace with this name";
+      }
+      
       setError(msg);
       Toast.show({ type: "error", text1: msg });
       logger.error("Create workspace error:", err);

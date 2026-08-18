@@ -12,7 +12,6 @@ import {
 import { AppAvatar } from './common';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { useAuthStore } from '../stores/authStore';
-import { useChannelStore } from '../stores/channelStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { Check, CheckCheck, Clock, AlertCircle } from 'lucide-react-native';
 import logger from '../utils/logger';
@@ -23,7 +22,6 @@ import MobileFileCard from './common/MobileFileCard';
 const MessageInfoModal = ({ visible, onClose, message, colors }) => {
   const user = useAuthStore((s) => s.user);
   const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
-  const channel = useChannelStore((s) => s.channels.find(ch => ch._id === message?.channelId));
   const attachments = getMessageAttachments(message);
 
   const { deliveredTo, readBy, pending, loading } = useReceipts(

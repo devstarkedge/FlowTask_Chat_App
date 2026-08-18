@@ -352,19 +352,8 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
                       color: "var(--text-primary)"
                     }}
                   >
-                    <button
-                       className="w-full text-left transition-colors"
-                       style={{ padding: "8px 16px", color: "var(--text-primary)" }}
-                       onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface-hover, var(--bg-hover))"; }}
-                       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                       onClick={() => handleAssignCategory(null, "category")}
-                    >
-                      (No Category)
-                    </button>
-                    
                     {customCategories.length > 0 && (
                       <>
-                        <div style={{ padding: "6px 12px", fontSize: "11px", fontWeight: "bold", color: "var(--text-muted)", textTransform: "uppercase", marginTop: 4 }}>Custom Categories</div>
                         {customCategories.map(cat => (
                           <button
                             key={cat._id}

@@ -135,6 +135,11 @@ export const acceptInvite = asyncHandler(async (req, res) => {
   res.json({ success: true, data: result });
 });
 
+export const declineInvite = asyncHandler(async (req, res) => {
+  const result = await workspaceService.declineInvite(req.body.token);
+  res.json({ success: true, data: result });
+});
+
 export const getPendingInvites = asyncHandler(async (req, res) => {
   const invites = await workspaceService.getPendingInvites(req.params.id);
   res.json({ success: true, data: invites });

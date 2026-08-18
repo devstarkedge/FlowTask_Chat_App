@@ -13,6 +13,26 @@ export const FileService = {
   IMAGE_COPY_SIZE_LIMIT: 5 * 1024 * 1024,
 
   /**
+   * Auth headers for internal chat-file URLs (workspace-scoped).
+   */
+  getAuthHeaders(url = '') {
+    const headers = {};
+    const isInternal = !url || url.includes('/api/chat') || url.includes('/messages/files/');
+    if (!isInternal) return headers;
+    try {
+      const { useAuthStore } = require('../stores/authStore');
+      const { useWorkspaceStore } = require('../stores/workspaceStore');
+      const token = useAuthStore.getState().accessToken;
+      const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+      if (token) headers.Authorization = `Bearer ${token}`;
+      if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
+    } catch (err) {
+      logger.warn('file.headers_failed', { error: err.message });
+    }
+    return headers;
+  },
+
+  /**
    * Helper to construct a safe cache-friendly local path
    */
   getCachePath(file) {
@@ -57,22 +77,7 @@ export const FileService = {
         const url = file.url || file.secureUrl;
         if (!url) throw new Error('No download URL available');
 
-        // Extract Auth/Workspace headers if internal
-        const headers = {};
-        const isInternalUrl = url.includes('/api/chat') || url.includes('/messages/files/');
-        if (isInternalUrl) {
-          try {
-            const { useAuthStore } = require('../stores/authStore');
-            const { useWorkspaceStore } = require('../stores/workspaceStore');
-            const token = useAuthStore.getState().accessToken;
-            const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-            if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
-          } catch (err) {
-            logger.warn('file.download.headers_failed', { fileId, error: err.message });
-          }
-        }
-
+        const headers = this.getAuthHeaders(url);
         const result = await FileSystemAdapter.download(url, localUri, headers);
         if (!result || result.status !== 200) {
           throw new Error(`Download status ${result?.status || 'failed'}`);
@@ -209,11 +214,18 @@ export const FileService = {
 
     try {
       if (url) {
-        Linking.openURL(url).catch((err) => {
-          logger.error('file.preview.link_error', { fileId, error: err.message });
-          Toast.show({ type: 'error', text1: 'Cannot open preview' });
-        });
-        logger.info('file.preview.external_success', { fileId });
+        logger.info('file.preview.downloading', { fileId });
+        const localUri = await FileService.downloadFile(file);
+        const sharingAvailable = await FileSystemAdapter.isSharingAvailable();
+        if (sharingAvailable) {
+          await FileSystemAdapter.share(localUri, mime);
+          logger.info('file.preview.shared_preview', { fileId });
+        } else {
+          Linking.openURL(url).catch((err) => {
+            logger.error('file.preview.link_error', { fileId, error: err.message });
+            Toast.show({ type: 'error', text1: 'Cannot open preview' });
+          });
+        }
       } else {
         Toast.show({ type: 'error', text1: 'No URL available for preview' });
       }

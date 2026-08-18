@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "../stores/authStore";
 import { useThemeStore } from "../stores/themeStore";
+import { useWorkspaceStore } from "../stores/workspaceStore";
 import CreateNewBottomSheet from "../components/CreateNewBottomSheet";
 import {
   Files,
@@ -39,6 +40,8 @@ const MoreItem = ({ icon: Icon, title, subtitle, showProBadge, onPress, colors }
 const MoreScreen = ({ navigation }) => {
   const { colors, effectiveTheme } = useThemeStore();
   const currentUser = useAuthStore((s) => s.user);
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const isWorkspaceAdmin = activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'admin';
   const [bottomSheetVisible, setBottomSheetVisible] = useState(false);
 
   return (
@@ -66,14 +69,16 @@ const MoreScreen = ({ navigation }) => {
           colors={colors}
           onPress={() => Alert.alert("Coming soon", "This feature will be available soon.")}
         />
-        <MoreItem
-          icon={Building2}
-          title="External connections"
-          subtitle="Work with people from other organisations"
-          showProBadge={true}
-          colors={colors}
-          onPress={() => navigation.navigate("ExternalConnections")}
-        />
+        {isWorkspaceAdmin && (
+          <MoreItem
+            icon={Building2}
+            title="External connections"
+            subtitle="Work with people from other organisations"
+            showProBadge={true}
+            colors={colors}
+            onPress={() => navigation.navigate("ExternalConnections")}
+          />
+        )}
       </ScrollView>
 
       {/* Floating "+" button for create new menu */}

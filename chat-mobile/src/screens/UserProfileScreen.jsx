@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useThemeStore } from '../stores/themeStore';
+import { useWorkspaceMembers } from '../hooks/queries/useWorkspaceMembers';
 import { useChannelStore } from '../stores/channelStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { ExternalLink, MessageSquare, MapPin, Clock, Phone, Mail, Hash, Video, ChevronRight, Check, ChevronLeft, MoreHorizontal, Headphones, UserX, Shield } from 'lucide-react-native';
@@ -22,6 +23,7 @@ import { AppAvatar, HeaderBackButton } from '../components/common';
 import { getAvatarColor } from '../components/Avatar';
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { useChannels } from '../hooks/queries/useChannels';
 
 
 import { usersAPI } from '../services/api';
@@ -33,10 +35,11 @@ const UserProfileScreen = ({ route, navigation }) => {
   const { width } = useWindowDimensions();
   const { user } = route.params;
   const { colors } = useThemeStore();
-  const channels = useChannelStore(s => s.channels);
+  const { activeWorkspace } = useWorkspaceStore();
+  const { data: channels = [] } = useChannels(activeWorkspace?._id);
   const createDM = useChannelStore(s => s.createDM);
   const setActiveChannel = useChannelStore(s => s.setActiveChannel);
-  const members = useWorkspaceStore(s => s.members);
+  const { data: members = [] } = useWorkspaceMembers(activeWorkspaceId);
   const rawTargetId = user?._id || user?.id;
   const targetId = typeof rawTargetId === 'object' ? rawTargetId?._id || rawTargetId?.id : rawTargetId;
   const targetIdStr = targetId?.toString ? targetId.toString() : targetId;

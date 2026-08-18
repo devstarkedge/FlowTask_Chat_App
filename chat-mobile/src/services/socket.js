@@ -3,6 +3,19 @@ import { AppState } from 'react-native';
 import storage from './storage';
 import ENV from '../config/environment';
 import logger from '../utils/logger';
+import {
+  updateThreadReplyInCache,
+  removeThreadReplyFromCache,
+  addThreadReplyToCache,
+  addReactionToThreadReplyCache,
+  removeReactionFromThreadReplyCache,
+  addMessageToCache,
+  updateMessageInCache,
+  removeMessageFromCache,
+  reconcileMessageInCache,
+  addReactionToMessageCache,
+  removeReactionFromMessageCache,
+} from '../queries/cacheUtils';
 
 // Dynamic getters to resolve require cycles
 const useAuthStore = {
@@ -23,6 +36,12 @@ const useLaterStore = {
 };
 const useScheduledStore = {
   get getState() { return require('../stores/scheduledStore').useScheduledStore.getState; }
+};
+const queryClient = {
+  get client() { return require('../queries/queryClient').queryClient; }
+};
+const queryKeys = {
+  get keys() { return require('../queries/queryKeys').queryKeys; }
 };
 
 let socket = null;
@@ -82,7 +101,7 @@ export const connectSocket = async () => {
     useChatStore.getState().setConnectionStatus('connected');
     
     // Join rooms for all channels
-    const channels = useChannelStore.getState().channels;
+    const channels = queryClient.client.getQueryData(queryKeys.keys.channels(workspaceId)) || [];
     channels.forEach(ch => {
       socket.emit('channel:join', ch._id);
     });
@@ -129,15 +148,20 @@ export const connectSocket = async () => {
       useChatStore.getState().clearTyping(message.channelId, authorId);
     }
 
-    // Skip only if THIS exact device sent it (handled via optimistic UI + ACK)
-    // We check if the tempId is currently in our local messages array.
-    const channelMessages = useChatStore.getState().messagesByChannel[message?.channelId] || [];
-    const isLocalPending = message.tempId && channelMessages.some(m => m._id === message.tempId);
-    if (isLocalPending) return;
+    // Skip if THIS device's own message is already in cache as a pending optimistic entry
+    // (it will be reconciled via message:ack or onSuccess instead)
+    if (message.tempId) {
+      const cachedData = queryClient.client.getQueryData(queryKeys.keys.messages(message.channelId));
+      const pages = cachedData?.pages || [];
+      const isLocalPending = pages.some(page =>
+        page.items?.some(m => m._id === message.tempId)
+      );
+      if (isLocalPending) return;
+    }
     // Safety: don't add thread replies to main chat
     if (message.threadId) return;
 
-    useChatStore.getState().addMessage(message);
+    addMessageToCache(message.channelId, message);
 
     // Presence-aware unread + auto-mark (parity with web UnreadManager)
     try {
@@ -154,28 +178,27 @@ export const connectSocket = async () => {
     if (message.threadId) {
       // Reconcile thread reply via ACK
       const resolvedRootId = rootMessageId || message.threadId;
-      useChatStore.getState().reconcileMessage(tempId, message);
+      reconcileMessageInCache(message.channelId, tempId, message);
     } else {
-      useChatStore.getState().reconcileMessage(tempId, message);
+      reconcileMessageInCache(message.channelId, tempId, message);
     }
   });
 
-  socket.on('message:update', ({ message }) => {
-    useChatStore.getState().updateMessage(message);
+  socket.on('message:updated', (message) => {
+    const channelId = message.channelId?._id || message.channelId;
+    updateMessageInCache(channelId, message);
     // Also update if it's a thread reply
     if (message?.threadId) {
-      useThreadStore.getState().updateThreadReply(message._id, message);
+      updateThreadReplyInCache(message._id, message);
     }
   });
 
   socket.on('message:delete', ({ messageId, channelId, isDeleted }) => {
-    if (isDeleted) {
-      useChatStore.getState().softDeleteMessage(messageId, channelId);
-    } else {
-      useChatStore.getState().removeMessage(messageId, channelId);
+    if (channelId) {
+      removeMessageFromCache(channelId, messageId);
     }
     // Also remove from thread replies
-    useThreadStore.getState().removeThreadReply(messageId, channelId);
+    removeThreadReplyFromCache(messageId);
   });
 
   socket.on('message:pinned', (payload) => {
@@ -353,7 +376,7 @@ export const connectSocket = async () => {
     // Also add to thread replies list if we're viewing that thread
     const resolvedRootId = rootMessageId || threadReply.threadId;
     if (resolvedRootId) {
-      useThreadStore.getState().addThreadReply(resolvedRootId, threadReply);
+      addThreadReplyToCache(resolvedRootId, threadReply);
     }
   });
 
@@ -421,13 +444,13 @@ export const connectSocket = async () => {
   socket.on('reaction:add', ({ messageId, userId, emoji, channelId }) => {
     const user = useAuthStore.getState().user;
     const reactionUser = userId === user?._id ? { _id: user._id, name: user.name } : { _id: userId };
-    useChatStore.getState().addReactionLocal(messageId, emoji, reactionUser);
-    useThreadStore.getState().addReactionToReply(messageId, emoji, reactionUser);
+    addReactionToMessageCache(channelId, messageId, emoji, reactionUser);
+    addReactionToThreadReplyCache(messageId, emoji, reactionUser);
   });
 
   socket.on('reaction:remove', ({ messageId, userId, emoji, channelId }) => {
-    useChatStore.getState().removeReactionLocal(messageId, emoji, userId);
-    useThreadStore.getState().removeReactionFromReply(messageId, emoji, userId);
+    removeReactionFromMessageCache(channelId, messageId, emoji, userId);
+    removeReactionFromThreadReplyCache(messageId, emoji, userId);
   });
 
   // Notification Events
@@ -621,8 +644,9 @@ export const connectSocket = async () => {
     const currentUserId = useAuthStore.getState().user?._id;
     if (userId === currentUserId) {
       useAuthStore.getState().updateUserRole(newRole, workspaceId);
-      const { useWorkspaceStore } = require('../stores/workspaceStore');
-      useWorkspaceStore.getState().fetchWorkspaces();
+      const { queryClient } = require('../queries/queryClient');
+      const { queryKeys } = require('../queries/queryKeys');
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces });
       logger.info('[Socket] User role updated', { userId, oldRole, newRole, workspaceId });
     }
   });
@@ -753,7 +777,8 @@ export const connectSocket = async () => {
       flushQueue(
         (tempId, serverMessage) => {
           const store = useChatStore.getState();
-          store.reconcileMessage(tempId, serverMessage);
+          const channelId = serverMessage.channelId?._id || serverMessage.channelId;
+          reconcileMessageInCache(channelId, tempId, serverMessage);
           store.updateMessageStatusLocal(tempId, 'sent');
         },
         (tempId, error) => {
@@ -771,15 +796,20 @@ export const connectSocket = async () => {
 
     try {
       const channelStore = useChannelStore.getState();
-      channelStore.fetchChannels().then(() => {
-        const channels = useChannelStore.getState().channels;
+      queryClient.client.fetchQuery({
+        queryKey: queryKeys.keys.channels(workspaceId),
+        queryFn: async () => {
+          const { data } = await require('./api').directoriesAPI.getChannels(workspaceId);
+          return data?.data || data || [];
+        }
+      }).then((channels) => {
         channels.forEach(ch => {
           socket.emit('channel:join', ch._id);
         });
         const activeChannelId = channelStore.activeChannelId;
         if (activeChannelId) {
           socket.emit('channel:join', activeChannelId);
-          useChatStore.getState().fetchMessages(activeChannelId);
+          queryClient.client.invalidateQueries({ queryKey: queryKeys.keys.messages(activeChannelId) });
         }
       });
 

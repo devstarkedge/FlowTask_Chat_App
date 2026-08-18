@@ -41,7 +41,7 @@ router.post('/groups', requireWorkspaceRole('owner', 'admin'), createGroup);
 router.put('/groups/:id', requireWorkspaceRole('owner', 'admin'), updateGroup);
 router.delete('/groups/:id', requireWorkspaceRole('owner', 'admin'), deleteGroup);
 
-router.get('/external', getExternalUsers);
+router.get('/external', requireWorkspaceRole('owner', 'admin'), getExternalUsers);
 router.get('/invitations', getInvitations);
 
 export default router;

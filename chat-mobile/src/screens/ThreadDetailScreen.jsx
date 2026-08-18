@@ -5,11 +5,11 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   Alert,
   Platform,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import KeyboardAwareContainer from '../components/common/KeyboardAwareContainer';
 import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
@@ -30,10 +30,12 @@ import ReplyQuotePreview from '../components/ReplyQuotePreview';
 import GifRenderer from '../components/GifRenderer';
 import AudioMessagePlayer from '../components/AudioMessagePlayer';
 import { resolveMessageSenderName, resolveReplyToSenderName, resolveReplyToContent, resolveReplyToAttachment, hasValidReplyTo } from '../utils/replyUtils';
+import { useChannelMembers } from '../hooks/queries/useChannelMembers';
 import { useChannelStore } from '../stores/channelStore';
 import VideoMessagePlayer from '../components/VideoMessagePlayer';
 import { Bookmark, Share, MoreVertical } from 'lucide-react-native';
 import { useThreadDetails } from '../hooks/useThreadDetails';
+import { useEditMessage, useDeleteMessage } from '../hooks/queries/useMessages';
 
 const ThreadDetailScreen = ({ route, navigation }) => {
   const {
@@ -54,10 +56,11 @@ const ThreadDetailScreen = ({ route, navigation }) => {
   } = route.params;
 
   const { colors } = useThemeStore();
-  const membersByChannel = useChannelStore((s) => s.membersByChannel);
-  const channelMembers = membersByChannel?.[channelId] || [];
+  const { data: channelMembers = [] } = useChannelMembers(channelId);
   const [activeHighlightId, setActiveHighlightId] = useState(highlightedMessageId || null);
   const threadDetails = useThreadDetails({ rootMessageId, channelId, highlightedMessageId });
+  const { mutateAsync: editMessage } = useEditMessage();
+  const { mutateAsync: deleteMessage } = useDeleteMessage();
 
   const {
     user,
@@ -87,6 +90,8 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     flatListRef,
     getAttachments,
     handleSendReply,
+    deleteThreadReply,
+    editThreadReply,
     getAuthorId,
     resolveAuthor,
   } = threadDetails;
@@ -307,8 +312,9 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         disablePadding={false}
         bottomSafeContext={Platform.OS === 'ios'}
       >
-        <FlatList
+        <FlashList
           ref={flatListRef}
+          estimatedItemSize={100}
           onScrollToIndexFailed={(info) => {
             setTimeout(() => {
               flatListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 });
@@ -316,9 +322,8 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           }}
           data={replies}
           renderItem={renderReply}
-          keyExtractor={(item, index) => item._id ?? String(index)}
+          keyExtractor={(item, index) => item.tempId || item._id || String(index)}
           contentContainerStyle={styles.repliesList}
-          initialNumToRender={15}
           onEndReached={() => {
             if (threadHasMore[rootMessageId] && !isLoadingReplies) {
               const oldest = replies[0];
@@ -515,25 +520,33 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                     if (isAttachment) {
                       const remainingRefs = (msg.fileReferences || [])
                         .filter(r => {
-                          const rId = r.fileId?._id || r.fileId || r._id;
-                          const targetId = actionAttachmentTarget._id;
-                          return rId !== targetId;
+                          const rId = String(r.fileId?._id || r.fileId || r._id || '');
+                          const targetId = String(actionAttachmentTarget._id || '');
+                          return rId && targetId && rId !== targetId;
                         })
-                        .map(r => r.fileId?._id || r.fileId || r._id);
+                        .map(r => String(r.fileId?._id || r.fileId || r._id || ''))
+                        .filter((id) => /^[0-9a-fA-F]{24}$/.test(id));
+                      const hasText = !!(msg.content && String(msg.content).trim());
 
-                      if (isRoot) {
-                        await editMessage(rootMessageId, channelId, msg.content, msg.htmlContent, remainingRefs);
+                      if (remainingRefs.length === 0 && !hasText) {
+                        if (isRoot) {
+                          await deleteMessage({ messageId: targetId, channelId });
+                          navigation.goBack();
+                        } else {
+                          await deleteThreadReply({ rootMessageId, replyId: targetId });
+                        }
+                      } else if (isRoot) {
+                        await editMessage({ messageId: rootMessageId, channelId, content: msg.content, htmlContent: msg.htmlContent, fileReferences: remainingRefs });
                       } else {
-                        await useThreadStore.getState().editThreadReply(rootMessageId, msg._id, msg.content, msg.htmlContent, remainingRefs);
+                        await editThreadReply({ rootMessageId, replyId: msg._id, content: msg.content, htmlContent: msg.htmlContent, fileReferences: remainingRefs });
                       }
                       Toast.show({ type: 'success', text1: 'Image deleted' });
                     } else {
                       if (isRoot) {
-                        const { deleteMessage: del } = useChatStore.getState();
-                        await del(targetId, channelId);
+                        await deleteMessage({ messageId: targetId, channelId });
                         navigation.goBack();
                       } else {
-                        await useThreadStore.getState().deleteThreadReply(rootMessageId, targetId);
+                        await deleteThreadReply({ rootMessageId, replyId: targetId });
                       }
                     }
                   } catch (err) {

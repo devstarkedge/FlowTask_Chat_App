@@ -1,30 +1,18 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Linking,
-  Modal,
   Image,
-  ScrollView,
   ActivityIndicator,
-  Dimensions,
-  Alert,
-  Platform,
 } from 'react-native';
-import { Video, Audio, ResizeMode } from 'expo-av';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
-import { downloadAndSaveFile } from '../../utils/fileDownload';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { normalizeMediaUrl, getFileKind } from '../../utils/mediaUtils';
 import { useAuthStore } from '../../stores/authStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import logger from '../../utils/logger';
-import DocumentPreviewModal from '../chat/DocumentPreviewModal';
-import ENV from '../../config/environment';
-
+import FilePreviewRenderer, { AudioPlayerCard, KIND_COLORS, formatFileSize, resolvePreviewFile } from '../chat/preview';
 import {
   FileText,
   Image as ImageIcon,
@@ -34,51 +22,9 @@ import {
   FileCode,
   Table2,
   File,
-  ExternalLink,
-  X,
   Play,
-  Pause,
   Download,
-  ChevronLeft,
-  Volume2,
-  VolumeX,
 } from 'lucide-react-native';
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-function formatFileSize(bytes) {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatDuration(millis) {
-  if (!millis) return '0:00';
-  const totalSec = Math.floor(millis / 1000);
-  const min = Math.floor(totalSec / 60);
-  const sec = totalSec % 60;
-  return `${min}:${sec.toString().padStart(2, '0')}`;
-}
-
-// ─── Kind colours ─────────────────────────────────────────────────────────────
-
-const KIND_COLORS = {
-  image:        '#1264a3',
-  video:        '#7c3aed',
-  audio:        '#10b981',
-  archive:      '#f97316',
-  code:         '#10b981',
-  text:         '#6b7280',
-  csv:          '#10b981',
-  spreadsheet:  '#10b981',
-  pdf:          '#ef4444',
-  word:         '#1264a3',
-  presentation: '#eab308',
-  file:         '#6b7280',
-};
-
-// ─── Icon map ────────────────────────────────────────────────────────────────
 
 function KindIcon({ kind, color, size = 22 }) {
   const p = { size, color };
@@ -98,258 +44,33 @@ function KindIcon({ kind, color, size = 22 }) {
   }
 }
 
-// ─── Fullscreen Image Viewer ──────────────────────────────────────────────────
-
-function ImageViewer({ visible, fileUrl, name, mimeType, headers, onClose }) {
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState(false);
-
-  const handleDownload = async () => {
-    try {
-      await downloadAndSaveFile(fileUrl, name, mimeType);
-    } catch (e) {
-      Alert.alert('Download Error', e.message || 'Could not download image');
-    }
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={ms.imgModalBg}>
-        {/* Header */}
-        <View style={ms.imgHeader}>
-          <TouchableOpacity onPress={onClose} style={ms.imgCloseBtn} hitSlop={{ top: verticalScale(10), bottom: verticalScale(10), left: scale(10), right: scale(10) }}>
-            <X size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={ms.imgTitle} numberOfLines={1}>{name}</Text>
-          <TouchableOpacity onPress={handleDownload} style={ms.imgCloseBtn}>
-            <Download size={20} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Image */}
-        <TouchableOpacity style={ms.imgContentArea} activeOpacity={1} onPress={onClose}>
-          {!loaded && !error && <ActivityIndicator color="#fff" style={{ position: 'absolute' }} />}
-          {error ? (
-            <View style={ms.imgErrorBox}>
-              <ImageIcon size={48} color="rgba(255,255,255,0.4)" />
-              <Text style={ms.imgErrorText}>Failed to load image</Text>
-            </View>
-          ) : (
-            <Image
-              source={{ uri: fileUrl, headers }}
-              style={ms.fullImg}
-              resizeMode="contain"
-              onLoad={() => setLoaded(true)}
-              onError={(err) => {
-                logger.warn('[ImageViewer] Fullscreen image load failed:', fileUrl, err?.nativeEvent);
-                setError(true);
-              }}
-            />
-          )}
-        </TouchableOpacity>
-      </View>
-    </Modal>
-  );
-}
-
-// ─── Fullscreen Video Player ──────────────────────────────────────────────────
-
-function VideoPlayer({ visible, fileUrl, name, onClose }) {
-  const videoRef = useRef(null);
-  const [status, setStatus] = useState({});
-  const [muted, setMuted] = useState(false);
-
-  const togglePlay = async () => {
-    if (!videoRef.current) return;
-    if (status.isPlaying) {
-      await videoRef.current.pauseAsync();
-    } else {
-      await videoRef.current.playAsync();
-    }
-  };
-
-  const toggleMute = async () => {
-    if (!videoRef.current) return;
-    const next = !muted;
-    setMuted(next);
-    await videoRef.current.setIsMutedAsync(next);
-  };
-
-  return (
-    <Modal visible={visible} transparent={false} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <View style={ms.videoModalBg}>
-        <View style={ms.videoHeader}>
-          <TouchableOpacity onPress={onClose} style={ms.videoHeaderBtn}>
-            <ChevronLeft size={26} color="#fff" />
-          </TouchableOpacity>
-          <Text style={ms.videoTitle} numberOfLines={1}>{name}</Text>
-          <TouchableOpacity onPress={toggleMute} style={ms.videoHeaderBtn}>
-            {muted ? <VolumeX size={22} color="#fff" /> : <Volume2 size={22} color="#fff" />}
-          </TouchableOpacity>
-        </View>
-
-        <View style={ms.videoArea}>
-          <Video
-            ref={videoRef}
-            source={{ uri: fileUrl }}
-            style={ms.videoPlayer}
-            resizeMode={ResizeMode.CONTAIN}
-            onPlaybackStatusUpdate={setStatus}
-            useNativeControls
-            shouldPlay
-            isMuted={muted}
-          />
-        </View>
-
-        {/* Progress bar */}
-        <View style={ms.videoFooter}>
-          <Text style={ms.videoTimeText}>
-            {formatDuration(status.positionMillis)} / {formatDuration(status.durationMillis)}
-          </Text>
-          <View style={ms.progressBarBg}>
-            <View style={[
-              ms.progressBarFill,
-              {
-                width: status.durationMillis
-                  ? `${(status.positionMillis / status.durationMillis) * 100}%`
-                  : '0%',
-              },
-            ]} />
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-// ─── Audio Player Card ────────────────────────────────────────────────────────
-
-function AudioPlayerCard({ fileUrl, name, activeColor, colors }) {
-  const soundRef = useRef(null);
-  const [playing, setPlaying] = useState(false);
-  const [position, setPosition] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [loading, setLoading] = useState(false);
-
-  const loadAndPlay = async () => {
-    if (soundRef.current) {
-      if (playing) {
-        await soundRef.current.pauseAsync();
-        setPlaying(false);
-      } else {
-        await soundRef.current.playAsync();
-        setPlaying(true);
-      }
-      return;
-    }
-    setLoading(true);
-    try {
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: fileUrl },
-        { shouldPlay: true },
-        (s) => {
-          if (s.isLoaded) {
-            setPosition(s.positionMillis);
-            setDuration(s.durationMillis || 0);
-            setPlaying(s.isPlaying);
-            if (s.didJustFinish) {
-              setPlaying(false);
-              setPosition(0);
-            }
-          }
-        }
-      );
-      soundRef.current = sound;
-      setPlaying(true);
-    } catch {
-      Alert.alert('Error', 'Could not play audio.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const progress = duration > 0 ? position / duration : 0;
-
-  return (
-    <View style={[ms.audioCard, { backgroundColor: activeColor + '15', borderColor: activeColor + '40' }]}>
-      <TouchableOpacity style={[ms.audioPlayBtn, { backgroundColor: activeColor }]} onPress={loadAndPlay} disabled={loading}>
-        {loading
-          ? <ActivityIndicator color="#fff" size="small" />
-          : playing
-            ? <Pause size={16} color="#fff" />
-            : <Play size={16} color="#fff" />
-        }
-      </TouchableOpacity>
-
-      <View style={ms.audioInfo}>
-        <Text style={[ms.audioName, { color: colors.textPrimary }]} numberOfLines={1}>{name}</Text>
-        <View style={ms.audioProgressRow}>
-          <View style={[ms.audioProgressBg, { backgroundColor: activeColor + '30' }]}>
-            <View style={[ms.audioProgressFill, { backgroundColor: activeColor, width: `${progress * 100}%` }]} />
-          </View>
-          <Text style={[ms.audioDuration, { color: colors.textTertiary }]}>
-            {formatDuration(position)} / {formatDuration(duration)}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// Code Preview Modal has been migrated to DocumentPreviewModal
-
-// ─── Main MobileFileCard ──────────────────────────────────────────────────────
-
 export default function MobileFileCard({ file, colors, onLongPress, isUploading = false }) {
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const openPreview = useCallback(() => setPreviewVisible(true), []);
+
   if (!file) return null;
 
-  const name = file.originalName || file.fileName || file.name || 'File';
-  const size = file.fileSize || file.size || file.fileSizeBytes;
-  const mime = file.mimeType || file.type || '';
+  const resolved = resolvePreviewFile(file);
+  const name = resolved?.name || file.originalName || file.fileName || file.name || 'File';
+  const size = resolved?.size || file.fileSize || file.size || file.fileSizeBytes;
+  const mime = resolved?.mime || file.mimeType || file.type || '';
   const ext  = (name.split('.').pop() || '').toLowerCase();
-  
+
   const rawUrl = file.url || file.secureUrl || file.secure_url || file.path || file.uri || file.location || file.fileUrl || file.downloadUrl || '';
-  const fileUrl = normalizeMediaUrl(rawUrl);
-  
+  const fileUrl = resolved?.fileUrl || normalizeMediaUrl(rawUrl);
+
   const rawThumb = file.thumbnailUrl || file.thumbUrl || file.previewUrl || (mime.startsWith('image/') || ext.match(/^(jpg|jpeg|png|gif|webp)$/i) ? rawUrl : null);
-  const thumbUrl = normalizeMediaUrl(rawThumb);
+  const thumbUrl = resolved?.thumbUrl || normalizeMediaUrl(rawThumb);
 
-  const kind = getFileKind(mime, name, fileUrl);
-
-  const apiBase = (ENV.API_BASE_URL || '').replace(/\/api\/chat\/?$/i, '');
-  const isMongoId = /^[0-9a-fA-F]{24}$/.test(file._id);
-  const proxyUrl = isMongoId ? `${apiBase}/api/chat/messages/files/${file._id}/proxy` : fileUrl;
-  
-  // Use proxyUrl for documents to avoid Cloudinary 401 on raw files
-  const finalDocUrl = (kind === 'image' || kind === 'video' || kind === 'audio') ? fileUrl : proxyUrl;
+  const kind = resolved?.kind || getFileKind(mime, name, fileUrl);
 
   const activeColor = (KIND_COLORS[kind] || KIND_COLORS.file);
-  const themeColor  = kind === 'image' || kind === 'video' || kind === 'audio'
-    ? activeColor
-    : (colors.primary || activeColor);
-
-  const [imgVisible,   setImgVisible]   = useState(false);
-  const [vidVisible,   setVidVisible]   = useState(false);
-  const [docVisible,   setDocVisible]   = useState(false);
-  const [imgError,     setImgError]     = useState(false);
-
-  // ── Action handlers ──
-
-  const handleCardPress = useCallback(() => {
-    switch (kind) {
-      case 'image': setImgVisible(true);  break;
-      case 'video': setVidVisible(true);  break;
-      default:      setDocVisible(true);  break;
-    }
-  }, [kind]);
-
   const isPlaceholder = !fileUrl || fileUrl.includes('/placeholder-loading');
 
-  // ── IMAGES: render inline thumbnail ──
   if (kind === 'image' && isPlaceholder) {
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[ms.card, { backgroundColor: colors.backgroundSecondary || colors.background, borderColor: colors.border }]}
         onLongPress={onLongPress}
         activeOpacity={0.75}
@@ -362,10 +83,19 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
 
   const token = useAuthStore.getState().accessToken;
   const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
-  const imageHeaders = {
+  const imageHeaders = resolved?.headers || {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
   };
+
+  const preview = (
+    <FilePreviewRenderer
+      visible={previewVisible}
+      file={file}
+      onClose={() => setPreviewVisible(false)}
+      colors={colors}
+    />
+  );
 
   if (kind === 'image' && imgError) {
     return (
@@ -385,32 +115,18 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
           </View>
           <TouchableOpacity
             style={[ms.actionBtn, { backgroundColor: activeColor + '15' }]}
-            onPress={() => setImgVisible(true)}
+            onPress={openPreview}
           >
             <Download size={16} color={activeColor} />
           </TouchableOpacity>
         </TouchableOpacity>
-
-        <ImageViewer
-          visible={imgVisible}
-          fileUrl={fileUrl}
-          name={name}
-          mimeType={mime}
-          headers={imageHeaders}
-          onClose={() => setImgVisible(false)}
-        />
+        {preview}
       </>
     );
   }
 
   if (kind === 'image') {
-    let targetUri = thumbUrl || fileUrl;
-
-    // Fix for Android not natively supporting HEIC rendering:
-    // Ask Cloudinary to deliver it as JPG
-    if (targetUri && targetUri.includes('res.cloudinary.com')) {
-      targetUri = targetUri.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
-    }
+    const targetUri = thumbUrl || fileUrl;
 
     logger.info('[MobileFileCard] Final image props:', {
       name,
@@ -421,21 +137,11 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
 
     return (
       <>
-        <TouchableOpacity onPress={() => setImgVisible(true)} onLongPress={onLongPress} activeOpacity={0.85} style={ms.imgThumbContainer}>
+        <TouchableOpacity onPress={openPreview} onLongPress={onLongPress} activeOpacity={0.85} style={ms.imgThumbContainer}>
           <Image
             source={{ uri: targetUri, headers: imageHeaders }}
             style={ms.imgThumb}
             resizeMode="cover"
-            onLoadStart={() => {
-              logger.info('[MobileFileCard Image] onLoadStart:', targetUri);
-            }}
-            onLoad={(e) => {
-              const { width, height } = e.nativeEvent.source || {};
-              logger.info('[MobileFileCard Image] onLoad SUCCESS:', { targetUri, width, height });
-            }}
-            onLoadEnd={() => {
-              logger.info('[MobileFileCard Image] onLoadEnd:', targetUri);
-            }}
             onError={(err) => {
               logger.warn('[MobileFileCard Image] onError FAILURE:', {
                 targetUri,
@@ -450,29 +156,28 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
             </View>
           )}
         </TouchableOpacity>
-
-        <ImageViewer
-          visible={imgVisible}
-          fileUrl={targetUri}
-          name={name}
-          mimeType={mime}
-          headers={imageHeaders}
-          onClose={() => setImgVisible(false)}
-        />
+        {preview}
       </>
     );
   }
 
-  // ── AUDIO: inline player ──
+  // Audio stays inline in chat (Files Screen uses AudioPlayerModal via FilePreviewRenderer).
   if (kind === 'audio') {
-    return <AudioPlayerCard fileUrl={fileUrl} name={name} activeColor={activeColor} colors={colors} />;
+    return (
+      <AudioPlayerCard
+        fileUrl={fileUrl}
+        name={name}
+        activeColor={activeColor}
+        colors={colors}
+        cacheFile={resolved?.cacheFile}
+      />
+    );
   }
 
-  // ── VIDEOS: thumbnail poster + play button ──
   if (kind === 'video') {
     return (
       <>
-        <TouchableOpacity onPress={() => setVidVisible(true)} onLongPress={onLongPress} activeOpacity={0.85} style={ms.vidPoster}>
+        <TouchableOpacity onPress={openPreview} onLongPress={onLongPress} activeOpacity={0.85} style={ms.vidPoster}>
           {thumbUrl ? (
             <Image source={{ uri: thumbUrl }} style={ms.vidPosterImg} resizeMode="cover" />
           ) : (
@@ -480,39 +185,28 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
               <Film size={40} color={activeColor} />
             </View>
           )}
-          {/* Play overlay */}
           <View style={ms.vidPlayOverlay}>
             <View style={ms.vidPlayCircle}>
               <Play size={22} color="#fff" style={{ marginLeft: scale(3) }} />
             </View>
           </View>
         </TouchableOpacity>
-
-        <VideoPlayer
-          visible={vidVisible}
-          fileUrl={fileUrl}
-          name={name}
-          onClose={() => setVidVisible(false)}
-        />
+        {preview}
       </>
     );
   }
 
-  // ── ALL OTHER types: rich file card ──
   return (
     <>
       <TouchableOpacity
         style={[ms.card, { backgroundColor: colors.backgroundSecondary || colors.background, borderColor: colors.border }]}
-        onPress={handleCardPress}
+        onPress={openPreview}
         onLongPress={onLongPress}
         activeOpacity={0.75}
       >
-        {/* Icon */}
         <View style={[ms.iconBox, { backgroundColor: activeColor + '20' }]}>
           <KindIcon kind={kind} color={activeColor} size={22} />
         </View>
-
-        {/* Info */}
         <View style={ms.info}>
           <Text style={[ms.fileName, { color: colors.textPrimary }]} numberOfLines={1}>{name}</Text>
           <View style={ms.metaRow}>
@@ -525,24 +219,12 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
           </View>
         </View>
       </TouchableOpacity>
-
-      {/* Document Preview Modal */}
-      <DocumentPreviewModal
-        visible={docVisible}
-        fileUrl={finalDocUrl}
-        name={name}
-        mimeType={mime}
-        kind={kind}
-        onClose={() => setDocVisible(false)}
-      />
+      {preview}
     </>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const ms = StyleSheet.create({
-  // ── Image thumbnail (inline in bubble) ──
   imgThumbContainer: {
     width: scale(250),
     height: verticalScale(200),
@@ -555,39 +237,6 @@ const ms = StyleSheet.create({
     height: '100%',
     backgroundColor: '#1e1e1e',
   },
-  imgThumbOverlay: {
-    position: 'absolute',
-    bottom: verticalScale(0),
-    left: scale(0),
-    right: scale(0),
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: scale(8),
-    paddingVertical: verticalScale(5),
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  imgThumbName: { color: '#fff', fontSize: moderateScale(11), fontWeight: '600', flex: 1, marginRight: scale(6) },
-  imgThumbSize: { color: 'rgba(255,255,255,0.75)', fontSize: moderateScale(10) },
-
-  // ── Fullscreen image viewer ──
-  imgModalBg: { flex: 1, backgroundColor: '#000' },
-  imgHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 54 : 40,
-    paddingHorizontal: scale(16),
-    paddingBottom: verticalScale(12),
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  imgCloseBtn: { padding: moderateScale(6) },
-  imgTitle: { flex: 1, color: '#fff', fontSize: moderateScale(15), fontWeight: '600', marginHorizontal: scale(10) },
-  imgContentArea: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  fullImg: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.72 },
-  imgErrorBox: { alignItems: 'center', gap: 12 },
-  imgErrorText: { color: 'rgba(255,255,255,0.5)', fontSize: moderateScale(14) },
-
-  // ── Video poster card ──
   vidPoster: {
     width: '100%',
     minWidth: scale(240),
@@ -616,93 +265,6 @@ const ms = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  vidFooterStrip: {
-    position: 'absolute',
-    bottom: verticalScale(0),
-    left: scale(0),
-    right: scale(0),
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: scale(8),
-    paddingVertical: verticalScale(5),
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  vidName: { color: '#fff', fontSize: moderateScale(11), fontWeight: '600', flex: 1 },
-  vidSize: { color: 'rgba(255,255,255,0.7)', fontSize: moderateScale(10) },
-
-  // ── Fullscreen video player ──
-  videoModalBg: { flex: 1, backgroundColor: '#000' },
-  videoHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 54 : 40,
-    paddingHorizontal: scale(12),
-    paddingBottom: verticalScale(10),
-    backgroundColor: 'rgba(0,0,0,0.7)',
-  },
-  videoHeaderBtn: { padding: moderateScale(8) },
-  videoTitle: { flex: 1, color: '#fff', fontSize: moderateScale(15), fontWeight: '600', marginHorizontal: scale(8) },
-  videoArea: { flex: 1, justifyContent: 'center', backgroundColor: '#000' },
-  videoPlayer: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.55 },
-  videoFooter: {
-    paddingHorizontal: scale(20),
-    paddingBottom: verticalScale(40),
-    paddingTop: verticalScale(16),
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    gap: 8,
-  },
-  videoTimeText: { color: 'rgba(255,255,255,0.7)', fontSize: moderateScale(12), textAlign: 'right' },
-  progressBarBg: { height: verticalScale(4), backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: moderateScale(2) },
-  progressBarFill: { height: verticalScale(4), backgroundColor: '#fff', borderRadius: moderateScale(2) },
-
-  // ── Audio player card ──
-  audioCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: moderateScale(14),
-    borderWidth: 1,
-    padding: moderateScale(12),
-    marginVertical: verticalScale(4),
-    gap: 12,
-  },
-  audioPlayBtn: {
-    width: scale(38),
-    height: verticalScale(38),
-    borderRadius: moderateScale(19),
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  audioInfo: { flex: 1, gap: 6 },
-  audioName: { fontSize: moderateScale(13), fontWeight: '600' },
-  audioProgressRow: { gap: 4 },
-  audioProgressBg: { height: verticalScale(3), borderRadius: moderateScale(2), overflow: 'hidden' },
-  audioProgressFill: { height: verticalScale(3), borderRadius: moderateScale(2) },
-  audioDuration: { fontSize: moderateScale(10) },
-
-  // ── Code preview modal ──
-  codeModalBg: { flex: 1, backgroundColor: '#0d1117' },
-  codeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 54 : 40,
-    paddingHorizontal: scale(12),
-    paddingBottom: verticalScale(12),
-    backgroundColor: '#161b22',
-    borderBottomWidth: 1,
-    borderBottomColor: '#30363d',
-  },
-  codeTitle: { flex: 1, color: '#e6edf3', fontSize: moderateScale(14), fontWeight: '600', marginHorizontal: scale(8) },
-  codeScroll: { flex: 1, padding: moderateScale(16) },
-  codeText: {
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: moderateScale(12),
-    color: '#e6edf3',
-    lineHeight: 20,
-  },
-  codeError: { color: '#f85149', fontSize: moderateScale(13), margin: moderateScale(20) },
-
-  // ── Generic file card ──
   card: {
     flexDirection: 'row',
     alignItems: 'center',

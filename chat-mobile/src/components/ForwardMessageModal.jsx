@@ -15,6 +15,8 @@ import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useChannelStore } from '../stores/channelStore';
 import { useAuthStore } from '../stores/authStore';
+import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useChannels } from '../hooks/queries/useChannels';
 import { AppAvatar } from './common';
 import { Hash, Lock, CheckCircle2, Circle } from 'lucide-react-native';
 import { messageAPI } from '../services/api';
@@ -29,7 +31,8 @@ const ForwardMessageModal = ({ visible, onClose, message, colors }) => {
   
   const navigation = useNavigation();
 
-  const channels = useChannelStore((s) => s.channels) || [];
+  const { activeWorkspace } = useWorkspaceStore();
+  const { data: channels = [] } = useChannels(activeWorkspace?._id);
   const { user } = useAuthStore();
 
   const handleClose = () => {

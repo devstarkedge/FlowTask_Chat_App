@@ -74,6 +74,7 @@ export default function MediaPickerSheet({
   const handleLaunchLibrary = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsMultipleSelection: true,
+      selectionLimit: 10,
       mediaTypes: ['images', 'videos'],
     });
     if (!result.canceled) {
@@ -88,6 +89,7 @@ export default function MediaPickerSheet({
       const result = await DocumentPicker.getDocumentAsync({
         multiple: true,
         type: '*/*',
+        copyToCacheDirectory: true,
       });
       if (!result.canceled) {
         onPickFiles(result.assets);

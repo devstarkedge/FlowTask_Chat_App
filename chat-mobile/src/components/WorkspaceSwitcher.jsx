@@ -27,20 +27,22 @@ import AddWorkspaceScreen from "./workspace/AddWorkspaceScreen";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import useResponsive from '../hooks/useResponsive';
 import api from '../services/api';
+import { useWorkspaces } from '../hooks/queries/useWorkspaces';
 
 const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
   const { width } = useResponsive();
   const SIDEBAR_WIDTH = Math.min(width * 0.82, 360);
   const insets = useSafeAreaInsets();
   const {
-    workspaces,
     activeWorkspace,
     switchWorkspace,
     fetchWorkspaces,
-    leaveWorkspace,
     isLoading,
     error,
   } = useWorkspaceStore();
+  // Workspaces live in the TanStack Query cache (populated by store's fetchWorkspaces),
+  // not in the zustand store — read them via the query hook (same key, keeps in sync).
+  const { data: workspaces = [] } = useWorkspaces();
   const { colors } = useThemeStore();
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const [actionMenuVisible, setActionMenuVisible] = useState(null);

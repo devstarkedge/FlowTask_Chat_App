@@ -54,6 +54,7 @@ import { workspaceAPI } from '../../services/api';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import WorkspaceAvatar from '../../components/WorkspaceAvatar';
 import ENV from '../../config/environment';
+import { useWorkspaceMembers } from '../../hooks/queries/useWorkspaceMembers';
 
 /* ───────────────────────────────────────
    TAB CONFIG
@@ -82,9 +83,7 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   const user = useAuthStore((s) => s.user);
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
-  const members = useWorkspaceStore((s) => s.members);
-  const fetchMembers = useWorkspaceStore((s) => s.fetchMembers);
-  const membersLoading = useWorkspaceStore((s) => s.membersLoading);
+  const { data: members = [], isLoading: membersLoading, refetch: refetchMembers } = useWorkspaceMembers(activeWorkspaceId);
   const deleteWorkspace = useWorkspaceStore((s) => s.deleteWorkspace);
   const leaveWorkspace = useWorkspaceStore((s) => s.leaveWorkspace);
 
@@ -125,7 +124,6 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   }, [activeWorkspaceId]);
 
   useEffect(() => {
-    if (activeTab === 'members') fetchMembers(activeWorkspaceId);
     if (activeTab === 'security') loadSecuritySettings();
     if (activeTab === 'notifications') loadNotificationSettings();
     if (activeTab === 'integrations') loadIntegrationSettings();
@@ -186,7 +184,7 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
-      fetchMembers(activeWorkspaceId),
+      refetchMembers(),
       loadWorkspaceData(),
     ]);
     setRefreshing(false);
@@ -289,7 +287,7 @@ export default function WorkspaceSettingsScreen({ navigation }) {
           try {
             await workspaceAPI.removeMember(activeWorkspaceId, memberId);
             Toast.show({ type: 'success', text1: 'Member removed' });
-            fetchMembers(activeWorkspaceId);
+            refetchMembers();
           } catch (e) {
             Toast.show({ type: 'error', text1: 'Failed to remove member' });
           }
@@ -307,7 +305,7 @@ export default function WorkspaceSettingsScreen({ navigation }) {
           try {
             await workspaceAPI.updateMemberRole(activeWorkspaceId, memberId, role);
             Toast.show({ type: 'success', text1: `Role changed to ${role}` });
-            fetchMembers(activeWorkspaceId);
+            refetchMembers();
           } catch (e) {
             Toast.show({ type: 'error', text1: 'Failed to update role' });
           }

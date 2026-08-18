@@ -3,10 +3,10 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   RefreshControl,
   TouchableOpacity,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useThreadStore } from '../stores/threadStore';
 import { useThemeStore } from '../stores/themeStore';
 import { formatRelativeTimeLong } from '../utils/dateUtils';
@@ -21,8 +21,10 @@ import logger from '../utils/logger';
 import { useAuthStore } from '../stores/authStore';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
+import { useTranslation } from 'react-i18next';
 
 const ThreadsScreen = ({ navigation }) => {
+  const { t } = useTranslation();
   const { colors } = useThemeStore();
   const threads = useThreadStore(state => state.threads);
   const isLoading = useThreadStore(state => state.isLoading);
@@ -212,20 +214,21 @@ const ThreadsScreen = ({ navigation }) => {
 
   return (
     <ScreenLayout>
-      <ScreenHeader title="Threads" onBack={() => navigation.goBack()} />
+      <ScreenHeader title={t('threads.title')} onBack={() => navigation.goBack()} />
 
       {/* Content */}
       <View style={[styles.subHeader, { backgroundColor: colors.background }]}>
-        <Text style={[styles.subHeaderText, { color: colors.textSecondary }]}>No new replies</Text>
+        <Text style={[styles.subHeaderText, { color: colors.textSecondary }]}>{t('threads.noNewReplies')}</Text>
       </View>
 
       {isLoading ? (
         <LoadingState />
       ) : threads.length === 0 ? (
-        <EmptyState icon={MessageSquare} title="No threads found" />
+        <EmptyState icon={MessageSquare} title={t('threads.noThreadsFound')} />
       ) : (
-        <FlatList
+        <FlashList
           data={threads}
+          estimatedItemSize={250}
           renderItem={renderThreadItem}
           keyExtractor={(item, index) => item._id ?? String(index)}
           contentContainerStyle={styles.listContainer}

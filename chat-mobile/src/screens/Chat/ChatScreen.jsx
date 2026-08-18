@@ -2,12 +2,17 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import useResponsive from '../../hooks/useResponsive';
 import { useWindowDimensions } from 'react-native';
+import { useChannels } from '../../hooks/queries/useChannels';
+import { useChannelMembers } from '../../hooks/queries/useChannelMembers';
+import { queryClient } from '../../queries/queryClient';
+import { queryKeys } from '../../queries/queryKeys';
+import { useWorkspaceMembers } from '../../hooks/queries/useWorkspaceMembers';
+import { useMessages, useSendMessage, useEditMessage, useDeleteMessage } from '../../hooks/queries/useMessages';
 
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TextInput,
   TouchableOpacity,
   Keyboard,
@@ -23,6 +28,7 @@ import {
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useShallow } from 'zustand/react/shallow';
+import { FlashList } from "@shopify/flash-list";
 import ChatMessageItem from "../../components/ChatMessageItem";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
@@ -151,36 +157,36 @@ const ChatScreen = ({ route, navigation }) => {
   const appScreenEdges = ['top', 'left', 'right'];
 
   // Granular store subscriptions — prevent unnecessary re-renders
-  const messages = useChatStore(useShallow((s) => s.messagesByChannel[channelId] || []));
-  const isLoadingMessages = useChatStore((s) => s.isLoadingMessages);
-  const channelHasMore = useChatStore((s) => s.hasMore[channelId]);
+  const {
+    data: messagesData,
+    isLoading: isLoadingMessages,
+    hasNextPage: channelHasMore,
+    fetchNextPage,       // load older messages (pagination)
+    refetch: refetchMessages, // force a fresh first-page load
+  } = useMessages(channelId);
+  // pages[0] = latest messages (oldest-to-newest within page).
+  // flatMap gives a single oldest-first array across all loaded pages.
+  const messages = messagesData?.pages?.flatMap(page => page.items) || [];
+  const { mutateAsync: sendMessage } = useSendMessage();
+  const { mutateAsync: editMessage } = useEditMessage();
+  const { mutateAsync: deleteMessage } = useDeleteMessage();
   const savedMessageIds = useLaterStore((s) => s.savedMessageIds);
   const {
-    fetchMessages,
-    sendMessage,
     addReaction,
     removeReaction,
-    editMessage,
-    deleteMessage,
   } = useChatStore(
     useShallow((s) => ({
-      fetchMessages: s.fetchMessages,
-      sendMessage: s.sendMessage,
       addReaction: s.addReaction,
       removeReaction: s.removeReaction,
-      editMessage: s.editMessage,
-      deleteMessage: s.deleteMessage,
     }))
   );
   const user = useAuthStore(useShallow((s) => s.user));
-  const channels = useChannelStore(useShallow((s) => s.channels));
-  const membersByChannel = useChannelStore(useShallow((s) => s.membersByChannel));
-  const fetchMembers = useChannelStore((s) => s.fetchMembers);
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const { data: channels = [] } = useChannels(activeWorkspaceId);
+  const { data: channelMembers = [] } = useChannelMembers(channelId);
   const markAsRead = useChannelStore((s) => s.markAsRead);
   const { colors } = useThemeStore(useShallow((s) => ({ colors: s.colors })));
-  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
-  // Subscribe to workspace members for live presence updates in the DM header
-  const workspaceMembers = useWorkspaceStore(useShallow((s) => s.members));
+  const { data: workspaceMembers = [] } = useWorkspaceMembers(activeWorkspaceId);
   const toggleSaveMessage = useLaterStore((s) => s.toggleSaveMessage);
   const isMessageSaved = useLaterStore((s) => s.isMessageSaved);
 
@@ -396,11 +402,11 @@ const ChatScreen = ({ route, navigation }) => {
   );
 
   // Full user objects from fetchMembers — has avatar, name, onlineStatus
-  const channelMembers = membersByChannel[channelId] || [];
+  const channelMembersArr = Array.isArray(channelMembers) ? channelMembers : [];
 
   const memberCount = useMemo(
-    () => channelMembers.length || channel?.members?.length || 0,
-    [channelMembers, channel]
+    () => channelMembersArr.length || channel?.members?.length || 0,
+    [channelMembersArr.length, channel?.members?.length]
   );
   const onlineCount = useMemo(
     () => channelMembers.filter((m) => m.onlineStatus === "online").length,
@@ -467,20 +473,26 @@ const ChatScreen = ({ route, navigation }) => {
         socket.emit('channel:join', String(channelId));
       }
 
-      const res = await fetchMessages(channelId);
-      if (res?.error && res.status === 403) {
-        try {
-          const currentUser = useAuthStore.getState().user;
-          await channelAPI.addMember(channelId, currentUser._id);
-          Toast.show({ type: 'success', text1: `Joined ${channelName || 'channel'}` });
-          await fetchMessages(channelId);
-          fetchMembers(channelId);
-        } catch (err) {
-          logger.error('Failed to auto-join channel:', err);
+      // refetchMessages() invalidates the cache and fetches the LATEST page fresh.
+      // DO NOT call fetchNextPage(channelId) here — fetchNextPage ignores its argument
+      // and loads the *next older* page using the stored cursor, meaning the latest
+      // messages are never re-fetched and the chat stays stale.
+      try {
+        await refetchMessages();
+      } catch (err) {
+        if (err?.response?.status === 403) {
+          try {
+            const currentUser = useAuthStore.getState().user;
+            await channelAPI.addMember(channelId, currentUser._id);
+            Toast.show({ type: 'success', text1: `Joined ${channelName || 'channel'}` });
+            await refetchMessages();
+          } catch (joinErr) {
+            logger.error('Failed to auto-join channel:', joinErr);
+          }
         }
-      } else {
-        fetchMembers(channelId);
       }
+
+      fetchMembers(channelId);
     };
     initData();
   }, [channelId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -491,7 +503,8 @@ const ChatScreen = ({ route, navigation }) => {
 
     const { conversationPresence } = require('../../services/conversationPresence');
     const setActiveChannel = useChannelStore.getState().setActiveChannel;
-    const channel = useChannelStore.getState().channels.find(
+    const currentChannels = queryClient.getQueryData(queryKeys.channels(useWorkspaceStore.getState().activeWorkspaceId)) || [];
+    const channel = currentChannels.find(
       (ch) => String(ch._id) === String(channelId)
     );
     const type = channel?.type === 'dm' ? 'dm' : 'channel';
@@ -557,7 +570,7 @@ const ChatScreen = ({ route, navigation }) => {
   }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSend = (content, options) => {
-    sendMessage(channelId, content, options);
+    sendMessage({ channelId, content, options, tempId: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}` });
   };
 
   const scrollToIndex = (index) => {
@@ -621,24 +634,21 @@ const ChatScreen = ({ route, navigation }) => {
     setScrolledToMessageId(null); // allow re-jump to same message
     setJumpToMessageId(targetId);
 
-    // If not loaded yet, page older history until we find it (or give up)
+    // Check whether the target is already in the TanStack Query cache
     const findIndex = () => {
-      const list = [...(useChatStore.getState().messagesByChannel[channelId] || [])].reverse();
+      const list = [...messages].reverse(); // displayedMessages order
       return list.findIndex((m) => String(m._id) === targetId);
     };
 
     let index = findIndex();
     if (index !== -1) return; // effect will scroll
 
+    // Page older history until we find it (or give up)
     let attempts = 0;
     while (attempts < 12) {
-      const hasMore = useChatStore.getState().hasMore[channelId];
-      const msgs = useChatStore.getState().messagesByChannel[channelId] || [];
-      if (!hasMore || msgs.length === 0) break;
-      const oldest = msgs[0];
-      if (!oldest?._id) break;
+      if (!channelHasMore || messages.length === 0) break;
       try {
-        await fetchMessages(channelId, oldest._id);
+        await fetchNextPage(); // loads the next older page (no args needed)
       } catch (_) {
         break;
       }
@@ -647,7 +657,7 @@ const ChatScreen = ({ route, navigation }) => {
       if (index !== -1) break;
     }
     // jumpToMessageId + displayedMessages update will trigger scroll effect
-  }, [channelId, fetchMessages]);
+  }, [channelId, channelHasMore, messages, fetchNextPage]);
 
   const renderMessage = useCallback(({ item, index }) => {
     const prevItem = displayedMessages[index + 1];
@@ -658,7 +668,7 @@ const ChatScreen = ({ route, navigation }) => {
     if (hasValidReplyTo(item.replyTo, item.parentMessageId)) {
       const parentId = item.replyTo?.messageId || item.parentMessageId;
       const parent = displayedMessages.find((m) => String(m._id) === String(parentId));
-      const members = membersByChannel[channelId] || [];
+      const members = channelMembers;
       const resolvedName = resolveReplyToSenderName(item.replyTo, parent, members);
       const resolvedContent = resolveReplyToContent(item.replyTo, parent);
       const resolvedAttachment = resolveReplyToAttachment(item.replyTo, parent);
@@ -697,7 +707,7 @@ const ChatScreen = ({ route, navigation }) => {
         index={index}
         savedMessageIds={savedMessageIds}
         highlightedMessageId={highlightedMessageId}
-        membersByChannel={membersByChannel}
+        channelMembers={channelMembers}
         channelId={channelId}
         channelName={channelName}
         maxBubbleWidth={maxBubbleWidth}
@@ -712,7 +722,7 @@ const ChatScreen = ({ route, navigation }) => {
     );
   }, [
     displayedMessages, user, colors, styles, searchQuery, searchResults,
-    currentMatch, savedMessageIds, highlightedMessageId, membersByChannel,
+    currentMatch, savedMessageIds, highlightedMessageId, channelMembers,
     channelId, channelName, maxBubbleWidth, showMessageActions, addReaction,
     removeReaction, setEmojiPickerTarget, navigation, handleReplyPreviewPress
   ]);
@@ -915,13 +925,15 @@ const ChatScreen = ({ route, navigation }) => {
           style={{ flex: 1 }}
           {...keyboardProps}
         >
-          <FlatList
+          <FlashList
             ref={flatListRef}
             style={{ flex: 1 }}
-          data={displayedMessages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item._id}
-          inverted
+            estimatedItemSize={80}
+            data={displayedMessages}
+            extraData={{ savedMessageIds, highlightedMessageId, searchQuery, searchResults, currentMatch, colors }}
+            renderItem={renderMessage}
+            keyExtractor={(item) => item.tempId || item._id || String(Math.random())}
+            inverted
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           contentContainerStyle={[styles.messageList, { flexGrow: 1 }]}
@@ -950,17 +962,13 @@ const ChatScreen = ({ route, navigation }) => {
           }}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           onEndReached={() => {
+            // fetchNextPage() uses the stored nextCursor (oldest message _id of the last
+            // fetched page) to load the next batch of older messages. No args needed.
             if (channelHasMore && !isLoadingMessages) {
-              const oldest = messages[0];
-              if (oldest) fetchMessages(channelId, oldest._id);
+              fetchNextPage();
             }
           }}
           onEndReachedThreshold={0.3}
-          initialNumToRender={12}
-          maxToRenderPerBatch={8}
-          windowSize={7}
-          updateCellsBatchingPeriod={50}
-          removeClippedSubviews={Platform.OS !== 'web'}
           onScrollToIndexFailed={(info) => {
             const approx = Math.max(0, (info.averageItemLength || 72) * info.index);
             flatListRef.current?.scrollToOffset({ offset: approx, animated: true });
@@ -1031,14 +1039,14 @@ const ChatScreen = ({ route, navigation }) => {
             colors={colors}
             text={text}
             onChangeText={setText}
-            members={membersByChannel[channelId] || []}
+            channelMembers={channelMembers}
             onSend={(content, options) => {
               if (editingMessage) {
-                editMessage(editingMessage._id, channelId, content, options?.htmlContent, options?.fileReferences);
+                editMessage({ messageId: editingMessage._id, channelId, content, htmlContent: options?.htmlContent, fileReferences: options?.fileReferences });
                 setEditingMessage(null);
               } else {
                 pendingAutoScroll.current = true;
-                sendMessage(channelId, content, options);
+                sendMessage({ channelId, content, options, tempId: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}` });
               }
               setReplyingTo(null);
             }}
@@ -1138,7 +1146,7 @@ const ChatScreen = ({ route, navigation }) => {
         }}
         onReply={() => {
           const msg = actionMenuTarget;
-          const members = membersByChannel[channelId] || [];
+          const members = channelMembers;
           const resolvedName = resolveMessageSenderName(msg, members) || "Someone";
           setReplyingTo({
             ...msg,
@@ -1179,18 +1187,24 @@ const ChatScreen = ({ route, navigation }) => {
                       try {
                         const remainingRefs = (msg.fileReferences || [])
                           .filter(r => {
-                            const rId = r.fileId?._id || r.fileId || r._id;
-                            const targetId = actionAttachmentTarget._id;
-                            return rId !== targetId;
+                            const rId = String(r.fileId?._id || r.fileId || r._id || '');
+                            const targetId = String(actionAttachmentTarget._id || '');
+                            return rId && targetId && rId !== targetId;
                           })
-                          .map(r => r.fileId?._id || r.fileId || r._id);
-                        await editMessage(msgId, channelId, msg.content, msg.htmlContent, remainingRefs);
+                          .map(r => String(r.fileId?._id || r.fileId || r._id || ''))
+                          .filter((id) => /^[0-9a-fA-F]{24}$/.test(id));
+                        const hasText = !!(msg.content && String(msg.content).trim());
+                        if (remainingRefs.length === 0 && !hasText) {
+                          await deleteMessage({ messageId: msgId, channelId });
+                        } else {
+                          await editMessage({ messageId: msgId, channelId, content: msg.content, htmlContent: msg.htmlContent, fileReferences: remainingRefs });
+                        }
                         Toast.show({ type: 'success', text1: 'Image deleted' });
                       } catch (err) {
                         Toast.show({ type: 'error', text1: 'Failed to delete image' });
                       }
                     } else {
-                      deleteMessage(msgId, channelId);
+                      deleteMessage({ messageId: msgId, channelId });
                     }
                   },
                 },

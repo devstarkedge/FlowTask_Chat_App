@@ -161,7 +161,7 @@ export const useAuthStore = create((set, get) => ({
       const { useUIStore } = await import('./uiStore');
       const { useNotificationStore } = await import('./notificationStore');
 
-      useChannelStore.setState({ channels: [], activeChannelId: null, unreads: {} });
+      useChannelStore.setState({ activeChannelId: null, unreads: {} });
       console.log('[Logout] Channel store reset.');
       useChatStore.setState({ messagesByChannel: {}, hasMore: {}, typingByChannel: {}, connectionStatus: 'disconnected' });
       console.log('[Logout] Chat store reset.');

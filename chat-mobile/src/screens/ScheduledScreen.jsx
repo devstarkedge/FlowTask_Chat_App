@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { useThemeStore } from '../stores/themeStore';
-import { useChannelStore } from '../stores/channelStore';
 import { formatRelativeTime, formatScheduledDate } from '../utils/dateUtils';
 import { ScreenLayout, ScreenHeader, LoadingState, EmptyState } from '../components/common';
 import { 
@@ -84,7 +83,6 @@ const ScheduledScreen = ({ navigation }) => {
   const scheduledMessages = useScheduledStore(state => state.scheduledMessages);
   const isLoading = useScheduledStore(state => state.isLoading);
   const fetchScheduledMessages = useScheduledStore(state => state.fetchScheduledMessages);
-  const { channels } = useChannelStore();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
 

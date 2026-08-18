@@ -1,9 +1,12 @@
 import { useChannelStore } from '../stores/channelStore';
 import { conversationPresence } from './conversationPresence';
 import { useAuthStore } from '../stores/authStore';
+import { useWorkspaceStore } from '../stores/workspaceStore';
 import { readReceiptAPI } from './api';
 import { getSocket } from './socket';
 import logger from '../utils/logger';
+import { queryClient } from '../queries/queryClient';
+import { queryKeys } from '../queries/queryKeys';
 
 /**
  * UnreadManager — mobile parity with web unreadManager.
@@ -32,9 +35,9 @@ class UnreadManager {
     }
 
     if (conversationPresence.isActive(cid)) {
-      const channel = useChannelStore.getState().channels.find(
-        (c) => String(c._id) === cid
-      );
+      const activeWorkspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+      const channels = queryClient.getQueryData(queryKeys.channels(activeWorkspaceId)) || [];
+      const channel = channels.find((c) => String(c._id) === cid);
       if (channel?.type === 'dm') {
         try {
           const socket = getSocket();

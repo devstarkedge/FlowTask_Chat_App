@@ -66,22 +66,40 @@ export const createMessagesSlice = (set, get) => ({
   },
 
   softDeleteMessage: (messageId, channelId) => {
-    set((state) => ({
-      messagesByChannel: {
-        ...state.messagesByChannel,
-        [channelId]: (state.messagesByChannel[channelId] || []).map(m =>
-          m._id === messageId ? { ...m, isDeleted: true, content: 'This message was deleted' } : m
-        )
-      }
-    }));
+    set((state) => {
+      const msgs = state.messagesByChannel[channelId] || [];
+      let found = false;
+      const updated = msgs.map((m) => {
+        if (String(m._id) !== String(messageId)) return m;
+        found = true;
+        return {
+          ...m,
+          isDeleted: true,
+          content: '',
+          htmlContent: '',
+          attachments: [],
+          fileReferences: [],
+          deletedAt: m.deletedAt || new Date().toISOString(),
+        };
+      });
+      if (!found) return state;
+      return {
+        messagesByChannel: {
+          ...state.messagesByChannel,
+          [channelId]: updated,
+        },
+      };
+    });
   },
 
   removeMessage: (messageId, channelId) => {
     set((state) => ({
       messagesByChannel: {
         ...state.messagesByChannel,
-        [channelId]: (state.messagesByChannel[channelId] || []).filter(m => m._id !== messageId)
-      }
+        [channelId]: (state.messagesByChannel[channelId] || []).filter(
+          (m) => String(m._id) !== String(messageId)
+        ),
+      },
     }));
-  }
+  },
 });

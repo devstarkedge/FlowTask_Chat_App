@@ -8,6 +8,7 @@ export default function MemberItem({ member, onOpenProfile, canRemove, onRemove 
   const id = member?._id || member?.userId;
   const status = presenceMap[id] || presenceMap[member?.flowTaskUserId] || presenceMap[member?.chatUserId] || member?.onlineStatus || 'offline';
   const isOnline = status === 'online'
+  const displayRole = member.workspaceRole || member.role || member.channelRole;
 
   return (
     <div className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-default ${member?.registrationStatus === 'faded' ? 'opacity-60' : 'hover:bg-(--bg-hover)'}`}>
@@ -22,13 +23,13 @@ export default function MemberItem({ member, onOpenProfile, canRemove, onRemove 
                 Unregistered
               </span>
             )}
-            {member.channelRole && member.registrationStatus !== 'faded' && (
+            {displayRole && member.registrationStatus !== 'faded' && (
               <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)' }}>
-                {member.channelRole.charAt(0).toUpperCase() + member.channelRole.slice(1)}
+                {displayRole.charAt(0).toUpperCase() + displayRole.slice(1)}
               </span>
             )}
           </div>
-          <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-muted)' }}>{member.email || member.role || ''}</p>
+          <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-muted)' }}>{member.email || displayRole || ''}</p>
         </div>
       </button>
       <div className="flex items-center gap-2">

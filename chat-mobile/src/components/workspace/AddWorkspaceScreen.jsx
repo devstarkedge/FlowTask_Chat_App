@@ -38,7 +38,7 @@ import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 const AddWorkspaceScreen = ({ visible, onClose, navigation }) => {
   const { colors } = useThemeStore();
   const { logout } = useAuthStore();
-  const { joinByInviteCode, fetchWorkspaces, switchWorkspace } = useWorkspaceStore();
+  const { joinByInviteCode, switchWorkspace } = useWorkspaceStore();
 
   // Sub-modal states
   const [createVisible, setCreateVisible] = useState(false);

@@ -17,6 +17,8 @@ import { X, Clock, Check } from "lucide-react-native";
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import logger from '../utils/logger';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import Button from './common/Button';
+import IconButton from './common/IconButton';
 
 
 const StatusModal = ({ visible, onClose, initialStatus }) => {
@@ -150,9 +152,14 @@ const StatusModal = ({ visible, onClose, initialStatus }) => {
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
               Set a status
             </Text>
-            <TouchableOpacity onPress={handleClose}>
-              <X size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
+            <IconButton 
+              icon={X}
+              size={40}
+              iconSize={24}
+              variant="ghost"
+              onPress={handleClose}
+              style={{ marginRight: -8 }}
+            />
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
@@ -246,36 +253,19 @@ const StatusModal = ({ visible, onClose, initialStatus }) => {
 
             {/* Actions */}
             <View style={styles.actions}>
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  styles.clearButton,
-                  { backgroundColor: colors.backgroundSecondary },
-                ]}
+              <Button
+                title="Clear status"
+                variant="ghost"
                 onPress={handleClear}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[styles.buttonText, { color: colors.textPrimary }]}
-                >
-                  Clear status
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  styles.saveButton,
-                  { backgroundColor: colors.primary },
-                ]}
+                style={[styles.button, styles.clearButton, { backgroundColor: colors.backgroundSecondary, borderColor: 'transparent' }]}
+                textStyle={{ color: colors.textPrimary }}
+              />
+              <Button
+                title="Save"
+                variant="primary"
                 onPress={handleSave}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[styles.buttonText, { color: colors.textInverse }]}
-                >
-                  Save
-                </Text>
-              </TouchableOpacity>
+                style={[styles.button, styles.saveButton]}
+              />
             </View>
           </ScrollView>
         </View>

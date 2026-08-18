@@ -23,8 +23,8 @@ router.post('/', protect, validate({ body: createWorkspaceSchema }), ctrl.create
 router.post('/join', protect, ctrl.joinByInviteCode);
 router.get('/slug/:slug', protect, ctrl.getWorkspaceBySlug);
 router.post('/accept-invite', protect, ctrl.acceptInvite);
-
 // ─── Public (no auth required) ───────────────────────────────────────────────
+router.post('/decline-invite', ctrl.declineInvite);
 router.get('/invite-info/:token', ctrl.getInviteInfo);
 
 // ─── Workspace-scoped routes ───────────────────────────────────────────────

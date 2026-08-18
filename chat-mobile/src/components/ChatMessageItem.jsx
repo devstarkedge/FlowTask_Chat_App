@@ -32,9 +32,9 @@ const ChatMessageItem = memo(({
   index,
   savedMessageIds,
   highlightedMessageId,
-  membersByChannel,
   channelId,
   channelName,
+  channelMembers,
   maxBubbleWidth,
   showMessageActions,
   addReaction,
@@ -138,10 +138,9 @@ const ChatMessageItem = memo(({
 
   const replySenderOverride = (() => {
     if (!hasValidReplyTo(item.replyTo, item.parentMessageId)) return null;
-    const members = membersByChannel?.[channelId] || [];
     const existing = (item.replyTo.senderName || "").trim();
     if (existing && !isGenericName(existing)) return existing;
-    return resolveReplyToSenderName(item.replyTo, null, members);
+    return resolveReplyToSenderName(item.replyTo, null, channelMembers || []);
   })();
 
   const showReplyQuote = hasValidReplyTo(item.replyTo, item.parentMessageId);
@@ -170,8 +169,7 @@ const ChatMessageItem = memo(({
         {!isMe && !isCompact && (
           <RNTouchableOpacity 
             onPress={() => {
-              const members = membersByChannel[channelId] || [];
-              const userObj = members.find((m) => m._id === messageSender?._id) || messageSender;
+              const userObj = (channelMembers || []).find((m) => m._id === messageSender?._id) || messageSender;
               navigation.navigate("UserProfile", { user: userObj, channelId, messageId: item._id });
             }}
             activeOpacity={0.7}
@@ -292,8 +290,7 @@ const ChatMessageItem = memo(({
                 mentions={item.mentions}
                 searchQuery={searchQuery}
                 onMentionPress={(userId) => {
-                  const members = membersByChannel[channelId] || [];
-                  const userObj = members.find((m) => m._id === userId) || { _id: userId };
+                  const userObj = (channelMembers || []).find((m) => m._id === userId) || { _id: userId };
                   navigation.navigate("UserProfile", { user: userObj, channelId, messageId: item._id });
                 }}
                 colors={{
@@ -433,6 +430,7 @@ const ChatMessageItem = memo(({
 
   return (
     prevProps.item === nextProps.item &&
+    prevProps.item?.isDeleted === nextProps.item?.isDeleted &&
     prevProps.prevItem === nextProps.prevItem &&
     prevProps.nextItem === nextProps.nextItem &&
     prevIsSaved === nextIsSaved &&

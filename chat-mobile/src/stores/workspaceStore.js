@@ -3,6 +3,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import storage from '../services/storage';
 import logger from '../utils/logger';
 import { workspaceAPI, setCachedWorkspaceId } from '../services/api';
+import { queryClient } from '../queries/queryClient';
+import { queryKeys } from '../queries/queryKeys';
 
 async function clearScopedAppState() {
   try {
@@ -16,10 +18,8 @@ async function clearScopedAppState() {
 
     disconnectSocket();
     useChannelStore.setState({
-      channels: [],
       activeChannelId: null,
       unreads: {},
-      membersByChannel: {},
       categories: [],
     });
     useChatStore.setState({ messagesByChannel: {}, hasMore: {}, typingByChannel: {} });
@@ -38,10 +38,8 @@ const recentlyRemovedWorkspaces = new Set();
 export const useWorkspaceStore = create(
   persist(
     (set, get) => ({
-      workspaces: [],
       activeWorkspaceId: null,
       activeWorkspace: null,
-      members: [],
       presenceMap: {},
       isLoading: false,
       error: null,
@@ -49,13 +47,16 @@ export const useWorkspaceStore = create(
       fetchWorkspaces: async (skipAutoSelect = false) => {
         set({ isLoading: true, error: null });
         try {
-          const { data } = await workspaceAPI.mine();
-          let workspaces = data.data?.workspaces || [];
+          const workspaces = await queryClient.fetchQuery({
+            queryKey: queryKeys.workspaces,
+            queryFn: async () => {
+              const { data } = await workspaceAPI.mine();
+              let w = data.data?.workspaces || [];
+              return w.filter(ws => !recentlyRemovedWorkspaces.has(ws._id));
+            }
+          });
           
-          // Filter out recently removed workspaces to prevent backend cache lag
-          workspaces = workspaces.filter(w => !recentlyRemovedWorkspaces.has(w._id));
-          
-          set({ workspaces, isLoading: false });
+          set({ isLoading: false });
 
           if (skipAutoSelect) return workspaces;
 
@@ -87,7 +88,14 @@ export const useWorkspaceStore = create(
 
       switchWorkspace: async (workspaceId) => {
         if (!workspaceId) return;
-        const { workspaces } = get();
+        let workspaces = queryClient.getQueryData(queryKeys.workspaces) || [];
+        if (workspaces.length === 0) {
+          // Fallback if cache is empty
+          try {
+            workspaces = await get().fetchWorkspaces(true);
+          } catch (e) {}
+        }
+        
         const workspace = workspaces.find((w) => w._id === workspaceId);
         if (workspace) {
           // Set header cache BEFORE any follow-up API calls
@@ -119,15 +127,21 @@ export const useWorkspaceStore = create(
           disconnectSocket();
 
           // Clear existing state via proper store actions
-          useChannelStore.setState({ channels: [], activeChannelId: null, unreads: {} });
+          useChannelStore.setState({ activeChannelId: null, unreads: {} });
           useChatStore.setState({ messagesByChannel: {}, hasMore: {}, typingByChannel: {} });
 
           // Reconnect socket
           await connectSocket();
 
-          // Refresh all data
+          // Channels are managed by TanStack Query (useChannels hook), not the store.
+          // Invalidate the cache so the next render of useChannels refetches automatically.
+          const wid = get().activeWorkspaceId;
+          if (wid) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
+          }
+
+          // Refresh other store-managed data in parallel
           await Promise.all([
-            useChannelStore.getState().fetchChannels(),
             useThreadStore.getState().fetchThreads?.() || Promise.resolve(),
             useLaterStore.getState().fetchSavedMessages?.() || Promise.resolve(),
             useDraftStore.getState().fetchDrafts?.(get().activeWorkspaceId) || Promise.resolve(),
@@ -174,10 +188,10 @@ export const useWorkspaceStore = create(
         // Add to our cache lag prevention list
         recentlyRemovedWorkspaces.add(removedWorkspaceId);
 
-        // Optimistically drop from local list
-        set((state) => ({
-          workspaces: state.workspaces.filter((w) => w._id !== removedWorkspaceId),
-        }));
+        // Optimistically drop from local cache
+        queryClient.setQueryData(queryKeys.workspaces, (old = []) => 
+          old.filter((w) => w._id !== removedWorkspaceId)
+        );
 
         // Authoritative list from server (/mine does not need workspace header)
         const workspaces = await get().fetchWorkspaces(true);
@@ -190,7 +204,7 @@ export const useWorkspaceStore = create(
           }
           const next = remaining[0];
           // Ensure list in store matches filtered remaining (in case server lag)
-          set({ workspaces: remaining.length === workspaces.length ? workspaces : remaining });
+          queryClient.setQueryData(queryKeys.workspaces, remaining.length === workspaces.length ? workspaces : remaining);
           await get().switchWorkspace(next._id);
           return { remaining: true, nextWorkspaceId: next._id };
         }
@@ -252,10 +266,8 @@ export const useWorkspaceStore = create(
       clearWorkspaceState: () => {
         setCachedWorkspaceId(null);
         set({
-          workspaces: [],
           activeWorkspaceId: null,
           activeWorkspace: null,
-          members: [],
           error: null,
           isLoading: false,
         });
@@ -264,25 +276,33 @@ export const useWorkspaceStore = create(
 
       // Update member role in store (for socket events, no API call)
       updateMemberRoleInStore: (userId, newRole) => {
-        set((state) => ({
-          members: state.members.map((m) =>
+        const wid = get().activeWorkspaceId;
+        if (!wid) return;
+        queryClient.setQueryData(queryKeys.workspaceMembers(wid), (oldMembers) => {
+          if (!oldMembers) return oldMembers;
+          return oldMembers.map((m) =>
             (m.userId?._id === userId || m.userId === userId || m._id === userId)
               ? { ...m, role: newRole }
               : m
-          ),
-        }))
+          );
+        });
       },
 
       // Update member profile in store (for socket events, no API call)
       updateMemberProfile: (userId, updates) => {
         set((state) => ({
           presenceMap: updates.onlineStatus ? { ...state.presenceMap, [userId]: updates.onlineStatus } : state.presenceMap,
-          members: state.members.map((m) =>
+        }));
+        const wid = get().activeWorkspaceId;
+        if (!wid) return;
+        queryClient.setQueryData(queryKeys.workspaceMembers(wid), (oldMembers) => {
+          if (!oldMembers) return oldMembers;
+          return oldMembers.map((m) =>
             (m.userId?._id === userId || m.userId === userId || m._id === userId)
               ? { ...m, ...updates }
               : m
-          ),
-        }))
+          );
+        });
       },
 
       updatePresenceBatch: (updates) => {
@@ -315,7 +335,7 @@ export const useWorkspaceStore = create(
       storage: createJSONStorage(() => storage),
       partialize: (state) => ({
         activeWorkspaceId: state.activeWorkspaceId,
-        activeWorkspace: state.activeWorkspace,
+        activeWorkspace: state.activeWorkspaceId ? state.activeWorkspace : null,
       }),
       onRehydrateStorage: () => (state) => {
         // After persist rehydration, prime API header cache immediately

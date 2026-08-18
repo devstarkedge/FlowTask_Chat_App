@@ -284,7 +284,9 @@ export default function InviteManagementScreen({ navigation }) {
           onPress={() => setChannelModalVisible(true)}
         >
           <View style={styles.rowLeft}>
-            <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>Add to channels</Text>
+            <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>
+              Add to channels{isGuest ? ' (required)' : ' (optional)'}
+            </Text>
             <Text style={[styles.rowValue, { color: colors.textSecondary }]} numberOfLines={1}>
               {selectedChannelsNames || "Select channels..."}
             </Text>

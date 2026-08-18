@@ -18,7 +18,8 @@ import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import logger from '../utils/logger';
 import { formatMessageTime } from "../utils/dateUtils";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
-
+import Button from './common/Button';
+import IconButton from './common/IconButton';
 
 const PauseNotificationsModal = ({ visible, onClose }) => {
   const { colors } = useThemeStore();
@@ -133,9 +134,14 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
               Pause notifications
             </Text>
-            <TouchableOpacity onPress={handleClose}>
-              <X size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
+            <IconButton 
+              icon={X}
+              size={40}
+              iconSize={24}
+              variant="ghost"
+              onPress={handleClose}
+              style={{ marginRight: -8 }}
+            />
           </View>
 
           {/* Duration Options or Custom Picker */}
@@ -210,14 +216,13 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
                     </TouchableOpacity>
                   </View>
                 )}
-                <TouchableOpacity
-                  style={[styles.scheduleButton, { backgroundColor: colors.primary, alignItems: 'center' }]}
+                <Button
+                  title="Set Custom Time"
+                  variant="primary"
                   onPress={handleCustomSubmit}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: moderateScale(14) }}>
-                    Set Custom Time
-                  </Text>
-                </TouchableOpacity>
+                  style={styles.scheduleButton}
+                  fullWidth
+                />
               </View>
 
               {Platform.OS === 'android' && showPicker && (

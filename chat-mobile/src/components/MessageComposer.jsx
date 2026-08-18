@@ -40,6 +40,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import logger from "../utils/logger";
 import { buildReplyToSnapshot, resolveMessageSenderName, getMessagePlainText } from "../utils/replyUtils";
 import { useKeyboardState } from "react-native-keyboard-controller";
+import { pickMediaAndFiles } from '../utils/mediaUtils';
+import FileClipboardService from '../services/FileClipboardService';
 import { useDraftStore } from "../stores/draftStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useScheduledStore } from "../stores/scheduledStore";
@@ -322,7 +324,37 @@ const MessageComposer = React.memo(function MessageComposer({
   }, [channelId]);
 
   const handleEditorUpdate = useCallback(
-    ({ html, text: plain, isEmpty }) => {
+    async ({ html, text: plain, isEmpty }) => {
+      // Intercept file pastes
+      if (plain && plain.includes('[flowtask-file:')) {
+        const file = await FileClipboardService.resolveMarker(plain);
+        if (file) {
+          // It's a valid clipboard file! Add to attachments.
+          setPendingFiles(prev => {
+             // Don't add if it already exists
+             if (prev.some(f => f._id === file._id || (f.id && f.id === file.id))) return prev;
+             const fileId = file._id || file.id || file.fileId?._id || file.fileId;
+             return [...prev, { 
+                ...file,
+                _id: fileId,
+                id: fileId,
+                name: file.originalName || file.fileName || file.name,
+                url: file.url || file.secureUrl, 
+                _tempUri: file.url || file.secureUrl || String(Math.random()),
+                status: 'completed',
+                progress: 100,
+                uploading: false,
+                uploadFailed: false
+             }];
+          });
+
+          // Strip the marker from the editor text
+          const cleanHtml = html.replace(/\[flowtask-file:[a-zA-Z0-9]+\]/g, '');
+          editorRef.current?.setContent(cleanHtml);
+          return;
+        }
+      }
+
       latestContentRef.current = { html: html || '', text: plain || '' };
       onChangeText(html || '');
       if (!isEmpty) {
@@ -339,7 +371,7 @@ const MessageComposer = React.memo(function MessageComposer({
         }
       }
     },
-    [onChangeText, channelId]
+    [onChangeText, channelId, setPendingFiles]
   );
 
   const handleEditorSelection = useCallback((state) => {
@@ -435,7 +467,7 @@ const MessageComposer = React.memo(function MessageComposer({
 
     if (!plainContent && pendingFiles.length === 0) return;
 
-    const uploadedFiles = pendingFiles.filter((f) => f._id);
+    const uploadedFiles = pendingFiles.filter((f) => f._id || f.id);
     if (
       pendingFiles.length > 0 &&
       uploadedFiles.length === 0 &&
@@ -447,32 +479,65 @@ const MessageComposer = React.memo(function MessageComposer({
     const mentionPayload =
       pendingMentions.length > 0 ? pendingMentions : undefined;
 
-    const attachmentObjects = uploadedFiles.map((f) => ({
-      _id: f._id,
-      fileName: f.name,
-      originalName: f.name,
-      mimeType: f.mimeType || 'image/jpeg',
-      fileSize: f.fileSize || 0,
-      url: f.url,
-      secureUrl: f.url,
-      thumbnailUrl: f.thumbnailUrl || f.url,
-      source: 'chat_upload',
-    }));
+    const isObjectId = (id) => /^[0-9a-fA-F]{24}$/.test(String(id || ''));
+    const fileRefIds = uploadedFiles
+      .map((f) => String(f._id || f.id || ''))
+      .filter(isObjectId);
+
+    const isHttpUrl = (u) => {
+      if (!u || typeof u !== 'string') return false;
+      return /^https?:\/\//i.test(u);
+    };
+
+    // Existing FileAssets must be sent as fileReferences only.
+    // Embedded `attachments` is for new uploads and is schema-strict (positive
+    // fileSize + absolute URL) — clipboard-pasted files often fail that and 400.
+    const attachmentObjects = fileRefIds.length
+      ? undefined
+      : uploadedFiles
+          .map((f) => ({
+            fileName: f.name || f.fileName || f.originalName || 'file',
+            originalName: f.originalName || f.name || f.fileName || 'file',
+            mimeType: f.mimeType || 'application/octet-stream',
+            fileSize: Number(f.fileSize) || 0,
+            url: f.url || f.secureUrl,
+            thumbnailUrl: f.thumbnailUrl || undefined,
+            source: 'chat_upload',
+          }))
+          .filter((a) => a.fileSize > 0 && isHttpUrl(a.url));
 
     const replyTo = replyingTo?._id ? buildReplyToSnapshot(replyingTo, members) : null;
-
-    onSend(plainContent, {
-      htmlContent: htmlContent || undefined,
-      ...(replyTo
-        ? {
-            parentMessageId: replyingTo._id,
-            replyTo,
-          }
-        : {}),
-      fileReferences: uploadedFiles.map((f) => f._id),
-      attachments: attachmentObjects,
+    const baseOptions = {
+      ...(replyTo ? { parentMessageId: replyingTo._id, replyTo } : {}),
       mentions: mentionPayload,
-    });
+    };
+
+    const numFiles = Math.max(fileRefIds.length, attachmentObjects ? attachmentObjects.length : 0);
+
+    if (numFiles <= 1) {
+      onSend(plainContent, {
+        htmlContent: htmlContent || undefined,
+        ...baseOptions,
+        ...(fileRefIds.length ? { fileReferences: fileRefIds } : {}),
+        ...(attachmentObjects?.length ? { attachments: attachmentObjects } : {}),
+      });
+    } else {
+      // Send each file as a separate message
+      const items = fileRefIds.length ? fileRefIds : attachmentObjects;
+      const isRefs = fileRefIds.length > 0;
+
+      items.forEach((item, index) => {
+        const isFirst = index === 0;
+        const text = isFirst ? plainContent : '';
+        const html = isFirst && htmlContent ? htmlContent : undefined;
+        
+        onSend(text, {
+          htmlContent: html,
+          ...baseOptions,
+          ...(isRefs ? { fileReferences: [item] } : { attachments: [item] }),
+        });
+      });
+    }
 
     // Clear reply/edit banner after send so it never sticks onto the next message
     if (replyingTo) onCancelReply?.();
@@ -518,18 +583,32 @@ const MessageComposer = React.memo(function MessageComposer({
       if (!scheduledAt || (!plainContent && pendingFiles.length === 0)) return;
 
       const replyTo = replyingTo?._id ? buildReplyToSnapshot(replyingTo, members) : null;
-
-      onSend(plainContent, {
-        htmlContent: htmlContent || undefined,
+      const baseOptions = {
         scheduledAt,
-        ...(replyTo
-          ? {
-              parentMessageId: replyingTo._id,
-              replyTo,
-            }
-          : {}),
-        fileReferences: pendingFiles.filter((f) => f._id).map((f) => f._id),
-      });
+        ...(replyTo ? { parentMessageId: replyingTo._id, replyTo } : {}),
+      };
+
+      const fileRefs = pendingFiles.filter((f) => f._id).map((f) => f._id);
+      
+      if (fileRefs.length <= 1) {
+        onSend(plainContent, {
+          htmlContent: htmlContent || undefined,
+          ...baseOptions,
+          ...(fileRefs.length ? { fileReferences: fileRefs } : {}),
+        });
+      } else {
+        fileRefs.forEach((item, index) => {
+          const isFirst = index === 0;
+          const text = isFirst ? plainContent : '';
+          const html = isFirst && htmlContent ? htmlContent : undefined;
+          
+          onSend(text, {
+            htmlContent: html,
+            ...baseOptions,
+            fileReferences: [item],
+          });
+        });
+      }
 
       latestContentRef.current = { html: '', text: '' };
       editorRef.current?.clear();
@@ -576,20 +655,23 @@ const MessageComposer = React.memo(function MessageComposer({
           
           const extToMime = {
             png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
-            gif: 'image/gif', webp: 'image/webp', mp4: 'video/mp4',
-            mov: 'video/quicktime', pdf: 'application/pdf', doc: 'application/msword',
+            gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif',
+            mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/x-m4v',
+            pdf: 'application/pdf', doc: 'application/msword',
             docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            zip: 'application/zip',
+            csv: 'text/csv', txt: 'text/plain', rtf: 'application/rtf',
+            zip: 'application/zip', rar: 'application/vnd.rar', '7z': 'application/x-7z-compressed',
+            mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg',
           };
 
           const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
-          if (!type || type === 'image' || type === 'video' || type === 'application/octet-stream') {
-            type = extToMime[ext] || (ext ? `image/${ext}` : 'image/jpeg');
+          if (!type || type === 'image' || type === 'video' || type === 'application/octet-stream' || !type.includes('/')) {
+            type = extToMime[ext] || (ext ? `application/octet-stream` : 'application/octet-stream');
           }
           if (!name.includes('.')) {
-            const mimeExtMap = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'video/mp4': 'mp4', 'application/pdf': 'pdf' };
-            name += `.${mimeExtMap[type] || 'jpg'}`;
+            const mimeExtMap = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'video/mp4': 'mp4', 'application/pdf': 'pdf', 'text/csv': 'csv' };
+            name += `.${mimeExtMap[type] || 'bin'}`;
           }
 
           let fileUri = localEntry._tempUri || localEntry.uri || '';
@@ -780,15 +862,6 @@ const MessageComposer = React.memo(function MessageComposer({
               }
             : {}),
           fileReferences: [fileId],
-          attachments: [{
-            fileName: uploadedFile.fileName || uploadedFile.originalName || file.name,
-            originalName: uploadedFile.originalName || file.name,
-            mimeType: uploadedFile.mimeType || (type === 'audio' ? 'audio/m4a' : 'video/mp4'),
-            fileSize: uploadedFile.fileSize || 0,
-            url: uploadedFile.url || uploadedFile.secureUrl,
-            thumbnailUrl: uploadedFile.thumbnailUrl,
-            source: 'chat_upload',
-          }],
           [type === 'audio' ? 'audioMeta' : 'videoMeta']: {
             duration,
             [type === 'audio' ? 'audioUrl' : 'videoUrl']: uploadedFile.url || uploadedFile.secureUrl,

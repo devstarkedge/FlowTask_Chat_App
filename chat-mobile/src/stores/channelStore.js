@@ -17,54 +17,13 @@ const getAuthUser = () => {
 export const useChannelStore = create(
   persist(
     (set, get) => ({
-      channels: [],
       activeChannelId: null,
       unreads: {},
-      membersByChannel: {},
       categories: [],
       starredIds: [],
       pinnedIds: [],
       isLoading: false,
 
-      fetchChannels: async (options = {}) => {
-        const silent = options?.silent === true;
-        if (!resolveWorkspaceId()) {
-          logger.warn('[ChannelStore] Skipping fetchChannels — no active workspace');
-          return;
-        }
-        if (!silent) set({ isLoading: true });
-        try {
-          const { data } = await channelAPI.list();
-          const channels = data.data.channels;
-          // Extract starred/pinned from channel flags if server provides them
-          const starredIds = channels.filter(c => c.isStarred || c.starred).map(c => c._id);
-          const pinnedIds = channels.filter(c => c.isPinned || c.pinned).map(c => c._id);
-          set({ channels, starredIds, pinnedIds, isLoading: false });
-
-          get().fetchCategories();
-
-          // ── Join channel rooms AFTER channels are loaded ──────────────────
-          // The socket connect handler runs before fetchChannels resolves, so channels
-          // is always [] at connect time. We must join rooms here so the mobile app
-          // receives channel:updated events (which carry lastMessagePreview from server).
-          try {
-            const socket = getSocket();
-            if (socket && socket.connected) {
-              channels.forEach(ch => {
-                const cid = ch._id?.toString ? ch._id.toString() : ch._id;
-                if (cid) socket.emit('channel:join', cid);
-              });
-            }
-          } catch (socketErr) {
-            logger.warn('[ChannelStore] Failed to join channel rooms after fetch:', socketErr);
-          }
-
-          get().fetchUnreads();
-        } catch (error) {
-          set({ isLoading: false });
-          logger.error('Failed to fetch channels:', error);
-        }
-      },
       fetchCategories: async () => {
         try {
           const { data } = await categoryAPI.list();
@@ -140,20 +99,25 @@ export const useChannelStore = create(
             }
           }
 
-          set((state) => {
-            // Merge fresh lastMessagePreview/lastMessageAt into channels where available
-            const updatedChannels =
-              Object.keys(channelUpdates).length > 0
-                ? state.channels.map((c) => {
-                    const cid = c._id?.toString ? c._id.toString() : c._id;
-                    return channelUpdates[cid]
-                      ? { ...c, ...channelUpdates[cid] }
-                      : c;
-                  })
-                : state.channels;
+          // Update unread counts in the Zustand store
+          set({ unreads });
 
-            return { unreads, channels: updatedChannels };
-          });
+          // Channels are managed by TanStack Query — update the cache directly
+          // instead of touching a non-existent state.channels array.
+          if (Object.keys(channelUpdates).length > 0) {
+            const queryClient = require('../queries/queryClient').queryClient;
+            const queryKeys = require('../queries/queryKeys').queryKeys;
+            const wid = resolveWorkspaceId();
+            if (wid) {
+              queryClient.setQueryData(queryKeys.channels(wid), (oldChannels) => {
+                if (!Array.isArray(oldChannels)) return oldChannels;
+                return oldChannels.map((c) => {
+                  const cid = c._id?.toString ? c._id.toString() : c._id;
+                  return channelUpdates[cid] ? { ...c, ...channelUpdates[cid] } : c;
+                });
+              });
+            }
+          }
         } catch (error) {
           logger.error('Failed to fetch unreads:', error);
         }
@@ -186,9 +150,10 @@ export const useChannelStore = create(
           const { data } = await channelAPI.create({ name, visibility, topic, memberIds });
           const channel = data.data?.channel || data.data;
           if (channel) {
-            set((state) => ({
-              channels: [...state.channels.filter(c => c._id !== channel._id), channel],
-            }));
+            const queryClient = require('../queries/queryClient').queryClient;
+            const queryKeys = require('../queries/queryKeys').queryKeys;
+            const wid = resolveWorkspaceId();
+            if (wid) queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
             Toast.show({ type: 'success', text1: `#${name} created` });
             return channel;
           }
@@ -204,13 +169,10 @@ export const useChannelStore = create(
           const { data } = await channelAPI.createDM(userId);
           const channel = data.data?.channel || data.data;
           if (channel) {
-            // Add to channels if not already present
-            set((state) => {
-              const exists = state.channels.some(c => c._id === channel._id);
-              return {
-                channels: exists ? state.channels : [...state.channels, channel],
-              };
-            });
+            const queryClient = require('../queries/queryClient').queryClient;
+            const queryKeys = require('../queries/queryKeys').queryKeys;
+            const wid = resolveWorkspaceId();
+            if (wid) queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
             return channel;
           }
         } catch (error) {
@@ -229,11 +191,12 @@ export const useChannelStore = create(
               starredIds: isStarred
                 ? state.starredIds.filter(id => id !== channelId)
                 : [...state.starredIds, channelId],
-              channels: state.channels.map(c =>
-                c._id === channelId ? { ...c, isStarred: !isStarred } : c
-              ),
             };
           });
+          const queryClient = require('../queries/queryClient').queryClient;
+          const queryKeys = require('../queries/queryKeys').queryKeys;
+          const wid = resolveWorkspaceId();
+          if (wid) queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
         } catch (error) {
           Toast.show({ type: 'error', text1: 'Failed to update star' });
         }
@@ -248,11 +211,12 @@ export const useChannelStore = create(
               pinnedIds: isPinned
                 ? state.pinnedIds.filter(id => id !== channelId)
                 : [...state.pinnedIds, channelId],
-              channels: state.channels.map(c =>
-                c._id === channelId ? { ...c, isPinned: !isPinned } : c
-              ),
             };
           });
+          const queryClient = require('../queries/queryClient').queryClient;
+          const queryKeys = require('../queries/queryKeys').queryKeys;
+          const wid = resolveWorkspaceId();
+          if (wid) queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
         } catch (error) {
           Toast.show({ type: 'error', text1: 'Failed to update pin' });
         }
@@ -269,39 +233,31 @@ export const useChannelStore = create(
       },
 
       addChannel: (channel) => {
-        const newCid = channel._id?.toString ? channel._id.toString() : channel._id;
-        set((state) => {
-          if (state.channels.some((c) => {
-            const cId = c._id?.toString ? c._id.toString() : c._id;
-            return cId === newCid;
-          })) return state;
-          return { channels: [...state.channels, channel] };
-        });
+        const queryClient = require('../queries/queryClient').queryClient;
+        const queryKeys = require('../queries/queryKeys').queryKeys;
+        const wid = resolveWorkspaceId();
+        if (wid) queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
       },
 
       removeChannel: (channelId) => {
         const cidStr = channelId?.toString ? channelId.toString() : channelId;
         set((state) => ({
-          channels: state.channels.filter((c) => {
-            const cId = c._id?.toString ? c._id.toString() : c._id;
-            return cId !== cidStr;
-          }),
           activeChannelId: (() => {
             const activeStr = state.activeChannelId?.toString ? state.activeChannelId.toString() : state.activeChannelId;
             return activeStr === cidStr ? null : state.activeChannelId;
           })(),
         }));
+        const queryClient = require('../queries/queryClient').queryClient;
+        const queryKeys = require('../queries/queryKeys').queryKeys;
+        const wid = resolveWorkspaceId();
+        if (wid) queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
       },
 
       updateChannel: (channelId, updates) => {
-        // Normalise to string so ObjectId !== string mismatches never cause silent failures
-        const cidStr = channelId?.toString ? channelId.toString() : channelId;
-        set((state) => ({
-          channels: state.channels.map((c) => {
-            const cId = c._id?.toString ? c._id.toString() : c._id;
-            return cId === cidStr ? { ...c, ...updates } : c;
-          }),
-        }));
+        const queryClient = require('../queries/queryClient').queryClient;
+        const queryKeys = require('../queries/queryKeys').queryKeys;
+        const wid = resolveWorkspaceId();
+        if (wid) queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
       },
 
       updateUnread: (channelId, count) => {
@@ -316,24 +272,29 @@ export const useChannelStore = create(
         const { channelId, content, createdAt } = message;
         if (!channelId) return;
 
-        // Preview-only update (mirrors web). Unread increments are handled by UnreadManager.
         const channelIdStr = channelId?.toString ? channelId.toString() : channelId;
         const rawText = (content || '').replace(/<[^>]*>/g, '').trim();
         const preview = rawText.length > 80 ? rawText.substring(0, 80) + '\u2026' : rawText;
         const timestamp = createdAt || new Date().toISOString();
 
-        set((state) => {
-          const cIndex = state.channels.findIndex(c => (c._id?.toString ? c._id.toString() : c._id) === channelIdStr);
-          if (cIndex === -1) return state;
+        const queryClient = require('../queries/queryClient').queryClient;
+        const queryKeys = require('../queries/queryKeys').queryKeys;
+        const wid = resolveWorkspaceId();
+        if (!wid) return;
 
-          const oldChannel = state.channels[cIndex];
+        queryClient.setQueryData(queryKeys.channels(wid), (oldChannels) => {
+          if (!oldChannels) return oldChannels;
+          const cIndex = oldChannels.findIndex(c => (c._id?.toString ? c._id.toString() : c._id) === channelIdStr);
+          if (cIndex === -1) return oldChannels;
+
+          const oldChannel = oldChannels[cIndex];
           const newTime = new Date(timestamp).getTime();
           const oldTime = new Date(oldChannel.lastMessageAt || 0).getTime();
 
-          if (oldTime >= newTime) return state;
+          if (oldTime >= newTime) return oldChannels;
 
           const updatedChannel = { ...oldChannel, lastMessageAt: timestamp, lastMessagePreview: preview };
-          const newChannels = [...state.channels];
+          const newChannels = [...oldChannels];
           newChannels.splice(cIndex, 1);
 
           let insertIdx = 0;
@@ -344,60 +305,8 @@ export const useChannelStore = create(
           }
           
           newChannels.splice(insertIdx, 0, updatedChannel);
-          return { channels: newChannels };
+          return newChannels;
         });
-      },
-
-      fetchMembers: async (channelId) => {
-        try {
-          const { data } = await usersAPI.getChannelMembers(channelId);
-          const members = data.data?.members || data.data || [];
-          set((state) => ({
-            membersByChannel: {
-              ...state.membersByChannel,
-              [channelId]: members,
-            },
-          }));
-        } catch (error) {
-          logger.error('Failed to fetch channel members:', error);
-        }
-      },
- 
-       
-
-        
-      // Update a single member's online status across all cached channel member lists.
-      // Called by socket presence events so the chat header avatar reflects live status.
-      updateMemberPresence: (userId, onlineStatus) => {
-        set((state) => {
-          const channelUpdates = {};
-          for (const [chId, members] of Object.entries(state.membersByChannel)) {
-            const hasUser = members.some(
-              (m) => m._id === userId || m.userId?._id === userId
-            );
-            if (hasUser) {
-              channelUpdates[chId] = members.map((m) =>
-                m._id === userId || m.userId?._id === userId
-                  ? { ...m, onlineStatus }
-                  : m
-              );
-            }
-          }
-          if (Object.keys(channelUpdates).length === 0) return state;
-          return {
-            membersByChannel: { ...state.membersByChannel, ...channelUpdates },
-          };
-        });
-      },
-
-      getStarredChannels: () => {
-        const { channels, starredIds } = get();
-        return channels.filter(c => starredIds.includes(c._id));
-      },
-
-      getPinnedChannels: () => {
-        const { channels, pinnedIds } = get();
-        return channels.filter(c => pinnedIds.includes(c._id));
       },
     }),
     {
@@ -408,9 +317,7 @@ export const useChannelStore = create(
         unreads: state.unreads,
         starredIds: state.starredIds,
         pinnedIds: state.pinnedIds,
-        channels: state.channels,
         categories: state.categories,
-        membersByChannel: state.membersByChannel,
       }),
     }
   )

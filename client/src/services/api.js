@@ -394,6 +394,8 @@ export const workspaceAPI = {
     api.delete(`/workspaces/${id}/invites/${inviteId}`),
   acceptEmailInvite: (token) =>
     api.post("/workspaces/accept-invite", { token }),
+  declineEmailInvite: (token) =>
+    api.post("/workspaces/decline-invite", { token }),
   getInviteInfo: (token) =>
     api.get(`/workspaces/invite-info/${token}`),
   // Workspace settings

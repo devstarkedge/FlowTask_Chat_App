@@ -13,7 +13,7 @@ class DirectoriesRepository {
    * Joins WorkspaceMembership + ChatUser for the given workspace.
    */
   async getWorkspaceUsers(workspaceId, { search, title, location, sort = 'recommended', page = 1, limit = 50 } = {}) {
-    const filter = { workspaceId, isActive: true };
+    const filter = { workspaceId: new mongoose.Types.ObjectId(workspaceId), isActive: true };
     const skip = (page - 1) * limit;
 
     let sortOption;

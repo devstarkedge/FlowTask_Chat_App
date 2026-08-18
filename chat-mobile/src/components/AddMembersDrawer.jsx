@@ -12,8 +12,9 @@ import {
 import KeyboardAwareContainer from "./common/KeyboardAwareContainer";
 import { useThemeStore } from "../stores/themeStore";
 import { X, Search, Check, Plus } from "lucide-react-native";
-import { directoriesAPI } from "../services/api";
+import { useDirectoryUsers } from "../hooks/queries/useDirectoryUsers";
 import { useAuthStore } from "../stores/authStore";
+import { useWorkspaceStore } from "../stores/workspaceStore";
 import { AppAvatar } from "./common";
 import { verticalScale, moderateScale } from '../utils/responsive';
 import useResponsive from '../hooks/useResponsive';
@@ -31,37 +32,27 @@ const AddMembersDrawer = ({ visible, onClose, onConfirm, isLoading }) => {
   const [memberSearchQuery, setMemberSearchQuery] = useState("");
   const [memberSearchResults, setMemberSearchResults] = useState([]);
   const [selectedMembers, setSelectedMembers] = useState([]);
-  const [isSearchingMembers, setIsSearchingMembers] = useState(false);
+
+
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const { data: searchData, isFetching: isSearchingMembers } = useDirectoryUsers(
+    activeWorkspaceId,
+    { limit: 100, search: memberSearchQuery.trim() }
+  );
 
   useEffect(() => {
-    if (!visible) return;
-    const fetchMembers = async () => {
-      setIsSearchingMembers(true);
-      try {
-        const query = memberSearchQuery.trim();
-        const params = { limit: 100 };
-        if (query) params.search = query;
-        const { data } = await directoriesAPI.getUsers(params);
-        const contacts = data.data || data; 
-        const filtered = (Array.isArray(contacts) ? contacts : contacts?.users || [])
-          .map(u => ({
-            _id: u._id || u.chatUserId,
-            name: u.name,
-            email: u.email,
-            avatar: u.avatar
-          }))
-          .filter(u => u._id && u._id !== user?._id);
-        setMemberSearchResults(filtered);
-      } catch (err) {
-        console.error("Failed to search members:", err);
-      } finally {
-        setIsSearchingMembers(false);
-      }
-    };
-
-    const timer = setTimeout(fetchMembers, memberSearchQuery ? 350 : 50);
-    return () => clearTimeout(timer);
-  }, [memberSearchQuery, visible, user]);
+    if (!visible || !searchData) return;
+    const contacts = searchData;
+    const filtered = (Array.isArray(contacts) ? contacts : contacts?.users || [])
+      .map(u => ({
+        _id: u._id || u.chatUserId,
+        name: u.name,
+        email: u.email,
+        avatar: u.avatar
+      }))
+      .filter(u => u._id && u._id !== user?._id);
+    setMemberSearchResults(filtered);
+  }, [searchData, visible, user]);
 
   const handleToggleMember = (member) => {
     setSelectedMembers((prev) => {

@@ -1,4 +1,5 @@
 import ENV from '../config/environment';
+import { getFilePreviewInfo } from './filePreviewInfo';
 
 /**
  * Normalizes any media URL (relative, protocol-less, socket server relative)
@@ -66,46 +67,23 @@ export const normalizeMediaUrl = (url) => {
 };
 
 /**
- * Enhanced file kind detection logic based on mime type, file name, and URL.
+ * Enhanced file kind detection — aligned with Web App preview rules.
  */
 export function getFileKind(mime = '', name = '', url = '') {
-  const cleanMime = (mime || '').toLowerCase();
-  const cleanName = (name || '').toLowerCase();
+  const info = getFilePreviewInfo({
+    mimeType: mime,
+    originalFileName: name,
+    name,
+    url,
+  });
+  if (info.kind !== 'file') return info.kind;
+
   const cleanUrl = (url || '').toLowerCase();
-
-  const nameExt = (cleanName.split('.').pop() || '').toLowerCase();
-  // Strip query params or hash from url before extracting extension
-  const urlPath = cleanUrl.split('?')[0].split('#')[0];
-  const urlExt = (urlPath.split('.').pop() || '').toLowerCase();
-
-  // Combine extensions to check
-  const ext = /^(jpg|jpeg|png|gif|webp|svg|tiff|tif|bmp|ico|heic|heif|avif|dng|raw|mp4|mov|avi|mkv|webm|flv|wmv|m4v|3gp|mp3|m4a|wav|aac|ogg|flac|opus|wma|pdf|doc|docx|xls|xlsx|csv|ppt|pptx|zip|rar|tar|gz|7z|bz2|xz|js|ts|jsx|tsx|py|java|c|cpp|cs|go|rs|rb|php|swift|kt|sh|bash|json|xml|html|htm|css|yaml|yml|toml|ini|env|md|mdx|txt)$/.test(nameExt)
-    ? nameExt
-    : urlExt;
-
-  const isAudioExt = /^(mp3|m4a|wav|aac|ogg|flac|opus|wma)$/.test(ext);
-  const isVideoExt = /^(mp4|mov|avi|mkv|webm|flv|wmv|m4v|3gp)$/.test(ext);
-
-  if (cleanMime.startsWith('image/') || /^(jpg|jpeg|png|gif|webp|svg|tiff|tif|bmp|ico|heic|heif|avif|dng|raw)$/.test(ext)) return 'image';
-  if (isAudioExt || cleanMime.startsWith('audio/')) return 'audio';
-  if (cleanMime.startsWith('video/') || isVideoExt) return 'video';
-  if (cleanMime === 'application/pdf' || ext === 'pdf') return 'pdf';
-  if (/^(doc|docx)$/.test(ext) || cleanMime.includes('word') || cleanMime.includes('msword')) return 'word';
-  if (/^(xls|xlsx)$/.test(ext) || cleanMime.includes('excel') || cleanMime.includes('spreadsheet')) return 'spreadsheet';
-  if (ext === 'csv') return 'csv';
-  if (/^(ppt|pptx)$/.test(ext) || cleanMime.includes('presentation') || cleanMime.includes('powerpoint')) return 'presentation';
-  if (/^(zip|rar|tar|gz|7z|bz2|xz)$/.test(ext) || cleanMime.includes('zip') || cleanMime.includes('rar') || cleanMime.includes('tar')) return 'archive';
-  if (/^(js|ts|jsx|tsx|py|java|c|cpp|cs|go|rs|rb|php|swift|kt|sh|bash)$/.test(ext)) return 'code';
-  if (/^(json|xml|html|htm|css|yaml|yml|toml|ini|env|md|mdx)$/.test(ext)) return 'code';
-  if (cleanMime.startsWith('text/') || cleanMime.includes('json') || cleanMime.includes('xml')) return 'code';
-  if (ext === 'txt') return 'text';
-
-  // Fallback checks on URL path pattern (e.g., Cloudinary image/video URLs)
   if (cleanUrl.includes('/image/upload/') || cleanUrl.includes('/images/')) return 'image';
   if (cleanUrl.includes('/video/upload/') || cleanUrl.includes('/videos/')) return 'video';
   if (cleanUrl.includes('/raw/upload/') && cleanUrl.includes('.audio')) return 'audio';
 
-  return 'file';
+  return info.kind;
 }
 
 export function getCleanFileName(name, originalFileName) {

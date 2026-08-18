@@ -10,6 +10,7 @@ import { useScheduledStore } from "../stores/scheduledStore";
 import { categoryAPI } from "../services/api";
 import { useTranslation } from "../utils/i18n";
 import { useShallow } from 'zustand/react/shallow';
+import { useChannels } from '../hooks/queries/useChannels';
 
 export const useHomeData = (navigation) => {
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
@@ -19,13 +20,11 @@ export const useHomeData = (navigation) => {
     useShallow((s) => ({ enabledHomeCards: s.enabledHomeCards, toggleHomeCard: s.toggleHomeCard }))
   );
   
-  const channels = useChannelStore((s) => s.channels) || [];
+  const { data: channels = [], isLoading: isChannelsLoading, refetch: fetchChannels } = useChannels(activeWorkspace?._id);
   const categories = useChannelStore((s) => s.categories) || [];
-  const fetchChannels = useChannelStore((s) => s.fetchChannels);
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
   const unreads = useChannelStore((s) => s.unreads) || {};
   const starredIds = useChannelStore((s) => s.starredIds) || [];
-  const isChannelsLoading = useChannelStore((s) => s.isLoading);
 
   const unreadThreadCount = useThreadStore((s) => s.unreadThreadCount) || 0;
   const fetchThreads = useThreadStore((s) => s.fetchThreads);

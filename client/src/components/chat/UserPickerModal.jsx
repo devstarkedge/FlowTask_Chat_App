@@ -638,7 +638,7 @@ function UserRow({ u, isSelected, isOnline, existingDM, isCreating, onSelect, on
           {isOnline && <span className="upm-badge-online">Online</span>}
         </div>
         <span className="upm-user-sub">
-          {u.email || u.title || (u.role && u.role !== 'employee' ? u.role : '')}
+          {u.email || u.title || (u.role && u.role !== 'employee' ? u.role.charAt(0).toUpperCase() + u.role.slice(1) : '')}
         </span>
       </div>
 

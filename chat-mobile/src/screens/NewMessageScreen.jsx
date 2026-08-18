@@ -20,6 +20,7 @@ import { useNewMessageSearch } from '../hooks/useNewMessageSearch';
 import { AppAvatar , HeaderBackButton } from '../components/common';
 import { X, Hash, Lock, Volume2, Search } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { useChannels } from '../hooks/queries/useChannels';
 
 
 // ─── Channel List Item ──────────────────────────────────────────────────────
@@ -110,11 +111,11 @@ const SectionHeader = React.memo(({ title, colors }) => (
 
 const NewMessageScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
-  const channels = useChannelStore(s => s.channels) || [];
+  const activeWorkspaceId = useWorkspaceStore(s => s.activeWorkspaceId);
+  const { data: channels = [] } = useChannels(activeWorkspaceId);
   const setActiveChannel = useChannelStore(s => s.setActiveChannel);
   const { createDM } = useChannelStore();
   const { user: currentUser } = useAuthStore();
-  const activeWorkspaceId = useWorkspaceStore(s => s.activeWorkspaceId);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [users, setUsers] = useState([]);

@@ -4,6 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../stores/authStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useThemeStore } from '../stores/themeStore';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../queries/queryKeys';
+import { fetchWorkspacesFn, useWorkspaces } from '../hooks/queries/useWorkspaces';
 import { workspaceAPI } from '../services/api';
 import { secureSet, secureGet, secureMultiRemove } from '../utils/secureStorage';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
@@ -15,7 +18,9 @@ const InviteProcessingScreen = ({ route, navigation }) => {
   const [inviteData, setInviteData] = useState(null);
   const [errorState, setErrorState] = useState(null); // 'invalid', 'expired', 'deleted', null
   const { accessToken, isInitialized } = useAuthStore();
-  const { joinByInviteCode, workspaces, switchWorkspace } = useWorkspaceStore();
+  const { joinByInviteCode, switchWorkspace } = useWorkspaceStore();
+  const { data: workspaces = [] } = useWorkspaces();
+  const queryClient = useQueryClient();
   const { colors } = useThemeStore();
 
   useEffect(() => {
@@ -50,10 +55,11 @@ const InviteProcessingScreen = ({ route, navigation }) => {
       }
 
       // Fetch latest workspaces list from server to ensure accurate member check
-      const { fetchWorkspaces } = useWorkspaceStore.getState();
-      await fetchWorkspaces(true);
+      const latestWorkspaces = await queryClient.fetchQuery({
+        queryKey: queryKeys.workspaces,
+        queryFn: fetchWorkspacesFn,
+      });
 
-      const latestWorkspaces = useWorkspaceStore.getState().workspaces || [];
       const isAlreadyMember = latestWorkspaces.some(w => w._id === info.workspaceId);
       if (isAlreadyMember) {
         Alert.alert(

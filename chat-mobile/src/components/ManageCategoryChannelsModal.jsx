@@ -8,10 +8,14 @@ import { categoryAPI, directoriesAPI } from '../services/api';
 import { X, Check, Search, Hash, Lock } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { isChatAppChannel } from '../utils/channelOrigin';
+import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useChannels } from '../hooks/queries/useChannels';
 
 const ManageCategoryChannelsModal = ({ visible, onClose, category, mode = 'add' }) => {
   const { colors } = useThemeStore();
-  const { channels, fetchChannels, fetchCategories } = useChannelStore();
+  const { fetchCategories } = useChannelStore();
+  const { activeWorkspace } = useWorkspaceStore();
+  const { data: channels = [], refetch: fetchChannels } = useChannels(activeWorkspace?._id);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChannels, setSelectedChannels] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);

@@ -5,7 +5,7 @@ import { X, Check } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { formatMessageTime } from '../utils/dateUtils';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
-
+import IconButton from './common/IconButton';
 
 const RECURRENCE_OPTIONS = ['None', 'Daily', 'Weekly', 'Monthly', 'Yearly'];
 
@@ -37,16 +37,26 @@ const CreateReminderModal = ({ visible, onClose, onSubmit, colors }) => {
         <View style={[styles.container, { backgroundColor: colors.background }]}>
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity style={styles.iconButton} onPress={onClose}>
-              <X size={20} color={colors.textPrimary} />
-            </TouchableOpacity>
+            <IconButton 
+              icon={X}
+              size={44}
+              iconSize={20}
+              variant="ghost"
+              onPress={onClose}
+              style={{ backgroundColor: 'rgba(0,0,0,0.04)' }}
+            />
             <Text style={[styles.title, { color: colors.textPrimary }]}>Reminder</Text>
-            <TouchableOpacity style={styles.iconButton} onPress={() => {
-              onSubmit && onSubmit({ date, description, recurrence });
-              onClose();
-            }}>
-              <Check size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+            <IconButton 
+              icon={Check}
+              size={44}
+              iconSize={20}
+              variant="ghost"
+              onPress={() => {
+                onSubmit && onSubmit({ date, description, recurrence });
+                onClose();
+              }}
+              style={{ backgroundColor: 'rgba(0,0,0,0.04)' }}
+            />
           </View>
 
           {/* Form */}

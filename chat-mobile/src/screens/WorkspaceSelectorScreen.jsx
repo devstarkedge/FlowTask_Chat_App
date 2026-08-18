@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useWorkspaces } from '../hooks/queries/useWorkspaces';
 import { LogOut, Plus, CircleChevronRight, Briefcase } from 'lucide-react-native';
 import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
@@ -19,7 +20,8 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 
 const WorkspaceSelectorScreen = ({ navigation }) => {
-  const { workspaces, isLoading, fetchWorkspaces, switchWorkspace } = useWorkspaceStore();
+  const { switchWorkspace } = useWorkspaceStore();
+  const { data: workspaces = [], isLoading, refetch: fetchWorkspaces } = useWorkspaces();
   const { logout, user } = useAuthStore();
   const { colors } = useThemeStore();
   const styles = createStyles(colors);

@@ -9,10 +9,10 @@ import {
 } from 'react-native';
 import { useDraftStore, getWorkspaceDrafts } from '../stores/draftStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
-import { useChatStore } from '../stores/chatStore';
 import { useThemeStore } from '../stores/themeStore';
-import { useChannelStore } from '../stores/channelStore';
+import { useScheduledStore } from '../stores/scheduledStore';
 import { useAuthStore } from '../stores/authStore';
+import { useChannels } from '../hooks/queries/useChannels';
 import { formatRelativeTime } from '../utils/dateUtils';
 import { ScreenLayout, ScreenHeader, EmptyState } from '../components/common';
 import { 
@@ -28,6 +28,8 @@ import { AppAvatar } from '../components/common';
 import { useConversationDetails } from '../hooks/useConversationDetails';
 import { Alert } from 'react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import api from '../services/api';
+import Toast from 'react-native-toast-message';
 
 
 const DraftItem = React.memo(({ item, onPress, onSchedule, onDelete, onSend, colors }) => {
@@ -101,9 +103,9 @@ const DraftsScreen = ({ navigation }) => {
   const drafts = useDraftStore(state => state.drafts);
   const clearDraft = useDraftStore(state => state.clearDraft);
   const fetchDrafts = useDraftStore(state => state.fetchDrafts);
+  const createScheduledMessage = useScheduledStore(state => state.createScheduledMessage);
   const { activeWorkspace } = useWorkspaceStore();
-  const { channels } = useChannelStore();
-  const sendMessage = useChatStore((s) => s.sendMessage);
+  const { data: channels = [] } = useChannels(activeWorkspace?._id);
   const [refreshing, setRefreshing] = useState(false);
   const [scheduleDraft, setScheduleDraft] = useState(null);
 
@@ -132,6 +134,7 @@ const DraftsScreen = ({ navigation }) => {
     });
   }, [channels, navigation]);
 
+
   const handleDeleteDraft = useCallback((draft) => {
     clearDraft(draft.channelId, draft.workspaceId, draft.threadId);
   }, [clearDraft]);
@@ -139,7 +142,8 @@ const DraftsScreen = ({ navigation }) => {
   const handleScheduleSend = useCallback(async (scheduledAt) => {
     if (!scheduleDraft) return;
     try {
-      await sendMessage(scheduleDraft.channelId, scheduleDraft.text, {
+      await createScheduledMessage(scheduleDraft.channelId, {
+        content: scheduleDraft.text || '',
         htmlContent: scheduleDraft.html,
         threadId: scheduleDraft.threadId === 'root' ? null : scheduleDraft.threadId,
         scheduledAt,
@@ -147,30 +151,33 @@ const DraftsScreen = ({ navigation }) => {
       clearDraft(scheduleDraft.channelId, scheduleDraft.workspaceId, scheduleDraft.threadId);
       setScheduleDraft(null);
       fetchDrafts(activeWorkspace?._id);
+      Toast.show({ type: 'success', text1: 'Message scheduled successfully.' });
     } catch (err) {
       console.error('Failed to schedule draft', err);
-      Alert.alert('Error', 'Failed to schedule message');
+      Toast.show({ type: 'error', text1: 'Failed to schedule message.' });
     }
-  }, [scheduleDraft, clearDraft, activeWorkspace?._id, fetchDrafts, sendMessage]);
+  }, [scheduleDraft, clearDraft, activeWorkspace?._id, fetchDrafts, createScheduledMessage]);
 
   const handleSendDraft = useCallback(async (draft) => {
     try {
-      const result = await sendMessage(draft.channelId, draft.text, {
-        htmlContent: draft.html,
-        threadId: draft.threadId === 'root' ? null : draft.threadId,
-      });
-      
-      if (result && result.error) {
-        throw new Error('Failed to send message via API');
+      const payload = {
+        content: draft.text || '',
+        ...(draft.html ? { htmlContent: draft.html } : {}),
+        ...(draft.threadId && draft.threadId !== 'root' ? { threadId: draft.threadId } : {}),
+      };
+      const { data } = await api.post(`/channels/${draft.channelId}/messages`, payload);
+      if (!data?.data?.message && !data?.data) {
+        throw new Error('No response from server');
       }
-
       clearDraft(draft.channelId, draft.workspaceId, draft.threadId);
       fetchDrafts(activeWorkspace?._id);
+      Toast.show({ type: 'success', text1: 'Draft sent!' });
     } catch (err) {
       console.error('Failed to send draft', err);
-      Alert.alert('Error', 'Failed to send message');
+      Toast.show({ type: 'error', text1: 'Failed to send message.' });
     }
-  }, [clearDraft, activeWorkspace?._id, fetchDrafts, sendMessage]);
+  }, [clearDraft, activeWorkspace?._id, fetchDrafts]);
+
 
   const renderDraftItem = useCallback(({ item }) => {
     return (

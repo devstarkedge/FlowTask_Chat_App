@@ -24,6 +24,8 @@ import { useWorkspaceStore } from "../stores/workspaceStore";
 import { directoriesAPI } from "../services/api";
 import { useChannels } from '../hooks/queries/useChannels';
 import { useWorkspaceMembers } from '../hooks/queries/useWorkspaceMembers';
+import { useDirectoryExternal } from '../hooks/queries/useDirectoryExternal';
+import { channelAPI } from '../services/api';
 import { queryClient } from '../queries/queryClient';
 import { queryKeys } from '../queries/queryKeys';
 import {
@@ -33,7 +35,8 @@ import {
   Plus,
   MessageSquare,
   Building2,
-  CheckSquare
+  CheckSquare,
+  Globe,
 } from "lucide-react-native";
 import logger from '../utils/logger';
 import { formatRelativeTime } from '../utils/dateUtils';
@@ -145,33 +148,65 @@ const DMListScreen = ({ navigation }) => {
   const [accountDrawerVisible, setAccountDrawerVisible] = useState(false);
   const [filterQuery, setFilterQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
+  const [openingDMFor, setOpeningDMFor] = useState(null);
+
+  const { data: externalUsers = [] } = useDirectoryExternal(
+    activeWorkspace?._id,
+    { status: 'active' }
+  );
 
   const dmChannels = useMemo(() => {
-    let dms = channels.filter((c) => c.type === "dm");
-    
+    // Only show DMs that have at least one message — matches web app behaviour
+    let dms = channels.filter(
+      (c) => c.type === "dm" && !!(c.lastMessageAt || c.lastMessage?.createdAt)
+    );
+
     if (activeFilter === "unreads") {
       dms = dms.filter(c => {
         const cid = c._id?.toString ? c._id.toString() : String(c._id);
         return (unreads[cid] || 0) > 0;
       });
-    } else if (activeFilter === "external") {
-      // Assuming external means they are not in our primary domain or there's an isExternal flag
-      dms = dms.filter(c => c.isExternal);
     }
 
     if (filterQuery.trim()) {
       const q = filterQuery.toLowerCase();
       dms = dms.filter((c) => c.name?.toLowerCase().includes(q));
     }
-    
+
     dms.sort((a, b) => {
       const aTime = new Date(a.lastMessageAt || a.lastMessage?.createdAt || 0).getTime();
       const bTime = new Date(b.lastMessageAt || b.lastMessage?.createdAt || 0).getTime();
       return bTime - aTime;
     });
-    
+
     return dms;
   }, [channels, filterQuery, activeFilter, unreads]);
+
+  const filteredExternalUsers = useMemo(() => {
+    if (!filterQuery.trim()) return externalUsers;
+    const q = filterQuery.toLowerCase();
+    return externalUsers.filter(u =>
+      (u.name || u.email || '').toLowerCase().includes(q)
+    );
+  }, [externalUsers, filterQuery]);
+
+  const handleExternalUserPress = useCallback(async (guest) => {
+    const guestUserId = guest.userId?._id || guest.userId || guest._id;
+    if (!guestUserId) return;
+    setOpeningDMFor(guestUserId);
+    try {
+      const { data } = await channelAPI.createDM(guestUserId);
+      const channel = data?.data?.channel || data?.data || data?.channel;
+      if (channel?._id) {
+        setActiveChannel(channel._id);
+        navigation.navigate('Chat', { channelId: channel._id, channelName: channel.name });
+      }
+    } catch (err) {
+      logger.error('[DMListScreen] Failed to open DM with external user:', err);
+    } finally {
+      setOpeningDMFor(null);
+    }
+  }, [navigation, setActiveChannel]);
 
   const handlePress = useCallback(
     (channel) => {
@@ -269,25 +304,79 @@ const DMListScreen = ({ navigation }) => {
       </View>
 
       {/* List */}
-      <FlatList
-        data={dmChannels}
-        keyExtractor={(item) => item._id}
-        renderItem={renderItem}
-        showsVerticalScrollIndicator={false}
-        initialNumToRender={12}
-        maxToRenderPerBatch={10}
-        windowSize={11}
-        removeClippedSubviews={Platform.OS !== 'web'}
-        contentContainerStyle={{ paddingTop: verticalScale(4), paddingBottom: verticalScale(80) }}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No direct messages yet</Text>
-            <TouchableOpacity onPress={() => setCreateNewVisible(true)}>
-              <Text style={[styles.emptyLink, { color: colors.primary }]}>Start a conversation</Text>
-            </TouchableOpacity>
-          </View>
-        }
-      />
+      {activeFilter === 'external' ? (
+        <FlatList
+          data={filteredExternalUsers}
+          keyExtractor={(item) => String(item._id)}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingTop: verticalScale(4), paddingBottom: verticalScale(80) }}
+          renderItem={({ item: guest }) => {
+            const name = guest.name || guest.email?.split('@')[0] || 'Unknown';
+            const guestUserId = guest.userId?._id || guest.userId || guest._id;
+            const isOpening = openingDMFor === guestUserId;
+            return (
+              <TouchableOpacity
+                style={[styles.externalRow, { backgroundColor: colors.background }]}
+                onPress={() => handleExternalUserPress(guest)}
+                activeOpacity={0.6}
+                disabled={isOpening}
+              >
+                <View style={{ position: 'relative' }}>
+                  <AppAvatar
+                    user={{ _id: guestUserId, name, avatar: guest.avatar }}
+                    size={44}
+                  />
+                  <View style={[styles.globeBadge, { backgroundColor: colors.primary }]}>
+                    <Globe size={moderateScale(9)} color="#fff" />
+                  </View>
+                </View>
+                <View style={styles.externalInfo}>
+                  <Text style={[styles.externalName, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {name}
+                  </Text>
+                  {guest.email ? (
+                    <Text style={[styles.externalEmail, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {guest.email}
+                    </Text>
+                  ) : null}
+                </View>
+                {isOpening ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <View style={[styles.guestBadge, { backgroundColor: 'rgba(124,58,237,0.12)' }]}>
+                    <Text style={styles.guestBadgeText}>Guest</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          }}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No external users</Text>
+            </View>
+          }
+        />
+      ) : (
+        <FlatList
+          data={dmChannels}
+          keyExtractor={(item) => item._id}
+          renderItem={renderItem}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={11}
+          removeClippedSubviews={Platform.OS !== 'web'}
+          contentContainerStyle={{ paddingTop: verticalScale(4), paddingBottom: verticalScale(80) }}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No direct messages yet</Text>
+              <TouchableOpacity onPress={() => setCreateNewVisible(true)}>
+                <Text style={[styles.emptyLink, { color: colors.primary }]}>Start a conversation</Text>
+              </TouchableOpacity>
+            </View>
+          }
+        />
+      )}
 
       <FAB onPress={() => setCreateNewVisible(true)} />
 
@@ -359,6 +448,44 @@ const styles = StyleSheet.create({
   emptyLink: {
     fontSize: moderateScale(15),
     fontWeight: "600",
+  },
+  externalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
+    gap: 12,
+  },
+  externalInfo: {
+    flex: 1,
+  },
+  externalName: {
+    fontSize: moderateScale(16),
+    fontWeight: '600',
+  },
+  externalEmail: {
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(2),
+  },
+  globeBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: scale(16),
+    height: scale(16),
+    borderRadius: scale(8),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  guestBadge: {
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
+    borderRadius: moderateScale(20),
+  },
+  guestBadgeText: {
+    color: '#7c3aed',
+    fontSize: moderateScale(11),
+    fontWeight: '600',
   },
 });
 

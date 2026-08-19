@@ -54,7 +54,7 @@ export default function App() {
   const initPrefs = usePreferencesStore((state) => state.init);
   const fetchNotifPrefs = useNotificationPrefStore((state) => state.fetchPreferences);
   const accessToken = useAuthStore((state) => state.accessToken);
-  const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
+  const activeWorkspaceId = useWorkspaceStore((state) => state?.activeWorkspaceId ?? null);
   const themeSubscriptionRef = useRef(null);
 
 

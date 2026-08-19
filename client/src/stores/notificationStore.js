@@ -3,6 +3,7 @@ import api from '../services/api'
 import { notificationAPI } from '../services/api'
 import logger from '../utils/logger'
 import { normalizeNotification } from '../utils/notificationFormat'
+import { useAuthStore } from './authStore'
 
 export const useNotificationStore = create((set, get) => ({
   notifications: [],
@@ -161,12 +162,10 @@ export const useNotificationStore = create((set, get) => ({
     try {
       const { data } = await notificationAPI.getPreferences()
       const prefs = data?.data || data || {}
-      set({
-        preferences: prefs,
-        preferencesLoading: false,
-        isPaused: prefs.pause?.active || false,
-        pauseResumeAt: prefs.pause?.resumeAt || null,
-      })
+      const pauseActive = prefs.pause?.active || false
+      const resumeAt = prefs.pause?.resumeAt || null
+      set({ preferences: prefs, preferencesLoading: false, isPaused: pauseActive, pauseResumeAt: resumeAt })
+      if (pauseActive && resumeAt) get()._schedulePauseExpiry(resumeAt)
     } catch (error) {
       set({ preferencesLoading: false })
       logger.error('Failed to fetch notification preferences:', error)
@@ -207,11 +206,9 @@ export const useNotificationStore = create((set, get) => ({
     try {
       const { data } = await notificationAPI.pauseNotifications({ duration })
       const prefs = data?.data || data || {}
-      set({
-        preferences: prefs,
-        isPaused: true,
-        pauseResumeAt: prefs.pause?.resumeAt || null,
-      })
+      const resumeAt = prefs.pause?.resumeAt || null
+      set({ preferences: prefs, isPaused: true, pauseResumeAt: resumeAt })
+      if (resumeAt) get()._schedulePauseExpiry(resumeAt)
       return true
     } catch (error) {
       logger.error('Failed to pause notifications:', error)
@@ -222,13 +219,11 @@ export const useNotificationStore = create((set, get) => ({
   // ─── Resume notifications ────────────────────────────────────────────
   resumeNotifications: async () => {
     try {
+      const existing = get()._pauseExpiryTimer
+      if (existing) clearTimeout(existing)
       const { data } = await notificationAPI.resumeNotifications()
       const prefs = data?.data || data || {}
-      set({
-        preferences: prefs,
-        isPaused: false,
-        pauseResumeAt: null,
-      })
+      set({ preferences: prefs, isPaused: false, pauseResumeAt: null, _pauseExpiryTimer: null })
       return true
     } catch (error) {
       logger.error('Failed to resume notifications:', error)
@@ -250,11 +245,45 @@ export const useNotificationStore = create((set, get) => ({
 
   // ─── Apply preferences from socket sync ──────────────────────────────
   applyPreferences: (prefs) => {
+    const pauseActive = prefs.pause?.active || false
+    const resumeAt = prefs.pause?.resumeAt || null
     set({
       preferences: prefs,
-      isPaused: prefs.pause?.active || false,
-      pauseResumeAt: prefs.pause?.resumeAt || null,
+      isPaused: pauseActive,
+      pauseResumeAt: resumeAt,
     })
+    if (pauseActive && resumeAt) {
+      get()._schedulePauseExpiry(resumeAt)
+    }
+  },
+
+  // ─── Schedule client-side auto-expiry of pause ────────────────────────
+  _pauseExpiryTimer: null,
+  _schedulePauseExpiry: (resumeAt) => {
+    const existing = get()._pauseExpiryTimer
+    if (existing) clearTimeout(existing)
+    const ms = new Date(resumeAt) - Date.now()
+    if (ms <= 0) {
+      set({ isPaused: false, pauseResumeAt: null, _pauseExpiryTimer: null })
+      return
+    }
+    const timer = setTimeout(() => {
+      set({ isPaused: false, pauseResumeAt: null, _pauseExpiryTimer: null })
+      // Also clear dnd in authStore so avatar icon removes immediately
+      const currentUser = useAuthStore.getState().user
+      if (currentUser) {
+        useAuthStore.setState({
+          user: {
+            ...currentUser,
+            chatPreferences: {
+              ...currentUser.chatPreferences,
+              dnd: { ...(currentUser.chatPreferences?.dnd || {}), enabled: false, endAt: null },
+            },
+          },
+        })
+      }
+    }, ms)
+    set({ _pauseExpiryTimer: timer })
   },
 
   // ─── Clear all state (for workspace switching/logout) ────────────────

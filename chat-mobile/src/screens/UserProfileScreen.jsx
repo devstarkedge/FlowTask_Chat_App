@@ -35,7 +35,11 @@ const UserProfileScreen = ({ route, navigation }) => {
   const { width } = useWindowDimensions();
   const { user } = route.params;
   const { colors } = useThemeStore();
-  const { activeWorkspace } = useWorkspaceStore();
+  // Use getState() directly — avoids creating a new object on every render
+  // which would trigger React re-renders and "Maximum update depth exceeded".
+  const state = useWorkspaceStore.getState();
+  const activeWorkspace = state.activeWorkspace;
+  const activeWorkspaceId = state.activeWorkspaceId;
   const { data: channels = [] } = useChannels(activeWorkspace?._id);
   const createDM = useChannelStore(s => s.createDM);
   const setActiveChannel = useChannelStore(s => s.setActiveChannel);

@@ -217,9 +217,10 @@ const ThreadsScreen = ({ navigation }) => {
       <ScreenHeader title={t('threads.title')} onBack={() => navigation.goBack()} />
 
       {/* Content */}
-      <View style={[styles.subHeader, { backgroundColor: colors.background }]}>
+      {/* <View style={[styles.subHeader, { backgroundColor: colors.background }]}>
         <Text style={[styles.subHeaderText, { color: colors.textSecondary }]}>{t('threads.noNewReplies')}</Text>
-      </View>
+      </View> */}
+      
 
       {isLoading ? (
         <LoadingState />
@@ -270,6 +271,7 @@ const createStyles = (colors) => StyleSheet.create({
   threadChannelHeader: {
     paddingHorizontal: moderateScale(16),
     marginBottom: moderateScale(12),
+    marginTop: moderateScale(12),
   },
   channelTitle: {
     fontSize: moderateScale(16),

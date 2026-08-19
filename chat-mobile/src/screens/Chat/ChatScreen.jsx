@@ -93,6 +93,8 @@ import { resolveReplyToSenderName, resolveMessageSenderName, resolveReplyToConte
 import MessageStatusTicks from '../../components/MessageStatusTicks';
 import MessageInfoModal from '../../components/MessageInfoModal';
 import GifRenderer from '../../components/GifRenderer';
+import Toast from 'react-native-toast-message';
+import { useScheduledStore } from '../../stores/scheduledStore';
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const getAuthorId = (msg) => {
@@ -569,6 +571,17 @@ const ChatScreen = ({ route, navigation }) => {
     return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
   }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const createScheduledMessage = useScheduledStore(state => state.createScheduledMessage);
+
+  const handleSchedule = useCallback(async (channelId, payload) => {
+    try {
+      await createScheduledMessage(channelId, payload);
+      Toast.show({ type: 'success', text1: 'Message scheduled successfully.' });
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Failed to schedule message.' });
+    }
+  }, [createScheduledMessage]);
+
   const handleSend = (content, options) => {
     sendMessage({ channelId, content, options, tempId: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}` });
   };
@@ -992,16 +1005,16 @@ const ChatScreen = ({ route, navigation }) => {
               />
             ) : null
           }
-          ListEmptyComponent={
-            !isLoadingMessages ? (
-              <View style={styles.emptyContainer}>
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  No messages yet
-                </Text>
-              </View>
-            ) : null
-          }
+          ListEmptyComponent={null}
         />
+
+        {!isLoadingMessages && displayedMessages.length === 0 && (
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              No messages yet
+            </Text>
+          </View>
+        )}
 
         {/* Typing Indicator */}
         {typingUsers.length > 0 && (
@@ -1050,6 +1063,7 @@ const ChatScreen = ({ route, navigation }) => {
               }
               setReplyingTo(null);
             }}
+            onSchedule={handleSchedule}
             replyingTo={replyingTo}
             editingMessage={editingMessage}
             onCancelReply={() => { setReplyingTo(null); setText(""); }}
@@ -1780,11 +1794,13 @@ const createStyles = (colors) =>
       fontWeight: '500',
     },
     emptyContainer: {
-      flex: 1,
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
       justifyContent: "center",
       alignItems: "center",
-      paddingVertical: verticalScale(80),
-      transform: Platform.OS === 'android' ? [{ scaleY: -1 }, { scaleX: -1 }] : [{ scaleY: -1 }],
     },
     emptyText: {
       fontSize: moderateScale(15),

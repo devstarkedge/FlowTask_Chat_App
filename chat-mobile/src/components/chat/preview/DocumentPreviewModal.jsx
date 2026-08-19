@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
+  Platform,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { X, Download } from 'lucide-react-native';

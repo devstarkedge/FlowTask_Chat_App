@@ -1,11 +1,14 @@
 import { useMemo } from 'react';
-import { useChannelStore } from '../stores/channelStore';
 import { useAuthStore } from '../stores/authStore';
+import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useChannels } from './queries/useChannels';
 import { Hash, Lock } from 'lucide-react-native';
 
 export const useConversationDetails = (channelId) => {
-  const { channels } = useChannelStore();
+  const { activeWorkspace } = useWorkspaceStore();
+  const { data: channels = [] } = useChannels(activeWorkspace?._id);
   const currentUser = useAuthStore(state => state.user);
+
 
   return useMemo(() => {
     // If channelId is an object (populated), extract _id, otherwise treat as string

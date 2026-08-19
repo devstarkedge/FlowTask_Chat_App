@@ -53,11 +53,13 @@ class SocketManager {
     const MessageEvents = require('../socket/MessageEvents').default;
     const ReceiptEvents = require('../socket/ReceiptEvents').default;
     const PresenceEvents = require('../socket/PresenceEvents').default;
+    const ScheduledEvents = require('../socket/ScheduledEvents').default;
 
     ConnectionEvents(this.socket);
     MessageEvents(this.socket);
     ReceiptEvents(this.socket);
     PresenceEvents(this.socket);
+    ScheduledEvents(this.socket);
   }
 
   disconnect() {

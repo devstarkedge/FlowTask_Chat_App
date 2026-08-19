@@ -289,6 +289,7 @@ const LaterScreen = ({ navigation }) => {
           renderItem={renderSavedItem}
           keyExtractor={(item) => item._key || item._id || Math.random().toString()}
           contentContainerStyle={styles.listContainer}
+          ItemSeparatorComponent={() => <View style={styles.divider} />}
           showsVerticalScrollIndicator={false}
           initialNumToRender={10}
           maxToRenderPerBatch={10}
@@ -489,7 +490,13 @@ const createStyles = (colors) => StyleSheet.create({
   listContainer: {
     padding: moderateScale(16),
     paddingTop: verticalScale(24),
-    gap: 24,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    opacity: 0.5,
+    marginVertical: verticalScale(12),
+    marginHorizontal: scale(4),
   },
   savedItem: {
     paddingVertical: verticalScale(8),

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from "react";
 import { View, Text, Image, StyleSheet } from "react-native";
 import { useShallow } from 'zustand/react/shallow';
 import { useThemeStore } from "../stores/themeStore";
+import { Moon } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 
@@ -145,20 +146,27 @@ const Avatar = React.memo(
           </View>
         )}
 
-        {showStatus && isDnd && (
+                                        {showStatus && isDnd && (
           <View
             style={[
               styles.dndBadge,
               {
-                minWidth: Math.max(14, size * 0.45),
-                height: Math.max(14, size * 0.45),
+                width: statusSize,
+                height: statusSize,
+                borderRadius: statusSize / 2,
+                backgroundColor: colors.busy,
                 borderColor: colors.background,
-                top: -4,
-                right: -4,
+                borderWidth: 2,
+                top: -2,
+                right: -2,
               },
             ]}
           >
-            <Text style={{ fontSize: Math.max(10, size * 0.35) }}>💤</Text>
+            <Moon
+              size={Math.max(8, size * 0.22)}
+              color={colors.textOnPrimary}
+              strokeWidth={2.5}
+            />
           </View>
         )}
       </View>
@@ -189,13 +197,11 @@ const styles = StyleSheet.create({
     borderRadius: moderateScale(999),
     backgroundColor: "transparent",
   },
-  dndBadge: {
+      dndBadge: {
     position: "absolute",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
-    borderRadius: moderateScale(999),
-    backgroundColor: "transparent",
   },
 });
 

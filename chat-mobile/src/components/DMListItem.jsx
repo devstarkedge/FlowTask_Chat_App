@@ -51,7 +51,7 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
             <BellOff size={14} color={colors.textSecondary} />
           )}
         </View>
-        {!!channel.lastMessagePreview && (
+        {!!channel.lastMessagePreview && channel.lastMessagePreview !== '(no message yet)' && (
           <Text
             style={[styles.lastMessage, { color: colors.textSecondary }]}
             numberOfLines={1}

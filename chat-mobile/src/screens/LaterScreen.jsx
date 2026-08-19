@@ -161,7 +161,7 @@ const LaterItem = React.memo(({ item, onPress, onLongPress, onBottomSheet, filte
 
 const LaterScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
-  const savedMessages = useLaterStore(state => state.savedMessages);
+  const savedMessages = useLaterStore(state => state.savedMessages ?? []);
   const isLoading = useLaterStore(state => state.isLoading);
   const fetchSavedMessages = useLaterStore(state => state.fetchSavedMessages);
   const updateStatus = useLaterStore(state => state.updateStatus);

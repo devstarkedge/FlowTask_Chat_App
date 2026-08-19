@@ -225,7 +225,7 @@ function BottomTabs({ navigation }) {
 
 export default function AppNavigation() {
   const { accessToken, isInitialized } = useAuthStore();
-  const { activeWorkspaceId } = useWorkspaceStore();
+  const activeWorkspaceId = useWorkspaceStore((s) => s?.activeWorkspaceId ?? null);
   const { colors, isInitialized: themeInitialized } = useThemeStore();
 
   if (!isInitialized || !themeInitialized) return null;

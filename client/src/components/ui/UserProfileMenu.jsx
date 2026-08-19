@@ -321,9 +321,9 @@ export default function UserProfileMenu({
             <div className="user-submenu">
               <div className="user-submenu-header">
                 <div className="user-submenu-title">Pause notifications...</div>
-                <button type="button" className="help-icon" title="Pause notifications help">
+                {/* <button type="button" className="help-icon" title="Pause notifications help">
                   <HelpCircle size={16} />
-                </button>
+                </button> */}
               </div>
 
               {dndState?.enabled ? (
@@ -365,7 +365,7 @@ export default function UserProfileMenu({
 
               <div className="submenu-divider" />
 
-              <div className="appearance-toggle-row" style={{ padding: '10px' }}>
+              {/* <div className="appearance-toggle-row" style={{ padding: '10px' }}>
                 <div style={{ width: 22 }}>
                   <span className="w-5 h-5 rounded-full" />
                 </div>
@@ -378,7 +378,7 @@ export default function UserProfileMenu({
                     <span />
                   </button>
                 </div>
-              </div>
+              </div> */}
 
               <div className="submenu-divider" />
 

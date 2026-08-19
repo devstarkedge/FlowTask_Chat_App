@@ -166,6 +166,7 @@ const MessageComposer = React.memo(function MessageComposer({
   workspaceId,
   colors,
   onSend,
+  onSchedule,
   replyingTo,
   editingMessage,
   onCancelReply,
@@ -570,7 +571,7 @@ const MessageComposer = React.memo(function MessageComposer({
 
   // ─── Schedule send ─────────────────────────────────────────────────────────
   const handleScheduleSend = useCallback(
-    (scheduledAt) => {
+    async (scheduledAt) => {
       const fromEditor = editorRef.current?.getContent?.() || latestContentRef.current;
       let htmlContent = (fromEditor.html || text || '').trim();
       let plainContent = (fromEditor.text || stripHtml(htmlContent)).trim();
@@ -583,33 +584,25 @@ const MessageComposer = React.memo(function MessageComposer({
       if (!scheduledAt || (!plainContent && pendingFiles.length === 0)) return;
 
       const replyTo = replyingTo?._id ? buildReplyToSnapshot(replyingTo, members) : null;
-      const baseOptions = {
+
+      const fileRefs = pendingFiles
+        .filter((f) => f._id || f.id)
+        .map((f) => String(f._id || f.id));
+
+      const payload = {
+        content: plainContent,
+        ...(htmlContent ? { htmlContent } : {}),
         scheduledAt,
         ...(replyTo ? { parentMessageId: replyingTo._id, replyTo } : {}),
+        ...(fileRefs.length ? { fileReferences: fileRefs } : {}),
       };
 
-      const fileRefs = pendingFiles.filter((f) => f._id).map((f) => f._id);
-      
-      if (fileRefs.length <= 1) {
-        onSend(plainContent, {
-          htmlContent: htmlContent || undefined,
-          ...baseOptions,
-          ...(fileRefs.length ? { fileReferences: fileRefs } : {}),
-        });
-      } else {
-        fileRefs.forEach((item, index) => {
-          const isFirst = index === 0;
-          const text = isFirst ? plainContent : '';
-          const html = isFirst && htmlContent ? htmlContent : undefined;
-          
-          onSend(text, {
-            htmlContent: html,
-            ...baseOptions,
-            fileReferences: [item],
-          });
-        });
+      // Delegate to the parent's schedule handler (calls scheduledAPI.create)
+      if (onSchedule) {
+        await onSchedule(channelId, payload);
       }
 
+      // Clear the composer after scheduling
       latestContentRef.current = { html: '', text: '' };
       editorRef.current?.clear();
       onChangeText('');
@@ -621,9 +614,9 @@ const MessageComposer = React.memo(function MessageComposer({
     },
     [
       text,
-      onSend,
-      pendingFiles,
+      onSchedule,
       channelId,
+      pendingFiles,
       activeWorkspaceId,
       clearDraft,
       onChangeText,
@@ -631,6 +624,7 @@ const MessageComposer = React.memo(function MessageComposer({
       members,
     ],
   );
+
 
   // ─── File attachment — pick and upload to server ──────────────────────────
   const uploadFilesToServer = useCallback(

@@ -698,6 +698,25 @@ export function connectSocket() {
   socket.on('notification:preferences:updated', ({ preferences }) => {
     if (preferences) {
       useNotificationStore.getState().applyPreferences(preferences)
+      // Sync pause state into authStore so Avatar isDnd reflects correctly
+      const currentUser = useAuthStore.getState().user
+      if (currentUser) {
+        const pauseActive = preferences.pause?.active === true
+        const endAt = preferences.pause?.resumeAt || null
+        useAuthStore.setState({
+          user: {
+            ...currentUser,
+            chatPreferences: {
+              ...currentUser.chatPreferences,
+              dnd: {
+                ...(currentUser.chatPreferences?.dnd || {}),
+                enabled: pauseActive,
+                endAt: pauseActive ? endAt : null,
+              },
+            },
+          },
+        })
+      }
     }
   })
 

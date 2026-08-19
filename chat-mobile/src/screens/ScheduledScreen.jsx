@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,9 @@ import {
   RefreshControl,
   Alert,
   TouchableOpacity,
+  AppState,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { useThemeStore } from '../stores/themeStore';
 import { formatRelativeTime, formatScheduledDate } from '../utils/dateUtils';
@@ -80,24 +82,83 @@ const ScheduledItem = React.memo(({ item, onPress, colors }) => {
 
 const ScheduledScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
-  const scheduledMessages = useScheduledStore(state => state.scheduledMessages);
+  const scheduledMessages = useScheduledStore(state => state.scheduledMessages ?? []);
   const isLoading = useScheduledStore(state => state.isLoading);
   const fetchScheduledMessages = useScheduledStore(state => state.fetchScheduledMessages);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
 
-  const fetchScheduledMessagesRef = useRef(fetchScheduledMessages);
-  fetchScheduledMessagesRef.current = fetchScheduledMessages;
+  // Stable ref so timers/callbacks never capture a stale function
+  const fetchRef = useRef(fetchScheduledMessages);
+  fetchRef.current = fetchScheduledMessages;
+
+  // ─── Layer 1: initial load ───────────────────────────────────────────────
+  useEffect(() => {
+    fetchRef.current();
+  }, []);
+
+  // ─── Layer 2: refresh every time user navigates to this screen ──────────
+  useFocusEffect(
+    useCallback(() => {
+      fetchRef.current();
+    }, [])
+  );
+
+  // ─── Layer 3: refresh when app returns from background ──────────────────
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        fetchRef.current();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  // ─── Layer 4: precision timers ───────────────────────────────────────────
+  // For every scheduled message whose time is within the next 24 hours,
+  // set a setTimeout that fires at the exact millisecond it's due (+1 s
+  // to allow the backend to process and send) and then refreshes the list.
+  // This ensures the screen updates within ~1 second of the scheduled time
+  // even if the socket event is missed or delayed.
+  const timerKey = useMemo(
+    () => scheduledMessages.map(m => `${m._id}:${m.scheduledAt}`).join('|'),
+    [scheduledMessages]
+  );
 
   useEffect(() => {
-    fetchScheduledMessagesRef.current();
-  }, []);
+    const timers = [];
+    const now = Date.now();
+    const MAX_DELAY = 24 * 60 * 60 * 1000; // 24 h
+
+    scheduledMessages.forEach((msg) => {
+      const due = new Date(msg.scheduledAt).getTime();
+      const delay = due - now;
+
+      if (delay > 0 && delay <= MAX_DELAY) {
+        // Fire 1 second after the scheduled time to give the backend a moment
+        // to process and emit the socket event. If the socket already removed
+        // it, the fetch is a cheap no-op.
+        const timer = setTimeout(() => {
+          fetchRef.current();
+        }, delay + 1000);
+        timers.push(timer);
+      } else if (delay <= 0 && delay > -5000) {
+        // Message became due very recently (e.g. app just foregrounded right
+        // on the scheduled second) — refresh immediately.
+        fetchRef.current();
+      }
+    });
+
+    return () => timers.forEach(clearTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timerKey]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchScheduledMessages();
     setRefreshing(false);
   }, [fetchScheduledMessages]);
+
 
   const renderScheduledItem = useCallback(({ item }) => {
     return (

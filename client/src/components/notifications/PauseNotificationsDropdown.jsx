@@ -38,7 +38,6 @@ export default function PauseNotificationsDropdown({ onClose }) {
       const diff = new Date(pauseResumeAt) - new Date()
       if (diff <= 0) {
         setCountdown('Resuming...')
-        // Safety net: auto-resume if the server socket event was missed
         resumeNotifications()
         return
       }

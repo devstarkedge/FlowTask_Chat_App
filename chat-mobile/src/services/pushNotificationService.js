@@ -34,11 +34,13 @@ export const setNavigationRef = (ref) => { _navigationRef = ref; };
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     const isRemotePush = notification.request.trigger?.type === 'push';
+    const isScheduledSent = notification.request.content?.data?.type === 'scheduled_sent'
+      || notification.request.content?.data?.type === 'scheduled_failed';
     return {
-      shouldPlaySound: !isRemotePush,
+      shouldPlaySound: !isRemotePush || isScheduledSent,
       shouldSetBadge: true,
-      shouldShowBanner: false,
-      shouldShowList: false,
+      shouldShowBanner: !isRemotePush || isScheduledSent,
+      shouldShowList: true,
     };
   },
 });

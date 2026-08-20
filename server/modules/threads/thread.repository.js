@@ -42,20 +42,26 @@ class ThreadRepository {
       return null;
     }
 
-    const idFilter = injectWorkspaceFilter({ _id: id }, workspaceId);
+    // Deliberately NOT routed through injectWorkspaceFilter here — both
+    // `_id` and `rootMessageId` are globally-unique Mongo ObjectIds (the
+    // latter is a Message's own _id), so an unscoped match can never
+    // return a different tenant's document. See channel.repository.js
+    // #findById for the same reasoning. workspaceId, when passed, is still
+    // applied as a defense-in-depth check.
+    const idFilter = workspaceId ? { _id: id, workspaceId } : { _id: id };
     let query = Thread.findOne(idFilter);
     if (populate) {
       query.populate('participantIds', 'name email avatar flowTaskUserId');
       query.populate('rootMessageId');
     }
-    
+
     let thread = await query.exec();
-    
+
     // Fallback: If not found by _id, check if it's actually a rootMessageId
     // This supports the frontend passing the message ID to open a thread
     if (!thread) {
       query = Thread.findOne(
-        injectWorkspaceFilter({ rootMessageId: id }, workspaceId),
+        workspaceId ? { rootMessageId: id, workspaceId } : { rootMessageId: id },
       );
       if (populate) {
         query.populate('participantIds', 'name email avatar flowTaskUserId');

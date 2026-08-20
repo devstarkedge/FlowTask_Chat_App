@@ -1,5 +1,5 @@
 import ChatUser from './ChatUser.model.js';
-import { BOT } from '../../config/constants.js';
+import { BOT, CHANNEL_MEMBER_ROLES } from '../../config/constants.js';
 
 function normalizePushSubscription(subscription = {}) {
   return {
@@ -191,6 +191,45 @@ class UserRepository {
    */
   async findByFlowTaskId(flowTaskUserId) {
     return ChatUser.findByFlowTaskId(flowTaskUserId);
+  }
+
+  /**
+   * Resolve a ChatUser by FlowTask id AND ensure they hold an active
+   * WorkspaceMembership in `workspaceId`, auto-provisioning one for
+   * FlowTask-synced identities that haven't been granted workspace access
+   * yet. Formalizes (and is reused by) the auto-add logic previously
+   * hand-rolled inline in channel.service.js#resolveAndValidateDMTarget.
+   *
+   * Use ONLY at call sites whose intent is "this action is about to grant
+   * or confirm the user's access to something workspace-scoped" (adding to
+   * a channel, resolving a DM target, bulk membership sync). Pure display/
+   * lookup call sites (resolving a name for a chat message, comparing an
+   * existing role before an update, a deactivation lookup) must keep using
+   * findByFlowTaskId — granting workspace access as a side effect of
+   * rendering a username or handling a deactivation event would be wrong.
+   *
+   * @param {string} flowTaskUserId
+   * @param {string} workspaceId
+   * @returns {Promise<{user: object, membership: object|null}|null>} null if no ChatUser exists for this FlowTask id at all
+   */
+  async resolveWorkspaceMember(flowTaskUserId, workspaceId) {
+    const user = await ChatUser.findByFlowTaskId(flowTaskUserId);
+    if (!user) return null;
+    if (!workspaceId) return { user, membership: null };
+
+    const { default: workspaceRepository } = await import('../workspaces/workspace.repository.js');
+    let membership = await workspaceRepository.getMembership(user._id, workspaceId);
+
+    if (!membership && user.authProvider === 'flowtask' && user.flowTaskUserId) {
+      try {
+        await workspaceRepository.addMember(user._id, workspaceId, CHANNEL_MEMBER_ROLES.MEMBER);
+      } catch {
+        // race: another concurrent request added it first — fall through to re-check
+      }
+      membership = await workspaceRepository.getMembership(user._id, workspaceId);
+    }
+
+    return { user, membership };
   }
 
   /**
@@ -523,6 +562,34 @@ class UserRepository {
     return ChatUser.find({
       flowTaskUserId: { $in: flowTaskUserIds },
     }).exec();
+  }
+
+  /**
+   * Plural form of resolveWorkspaceMember — batches the identity lookup,
+   * then provisions membership only for the subset that's missing it.
+   * @param {string[]} flowTaskUserIds
+   * @param {string} workspaceId
+   * @returns {Promise<object[]>} the resolved ChatUser documents (membership provisioning is a side effect, not part of the return shape)
+   */
+  async resolveWorkspaceMembers(flowTaskUserIds, workspaceId) {
+    const users = await ChatUser.find({ flowTaskUserId: { $in: flowTaskUserIds } }).exec();
+    if (!workspaceId || users.length === 0) return users;
+
+    const { default: WorkspaceMembership } = await import('../workspaces/WorkspaceMembership.model.js');
+    const existing = await WorkspaceMembership.find({
+      userId: { $in: users.map((u) => u._id) },
+      workspaceId,
+      isActive: true,
+    }).select('userId').lean();
+    const alreadyMember = new Set(existing.map((m) => m.userId.toString()));
+
+    const { default: workspaceRepository } = await import('../workspaces/workspace.repository.js');
+    await Promise.all(
+      users
+        .filter((u) => !alreadyMember.has(u._id.toString()) && u.authProvider === 'flowtask' && u.flowTaskUserId)
+        .map((u) => workspaceRepository.addMember(u._id, workspaceId, CHANNEL_MEMBER_ROLES.MEMBER).catch(() => {})),
+    );
+    return users;
   }
 
   /**

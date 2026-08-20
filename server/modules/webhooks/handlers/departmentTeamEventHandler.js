@@ -7,6 +7,7 @@ import Department from '../../categories/Department.model.js';
 import { emitToUser } from '../../../sockets/socketManager.js';
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SOCKET_EVENTS } from '../../../config/constants.js';
+import { requireWorkspaceId } from '../../../utils/webhookEventGuard.js';
 
 /**
  * Department & Team Event Handler — handles FlowTask department/team lifecycle events.
@@ -29,8 +30,9 @@ export function registerDepartmentTeamEventHandlers() {
 
   eventBus.register(FLOWTASK_EVENTS.DEPARTMENT_CREATED, async (payload) => {
     try {
-      const { department, userId, _workspaceId: wsId } = payload;
-      if (!department || !wsId) return;
+      const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.DEPARTMENT_CREATED);
+      const { department, userId } = payload;
+      if (!wsId || !department) return;
 
       const deptId = department._id || department.id;
       const deptName = department.name || 'Unnamed Department';
@@ -90,8 +92,9 @@ export function registerDepartmentTeamEventHandlers() {
 
   eventBus.register(FLOWTASK_EVENTS.DEPARTMENT_UPDATED, async (payload) => {
     try {
-      const { department, changes, _workspaceId: wsId } = payload;
-      if (!department) return;
+      const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.DEPARTMENT_UPDATED);
+      const { department, changes } = payload;
+      if (!wsId || !department) return;
 
       const deptId = department._id || department.id;
       
@@ -126,8 +129,9 @@ export function registerDepartmentTeamEventHandlers() {
 
   eventBus.register(FLOWTASK_EVENTS.DEPARTMENT_DELETED, async (payload) => {
     try {
-      const { departmentId, departmentName, _workspaceId: wsId } = payload;
-      if (!departmentId) return;
+      const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.DEPARTMENT_DELETED);
+      const { departmentId, departmentName } = payload;
+      if (!wsId || !departmentId) return;
 
       // Delete from local Department collection
       await Department.findOneAndDelete({ workspaceId: wsId, externalId: departmentId });
@@ -149,8 +153,9 @@ export function registerDepartmentTeamEventHandlers() {
 
   eventBus.register(FLOWTASK_EVENTS.DEPARTMENT_MEMBER_ADDED, async (payload) => {
     try {
-      const { departmentId, memberId, _workspaceId: wsId } = payload;
-      if (!departmentId || !memberId) return;
+      const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.DEPARTMENT_MEMBER_ADDED);
+      const { departmentId, memberId } = payload;
+      if (!wsId || !departmentId || !memberId) return;
 
       const channel = await channelRepository.findByFlowTaskRef('department', departmentId, wsId);
       if (!channel) return;
@@ -158,7 +163,7 @@ export function registerDepartmentTeamEventHandlers() {
       const user = await userRepository.findByFlowTaskId(memberId, wsId);
       if (!user) return;
 
-      await channelService.addMember(channel._id, user._id);
+      await channelService.addMember(channel._id, user._id, undefined, wsId);
     } catch (err) {
       logger.error('DEPARTMENT_MEMBER_ADDED handler failed', { error: err.message, payload });
     }
@@ -166,8 +171,9 @@ export function registerDepartmentTeamEventHandlers() {
 
   eventBus.register(FLOWTASK_EVENTS.DEPARTMENT_MEMBER_REMOVED, async (payload) => {
     try {
-      const { departmentId, memberId, _workspaceId: wsId } = payload;
-      if (!departmentId || !memberId) return;
+      const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.DEPARTMENT_MEMBER_REMOVED);
+      const { departmentId, memberId } = payload;
+      if (!wsId || !departmentId || !memberId) return;
 
       const channel = await channelRepository.findByFlowTaskRef('department', departmentId, wsId);
       if (!channel) return;
@@ -175,7 +181,7 @@ export function registerDepartmentTeamEventHandlers() {
       const user = await userRepository.findByFlowTaskId(memberId, wsId);
       if (!user) return;
 
-      await channelService.removeMember(channel._id, user._id, 'system');
+      await channelService.removeMember(channel._id, user._id, 'system', wsId);
     } catch (err) {
       logger.error('DEPARTMENT_MEMBER_REMOVED handler failed', { error: err.message, payload });
     }
@@ -185,8 +191,9 @@ export function registerDepartmentTeamEventHandlers() {
 
   eventBus.register(FLOWTASK_EVENTS.TEAM_CREATED, async (payload) => {
     try {
-      const { team, userId, _workspaceId: wsId } = payload;
-      if (!team || !wsId) return;
+      const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TEAM_CREATED);
+      const { team, userId } = payload;
+      if (!wsId || !team) return;
 
       const teamId = team._id || team.id;
       const teamName = team.name || 'Unnamed Team';
@@ -234,8 +241,9 @@ export function registerDepartmentTeamEventHandlers() {
 
   eventBus.register(FLOWTASK_EVENTS.TEAM_UPDATED, async (payload) => {
     try {
-      const { team, changes, _workspaceId: wsId } = payload;
-      if (!team) return;
+      const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TEAM_UPDATED);
+      const { team, changes } = payload;
+      if (!wsId || !team) return;
 
       const teamId = team._id || team.id;
       const channel = await channelRepository.findByFlowTaskRef('team', teamId, wsId);
@@ -255,8 +263,9 @@ export function registerDepartmentTeamEventHandlers() {
 
   eventBus.register(FLOWTASK_EVENTS.TEAM_DELETED, async (payload) => {
     try {
-      const { teamId, teamName, _workspaceId: wsId } = payload;
-      if (!teamId) return;
+      const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TEAM_DELETED);
+      const { teamId, teamName } = payload;
+      if (!wsId || !teamId) return;
 
       const channel = await channelRepository.findByFlowTaskRef('team', teamId, wsId);
       if (!channel || channel.isArchived) return;
@@ -275,8 +284,9 @@ export function registerDepartmentTeamEventHandlers() {
 
   eventBus.register(FLOWTASK_EVENTS.TEAM_MEMBER_ADDED, async (payload) => {
     try {
-      const { teamId, memberId, _workspaceId: wsId } = payload;
-      if (!teamId || !memberId) return;
+      const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TEAM_MEMBER_ADDED);
+      const { teamId, memberId } = payload;
+      if (!wsId || !teamId || !memberId) return;
 
       const channel = await channelRepository.findByFlowTaskRef('team', teamId, wsId);
       if (!channel) return;
@@ -284,7 +294,7 @@ export function registerDepartmentTeamEventHandlers() {
       const user = await userRepository.findByFlowTaskId(memberId, wsId);
       if (!user) return;
 
-      await channelService.addMember(channel._id, user._id);
+      await channelService.addMember(channel._id, user._id, undefined, wsId);
     } catch (err) {
       logger.error('TEAM_MEMBER_ADDED handler failed', { error: err.message, payload });
     }
@@ -292,8 +302,9 @@ export function registerDepartmentTeamEventHandlers() {
 
   eventBus.register(FLOWTASK_EVENTS.TEAM_MEMBER_REMOVED, async (payload) => {
     try {
-      const { teamId, memberId, _workspaceId: wsId } = payload;
-      if (!teamId || !memberId) return;
+      const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TEAM_MEMBER_REMOVED);
+      const { teamId, memberId } = payload;
+      if (!wsId || !teamId || !memberId) return;
 
       const channel = await channelRepository.findByFlowTaskRef('team', teamId, wsId);
       if (!channel) return;
@@ -301,7 +312,7 @@ export function registerDepartmentTeamEventHandlers() {
       const user = await userRepository.findByFlowTaskId(memberId, wsId);
       if (!user) return;
 
-      await channelService.removeMember(channel._id, user._id, 'system');
+      await channelService.removeMember(channel._id, user._id, 'system', wsId);
     } catch (err) {
       logger.error('TEAM_MEMBER_REMOVED handler failed', { error: err.message, payload });
     }

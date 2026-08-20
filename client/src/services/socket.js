@@ -7,6 +7,7 @@ import { useNotificationStore } from '../stores/notificationStore'
 import { useDraftStore } from '../stores/draftStore'
 import { useLaterStore } from '../stores/laterStore'
 import { useScheduledStore } from '../stores/scheduledStore'
+import { useFavoritesStore } from '../stores/favoritesStore'
 import { throttle } from '../utils/throttle'
 import { conversationPresence } from './conversationPresence'
 import { usePresenceStore } from '../stores/presenceStore'
@@ -160,15 +161,15 @@ export function connectSocket() {
     logger.log('[Socket] Connected:', socket.id)
     useChatStore.getState().setConnectionStatus('connected')
 
-    // Reconcile against the server before joining rooms. Cached sidebar state
-    // must never restore access removed while this device was disconnected.
+    // Reconcile sidebar state against the server. Channel-room membership
+    // itself no longer needs a client-driven join loop here — the server
+    // joins every accessible channel room as part of its own connection
+    // handshake (see socketManager.js), off the same channel list it already
+    // computes for presence. Looping 'channel:join' per channel here was
+    // redundant and, at 100+ channels, caused a DB query storm (2 queries
+    // per channel) on every connect/reconnect.
     try {
-      useChannelStore.getState().fetchChannels().then(() => {
-        const channels = useChannelStore.getState().channels
-        for (const ch of channels) {
-          socket.emit('channel:join', ch._id)
-        }
-      })
+      useChannelStore.getState().fetchChannels()
       useAuthStore.getState().fetchChannelSyncStatus()
       
       // Sync active conversation focus with the server upon connect
@@ -177,7 +178,7 @@ export function connectSocket() {
         socket.emit('window:focus', { channelId: activeChannelId })
       }
     } catch (err) {
-      logger.error('[Socket] Failed to join channels on connect:', err.message)
+      logger.error('[Socket] Failed to reconcile on connect:', err.message)
     }
   })
 
@@ -218,28 +219,26 @@ export function connectSocket() {
       ? Date.now() - _disconnectTime
       : Infinity
 
-    // ── Always rejoin channel rooms (lightweight, no server queries) ──
+    // Channel-room membership doesn't need client action here — a Socket.IO
+    // 'reconnect' opens a brand-new underlying connection, so the server's
+    // connection handler runs again and re-joins every accessible channel
+    // room itself (see socketManager.js). Re-emitting 'channel:join' per
+    // channel from the client was pure duplicate work, and at 100+ channels
+    // it doubled the DB-query storm this same reconnect already causes
+    // server-side.
     try {
-      const channels = useChannelStore.getState().channels
-      for (const ch of channels) {
-        socket.emit('channel:join', ch._id)
-      }
       const activeChannelId = useChannelStore.getState().activeChannelId
-      if (activeChannelId) {
-        socket.emit('channel:join', activeChannelId)
-        
+      if (activeChannelId && document.visibilityState === 'visible') {
         // Re-sync active conversation focus with the server upon reconnect
-        if (document.visibilityState === 'visible') {
-          socket.emit('window:focus', { channelId: activeChannelId })
-        }
+        socket.emit('window:focus', { channelId: activeChannelId })
       }
     } catch (err) {
-      logger.error('[Socket] Failed to rejoin rooms after reconnect:', err.message)
+      logger.error('[Socket] Failed to resync focus after reconnect:', err.message)
     }
 
     // ── Brief disconnect (< 5s): skip full cascade ──
-    // The socket already re-joined rooms. Real-time events will fill any
-    // tiny gaps. No need to refetch channels, messages, unreads, pins, etc.
+    // The socket already rejoined rooms server-side. Real-time events will
+    // fill any tiny gaps. No need to refetch channels, messages, unreads, etc.
     if (disconnectDuration < BRIEF_DISCONNECT_THRESHOLD_MS) {
       logger.log('[Socket] Brief disconnect — skipping full re-sync', { disconnectDuration })
       return
@@ -251,13 +250,8 @@ export function connectSocket() {
       useAuthStore.getState().fetchChannelSyncStatus()
       const channelStore = useChannelStore.getState()
       channelStore.fetchChannels().then(() => {
-        const channels = useChannelStore.getState().channels
-        for (const ch of channels) {
-          socket.emit('channel:join', ch._id)
-        }
         const activeChannelId = channelStore.activeChannelId
         if (activeChannelId) {
-          socket.emit('channel:join', activeChannelId)
           useChatStore.getState().fetchMessages(activeChannelId)
         }
         channelStore.fetchUnreads()

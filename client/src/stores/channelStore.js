@@ -50,6 +50,28 @@ export const useChannelStore = create(
   // Channel info panel
   showInfoPanel: false,
 
+  // Replace the channel list and drop `activeChannelId` if it no longer
+  // appears in it. `activeChannelId` is persisted to localStorage (see the
+  // `persist` config below) and shared across tabs/sessions of the same
+  // origin — if the workspace being loaded is the same one the user was
+  // last on, workspaceStore#switchWorkspace's reset never fires (see
+  // WorkspaceLayout.jsx's `workspaceId !== activeWorkspaceId` guard), so a
+  // stale channel id from an earlier session/workspace can survive
+  // untouched and get used as ChatLayout's fallback "current channel" (see
+  // localSearchConversationId) — firing read/members/pins/messages
+  // requests for a channel that isn't in THIS list ("Channel not found"
+  // 403s). Call this instead of setting `channels` directly anywhere new
+  // channels are loaded, exactly like workspaceStore already validates
+  // activeWorkspaceId against freshly-fetched workspaces.
+  setChannels: (channels) => {
+    const { activeChannelId } = get()
+    const stillValid = activeChannelId && channels.some((c) => c._id === activeChannelId)
+    set({
+      channels,
+      ...(stillValid ? {} : { activeChannelId: null }),
+    })
+  },
+
   fetchChannels: async (overrideWorkspaceId = null) => {
     // Dynamic import avoids circular dependency with workspaceStore
     let workspaceId = overrideWorkspaceId
@@ -66,7 +88,8 @@ export const useChannelStore = create(
       const { data } = await channelAPI.list(options)
       // Normalise every channel so _id is always a plain string
       const channels = (data.data.channels || []).map(normalizeChannel)
-      set({ channels, isLoading: false })
+      get().setChannels(channels)
+      set({ isLoading: false })
       get().fetchUnreads()
       get().fetchCategories()
       get().fetchDepartments()

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuthStore } from "../stores/authStore";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import {
@@ -109,17 +109,41 @@ const tabContent = {
    COMPONENT
 ───────────────────────────────────────────────────────────────────────── */
 export default function LoginPage() {
-  const { loginNative, isLoading, error, clearError, user } = useAuthStore();
+  const { loginNative, loginFlowTask, isLoading, error, clearError, user } = useAuthStore();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const redirectTo = searchParams.get("redirect");
+  const ssoToken = searchParams.get("token");
+  const ssoSource = searchParams.get("source");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const ssoAttempted = useRef(false);
+  const [ssoLoading, setSsoLoading] = useState(ssoSource === "flowtask" && !!ssoToken);
+
+  /* ── FlowTask "Open Chat" SSO landing ──────────────────────────────────
+     FlowTask redirects here as /login?token=...&source=flowtask&workspaceId=...
+     The workspaceId query param is display-only/untrusted — the actual
+     target workspace comes back from the server, which derives it from the
+     token's signed, verified claim (see auth.controller.js#loginFlowTask). */
+  useEffect(() => {
+    if (ssoSource !== "flowtask" || !ssoToken || ssoAttempted.current) return;
+    ssoAttempted.current = true;
+    loginFlowTask(ssoToken)
+      .then((data) => {
+        const workspaceId = data?.data?.workspaceId;
+        navigate(workspaceId ? `/workspace/${workspaceId}` : "/select-workspace", { replace: true });
+      })
+      .catch(() => {
+        // Error surfaces via the store's `error` state below; fall back to
+        // showing the native login form instead of a permanent spinner.
+        setSsoLoading(false);
+      });
+  }, [ssoSource, ssoToken, loginFlowTask, navigate]);
 
   /* ── Post-login redirect (handles ALL login paths: native email/password, already-authenticated) ── */
   useEffect(() => {
-    if (!user) return;
+    if (!user || ssoLoading) return;
     // User is authenticated — check for pending invite or explicit redirect
     const pendingInvite = sessionStorage.getItem("pendingInviteToken");
     if (pendingInvite) {
@@ -130,7 +154,7 @@ export default function LoginPage() {
     } else {
       navigate("/select-workspace", { replace: true });
     }
-  }, [user, navigate, redirectTo]);
+  }, [user, navigate, redirectTo, ssoLoading]);
 
 
   const handleNativeLogin = async (e) => {
@@ -149,6 +173,28 @@ export default function LoginPage() {
   /* ─────────────────────────────────────────────────────────────────────
      RENDER
   ───────────────────────────────────────────────────────────────────── */
+  if (ssoLoading) {
+    return (
+      <div className="lp" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+          <div
+            className="lp-spin"
+            style={{
+              width: 32,
+              height: 32,
+              border: "3px solid rgba(99,102,241,.2)",
+              borderTopColor: "#6366f1",
+              borderRadius: "50%",
+            }}
+          />
+          <p className="lp-subheading" style={{ margin: 0 }}>
+            Signing you in from FlowTask…
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="lp">
       {/* ── Mesh bg ──*/}

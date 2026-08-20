@@ -123,7 +123,10 @@ export const useAuthStore = create((set, get) => ({
           isInitialized: true,
         })
         if (Array.isArray(channels)) {
-          useChannelStore.setState({ channels })
+          // setChannels (not a raw setState) — drops a stale, persisted
+          // activeChannelId from an earlier session/workspace if it isn't
+          // in this login's channel list. See channelStore.js#setChannels.
+          useChannelStore.getState().setChannels(channels)
         }
         useWorkspaceStore.getState().fetchWorkspaces().catch((error) => {
           logger.error('Post-login workspace reconciliation failed:', error)

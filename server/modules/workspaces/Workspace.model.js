@@ -160,10 +160,15 @@ workspaceSchema.index({ 'billing.stripeCustomerId': 1 }, { sparse: true });
 workspaceSchema.index({ 'billing.stripeSubscriptionId': 1 }, { sparse: true });
 // FlowTask integration lookup
 workspaceSchema.index({ 'settings.flowtaskIntegration.enabled': 1, isActive: 1 }, { sparse: true });
-workspaceSchema.index(
-  { source: 1 },
-  { unique: true, partialFilterExpression: { source: 'flowtask', isActive: true } },
-);
+// NOTE: this used to also carry a partial-unique index on {source:1} that
+// enforced "at most one active source:'flowtask' workspace, ever" — a
+// structural singleton that made multi-tenant FlowTask integration
+// impossible. Uniqueness for FlowTask-linked workspaces is now enforced by
+// WorkspaceMapping's unique flowTaskWorkspaceId/chatWorkspaceId indexes
+// instead ("one ChatApp workspace per FlowTask workspace", not "at most one
+// FlowTask-sourced workspace"). Removing this from the schema does not drop
+// it from an existing Mongo deployment — see
+// scripts/migrateChatWorkspaceMapping.js, which calls Workspace.syncIndexes().
 
 // Partial unique index: only enforce slug uniqueness for active workspaces.
 workspaceSchema.index({ slug: 1 }, { unique: true, partialFilterExpression: { isActive: true } });

@@ -37,8 +37,6 @@ import categoryRoutes from './modules/categories/category.routes.js';
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
 import { registerFileUploadEventHandlers } from './services/fileUploadEvents.service.js';
 import eventBus from './services/eventBus.js';
-import channelService from './modules/channels/channel.service.js';
-import workspaceService from './modules/workspaces/workspace.service.js';
 import { startDeadlineWarningCron, stopDeadlineWarningCron } from './modules/bot/deadlineWarning.js';
 import { startDNDScheduler, stopDNDScheduler } from './services/dndScheduler.service.js';
 import fileCleanupService from './services/fileCleanup.service.js';
@@ -341,12 +339,32 @@ async function startServer() {
     // 3b. Start Canvas CRDT collaboration server
     await startCanvasCollaborationServer();
 
-    // 4. Ensure default workspace exists
-    const defaultWorkspace = await workspaceService.ensureDefaultWorkspace();
-    logger.info('Default workspace ready', { workspaceId: defaultWorkspace._id, slug: defaultWorkspace.slug });
-
-    // 5. Bootstrap system channels (for default workspace)
-    await channelService.bootstrapSystemChannels(defaultWorkspace._id.toString());
+    // 4/5. No default/global workspace is bootstrapped here anymore — every
+    // workspace is created dynamically (FlowTask SSO or ChatApp-native
+    // creation), and each one gets its own system channels bootstrapped at
+    // creation time (see workspace.service.js#_createDefaultChannels).
+    //
+    // Reconcile Workspace's indexes with the current schema on every boot.
+    // Removing an index from a Mongoose schema file does NOT drop it from
+    // an already-existing MongoDB deployment — that requires an explicit
+    // syncIndexes() call. The old partial-unique index on {source:1}
+    // (pre-multi-tenant: "at most one active source:'flowtask' workspace,
+    // ever") was previously only dropped by the one-time
+    // scripts/migrateChatWorkspaceMapping.js migration — if that was never
+    // run against a given deployment, every second FlowTask-linked
+    // workspace creation fails with a raw duplicate-key error on `source`
+    // that looks unrelated to slug/mapping collisions. Doing this at every
+    // boot instead of relying on a manually-run script means new
+    // deployments (and ones that missed the migration) self-heal
+    // automatically. Non-fatal — an index-sync failure must never prevent
+    // the server from starting.
+    try {
+      const { default: Workspace } = await import('./modules/workspaces/Workspace.model.js');
+      const indexChanges = await Workspace.syncIndexes();
+      logger.info('Workspace indexes synced', { indexChanges });
+    } catch (err) {
+      logger.error('Failed to sync Workspace indexes at boot — continuing startup', { error: err.message });
+    }
 
     // 6. Start deadline warning cron
     startDeadlineWarningCron();

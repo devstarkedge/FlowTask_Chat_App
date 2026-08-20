@@ -2,9 +2,7 @@ import asyncHandler from '../../middleware/asyncHandler.js';
 import { webhookVerifier } from '../../middleware/webhookVerifier.js';
 import eventProcessor from '../../services/eventProcessor.js';
 import logger from '../../utils/logger.js';
-import Workspace from '../workspaces/Workspace.model.js';
-import workspaceService from '../workspaces/workspace.service.js';
-import { BadRequestError } from '../../middleware/errorHandler.js';
+import { resolveByFlowTaskWorkspaceId } from '../../services/chat/workspaceMappingResolver.js';
 
 /**
  * Webhook Controller — single entry point for all FlowTask webhook events.
@@ -18,60 +16,19 @@ import { BadRequestError } from '../../middleware/errorHandler.js';
  * and payload workspaceId, with strict validation.
  */
 
-async function resolveWorkspaceRef(reference) {
-  if (!reference) return null;
-
-  if (/^[0-9a-fA-F]{24}$/.test(reference)) {
-    const workspace = await Workspace.findById(reference);
-    if (workspace?.isActive) return workspace;
-    return null;
-  }
-
-  const workspace = await Workspace.findBySlug(reference);
-  return workspace?.isActive ? workspace : null;
-}
-
 /**
- * Resolve the target workspace for an incoming webhook.
- * FlowTask sends a workspace slug (e.g., 'flowtask') as workspaceId.
- * Resolution order:
- *   1. X-FlowTask-Workspace header (slug or ObjectId)
- *   2. Payload's workspaceId field
- *   3. Fall back to default workspace
+ * Resolve the target ChatApp workspace for an incoming webhook.
+ * FlowTask always sends ITS OWN real workspace ObjectId (never a ChatApp
+ * id/slug) — as the X-FlowTask-Workspace header and/or payload.workspaceId.
+ * The actual lookup/fail-closed logic lives in workspaceMappingResolver.js,
+ * shared with the reverse-sync inbound flow.
  */
 async function resolveWebhookWorkspace(req) {
-  const wsHeader = req.headers['x-flowtask-workspace']?.toString().trim();
-  const payloadWorkspaceRef = (req.body?.workspaceId || req.body?.data?.workspaceId)?.toString()?.trim();
-
-  let workspace = null;
-
-  if (wsHeader) {
-    workspace = await resolveWorkspaceRef(wsHeader);
-  }
-
-  if (!workspace && payloadWorkspaceRef) {
-    workspace = await resolveWorkspaceRef(payloadWorkspaceRef);
-  }
-
-  // Fallback to default workspace
-  if (!workspace) {
-    const defaultWorkspace = await workspaceService.ensureDefaultWorkspace();
-    if (defaultWorkspace?.isActive !== false) {
-      logger.info('Webhook workspace resolved to default workspace', {
-        wsHeader,
-        payloadWorkspaceRef,
-        defaultWorkspaceId: defaultWorkspace._id,
-        step: 'workspace_fallback_default',
-      });
-      workspace = defaultWorkspace;
-    }
-  }
-
-  if (!workspace) {
-    throw new BadRequestError('Could not resolve workspace for webhook (no valid reference or default workspace).');
-  }
-
-  return workspace;
+  const ref = req.headers['x-flowtask-workspace'] || req.body?.workspaceId || req.body?.data?.workspaceId;
+  return resolveByFlowTaskWorkspaceId(ref, {
+    eventName: req.webhook?.eventName,
+    deliveryId: req.webhook?.deliveryId,
+  });
 }
 
 /**

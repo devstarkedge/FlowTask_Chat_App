@@ -79,41 +79,18 @@ class DirectoriesRepository {
     });
 
     const users = await WorkspaceMembership.aggregate(pipeline);
-    // Also include FlowTask-upserted ChatUser accounts (authProvider='flowtask')
-    // that may not yet have a WorkspaceMembership. This helps show FlowTask
-    // users in the Directories panel even when they haven't been explicitly
-    // added as members yet (they may have been synced earlier by a background
-    // job or DM contacts flow).
-    try {
-      const ftFilter = { authProvider: 'flowtask', isActive: true };
-      if (search) {
-        const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-        ftFilter.$or = [{ name: regex }, { email: regex }];
-      }
-      const flowUsers = await ChatUser.find(ftFilter)
-        .select('name email avatar role onlineStatus customStatus')
-        .lean();
-
-      const existingIds = new Set(users.map((u) => u._id.toString()));
-      for (const fu of flowUsers) {
-        if (!existingIds.has(fu._id.toString())) {
-          users.push({
-            _id: fu._id,
-            name: fu.name,
-            email: fu.email,
-            avatar: fu.avatar,
-            role: fu.role,
-            onlineStatus: fu.onlineStatus,
-            customStatus: fu.customStatus,
-            workspaceRole: null,
-            joinedAt: null,
-          });
-        }
-      }
-    } catch (err) {
-      // Non-fatal — log and continue returning membership-based users
-      // (logger not imported here to avoid cycles; caller may log)
-    }
+    // NOTE: a previous version of this method also queried
+    // `ChatUser.find({authProvider: 'flowtask', isActive: true})` (globally,
+    // with no workspace filter — ChatUser carries no workspaceId of its
+    // own) to backfill FlowTask-synced accounts that "may not yet have a
+    // WorkspaceMembership" here. That query had no way to scope itself to
+    // this workspace, so it leaked every FlowTask-synced user from every
+    // OTHER workspace into this one's People tab. A user who's genuinely
+    // relevant to this workspace already gets a WorkspaceMembership row via
+    // upsertFromFlowTask's callers (directories.service.js#getUsers,
+    // task/subtask assignment auto-add, resolveWorkspaceMember, etc.) — so
+    // removing the fallback doesn't hide anyone who actually belongs here;
+    // it only stops showing people who don't.
 
     // ─── Include pending guest invites ──────────────────────────────────────
     // Guest invites that haven't been accepted yet should appear in the directory

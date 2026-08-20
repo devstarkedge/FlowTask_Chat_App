@@ -83,9 +83,17 @@ processedEventSchema.index({ workspaceId: 1, status: 1 });
  * @returns {{ status: 'new'|'duplicate'|'retry', doc: object }}
  */
 processedEventSchema.statics.claimEvent = async function (deliveryId, eventName, workspaceId) {
+  // Fails closed: workspaceId is `required: true` on the schema, so create()
+  // below would already reject an unscoped claim — but the *read* side
+  // (this findOne) previously stayed unscoped whenever workspaceId was
+  // falsy, meaning idempotency could theoretically match a deliveryId
+  // across tenants. This is the claim gate for every single webhook event,
+  // so it must never run cross-workspace.
+  if (!workspaceId) {
+    throw new Error('ProcessedEvent.claimEvent: workspaceId is required — refusing an unscoped idempotency claim.');
+  }
   // Try to find existing
-  const filter = { deliveryId };
-  if (workspaceId) filter.workspaceId = workspaceId;
+  const filter = { deliveryId, workspaceId };
   const existing = await this.findOne(filter);
 
   if (existing) {
@@ -111,7 +119,7 @@ processedEventSchema.statics.claimEvent = async function (deliveryId, eventName,
       deliveryId,
       eventName,
       status: EVENT_STATUS.PROCESSING,
-      ...(workspaceId && { workspaceId }),
+      workspaceId,
     });
   } catch (error) {
     if (error?.code !== 11000) throw error;
@@ -123,10 +131,11 @@ processedEventSchema.statics.claimEvent = async function (deliveryId, eventName,
 };
 
 processedEventSchema.statics.markCompleted = function (deliveryId, workspaceId) {
-  const filter = { deliveryId };
-  if (workspaceId) filter.workspaceId = workspaceId;
+  if (!workspaceId) {
+    throw new Error('ProcessedEvent.markCompleted: workspaceId is required — refusing an unscoped update.');
+  }
   return this.findOneAndUpdate(
-    filter,
+    { deliveryId, workspaceId },
     {
       status: EVENT_STATUS.COMPLETED,
       processedAt: new Date(),
@@ -135,10 +144,11 @@ processedEventSchema.statics.markCompleted = function (deliveryId, workspaceId) 
 };
 
 processedEventSchema.statics.markFailed = function (deliveryId, error, workspaceId) {
-  const filter = { deliveryId };
-  if (workspaceId) filter.workspaceId = workspaceId;
+  if (!workspaceId) {
+    throw new Error('ProcessedEvent.markFailed: workspaceId is required — refusing an unscoped update.');
+  }
   return this.findOneAndUpdate(
-    filter,
+    { deliveryId, workspaceId },
     {
       status: EVENT_STATUS.FAILED,
       lastError: typeof error === 'string' ? error : error?.message || 'Unknown error',

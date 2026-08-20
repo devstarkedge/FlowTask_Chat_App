@@ -8,6 +8,7 @@ import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SYSTEM_CHANNELS, SOCKET_EVENTS } from '../../../config/constants.js';
 import { emitToChannel, emitToUser } from '../../../sockets/socketManager.js';
 import env from '../../../config/environment.js';
+import { requireWorkspaceId } from '../../../utils/webhookEventGuard.js';
 
 // Optional Redis-backed idempotency (uses REDIS_URL when available)
 async function getRedisClient() {
@@ -95,7 +96,9 @@ export function registerAnnouncementEventHandlers() {
   eventBus.register(
     FLOWTASK_EVENTS.ANNOUNCEMENT_CREATED,
     async (payload) => {
-      const { announcement, userId, _workspaceId: wsId } = payload;
+      const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.ANNOUNCEMENT_CREATED);
+      if (!wsId) return;
+      const { announcement, userId } = payload;
 
       if (!announcement) {
         logger.warn('announcement.created: missing announcement data');
@@ -182,10 +185,11 @@ export function registerAnnouncementEventHandlers() {
   eventBus.register(
     FLOWTASK_EVENTS.ANNOUNCEMENT_DELETED,
     async (payload) => {
+      const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.ANNOUNCEMENT_DELETED);
+      if (!wsId) return;
       const {
         announcement,
         announcementId: directId,
-        _workspaceId: wsId,
         syncVersion,
         deletedBy,
         deletedAt,
@@ -274,7 +278,9 @@ export function registerAnnouncementEventHandlers() {
   eventBus.register(
     FLOWTASK_EVENTS.ANNOUNCEMENT_UPDATED,
     async (payload) => {
-      const { announcement, userId, _workspaceId: wsId } = payload;
+      const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.ANNOUNCEMENT_UPDATED);
+      if (!wsId) return;
+      const { announcement, userId } = payload;
 
       if (!announcement) {
         logger.warn('announcement.updated: missing announcement data');

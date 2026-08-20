@@ -81,7 +81,16 @@ class ChannelRepository {
    * @returns {Promise<Channel|null>}
    */
   async findById(id, { populate = false, workspaceId } = {}) {
-    const filter = injectWorkspaceFilter({ _id: id }, workspaceId);
+    // Deliberately NOT routed through injectWorkspaceFilter (which now
+    // throws on a missing workspaceId — see workspaceContext.js). Unlike a
+    // slug/external-ref/deliveryId lookup, `_id` is a globally-unique Mongo
+    // ObjectId: `findOne({_id: id})` can never return a different tenant's
+    // document by definition, so omitting workspaceId here isn't a
+    // cross-workspace leak risk — it's a few callers (e.g. bot.service.js's
+    // slash commands) that don't have workspace context yet and use this
+    // purely to fetch-then-inspect. When workspaceId IS passed, it's still
+    // applied as a defense-in-depth check.
+    const filter = workspaceId ? { _id: id, workspaceId } : { _id: id };
     const query = Channel.findOne(filter);
     if (populate) {
       query.populate('members.userId', 'name email avatar onlineStatus');

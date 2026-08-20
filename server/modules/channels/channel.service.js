@@ -511,9 +511,15 @@ class ChannelService {
       targetUser = await userRepository.findById(targetUserId);
     }
 
-    // Strategy 2: Try as a flowTaskUserId (if not found above)
+    // Strategy 2: Try as a flowTaskUserId (if not found above) — resolves
+    // the identity AND ensures workspace membership for FlowTask-synced
+    // users in one call (see user.repository.js#resolveWorkspaceMember).
+    // The generic membership-verify-and-auto-add block below still runs
+    // for whichever strategy found the user — harmless/idempotent when it
+    // re-checks a membership this call already provisioned.
     if (!targetUser) {
-      targetUser = await userRepository.findByFlowTaskId(targetUserId);
+      const resolved = await userRepository.resolveWorkspaceMember(targetUserId, workspaceId);
+      targetUser = resolved?.user || null;
     }
 
     // Strategy 3: Fetch from FlowTask service if we have a token
@@ -1432,7 +1438,7 @@ class ChannelService {
     });
     if (!channel) throw new NotFoundError("Channel not found");
 
-    const chatUsers = await userRepository.findByFlowTaskIds(
+    const chatUsers = await userRepository.resolveWorkspaceMembers(
       flowTaskUserIds,
       workspaceId,
     );

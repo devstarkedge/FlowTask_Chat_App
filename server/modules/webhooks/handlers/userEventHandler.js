@@ -6,15 +6,7 @@ import messageService from '../../messages/message.service.js';
 import roleSyncService from '../../../services/roleSync.service.js';
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SYSTEM_CHANNELS } from '../../../config/constants.js';
-
-function requireWorkspaceId(payload, eventName) {
-  const wsId = payload?._workspaceId;
-  if (!wsId) {
-    logger.warn(`${eventName}: missing _workspaceId, skipping event`);
-    return null;
-  }
-  return wsId;
-}
+import { requireWorkspaceId } from '../../../utils/webhookEventGuard.js';
 
 /**
  * User Event Handler — handles FlowTask user lifecycle events.

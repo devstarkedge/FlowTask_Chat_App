@@ -297,13 +297,19 @@ chatUserSchema.index({ onlineStatus: 1 });
 chatUserSchema.index({ departmentIds: 1, isActive: 1 });
 
 // ─── Pre-save: Hash password on change ───────────────────────────────────────
-chatUserSchema.pre('save', async function (next) {
+// Mongoose 7+ no longer passes a next() callback into pre hooks (an async
+// hook resolves/rejects via its own promise). The old `next()` call here
+// threw "next is not a function" on every password set — caught by this
+// same try/catch and merely logged, which meant a bcrypt failure would fall
+// through and let save() persist the plaintext password. Rethrowing instead
+// makes the save actually fail closed, as a password hook must.
+chatUserSchema.pre('save', async function () {
   if (!this.isModified('password') || !this.password) return;
   try {
     this.password = await bcrypt.hash(this.password, SALT_ROUNDS);
-    next();
   } catch (err) {
     console.error('Error hashing password:', err);
+    throw err;
   }
 });
 

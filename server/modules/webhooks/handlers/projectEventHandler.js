@@ -7,15 +7,7 @@ import channelRepository from '../../channels/channel.repository.js';
 import { emitToChannel, emitToUser } from '../../../sockets/socketManager.js';
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SOCKET_EVENTS } from '../../../config/constants.js';
-
-function requireWorkspaceId(payload, eventName) {
-  const wsId = payload?._workspaceId;
-  if (!wsId) {
-    logger.warn(`${eventName}: missing _workspaceId, skipping event`);
-    return null;
-  }
-  return wsId;
-}
+import { requireWorkspaceId } from '../../../utils/webhookEventGuard.js';
 
 function normalizeEntityId(value) {
   if (!value) return null;
@@ -402,7 +394,7 @@ export function registerProjectEventHandlers() {
           ownerFlowTaskId: ownerId,
         });
       } else if (member) {
-        await channelService.removeMember(channel._id, member._id, 'system');
+        await channelService.removeMember(channel._id, member._id, 'system', wsId);
       }
 
       if (member) {

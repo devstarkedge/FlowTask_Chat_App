@@ -59,14 +59,17 @@ directMessageSchema.statics.buildDmKey = function (memberIds) {
   return [...memberIds].map((id) => id.toString()).sort().join(':');
 };
 
-directMessageSchema.pre('validate', function (next) {
+// Mongoose 7+ no longer passes a next() callback into pre hooks — hooks
+// resolve via return value/thrown error instead (see ChatUser.model.js for
+// the async equivalent). This used to be `function (next) { ... next() }`,
+// which threw "next is not a function" and aborted every DM creation.
+directMessageSchema.pre('validate', function () {
   if (Array.isArray(this.memberIds) && this.memberIds.length > 0) {
     this.memberIds = [...this.memberIds]
       .map((id) => id.toString())
       .sort();
     this.dmKey = this.constructor.buildDmKey(this.memberIds);
   }
-  next();
 });
 
 const DirectMessage = model('DirectMessage', directMessageSchema);

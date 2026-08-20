@@ -2,15 +2,7 @@ import eventBus from '../../../services/eventBus.js';
 import syncService from '../../flowtask/sync.service.js';
 import workspaceRepository from '../../workspaces/workspace.repository.js';
 import logger from '../../../utils/logger.js';
-
-function requireWorkspaceId(payload, eventName) {
-  const wsId = payload?._workspaceId;
-  if (!wsId) {
-    logger.warn(`${eventName}: missing _workspaceId, skipping event`);
-    return null;
-  }
-  return wsId;
-}
+import { requireWorkspaceId } from '../../../utils/webhookEventGuard.js';
 
 /**
  * Integration Event Handler — handles meta-events like sync requests

@@ -183,6 +183,12 @@ class AuthService {
     // 2. Determine flow: redirect SSO (token has embedded user data) vs legacy (requires API fetch)
     let flowTaskUser;
     const isRedirectFlow = decoded.source === 'flowtask' && decoded.email && decoded.name;
+    // The redirect flow's JWT already carries FlowTask's real workspace id
+    // (see FlowTask's chatIntegrationController.js#getChatRedirectUrl) — the
+    // legacy flow (fetch-from-API) has no workspace claim available this way.
+    const flowTaskWorkspaceId = isRedirectFlow ? (decoded.workspaceId || null) : null;
+    const flowTaskWorkspaceName = isRedirectFlow ? (decoded.workspaceName || null) : null;
+    const flowTaskWorkspaceSlug = isRedirectFlow ? (decoded.workspaceSlug || null) : null;
 
     logger.debug('FlowTask SSO login attempt', {
       flowTaskUserId: decoded.id,
@@ -241,9 +247,10 @@ class AuthService {
       chatUserId: chatUser._id,
       flowTaskUserId: chatUser.flowTaskUserId,
       name: chatUser.name,
+      flowTaskWorkspaceId,
     });
 
-    return { chatUser, accessToken, refreshToken };
+    return { chatUser, accessToken, refreshToken, flowTaskWorkspaceId, flowTaskWorkspaceName, flowTaskWorkspaceSlug };
   }
 
   // ═══════════════════════════════════════════════════════════════════════

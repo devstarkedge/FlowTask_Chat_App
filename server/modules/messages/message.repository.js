@@ -66,7 +66,12 @@ class MessageRepository {
       return null;
     }
 
-    const query = Message.findOne(injectWorkspaceFilter({ _id: id }, workspaceId));
+    // _id is a globally-unique Mongo ObjectId, so an unscoped match can
+    // never return a different tenant's document — see
+    // channel.repository.js#findById for the same reasoning. workspaceId,
+    // when passed, is still applied as a defense-in-depth check.
+    const filter = workspaceId ? { _id: id, workspaceId } : { _id: id };
+    const query = Message.findOne(filter);
     if (populate) {
       query.populate('authorId', 'name email avatar flowTaskUserId onlineStatus');
       query.populate({
@@ -594,8 +599,10 @@ async findByFlowTaskRef(entityType, entityId, workspaceId) {
    * @returns {Promise<Message|null>}
    */
   async getLatestInChannel(channelId, workspaceId) {
-    const filter = { channelId, isDeleted: false };
-    if (workspaceId) filter.workspaceId = workspaceId;
+    if (!workspaceId) {
+      throw new Error('message.repository#getLatestInChannel: workspaceId is required — refusing an unscoped lookup.');
+    }
+    const filter = { channelId, isDeleted: false, workspaceId };
 
     return Message.findOne(filter)
       .sort({ createdAt: -1 })
@@ -614,9 +621,15 @@ async findByFlowTaskRef(entityType, entityId, workspaceId) {
    */
   async getLatestMessagesForChannels(channelIds, workspaceId) {
     if (!channelIds || channelIds.length === 0) return new Map();
+    if (!workspaceId) {
+      throw new Error('message.repository#getLatestMessagesForChannels: workspaceId is required — refusing an unscoped lookup.');
+    }
 
-    const filter = { channelId: { $in: channelIds.map(id => new mongoose.Types.ObjectId(id)) }, isDeleted: false };
-    if (workspaceId) filter.workspaceId = new mongoose.Types.ObjectId(workspaceId);
+    const filter = {
+      channelId: { $in: channelIds.map(id => new mongoose.Types.ObjectId(id)) },
+      isDeleted: false,
+      workspaceId: new mongoose.Types.ObjectId(workspaceId),
+    };
 
     const latestMessages = await Message.aggregate([
       { $match: filter },

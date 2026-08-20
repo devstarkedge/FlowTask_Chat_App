@@ -143,6 +143,12 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
   const startedAt = Date.now();
   const requestId = (req.get('X-Request-Id') || crypto.randomUUID()).slice(0, 128);
   const attemptId = req.get('X-Auth-Attempt-Id')?.slice(0, 128) || null;
+  // Advisory only — used solely for a mismatch log below. The actual target
+  // workspace is decided by the server-verified JWT `workspaceId` claim
+  // (see authService.loginFlowTask), never by this client-supplied header.
+  // Previously this header WON over the resolved workspace outright, which
+  // meant any authenticated request could redirect itself into an arbitrary
+  // workspace — see the `wsId` computation below.
   const explicitWorkspaceId = req.get('X-Workspace-Id');
   res.set('X-Request-Id', requestId);
 
@@ -189,31 +195,57 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
   });
 
   try {
-    const { chatUser, accessToken, refreshToken } = await authService.loginFlowTask({
-      token,
-      userAgent,
-    });
+    const {
+      chatUser, accessToken, refreshToken,
+      flowTaskWorkspaceId, flowTaskWorkspaceName, flowTaskWorkspaceSlug,
+    } = await authService.loginFlowTask({ token, userAgent });
     logger.info('FlowTask token validated and ChatApp user resolved', {
       requestId,
       attemptId,
       chatUserId: chatUser._id,
       flowTaskUserId: chatUser.flowTaskUserId,
+      flowTaskWorkspaceId,
     });
+
+    if (explicitWorkspaceId && flowTaskWorkspaceId && explicitWorkspaceId !== flowTaskWorkspaceId) {
+      logger.warn('X-Workspace-Id header does not match the JWT workspaceId claim — header ignored', {
+        requestId,
+        chatUserId: chatUser._id,
+        explicitWorkspaceId,
+        flowTaskWorkspaceId,
+      });
+    }
 
     let flowtaskWorkspace = null;
     if (env.FLOWTASK_ENABLED) {
-      try {
-        flowtaskWorkspace = await workspaceService.findOrCreateFlowTaskWorkspace(chatUser._id);
-      } catch (error) {
-        logger.error('Failed to resolve FlowTask workspace during login', {
+      if (flowTaskWorkspaceId) {
+        try {
+          flowtaskWorkspace = await workspaceService.findOrCreateFlowTaskWorkspace({
+            creatorId: chatUser._id,
+            flowTaskWorkspaceId,
+            workspaceName: flowTaskWorkspaceName,
+            workspaceSlug: flowTaskWorkspaceSlug,
+          });
+        } catch (error) {
+          logger.error('Failed to resolve FlowTask workspace during login', {
+            requestId,
+            chatUserId: chatUser._id,
+            flowTaskWorkspaceId,
+            error: error.message,
+          });
+        }
+      } else {
+        logger.error('FlowTask SSO token has no workspaceId claim — cannot resolve a ChatApp workspace', {
           requestId,
           chatUserId: chatUser._id,
-          error: error.message,
         });
       }
     }
 
-    const wsId = explicitWorkspaceId || flowtaskWorkspace?._id?.toString() || null;
+    // No header fallback — the target workspace is decided ONLY by the
+    // server-verified JWT claim resolved above, never by a client-supplied
+    // header (that was the actual access-control bug being fixed here).
+    const wsId = flowtaskWorkspace?._id?.toString() || null;
     let channels = [];
     let channelSync = env.FLOWTASK_ENABLED
       ? { status: wsId ? 'pending' : 'failed', workspaceId: wsId, error: wsId ? null : 'FlowTask workspace unavailable' }
@@ -230,7 +262,7 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
       const systemChannels = await channelRepository.findSystemChannels(wsId);
       await Promise.all(systemChannels.map((channel) => {
         if (channel.visibility === 'public' && !channel.hasMember(chatUser._id)) {
-          return channelService.addMember(channel._id, chatUser._id).catch((error) => {
+          return channelService.addMember(channel._id, chatUser._id, undefined, wsId).catch((error) => {
             logger.warn('System channel auto-join failed during login', {
               requestId,
               workspaceId: wsId,
@@ -332,6 +364,7 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
         user: chatUser,
         accessToken,
         refreshToken,
+        workspaceId: wsId,
         workspaces,
         channels,
         channelSync,
@@ -384,7 +417,7 @@ export const syncUser = asyncHandler(async (req, res) => {
     const systemChannels = await channelRepository.findSystemChannels(wsId);
     for (const sc of systemChannels) {
       if (sc.visibility === 'public' && !sc.hasMember(chatUser._id)) {
-        await channelService.addMember(sc._id, chatUser._id).catch(() => {});
+        await channelService.addMember(sc._id, chatUser._id, undefined, wsId).catch(() => {});
       }
     }
 

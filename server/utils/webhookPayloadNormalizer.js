@@ -142,6 +142,15 @@ function normalizeUser(user) {
 // ─── Event-Specific Normalizers ──────────────────────────────────────────────
 
 const NORMALIZERS = {
+  // ─── Workspace Events ───────────────────────────────────────────────────
+
+  [FLOWTASK_EVENTS.WORKSPACE_UPDATED]: (p) => ({
+    ...p,
+    workspace: p.workspace,
+    changes: p.changes || {},
+    userId: p.userId || actorToUserId(p.actor),
+  }),
+
   // ─── Project Events ─────────────────────────────────────────────────────
 
   [FLOWTASK_EVENTS.PROJECT_CREATED]: (p) => ({
@@ -224,6 +233,26 @@ const NORMALIZERS = {
 
   [FLOWTASK_EVENTS.TASK_COMMENTED]: (p) => ({
     ...p,
+    comment: p.comment,
+    card: p.card || taskToCard(p.task),
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    userId: p.userId || actorToUserId(p.actor),
+  }),
+
+  [FLOWTASK_EVENTS.COMMENT_UPDATED]: (p) => ({
+    ...p,
+    commentId: p.commentId || p.comment?.id || p.comment?._id,
+    comment: p.comment,
+    card: p.card || taskToCard(p.task),
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    userId: p.userId || actorToUserId(p.actor),
+  }),
+
+  [FLOWTASK_EVENTS.COMMENT_DELETED]: (p) => ({
+    ...p,
+    commentId: p.commentId || p.comment?.id || p.comment?._id,
     comment: p.comment,
     card: p.card || taskToCard(p.task),
     boardId: p.boardId || p.task?.boardId || p.project?.id,
@@ -425,6 +454,17 @@ const NORMALIZERS = {
     userId: p.userId || actorToUserId(p.actor),
   }),
 
+  [FLOWTASK_EVENTS.SUBTASK_ASSIGNED]: (p) => ({
+    ...p,
+    subtask: p.subtask,
+    card: p.card || taskToCard(p.task),
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    assigneeId: p.assigneeId || p.assigneeIds?.[0],
+    assigneeIds: p.assigneeIds || [],
+    assignerId: p.assignerId || actorToUserId(p.actor),
+  }),
+
   // ─── Nano Subtask Events ────────────────────────────────────────────────
 
   [FLOWTASK_EVENTS.NANO_CREATED]: (p) => ({
@@ -457,10 +497,32 @@ const NORMALIZERS = {
     userId: p.userId || actorToUserId(p.actor),
   }),
 
+  [FLOWTASK_EVENTS.NANO_ASSIGNED]: (p) => ({
+    ...p,
+    nano: p.nano,
+    subtask: p.subtask,
+    card: p.card || taskToCard(p.task),
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    assigneeId: p.assigneeId || p.assigneeIds?.[0],
+    assigneeIds: p.assigneeIds || [],
+    assignerId: p.assignerId || actorToUserId(p.actor),
+  }),
+
   // ─── Attachment Events ──────────────────────────────────────────────────
 
   [FLOWTASK_EVENTS.ATTACHMENT_ADDED]: (p) => ({
     ...p,
+    attachment: p.attachment,
+    card: p.card || taskToCard(p.task),
+    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
+    userId: p.userId || actorToUserId(p.actor),
+  }),
+
+  [FLOWTASK_EVENTS.ATTACHMENT_DELETED]: (p) => ({
+    ...p,
+    attachmentId: p.attachmentId || p.attachment?.id || p.attachment?._id,
     attachment: p.attachment,
     card: p.card || taskToCard(p.task),
     boardId: p.boardId || p.task?.boardId || p.project?.id,

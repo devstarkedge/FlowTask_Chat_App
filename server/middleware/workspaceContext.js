@@ -102,12 +102,25 @@ export const requireWorkspaceRole = (...roles) => {
  * injectWorkspaceFilter — utility to add workspaceId to any query filter object.
  * Used as a helper in repositories.
  *
+ * Fails closed: throws rather than silently returning an unscoped
+ * cross-workspace filter. This used to `return filter` unchanged when
+ * workspaceId was falsy — every current caller always has a real
+ * workspaceId by the time it reaches here (resolveWorkspace/webhook
+ * resolution already guarantee it upstream), so this never changes
+ * behavior for a working call site. It only removes the landmine: any
+ * future/misordered caller that forgets to pass workspaceId no longer
+ * silently queries every tenant's data for a shared value (e.g. the
+ * `#announcements` slug, which multiple workspaces reuse) — it now fails
+ * loudly instead, matching injectWorkspaceFilterRequired below.
+ *
  * @param {Object} filter     Existing query filter
  * @param {string} workspaceId  The workspace ObjectId string
  * @returns {Object}          Filter with workspaceId injected
  */
 export const injectWorkspaceFilter = (filter, workspaceId) => {
-  if (!workspaceId) return filter;
+  if (!workspaceId) {
+    throw new BadRequestError('workspaceId is required for this query — refusing to run it unscoped across workspaces.');
+  }
   return { ...filter, workspaceId };
 };
 

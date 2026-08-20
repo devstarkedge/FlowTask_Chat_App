@@ -152,9 +152,10 @@ threadSchema.methods.resolve = function (userId) {
 
 // ─── Static Methods ──────────────────────────────────────────────────────────
 threadSchema.statics.findByTaskId = function (taskId, workspaceId) {
-  const filter = { 'flowTaskRef.taskId': taskId };
-  if (workspaceId) filter.workspaceId = workspaceId;
-  return this.findOne(filter);
+  if (!workspaceId) {
+    throw new Error('Thread.findByTaskId: workspaceId is required — refusing an unscoped lookup.');
+  }
+  return this.findOne({ 'flowTaskRef.taskId': taskId, workspaceId });
 };
 
 const Thread = mongoose.models.Thread || model('Thread', threadSchema);

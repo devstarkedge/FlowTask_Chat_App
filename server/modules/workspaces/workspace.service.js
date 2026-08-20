@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import workspaceRepository from './workspace.repository.js';
+import WorkspaceMapping from '../flowtask/WorkspaceMapping.model.js';
 import { WORKSPACE_ROLES, WORKSPACE_LIMITS, DEFAULT_CHANNELS, CHANNEL_VISIBILITY, CHANNEL_MEMBER_ROLES } from '../../config/constants.js';
 import env from '../../config/environment.js';
 import logger from '../../utils/logger.js';
@@ -14,30 +15,87 @@ class WorkspaceService {
   // ─── FlowTask Integration ───────────────────────────────────────────────
 
   /**
-   * Find or create a workspace linked to the FlowTask instance.
-   * Used during FlowTask SSO login to auto-provision workspace.
-   * Always assigns plan = 'enterprise' for FlowTask workspaces.
+   * Find or create the ChatApp workspace linked to ONE specific FlowTask
+   * workspace, keyed by FlowTask's real workspace id via WorkspaceMapping.
+   * Used during FlowTask SSO login to auto-provision a workspace on first
+   * "Open Chat" click from a given FlowTask workspace. Always assigns
+   * plan = 'enterprise'.
    *
-   * @param {string} creatorId - ChatUser _id of the FlowTask user
-   * @param {string} [workspaceName] - Name override from FlowTask
+   * Replaces the old singleton lookup (workspaceRepository.findFlowTaskWorkspace(),
+   * which returned "the one" source:'flowtask' workspace regardless of which
+   * FlowTask tenant asked) — that made every FlowTask workspace share the
+   * same ChatApp workspace. See Workspace.model.js for the removed unique
+   * index this replaces.
+   *
+   * @param {object} params
+   * @param {string} params.creatorId - ChatUser _id of the FlowTask user
+   * @param {string} params.flowTaskWorkspaceId - FlowTask's real workspace ObjectId (string)
+   * @param {string} [params.workspaceName] - Display name hint from FlowTask
+   * @param {string} [params.workspaceSlug] - Slug hint from FlowTask
    * @returns {Promise<object>} workspace document
    */
-  async findOrCreateFlowTaskWorkspace(creatorId, workspaceName) {
-    const name = workspaceName || env.DEFAULT_WORKSPACE_NAME || 'FlowTask Workspace';
-    const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-    let workspace = await workspaceRepository.findFlowTaskWorkspace();
-    let created = false;
+  async findOrCreateFlowTaskWorkspace({ creatorId, flowTaskWorkspaceId, workspaceName, workspaceSlug }) {
+    if (!flowTaskWorkspaceId) {
+      throw new BadRequestError('flowTaskWorkspaceId is required.');
+    }
 
-    if (!workspace) {
+    const existingMapping = await WorkspaceMapping.findByFlowTaskWorkspaceId(flowTaskWorkspaceId);
+    if (existingMapping) {
+      const workspace = await workspaceRepository.findById(existingMapping.chatWorkspaceId);
+      if (workspace?.isActive) {
+        const currentMembership = await workspaceRepository.getMembership(creatorId, workspace._id);
+        await workspaceRepository.addMember(
+          creatorId,
+          workspace._id,
+          currentMembership?.role || WORKSPACE_ROLES.MEMBER,
+        );
+        existingMapping.lastSeenAt = new Date();
+        existingMapping.save().catch((err) => {
+          logger.warn('Failed to bump WorkspaceMapping.lastSeenAt', { error: err.message });
+        });
+        logger.info('FlowTask workspace membership resolved via mapping', {
+          workspaceId: workspace._id,
+          flowTaskWorkspaceId,
+          creatorId,
+        });
+        return workspace;
+      }
+      // Mapping points at a workspace that no longer exists/is inactive —
+      // log it loudly and provision a fresh one below (the stale row must
+      // be removed first: flowTaskWorkspaceId is uniquely indexed).
+      logger.error('WorkspaceMapping points at a missing/inactive Workspace — reprovisioning', {
+        flowTaskWorkspaceId,
+        chatWorkspaceId: existingMapping.chatWorkspaceId,
+      });
+      await WorkspaceMapping.deleteOne({ _id: existingMapping._id });
+    }
+
+    const name = workspaceName ;
+    let slug = (workspaceSlug || name).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'flowtask';
+
+    // Deliberately NOT wrapped in a multi-document transaction
+    // (session.withTransaction): that requires a replica set / mongos, and
+    // the default local/dev deployment is a bare standalone
+    // `mongodb://localhost:27017/...` instance (see .env.example) which
+    // rejects transactions outright. A transaction failing here was
+    // previously swallowed by the caller's try/catch (auth.controller.js),
+    // so the login would silently succeed with wsId=null — "logged in, but
+    // ChatApp shows no workspaces". Concurrency safety instead comes from
+    // the unique indexes on Workspace.slug and
+    // WorkspaceMapping.flowTaskWorkspaceId/chatWorkspaceId, with
+    // compensating cleanup (_rollbackOrphanedWorkspace) if a race is lost
+    // after partial creation.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      let workspace = null;
       try {
-        workspace = await workspaceRepository.create({
+        workspace = await mongoose.model('Workspace').create({
           name,
           slug,
           description: 'Auto-created workspace for FlowTask integration',
           plan: 'enterprise',
           source: 'flowtask',
           owner: creatorId,
-          memberCount: 0,
+          memberCount: 1,
           inviteCode: crypto.randomBytes(16).toString('hex'),
           settings: {
             defaultChannelVisibility: 'private',
@@ -48,47 +106,118 @@ class WorkspaceService {
             },
           },
         });
-        created = true;
-      } catch (error) {
-        if (error?.code !== 11000) throw error;
-        workspace = await workspaceRepository.findFlowTaskWorkspace()
-          || await workspaceRepository.findBySlug(slug);
-        if (!workspace) throw error;
-        logger.info('Concurrent FlowTask workspace create resolved by unique mapping', {
+
+        await mongoose.model('WorkspaceMembership').create({
+          userId: creatorId,
           workspaceId: workspace._id,
+          role: WORKSPACE_ROLES.OWNER,
+          isActive: true,
+          joinedAt: new Date(),
+        });
+
+        await WorkspaceMapping.create({
+          chatWorkspaceId: workspace._id,
+          flowTaskWorkspaceId,
+          flowTaskWorkspaceSlug: workspaceSlug || null,
+          flowTaskWorkspaceName: workspaceName || null,
+          syncOrigin: 'user_initiated',
+          createdByChatUserId: creatorId,
+        });
+
+        // Default channels are non-critical, matching createWorkspace()'s
+        // existing pattern.
+        await this._createDefaultChannels(workspace._id, creatorId);
+
+        logger.info('FlowTask workspace auto-created', {
+          workspaceId: workspace._id,
+          flowTaskWorkspaceId,
+          name: workspace.name,
           creatorId,
         });
+
+        return workspace;
+      } catch (error) {
+        if (error?.code !== 11000) throw error;
+
+        // Diagnostic: which unique index actually tripped (Workspace.slug vs
+        // WorkspaceMapping.flowTaskWorkspaceId vs .chatWorkspaceId) — without
+        // this, a persistent 11000 across every retry is very hard to tell
+        // apart from "a genuine concurrent request" vs "a stale leftover row".
+        logger.warn('findOrCreateFlowTaskWorkspace: unique-key collision, resolving', {
+          attempt,
+          flowTaskWorkspaceId,
+          creatorId,
+          hadPartialWorkspace: !!workspace,
+          keyPattern: error.keyPattern,
+          keyValue: error.keyValue,
+        });
+
+        const concurrentMapping = await WorkspaceMapping.findByFlowTaskWorkspaceId(flowTaskWorkspaceId);
+        if (concurrentMapping) {
+          // Another concurrent login for this same brand-new FlowTask
+          // workspace won the race. Discard anything we managed to create
+          // and adopt the winner's workspace instead.
+          if (workspace) {
+            await this._rollbackOrphanedWorkspace(workspace._id, creatorId);
+          }
+          const winnerWorkspace = await workspaceRepository.findById(concurrentMapping.chatWorkspaceId);
+          if (winnerWorkspace?.isActive) {
+            logger.info('Concurrent FlowTask workspace create resolved by unique mapping', {
+              flowTaskWorkspaceId,
+              chatWorkspaceId: concurrentMapping.chatWorkspaceId,
+              creatorId,
+            });
+            const currentMembership = await workspaceRepository.getMembership(creatorId, winnerWorkspace._id);
+            await workspaceRepository.addMember(
+              creatorId,
+              winnerWorkspace._id,
+              currentMembership?.role || WORKSPACE_ROLES.MEMBER,
+            );
+            return winnerWorkspace;
+          }
+          // The mapping's target workspace doesn't exist / isn't active — a
+          // stale/orphaned row (e.g. left over from an earlier failed
+          // attempt) rather than a genuine concurrent winner. It's holding
+          // the flowTaskWorkspaceId unique slot hostage, so every retry
+          // would fail identically forever unless we remove it here.
+          logger.error('Stale WorkspaceMapping blocked provisioning — removing and retrying', {
+            flowTaskWorkspaceId,
+            chatWorkspaceId: concurrentMapping.chatWorkspaceId,
+          });
+          await WorkspaceMapping.deleteOne({ _id: concurrentMapping._id });
+        } else if (workspace) {
+          // No mapping race — most likely a Workspace.slug collision that
+          // happened after we'd already created the workspace. Clean up
+          // and retry with a suffixed slug.
+          await this._rollbackOrphanedWorkspace(workspace._id, creatorId);
+        }
+        slug = `${slug}-${crypto.randomBytes(3).toString('hex')}`;
       }
     }
 
-    const currentMembership = await workspaceRepository.getMembership(creatorId, workspace._id);
-    await workspaceRepository.addMember(
-      creatorId,
-      workspace._id,
-      currentMembership?.role || (created ? WORKSPACE_ROLES.OWNER : WORKSPACE_ROLES.MEMBER),
-    );
+    throw new Error(`Failed to provision FlowTask-linked workspace for flowTaskWorkspaceId=${flowTaskWorkspaceId} after retries.`);
+  }
 
-    workspace = await workspaceRepository.update(workspace._id, {
-      source: 'flowtask',
-      plan: 'enterprise',
-      'settings.flowtaskIntegration': {
-        enabled: true,
-        apiUrl: env.FLOWTASK_API_URL || '',
-        webhookSecret: env.FLOWTASK_WEBHOOK_SECRET || '',
-      },
-    });
-
-    if (created) {
-      await this._createDefaultChannels(workspace._id, creatorId);
+  /**
+   * Compensating cleanup for findOrCreateFlowTaskWorkspace: deletes a
+   * partially-created Workspace + its owner WorkspaceMembership when a
+   * unique-index race means it can't be kept (either a concurrent request
+   * already won the flowTaskWorkspaceId mapping, or a plain slug retry is
+   * needed). Never throws — logs and moves on, since the caller always
+   * retries or returns a different workspace afterward regardless.
+   * @private
+   */
+  async _rollbackOrphanedWorkspace(workspaceId, creatorId) {
+    try {
+      await mongoose.model('Workspace').deleteOne({ _id: workspaceId });
+      await mongoose.model('WorkspaceMembership').deleteOne({ workspaceId, userId: creatorId });
+    } catch (err) {
+      logger.error('Failed to roll back orphaned FlowTask workspace after a lost race', {
+        workspaceId,
+        creatorId,
+        error: err.message,
+      });
     }
-
-    logger.info(created ? 'FlowTask workspace auto-created' : 'FlowTask workspace membership resolved', {
-      workspaceId: workspace._id,
-      name: workspace.name,
-      creatorId,
-    });
-
-    return workspace;
   }
   // ─── Workspace CRUD ──────────────────────────────────────────────────
 
@@ -140,6 +269,33 @@ class WorkspaceService {
     // Default channels are non-critical — create outside transaction
     await this._createDefaultChannels(workspace._id, creatorId);
 
+    // Reverse-sync: best-effort announce to FlowTask so it can provision
+    // its own counterpart workspace (see flowtaskInboundSync.service.js).
+    // The .catch() ensures a FlowTask outage can never fail or throw out
+    // of workspace creation itself — a workspace that fails this step
+    // simply stays FlowTask-unlinked, exactly as it would have before this
+    // feature existed. Deliberately calls ONLY this announce path, never
+    // anything chatHooks-shaped — findOrCreateFlowTaskWorkspace() (the
+    // FlowTask-SSO-triggered path) must remain the only other place a
+    // workspace/mapping gets created, and it never calls this announce
+    // function, which is what prevents a sync ping-pong loop.
+    try {
+      const { default: ChatUser } = await import('../users/ChatUser.model.js');
+      const { default: flowtaskInboundSync } = await import('../flowtask/flowtaskInboundSync.service.js');
+      const creator = await ChatUser.findById(creatorId).lean();
+      await flowtaskInboundSync.announceWorkspaceCreated({ workspace, creator }).catch((err) => {
+        logger.warn('Failed to announce new workspace to FlowTask — it will remain FlowTask-unlinked until retried', {
+          workspaceId: workspace._id,
+          error: err.message,
+        });
+      });
+    } catch (err) {
+      logger.warn('Reverse-sync announce to FlowTask threw unexpectedly — workspace creation unaffected', {
+        workspaceId: workspace._id,
+        error: err.message,
+      });
+    }
+
     logger.info(`Workspace created: ${workspace.name} (${workspace.slug}) by user ${creatorId}`);
 
     return workspace;
@@ -152,6 +308,22 @@ class WorkspaceService {
   async _createDefaultChannels(workspaceId, creatorId) {
     const { default: channelRepository } = await import('../channels/channel.repository.js');
     const { default: ChannelMember } = await import('../channels/ChannelMember.model.js');
+
+    // System channels (general/admin/managers/announcements) used to be
+    // bootstrapped only once, at server boot, for a single hardcoded
+    // "default" workspace (server/index.js) — meaning every OTHER
+    // workspace never got them, and features that look these up by slug
+    // (botNotifier.js, announcementEventHandler.js, userEventHandler.js)
+    // would silently find nothing for any workspace but that one. Now
+    // bootstrapped per-workspace, at actual creation time, for every
+    // workspace equally — idempotent, safe even if called more than once.
+    const { default: channelService } = await import('../channels/channel.service.js');
+    await channelService.bootstrapSystemChannels(workspaceId).catch((err) => {
+      logger.error('Failed to bootstrap system channels for new workspace', {
+        workspaceId,
+        error: err.message,
+      });
+    });
 
     for (const ch of DEFAULT_CHANNELS) {
       try {
@@ -499,33 +671,6 @@ class WorkspaceService {
 
     const newCode = crypto.randomBytes(16).toString('hex');
     return workspaceRepository.update(workspaceId, { inviteCode: newCode });
-  }
-
-  /**
-   * Ensure the default FlowTask workspace exists. Called at server startup.
-   * Idempotent — safe to call repeatedly.
-   */
-  async ensureDefaultWorkspace() {
-    let workspace = await workspaceRepository.findBySlug(env.DEFAULT_WORKSPACE_SLUG);
-
-    if (!workspace) {
-      workspace = await workspaceRepository.create({
-        name: env.DEFAULT_WORKSPACE_NAME,
-        slug: env.DEFAULT_WORKSPACE_SLUG,
-        description: 'Default workspace for FlowTask integration',
-        plan: 'enterprise',
-        inviteCode: crypto.randomBytes(16).toString('hex'),
-        settings: {
-          flowtaskIntegration: {
-            enabled: true,
-          },
-        },
-      });
-
-      logger.info(`Default workspace created: ${workspace.slug}`);
-    }
-
-    return workspace;
   }
 
   // ─── Email Invites ──────────────────────────────────────────────────

@@ -1,5 +1,7 @@
 import workspaceService from './workspace.service.js';
+import workspaceRepository from './workspace.repository.js';
 import asyncHandler from '../../middleware/asyncHandler.js';
+import { ForbiddenError } from '../../middleware/errorHandler.js';
 
 /**
  * Workspace Controller — HTTP handlers for workspace management.
@@ -12,14 +14,46 @@ export const createWorkspace = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, data: workspace });
 });
 
+// `resolveWorkspace` (workspace.routes.js) only validates membership for the
+// X-Workspace-Id HEADER — it does not know or care about `req.params.id`,
+// the workspace this handler actually queries. Without an explicit check
+// here, any authenticated user (a member of ANY workspace, trivially true
+// since anyone can create one) could read another workspace's full profile
+// — including its plaintext inviteCode, which can then be used via
+// POST /workspaces/join to self-provision real membership. Re-derive the
+// requester's role against the TARGET workspace, the same pattern already
+// used correctly by updateWorkspace/deleteWorkspace/etc. below.
 export const getWorkspace = asyncHandler(async (req, res) => {
+  const role = await workspaceRepository.getUserRole(req.user._id, req.params.id);
+  if (!role) {
+    throw new ForbiddenError('You are not a member of this workspace.');
+  }
   const workspace = await workspaceService.getWorkspace(req.params.id);
-  res.json({ success: true, data: workspace });
+  const data = workspace.toObject();
+  // Mirrors getMyWorkspaces' existing field-filtering — only owners/admins
+  // receive the inviteCode.
+  if (!['owner', 'admin'].includes(role)) {
+    delete data.inviteCode;
+  }
+  res.json({ success: true, data });
 });
 
+// This route (workspace.routes.js) doesn't even run `resolveWorkspace` —
+// previously ANY authenticated user could fetch ANY other workspace's full
+// profile (incl. inviteCode) purely by knowing/guessing its slug. Also
+// currently unused by the client (no caller of api.js's workspaceAPI.getBySlug),
+// but fixed properly rather than left as a dead, exploitable endpoint.
 export const getWorkspaceBySlug = asyncHandler(async (req, res) => {
   const workspace = await workspaceService.getWorkspaceBySlug(req.params.slug);
-  res.json({ success: true, data: workspace });
+  const role = await workspaceRepository.getUserRole(req.user._id, workspace._id);
+  if (!role) {
+    throw new ForbiddenError('You are not a member of this workspace.');
+  }
+  const data = workspace.toObject();
+  if (!['owner', 'admin'].includes(role)) {
+    delete data.inviteCode;
+  }
+  res.json({ success: true, data });
 });
 
 export const updateWorkspace = asyncHandler(async (req, res) => {
@@ -59,7 +93,14 @@ export const getMyWorkspaces = asyncHandler(async (req, res) => {
 
 // ─── Membership ─────────────────────────────────────────────────────────────
 
+// Same gap as getWorkspace above — resolveWorkspace validates the header
+// workspace, not req.params.id. Without this check, any authenticated user
+// could list another workspace's full member roster (names + emails).
 export const getMembers = asyncHandler(async (req, res) => {
+  const role = await workspaceRepository.getUserRole(req.user._id, req.params.id);
+  if (!role) {
+    throw new ForbiddenError('You are not a member of this workspace.');
+  }
   const members = await workspaceService.getWorkspaceMembers(
     req.params.id,
     { role: req.query.role },

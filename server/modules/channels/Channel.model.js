@@ -310,11 +310,20 @@ channelSchema.statics.findByFlowTaskRef = function (
     normalizedId = null;
   }
 
+  // Fails closed: a FlowTask board id is globally unique, so an unscoped
+  // lookup would almost always still resolve the right channel by luck —
+  // but this is the exact "correct project channel" resolution step every
+  // task/subtask/nano/comment/time-log event handler depends on, so it must
+  // never silently degrade to a cross-workspace search if a caller forgets
+  // to pass workspaceId.
+  if (!workspaceId) {
+    throw new Error('Channel.findByFlowTaskRef: workspaceId is required — refusing an unscoped lookup.');
+  }
   const filter = {
     "flowTaskRef.entityType": entityType,
     "flowTaskRef.entityId": normalizedId,
+    workspaceId,
   };
-  if (workspaceId) filter.workspaceId = workspaceId;
   return this.findOne(filter);
 };
 
@@ -323,19 +332,24 @@ channelSchema.statics.findUserChannels = function (
   includeArchived = false,
   workspaceId,
 ) {
-  const filter = { "members.userId": userId };
+  if (!workspaceId) {
+    throw new Error('Channel.findUserChannels: workspaceId is required — refusing an unscoped lookup.');
+  }
+  const filter = { "members.userId": userId, workspaceId };
   if (!includeArchived) filter.isArchived = false;
-  if (workspaceId) filter.workspaceId = workspaceId;
   return this.find(filter).sort({ lastMessageAt: -1 });
 };
 
 channelSchema.statics.findDMChannel = function (participantIds, workspaceId) {
+  if (!workspaceId) {
+    throw new Error('Channel.findDMChannel: workspaceId is required — refusing an unscoped lookup.');
+  }
   const sorted = [...participantIds].sort();
   const filter = {
     type: CHANNEL_TYPES.DM,
     dmParticipants: { $all: sorted, $size: sorted.length },
+    workspaceId,
   };
-  if (workspaceId) filter.workspaceId = workspaceId;
   return this.findOne(filter);
 };
 

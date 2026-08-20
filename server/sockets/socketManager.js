@@ -298,16 +298,24 @@ export async function initializeSocket(httpServer, corsOptions) {
       socket.join(deptRoom);
     }
 
-    // Channel rooms (all channels user belongs to)
+    // Channel rooms (all channels user belongs to) — joined directly off this
+    // single already-fetched list. Previously the server only recorded
+    // initialChannelIds here and left room-joining to the client, which
+    // responded by emitting 'channel:join' once per channel on every
+    // connect/reconnect — each hitting the DB twice (Channel + ChannelMember
+    // findOne). At 100+ channels that turned into hundreds of individual
+    // round trips saturating the connection pool (see slow-query storm on
+    // channels/channelmembers findOne). getChannelsForUser already applies
+    // the same visibility/membership rules the per-channel handler checks,
+    // so joining straight from its result is safe and costs zero extra queries.
     let initialChannelIds = [];
     try {
       const { default: channelService } = await import('../modules/channels/channel.service.js');
       const channels = await channelService.getChannelsForUser(userId, wsId);
       for (const channel of channels) {
-        // LAZY JOIN: We no longer socket.join(chRoom) here for all channels.
-        // Clients must explicitly emit 'channel:join' when they navigate to a channel.
-        // We still collect initialChannelIds to broadcast this user's presence to those rooms.
-        initialChannelIds.push(channel._id.toString());
+        const channelId = channel._id.toString();
+        socket.join(buildRoomName(wsId, 'channel', channelId));
+        initialChannelIds.push(channelId);
       }
     } catch (error) {
       logger.error('Failed to get channels for presence', {

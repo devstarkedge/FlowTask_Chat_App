@@ -28,8 +28,8 @@ function Avatar({ member, size = 28, showStatus = false }) {
   const isOnline = effectiveStatus === 'online'
   const isAway = effectiveStatus === 'away'
   const isDnd = effectiveStatus === 'dnd' || 
-    (safeMember.chatPreferences?.dnd?.enabled && (!safeMember.chatPreferences?.dnd?.pausedUntil || new Date(safeMember.chatPreferences.dnd.pausedUntil).getTime() > Date.now())) ||
-    (safeMember.chatPreferences?.pausedUntil && new Date(safeMember.chatPreferences.pausedUntil).getTime() > Date.now());
+    (safeMember.chatPreferences?.dnd?.enabled && (!safeMember.chatPreferences?.dnd?.endAt || new Date(safeMember.chatPreferences.dnd.endAt).getTime() > Date.now())) ||
+    (safeMember.chatPreferences?.endAt && new Date(safeMember.chatPreferences.endAt).getTime() > Date.now());
   const bgColor = getColor(safeMember.name)
   const initials = (safeMember.name || '?')[0].toUpperCase()
   const statusSize = Math.max(8, size * 0.3)

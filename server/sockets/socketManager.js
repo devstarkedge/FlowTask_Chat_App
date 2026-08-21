@@ -295,7 +295,6 @@ export async function initializeSocket(httpServer, corsOptions) {
 
     // Department rooms
     const workspaceDepartmentIds = socket.workspaceMembership?.flowTaskAccess?.departmentIds
-      || user.departmentIds
       || [];
     for (const deptId of workspaceDepartmentIds) {
       const deptRoom = buildRoomName(wsId, 'dept', deptId);
@@ -419,7 +418,8 @@ export async function initializeSocket(httpServer, corsOptions) {
         const { default: permissionEngine } = await import('../services/permissionEngine.js');
         const scopedUser = {
           ...(user.toObject ? user.toObject() : user),
-          role: socket.workspaceMembership?.role || 'member',
+          workspaceRole: socket.workspaceMembership?.role || null,
+          flowTaskAccess: socket.workspaceMembership?.flowTaskAccess || null,
         };
         if (
           permissionEngine.canViewAllChannels(scopedUser, { workspaceId: wsId })

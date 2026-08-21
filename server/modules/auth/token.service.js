@@ -17,11 +17,14 @@ class TokenService {
 
   /**
    * Issue a new access token for a Chat user.
-   * @param {{ id: string, role: string }} payload
+   * @param {{ id: string }} payload
    * @returns {string} JWT access token
    */
   issueAccessToken(payload) {
-    const claims = { id: payload.id, role: payload.role, type: 'access' };
+    // Roles are always resolved from the active WorkspaceMembership after
+    // authentication. Keeping a global role claim in this token invites a
+    // workspace authorization bypass after a workspace switch.
+    const claims = { id: payload.id, type: 'access' };
     return jwt.sign(
       claims,
       env.JWT_SECRET,
@@ -32,7 +35,7 @@ class TokenService {
   /**
    * Verify a Chat-issued access token.
    * @param {string} token
-   * @returns {{ id: string, role: string, type: string, iat: number, exp: number }}
+   * @returns {{ id: string, type: string, iat: number, exp: number }}
    * @throws {jwt.JsonWebTokenError|jwt.TokenExpiredError}
    */
   verifyAccessToken(token) {

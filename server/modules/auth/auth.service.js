@@ -116,7 +116,7 @@ class AuthService {
       : undefined;
 
     // Issue tokens (no workspaceId in JWT — workspace resolved via header)
-    const accessToken = tokenService.issueAccessToken({ id: user._id.toString(), role: user.role });
+    const accessToken = tokenService.issueAccessToken({ id: user._id.toString() });
     const refreshToken = tokenService.issueRefreshToken({ id: user._id.toString() });
 
     // Store hashed refresh token
@@ -256,7 +256,7 @@ class AuthService {
     });
 
     // 5. Issue Chat tokens (no workspaceId in JWT)
-    const accessToken = tokenService.issueAccessToken({ id: chatUser._id.toString(), role: chatUser.role });
+    const accessToken = tokenService.issueAccessToken({ id: chatUser._id.toString() });
     const refreshToken = tokenService.issueRefreshToken({ id: chatUser._id.toString() });
 
     // 6. Store hashed refresh token
@@ -325,7 +325,7 @@ class AuthService {
     await userRepository.removeRefreshToken(user._id, tokenHash);
 
     // Issue new token pair
-    const newAccessToken = tokenService.issueAccessToken({ id: user._id.toString(), role: user.role });
+    const newAccessToken = tokenService.issueAccessToken({ id: user._id.toString() });
     const newRefreshToken = tokenService.issueRefreshToken({ id: user._id.toString() });
 
     // Store new hashed refresh token

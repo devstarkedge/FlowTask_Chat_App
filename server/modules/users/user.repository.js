@@ -194,19 +194,12 @@ class UserRepository {
   }
 
   /**
-   * Resolve a ChatUser by FlowTask id AND ensure they hold an active
-   * WorkspaceMembership in `workspaceId`, auto-provisioning one for
-   * FlowTask-synced identities that haven't been granted workspace access
-   * yet. Formalizes (and is reused by) the auto-add logic previously
-   * hand-rolled inline in channel.service.js#resolveAndValidateDMTarget.
+   * Resolve a ChatUser by FlowTask id and retrieve their active
+   * WorkspaceMembership in `workspaceId`. Workspace access is provisioned
+   * only by signed FlowTask SSO/webhook access, never by a lookup.
    *
-   * Use ONLY at call sites whose intent is "this action is about to grant
-   * or confirm the user's access to something workspace-scoped" (adding to
-   * a channel, resolving a DM target, bulk membership sync). Pure display/
-   * lookup call sites (resolving a name for a chat message, comparing an
-   * existing role before an update, a deactivation lookup) must keep using
-   * findByFlowTaskId — granting workspace access as a side effect of
-   * rendering a username or handling a deactivation event would be wrong.
+   * This is a read-only identity and membership resolver. Display and action
+   * callers can use it safely because it cannot grant a default role.
    *
    * @param {string} flowTaskUserId
    * @param {string} workspaceId
@@ -569,11 +562,11 @@ class UserRepository {
   }
 
   /**
-   * Plural form of resolveWorkspaceMember — batches the identity lookup,
-   * then provisions membership only for the subset that's missing it.
+   * Plural form of resolveWorkspaceMember; it batches identity lookup only
+   * and does not create workspace membership.
    * @param {string[]} flowTaskUserIds
    * @param {string} workspaceId
-   * @returns {Promise<object[]>} the resolved ChatUser documents (membership provisioning is a side effect, not part of the return shape)
+   * @returns {Promise<object[]>} the resolved ChatUser documents
    */
   async resolveWorkspaceMembers(flowTaskUserIds, workspaceId) {
     const users = await ChatUser.find({ flowTaskUserId: { $in: flowTaskUserIds } }).exec();

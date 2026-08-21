@@ -32,6 +32,7 @@ export const CAPABILITIES = Object.freeze({
 // This is the single source of truth for what each role can do.
 // To extend: add new capabilities above and assign them to roles below.
 const ROLE_CAPABILITIES = {
+  owner: new Set(Object.values(CAPABILITIES)),
   admin: new Set(Object.values(CAPABILITIES)), // Admin gets ALL capabilities
   manager: new Set([
     CAPABILITIES.VIEW_CHANNEL,
@@ -58,6 +59,13 @@ const ROLE_CAPABILITIES = {
     CAPABILITIES.MANAGE_NOTIFICATIONS,
     CAPABILITIES.PIN_CHANNEL,
   ]),
+  member: new Set([
+    CAPABILITIES.VIEW_CHANNEL,
+    CAPABILITIES.SEND_MESSAGE,
+    CAPABILITIES.MANAGE_NOTIFICATIONS,
+    CAPABILITIES.PIN_CHANNEL,
+  ]),
+  guest: new Set([CAPABILITIES.VIEW_CHANNEL]),
 };
 
 // Default capabilities for unknown roles (principle of least privilege)
@@ -67,10 +75,26 @@ const DEFAULT_CAPABILITIES = new Set([
 ]);
 
 class PermissionEngine {
+  _resolveWorkspaceAccess(principal) {
+    if (!principal) return null;
+
+    const membership = principal.workspaceMembership || principal.membership || null;
+    const workspaceRole = membership?.role || principal.workspaceRole || null;
+    if (typeof workspaceRole !== 'string' || !workspaceRole) return null;
+
+    const flowTaskAccess = membership?.flowTaskAccess || principal.flowTaskAccess || null;
+    const flowTaskRole = principal.flowTaskRole || flowTaskAccess?.role || null;
+    const role = ['owner', 'admin', 'guest'].includes(workspaceRole)
+      ? workspaceRole
+      : (flowTaskRole || workspaceRole);
+
+    return { role: role.toLowerCase(), workspaceRole, flowTaskAccess };
+  }
+
   /**
    * Check if a user has a specific capability.
    *
-   * @param {object} user - The ChatUser document (must have .role)
+   * @param {object} principal - ChatUser identity plus active workspace role
    * @param {string} capability - One of CAPABILITIES values
    * @param {object} [context] - Optional context for fine-grained checks
    * @param {string} [context.workspaceId]
@@ -78,10 +102,13 @@ class PermissionEngine {
    * @param {string} [context.departmentId]
    * @returns {boolean}
    */
-  hasCapability(user, capability, context = {}) {
-    if (!user || !capability) return false;
+  hasCapability(principal, capability, context = {}) {
+    if (!principal || !capability) return false;
 
-    const role = (user.role || '').toLowerCase();
+    const access = this._resolveWorkspaceAccess(principal);
+    if (!access) return false;
+
+    const { role } = access;
     const caps = ROLE_CAPABILITIES[role] || DEFAULT_CAPABILITIES;
 
     // Direct capability check
@@ -93,7 +120,7 @@ class PermissionEngine {
     if (capability === CAPABILITIES.VIEW_DEPARTMENT_CHANNELS && context.departmentId) {
       // HR and managers can view their own department channels
       if (role !== 'admin' && role !== 'manager') {
-        const userDepts = (user.departmentIds || []).map(String);
+        const userDepts = (access.flowTaskAccess?.departmentIds || []).map(String);
         if (!userDepts.includes(context.departmentId.toString())) {
           return false;
         }
@@ -113,15 +140,18 @@ class PermissionEngine {
    *   4. Private/project channel → must be a member
    *   5. Department channel → must belong to that department
    *
-   * @param {object} user - ChatUser document
+   * @param {object} principal - ChatUser identity plus active workspace role
    * @param {object} channel - Channel document
    * @returns {boolean}
    */
-  canAccessChannel(user, channel) {
-    if (!user || !channel) return false;
+  canAccessChannel(principal, channel) {
+    if (!principal || !channel) return false;
+
+    const access = this._resolveWorkspaceAccess(principal);
+    if (!access) return false;
 
     const workspaceId = channel.workspaceId?.toString();
-    const role = (user.role || '').toLowerCase();
+    const { role } = access;
 
     // Strict system channel RBAC validation
     if (channel.slug === 'flowtask-admin') {
@@ -136,19 +166,19 @@ class PermissionEngine {
       if (role === 'admin' || role === 'owner') {
         return true;
       }
-      return channel.hasMember?.(user._id) === true;
+      return channel.hasMember?.(principal._id) === true;
     }
 
     // VIEW_ALL_CHANNELS bypasses membership checks
-    if (this.hasCapability(user, CAPABILITIES.VIEW_ALL_CHANNELS, { workspaceId })) {
+    if (this.hasCapability(principal, CAPABILITIES.VIEW_ALL_CHANNELS, { workspaceId })) {
       return true;
     }
 
-    const userId = user._id?.toString();
+    const userId = principal._id?.toString();
 
     // DM: strict participant check
     if (channel.type === 'dm') {
-      const isMember = channel.hasMember?.(user._id);
+      const isMember = channel.hasMember?.(principal._id);
       const isParticipant = channel.dmParticipants?.map(String).includes(userId);
       return isMember || isParticipant;
     }
@@ -160,14 +190,14 @@ class PermissionEngine {
 
     // Department channel: user must belong to that department
     if (channel.type === 'department' && channel.flowTaskRef?.entityId) {
-      const userDepts = (user.departmentIds || []).map(String);
+      const userDepts = (access.flowTaskAccess?.departmentIds || []).map(String);
       if (userDepts.includes(channel.flowTaskRef.entityId.toString())) {
         return true;
       }
     }
 
     // Membership check (for private/project channels)
-    if (channel.hasMember?.(user._id)) {
+    if (channel.hasMember?.(principal._id)) {
       return true;
     }
 
@@ -182,16 +212,16 @@ class PermissionEngine {
    * @param {object} channel
    * @returns {boolean}
    */
-  canManageChannel(user, channel) {
-    if (!user || !channel) return false;
+  canManageChannel(principal, channel) {
+    if (!principal || !channel) return false;
 
     // Admin can manage everything
-    if (this.hasCapability(user, CAPABILITIES.MANAGE_MEMBERS)) {
+    if (this.hasCapability(principal, CAPABILITIES.MANAGE_MEMBERS)) {
       return true;
     }
 
     // Channel owner can manage their own channel
-    const role = channel.getMemberRole?.(user._id);
+    const role = channel.getMemberRole?.(principal._id);
     return role === 'owner' || role === 'admin';
   }
 
@@ -214,8 +244,8 @@ class PermissionEngine {
    * @param {object} [context]
    * @returns {boolean}
    */
-  canViewAllChannels(user, context = {}) {
-    return this.hasCapability(user, CAPABILITIES.VIEW_ALL_CHANNELS, context);
+  canViewAllChannels(principal, context = {}) {
+    return this.hasCapability(principal, CAPABILITIES.VIEW_ALL_CHANNELS, context);
   }
 }
 

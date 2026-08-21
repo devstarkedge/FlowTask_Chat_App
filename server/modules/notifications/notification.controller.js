@@ -1,4 +1,5 @@
 import notificationService from './notification.service.js';
+import channelService from '../channels/channel.service.js';
 import asyncHandler from '../../middleware/asyncHandler.js';
 
 /**
@@ -15,6 +16,16 @@ export const getNotifications = asyncHandler(async (req, res) => {
     req.user._id,
     req.workspaceId,
     { cursor, limit: parseInt(limit, 10) || 30, filter },
+  );
+
+  const accessibleChannels = await channelService.getChannelsForUser(
+    req.user._id,
+    req.workspaceId,
+    req.membership,
+  );
+  const allowedChannelIds = new Set(accessibleChannels.map((channel) => channel._id.toString()));
+  result.notifications = result.notifications.filter((notification) =>
+    !notification.channelId || allowedChannelIds.has(notification.channelId.toString()),
   );
 
   res.json({ success: true, ...result });

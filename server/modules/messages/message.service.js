@@ -791,16 +791,18 @@ class MessageService {
    * Full-text search across messages.
    * Filters results to channels the user has access to.
    */
-  async searchMessages(query, userId, channelId, options = {}, workspaceId) {
+  async searchMessages(query, userId, channelId, options = {}, workspaceId, membership = null) {
     const { limit } = parsePagination(options);
+    const { default: channelService } = await import('../channels/channel.service.js');
 
     // If no specific channel, restrict search to user's channels
     if (!channelId) {
-      const userChannels = await channelRepository.findByMember(userId, { workspaceId });
+      const userChannels = await channelService.getChannelsForUser(userId, workspaceId, membership);
       const channelIds = userChannels.map((c) => c._id);
       return messageRepository.search(query, { channelIds, limit, workspaceId });
     }
 
+    await channelService.getChannelById(channelId, userId, workspaceId, membership);
     return messageRepository.search(query, { channelId, limit, workspaceId });
   }
 
@@ -976,7 +978,12 @@ class MessageService {
       if (channel.type === 'dm') {
         memberIds = channel.dmParticipants || [];
       } else {
-        memberIds = (channel.members || []).map(m => m.userId.toString());
+        const { getAuthorizedProjectUserIds, isFlowTaskProjectChannel } =
+          await import('../flowtask/projectAccess.service.js');
+        const { default: ChannelMember } = await import('../channels/ChannelMember.model.js');
+        memberIds = isFlowTaskProjectChannel(channel)
+          ? await getAuthorizedProjectUserIds(channel, workspaceId)
+          : await ChannelMember.getMemberIds(channel._id);
       }
 
       const targetUserIds = memberIds.filter(id => id.toString() !== senderUserId.toString());
@@ -1061,6 +1068,9 @@ class MessageService {
 
     const notificationService = (await import('../notifications/notification.service.js')).default;
     const ChannelMember = (await import('../channels/ChannelMember.model.js')).default;
+    const { canAccessFlowTaskProjectChannel, getAuthorizedProjectUserIds, isFlowTaskProjectChannel } =
+      await import('../flowtask/projectAccess.service.js');
+    const workspaceId = message.workspaceId || channel.workspaceId;
 
     // Build preview: prefer text, fall back to attachment label
     const textPreview = truncate(stripHtml(message.content || ''), 100);
@@ -1072,6 +1082,14 @@ class MessageService {
         // Find by ObjectId since targetId is the ChatUser _id
         const chatUser = await userRepository.findById(mention.targetId);
         if (chatUser && chatUser._id.toString() !== message.authorId?.toString()) {
+          if (isFlowTaskProjectChannel(channel)) {
+            const allowed = await canAccessFlowTaskProjectChannel(
+              channel,
+              chatUser._id,
+              workspaceId,
+            );
+            if (!allowed) continue;
+          }
           // Check channel mute preference
           const preferences = chatUser.preferences || {};
           const channelMutes = preferences.channelMutes || {};
@@ -1079,7 +1097,7 @@ class MessageService {
 
           // Persist notification
           await notificationService.createMentionNotification({
-            workspaceId: message.workspaceId || channel.workspaceId,
+            workspaceId,
             recipientId: chatUser._id,
             senderId: message.authorId?._id || message.authorId,
             senderName: message.senderSnapshot?.name || 'Someone',
@@ -1095,7 +1113,9 @@ class MessageService {
       } else if (mention.type === MENTION_TYPES.CHANNEL && (mention.name === 'channel' || mention.name === 'here')) {
         // @channel / @here — notify all (or online) channel members
         try {
-          const memberIds = await ChannelMember.getMemberIds(channel._id);
+          const memberIds = isFlowTaskProjectChannel(channel)
+            ? await getAuthorizedProjectUserIds(channel, workspaceId)
+            : await ChannelMember.getMemberIds(channel._id);
           const authorIdStr = (message.authorId?._id || message.authorId)?.toString();
 
           // For @here, batch-load online status to avoid N+1 queries
@@ -1114,7 +1134,7 @@ class MessageService {
             if (onlineMemberIds && !onlineMemberIds.has(memberId)) continue;
 
             await notificationService.createMentionNotification({
-              workspaceId: message.workspaceId || channel.workspaceId,
+              workspaceId,
               recipientId: memberId,
               senderId: message.authorId?._id || message.authorId,
               senderName: message.senderSnapshot?.name || 'Someone',

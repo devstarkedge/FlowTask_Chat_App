@@ -1,8 +1,9 @@
 import userRepository from '../modules/users/user.repository.js';
 import WorkspaceMembership from '../modules/workspaces/WorkspaceMembership.model.js';
-import { emitToUser, emitToWorkspace } from '../sockets/socketManager.js';
+import { emitToUser, emitToWorkspace, leaveChannelRoom } from '../sockets/socketManager.js';
 import { SOCKET_EVENTS } from '../config/constants.js';
 import logger from '../utils/logger.js';
+import { purgeUnauthorizedProjectActivity } from '../modules/flowtask/projectAccess.service.js';
 
 /**
  * Role Synchronization Service
@@ -19,7 +20,7 @@ class RoleSyncService {
    * @param {string} workspaceId - Target workspace ID
    * @returns {Promise<boolean>} Success status
    */
-  async syncUserRole(userId, newRole, workspaceId) {
+  async syncUserRole(userId, newRole, workspaceId, flowTaskAccess = null) {
     try {
       logger.info('[RoleSync] Starting role sync', { userId, newRole, workspaceId });
       
@@ -51,23 +52,50 @@ class RoleSyncService {
         return false;
       }
 
-      const oldRole = membership.role;
-      logger.info('[RoleSync] Current membership role', { oldRole, workspaceId });
+      const oldAccess = membership.flowTaskAccess?.toObject?.()
+        || membership.flowTaskAccess
+        || {};
+      const oldRole = oldAccess.role || 'employee';
+      const nextAccess = {
+        ...oldAccess,
+        ...(flowTaskAccess || {}),
+        role: (flowTaskAccess?.role || newRole || oldRole || 'employee').toLowerCase(),
+        syncedAt: flowTaskAccess?.syncedAt
+          ? new Date(flowTaskAccess.syncedAt)
+          : new Date(),
+      };
+      const comparableOld = { ...oldAccess, syncedAt: undefined };
+      const comparableNext = { ...nextAccess, syncedAt: undefined };
+      const changed = JSON.stringify(comparableOld) !== JSON.stringify(comparableNext);
 
-      // Map FlowTask roles to workspace roles if needed
-      const mappedRole = this._mapFlowTaskRole(newRole);
-      logger.info('[RoleSync] Role mapping result', { flowTaskRole: newRole, mappedRole });
-
-      // Update role if changed
-      if (oldRole !== mappedRole) {
-        membership.role = mappedRole;
+      // FlowTask role/access never overwrites ChatApp's workspace role. The
+      // latter controls Chat-owned administration, while project visibility is
+      // evaluated from flowTaskAccess on this exact membership. Mapping a
+      // FlowTask manager to Chat admin was the cross-session privilege leak.
+      if (changed) {
+        membership.flowTaskAccess = nextAccess;
         await membership.save();
+
+        const revokedChannelIds = await purgeUnauthorizedProjectActivity(
+          chatUser._id,
+          workspaceId,
+          membership,
+        );
+        for (const channelId of revokedChannelIds) {
+          emitToUser(
+            chatUser._id.toString(),
+            SOCKET_EVENTS.CHANNEL_REMOVED,
+            { channelId },
+            workspaceId,
+          );
+          await leaveChannelRoom(chatUser._id.toString(), channelId, workspaceId);
+        }
 
         logger.info('[RoleSync] User role updated in DB', {
           chatUserId: chatUser._id,
           flowTaskUserId: userId,
           oldRole,
-          newRole: mappedRole,
+          newRole: nextAccess.role,
           workspaceId,
         });
 
@@ -75,7 +103,7 @@ class RoleSyncService {
         const userRolePayload = {
           userId: chatUser._id.toString(),
           oldRole,
-          newRole: mappedRole,
+          newRole: nextAccess.role,
           workspaceId,
           timestamp: new Date().toISOString(),
         };
@@ -92,6 +120,13 @@ class RoleSyncService {
           workspaceId
         );
 
+        emitToUser(
+          chatUser._id.toString(),
+          SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED,
+          { workspaceId, reason: 'flowtask_access_changed' },
+          workspaceId,
+        );
+
         logger.info('[RoleSync] Emitted user:role_updated to personal room', {
           chatUserId: chatUser._id,
           workspaceId,
@@ -100,7 +135,7 @@ class RoleSyncService {
         // Emit to workspace room (so other members see the update)
         const workspacePayload = {
           userId: chatUser._id.toString(),
-          newRole: mappedRole,
+          newRole: nextAccess.role,
           workspaceId,
           updatedBy: null,
           timestamp: new Date().toISOString(),
@@ -127,10 +162,10 @@ class RoleSyncService {
         return true;
       }
 
-      logger.info('[RoleSync] No role change needed (roles match)', {
+      logger.info('[RoleSync] No FlowTask access change needed', {
         chatUserId: chatUser._id,
         currentRole: oldRole,
-        incomingRole: mappedRole,
+        incomingRole: nextAccess.role,
         workspaceId,
       });
       return false; // No change needed
@@ -202,21 +237,6 @@ class RoleSyncService {
       });
       return false;
     }
-  }
-
-  /**
-   * Map FlowTask role names to ChatApp workspace roles.
-   * @private
-   */
-  _mapFlowTaskRole(flowTaskRole) {
-    const roleMap = {
-      admin: 'admin',
-      manager: 'admin',
-      member: 'member',
-      guest: 'guest',
-      owner: 'owner',
-    };
-    return roleMap[flowTaskRole?.toLowerCase()] || 'member';
   }
 
   /**

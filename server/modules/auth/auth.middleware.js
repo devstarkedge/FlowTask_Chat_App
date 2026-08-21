@@ -148,8 +148,23 @@ export function requireChannelAccess() {
         return next(new ForbiddenError('Channel not found'));
       }
 
-      // Admin and owner can access all channels
-      if (req.user.role === 'admin' || req.user.role === 'owner') {
+      const { canAccessFlowTaskProjectChannel, isFlowTaskProjectChannel } =
+        await import('../flowtask/projectAccess.service.js');
+
+      if (isFlowTaskProjectChannel(channel)) {
+        const allowed = await canAccessFlowTaskProjectChannel(
+          channel,
+          req.user._id,
+          req.workspaceId,
+          req.membership,
+        );
+        if (!allowed) return next(new ForbiddenError('Not authorized for this FlowTask project'));
+        req.channel = channel;
+        return next();
+      }
+
+      // Chat workspace admins can access non-FlowTask project channels only.
+      if (req.membership?.role === 'admin' || req.membership?.role === 'owner') {
         req.channel = channel;
         return next();
       }
@@ -241,8 +256,24 @@ export function requireMessageAccess(options = { allowMissing: false }) {
         return next(new NotFoundError('Channel not found'));
       }
 
-      // Admin and owner can access all
-      if (req.user.role === 'admin' || req.user.role === 'owner') {
+      const { canAccessFlowTaskProjectChannel, isFlowTaskProjectChannel } =
+        await import('../flowtask/projectAccess.service.js');
+
+      if (isFlowTaskProjectChannel(channel)) {
+        const allowed = await canAccessFlowTaskProjectChannel(
+          channel,
+          req.user._id,
+          req.workspaceId,
+          req.membership,
+        );
+        if (!allowed) return next(new ForbiddenError('Not authorized for this FlowTask project'));
+        req.message = message;
+        req.channel = channel;
+        return next();
+      }
+
+      // Chat workspace admins can access non-FlowTask project channels only.
+      if (req.membership?.role === 'admin' || req.membership?.role === 'owner') {
         req.message = message;
         req.channel = channel;
         return next();

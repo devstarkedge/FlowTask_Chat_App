@@ -2,6 +2,27 @@ import mongoose from 'mongoose';
 
 const { Schema, model } = mongoose;
 
+// FlowTask is the source of truth for this data. It intentionally belongs on
+// the user+workspace relation, never on ChatUser: the same person can be an
+// admin in one FlowTask workspace and an employee in another.
+const flowTaskAccessSchema = new Schema({
+  role: { type: String, default: 'employee', lowercase: true },
+  roleId: { type: String, default: null },
+  departmentIds: [{ type: String }],
+  teamId: { type: String, default: null },
+  accessType: {
+    type: String,
+    enum: ['full_department', 'selected_projects', 'assigned_tasks'],
+    default: 'assigned_tasks',
+  },
+  allowedProjectIds: [{ type: String }],
+  canViewAllProjects: { type: Boolean, default: false },
+  canViewDepartmentProjects: { type: Boolean, default: false },
+  canViewSelectedProjects: { type: Boolean, default: false },
+  canViewPublicProjects: { type: Boolean, default: false },
+  syncedAt: { type: Date, default: null },
+}, { _id: false });
+
 /**
  * WorkspaceMembership — junction model linking ChatUsers to Workspaces.
  *
@@ -52,6 +73,10 @@ const workspaceMembershipSchema = new Schema({
   displayName: {
     type: String,
     maxlength: 50,
+    default: null,
+  },
+  flowTaskAccess: {
+    type: flowTaskAccessSchema,
     default: null,
   },
 }, {

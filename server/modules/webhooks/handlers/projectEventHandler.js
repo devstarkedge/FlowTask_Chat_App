@@ -5,6 +5,9 @@ import messageService from '../../messages/message.service.js';
 import userRepository from '../../users/user.repository.js';
 import channelRepository from '../../channels/channel.repository.js';
 import { emitToChannel, emitToUser } from '../../../sockets/socketManager.js';
+import {
+  getAuthorizedProjectUserIds,
+} from '../../flowtask/projectAccess.service.js';
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SOCKET_EVENTS } from '../../../config/constants.js';
 import { requireWorkspaceId } from '../../../utils/webhookEventGuard.js';
@@ -90,6 +93,16 @@ export function registerProjectEventHandlers() {
         membershipVersion: payload.membershipVersion || 0,
       },
     );
+
+    const authorizedUserIds = await getAuthorizedProjectUserIds(channel, wsId);
+    for (const userId of authorizedUserIds) {
+      emitToUser(
+        userId,
+        SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED,
+        { workspaceId: wsId, channelId: channel._id.toString(), reason: 'project_membership_synced' },
+        wsId,
+      );
+    }
 
     logger.info('project.membership_synced handled', {
       boardId,
@@ -207,7 +220,8 @@ export function registerProjectEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.PROJECT_UPDATED);
     if (!wsId) return;
 
-    const { board, changes, userId } = payload;
+    const { board, userId } = payload;
+    const changes = payload.changes?.changes || payload.changes || {};
 
     if (!board?._id) return;
 
@@ -216,51 +230,78 @@ export function registerProjectEventHandlers() {
       logger.warn('project.updated: no channel found for board', { boardId: board._id });
       return;
     }
+    const previouslyAuthorizedUserIds = await getAuthorizedProjectUserIds(channel, wsId);
 
-    // Update channel metadata if name, description, department, or status changed
-    if (changes?.title || changes?.description || changes?.department || changes?.departmentId || changes?.status || changes?.isArchived !== undefined) {
+    // Update channel metadata, including the values that drive the scoped
+    // FlowTask project-access decision (department, team and discoverability).
+    if (board) {
       const updates = {};
-      if (changes?.title) {
-        updates.name = changes.title;
-        // Generate new slug from the new title
-        const { slugify, appendCollisionSuffix } = await import('../../../utils/slugify.js');
-        let newSlug = slugify(changes.title);
-        // Check if slug already exists for another channel
-        const existingSlug = await channelRepository.findBySlug(newSlug, wsId);
-        if (existingSlug && existingSlug._id.toString() !== channel._id.toString()) {
-          newSlug = appendCollisionSuffix(newSlug, board._id);
-        }
-        updates.slug = newSlug;
+      const updatedTitle = board.title || board.name || changes?.title || changes?.name;
+      if (updatedTitle && updatedTitle !== channel.name) {
+        updates.name = updatedTitle;
       }
-      if (changes?.description !== undefined) {
-        updates.description = changes.description;
+      if (board.description !== undefined) {
+        updates.description = board.description;
       }
       
       // Handle department changes
-      const newDept = changes?.department || changes?.departmentId;
-      if (newDept) {
+      const newDept = board.department ?? changes?.department ?? changes?.departmentId;
+      if (newDept !== undefined && newDept !== null) {
         const deptObj = typeof newDept === 'object' ? newDept : null;
         const deptId = deptObj?._id || deptObj?.id || (typeof newDept === 'string' ? newDept : null);
         const deptName = deptObj?.name || 'general';
         if (deptId) {
           updates.departmentRef = { departmentId: deptId.toString(), departmentName: deptName };
-        } else if (newDept === null) {
-          updates.departmentRef = { departmentId: null, departmentName: null };
         }
+      } else if (newDept === null) {
+        updates.departmentRef = { departmentId: null, departmentName: null };
       }
 
+      const boardTeam = normalizeEntityId(board.team || payload.project?.team);
+      const sourceVisibility = board.sourceVisibility || payload.project?.sourceVisibility;
+      updates.flowTaskMetadata = {
+        teamId: boardTeam,
+        sourceVisibility: ['public', 'private'].includes(sourceVisibility)
+          ? sourceVisibility
+          : null,
+      };
+
       // Handle unarchiving / restoring via status
-      if (changes?.status === 'active' || changes?.isArchived === false) {
+      if (board.isArchived === false || changes?.status === 'active' || changes?.isArchived === false) {
         updates.isArchived = false;
       }
 
       // Handle archiving
-      if (changes?.status === 'archived' || changes?.isArchived === true) {
+      if (board.isArchived === true || changes?.status === 'archived' || changes?.isArchived === true) {
         await channelService.archiveChannel(channel._id, 'system', wsId);
         // The archiveChannel method handles emitting the update event for archiving.
+        for (const recipientId of previouslyAuthorizedUserIds) {
+          emitToUser(
+            recipientId,
+            SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED,
+            { workspaceId: wsId, channelId: channel._id.toString(), reason: 'project_archived' },
+            wsId,
+          );
+        }
+        return;
       }
 
-      await channelService.updateChannel(channel._id, updates, null, wsId);
+      const updatedChannel = await channelService.updateChannel(channel._id, updates, null, wsId);
+      const { reconcileChannelRoomAccess } = await import('../../../sockets/socketManager.js');
+      await reconcileChannelRoomAccess(channel._id.toString(), wsId);
+      const currentlyAuthorizedUserIds = await getAuthorizedProjectUserIds(updatedChannel, wsId);
+      const affectedUserIds = new Set([
+        ...previouslyAuthorizedUserIds,
+        ...currentlyAuthorizedUserIds,
+      ]);
+      for (const recipientId of affectedUserIds) {
+        emitToUser(
+          recipientId,
+          SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED,
+          { workspaceId: wsId, channelId: channel._id.toString(), reason: 'project_metadata_updated' },
+          wsId,
+        );
+      }
     }
 
     // Post update notification
@@ -294,6 +335,7 @@ export function registerProjectEventHandlers() {
 
     const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
+    const authorizedUserIds = await getAuthorizedProjectUserIds(channel, wsId);
 
     // Post notification before archiving
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
@@ -305,7 +347,15 @@ export function registerProjectEventHandlers() {
     );
 
     // Archive the channel
-    await channelService.archiveChannel(channel._id, 'system');
+    await channelService.archiveChannel(channel._id, 'system', wsId);
+    for (const recipientId of authorizedUserIds) {
+      emitToUser(
+        recipientId,
+        SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED,
+        { workspaceId: wsId, channelId: channel._id.toString(), reason: 'project_deleted' },
+        wsId,
+      );
+    }
 
     logger.info('project.deleted handled', { channelId: channel._id, boardId });
   });

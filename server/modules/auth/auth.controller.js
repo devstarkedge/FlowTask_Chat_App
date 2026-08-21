@@ -17,7 +17,7 @@ import { ForbiddenError } from '../../middleware/errorHandler.js';
  * Ensure the user has a WorkspaceMembership record for the given workspace.
  * Called after login/register so subsequent resolveWorkspace checks pass.
  */
-async function ensureWorkspaceMembership(userId, workspaceId) {
+async function ensureWorkspaceMembership(userId, workspaceId, flowTaskAccess = null) {
   if (!workspaceId) return;
   const existing = await WorkspaceMembership.findOne({
     userId,
@@ -26,6 +26,21 @@ async function ensureWorkspaceMembership(userId, workspaceId) {
   }).lean();
   if (!existing) {
     await WorkspaceMembership.addMember(userId, workspaceId);
+  }
+  if (flowTaskAccess) {
+    await WorkspaceMembership.updateOne(
+      { userId, workspaceId, isActive: true },
+      {
+        $set: {
+          flowTaskAccess: {
+            ...flowTaskAccess,
+            syncedAt: flowTaskAccess.syncedAt
+              ? new Date(flowTaskAccess.syncedAt)
+              : new Date(),
+          },
+        },
+      },
+    );
   }
 }
 
@@ -198,7 +213,7 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
   try {
     const {
       chatUser, accessToken, refreshToken,
-      flowTaskWorkspaceId, flowTaskWorkspaceName, flowTaskWorkspaceSlug, flowTaskPlan,
+      flowTaskWorkspaceId, flowTaskWorkspaceName, flowTaskWorkspaceSlug, flowTaskPlan, flowTaskAccess,
     } = await authService.loginFlowTask({ token, userAgent });
     logger.info('FlowTask token validated and ChatApp user resolved', {
       requestId,
@@ -261,7 +276,7 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
       : { status: 'completed' };
 
     if (wsId) {
-      await ensureWorkspaceMembership(chatUser._id, wsId);
+      await ensureWorkspaceMembership(chatUser._id, wsId, flowTaskAccess);
       logger.info('FlowTask workspace membership resolved', {
         requestId,
         chatUserId: chatUser._id,

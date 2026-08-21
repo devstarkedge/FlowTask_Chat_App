@@ -190,6 +190,7 @@ class AuthService {
     const flowTaskWorkspaceId = isRedirectFlow ? (decoded.workspaceId || null) : null;
     const flowTaskWorkspaceName = isRedirectFlow ? (decoded.workspaceName || null) : null;
     const flowTaskWorkspaceSlug = isRedirectFlow ? (decoded.workspaceSlug || null) : null;
+    const flowTaskAccess = isRedirectFlow ? (decoded.flowTaskAccess || null) : null;
     // FlowTask's `plan` claim (chatIntegrationController.js#getChatRedirectUrl
     // / workspaceChatSyncService.js) — only trusted for the redirect flow,
     // same scoping as the workspace claims above. Mapped to ChatApp's own
@@ -249,6 +250,10 @@ class AuthService {
     const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser, {
       markRegistered: true,
       createIfMissing: true,
+      // Workspace role/department/access is carried by WorkspaceMembership.
+      // Never overwrite ChatUser's global fields during a workspace-specific
+      // SSO login or the most recently opened workspace wins everywhere.
+      syncWorkspaceScopedFields: false,
     });
 
     // 5. Issue Chat tokens (no workspaceId in JWT)
@@ -269,7 +274,16 @@ class AuthService {
       flowTaskWorkspaceId,
     });
 
-    return { chatUser, accessToken, refreshToken, flowTaskWorkspaceId, flowTaskWorkspaceName, flowTaskWorkspaceSlug, flowTaskPlan };
+    return {
+      chatUser,
+      accessToken,
+      refreshToken,
+      flowTaskWorkspaceId,
+      flowTaskWorkspaceName,
+      flowTaskWorkspaceSlug,
+      flowTaskPlan,
+      flowTaskAccess,
+    };
   }
 
   // ═══════════════════════════════════════════════════════════════════════

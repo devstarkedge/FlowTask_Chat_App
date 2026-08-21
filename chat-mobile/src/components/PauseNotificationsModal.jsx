@@ -29,7 +29,7 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
   const [showPicker, setShowPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState('date');
 
-  const isPaused = user?.notificationsPausedUntil && new Date(user.notificationsPausedUntil) > new Date();
+  const isPaused = user?.chatPreferences?.dnd?.enabled && (!user.chatPreferences.dnd.endAt || new Date(user.chatPreferences.dnd.endAt) > new Date());
 
   const allDurations = [
     { label: "Continue Notifications", value: "continue" },
@@ -48,7 +48,12 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
     try {
       if (duration.value === 'continue') {
         await usersAPI.resumeNotifications();
-        updateUser({ notificationsPausedUntil: null });
+        updateUser({ 
+          chatPreferences: { 
+            ...(user?.chatPreferences || {}), 
+            dnd: { ...(user?.chatPreferences?.dnd || {}), enabled: false, endAt: null } 
+          } 
+        });
       } else {
         // Compute pause duration in minutes
         let minutes = typeof duration.value === 'number' ? duration.value : null;
@@ -71,7 +76,12 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
             duration: minutes,
             resumeAt,
           });
-          updateUser({ notificationsPausedUntil: resumeAt });
+          updateUser({ 
+            chatPreferences: { 
+              ...(user?.chatPreferences || {}), 
+              dnd: { ...(user?.chatPreferences?.dnd || {}), enabled: true, endAt: resumeAt } 
+            } 
+          });
         }
       }
     } catch (err) {
@@ -94,7 +104,12 @@ const PauseNotificationsModal = ({ visible, onClose }) => {
           duration: minutes,
           resumeAt,
         });
-        updateUser({ notificationsPausedUntil: resumeAt });
+        updateUser({ 
+          chatPreferences: { 
+            ...(user?.chatPreferences || {}), 
+            dnd: { ...(user?.chatPreferences?.dnd || {}), enabled: true, endAt: resumeAt } 
+          } 
+        });
       }
     } catch (err) {
       logger.error('Failed to pause notifications:', err);

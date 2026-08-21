@@ -183,6 +183,13 @@ class NotificationEngine {
         return { sent: false, reason: 'paused' };
       }
 
+      const recipient = await userRepository.findById(recipientIdStr);
+      const globalDnd = recipient?.chatPreferences?.dnd;
+      const isGlobalPaused = globalDnd?.enabled && (!globalDnd.endAt || new Date(globalDnd.endAt) > new Date());
+      if (isGlobalPaused) {
+        return { sent: false, reason: 'paused_global' };
+      }
+
       const inQuietHours = await NotificationPreference.isInQuietHours(recipientIdStr, workspaceId);
       if (inQuietHours) {
         return { sent: false, reason: 'quiet_hours' };
@@ -401,6 +408,11 @@ class NotificationEngine {
         if (priority !== NOTIFICATION_PRIORITIES.HIGH) {
           const isPaused = await NotificationPreference.isPaused(recipientIdStr, workspaceId);
           if (isPaused) return null;
+
+          const recipient = await userRepository.findById(recipientIdStr);
+          const globalDnd = recipient?.chatPreferences?.dnd;
+          const isGlobalPaused = globalDnd?.enabled && (!globalDnd.endAt || new Date(globalDnd.endAt) > new Date());
+          if (isGlobalPaused) return null;
         }
       }
 

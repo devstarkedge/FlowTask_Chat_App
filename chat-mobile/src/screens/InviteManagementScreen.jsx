@@ -13,7 +13,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeStore } from "../stores/themeStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
-import { useChannelStore } from "../stores/channelStore";
+import { useChannels } from "../hooks/queries/useChannels";
 import { workspaceAPI } from "../services/api";
 import ENV from "../config/environment";
 import * as Clipboard from "expo-clipboard";
@@ -49,7 +49,7 @@ export default function InviteManagementScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const activeWorkspace   = useWorkspaceStore((s) => s.activeWorkspace);
-  const { channels, fetchChannels } = useChannelStore();
+  const { data: channels = [] } = useChannels(activeWorkspaceId);
 
   const [emails, setEmails] = useState([]);
   const [emailInput, setEmailInput] = useState("");
@@ -75,13 +75,6 @@ export default function InviteManagementScreen({ navigation }) {
       navigation.goBack();
     }
   }, [canManage, activeWorkspace, navigation]);
-
-  // Load channels
-  useEffect(() => {
-    if (activeWorkspaceId) {
-      fetchChannels(activeWorkspaceId).catch(() => {});
-    }
-  }, [activeWorkspaceId, fetchChannels]);
 
   // Pre-select general channel by default
   useEffect(() => {
@@ -330,7 +323,7 @@ export default function InviteManagementScreen({ navigation }) {
         )}
 
         {/* Admin Toggle (only if member type) */}
-        {!isGuest && !isFlowTaskWorkspace && (
+        {/* {!isGuest && !isFlowTaskWorkspace && (
           <View style={[styles.rowItem, { borderBottomColor: colors.border }]}>
             <View style={styles.rowLeft}>
               <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>Make workspace admin</Text>
@@ -345,7 +338,7 @@ export default function InviteManagementScreen({ navigation }) {
               thumbColor={isAdmin ? colors.primary : "#f4f3f4"}
             />
           </View>
-        )}
+        )} */}
 
         {/* Link Copy Widget */}
         {!isFlowTaskWorkspace && (

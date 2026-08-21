@@ -179,9 +179,13 @@ export const connectSocket = async () => {
 
   socket.on('message:ack', ({ tempId, message, rootMessageId }) => {
     if (message.threadId) {
-      // Reconcile thread reply via ACK
+      // This ACK is for a thread reply — reconcile ONLY in the threadReplies cache,
+      // NOT in the main channel messages cache, to avoid double-posting.
       const resolvedRootId = rootMessageId || message.threadId;
-      reconcileMessageInCache(message.channelId, tempId, message);
+      const { reconcileThreadReplyInCache } = require('../queries/cacheUtils');
+      if (reconcileThreadReplyInCache) {
+        reconcileThreadReplyInCache(resolvedRootId, tempId, message);
+      }
     } else {
       reconcileMessageInCache(message.channelId, tempId, message);
     }

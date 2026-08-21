@@ -53,7 +53,8 @@ export const useWorkspaceStore = create(
               const { data } = await workspaceAPI.mine();
               let w = data.data?.workspaces || [];
               return w.filter(ws => !recentlyRemovedWorkspaces.has(ws._id));
-            }
+            },
+            staleTime: 0, // Always fetch fresh data from server
           });
           
           set({ isLoading: false });
@@ -96,7 +97,20 @@ export const useWorkspaceStore = create(
           } catch (e) {}
         }
         
-        const workspace = workspaces.find((w) => w._id === workspaceId);
+        let workspace = workspaces.find((w) => w._id === workspaceId);
+        
+        // If not found in cache, force a fresh server fetch and retry
+        if (!workspace) {
+          try {
+            logger.info('[WorkspaceStore] Workspace not in cache, forcing server refetch…');
+            await queryClient.invalidateQueries({ queryKey: queryKeys.workspaces });
+            const freshList = await get().fetchWorkspaces(true);
+            workspace = freshList.find((w) => w._id === workspaceId);
+          } catch (e) {
+            logger.warn('[WorkspaceStore] Refetch during switchWorkspace failed', e);
+          }
+        }
+        
         if (workspace) {
           // Set header cache BEFORE any follow-up API calls
           setCachedWorkspaceId(workspaceId);
@@ -109,6 +123,8 @@ export const useWorkspaceStore = create(
 
           // Trigger full context refresh
           await get().refreshWorkspaceContext();
+        } else {
+          logger.error('[WorkspaceStore] switchWorkspace failed: workspace not found for id', workspaceId);
         }
       },
 
@@ -164,8 +180,31 @@ export const useWorkspaceStore = create(
             alreadyMember: !!data.data?.alreadyMember,
           };
           
-          // Refresh workspaces list to ensure the new workspace is available for switchWorkspace
-          await get().fetchWorkspaces(true);
+          // 1. Optimistically inject the workspace into cache FIRST so
+          //    switchWorkspace can find it immediately.
+          if (!workspace.alreadyMember && workspace._id) {
+            queryClient.setQueryData(queryKeys.workspaces, (old = []) => {
+              if (old.some(w => w._id === workspace._id)) return old;
+              return [...old, workspace];
+            });
+          }
+          
+          // 2. Fetch authoritative list from server (skips stale cache).
+          //    This also ensures the workspace persists across cache refreshes.
+          try {
+            const freshList = await get().fetchWorkspaces(true);
+            // Guard: if server response doesn't include the workspace yet (replication lag),
+            // re-inject it so switchWorkspace still works.
+            if (workspace._id && !freshList.some(w => w._id === workspace._id)) {
+              queryClient.setQueryData(queryKeys.workspaces, (old = []) => {
+                if (old.some(w => w._id === workspace._id)) return old;
+                return [...old, workspace];
+              });
+            }
+          } catch (_fetchErr) {
+            // Non-critical — optimistic data is already in cache
+            logger.warn('[WorkspaceStore] Background workspace refresh failed after join', _fetchErr);
+          }
           
           set({ isLoading: false });
           return workspace;

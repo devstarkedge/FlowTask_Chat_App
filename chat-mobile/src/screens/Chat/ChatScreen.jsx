@@ -345,7 +345,13 @@ const ChatScreen = ({ route, navigation }) => {
     loadThreadAndNavigate();
   }, [threadId, isLoadingMessages, messages, channelId, channelName, navigation, highlightedMessageIdFromParam, route.params]);
 
-  const displayedMessages = useMemo(() => [...messages].reverse(), [messages]);
+  const displayedMessages = useMemo(
+    // Thread replies (messages with threadId set) belong exclusively in the
+    // Thread Details screen. Filter them out here as a client-side safety net
+    // in case any slip through the socket or API layer filtering.
+    () => [...messages].filter(m => !m.threadId).reverse(),
+    [messages]
+  );
 
   // Scrolling and highlighting target message from Later Panel / reply taps
   useEffect(() => {

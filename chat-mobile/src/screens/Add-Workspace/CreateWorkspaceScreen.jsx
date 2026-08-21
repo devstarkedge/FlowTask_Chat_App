@@ -80,11 +80,12 @@ const CreateWorkspaceScreen = ({ navigation }) => {
       setJoinVisible(false);
       setInviteCode('');
       
-      await queryClient.invalidateQueries({ queryKey: queryKeys.workspaces });
-      
       if (workspace?._id) {
         await switchWorkspace(workspace._id);
-        navigation.navigate('Main');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Main' }],
+        });
       }
     } catch (err) {
       const msg = err.response?.data?.error?.message || err.message || 'Failed to join workspace';

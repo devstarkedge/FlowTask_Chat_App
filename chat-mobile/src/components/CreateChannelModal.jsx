@@ -10,8 +10,9 @@ import {
   ActivityIndicator,
   FlatList,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import KeyboardAwareContainer from "./common/KeyboardAwareContainer";
 import { useThemeStore } from "../stores/themeStore";
 import { useChannelStore } from "../stores/channelStore";
 import { X, Hash, Lock, Search, Check, Plus } from "lucide-react-native";
@@ -106,13 +107,13 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
   return (
     <>
     <Modal visible={visible && !showAddMembers} animationType="slide" transparent>
-      <KeyboardAwareContainer
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={[
           styles.overlay,
           { backgroundColor: colors.overlay },
           isWide && styles.wideOverlay,
         ]}
-        disablePadding={false}
       >
         <View style={[
           styles.container,
@@ -226,7 +227,7 @@ const CreateChannelModal = ({ visible, onClose, onCreated, navigation }) => {
             {/* Add Members section was extracted to AddMembersDrawer */}
           </ScrollView>
         </View>
-      </KeyboardAwareContainer>
+      </KeyboardAvoidingView>
     </Modal>
       <AddMembersDrawer 
         visible={showAddMembers} 
@@ -255,6 +256,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     overflow: "hidden",
+    flexShrink: 1,
   },
   wideContainer: {
     width: "100%",
@@ -286,6 +288,7 @@ const styles = StyleSheet.create({
   },
   form: {
     padding: moderateScale(20),
+    flexShrink: 1,
   },
   label: {
     fontSize: moderateScale(13),

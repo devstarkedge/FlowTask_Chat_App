@@ -47,7 +47,7 @@ const CreateReminderModal = ({ visible, onClose, onSubmit, colors }) => {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'} 
         style={styles.overlay}
       >
         <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
@@ -77,7 +77,12 @@ const CreateReminderModal = ({ visible, onClose, onSubmit, colors }) => {
           </View>
 
           {/* Form */}
-          <View style={styles.form}>
+          <ScrollView 
+            style={styles.form} 
+            contentContainerStyle={{ paddingBottom: verticalScale(24) }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             {/* When */}
             <View style={[styles.row, { borderBottomColor: colors.border }]}>
               <Text style={[styles.label, { color: colors.textPrimary }]}>When</Text>
@@ -115,7 +120,7 @@ const CreateReminderModal = ({ visible, onClose, onSubmit, colors }) => {
                 autoFocus={false}
               />
             </View>
-          </View>
+          </ScrollView>
         </View>
 
         {/* iOS Date/Time Picker Modal */}

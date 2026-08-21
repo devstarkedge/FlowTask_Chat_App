@@ -350,7 +350,7 @@ const ChatMessageItem = memo(({
             </RNView>
 
             {isSaved && !isDeleted && (
-              <RNView style={{ position: 'absolute', top: -4, right: -4, backgroundColor: colors.card, borderRadius: moderateScale(10), padding: moderateScale(2), elevation: 2, zIndex: 99, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: scale(0), height: verticalScale(1) } }}>
+              <RNView style={{ position: 'absolute', top: verticalScale(-14), right: scale(-10), backgroundColor: colors.card, borderRadius: moderateScale(10), padding: moderateScale(2), elevation: 2, zIndex: 99, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: scale(0), height: verticalScale(1) } }}>
                 <Bookmark size={12} color={colors.primary} fill={colors.primary} />
               </RNView>
             )}

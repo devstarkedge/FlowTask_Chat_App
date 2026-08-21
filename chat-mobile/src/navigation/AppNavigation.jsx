@@ -125,13 +125,14 @@ function BottomTabs({ navigation }) {
   const { t } = useTranslation();
   const { isTablet, isDesktop } = useResponsive();
   const isWide = isTablet || isDesktop;
-  // Edge-to-edge (Expo 54+): always consume system nav inset.
-  // Use a minimum floor so gesture-nav (small inset) still has breathing room.
-  const NAV_BAR_FLOOR = verticalScale(4); // minimum extra gap above gesture bar
+  // Edge-to-edge handling: ensure tabs have breathing room above the system nav bar.
+  const ANDROID_EXTRA_PAD = verticalScale(14);
+  const IOS_EXTRA_PAD = verticalScale(4);
   const bottomInset = Math.max(insets.bottom, 0);
-  const tabBarContentHeight = isWide ? 58 : 50;
-  // Ensure at least NAV_BAR_FLOOR padding even when insets.bottom is 0
-  const tabBarBottomPad = bottomInset > 0 ? bottomInset + (Platform.OS === 'android' ? NAV_BAR_FLOOR : 0) : NAV_BAR_FLOOR;
+  const tabBarContentHeight = isWide ? 58 : 52; 
+  
+  // Provide consistent padding bottom. If Android, add extra padding to avoid the 3-button nav or gesture bar.
+  const tabBarBottomPad = bottomInset + (Platform.OS === 'android' ? ANDROID_EXTRA_PAD : IOS_EXTRA_PAD);
 
   return (
     <>
@@ -142,13 +143,13 @@ function BottomTabs({ navigation }) {
           tabBarHideOnKeyboard: true,
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textSecondary,
-          safeAreaInsets: { bottom: tabBarBottomPad },
           tabBarStyle: {
             backgroundColor: colors.backgroundSecondary,
             borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: colors.border,
-            paddingTop: verticalScale(4),
-            minHeight: tabBarContentHeight + tabBarBottomPad,
+            paddingTop: verticalScale(6),
+            paddingBottom: tabBarBottomPad,
+            height: tabBarContentHeight + tabBarBottomPad,
           },
           tabBarLabelStyle: {
             fontSize: moderateScale(isWide ? 12 : 10),

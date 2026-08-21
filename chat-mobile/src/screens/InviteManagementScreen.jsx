@@ -85,7 +85,7 @@ export default function InviteManagementScreen({ navigation }) {
 
   // Pre-select general channel by default
   useEffect(() => {
-    if (channels.length > 0 && selectedChannels.length === 0) {
+    if (channels && channels.length > 0 && selectedChannels.length === 0) {
       const generalCh = channels.find(c => c.name.toLowerCase() === "general");
       if (generalCh) {
         // Store as string to avoid ObjectId reference-equality failures in .includes()
@@ -120,7 +120,7 @@ export default function InviteManagementScreen({ navigation }) {
   };
 
   const filteredChannels = useMemo(() => {
-    return channels.filter((ch) => {
+    return (channels || []).filter((ch) => {
       if (ch.type === "dm" || ch.type === "group_dm" || ch.type === "system" || ch.type === "self" || ch.isArchived) return false;
       return ch.name.toLowerCase().includes(channelSearch.toLowerCase());
     });
@@ -195,7 +195,7 @@ export default function InviteManagementScreen({ navigation }) {
         setEmails([]);
         setEmailInput("");
         // Reset but keep default channels
-        const generalCh = channels.find(c => c.name.toLowerCase() === "general");
+        const generalCh = (channels || []).find(c => c.name.toLowerCase() === "general");
         setSelectedChannels(generalCh ? [String(generalCh._id)] : []);
         navigation.goBack();
       }
@@ -220,11 +220,23 @@ export default function InviteManagementScreen({ navigation }) {
 
   const selectedChannelsNames = useMemo(() => {
     const stringSelected = selectedChannels.map((x) => String(x));
-    return channels
+    return (channels || [])
       .filter((ch) => stringSelected.includes(String(ch._id)))
       .map((ch) => `#${ch.name}`)
       .join(", ");
   }, [channels, selectedChannels]);
+
+  const isFlowTaskWorkspace = activeWorkspace?.source === 'flowtask';
+
+  // For FlowTask workspaces, only allow guest invites.
+  useEffect(() => {
+    if (isFlowTaskWorkspace) {
+      setIsGuest(true);
+      setIsAdmin(false);
+    }
+  }, [isFlowTaskWorkspace]);
+
+  // ... (existing code, let's just replace the JSX parts directly in the return block)
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -232,7 +244,9 @@ export default function InviteManagementScreen({ navigation }) {
       {/* Slack Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <HeaderBackButton onPress={() => navigation.goBack()} />
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Add Members</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+          {isFlowTaskWorkspace ? "Add Guests" : "Add Members"}
+        </Text>
         <TouchableOpacity
           onPress={handleSend}
           disabled={sending || (emails.length === 0 && !emailInput.trim())}
@@ -295,7 +309,7 @@ export default function InviteManagementScreen({ navigation }) {
         </TouchableOpacity>
 
         {/* Guest Toggle (if permitted) */}
-        {guestAccess && (
+        {guestAccess && !isFlowTaskWorkspace && (
           <View style={[styles.rowItem, { borderBottomColor: colors.border }]}>
             <View style={styles.rowLeft}>
               <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>Invite as guest</Text>
@@ -316,7 +330,7 @@ export default function InviteManagementScreen({ navigation }) {
         )}
 
         {/* Admin Toggle (only if member type) */}
-        {/* {!isGuest && (
+        {!isGuest && !isFlowTaskWorkspace && (
           <View style={[styles.rowItem, { borderBottomColor: colors.border }]}>
             <View style={styles.rowLeft}>
               <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>Make workspace admin</Text>
@@ -331,22 +345,24 @@ export default function InviteManagementScreen({ navigation }) {
               thumbColor={isAdmin ? colors.primary : "#f4f3f4"}
             />
           </View>
-        )} */}
+        )}
 
         {/* Link Copy Widget */}
-        <View style={styles.linkContainer}>
-          <Text style={[styles.linkLabel, { color: colors.textSecondary }]}>Or invite by sharing a link:</Text>
-          <TouchableOpacity
-            style={[styles.linkBox, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}
-            onPress={copyInviteLink}
-            activeOpacity={0.7}
-          >
-            <Copy size={16} color={colors.primary} />
-            <Text style={[styles.linkText, { color: colors.textPrimary }]} numberOfLines={1}>
-              {inviteLink}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {!isFlowTaskWorkspace && (
+          <View style={styles.linkContainer}>
+            <Text style={[styles.linkLabel, { color: colors.textSecondary }]}>Or invite by sharing a link:</Text>
+            <TouchableOpacity
+              style={[styles.linkBox, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}
+              onPress={copyInviteLink}
+              activeOpacity={0.7}
+            >
+              <Copy size={16} color={colors.primary} />
+              <Text style={[styles.linkText, { color: colors.textPrimary }]} numberOfLines={1}>
+                {inviteLink}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
 

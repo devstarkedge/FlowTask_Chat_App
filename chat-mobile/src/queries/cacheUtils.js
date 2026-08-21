@@ -53,6 +53,47 @@ export const addThreadReplyToCache = (rootMessageId, reply) => {
   }
 };
 
+/**
+ * Reconcile a pending optimistic thread reply with the confirmed server reply.
+ * Replaces the tempId entry in threadReplies cache and removes any duplicates.
+ */
+export const reconcileThreadReplyInCache = (rootMessageId, tempId, serverReply) => {
+  const queryKey = queryKeys.threadReplies(rootMessageId);
+  const oldData = queryClient.getQueryData(queryKey);
+  if (!oldData || !oldData.pages) return;
+
+  const serverIdStr = String(serverReply._id);
+  let reconciled = false;
+
+  const newPages = oldData.pages.map(page => {
+    const newItems = page.items
+      .map(r => {
+        if (r._id === tempId) {
+          reconciled = true;
+          return { ...serverReply, pending: false, tempId };
+        }
+        return r;
+      })
+      // Remove any duplicate that arrived via socket before ACK
+      .filter(r => !(String(r._id) === serverIdStr && r._id !== tempId && r.tempId !== tempId));
+    return { ...page, items: newItems };
+  });
+
+  // Safety net: if optimistic entry was already evicted, append the server reply
+  if (!reconciled) {
+    const firstPage = newPages[0];
+    if (firstPage && !firstPage.items.some(r => String(r._id) === serverIdStr)) {
+      newPages[0] = {
+        ...firstPage,
+        items: [...firstPage.items, { ...serverReply, pending: false, tempId }]
+          .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)),
+      };
+    }
+  }
+
+  queryClient.setQueryData(queryKey, { ...oldData, pages: newPages });
+};
+
 export const addReactionToThreadReplyCache = (replyId, emoji, user) => {
   const queries = queryClient.getQueriesData({ queryKey: ['threadReplies'] });
   queries.forEach(([queryKey, oldData]) => {

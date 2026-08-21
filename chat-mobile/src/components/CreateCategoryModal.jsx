@@ -14,6 +14,7 @@ import {
   useWindowDimensions,
   KeyboardAvoidingView,
 } from 'react-native';
+import KeyboardAwareContainer from './common/KeyboardAwareContainer';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
@@ -319,7 +320,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
   // ── Render ──
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'padding'} style={styles.overlay}>
+      <KeyboardAwareContainer bottomSafeContext={true} style={styles.overlay}>
         <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={onClose} />
 
         <SafeAreaView
@@ -417,7 +418,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
 
           {/* ──────────── Body ──────────── */}
           <ScrollView
-            style={styles.body}
+            style={{ flexShrink: 1 }}
             contentContainerStyle={styles.bodyPad}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
@@ -695,7 +696,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
             />
           </View>
         </SafeAreaView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareContainer>
     </Modal>
   );
 }
@@ -713,6 +714,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: moderateScale(16),
     maxHeight: '90%',
     overflow: 'hidden',
+    flexShrink: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -8 },
     shadowOpacity: 0.2,

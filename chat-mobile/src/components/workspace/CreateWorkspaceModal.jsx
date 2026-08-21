@@ -127,6 +127,10 @@ const CreateWorkspaceModal = ({ visible, onClose, onSuccess, navigation }) => {
       if (onSuccess) onSuccess();
 
       await queryClient.invalidateQueries({ queryKey: queryKeys.workspaces });
+      queryClient.setQueryData(queryKeys.workspaces, (old = []) => {
+        if (old.some(w => w._id === workspace._id)) return old;
+        return [...old, workspace];
+      });
       
       if (workspace?._id) {
         await switchWorkspace(workspace._id);

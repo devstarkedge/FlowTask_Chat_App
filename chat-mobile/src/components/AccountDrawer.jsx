@@ -83,7 +83,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   
-  const userRole = activeWorkspace?.role || user?.role;
+  const userRole = activeWorkspace?.role;
   const canManage = ['owner', 'admin'].includes(userRole);
 
   const targetIdStr = user?._id?.toString ? user._id.toString() : user?._id;

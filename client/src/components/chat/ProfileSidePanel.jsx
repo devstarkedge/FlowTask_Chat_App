@@ -88,7 +88,7 @@ export default function ProfileSidePanel({ user, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [userId, workspaceId, user?.workspaceRole, user?.role]);
+  }, [userId, workspaceId, user?.workspaceRole]);
 
   useEffect(() => {
     const h = (e) => {
@@ -140,7 +140,6 @@ export default function ProfileSidePanel({ user, onClose }) {
   const role =
     (KNOWN_WORKSPACE_ROLES.has(user.workspaceRole) ? user.workspaceRole : null) ||
     (KNOWN_WORKSPACE_ROLES.has(fetchedWorkspaceRole) ? fetchedWorkspaceRole : null) ||
-    (KNOWN_WORKSPACE_ROLES.has(user.role) ? user.role : null) ||
     memberRecord?.role ||
     "member";
 

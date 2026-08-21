@@ -118,7 +118,6 @@ export default function WorkspaceMenu({
   const navigate = useNavigate();
   const { workspaces, activeWorkspace, activeWorkspaceId, isSwitching } =
     useWorkspaceStore();
-  const { user } = useAuthStore();
 
   const [isOpen, setIsOpen] = useState(false);
   const [unread, setUnread] = useState({});
@@ -173,7 +172,7 @@ export default function WorkspaceMenu({
   );
 
   // Check if user can invite (owner or admin)
-  const userRole = activeWorkspace?.role || user?.role;
+  const userRole = activeWorkspace?.role;
   const canInvite  = ["owner", "admin"].includes(userRole);
   const canManage  = canInvite; // guests should not see workspace settings
 

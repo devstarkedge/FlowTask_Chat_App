@@ -3,7 +3,6 @@ import { NotFoundError, ForbiddenError, ValidationError } from '../../middleware
 import logger from '../../utils/logger.js';
 import flowtaskService from '../flowtask/flowtask.service.js';
 import userRepository from '../users/user.repository.js';
-import workspaceRepository from '../workspaces/workspace.repository.js';
 
 class DirectoriesService {
   /**
@@ -38,16 +37,13 @@ class DirectoriesService {
           ftUsers = [];
         }
 
-        // Upsert FlowTask users and add as workspace members when missing.
+        // Refresh existing ChatApp identities only. Workspace membership and
+        // its role are created by signed FlowTask workspace access, never by
+        // rendering a directory or performing a search.
         for (const ftu of ftUsers || []) {
           try {
             if (!ftu._id || !ftu.email) continue;
-            const synced = await userRepository.upsertFromFlowTask(ftu);
-            if (!synced) continue;
-            const isMember = await workspaceRepository.isMember(synced._id, workspaceId);
-            if (!isMember) {
-              await workspaceRepository.addMember(synced._id, workspaceId, 'member');
-            }
+            await userRepository.upsertFromFlowTask(ftu);
           } catch (err) {
             logger.warn('Directories: failed to sync FlowTask user into workspace', {
               email: ftu.email,

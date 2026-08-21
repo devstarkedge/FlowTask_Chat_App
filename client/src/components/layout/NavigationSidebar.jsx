@@ -214,7 +214,7 @@ export default function NavigationSidebar({
 
   const activeFlowTaskRole = activeWorkspace?.flowTaskRole;
   const isManagerOrAdmin = ['admin', 'owner', 'manager'].includes(
-    activeFlowTaskRole || activeWorkspace?.role || user?.role,
+    activeFlowTaskRole || activeWorkspace?.role,
   );
 
   const toggleSection = (section) => {

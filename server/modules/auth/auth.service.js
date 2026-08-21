@@ -253,10 +253,6 @@ class AuthService {
     const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser, {
       markRegistered: true,
       createIfMissing: true,
-      // Workspace role/department/access is carried by WorkspaceMembership.
-      // Never overwrite ChatUser's global fields during a workspace-specific
-      // SSO login or the most recently opened workspace wins everywhere.
-      syncWorkspaceScopedFields: false,
     });
 
     // 5. Issue Chat tokens (no workspaceId in JWT)
@@ -521,29 +517,31 @@ class AuthService {
 
   /**
    * Validate that a user has one of the required roles.
-   * @param {object} user - ChatUser document
+   * @param {object} membership - Active WorkspaceMembership document
    * @param {string[]} requiredRoles
    * @throws {ForbiddenError}
    */
-  validateRole(user, requiredRoles) {
-    if (!user) throw new UnauthorizedError('User not found');
-    if (user.role === 'admin') return;
+  validateRole(membership, requiredRoles) {
+    if (!membership?.workspaceId) {
+      throw new ForbiddenError('Workspace membership is required');
+    }
+    if (membership.role === 'admin' || membership.role === 'owner') return;
     const normalizedRoles = requiredRoles.map((r) => r.toLowerCase());
-    if (!normalizedRoles.includes(user.role)) {
-      throw new ForbiddenError(`Required role: ${requiredRoles.join(' or ')}. Current role: ${user.role}`);
+    if (!normalizedRoles.includes(membership.role)) {
+      throw new ForbiddenError(`Required role: ${requiredRoles.join(' or ')}. Current role: ${membership.role}`);
     }
   }
 
   /**
    * Check department membership.
-   * @param {object} user - ChatUser document
+   * @param {object} membership - Active WorkspaceMembership document
    * @param {string} departmentId
    * @returns {boolean}
    */
-  isUserInDepartment(user, departmentId) {
-    if (!user || !departmentId) return false;
-    if (user.role === 'admin') return true;
-    return user.departmentIds.includes(departmentId);
+  isUserInDepartment(membership, departmentId) {
+    if (!membership?.workspaceId || !departmentId) return false;
+    if (membership.role === 'admin' || membership.role === 'owner') return true;
+    return membership.flowTaskAccess?.departmentIds?.includes(departmentId) || false;
   }
 }
 

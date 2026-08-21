@@ -56,7 +56,7 @@ router.get('/preferences/theme', protect, getThemePreferences);
 router.put('/presence', protect, setPresence);
 
 // Profile (must be last — :id is a catch-all param)
-router.patch('/:id', protect, updateUser);
+router.patch('/:id', protect, resolveWorkspace, updateUser);
 router.get('/:id', protect, getProfile);
 
 export default router;

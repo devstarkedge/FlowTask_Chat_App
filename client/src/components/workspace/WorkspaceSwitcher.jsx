@@ -282,10 +282,8 @@ export default function WorkspaceSwitcher({
   const navigate = useNavigate();
   const { workspaces, activeWorkspace, activeWorkspaceId, isSwitching } =
     useWorkspaceStore();
-  const { user } = useAuthStore();
-
   // Permission check: only owner or admin can invite / manage
-  const userRole = activeWorkspace?.role || user?.role;
+  const userRole = activeWorkspace?.role;
   const canManage = ["owner", "admin"].includes(userRole);
 
   const [isOpen, setIsOpen] = useState(false);

@@ -91,7 +91,9 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
   const isOwner =
     myMembership?.channelRole === "owner" || channel.createdBy === user?._id;
   const isAdmin =
-    isOwner || myMembership?.channelRole === "admin" || user?.role === "admin";
+    isOwner ||
+    myMembership?.channelRole === "admin" ||
+    ["owner", "admin"].includes(activeWorkspace?.role);
   const isDM = channel.type === "dm";
   const isSystem = channel.type === "system";
   const isSystemManagedProject =

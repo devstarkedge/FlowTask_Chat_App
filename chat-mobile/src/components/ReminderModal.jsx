@@ -18,6 +18,7 @@ import {
   StyleSheet,
   Modal,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { X, Clock, Bell, Calendar, Repeat as RepeatIcon, ChevronLeft} from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -121,6 +122,7 @@ const ReminderModal = React.memo(function ReminderModal({
     if (!visible) {
       setShowCustom(false);
     } else {
+      Keyboard.dismiss();
       const d = new Date();
       d.setHours(d.getHours() + 1);
       setCustomDate(d);

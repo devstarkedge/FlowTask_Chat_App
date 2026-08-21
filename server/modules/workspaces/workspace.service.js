@@ -994,6 +994,7 @@ class WorkspaceService {
     // Check plan limits
     const workspace = invite.workspaceId;
     this._assertMembershipManagedOutsideChatApp(workspace);
+    
     if (workspace.plan !== 'enterprise') {
       const currentCount = await workspaceRepository.countMembers(workspace._id);
       const planConfig = WORKSPACE_LIMITS[workspace.plan] || WORKSPACE_LIMITS.free;
@@ -1004,7 +1005,6 @@ class WorkspaceService {
         );
       }
     }
-
     const isGuestInvite = invite.inviteType === 'guest' || invite.role === 'guest';
     const roleToAssign = isGuestInvite ? WORKSPACE_ROLES.GUEST : invite.role;
 

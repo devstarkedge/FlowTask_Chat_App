@@ -403,6 +403,7 @@ export default function WorkspaceSettingsScreen({ navigation }) {
             onRemove={handleRemoveMember}
             onUpdateRole={handleUpdateRole}
             navigation={navigation}
+            isFlowTaskWorkspace={currentWorkspace?.source === 'flowtask'}
           />
         )}
         {activeTab === 'invite' && (
@@ -570,9 +571,9 @@ function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, 
 /* ───────────────────────────────────────
    MEMBERS TAB
    ─────────────────────────────────────── */
-function MembersTab({ members, loading, currentUserId, canManage, colors, onRemove, onUpdateRole, navigation }) {
-  const [search, setSearch] = useState('');
+function MembersTab({ members, loading, currentUserId, canManage, colors, onRemove, onUpdateRole, navigation, isFlowTaskWorkspace }) {
   const [showRolePicker, setShowRolePicker] = useState(null);
+  const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
     if (!search.trim()) return members;
@@ -604,7 +605,7 @@ function MembersTab({ members, loading, currentUserId, canManage, colors, onRemo
       </Text>
 
       {/* Invite Button */}
-      {canManage && (
+      {canManage && !isFlowTaskWorkspace && (
         <TouchableOpacity
           style={[styles.inviteButton, { backgroundColor: colors.primary }]}
           onPress={() => navigation.navigate('InviteManagement')}
@@ -702,6 +703,19 @@ function MembersTab({ members, loading, currentUserId, canManage, colors, onRemo
    INVITE TAB
    ─────────────────────────────────────── */
 function InviteTab({ workspace, canManage, inviteLink, colors, onCopyLink, onShareLink, onCopyCode, onRegenerate, navigation }) {
+  const isFlowTaskWorkspace = workspace?.source === 'flowtask';
+
+  if (isFlowTaskWorkspace) {
+    return (
+      <View style={styles.tabContent}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Workspace Invitations</Text>
+        <Text style={[styles.sectionDesc, { color: colors.textSecondary }]}>
+          Workspace membership and roles are managed by FlowTask. To invite new members to this workspace, please use FlowTask's workspace invitation flow.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.tabContent}>
       {/* Invite Code Section */}

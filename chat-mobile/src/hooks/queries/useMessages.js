@@ -86,6 +86,11 @@ export const useMessages = (channelId, options = {}) => {
         }
       }
 
+      // Filter out thread replies so they don't clutter the main chat screen.
+      // A thread reply has threadId (and usually parentMessageId).
+      // We still want to show regular inline quotes which might only have parentMessageId or replyTo without threadId.
+      apiMessages = apiMessages.filter(m => !m.threadId);
+
       return { items: apiMessages, hasMore, nextCursor };
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor,
@@ -191,6 +196,10 @@ export const useSendMessage = () => {
     },
 
     onMutate: async ({ channelId, content, options = {}, tempId }) => {
+      // Thread replies must NOT be injected into the main channel message cache.
+      // They are managed exclusively by useThreadReplies / threadReplies cache key.
+      if (options?.threadId) return {};
+
       // Cancel any in-flight refetch without awaiting to prevent race conditions during rapid concurrent optimistic updates
       queryClient.cancelQueries({ queryKey: queryKeys.messages(channelId) });
       const previousData = queryClient.getQueryData(queryKeys.messages(channelId));
@@ -264,8 +273,12 @@ export const useSendMessage = () => {
       }
     },
 
-    onSuccess: (data, { channelId, tempId }) => {
+    onSuccess: (data, { channelId, tempId, options = {} }) => {
       if (data.isOffline) return; // Keep the pending optimistic message visible
+
+      // Thread replies are managed exclusively by the threadReplies cache — don't
+      // touch the main channel messages cache here.
+      if (options?.threadId || data.reply?.threadId) return;
 
       const serverMessage = data.reply;
       if (!serverMessage) {

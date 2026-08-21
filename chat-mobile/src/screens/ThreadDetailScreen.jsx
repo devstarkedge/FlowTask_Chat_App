@@ -310,7 +310,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
 
       <KeyboardAwareContainer
         disablePadding={false}
-        bottomSafeContext={Platform.OS === 'ios'}
+        bottomSafeContext={false}
       >
         <FlashList
           ref={flatListRef}

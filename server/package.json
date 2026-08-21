@@ -20,6 +20,8 @@
     "db:migrate-flowtask-sync-indexes:apply": "node scripts/migrateFlowTaskSyncIndexes.js --apply",
     "db:fix-guest-memberships": "node scripts/migrate/fix-guest-memberships.js --dry-run",
     "db:fix-guest-memberships:apply": "node scripts/migrate/fix-guest-memberships.js",
+    "db:sync-flowtask-workspace-roles": "node scripts/migrate/sync-flowtask-workspace-roles.js",
+    "db:sync-flowtask-workspace-roles:apply": "node scripts/migrate/sync-flowtask-workspace-roles.js --apply",
     "debug:notify": "node scripts/send_debug_notification.js"
   },
   "dependencies": {

@@ -643,7 +643,7 @@ export function connectSocket() {
   })
 
   // ─── User Role Update Events ────────────────────────────────────────
-  socket.on(SOCKET_EVENTS.USER_ROLE_UPDATED, ({ userId, oldRole, newRole, workspaceId }) => {
+  socket.on(SOCKET_EVENTS.USER_ROLE_UPDATED, ({ userId, oldRole, newRole, flowTaskRole, workspaceId }) => {
     const currentUserId = useAuthStore.getState().user?._id
     
     console.log('[Socket] USER_ROLE_UPDATED received', { userId, oldRole, newRole, workspaceId, currentUserId })
@@ -653,7 +653,7 @@ export function connectSocket() {
       console.log('[Socket] Updating role for current user', { newRole })
       
       // Update auth store user object
-      useAuthStore.getState().updateUserRole(newRole, workspaceId)
+      useAuthStore.getState().updateUserRole(newRole, workspaceId, flowTaskRole)
       
       // Refresh workspace memberships to get updated role
       useWorkspaceStore.getState().fetchWorkspaces()

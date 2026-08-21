@@ -12,6 +12,12 @@ import { BadRequestError, NotFoundError, ForbiddenError, ConflictError } from '.
  */
 
 class WorkspaceService {
+  _assertMembershipManagedOutsideChatApp(workspace) {
+    if (workspace?.source === 'flowtask') {
+      throw new ForbiddenError('Workspace membership and roles are managed by FlowTask for this workspace.');
+    }
+  }
+
   // ─── FlowTask Integration ───────────────────────────────────────────────
 
   /**
@@ -42,7 +48,10 @@ class WorkspaceService {
    * @param {string} [params.plan] - ChatApp plan slug (already mapped from FlowTask's), free|pro|enterprise
    * @returns {Promise<object>} workspace document
    */
-  async findOrCreateFlowTaskWorkspace({ creatorId, flowTaskWorkspaceId, workspaceName, workspaceSlug, plan }) {
+  async findOrCreateFlowTaskWorkspace({
+    creatorId, flowTaskWorkspaceId, workspaceName, workspaceSlug, plan,
+    membershipRole = WORKSPACE_ROLES.MEMBER,
+  }) {
     if (!flowTaskWorkspaceId) {
       throw new BadRequestError('flowTaskWorkspaceId is required.');
     }
@@ -67,12 +76,6 @@ class WorkspaceService {
           throw new ForbiddenError('This FlowTask workspace is on the Free plan — ChatApp requires Pro or Enterprise. Ask your workspace owner to upgrade in FlowTask.');
         }
 
-        const currentMembership = await workspaceRepository.getMembership(creatorId, workspace._id);
-        await workspaceRepository.addMember(
-          creatorId,
-          workspace._id,
-          currentMembership?.role || WORKSPACE_ROLES.MEMBER,
-        );
         existingMapping.lastSeenAt = new Date();
         existingMapping.save().catch((err) => {
           logger.warn('Failed to bump WorkspaceMapping.lastSeenAt', { error: err.message });
@@ -142,7 +145,11 @@ class WorkspaceService {
         await mongoose.model('WorkspaceMembership').create({
           userId: creatorId,
           workspaceId: workspace._id,
-          role: WORKSPACE_ROLES.OWNER,
+          // `Workspace.owner` remains a technical required field for the
+          // ChatApp model, but FlowTask's membership role is authoritative
+          // for access in this workspace. Never bootstrap a FlowTask user as
+          // ChatApp owner merely because they opened Chat first.
+          role: membershipRole,
           isActive: true,
           joinedAt: new Date(),
         });
@@ -199,12 +206,6 @@ class WorkspaceService {
               chatWorkspaceId: concurrentMapping.chatWorkspaceId,
               creatorId,
             });
-            const currentMembership = await workspaceRepository.getMembership(creatorId, winnerWorkspace._id);
-            await workspaceRepository.addMember(
-              creatorId,
-              winnerWorkspace._id,
-              currentMembership?.role || WORKSPACE_ROLES.MEMBER,
-            );
             return winnerWorkspace;
           }
           // The mapping's target workspace doesn't exist / isn't active — a
@@ -437,6 +438,7 @@ class WorkspaceService {
    */
   async deleteWorkspace(workspaceId, requesterId) {
     const workspace = await this.getWorkspace(workspaceId);
+    this._assertMembershipManagedOutsideChatApp(workspace);
 
     if (workspace.owner.toString() !== requesterId.toString()) {
       throw new ForbiddenError('Only the workspace owner can delete it.');
@@ -578,6 +580,7 @@ class WorkspaceService {
   async inviteMember(workspaceId, userId, role = WORKSPACE_ROLES.MEMBER, invitedBy) {
     // Check plan limits
     const workspace = await this.getWorkspace(workspaceId);
+    this._assertMembershipManagedOutsideChatApp(workspace);
     const currentCount = await workspaceRepository.countMembers(workspaceId);
     const limit = WORKSPACE_LIMITS[workspace.plan]?.maxMembers || WORKSPACE_LIMITS.free.maxMembers;
 
@@ -606,6 +609,7 @@ class WorkspaceService {
    * Remove a member from a workspace.
    */
   async removeMember(workspaceId, userId, requesterId) {
+    this._assertMembershipManagedOutsideChatApp(await this.getWorkspace(workspaceId));
     const requesterRole = await workspaceRepository.getUserRole(requesterId, workspaceId);
     const targetRole = await workspaceRepository.getUserRole(userId, workspaceId);
 
@@ -692,6 +696,7 @@ class WorkspaceService {
    * Update a member's role.
    */
   async updateMemberRole(workspaceId, userId, newRole, requesterId) {
+    this._assertMembershipManagedOutsideChatApp(await this.getWorkspace(workspaceId));
     const requesterRole = await workspaceRepository.getUserRole(requesterId, workspaceId);
 
     // Only owner can change roles
@@ -715,6 +720,7 @@ class WorkspaceService {
     if (!workspace || !workspace.isActive) {
       throw new NotFoundError('Invalid invite code or workspace is inactive.');
     }
+    this._assertMembershipManagedOutsideChatApp(workspace);
 
     // Check if already a member
     const isMember = await workspaceRepository.isMember(userId, workspace._id);
@@ -750,6 +756,7 @@ class WorkspaceService {
    * Regenerate the invite code for a workspace.
    */
   async regenerateInviteCode(workspaceId, requesterId) {
+    this._assertMembershipManagedOutsideChatApp(await this.getWorkspace(workspaceId));
     const role = await workspaceRepository.getUserRole(requesterId, workspaceId);
     if (!role || ![WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN].includes(role)) {
       throw new ForbiddenError('Only owner or admin can regenerate invite codes.');
@@ -797,6 +804,7 @@ class WorkspaceService {
 
     // 1. Check workspace exists.
     const workspace = await this.getWorkspace(workspaceId);
+    this._assertMembershipManagedOutsideChatApp(workspace);
 
     // 2. Check inviter has permission.
     const inviterRole = await workspaceRepository.getUserRole(invitedBy, workspaceId);
@@ -985,6 +993,7 @@ class WorkspaceService {
 
     // Check plan limits
     const workspace = invite.workspaceId;
+    this._assertMembershipManagedOutsideChatApp(workspace);
     if (workspace.plan !== 'enterprise') {
       const currentCount = await workspaceRepository.countMembers(workspace._id);
       const planConfig = WORKSPACE_LIMITS[workspace.plan] || WORKSPACE_LIMITS.free;
@@ -1119,6 +1128,8 @@ class WorkspaceService {
     const { SOCKET_EVENTS } = await import('../../config/constants.js');
     const { emitToWorkspace } = await import('../../sockets/socketManager.js');
 
+    this._assertMembershipManagedOutsideChatApp(await this.getWorkspace(workspaceId));
+
     // Find the invite first
     const existingInvite = await WorkspaceInvite.findOne({
       _id: inviteId,
@@ -1193,6 +1204,7 @@ class WorkspaceService {
     const { SOCKET_EVENTS } = await import('../../config/constants.js');
     const { emitToWorkspace } = await import('../../sockets/socketManager.js');
 
+    this._assertMembershipManagedOutsideChatApp(await this.getWorkspace(workspaceId));
     const invite = await WorkspaceInvite.revoke(inviteId, workspaceId, revokedBy);
     if (!invite) {
       throw new NotFoundError('Invite not found or already used.');
@@ -1519,6 +1531,7 @@ class WorkspaceService {
 
   async logoutAllSessions(workspaceId, requesterId) {
     const workspace = await this.getWorkspace(workspaceId);
+    this._assertMembershipManagedOutsideChatApp(workspace);
     if (workspace.owner.toString() !== requesterId.toString()) {
       throw new ForbiddenError('Only the workspace owner can logout all sessions.');
     }
@@ -1713,6 +1726,7 @@ class WorkspaceService {
    * - Owner: leaving triggers automatic workspace deletion with all associated data.
    */
   async leaveWorkspace(workspaceId, userId) {
+    this._assertMembershipManagedOutsideChatApp(await this.getWorkspace(workspaceId));
     const role = await workspaceRepository.getUserRole(userId, workspaceId);
 
     if (!role) {

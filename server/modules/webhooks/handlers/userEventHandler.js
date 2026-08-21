@@ -11,20 +11,19 @@ import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SOCKET_EVENTS, SYSTEM_CHANNELS } from '../../../config/constants.js';
 import { requireWorkspaceId } from '../../../utils/webhookEventGuard.js';
 
-function workspaceAccess(payload, user) {
-  if (payload?.access) return payload.access;
-  const departments = Array.isArray(user?.department)
-    ? user.department
-    : (user?.department ? [user.department] : []);
-  return {
-    role: user?.role || 'employee',
-    departmentIds: departments
-      .map((department) => department?._id || department?.id || department)
-      .filter(Boolean)
-      .map(String),
-    teamId: user?.team?._id || user?.team?.id || user?.team || null,
-    accessType: 'assigned_tasks',
-  };
+function workspaceAccess(payload, eventName) {
+  const access = payload?.access;
+  if (typeof access?.role === 'string' && access.role.trim()) return access;
+
+  // A global `user.role` is not a substitute: a person may have a different
+  // role in every FlowTask workspace. Ignore incomplete events rather than
+  // silently manufacturing an employee membership in the wrong tenant.
+  logger.error('FlowTask user event missing workspace-scoped access snapshot', {
+    eventName,
+    workspaceId: payload?.workspaceId,
+    flowTaskUserId: payload?.user?._id,
+  });
+  return null;
 }
 
 /**
@@ -58,7 +57,8 @@ export function registerUserEventHandlers() {
       return;
     }
 
-    const access = workspaceAccess(payload, user);
+    const access = workspaceAccess(payload, FLOWTASK_EVENTS.USER_CREATED);
+    if (!access) return;
     await roleSyncService.syncUserRole(user._id, access.role, wsId, access);
 
     // Add to public system channels
@@ -120,7 +120,7 @@ export function registerUserEventHandlers() {
     const existingMembership = existingChatUser
       ? await WorkspaceMembership.findOne({ userId: existingChatUser._id, workspaceId: wsId, isActive: true }).lean()
       : null;
-    const oldRole = existingMembership?.flowTaskAccess?.role || 'employee';
+    const oldRole = existingMembership?.flowTaskAccess?.role || null;
 
     // Upsert with latest data
     const chatUser = await userRepository.upsertFromFlowTask(user, wsId);
@@ -141,10 +141,11 @@ export function registerUserEventHandlers() {
     // Persist the complete FlowTask scope on this workspace membership before
     // emitting any UI event. This is what sidebar, REST, sockets, unread and
     // notification authorization read; ChatUser itself is global identity.
-    const effectiveAccess = workspaceAccess(payload, user);
+    const effectiveAccess = workspaceAccess(payload, FLOWTASK_EVENTS.USER_UPDATED);
+    if (!effectiveAccess) return;
     await roleSyncService.syncUserRole(
       user._id,
-      effectiveAccess.role || user.role || 'employee',
+      effectiveAccess.role,
       wsId,
       effectiveAccess,
     );
@@ -288,7 +289,8 @@ export function registerUserEventHandlers() {
       return;
     }
 
-    const access = workspaceAccess(payload, user);
+    const access = workspaceAccess(payload, FLOWTASK_EVENTS.USER_REGISTERED);
+    if (!access) return;
     await roleSyncService.syncUserRole(user._id, access.role, wsId, access);
 
     // Notify admins only
@@ -329,7 +331,8 @@ export function registerUserEventHandlers() {
       return;
     }
 
-    const access = workspaceAccess(payload, user);
+    const access = workspaceAccess(payload, FLOWTASK_EVENTS.USER_VERIFIED);
+    if (!access) return;
     await roleSyncService.syncUserRole(user._id, access.role, wsId, access);
     const workspaceRole = access.role;
 
@@ -375,7 +378,7 @@ export function registerUserEventHandlers() {
     if (adminChannel) {
       await messageService.sendSystemMessage(
         adminChannel._id,
-        `✅ User verified: **${chatUser.name}** (${user.email || 'no email'}), Role: ${chatUser.role}`,
+        `✅ User verified: **${chatUser.name}** (${user.email || 'no email'}), Role: ${access.role}`,
         undefined,
         wsId,
       );

@@ -16,11 +16,20 @@ import logger from '../../utils/logger.js';
 
 // ─── Middleware: require admin ─────────────────────────────────────────────
 export const requireAdmin = (req, res, next) => {
-  if (!req.user?.isAdmin()) {
+  if (!['owner', 'admin'].includes(req.membership?.role)) {
     return res.status(403).json({ success: false, error: { message: 'Admin access required' } });
   }
   next();
 };
+
+function rejectFlowTaskUserManagement(req, res) {
+  if (req.workspace?.source !== 'flowtask') return false;
+  res.status(403).json({
+    success: false,
+    error: { message: 'Users and roles in this workspace are managed by FlowTask.' },
+  });
+  return true;
+}
 
 // ──────────────────── Dashboard Analytics ──────────────────────────────────
 
@@ -122,6 +131,7 @@ export const listUsers = asyncHandler(async (req, res) => {
  * Change a user's role.
  */
 export const changeUserRole = asyncHandler(async (req, res) => {
+  if (rejectFlowTaskUserManagement(req, res)) return;
   const { role } = req.body;
   if (!['user', 'manager', 'admin'].includes(role)) {
     return res.status(400).json({ success: false, error: { message: 'Invalid role' } });
@@ -170,6 +180,7 @@ export const changeUserRole = asyncHandler(async (req, res) => {
  * Deactivate a user.
  */
 export const deactivateUser = asyncHandler(async (req, res) => {
+  if (rejectFlowTaskUserManagement(req, res)) return;
   // Prevent self-deactivation
   if (req.params.userId === req.user._id.toString()) {
     return res.status(400).json({ success: false, error: { message: 'Cannot deactivate yourself' } });
@@ -209,6 +220,7 @@ export const deactivateUser = asyncHandler(async (req, res) => {
  * Reactivate a deactivated user.
  */
 export const activateUser = asyncHandler(async (req, res) => {
+  if (rejectFlowTaskUserManagement(req, res)) return;
   const isMember = await WorkspaceMembership.exists({ workspaceId: req.workspaceId, userId: req.params.userId });
   if (!isMember) {
     return res.status(404).json({ success: false, error: { message: 'User not found in this workspace' } });

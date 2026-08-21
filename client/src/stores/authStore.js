@@ -241,16 +241,24 @@ export const useAuthStore = create((set, get) => ({
   },
 
   // ─── Role Update ───────────────────────────────────────────────────
-  updateUserRole: (newRole, workspaceId) => {
+  updateUserRole: (newRole, workspaceId, flowTaskRole = null) => {
     set((state) => {
       if (!state.user) return state
       
-      // Update user object with new role
-      const updatedUser = { ...state.user, role: newRole }
+      // ChatUser.role is global identity data. A role event is scoped to one
+      // workspace, so never overwrite it here or the last switched workspace
+      // leaks into every other tenant in this browser session.
+      const updatedUser = {
+        ...state.user,
+        workspaceRole: newRole,
+        workspaceRoleWorkspaceId: workspaceId,
+        ...(flowTaskRole ? { flowTaskRole } : {}),
+      }
       
       logger.info('[AuthStore] User role updated', { 
         userId: state.user._id, 
         newRole, 
+        flowTaskRole,
         workspaceId 
       })
       

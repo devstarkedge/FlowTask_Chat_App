@@ -509,13 +509,20 @@ class MessageService {
   /**
    * Get messages for a channel with cursor-based pagination.
    */
-  async getChannelMessages(channelId, query = {}, workspaceId, userId, user) {
+  async getChannelMessages(channelId, query = {}, workspaceId, userId, membership) {
     const { limit, cursor } = parsePagination(query);
     const direction = query.direction || 'before';
 
     const messages = await messageRepository.getChannelMessages(
       channelId,
-      { limit, cursor, direction, workspaceId, userId,  isAdmin: user?.role === 'admin' },
+      {
+        limit,
+        cursor,
+        direction,
+        workspaceId,
+        userId,
+        isAdmin: membership?.role === 'admin' || membership?.role === 'owner',
+      },
     );
     return cursorPaginationResponse(messages, limit, '_id');
   }

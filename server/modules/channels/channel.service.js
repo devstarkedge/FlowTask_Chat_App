@@ -1144,7 +1144,7 @@ class ChannelService {
     }
 
     const role = membership?.role || 'member';
-    const workspace = await workspaceRepository.findById(workspaceId).lean();
+    const workspace = await workspaceRepository.findById(workspaceId);
     const isFlowTaskWorkspace = workspace?.source === 'flowtask';
 
     // For guests, only return channels they are explicitly members of

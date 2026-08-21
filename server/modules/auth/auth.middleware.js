@@ -105,13 +105,18 @@ export function authorize(...roles) {
       return next(new UnauthorizedError('Authentication required'));
     }
 
-    // Admin always passes
-    if (req.user.role === 'admin') {
+    if (!req.membership) {
+      return next(new ForbiddenError('Workspace membership is required for role authorization'));
+    }
+
+    const workspaceRole = req.membership.role;
+    // Admin/owner authority is tenant-scoped, never ChatUser.role.
+    if (workspaceRole === 'admin' || workspaceRole === 'owner') {
       return next();
     }
 
     const normalizedRoles = roles.map((r) => r.toLowerCase());
-    if (!normalizedRoles.includes(req.user.role)) {
+    if (!normalizedRoles.includes(workspaceRole)) {
       return next(
         new ForbiddenError(`Access denied. Required role: ${roles.join(' or ')}`),
       );

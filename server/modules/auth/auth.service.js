@@ -212,7 +212,10 @@ class AuthService {
         _id: decoded.id,
         name: decoded.name,
         email: decoded.email,
-        role: decoded.role || 'employee',
+        // This is identity metadata only. Workspace authorization comes from
+        // the signed `flowTaskAccess` snapshot below; do not invent a global
+        // employee role when the token omitted a tenant-scoped role.
+        role: typeof decoded.role === 'string' ? decoded.role : undefined,
         avatar: decoded.avatar || '',
         isActive: true,
       };

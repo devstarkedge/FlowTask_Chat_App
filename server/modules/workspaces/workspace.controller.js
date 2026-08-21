@@ -85,6 +85,10 @@ export const getMyWorkspaces = asyncHandler(async (req, res) => {
       return {
         ...ws,
         role: m.role,
+        // This is a display/sync field for the active FlowTask tenant. The
+        // Chat membership `role` above remains the only value consumed by
+        // ChatApp authorization middleware.
+        flowTaskRole: m.flowTaskAccess?.role || null,
         joinedAt: m.joinedAt,
       };
     });

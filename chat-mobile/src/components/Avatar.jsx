@@ -48,8 +48,8 @@ const Avatar = React.memo(
     const isAway = data.onlineStatus === "away";
     const isDnd =
       data.onlineStatus === "dnd" || 
-      (data.chatPreferences?.dnd?.enabled && (!data.chatPreferences?.dnd?.pausedUntil || new Date(data.chatPreferences.dnd.pausedUntil).getTime() > Date.now())) ||
-      (data.chatPreferences?.pausedUntil && new Date(data.chatPreferences.pausedUntil).getTime() > Date.now());
+      (data.chatPreferences?.dnd?.enabled && (!data.chatPreferences?.dnd?.endAt || new Date(data.chatPreferences.dnd.endAt).getTime() > Date.now())) ||
+      (data.chatPreferences?.endAt && new Date(data.chatPreferences.endAt).getTime() > Date.now());
 
     // Backend uses 'avatar' primarily; also handle avatarUrl, profileImage, profilePicture, image
     const avatarUrl = useMemo(

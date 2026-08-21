@@ -17,16 +17,36 @@ export function startDNDScheduler() {
       const now = new Date()
 
       // 1) Disable manual DND where endAt has passed
-      const expiredResult = await ChatUser.updateMany(
-        { 'chatPreferences.dnd.enabled': true, 'chatPreferences.dnd.endAt': { $lte: now } },
-        { $set: { 'chatPreferences.dnd.enabled': false }, $unset: { 'chatPreferences.dnd.endAt': 1 } },
-      )
-      if (expiredResult.modifiedCount > 0) {
-        logger.info('Cleared expired manual DND for users', { count: expiredResult.modifiedCount })
+      const expiredUsers = await ChatUser.find({
+        'chatPreferences.dnd.enabled': true,
+        'chatPreferences.dnd.endAt': { $lte: now }
+      }).select('chatPreferences').lean();
+
+      if (expiredUsers.length > 0) {
+        const expiredIds = expiredUsers.map(u => u._id);
+        await ChatUser.updateMany(
+          { _id: { $in: expiredIds } },
+          { $set: { 'chatPreferences.dnd.enabled': false }, $unset: { 'chatPreferences.dnd.endAt': 1 } }
+        );
+        
+        try {
+          const { broadcastUserPreferences } = await import('../sockets/socketManager.js');
+          for (const u of expiredUsers) {
+            const updatedPrefs = { ...u.chatPreferences };
+            if (updatedPrefs.dnd) {
+              updatedPrefs.dnd.enabled = false;
+              updatedPrefs.dnd.endAt = null;
+            }
+            await broadcastUserPreferences(u._id.toString(), updatedPrefs);
+          }
+        } catch (err) {
+          logger.warn('Failed to broadcast DND expiration', { error: err.message });
+        }
+        logger.info('Cleared expired manual DND for users', { count: expiredUsers.length });
       }
 
       // 2) Evaluate recurring schedules and enable/disable DND accordingly
-      const users = await ChatUser.find({ 'chatPreferences.dndSchedule.enabled': true }).select('chatPreferences.dndSchedule chatPreferences.dnd')
+      const users = await ChatUser.find({ 'chatPreferences.dndSchedule.enabled': true }).select('chatPreferences')
       for (const user of users) {
         try {
           const sched = user.chatPreferences?.dndSchedule
@@ -47,10 +67,22 @@ export function startDNDScheduler() {
 
           if (inWindow && !currentlyEnabled) {
             await ChatUser.findByIdAndUpdate(user._id, { $set: { 'chatPreferences.dnd.enabled': true } })
+            try {
+              const { broadcastUserPreferences } = await import('../sockets/socketManager.js');
+              user.chatPreferences.dnd = user.chatPreferences.dnd || {};
+              user.chatPreferences.dnd.enabled = true;
+              await broadcastUserPreferences(user._id.toString(), user.chatPreferences);
+            } catch(e) {}
           } else if (!inWindow && currentlyEnabled) {
             const manualEnd = user.chatPreferences?.dnd?.endAt
             if (!manualEnd || new Date(manualEnd) <= now) {
               await ChatUser.findByIdAndUpdate(user._id, { $set: { 'chatPreferences.dnd.enabled': false }, $unset: { 'chatPreferences.dnd.endAt': 1 } })
+              try {
+                const { broadcastUserPreferences } = await import('../sockets/socketManager.js');
+                user.chatPreferences.dnd.enabled = false;
+                user.chatPreferences.dnd.endAt = null;
+                await broadcastUserPreferences(user._id.toString(), user.chatPreferences);
+              } catch(e) {}
             }
           }
         } catch (err) {

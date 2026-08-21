@@ -5,11 +5,12 @@ import { ChevronLeft, Hourglass, Clock } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-
+import { useTranslation } from '../../utils/i18n';
 
 const TimeScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
   const prefs = usePreferencesStore();
+  const { t } = useTranslation();
 
   const renderSwitchRow = (icon, label, subtitle, valueKey) => (
     <View style={styles.row}>
@@ -36,7 +37,7 @@ const TimeScreen = ({ navigation }) => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <ChevronLeft size={28} color={colors.textPrimary} strokeWidth={2.5} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Time</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{t("Time Format")}</Text>
         <View style={styles.headerRight} />
       </View>
 

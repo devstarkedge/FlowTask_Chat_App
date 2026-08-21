@@ -22,7 +22,6 @@ import CreateCategoryModal from "../components/CreateCategoryModal";
 import CreateChannelModal from "../components/CreateChannelModal";
 import ManageCategoryChannelsModal from "../components/ManageCategoryChannelsModal";
 import CategoryActionSheet from "../components/CategoryActionSheet";
-import CustomizeHomeModal from "../components/CustomizeHomeModal";
 import { useThemeStore } from "../stores/themeStore";
 import WorkspaceAvatar from "../components/WorkspaceAvatar";
 import { useHomeData } from "../hooks/useHomeData";
@@ -106,7 +105,7 @@ const HomeScreen = ({ navigation }) => {
     if (unreadConversations.length > 0) {
       result.push({
         key: "unreads",
-        title: t("Unreads"),
+        title: t("Unread"),
         icon: Filter,
         data: sectionsExpanded.unreads !== false ? unreadConversations : [],
         type: "mixed",
@@ -342,9 +341,6 @@ const HomeScreen = ({ navigation }) => {
     if (enabledHomeCards.scheduled !== false) {
       cards.push({ key: "scheduled", icon: Clock, label: t("Scheduled"), subtitle: `${scheduledCount} items`, onPress: () => navigation.navigate("Scheduled") });
     }
-    if (enabledHomeCards.settings !== false) {
-      cards.push({ key: "settings", icon: Settings, label: t("Settings"), subtitle: t("Customize"), onPress: () => setCustomizeModalVisible(true) });
-    }
     return cards;
   }, [enabledHomeCards, quickCardsTotal, unreadThreadCount, savedCount, draftCount, scheduledCount, navigation, isThreadsLoading, t]);
 
@@ -433,7 +429,6 @@ const HomeScreen = ({ navigation }) => {
         </>
       )}
       <AccountDrawer visible={accountDrawerVisible} onClose={() => setAccountDrawerVisible(false)} navigation={navigation} />
-      <CustomizeHomeModal visible={customizeModalVisible} onClose={() => setCustomizeModalVisible(false)} enabledCards={enabledHomeCards} onToggleCard={toggleHomeCard} />
       <CreateNewBottomSheet visible={createNewVisible} onClose={() => setCreateNewVisible(false)} navigation={navigation} />
       <CreateCategoryModal visible={createCategoryVisible} onClose={() => setCreateCategoryVisible(false)} />
       <CreateChannelModal visible={createChannelVisible} onClose={() => setCreateChannelVisible(false)} navigation={navigation} />

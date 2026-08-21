@@ -76,6 +76,9 @@ function calculateNextReminderAt(saved) {
             candidate = candidate.plus({ months: interval });
           }
           break;
+        case 'yearly':
+          candidate = candidate.plus({ years: interval });
+          break;
         default:
           return null;
       }
@@ -100,6 +103,9 @@ function calculateNextReminderAt(saved) {
         break;
       case 'monthly':
         next = next.plus({ months: 1 });
+        break;
+      case 'yearly':
+        next = next.plus({ years: 1 });
         break;
       default:
         return null;

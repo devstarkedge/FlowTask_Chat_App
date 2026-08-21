@@ -324,11 +324,16 @@ export const useWorkspaceStore = create(
       // Update member profile in store (for socket events, no API call)
       updateMemberProfile: (userId, updates) => {
         set((state) => ({
-          members: state.members.map((m) =>
-            (m.userId?._id === userId || m.userId === userId || m._id === userId)
-              ? { ...m, ...updates }
-              : m
-          ),
+          members: state.members.map((m) => {
+            if (m.userId?._id === userId || m.userId === userId || m._id === userId) {
+              const isNested = typeof m.userId === 'object' && m.userId !== null;
+              if (isNested) {
+                return { ...m, userId: { ...m.userId, ...updates } };
+              }
+              return { ...m, ...updates };
+            }
+            return m;
+          }),
         }))
       },
 

@@ -628,9 +628,63 @@ class WorkspaceService {
       throw new ForbiddenError('Admins cannot remove other admins.');
     }
 
+    // 1. Remove workspace membership
     await workspaceRepository.removeMember(userId, workspaceId);
-    logger.info(`User ${userId} removed from workspace ${workspaceId} by ${requesterId}`);
 
+    // 2. Remove from all channels in this workspace (both collections)
+    try {
+      const { default: ChannelMember } = await import('../channels/ChannelMember.model.js');
+      const { default: Channel } = await import('../channels/Channel.model.js');
+      await ChannelMember.deleteMany({ userId, workspaceId });
+      await Channel.updateMany(
+        { workspaceId, 'members.userId': userId },
+        {
+          $pull: { members: { userId } },
+          $inc: { memberCount: -1 },
+        },
+      );
+    } catch (err) {
+      logger.error(`[removeMember] Failed to remove user ${userId} from channels in workspace ${workspaceId}`, { error: err.message });
+    }
+
+    // 3. Revoke any pending invites for this user's email
+    try {
+      const { default: ChatUser } = await import('../users/ChatUser.model.js');
+      const { default: WorkspaceInvite } = await import('./WorkspaceInvite.model.js');
+      const user = await ChatUser.findById(userId).select('email').lean();
+      if (user?.email) {
+        await WorkspaceInvite.updateMany(
+          { workspaceId, email: user.email.toLowerCase(), status: 'pending' },
+          { $set: { status: 'revoked', revokedBy: requesterId, revokedAt: new Date() } },
+        );
+      }
+    } catch (err) {
+      logger.error(`[removeMember] Failed to revoke invites for user ${userId}`, { error: err.message });
+    }
+
+    // 4. Emit socket event so all connected clients update in real-time
+    try {
+      const { emitToWorkspace, emitToUser } = await import('../../sockets/socketManager.js');
+      const { SOCKET_EVENTS } = await import('../../config/constants.js');
+      const wsId = workspaceId.toString();
+      const uid = userId.toString();
+      // Notify all workspace members (admin panels, member lists)
+      emitToWorkspace(wsId, SOCKET_EVENTS.WORKSPACE_MEMBER_REMOVED, {
+        workspaceId: wsId,
+        userId: uid,
+        removedBy: requesterId.toString(),
+      });
+      // Notify the removed user directly so their client can react
+      emitToUser(uid, SOCKET_EVENTS.WORKSPACE_MEMBER_REMOVED, {
+        workspaceId: wsId,
+        userId: uid,
+        removedBy: requesterId.toString(),
+      }, wsId);
+    } catch (err) {
+      logger.warn(`[removeMember] Failed to emit socket event for user ${userId}`, { error: err.message });
+    }
+
+    logger.info(`User ${userId} fully removed from workspace ${workspaceId} by ${requesterId}`);
     return { message: 'Member removed successfully.' };
   }
 

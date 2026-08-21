@@ -11,12 +11,12 @@ import {
   TextInput,
   Platform,
   Pressable,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { Hash, Users, Pin, Bell, LogOut, FolderOpen, FileText, UserPlus, X, Search, Plus, Lock, Edit2, Star, MessageSquare, FolderInput } from 'lucide-react-native';
 import { AppAvatar, HeaderBackButton } from '../components/common';
-import KeyboardAwareContainer from '../components/common/KeyboardAwareContainer';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { useChannelDetails } from '../hooks/useChannelDetails';
 
@@ -113,6 +113,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
           
           <View style={{ width: '100%', marginTop: verticalScale(12), borderBottomWidth: 1, borderBottomColor: colors.border }}>
             <DetailItem icon={Users} label="View Profile" colors={colors} onPress={() => navigation.navigate('UserProfile', { user: displayUser, channelId })} />
+            <DetailItem icon={FileText} label="Canvas" colors={colors} onPress={() => navigation.navigate('CanvasList', { channelId, channelName: dmName })} />
           </View>
 
           <View style={styles.dmSection}>
@@ -244,7 +245,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
           )}
 
           <DetailItem icon={FolderOpen} label="Files" colors={colors} onPress={() => navigation.navigate('Files', { channelId, channelName })} />
-          <DetailItem icon={FileText} label="Canvases" colors={colors} onPress={() => navigation.navigate('CanvasList', { channelId, channelName })} />
+          <DetailItem icon={FileText} label="Canvas" colors={colors} onPress={() => navigation.navigate('CanvasList', { channelId, channelName })} />
           <DetailItem icon={Pin} label="Pinned Messages" colors={colors} onPress={() => navigation.navigate('PinnedMessages', { channelId, channelName })} />
           
           {canMoveToCategory && (
@@ -264,16 +265,17 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
       </ScrollView>
 
       {/* Move to Category Modal */}
-      <Modal visible={showMoveCategoryModal} animationType="slide" transparent>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowMoveCategoryModal(false)}>
-          <View style={[styles.modalContainer, { backgroundColor: colors.background, height: 'auto', maxHeight: '60%' }]}>
+      <Modal visible={showMoveCategoryModal} animationType="slide" transparent onRequestClose={() => setShowMoveCategoryModal(false)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowMoveCategoryModal(false)} />
+          <View style={[styles.modalContainer, { backgroundColor: colors.background, height: undefined, maxHeight: '60%' }]}>
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Move to Category</Text>
               <TouchableOpacity onPress={() => setShowMoveCategoryModal(false)} style={styles.modalCloseBtn}>
                 <X size={24} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
-            <ScrollView style={{ padding: moderateScale(16) }}>
+            <ScrollView style={{ padding: moderateScale(16) }} contentContainerStyle={{ paddingBottom: moderateScale(32) }}>
               {categories.filter(c => c.type === 'custom').map((cat) => (
                 <TouchableOpacity
                   key={cat._id}
@@ -285,12 +287,13 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               ))}
             </ScrollView>
           </View>
-        </Pressable>
+        </View>
       </Modal>
 
       {/* Add Members Modal */}
-      <Modal visible={showAddMemberModal} animationType="slide" transparent>
-        <KeyboardAwareContainer style={styles.modalOverlay} disablePadding={false}>
+      <Modal visible={showAddMemberModal} animationType="slide" transparent onRequestClose={() => setShowAddMemberModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowAddMemberModal(false)} />
           <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Add Members</Text>
@@ -334,7 +337,7 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               </ScrollView>
             </View>
           </View>
-        </KeyboardAwareContainer>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

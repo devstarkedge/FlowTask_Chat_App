@@ -116,7 +116,7 @@ export const createCategory = asyncHandler(async (req, res, next) => {
   });
 
   req.app.get("io")
-    ?.to(req.workspaceId.toString())
+    ?.to(`ws:${req.workspaceId}:user:${req.user._id}`)
     .emit("category:created", category);
 
   res.status(201).json({ success: true, data: category });
@@ -203,7 +203,7 @@ export const updateCategory = asyncHandler(async (req, res, next) => {
         );
         const updatedPrevious = await Category.find({ _id: { $in: previousCategories.map(c => c._id) } }).populate('departmentId');
         for (const cat of updatedPrevious) {
-          req.app.get("io")?.to(req.workspaceId.toString()).emit("category:updated", cat);
+          req.app.get("io")?.to(`ws:${req.workspaceId}:user:${req.user._id}`).emit("category:updated", cat);
         }
       }
     }
@@ -216,7 +216,7 @@ export const updateCategory = asyncHandler(async (req, res, next) => {
   ).populate('departmentId');
 
   req.app.get("io")
-    ?.to(req.workspaceId.toString())
+    ?.to(`ws:${req.workspaceId}:user:${req.user._id}`)
     .emit("category:updated", updatedCategory);
 
   res.status(200).json({ success: true, data: updatedCategory });
@@ -277,7 +277,7 @@ export const deleteCategory = asyncHandler(async (req, res, next) => {
   await category.deleteOne();
 
   req.app.get("io")
-    ?.to(req.workspaceId.toString())
+    ?.to(`ws:${req.workspaceId}:user:${req.user._id}`)
     .emit("category:deleted", req.params.id);
 
   res.status(200).json({ success: true, data: {} });
@@ -303,7 +303,7 @@ export const reorderCategories = asyncHandler(async (req, res, next) => {
   await Category.bulkWrite(bulkOps);
 
   req.app.get("io")
-    ?.to(req.workspaceId.toString())
+    ?.to(`ws:${req.workspaceId}:user:${req.user._id}`)
     .emit("category:reordered", categoryOrders);
 
   res.status(200).json({ success: true, message: "Categories reordered successfully" });
@@ -361,7 +361,7 @@ export const addChannelToCategory = asyncHandler(async (req, res, next) => {
     );
     const updatedPrevious = await Category.find({ _id: { $in: previousCategories.map(c => c._id) } }).populate('departmentId');
     for (const cat of updatedPrevious) {
-      req.app.get("io")?.to(req.workspaceId.toString()).emit("category:updated", cat);
+      req.app.get("io")?.to(`ws:${req.workspaceId}:user:${req.user._id}`).emit("category:updated", cat);
     }
   }
 
@@ -373,7 +373,7 @@ export const addChannelToCategory = asyncHandler(async (req, res, next) => {
 
   if (!category) return next(new NotFoundError("Category"));
 
-  req.app.get("io")?.to(req.workspaceId.toString()).emit("category:updated", category);
+  req.app.get("io")?.to(`ws:${req.workspaceId}:user:${req.user._id}`).emit("category:updated", category);
   res.status(200).json({ success: true, data: category });
 });
 
@@ -391,7 +391,7 @@ export const removeChannelFromCategory = asyncHandler(async (req, res, next) => 
 
   if (!category) return next(new NotFoundError("Category"));
 
-  req.app.get("io")?.to(req.workspaceId.toString()).emit("category:updated", category);
+  req.app.get("io")?.to(`ws:${req.workspaceId}:user:${req.user._id}`).emit("category:updated", category);
   res.status(200).json({ success: true, data: category });
 });
 
@@ -427,7 +427,7 @@ export const addBulkChannelsToCategory = asyncHandler(async (req, res, next) => 
     );
     const updatedPrevious = await Category.find({ _id: { $in: previousCategories.map(c => c._id) } }).populate('departmentId');
     for (const cat of updatedPrevious) {
-      req.app.get("io")?.to(req.workspaceId.toString()).emit("category:updated", cat);
+      req.app.get("io")?.to(`ws:${req.workspaceId}:user:${req.user._id}`).emit("category:updated", cat);
     }
   }
 
@@ -439,6 +439,6 @@ export const addBulkChannelsToCategory = asyncHandler(async (req, res, next) => 
 
   if (!category) return next(new NotFoundError("Custom Category"));
 
-  req.app.get("io")?.to(req.workspaceId.toString()).emit("category:updated", category);
+  req.app.get("io")?.to(`ws:${req.workspaceId}:user:${req.user._id}`).emit("category:updated", category);
   res.status(200).json({ success: true, data: category });
 });

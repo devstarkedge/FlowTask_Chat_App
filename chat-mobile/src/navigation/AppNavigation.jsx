@@ -33,7 +33,6 @@ import HomeScreen from "../screens/HomeScreen";
 import DMListScreen from "../screens/DMListScreen";
 import ActivityScreen from "../screens/Activity/ActivityScreen";
 import YouScreen from "../screens/YouScreen";
-import ProfileScreen from "../screens/Authentication/ProfileScreen";
 import UserProfileScreen from "../screens/UserProfileScreen";
 import ChatScreen from "../screens/Chat/ChatScreen";
 import ChannelDetailsScreen from "../screens/ChannelDetailsScreen";
@@ -131,8 +130,8 @@ function BottomTabs({ navigation }) {
   const NAV_BAR_FLOOR = verticalScale(4); // minimum extra gap above gesture bar
   const bottomInset = Math.max(insets.bottom, 0);
   const tabBarContentHeight = isWide ? 58 : 50;
-  // Ensure at least NAV_BAR_FLOOR padding even when insets.bottom is 0 (rare edge case)
-  const tabBarBottomPad = Math.max(bottomInset, NAV_BAR_FLOOR);
+  // Ensure at least NAV_BAR_FLOOR padding even when insets.bottom is 0
+  const tabBarBottomPad = bottomInset > 0 ? bottomInset + (Platform.OS === 'android' ? NAV_BAR_FLOOR : 0) : NAV_BAR_FLOOR;
 
   return (
     <>
@@ -143,13 +142,13 @@ function BottomTabs({ navigation }) {
           tabBarHideOnKeyboard: true,
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textSecondary,
+          safeAreaInsets: { bottom: tabBarBottomPad },
           tabBarStyle: {
             backgroundColor: colors.backgroundSecondary,
             borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: colors.border,
-            paddingBottom: tabBarBottomPad,
             paddingTop: verticalScale(4),
-            height: tabBarContentHeight + tabBarBottomPad,
+            minHeight: tabBarContentHeight + tabBarBottomPad,
           },
           tabBarLabelStyle: {
             fontSize: moderateScale(isWide ? 12 : 10),
@@ -371,7 +370,7 @@ export default function AppNavigation() {
           />
           <Stack.Screen
             name="Profile"
-            component={ProfileScreen}
+            component={UserProfileScreen}
             options={{ headerShown: false }}
           />
           <Stack.Screen

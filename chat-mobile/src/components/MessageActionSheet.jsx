@@ -185,7 +185,7 @@ const MessageActionSheet = ({
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onClose}
       statusBarTranslucent={Platform.OS === 'android'}
     >

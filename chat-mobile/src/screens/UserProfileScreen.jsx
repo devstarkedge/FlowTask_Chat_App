@@ -24,16 +24,19 @@ import { getAvatarColor } from '../components/Avatar';
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { useChannels } from '../hooks/queries/useChannels';
-
+import { isCustomStatusValid } from '../utils/statusUtils';
 
 import { usersAPI } from '../services/api';
 
+
+import { useAuthStore } from '../stores/authStore';
 
 const KNOWN_WORKSPACE_ROLES = new Set(['owner', 'admin', 'member', 'guest']);
 
 const UserProfileScreen = ({ route, navigation }) => {
   const { width } = useWindowDimensions();
-  const { user } = route.params;
+  const { user: currentUser } = useAuthStore();
+  const user = route.params?.user || currentUser;
   const { colors } = useThemeStore();
   // Use getState() directly — avoids creating a new object on every render
   // which would trigger React re-renders and "Maximum update depth exceeded".
@@ -52,17 +55,18 @@ const UserProfileScreen = ({ route, navigation }) => {
   const [fetchedUser, setFetchedUser] = useState(null);
   const [isFetchingUser, setIsFetchingUser] = useState(true);
 
+  const memberRecord = members.find(
+    (m) => (m.userId?._id || m.userId)?.toString() === targetIdStr
+  );
+
   const liveUser = useMemo(() => {
-    if (fetchedUser) {
-      return {
-        ...user,
-        ...fetchedUser,
-        workspaceRole: fetchedUser.workspaceRole || user?.workspaceRole,
-      };
+    let baseUser = { ...user, ...fetchedUser };
+    if (!baseUser.email && memberRecord) {
+      baseUser.email = memberRecord.userId?.email || memberRecord.email;
     }
-    if (!user) return null;
-    return { ...user };
-  }, [user, fetchedUser]);
+    baseUser.workspaceRole = fetchedUser?.workspaceRole || user?.workspaceRole || memberRecord?.role;
+    return baseUser;
+  }, [user, fetchedUser, memberRecord]);
 
   useEffect(() => {
     if (targetId) {
@@ -120,14 +124,6 @@ const UserProfileScreen = ({ route, navigation }) => {
   const handleMessage = async () => {
     setLoadingDM(true);
     try {
-      // If we have an existing channelId context from the route, go back to it
-      if (route.params?.channelId) {
-        setActiveChannel(route.params.channelId);
-        navigation.navigate("Chat", {
-          channelId: route.params.channelId,
-        });
-        return;
-      }
 
       const channel = await createDM(targetIdStr);
       if (channel) {
@@ -167,12 +163,11 @@ const UserProfileScreen = ({ route, navigation }) => {
 
   const isOnline = liveOnlineStatus === 'online' || liveUser.onlineStatus === 'online';
   const isAway = liveOnlineStatus === 'away' || liveOnlineStatus === 'dnd' || liveUser.onlineStatus === 'away' || liveUser.onlineStatus === 'dnd';
-  const statusColor = isOnline ? colors.online : isAway ? colors.away : colors.textSecondary;
-  const statusText = isOnline ? 'Active' : (liveOnlineStatus === 'away' || liveUser.onlineStatus === 'away') ? 'Away' : (liveOnlineStatus === 'dnd' || liveUser.onlineStatus === 'dnd') ? 'Do Not Disturb' : 'Offline';
+  const isInactiveAccount = liveUser.isActive === false || liveUser.status === 'inactive';
+  
+  const statusColor = isInactiveAccount ? colors.error : isOnline ? colors.online : isAway ? colors.away : colors.textSecondary;
+  const statusText = isInactiveAccount ? 'Inactive' : isOnline ? 'Active' : (liveOnlineStatus === 'away' || liveUser.onlineStatus === 'away') ? 'Away' : (liveOnlineStatus === 'dnd' || liveUser.onlineStatus === 'dnd') ? 'Do Not Disturb' : 'Inactive';
 
-  const memberRecord = members.find(
-    (m) => (m.userId?._id || m.userId)?.toString() === targetIdStr
-  );
   const workspaceRole =
     (KNOWN_WORKSPACE_ROLES.has(liveUser.workspaceRole) ? liveUser.workspaceRole : null) ||
     (KNOWN_WORKSPACE_ROLES.has(liveUser.role) ? liveUser.role : null) ||
@@ -255,11 +250,9 @@ const UserProfileScreen = ({ route, navigation }) => {
             </Text>
           ) : null}
 
-          {liveUser.customStatus?.text && (
+          {isCustomStatusValid(liveUser.customStatus) && (
             <View style={[styles.customStatusRow, { backgroundColor: colors.backgroundSecondary }]}>
-              {liveUser.customStatus?.emoji && (
-                <Text style={styles.customStatusEmoji}>{liveUser.customStatus.emoji}</Text>
-              )}
+              <Text style={styles.customStatusEmoji}>{liveUser.customStatus.emoji || '💬'}</Text>
               <Text style={[styles.customStatusText, { color: colors.textPrimary }]}>
                 {liveUser.customStatus.text}
               </Text>
@@ -303,7 +296,7 @@ const UserProfileScreen = ({ route, navigation }) => {
             </View>
             <View style={styles.contactDetails}>
               <Text style={[styles.contactLabel, { color: colors.textSecondary }]}>EMAIL</Text>
-              <Text style={[styles.contactEmail, { color: colors.textPrimary }]}>{liveUser.email}</Text>
+              <Text style={[styles.contactEmail, { color: colors.textPrimary }]}>{liveUser.email || 'Not provided'}</Text>
             </View>
           </View>
 

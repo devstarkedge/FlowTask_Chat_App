@@ -12,6 +12,7 @@ import MobileFileCard from './common/MobileFileCard';
 import MessageStatusTicks from './MessageStatusTicks';
 import ReactionBar from './ReactionBar';
 import ReplyQuotePreview from './ReplyQuotePreview';
+import { useLaterStore } from '../stores/laterStore';
 import logger from '../utils/logger';
 import { getFileKind, getMessageAttachments } from '../utils/mediaUtils';
 import { resolveReplyToSenderName, isGenericName, hasValidReplyTo, resolveReplyToContent, resolveReplyToAttachment } from '../utils/replyUtils';
@@ -30,7 +31,6 @@ const ChatMessageItem = memo(({
   searchResults,
   currentMatch,
   index,
-  savedMessageIds,
   highlightedMessageId,
   channelId,
   channelName,
@@ -127,7 +127,9 @@ const ChatMessageItem = memo(({
 
   const showDateSep = !prevItem || !isSameDay(item.createdAt, prevItem.createdAt);
   const hasThread = (item.replyCount || 0) > 0;
-  const isSaved = savedMessageIds.includes(item._id);
+  
+  const itemIdStr = item._id ? String(item._id) : item.tempId;
+  const isSaved = useLaterStore((s) => s.savedMessageIds?.some(id => String(id) === itemIdStr));
   const attachments = getMessageAttachments(item);
 
   if (attachments.length > 0) {
@@ -169,7 +171,8 @@ const ChatMessageItem = memo(({
         {!isMe && !isCompact && (
           <RNTouchableOpacity 
             onPress={() => {
-              const userObj = (channelMembers || []).find((m) => m._id === messageSender?._id) || messageSender;
+              const senderId = messageSender?._id || messageSender?.id || (typeof messageSender === 'string' ? messageSender : null) || getAuthorId(item);
+              const userObj = (channelMembers || []).find((m) => m._id === senderId) || messageSender;
               navigation.navigate("UserProfile", { user: userObj, channelId, messageId: item._id });
             }}
             activeOpacity={0.7}
@@ -321,7 +324,7 @@ const ChatMessageItem = memo(({
                       />
                     );
                   }
-                  return <MobileFileCard key={file._id || i} file={file} colors={colors} isUploading={item.pending || item.status === 'pending'} onLongPress={() => !isDeleted && showMessageActions(item, file)} />;
+                  return <MobileFileCard key={file._id || i} file={file} colors={colors} isUploading={item.pending || item.status === 'pending' || file.isOptimisticPreview} onLongPress={() => !isDeleted && showMessageActions(item, file)} />;
                 })}
               </RNView>
             )}
@@ -347,8 +350,8 @@ const ChatMessageItem = memo(({
             </RNView>
 
             {isSaved && !isDeleted && (
-              <RNView style={{ position: 'absolute', top: -4, right: -4, backgroundColor: colors.card, borderRadius: moderateScale(10), padding: moderateScale(2), elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: scale(0), height: verticalScale(1) } }}>
-                <Bookmark size={10} color={colors.primary} fill={colors.primary} />
+              <RNView style={{ position: 'absolute', top: -4, right: -4, backgroundColor: colors.card, borderRadius: moderateScale(10), padding: moderateScale(2), elevation: 2, zIndex: 99, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: scale(0), height: verticalScale(1) } }}>
+                <Bookmark size={12} color={colors.primary} fill={colors.primary} />
               </RNView>
             )}
             </Pressable>
@@ -409,15 +412,15 @@ const ChatMessageItem = memo(({
   );
 }, (prevProps, nextProps) => {
   // Custom memo comparison for extreme performance
-  const prevIsSaved = prevProps.savedMessageIds.includes(prevProps.item._id);
-  const nextIsSaved = nextProps.savedMessageIds.includes(nextProps.item._id);
+  const prevIdStr = prevProps.item._id ? String(prevProps.item._id) : prevProps.item.tempId;
+  const nextIdStr = nextProps.item._id ? String(nextProps.item._id) : nextProps.item.tempId;
 
   const prevIsReplyTarget =
     prevProps.highlightedMessageId != null &&
-    String(prevProps.highlightedMessageId) === String(prevProps.item._id);
+    String(prevProps.highlightedMessageId) === prevIdStr;
   const nextIsReplyTarget =
     nextProps.highlightedMessageId != null &&
-    String(nextProps.highlightedMessageId) === String(nextProps.item._id);
+    String(nextProps.highlightedMessageId) === nextIdStr;
 
   const prevIsSearchHighlight =
     prevProps.searchQuery &&
@@ -433,7 +436,6 @@ const ChatMessageItem = memo(({
     prevProps.item?.isDeleted === nextProps.item?.isDeleted &&
     prevProps.prevItem === nextProps.prevItem &&
     prevProps.nextItem === nextProps.nextItem &&
-    prevIsSaved === nextIsSaved &&
     prevIsReplyTarget === nextIsReplyTarget &&
     prevIsSearchHighlight === nextIsSearchHighlight &&
     prevProps.searchQuery === nextProps.searchQuery &&
@@ -443,3 +445,4 @@ const ChatMessageItem = memo(({
 });
 
 export default ChatMessageItem;
+

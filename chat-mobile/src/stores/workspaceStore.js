@@ -297,19 +297,37 @@ export const useWorkspaceStore = create(
         if (!wid) return;
         queryClient.setQueryData(queryKeys.workspaceMembers(wid), (oldMembers) => {
           if (!oldMembers) return oldMembers;
-          return oldMembers.map((m) =>
-            (m.userId?._id === userId || m.userId === userId || m._id === userId)
-              ? { ...m, ...updates }
-              : m
-          );
+          return oldMembers.map((m) => {
+            if (m.userId?._id === userId || m.userId === userId || m._id === userId) {
+              const isNested = typeof m.userId === 'object' && m.userId !== null;
+              if (isNested) {
+                return { ...m, userId: { ...m.userId, ...updates } };
+              }
+              return { ...m, ...updates };
+            }
+            return m;
+          });
         });
       },
 
-      updatePresenceBatch: (updates) => {
-        set((state) => ({
-          presenceMap: { ...state.presenceMap, ...updates }
-        }))
-      },
+        updatePresenceBatch: (updates) => {
+          set((state) => {
+            const nextMap = { ...state.presenceMap };
+            let changed = false;
+            for (const [uid, newStatus] of Object.entries(updates)) {
+              const currentStatus = nextMap[uid];
+              // Protect active realtime status from being clobbered by stale offline DB data in API payloads
+              if (newStatus === 'offline' && (currentStatus === 'online' || currentStatus === 'away')) {
+                continue;
+              }
+              if (currentStatus !== newStatus) {
+                nextMap[uid] = newStatus;
+                changed = true;
+              }
+            }
+            return changed ? { presenceMap: nextMap } : state;
+          });
+        },
 
       clearError: () => set({ error: null }),
 

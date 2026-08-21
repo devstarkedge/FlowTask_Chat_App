@@ -11,6 +11,7 @@ import {
   Share,
   Alert,
   Platform,
+  StatusBar,
 } from "react-native";
 import { fileAPI, messageAPI } from "../services/api";
 import { getSocket } from "../services/socket";
@@ -57,7 +58,7 @@ function formatDate(value) {
 
 export default function FilesScreen({ route, navigation }) {
   const { channelId, channelName } = route.params || {};
-  const { colors } = useThemeStore();
+  const { colors, effectiveTheme } = useThemeStore();
   const [files, setFiles] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [query, setQuery] = useState("");
@@ -301,6 +302,7 @@ export default function FilesScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <StatusBar barStyle={effectiveTheme === "dark" ? "light-content" : "dark-content"} />
       <View
         style={[
           styles.header,

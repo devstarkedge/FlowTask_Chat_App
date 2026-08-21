@@ -52,7 +52,20 @@ const StatusModal = ({ visible, onClose, initialStatus }) => {
     if (visible) {
       const textVal = initialStatus?.text || "";
       const emojiVal = initialStatus?.emoji || "";
-      const expVal = initialStatus?.expiration !== undefined ? initialStatus.expiration : 60;
+      
+      let expVal = 60;
+      if (initialStatus?.expiration !== undefined) {
+        expVal = initialStatus.expiration;
+      } else if (initialStatus?.expiresAt) {
+        // If loaded from backend, convert expiresAt back to an approximation for UI, or just default
+        const minutesLeft = Math.round((new Date(initialStatus.expiresAt).getTime() - Date.now()) / 60000);
+        if (minutesLeft > 0) {
+          if (minutesLeft <= 30) expVal = 30;
+          else if (minutesLeft <= 60) expVal = 60;
+          else if (minutesLeft <= 240) expVal = 240;
+          else expVal = 'today';
+        }
+      }
       
       setStatusText(textVal);
       setSelectedEmoji(emojiVal);
@@ -81,18 +94,33 @@ const StatusModal = ({ visible, onClose, initialStatus }) => {
 
   const handleSave = async () => {
     try {
+      let durationInMinutes = null;
+      if (typeof expiration === 'number') {
+        durationInMinutes = expiration;
+      } else if (expiration === 'today') {
+        const now = new Date();
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        durationInMinutes = Math.round((endOfDay.getTime() - now.getTime()) / 60000);
+      } else if (expiration === 'week') {
+        const now = new Date();
+        const currentDay = now.getDay();
+        const distance = 7 - currentDay;
+        const endOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + distance, 23, 59, 59, 999);
+        durationInMinutes = Math.round((endOfWeek.getTime() - now.getTime()) / 60000);
+      }
+
       const statusObj = {
         text: statusText.trim(),
         emoji: selectedEmoji || '💬',
-        expiration: expiration,
+        duration: durationInMinutes, // Backend expects 'duration' in minutes
+        expiration: expiration, // For local cache UI
       };
       await usersAPI.setCustomStatus(statusObj);
 
       // Update local auth store so user state updates immediately across components
       const authState = useAuthStore.getState();
-      if (authState.user) {
-        authState.setUser({
-          ...authState.user,
+      if (authState.user && authState.updateUser) {
+        authState.updateUser({
           customStatus: statusObj.text ? statusObj : null,
         });
       }
@@ -110,9 +138,8 @@ const StatusModal = ({ visible, onClose, initialStatus }) => {
       await usersAPI.setCustomStatus({ text: '', emoji: '', expiration: null });
 
       const authState = useAuthStore.getState();
-      if (authState.user) {
-        authState.setUser({
-          ...authState.user,
+      if (authState.user && authState.updateUser) {
+        authState.updateUser({
           customStatus: null,
         });
       }

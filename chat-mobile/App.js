@@ -121,7 +121,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <SafeAreaProvider>
           <ErrorBoundary>
             <ThemeProvider>
               <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
@@ -129,7 +129,7 @@ export default function App() {
                   <AppNavigator />
                   <GlobalToastProvider />
                 </NavigationContainer>
-              </KeyboardProvider>
+              </KeyboardProvider>  
             </ThemeProvider>
           </ErrorBoundary>
         </SafeAreaProvider>

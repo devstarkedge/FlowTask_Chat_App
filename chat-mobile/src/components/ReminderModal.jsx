@@ -18,7 +18,6 @@ import {
   StyleSheet,
   Modal,
   Platform,
-  c
 } from 'react-native';
 import { X, Clock, Bell, Calendar, Repeat as RepeatIcon, ChevronLeft} from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -27,6 +26,7 @@ import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import Button from './common/Button';
 import IconButton from './common/IconButton';
+import Toast from 'react-native-toast-message';
 
 
 const RECURRENCE_OPTIONS = ['None', 'Daily', 'Weekly', 'Monthly', 'Yearly'];
@@ -79,7 +79,10 @@ const ReminderModal = React.memo(function ReminderModal({
   const [showRecurrencePicker, setShowRecurrencePicker] = useState(false);
 
   const handleCustomSubmit = () => {
-    if (customDate <= new Date()) return;
+    if (customDate <= new Date()) {
+      Toast.show({ type: 'error', text1: 'Reminder time must be in the future' });
+      return;
+    }
     onSetReminder(customDate.toISOString(), recurrence);
     setShowCustom(false);
     onClose();
@@ -115,7 +118,14 @@ const ReminderModal = React.memo(function ReminderModal({
 
   // Reset view when modal closes
   React.useEffect(() => {
-    if (!visible) setShowCustom(false);
+    if (!visible) {
+      setShowCustom(false);
+    } else {
+      const d = new Date();
+      d.setHours(d.getHours() + 1);
+      setCustomDate(d);
+      setRecurrence('None');
+    }
   }, [visible]);
 
   return (

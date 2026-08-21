@@ -46,7 +46,7 @@ const MoreScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView edges={["top"]} style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={effectiveTheme === "dark" ? "light-content" : "dark-content"} />
 
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>

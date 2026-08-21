@@ -36,7 +36,7 @@ import { useConversationDetails } from '../hooks/useConversationDetails';
 import logger from '../utils/logger';
 import Toast from 'react-native-toast-message';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
-
+import { useTranslation } from '../utils/i18n';
 
 const LaterItem = React.memo(({ item, onPress, onLongPress, onBottomSheet, filter, handleStatusChange, setReminderTarget, colors }) => {
   const message = item.messageId;
@@ -63,10 +63,14 @@ const LaterItem = React.memo(({ item, onPress, onLongPress, onBottomSheet, filte
   const formattedDate = new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   
   let subtitle = '';
-  if (item.recurrence && item.recurrence !== 'None') {
+  if (item.recurrence && item.recurrence !== 'None' && item.recurrence !== 'none') {
     subtitle = `Repeats ${item.recurrence.toLowerCase()}`;
   } else if (isCustom) {
-    subtitle = `Custom reminder`;
+    if (item.reminderAt) {
+      subtitle = `Scheduled for ${new Date(item.reminderAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+    } else {
+      subtitle = `Custom reminder`;
+    }
   } else if (isCanvas && canvasObj.updatedAt) {
     const days = Math.floor((new Date() - new Date(canvasObj.updatedAt)) / (1000 * 60 * 60 * 24));
     subtitle = days > 0 ? `Last edited ${days} days ago` : 'Last edited today';
@@ -169,6 +173,7 @@ const LaterScreen = ({ navigation }) => {
   const toggleSaveMessage = useLaterStore(state => state.toggleSaveMessage);
   const addCustomReminder = useLaterStore(state => state.addCustomReminder);
   const deleteSavedItem = useLaterStore(state => state.deleteSavedItem);
+  const { t } = useTranslation();
   
   const [filter, setFilter] = useState('in_progress'); 
   const [refreshing, setRefreshing] = useState(false);
@@ -220,6 +225,13 @@ const LaterScreen = ({ navigation }) => {
   const handleStatusChange = useCallback(async (messageId, newStatus) => {
     try {
       await updateStatus(messageId, newStatus);
+      let toastText = '';
+      if (newStatus === 'completed') toastText = 'Item completed';
+      if (newStatus === 'archived') toastText = 'Item archived';
+      if (newStatus === 'in_progress') toastText = 'Item reopened';
+      if (toastText) {
+        Toast.show({ type: 'success', text1: toastText });
+      }
     } catch (error) {
       logger.error('Failed to update status:', error);
     }
@@ -230,6 +242,7 @@ const LaterScreen = ({ navigation }) => {
     const targetId = reminderTarget.messageId?._id || reminderTarget.messageId || reminderTarget._id;
     try {
       await updateReminder(targetId, { date, recurrence });
+      Toast.show({ type: 'success', text1: 'Reminder set successfully' });
     } catch (error) {
       logger.error('Failed to set reminder:', error);
     }
@@ -264,7 +277,7 @@ const LaterScreen = ({ navigation }) => {
       <View style={styles.customHeader}>
         <HeaderBackButton onPress={() => navigation.goBack()} />
         
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Later</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{t("Later")}</Text>
         
         <View style={styles.headerRightPill}>
           <TouchableOpacity style={styles.headerIconButton} onPress={() => setCreateReminderVisible(true)}>
@@ -432,9 +445,13 @@ const LaterScreen = ({ navigation }) => {
       <CreateReminderModal
         visible={createReminderVisible}
         onClose={() => setCreateReminderVisible(false)}
-        onSubmit={(data) => {
-          addCustomReminder(data);
-          Toast.show({ type: 'success', text1: 'Reminder created!' });
+        onSubmit={async (data) => {
+          try {
+            await addCustomReminder(data);
+            Toast.show({ type: 'success', text1: 'Reminder created!' });
+          } catch (error) {
+            Toast.show({ type: 'error', text1: 'Failed to create reminder', text2: error?.response?.data?.error?.message || error.message });
+          }
         }}
         colors={colors}
       />

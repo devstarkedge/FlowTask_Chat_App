@@ -27,7 +27,22 @@ export default function SetStatusModal({ onClose }) {
   const { user, fetchUser } = useAuthStore()
   const [emoji, setEmoji] = useState(user?.customStatus?.emoji || '')
   const [text, setText] = useState(user?.customStatus?.text || '')
-  const [duration, setDuration] = useState(null)
+  
+  const [duration, setDuration] = useState(() => {
+    if (user?.customStatus?.expiration !== undefined) {
+      return user.customStatus.expiration;
+    } else if (user?.customStatus?.expiresAt) {
+      const minutesLeft = Math.round((new Date(user.customStatus.expiresAt).getTime() - Date.now()) / 60000);
+      if (minutesLeft > 0) {
+        if (minutesLeft <= 30) return 30;
+        if (minutesLeft <= 60) return 60;
+        if (minutesLeft <= 240) return 240;
+        return 'today';
+      }
+    }
+    return null;
+  })
+
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [saving, setSaving] = useState(false)
   const textRef = useRef(null)
@@ -64,6 +79,7 @@ export default function SetStatusModal({ onClose }) {
         emoji: emoji || undefined,
         text: text.trim() || undefined,
         duration: computeDuration(),
+        expiration: duration,
       })
       if (fetchUser) fetchUser()
       toast.success('Status updated')

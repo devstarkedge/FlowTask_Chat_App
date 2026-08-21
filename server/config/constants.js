@@ -18,6 +18,7 @@ export const CORS_ALLOWED_HEADERS = Object.freeze([
 
 export const FLOWTASK_EVENTS = Object.freeze({
   WORKSPACE_UPDATED: 'WORKSPACE_UPDATED',
+  WORKSPACE_PLAN_CHANGED: 'WORKSPACE_PLAN_CHANGED',
   PROJECT_CREATED: 'PROJECT_CREATED',
   PROJECT_UPDATED: 'PROJECT_UPDATED',
   PROJECT_DELETED: 'PROJECT_DELETED',
@@ -215,6 +216,26 @@ export const WORKSPACE_LIMITS = Object.freeze({
     },
   },
 });
+
+// ─── FlowTask Plan Sync ───────────────────────────────────────────────────
+// FlowTask's plan catalog includes a 'legacy' grandfathered tier with no
+// direct ChatApp equivalent (unlimited/unrestricted, Super-Admin-only) —
+// mapped to 'enterprise' since Legacy is unlimited in spirit, matching
+// Enterprise's ChatApp behavior. Any unrecognized slug maps to 'free' (fail
+// closed, never fail open to a permissive default). Used both by the
+// WORKSPACE_PLAN_CHANGED webhook handler and the FlowTask SSO login path
+// (auth.service.js#loginFlowTask), so both stay in sync with exactly one
+// mapping definition.
+const FLOWTASK_TO_CHAT_PLAN = Object.freeze({
+  free: 'free',
+  pro: 'pro',
+  enterprise: 'enterprise',
+  legacy: 'enterprise',
+});
+
+export function mapFlowTaskPlanToChatPlan(flowTaskPlanSlug) {
+  return FLOWTASK_TO_CHAT_PLAN[flowTaskPlanSlug] || 'free';
+}
 
 // ─── Default Channels ─────────────────────────────────────────────────
 export const DEFAULT_CHANNELS = Object.freeze([]);

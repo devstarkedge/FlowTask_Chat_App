@@ -65,6 +65,9 @@ const SOCKET_EVENTS = {
   USER_AWAY: 'presence:away',
   PRESENCE_SYNC: 'presence:sync',
 
+  // Workspace
+  WORKSPACE_PLAN_CHANGED: 'workspace:plan:changed',
+
   // Channels
   CHANNEL_ADDED: 'channel:added',
   CHANNEL_REMOVED: 'channel:removed',
@@ -520,6 +523,19 @@ export function connectSocket() {
 
   socket.on(SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED, () => {
     useChannelStore.getState().fetchChannels()
+  })
+
+  // Fired when FlowTask syncs a plan change (self-serve upgrade/downgrade
+  // or a Super Admin billing change) — see the server's
+  // workspaceEventHandler.js#WORKSPACE_PLAN_CHANGED handler, which already
+  // persisted Workspace.plan before emitting this. Re-fetching (rather than
+  // trusting the socket payload as the full truth) keeps this consistent
+  // with fetchWorkspace's existing merge-into-store behavior used
+  // elsewhere in this file.
+  socket.on(SOCKET_EVENTS.WORKSPACE_PLAN_CHANGED, ({ workspaceId }) => {
+    if (workspaceId) {
+      useWorkspaceStore.getState().fetchWorkspace(workspaceId)
+    }
   })
 
   // Handles faded → active user transitions (re-fetches member list)

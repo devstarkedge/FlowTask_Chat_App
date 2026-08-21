@@ -5,6 +5,7 @@ import tokenService from './token.service.js';
 import emailService from './email.service.js';
 import logger from '../../utils/logger.js';
 import { UnauthorizedError, ForbiddenError, ValidationError, NotFoundError } from '../../middleware/errorHandler.js';
+import { mapFlowTaskPlanToChatPlan } from '../../config/constants.js';
 
 /**
  * Auth Service — handles dual authentication:
@@ -189,6 +190,12 @@ class AuthService {
     const flowTaskWorkspaceId = isRedirectFlow ? (decoded.workspaceId || null) : null;
     const flowTaskWorkspaceName = isRedirectFlow ? (decoded.workspaceName || null) : null;
     const flowTaskWorkspaceSlug = isRedirectFlow ? (decoded.workspaceSlug || null) : null;
+    // FlowTask's `plan` claim (chatIntegrationController.js#getChatRedirectUrl
+    // / workspaceChatSyncService.js) — only trusted for the redirect flow,
+    // same scoping as the workspace claims above. Mapped to ChatApp's own
+    // plan vocabulary once here so every caller of loginFlowTask gets the
+    // already-resolved slug, not a raw FlowTask one.
+    const flowTaskPlan = isRedirectFlow ? mapFlowTaskPlanToChatPlan(decoded.plan) : null;
 
     logger.debug('FlowTask SSO login attempt', {
       flowTaskUserId: decoded.id,
@@ -226,6 +233,18 @@ class AuthService {
       }
     }
 
+    // Server-side plan gate — fails fast, before any ChatUser upsert or
+    // token issuance, so a Free-plan FlowTask workspace can never even
+    // start a ChatApp session through the redirect flow. This is a
+    // defense-in-depth mirror of FlowTask's own getChatRedirectUrl gate
+    // (which should already have rejected this before the redirect was
+    // ever generated) plus workspace.service.js#findOrCreateFlowTaskWorkspace's
+    // own gate below — three independent checks, none of which trust the
+    // others alone.
+    if (isRedirectFlow && flowTaskWorkspaceId && flowTaskPlan === 'free') {
+      throw new ForbiddenError('This FlowTask workspace is on the Free plan — ChatApp requires Pro or Enterprise.');
+    }
+
     // 4. Upsert ChatUser (global identity)
     const chatUser = await userRepository.upsertFromFlowTask(flowTaskUser, {
       markRegistered: true,
@@ -250,7 +269,7 @@ class AuthService {
       flowTaskWorkspaceId,
     });
 
-    return { chatUser, accessToken, refreshToken, flowTaskWorkspaceId, flowTaskWorkspaceName, flowTaskWorkspaceSlug };
+    return { chatUser, accessToken, refreshToken, flowTaskWorkspaceId, flowTaskWorkspaceName, flowTaskWorkspaceSlug, flowTaskPlan };
   }
 
   // ═══════════════════════════════════════════════════════════════════════

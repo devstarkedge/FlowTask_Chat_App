@@ -11,6 +11,7 @@ import ChatUser from '../users/ChatUser.model.js';
 import FlowTaskAuthAttempt from './FlowTaskAuthAttempt.model.js';
 import projectChannelSyncService from '../flowtask/projectChannelSync.service.js';
 import logger from '../../utils/logger.js';
+import { ForbiddenError } from '../../middleware/errorHandler.js';
 
 /**
  * Ensure the user has a WorkspaceMembership record for the given workspace.
@@ -197,7 +198,7 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
   try {
     const {
       chatUser, accessToken, refreshToken,
-      flowTaskWorkspaceId, flowTaskWorkspaceName, flowTaskWorkspaceSlug,
+      flowTaskWorkspaceId, flowTaskWorkspaceName, flowTaskWorkspaceSlug, flowTaskPlan,
     } = await authService.loginFlowTask({ token, userAgent });
     logger.info('FlowTask token validated and ChatApp user resolved', {
       requestId,
@@ -225,8 +226,16 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
             flowTaskWorkspaceId,
             workspaceName: flowTaskWorkspaceName,
             workspaceSlug: flowTaskWorkspaceSlug,
+            plan: flowTaskPlan,
           });
         } catch (error) {
+          if (error instanceof ForbiddenError) {
+            // The Free-plan gate — this must surface as a clean 403 to the
+            // caller, not a silent soft-fail into a login that "succeeds"
+            // with no workspace resolved (which every other failure mode
+            // below deliberately still swallows).
+            throw error;
+          }
           logger.error('Failed to resolve FlowTask workspace during login', {
             requestId,
             chatUserId: chatUser._id,

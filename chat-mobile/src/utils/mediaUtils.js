@@ -182,11 +182,25 @@ export const getMessageAttachments = (msg) => {
   let list = [];
   if (refs.length > 0) {
     list = refs.map(extractFileObject).filter(Boolean);
+    
+    // Merge local preview if available
+    const optimisticAtts = msg.optimisticAttachments || [];
+    if (optimisticAtts.length > 0) {
+      list = list.map((fileObj, idx) => {
+        if (fileObj.url?.includes('placeholder-loading') || fileObj.url?.includes('pending')) {
+           const match = optimisticAtts.find(o => o.originalName === fileObj.originalName) || optimisticAtts[idx];
+           if (match && match.url) {
+             return { ...fileObj, url: match.url, thumbnailUrl: match.thumbnailUrl || match.url, isOptimisticPreview: true };
+           }
+        }
+        return fileObj;
+      });
+    }
   }
 
   // 2. Check attachments / files / media if no references found
   if (list.length === 0) {
-    const rawAttachments = msg.attachments || msg.files || msg.media || [];
+    const rawAttachments = msg.attachments || msg.optimisticAttachments || msg.files || msg.media || [];
     if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
       list = rawAttachments.map(extractFileObject).filter(Boolean);
     }

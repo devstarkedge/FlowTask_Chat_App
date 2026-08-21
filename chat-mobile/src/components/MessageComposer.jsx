@@ -191,6 +191,7 @@ const MessageComposer = React.memo(function MessageComposer({
   const [linkUrl, setLinkUrl] = useState('https://');
   const draftTimerRef = useRef(null);
   const lastSavedRef = useRef("");
+  const [isSending, setIsSending] = useState(false);
   const editorRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const latestContentRef = useRef({ html: '', text: '' });
@@ -468,91 +469,73 @@ const MessageComposer = React.memo(function MessageComposer({
 
     if (!plainContent && pendingFiles.length === 0) return;
 
-    const uploadedFiles = pendingFiles.filter((f) => f._id || f.id);
-    if (
-      pendingFiles.length > 0 &&
-      uploadedFiles.length === 0 &&
-      pendingFiles.some((f) => f.uploading)
-    ) {
-      return;
-    }
-
-    const mentionPayload =
-      pendingMentions.length > 0 ? pendingMentions : undefined;
-
-    const isObjectId = (id) => /^[0-9a-fA-F]{24}$/.test(String(id || ''));
-    const fileRefIds = uploadedFiles
-      .map((f) => String(f._id || f.id || ''))
-      .filter(isObjectId);
-
-    const isHttpUrl = (u) => {
-      if (!u || typeof u !== 'string') return false;
-      return /^https?:\/\//i.test(u);
-    };
-
-    // Existing FileAssets must be sent as fileReferences only.
-    // Embedded `attachments` is for new uploads and is schema-strict (positive
-    // fileSize + absolute URL) — clipboard-pasted files often fail that and 400.
-    const attachmentObjects = fileRefIds.length
-      ? undefined
-      : uploadedFiles
-          .map((f) => ({
-            fileName: f.name || f.fileName || f.originalName || 'file',
-            originalName: f.originalName || f.name || f.fileName || 'file',
-            mimeType: f.mimeType || 'application/octet-stream',
-            fileSize: Number(f.fileSize) || 0,
-            url: f.url || f.secureUrl,
-            thumbnailUrl: f.thumbnailUrl || undefined,
-            source: 'chat_upload',
-          }))
-          .filter((a) => a.fileSize > 0 && isHttpUrl(a.url));
-
     const replyTo = replyingTo?._id ? buildReplyToSnapshot(replyingTo, members) : null;
     const baseOptions = {
       ...(replyTo ? { parentMessageId: replyingTo._id, replyTo } : {}),
-      mentions: mentionPayload,
+      mentions: pendingMentions.length > 0 ? pendingMentions : undefined,
     };
 
-    const numFiles = Math.max(fileRefIds.length, attachmentObjects ? attachmentObjects.length : 0);
-
-    if (numFiles <= 1) {
-      onSend(plainContent, {
-        htmlContent: htmlContent || undefined,
-        ...baseOptions,
-        ...(fileRefIds.length ? { fileReferences: fileRefIds } : {}),
-        ...(attachmentObjects?.length ? { attachments: attachmentObjects } : {}),
-      });
-    } else {
-      // Send each file as a separate message
-      const items = fileRefIds.length ? fileRefIds : attachmentObjects;
-      const isRefs = fileRefIds.length > 0;
-
-      items.forEach((item, index) => {
-        const isFirst = index === 0;
-        const text = isFirst ? plainContent : '';
-        const html = isFirst && htmlContent ? htmlContent : undefined;
-        
-        onSend(text, {
-          htmlContent: html,
+    setIsSending(true);
+    try {
+      // 1. Send text content if it exists
+      if (plainContent) {
+        onSend(plainContent, {
+          htmlContent: htmlContent || undefined,
           ...baseOptions,
-          ...(isRefs ? { fileReferences: [item] } : { attachments: [item] }),
         });
+      }
+
+      // 2. Send each file as an independent message
+      pendingFiles.forEach((f) => {
+        const isHttpUrl = (u) => /^https?:\/\//i.test(u);
+        const url = f.url || f._tempUri || f.secureUrl;
+        
+        if (f._id || f.id) {
+          // Already uploaded file
+          onSend("", {
+            ...baseOptions,
+            fileReferences: [String(f._id || f.id)],
+          });
+        } else {
+          // Local file - pass it as an optimistic attachment to be uploaded by the store
+          const attachmentObj = {
+            fileName: f.name || f.fileName || f.originalName || 'file',
+            originalName: f.originalName || f.name || f.fileName || 'file',
+            mimeType: f.mimeType || f.type || 'application/octet-stream',
+            fileSize: Number(f.fileSize) || 0,
+            url: url,
+            thumbnailUrl: f.thumbnailUrl || undefined,
+            source: 'chat_upload',
+            _tempUri: f._tempUri, // Pass temp URI for upload process
+          };
+          
+          onSend("", {
+            ...baseOptions,
+            attachments: [attachmentObj],
+            optimisticAttachments: [attachmentObj], // Show in UI immediately
+            _isPendingUpload: true, // Flag for the store to handle upload
+          });
+        }
       });
+
+      if (editingMessage) {
+        onCancelEdit?.();
+      } else {
+        onCancelReply?.();
+      }
+
+      latestContentRef.current = { html: '', text: '' };
+      editorRef.current?.clear();
+      onChangeText('');
+      setPendingFiles([]);
+      setPendingMentions([]);
+      clearDraft(channelId, activeWorkspaceId, null);
+      lastSavedRef.current = '';
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      emitTyping(channelId, false);
+    } finally {
+      setIsSending(false);
     }
-
-    // Clear reply/edit banner after send so it never sticks onto the next message
-    if (replyingTo) onCancelReply?.();
-    else if (editingMessage) onCancelEdit?.();
-
-    latestContentRef.current = { html: '', text: '' };
-    editorRef.current?.clear();
-    onChangeText('');
-    setPendingFiles([]);
-    setPendingMentions([]);
-    clearDraft(channelId, activeWorkspaceId, null);
-    lastSavedRef.current = '';
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    emitTyping(channelId, false);
   }, [
     text,
     onSend,
@@ -764,7 +747,7 @@ const MessageComposer = React.memo(function MessageComposer({
         fileSize: f.fileSize || f.size,
         status: 'pending',
         progress: 0,
-        uploading: true,
+        uploading: false,
         uploadFailed: false,
         _tempUri: f.uri,
       }));
@@ -776,11 +759,8 @@ const MessageComposer = React.memo(function MessageComposer({
       });
       // Persist initial add outside the updater
       saveDraftNow(nextState);
-
-      // Upload concurrently
-      await uploadFilesToServer(localEntries);
     },
-    [uploadFilesToServer, pendingFiles.length, saveDraftNow],
+    [pendingFiles.length, saveDraftNow],
   );
 
   const removePendingFile = useCallback((index) => {
@@ -856,6 +836,14 @@ const MessageComposer = React.memo(function MessageComposer({
               }
             : {}),
           fileReferences: [fileId],
+          optimisticAttachments: [{
+            fileName: file.name,
+            originalName: file.name,
+            url: uri,
+            mimeType: file.type,
+            fileSize: 0,
+            status: 'available',
+          }],
           [type === 'audio' ? 'audioMeta' : 'videoMeta']: {
             duration,
             [type === 'audio' ? 'audioUrl' : 'videoUrl']: uploadedFile.url || uploadedFile.secureUrl,
@@ -1120,12 +1108,25 @@ const MessageComposer = React.memo(function MessageComposer({
                     <Clock size={20} color={colors.textSecondary} />
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.sendButton, { backgroundColor: colors.primary, borderRadius: moderateScale(20), padding: moderateScale(8), marginRight: moderateScale(4) }]}
+                    style={[
+                      styles.sendButton, 
+                      { 
+                        backgroundColor: isSending ? colors.border : colors.primary, 
+                        borderRadius: moderateScale(20), 
+                        padding: moderateScale(8), 
+                        marginRight: moderateScale(4) 
+                      }
+                    ]}
                     onPress={handleSend}
                     onLongPress={() => setShowScheduleModal(true)}
                     delayLongPress={500}
+                    disabled={isSending}
                   >
-                    <Send size={16} color={colors.background} />
+                    {isSending ? (
+                      <Loader2 size={16} color={colors.background} />
+                    ) : (
+                      <Send size={16} color={colors.background} />
+                    )}
                   </TouchableOpacity>
                 </View>
               ) : (

@@ -6,7 +6,7 @@ import { useThemeStore } from '../../stores/themeStore';
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { OptionsSelectionModal } from '../../components/common';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-
+import { useTranslation } from '../../utils/i18n';
 
 const NOTIF_OPTIONS = {
   schedule: [
@@ -44,6 +44,7 @@ const NOTIF_OPTIONS = {
 const NotificationsPreferencesScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
   const prefs = usePreferencesStore();
+  const { t } = useTranslation();
 
   const [activePicker, setActivePicker] = useState(null);
 
@@ -95,7 +96,7 @@ const NotificationsPreferencesScreen = ({ navigation }) => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <ChevronLeft size={28} color={colors.textPrimary} strokeWidth={2.5} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Notifications</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{t("Notifications")}</Text>
         <TouchableOpacity style={styles.helpButton}>
           <HelpCircle size={24} color={colors.textPrimary} />
         </TouchableOpacity>

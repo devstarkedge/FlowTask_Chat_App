@@ -22,6 +22,7 @@ export const useHomeData = (navigation) => {
   
   const { data: channels = [], isLoading: isChannelsLoading, refetch: fetchChannels } = useChannels(activeWorkspace?._id);
   const categories = useChannelStore((s) => s.categories) || [];
+  const fetchCategories = useChannelStore((s) => s.fetchCategories);
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
   const unreads = useChannelStore((s) => s.unreads) || {};
   const starredIds = useChannelStore((s) => s.starredIds) || [];
@@ -86,6 +87,7 @@ export const useHomeData = (navigation) => {
       fetchSavedMessages?.().catch(console.error),
       fetchDrafts?.(activeWorkspace?._id).catch(console.error),
       fetchScheduledMessages?.().catch(console.error),
+      fetchCategories?.().catch(console.error),
       categoryAPI.getDepartments()
         .then(res => {
           if (res.data && res.data.data) {

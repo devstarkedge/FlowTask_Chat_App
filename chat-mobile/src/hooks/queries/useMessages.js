@@ -4,6 +4,7 @@ import { queryKeys } from '../../queries/queryKeys';
 import { useAuthStore } from '../../stores/authStore';
 import { enqueueMessage } from '../../services/offlineQueue';
 import { useChatStore } from '../../stores/chatStore';
+import { fileAPI } from '../../services/api';
 
 /**
  * useMessages — fetches channel messages using cursor-based pagination.
@@ -122,6 +123,59 @@ export const useSendMessage = () => {
       if (replyTo) payload.replyTo = replyTo;
       if (tempId) payload.tempId = tempId;
 
+      if (options._isPendingUpload && options.optimisticAttachments && options.optimisticAttachments.length > 0) {
+        const fileToUpload = options.optimisticAttachments[0];
+        if (fileToUpload && fileToUpload._tempUri) {
+          try {
+            let fileUri = fileToUpload._tempUri;
+            let fileName = fileToUpload.originalName || fileToUpload.fileName;
+            
+            // Handle iOS assets-library / ph URIs
+            if (fileUri.startsWith('ph://') || fileUri.startsWith('assets-library://')) {
+              try {
+                const FileSystem = require('expo-file-system/legacy');
+                const fileExt = fileName.includes('.') ? fileName.split('.').pop() : 'jpg';
+                const destPath = `${FileSystem.cacheDirectory}upload_${Date.now()}.${fileExt}`;
+                await FileSystem.copyAsync({ from: fileUri, to: destPath });
+                fileUri = destPath;
+              } catch (e) {
+                console.warn('[useMessages] Copy asset URI to cache failed:', e);
+              }
+            }
+
+            // Handle Android file prefix
+            const { Platform } = require('react-native');
+            if (Platform.OS === 'android' && fileUri && !fileUri.startsWith('file://') && !fileUri.startsWith('content://')) {
+              fileUri = `file://${fileUri}`;
+            }
+
+            const formData = new FormData();
+            formData.append("files", {
+              uri: fileUri,
+              name: fileName,
+              type: fileToUpload.mimeType || 'application/octet-stream'
+            });
+            
+            // Upload without blocking the UI
+            const { data: uploadData } = await fileAPI.uploadFiles(channelId, formData, (progressEvent) => {
+              if (progressEvent.total > 0) {
+                const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                // Optionally update progress in optimistic message if needed
+              }
+            }, true);
+            
+            const uploadedFile = (uploadData.data?.files || [])[0];
+            if (uploadedFile) {
+              payload.fileReferences = [String(uploadedFile._id || uploadedFile.id)];
+              payload.attachments = undefined; // Do not send local attachment objects
+            }
+          } catch (uploadError) {
+            console.error("Upload failed in sendMessage:", uploadError);
+            throw uploadError; // Let onError handle it by rolling back
+          }
+        }
+      }
+
       const connectionStatus = useChatStore.getState().connectionStatus;
 
       if (connectionStatus !== 'connected') {
@@ -137,8 +191,8 @@ export const useSendMessage = () => {
     },
 
     onMutate: async ({ channelId, content, options = {}, tempId }) => {
-      // Cancel any in-flight refetch so it doesn't overwrite the optimistic entry
-      await queryClient.cancelQueries({ queryKey: queryKeys.messages(channelId) });
+      // Cancel any in-flight refetch without awaiting to prevent race conditions during rapid concurrent optimistic updates
+      queryClient.cancelQueries({ queryKey: queryKeys.messages(channelId) });
       const previousData = queryClient.getQueryData(queryKeys.messages(channelId));
 
       const user = getUser();
@@ -161,6 +215,7 @@ export const useSendMessage = () => {
         gifMeta: options?.gifMeta,
         audioMeta: options?.audioMeta,
         videoMeta: options?.videoMeta,
+        optimisticAttachments: options?.optimisticAttachments || [],
       };
 
       queryClient.setQueryData(queryKeys.messages(channelId), (old) => {
@@ -185,15 +240,27 @@ export const useSendMessage = () => {
     },
 
     onError: (err, { channelId, tempId }, context) => {
-      // Only roll back if we have saved state AND the message hasn't been reconciled
-      if (context?.previousData) {
-        const current = queryClient.getQueryData(queryKeys.messages(channelId));
-        const wasReconciled = current?.pages?.some(p =>
-          p.items?.some(m => m.tempId === tempId && !m.pending)
-        );
-        if (!wasReconciled) {
-          queryClient.setQueryData(queryKeys.messages(channelId), context.previousData);
-        }
+      // Rollback only the specific message that failed, preserving other concurrent optimistic updates
+      const current = queryClient.getQueryData(queryKeys.messages(channelId));
+      const wasReconciled = current?.pages?.some(p =>
+        p.items?.some(m => m.tempId === tempId && !m.pending)
+      );
+      if (!wasReconciled) {
+        queryClient.setQueryData(queryKeys.messages(channelId), (old) => {
+          if (!old?.pages) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page, index) => {
+              if (index === 0) {
+                return {
+                  ...page,
+                  items: page.items.filter(m => m._id !== tempId)
+                };
+              }
+              return page;
+            })
+          };
+        });
       }
     },
 
@@ -218,7 +285,12 @@ export const useSendMessage = () => {
           const newItems = page.items.map(m => {
             if (m._id === tempId || (serverMessage._id && String(m._id) === String(serverMessage._id))) {
               replaced = true;
-              return { ...serverMessage, pending: false, tempId };
+              return { 
+                ...serverMessage, 
+                pending: false, 
+                tempId,
+                optimisticAttachments: m.optimisticAttachments || serverMessage.optimisticAttachments 
+              };
             }
             return m;
           });

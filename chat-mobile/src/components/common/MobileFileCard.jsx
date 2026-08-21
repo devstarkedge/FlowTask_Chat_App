@@ -127,19 +127,22 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
 
   if (kind === 'image') {
     const targetUri = thumbUrl || fileUrl;
+    const isLocalUri = targetUri?.startsWith('file://') || targetUri?.startsWith('content://') || targetUri?.startsWith('ph://');
+    const finalHeaders = isLocalUri ? undefined : imageHeaders;
 
     logger.info('[MobileFileCard] Final image props:', {
       name,
       targetUri,
       hasAuthToken: !!token,
       hasWorkspaceId: !!workspaceId,
+      isLocalUri
     });
 
     return (
       <>
         <TouchableOpacity onPress={openPreview} onLongPress={onLongPress} activeOpacity={0.85} style={ms.imgThumbContainer}>
           <Image
-            source={{ uri: targetUri, headers: imageHeaders }}
+            source={finalHeaders ? { uri: targetUri, headers: finalHeaders } : { uri: targetUri }}
             style={ms.imgThumb}
             resizeMode="cover"
             onError={(err) => {

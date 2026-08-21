@@ -672,7 +672,7 @@ const ChatScreen = ({ route, navigation }) => {
     // jumpToMessageId + displayedMessages update will trigger scroll effect
   }, [channelId, channelHasMore, messages, fetchNextPage]);
 
-  const renderMessage = useCallback(({ item, index }) => {
+  const renderMessage = useCallback(({ item, index, extraData }) => {
     const prevItem = displayedMessages[index + 1];
     const nextItem = displayedMessages[index - 1];
 
@@ -718,8 +718,8 @@ const ChatScreen = ({ route, navigation }) => {
         searchResults={searchResults}
         currentMatch={currentMatch}
         index={index}
-        savedMessageIds={savedMessageIds}
-        highlightedMessageId={highlightedMessageId}
+        
+        highlightedMessageId={extraData?.highlightedMessageId !== undefined ? extraData.highlightedMessageId : highlightedMessageId}
         channelMembers={channelMembers}
         channelId={channelId}
         channelName={channelName}
@@ -879,22 +879,20 @@ const ChatScreen = ({ route, navigation }) => {
                 </View>
               </TouchableOpacity>
 
-              {!isDM && (
-                <TouchableOpacity
-                  style={styles.cardOptionItem}
-                  onPress={() => {
-                    setShowOptions(false);
-                    navigation.navigate("CanvasList", { channelId, channelName });
-                  }}
-                >
-                  <View style={styles.cardOptionLeft}>
-                    <FileText size={20} color={colors.textPrimary} />
-                    <Text style={[styles.cardOptionText, { color: colors.textPrimary }]}>
-                      Canvas Documents
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.cardOptionItem}
+                onPress={() => {
+                  setShowOptions(false);
+                  navigation.navigate("CanvasList", { channelId, channelName });
+                }}
+              >
+                <View style={styles.cardOptionLeft}>
+                  <FileText size={20} color={colors.textPrimary} />
+                  <Text style={[styles.cardOptionText, { color: colors.textPrimary }]}>
+                    Canvas
+                  </Text>
+                </View>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.cardOptionItem}
@@ -943,7 +941,7 @@ const ChatScreen = ({ route, navigation }) => {
             style={{ flex: 1 }}
             estimatedItemSize={80}
             data={displayedMessages}
-            extraData={{ savedMessageIds, highlightedMessageId, searchQuery, searchResults, currentMatch, colors }}
+            extraData={{ highlightedMessageId, searchQuery, searchResults, currentMatch, colors }}
             renderItem={renderMessage}
             keyExtractor={(item) => item.tempId || item._id || String(Math.random())}
             inverted
@@ -1809,3 +1807,5 @@ const createStyles = (colors) =>
   });
 
 export default ChatScreen;
+
+

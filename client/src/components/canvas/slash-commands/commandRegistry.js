@@ -42,18 +42,6 @@ export const COMMAND_GROUPS = [
     label: "Basic",
     commands: [
       {
-        id: "Canvas",
-        label: "Canvas",
-        description: "Import a canvas template to get started quickly",
-        icon: FilePenLine,
-        keywords: ["template", "starter"],
-        run: (editor) => {
-          const template = window.prompt(
-            "Enter template name (e.g. 'Project Plan')",
-          );
-        },
-      },
-      {
         id: "checklist",
         label: "Checklist",
         description: "Track tasks with checkboxes",
@@ -172,14 +160,6 @@ export const COMMAND_GROUPS = [
       //   keywords: ["date", "follow up"],
       //   run: (editor) => insertParagraph(editor, "Reminder: "),
       // },
-      {
-        id: "ai-draft",
-        label: "AI Draft",
-        description: "Insert an AI-ready drafting prompt",
-        icon: Bot,
-        keywords: ["generate", "summarize", "assistant"],
-        run: (editor) => insertParagraph(editor, "AI prompt: "),
-      },
     ],
   },
 ];

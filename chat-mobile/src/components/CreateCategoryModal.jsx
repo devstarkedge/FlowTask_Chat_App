@@ -12,8 +12,8 @@ import {
   Platform,
   Pressable,
   useWindowDimensions,
+  KeyboardAvoidingView,
 } from 'react-native';
-import KeyboardAwareContainer from './common/KeyboardAwareContainer';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
@@ -29,6 +29,7 @@ import {
   Hash,
   Lock,
   Volume2,
+  Plus,
 } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { isChatAppChannel } from '../utils/channelOrigin';
@@ -90,6 +91,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChannels, setSelectedChannels] = useState([]);
+  const [step, setStep] = useState(1);
   const chRefreshed = useRef(false);
 
   // ── Derived data ──
@@ -133,14 +135,34 @@ export default function CreateCategoryModal({ visible, onClose }) {
   const hideDeptAction = categoryType === 'department'
     && (allImported || (!loadingDepts && departmentsWithChannels.length === 0));
 
+  const assignedChannelIds = useMemo(() => {
+    const ids = new Set();
+    categories.forEach(cat => {
+      if (Array.isArray(cat.channelIds)) {
+        cat.channelIds.forEach(id => ids.add(String(id?._id || id)));
+      }
+    });
+    return ids;
+  }, [categories]);
+
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return channels
-      .filter(c => isChatAppChannel(c) && !c.isArchived)
+      .filter(c => {
+        if (!isChatAppChannel(c) || c.isArchived) return false;
+        
+        const isDept = c.flowTaskRef?.entityType === 'department' && !!c.flowTaskRef?.entityId;
+        const isProj = !!c.departmentRef?.departmentId;
+        const isAssignedToDept = isDept || isProj;
+        
+        const isAssignedToCategory = assignedChannelIds.has(String(c._id));
+
+        return !isAssignedToDept && !isAssignedToCategory;
+      })
       .filter(c => (!q || c.name?.toLowerCase().includes(q)) && !selectedChannels.some(s => s._id === c._id))
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
       .slice(0, 50);
-  }, [searchQuery, channels, selectedChannels]);
+  }, [searchQuery, channels, selectedChannels, assignedChannelIds]);
 
   const isFormValid = () => {
     if (categoryType === 'department') return missingDepts.length > 0 && !loadingDepts;
@@ -194,6 +216,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
       setCustomIcon('✨');
       setSearchQuery('');
       setSelectedChannels([]);
+      setStep(1);
       setExpandedDepts({});
       setDeptError(null);
       loadDepartments();
@@ -296,7 +319,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
   // ── Render ──
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAwareContainer style={styles.overlay} disablePadding={false}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.overlay}>
         <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={onClose} />
 
         <SafeAreaView
@@ -315,57 +338,82 @@ export default function CreateCategoryModal({ visible, onClose }) {
         >
           {/* ──────────── Header ──────────── */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <View style={styles.headerIcon}>
-              <FolderPlus size={24} color={colors.primary} strokeWidth={2} />
-            </View>
-            <View style={styles.headerCopy}>
-              <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Create Category</Text>
-              <Text style={[styles.headerSub, { color: colors.textSecondary }]}>
-                Organize your channels into structured categories
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+                {step === 2 ? 'Add Channels' : 'Create Category'}
               </Text>
+              {categoryType === 'custom' ? (
+                <Text style={[styles.headerSub, { color: colors.textSecondary }]}>
+                  Step {step} of 2 {step === 1 ? '· Details' : '· Selection'}
+                </Text>
+              ) : (
+                <Text style={[styles.headerSub, { color: colors.textSecondary }]}>
+                  Organize your channels into structured groups
+                </Text>
+              )}
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={8} aria-label="Close modal">
-              <X size={20} color={colors.textSecondary} />
+            <TouchableOpacity 
+              onPress={onClose} 
+              hitSlop={8} 
+              style={[styles.closeBtn, { backgroundColor: colors.backgroundSecondary }]}
+            >
+              <X size={18} color={colors.textSecondary} strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
 
           {/* ──────────── Type Selector ──────────── */}
-          <View style={[styles.typeSection, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity
-              style={styles.radioRow}
-              onPress={() => setCategoryType('department')}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.radioOuter, { borderColor: categoryType === 'department' ? colors.primary : colors.border }]}>
-                {categoryType === 'department' && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
-              </View>
-              <Text style={[styles.radioLabel, { color: colors.textPrimary }]}>Department</Text>
-            </TouchableOpacity>
+          {step === 1 && (
+            <View style={[styles.typeSection, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: scale(8) }}>
+                <TouchableOpacity
+                  style={[
+                    styles.typeCard,
+                    { borderColor: colors.border, backgroundColor: colors.backgroundSecondary },
+                    categoryType === 'department' && { borderColor: colors.primary, backgroundColor: colors.primary + '10' }
+                  ]}
+                  onPress={() => setCategoryType('department')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.typeCardEmoji}>🏢</Text>
+                  <Text style={[styles.typeCardLabel, { color: categoryType === 'department' ? colors.primary : colors.textPrimary }]}>
+                    Department
+                  </Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.radioRow}
-              onPress={() => setCategoryType('custom')}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.radioOuter, { borderColor: categoryType === 'custom' ? colors.primary : colors.border }]}>
-                {categoryType === 'custom' && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
-              </View>
-              <Text style={[styles.radioLabel, { color: colors.textPrimary }]}>Custom Category</Text>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.typeCard,
+                    { borderColor: colors.border, backgroundColor: colors.backgroundSecondary },
+                    categoryType === 'custom' && { borderColor: colors.primary, backgroundColor: colors.primary + '10' }
+                  ]}
+                  onPress={() => setCategoryType('custom')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.typeCardEmoji}>✨</Text>
+                  <Text style={[styles.typeCardLabel, { color: categoryType === 'custom' ? colors.primary : colors.textPrimary }]}>
+                    Custom
+                  </Text>
+                </TouchableOpacity>
 
-            {hasDeptCategory && (
-              <TouchableOpacity
-                style={styles.radioRow}
-                onPress={() => setCategoryType('none')}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.radioOuter, { borderColor: categoryType === 'none' ? colors.primary : colors.border }]}>
-                  {categoryType === 'none' && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
-                </View>
-                <Text style={[styles.radioLabel, { color: colors.textPrimary }]}>No Category</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+                {hasDeptCategory && (
+                  <TouchableOpacity
+                    style={[
+                      styles.typeCard,
+                      { borderColor: colors.border, backgroundColor: colors.backgroundSecondary },
+                      categoryType === 'none' && { borderColor: colors.primary, backgroundColor: colors.primary + '10' }
+                    ]}
+                    onPress={() => setCategoryType('none')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.typeCardEmoji}>🚫</Text>
+                    <Text style={[styles.typeCardLabel, { color: categoryType === 'none' ? colors.primary : colors.textPrimary }]}>
+                      None
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+            </View>
+          )}
 
           {/* ──────────── Body ──────────── */}
           <ScrollView
@@ -375,7 +423,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
             showsVerticalScrollIndicator={false}
           >
             {/* ===== Department ===== */}
-            {categoryType === 'department' && (
+            {step === 1 && categoryType === 'department' && (
               <View style={styles.fieldGroup}>
                 {/* Info banner */}
                 <View style={[styles.infoBanner, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
@@ -393,8 +441,6 @@ export default function CreateCategoryModal({ visible, onClose }) {
                       )}
                   </Text>
                 </View>
-
-                <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>FLOWTASK DEPARTMENTS</Text>
 
                 {deptError ? (
                   <View style={[styles.errorBox, { backgroundColor: '#fff1f2', borderColor: '#fda4af' }]}>
@@ -427,66 +473,63 @@ export default function CreateCategoryModal({ visible, onClose }) {
                     </Text>
                   </View>
                 ) : (
-                  departmentsWithChannels.map(dept => {
-                    const isImported = existingDeptIds.has(String(dept._id)) || existingDeptIds.has(String(dept.externalId));
-                    const isExpanded = expandedDepts[dept._id];
-                    const deptChannels = getDeptChannels(dept);
+                  <View style={styles.deptList}>
+                    {missingDepts.map((d, dIdx) => {
+                      const deptChannels = getDeptChannels(d);
+                      const isExp = expandedDepts[d._id];
+                      return (
+                        <View key={`${d._id}-${dIdx}`} style={[styles.deptCard, { borderColor: colors.border, backgroundColor: colors.backgroundSecondary }]}>
+                          <TouchableOpacity
+                            style={styles.deptHeader}
+                            onPress={() => setExpandedDepts(prev => ({ ...prev, [d._id]: !isExp }))}
+                            activeOpacity={0.7}
+                          >
+                            <View style={styles.deptTitleRow}>
+                              <FolderPlus size={18} color={colors.primary} />
+                              <Text style={[styles.deptName, { color: colors.textPrimary }]} numberOfLines={1}>
+                                {d.name}
+                              </Text>
+                            </View>
+                            <View style={styles.deptCountRow}>
+                              <Text style={[styles.deptCountText, { color: colors.textSecondary }]}>
+                                {deptChannels.length} {deptChannels.length === 1 ? 'channel' : 'channels'}
+                              </Text>
+                              <ChevronDown
+                                size={18}
+                                color={colors.textTertiary}
+                                style={{ transform: [{ rotate: isExp ? '180deg' : '0deg' }] }}
+                              />
+                            </View>
+                          </TouchableOpacity>
 
-                    return (
-                      <View
-                        key={String(dept._id)}
-                        style={[styles.deptCard, { borderColor: colors.border, opacity: isImported ? 0.6 : 1 }]}
-                      >
-                        <TouchableOpacity
-                          style={[
-                            styles.deptHeader,
-                            { backgroundColor: colors.backgroundSecondary },
-                            isExpanded && { borderBottomWidth: 1, borderBottomColor: colors.border },
-                          ]}
-                          onPress={() => setExpandedDepts(p => ({ ...p, [dept._id]: !p[dept._id] }))}
-                          activeOpacity={0.7}
-                        >
-                          <View style={{ transform: [{ rotate: isExpanded ? '0deg' : '-90deg' }] }}>
-                            <ChevronDown size={16} color={colors.textSecondary} />
-                          </View>
-                          <Text style={styles.deptEmoji}>{dept.icon || '📁'}</Text>
-                          <Text style={[styles.deptName, { color: colors.textPrimary }]} numberOfLines={1}>
-                            {dept.name}
-                          </Text>
-                          {isImported && (
-                            <View style={[styles.badge, { backgroundColor: 'rgba(0,90,158,0.1)' }]}>
-                              <Text style={[styles.badgeText, { color: colors.primary }]}>Imported</Text>
+                          {isExp && (
+                            <View style={[styles.deptBody, { borderTopColor: colors.border, borderTopWidth: 1, backgroundColor: colors.background }]}>
+                              {deptChannels.length === 0 ? (
+                                <Text style={[styles.deptEmpty, { color: colors.textTertiary }]}>
+                                  No channels are currently linked to this department.
+                                </Text>
+                              ) : (
+                                deptChannels.map((ch, cIdx) => (
+                                  <View key={`${ch._id}-${cIdx}`} style={styles.deptChRow}>
+                                    <ChannelIcon channel={ch} color={colors.textTertiary} size={14} />
+                                    <Text style={[styles.deptChName, { color: colors.textSecondary }]} numberOfLines={1}>
+                                      {ch.name}
+                                    </Text>
+                                  </View>
+                                ))
+                              )}
                             </View>
                           )}
-                        </TouchableOpacity>
-
-                        {isExpanded && (
-                          <View style={[styles.deptBody, { backgroundColor: colors.background }]}>
-                            {deptChannels.length === 0 ? (
-                              <Text style={[styles.deptEmpty, { color: colors.textTertiary }]}>
-                                No channels are currently linked to this department.
-                              </Text>
-                            ) : (
-                              deptChannels.map(ch => (
-                                <View key={ch._id} style={styles.deptChRow}>
-                                  <Check size={14} color={colors.primary} strokeWidth={3} />
-                                  <Text style={[styles.deptChName, { color: colors.textSecondary }]} numberOfLines={1}>
-                                    {ch.name}
-                                  </Text>
-                                </View>
-                              ))
-                            )}
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })
+                        </View>
+                      );
+                    })}
+                  </View>
                 )}
               </View>
             )}
 
-            {/* ===== Custom Category ===== */}
-            {categoryType === 'custom' && (
+            {/* ===== Custom Category Step 1 ===== */}
+            {step === 1 && categoryType === 'custom' && (
               <View style={styles.fieldGroup}>
                 {/* Category Name */}
                 <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>CATEGORY NAME</Text>
@@ -530,54 +573,77 @@ export default function CreateCategoryModal({ visible, onClose }) {
                     ))}
                   </ScrollView>
                 </View>
+              </View>
+            )}
 
-                {/* Channel Search */}
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>ADD CHANNELS (OPTIONAL)</Text>
+            {/* ===== Custom Category Step 2 ===== */}
+            {step === 2 && categoryType === 'custom' && (
+              <View style={styles.fieldGroup}>
+                {/* Selected Channels Chips */}
+                {selectedChannels.length > 0 && (
+                  <View style={{ maxHeight: moderateScale(60), marginBottom: verticalScale(12) }}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 2, gap: 8 }}>
+                      {selectedChannels.map((ch, idx) => (
+                        <Chip key={`${ch._id}-${idx}`} channel={ch} onRemove={removeChannel} colors={colors} />
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
 
-                <View style={[styles.searchWrap, { borderColor: colors.border, backgroundColor: colors.background }]}>
-                  <Search size={16} color={colors.textTertiary} />
+                <View style={[styles.searchWrap, { borderColor: colors.border, backgroundColor: colors.inputBackground || colors.background, paddingVertical: Platform.OS === 'ios' ? 10 : 2 }]}>
+                  <Search size={18} color={colors.textTertiary} />
                   <TextInput
-                    style={[styles.searchInput, { color: colors.textPrimary }]}
+                    style={[styles.searchInput, { color: colors.textPrimary, fontSize: moderateScale(15), marginLeft: 8 }]}
                     placeholder="Search channels..."
                     placeholderTextColor={colors.textTertiary}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
+                    autoCapitalize="none"
+                    autoCorrect={false}
                   />
                   {searchQuery.length > 0 && (
                     <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={6}>
-                      <X size={13} color={colors.textTertiary} />
+                      <X size={16} color={colors.textTertiary} />
                     </TouchableOpacity>
                   )}
                 </View>
 
                 {/* Search Results */}
-                <View style={[styles.resultsBox, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                <View style={[styles.resultsBox, { borderColor: colors.border, backgroundColor: colors.background, marginTop: verticalScale(8), borderRadius: moderateScale(8) }]}>
                   {channelsLoading && channels.length === 0 ? (
                     <View style={styles.resultsCenter}>
                       <Text style={[styles.helperText, { color: colors.textSecondary }]}>Loading your channels...</Text>
                     </View>
                   ) : searchResults.length > 0 ? (
-                    searchResults.map(ch => {
-                      const isSel = selectedChannels.some(s => s._id === ch._id);
-                      return (
-                        <TouchableOpacity
-                          key={ch._id}
-                          style={[
-                            styles.resultRow,
-                            { borderBottomColor: colors.border },
-                            isSel && { backgroundColor: colors.primaryOverlay || 'rgba(0,90,158,0.05)' },
-                          ]}
-                          onPress={() => toggleChannel(ch)}
-                          activeOpacity={0.7}
-                        >
-                          <ChannelIcon channel={ch} color={colors.textSecondary} size={14} />
-                          <Text style={[styles.resultName, { color: colors.textPrimary }]} numberOfLines={1}>
-                            {ch.name}
-                          </Text>
-                          {isSel && <Check size={14} color={colors.primary} strokeWidth={2.5} />}
-                        </TouchableOpacity>
-                      );
-                    })
+                    <ScrollView nestedScrollEnabled={true} style={{ maxHeight: verticalScale(400) }} keyboardShouldPersistTaps="handled">
+                      {searchResults.map((ch, idx) => {
+                        const isSel = selectedChannels.some(s => s._id === ch._id);
+                        return (
+                          <TouchableOpacity
+                            key={`${ch._id}-${idx}`}
+                            style={[
+                              styles.resultRow,
+                              { borderBottomColor: colors.border, paddingVertical: verticalScale(10), paddingHorizontal: scale(12) },
+                              isSel && { backgroundColor: colors.primary + '10' },
+                            ]}
+                            onPress={() => toggleChannel(ch)}
+                            activeOpacity={0.7}
+                          >
+                            <ChannelIcon channel={ch} color={colors.textSecondary} size={16} />
+                            <Text style={[styles.resultName, { color: colors.textPrimary, fontSize: moderateScale(15), marginLeft: scale(10), flex: 1 }]} numberOfLines={1}>
+                              {ch.name}
+                            </Text>
+                            <View style={[
+                              { width: 18, height: 18, borderRadius: 4, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+                              { borderColor: isSel ? colors.primary : colors.border },
+                              isSel && { backgroundColor: colors.primary }
+                            ]}>
+                              {isSel ? <Check size={12} color="#fff" strokeWidth={3} /> : <Plus size={12} color={colors.textTertiary} />}
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
                   ) : (
                     <View style={styles.resultsCenter}>
                       <Text style={[styles.helperText, { color: colors.textSecondary }]}>
@@ -586,20 +652,11 @@ export default function CreateCategoryModal({ visible, onClose }) {
                     </View>
                   )}
                 </View>
-
-                {/* Selected Channels Chips */}
-                {selectedChannels.length > 0 && (
-                  <View style={styles.chipsWrap}>
-                    {selectedChannels.map(ch => (
-                      <Chip key={ch._id} channel={ch} onRemove={removeChannel} colors={colors} />
-                    ))}
-                  </View>
-                )}
               </View>
             )}
 
             {/* ===== No Category ===== */}
-            {categoryType === 'none' && (
+            {step === 1 && categoryType === 'none' && (
               <View style={[styles.noBanner, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
                 <Text style={[styles.noBannerText, { color: colors.textPrimary }]}>
                   Choose{' '}
@@ -611,15 +668,15 @@ export default function CreateCategoryModal({ visible, onClose }) {
           </ScrollView>
 
           {/* ──────────── Footer ──────────── */}
-          <View style={[styles.footer, { borderTopColor: colors.border }]}>
-            <Button
-              title="Cancel"
-              variant="ghost"
-              onPress={onClose}
-              disabled={isSubmitting}
-            />
-
-            {!hideDeptAction && (
+          <View style={[styles.footer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+            {step === 1 && categoryType === 'custom' ? (
+              <Button
+                title="Next"
+                variant="primary"
+                onPress={() => setStep(2)}
+                disabled={!isFormValid()}
+              />
+            ) : !hideDeptAction ? (
               <Button
                 title={submitLabel}
                 variant="primary"
@@ -628,10 +685,17 @@ export default function CreateCategoryModal({ visible, onClose }) {
                 disabled={!isFormValid() || isSubmitting}
                 loading={isSubmitting}
               />
-            )}
+            ) : null}
+
+             <Button
+              title={step === 2 ? "Back" : "Cancel"}
+              variant="ghost"
+              onPress={step === 2 ? () => setStep(1) : onClose}
+              disabled={isSubmitting}
+            />
           </View>
         </SafeAreaView>
-      </KeyboardAwareContainer>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -690,29 +754,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(24),
     paddingVertical: verticalScale(16),
     borderBottomWidth: 1,
-    gap: verticalScale(12),
   },
-  radioRow: {
+  typeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: scale(10),
-  },
-  radioOuter: {
-    width: scale(16),
-    height: scale(16),
-    borderRadius: scale(8),
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
+    borderRadius: moderateScale(10),
     borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: scale(8),
   },
-  radioInner: {
-    width: scale(8),
-    height: scale(8),
-    borderRadius: scale(4),
+  typeCardEmoji: {
+    fontSize: moderateScale(16),
   },
-  radioLabel: {
+  typeCardLabel: {
     fontSize: moderateScale(14),
-    fontWeight: '500',
+    fontWeight: '600',
   },
 
   // ── Body ──
@@ -783,23 +840,42 @@ const styles = StyleSheet.create({
 
   // ── Department Card ──
   deptCard: {
-    borderWidth: 1,
-    borderRadius: moderateScale(6),
+    borderWidth: 1.5,
+    borderRadius: moderateScale(10),
     overflow: 'hidden',
-    marginBottom: verticalScale(8),
+    marginBottom: verticalScale(10),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
   },
   deptHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(12),
-    gap: scale(10),
+    paddingVertical: verticalScale(14),
+    justifyContent: 'space-between',
   },
-  deptEmoji: { fontSize: moderateScale(16) },
+  deptTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: scale(10),
+    paddingRight: scale(10),
+  },
   deptName: {
     flex: 1,
-    fontSize: moderateScale(14),
-    fontWeight: '500',
+    fontSize: moderateScale(15),
+    fontWeight: '600',
+  },
+  deptCountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(6),
+  },
+  deptCountText: {
+    fontSize: moderateScale(13),
   },
   badge: {
     paddingHorizontal: scale(8),
@@ -842,64 +918,64 @@ const styles = StyleSheet.create({
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: moderateScale(6),
-    paddingHorizontal: scale(14),
-    paddingVertical: verticalScale(10),
+    borderWidth: 1.5,
+    borderRadius: moderateScale(10),
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(14),
     gap: scale(10),
   },
   textInput: {
     flex: 1,
-    fontSize: moderateScale(14),
+    fontSize: moderateScale(15),
     padding: 0,
   },
   emojiBtn: {
     padding: scale(2),
   },
   emojiText: {
-    fontSize: moderateScale(20),
+    fontSize: moderateScale(22),
   },
   emojiScrollRow: {
     flexDirection: 'row',
-    height: verticalScale(50),
+    height: verticalScale(54),
     marginTop: verticalScale(4),
   },
   emojiListContent: {
     alignItems: 'center',
-    gap: scale(10),
+    gap: scale(12),
     paddingRight: scale(10),
   },
   emojiSelectBtn: {
-    width: scale(38),
-    height: scale(38),
-    borderRadius: scale(19),
-    borderWidth: 1.5,
+    width: scale(42),
+    height: scale(42),
+    borderRadius: scale(21),
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emojiSelectText: {
-    fontSize: moderateScale(18),
+    fontSize: moderateScale(22),
   },
 
   // ── Search ──
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: moderateScale(6),
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(10),
+    borderWidth: 1.5,
+    borderRadius: moderateScale(10),
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     gap: scale(8),
   },
   searchInput: {
     flex: 1,
-    fontSize: moderateScale(14),
+    fontSize: moderateScale(15),
     padding: 0,
   },
   resultsBox: {
-    borderWidth: 1,
-    borderRadius: moderateScale(6),
-    maxHeight: verticalScale(160),
+    borderWidth: 1.5,
+    borderRadius: moderateScale(10),
+    maxHeight: verticalScale(400),
     overflow: 'hidden',
   },
   resultsCenter: {
@@ -955,12 +1031,17 @@ const styles = StyleSheet.create({
   // ── Footer ──
   footer: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: scale(24),
     paddingVertical: verticalScale(16),
     borderTopWidth: 1,
     gap: scale(12),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 10,
   },
   cancelBtn: {
     paddingVertical: verticalScale(9),

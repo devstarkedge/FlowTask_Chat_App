@@ -17,7 +17,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useThemeStore } from "../stores/themeStore";
-import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { directoriesAPI } from "../services/api";
 import { AppAvatar } from "../components/common";
@@ -32,6 +31,7 @@ import {
   CheckCircle,
 } from "lucide-react-native";
 import { scale, verticalScale, moderateScale } from "../utils/responsive";
+import { getSocket } from "../chat/services/SocketManager";
 
 const STATUS_TABS = [
   { value: "", label: "All" },
@@ -48,10 +48,9 @@ const PAGE_LIMIT = 30;
  * Uses Chat App directoriesAPI — no FlowTask dependency.
  */
 const ExternalConnectionsScreen = ({ navigation }) => {
-  const { colors } = useThemeStore();
-  const currentUser = useAuthStore((s) => s.user);
-  const { members } = useWorkspaceStore();
+  const { colors, effectiveTheme } = useThemeStore();
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
 
   const [guests, setGuests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,12 +62,20 @@ const ExternalConnectionsScreen = ({ navigation }) => {
   const [totalPages, setTotalPages] = useState(1);
   const debounceRef = useRef(null);
 
-  // Derive permission from workspace membership — backend is still the final authority
-  const myMembership = members.find(
-    (m) => (m.userId?._id || m.userId) === currentUser?._id
-  );
+  // activeWorkspace already carries the current user's role from the API
   const canManageGuests =
-    myMembership?.role === "owner" || myMembership?.role === "admin";
+    activeWorkspace?.role === "owner" || activeWorkspace?.role === "admin";
+
+  // Real-time: remove guest immediately when server emits workspace:member:removed
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+    const handler = ({ userId }) => {
+      setGuests((prev) => prev.filter((g) => g._id !== userId));
+    };
+    socket.on('workspace:member:removed', handler);
+    return () => socket.off('workspace:member:removed', handler);
+  }, []);
 
   // ─── Data Fetching ────────────────────────────────────────────────
 
@@ -358,7 +365,7 @@ const ExternalConnectionsScreen = ({ navigation }) => {
       edges={["top"]}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={effectiveTheme === "dark" ? "light-content" : "dark-content"} />
 
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>

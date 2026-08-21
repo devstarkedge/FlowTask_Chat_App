@@ -26,6 +26,9 @@ import { useTranslation } from "../utils/i18n";
 import StatusModal from "./StatusModal";
 import PauseNotificationsModal from "./PauseNotificationsModal";
 import PresenceModal from "./PresenceModal";
+import CustomizeHomeModal from "./CustomizeHomeModal";
+import { useUIStore } from "../stores/uiStore";
+import { useShallow } from 'zustand/react/shallow';
 import {
   X,
   User,
@@ -47,10 +50,12 @@ import {
   LogOut,
   CircleChevronRight,
   Smile,
+  Layers2,
   LogOut as LogOutIcon,
 } from "lucide-react-native";
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { isCustomStatusValid } from '../utils/statusUtils';
 
 // Helper to format expiration values into readable strings
 const formatExpiration = (exp) => {
@@ -90,6 +95,11 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
   const [pauseNotificationsVisible, setPauseNotificationsVisible] =
     useState(false);
   const [presenceModalVisible, setPresenceModalVisible] = useState(false);
+  const [customizeModalVisible, setCustomizeModalVisible] = useState(false);
+  
+  const { enabledHomeCards, toggleHomeCard } = useUIStore(
+    useShallow((s) => ({ enabledHomeCards: s.enabledHomeCards, toggleHomeCard: s.toggleHomeCard }))
+  );
 
   React.useEffect(() => {
     if (visible) {
@@ -295,7 +305,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
                   ]}
                   numberOfLines={1}
                 >
-                  {user?.customStatus?.text
+                  {isCustomStatusValid(user?.customStatus)
                   ? `${user.customStatus.emoji || '💬'} ${user.customStatus.text}${user.customStatus.expiration ? ` • ${formatExpiration(user.customStatus.expiration)}` : ''}`
                   : t("What's your status?")}
                 </Text>
@@ -362,6 +372,18 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
                 label={t("Preferences")}
                 onPress={() => navigateTo("Preferences")}
               />
+              <MenuItem
+                icon={Layers2 }
+                label={t("Customize shortcuts")}
+                onPress={() => {
+                  if (Platform.OS === "web") {
+                    document.activeElement?.blur();
+                    setTimeout(() => setCustomizeModalVisible(true), 0);
+                  } else {
+                    setCustomizeModalVisible(true);
+                  }
+                }}
+              />
             </View>
 
             <SectionDivider />
@@ -396,6 +418,12 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
       <PresenceModal
         visible={presenceModalVisible}
         onClose={() => setPresenceModalVisible(false)}
+      />
+      <CustomizeHomeModal 
+        visible={customizeModalVisible} 
+        onClose={() => setCustomizeModalVisible(false)} 
+        enabledCards={enabledHomeCards} 
+        onToggleCard={toggleHomeCard} 
       />
     </AccessibleModal>
   );

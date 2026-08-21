@@ -17,6 +17,7 @@ import { useThemeStore } from "../../stores/themeStore";
 import { AppAvatar, AppScreen } from "../../components/common";
 import ReplyQuotePreview from "../../components/ReplyQuotePreview";
 import { hasValidReplyTo } from "../../utils/replyUtils";
+import { useTranslation } from "../../utils/i18n";
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -181,7 +182,14 @@ const ActivityRow = React.memo(({ item, colors, navigation }) => {
       onSwipeableLeftOpen={() => handleSwipeAction(swipeActivityLeft)}
       onSwipeableRightOpen={() => handleSwipeAction(swipeActivityRight)}
     >
-      <TouchableOpacity onPress={handlePress} style={[arStyles.container, !item.isRead && !item.read && { backgroundColor: colors.backgroundSecondary || (colors.primary + '08') }]} activeOpacity={0.7}>
+      <TouchableOpacity 
+        onPress={handlePress} 
+        style={[
+          arStyles.container, 
+          { backgroundColor: (!item.isRead && !item.read) ? (colors.backgroundSecondary || (colors.primary + '08')) : colors.background }
+        ]} 
+        activeOpacity={0.7}
+      >
         <View style={arStyles.avatarContainer}>
           <AppAvatar user={sender} size={40} showStatus={false} />
           <View style={[arStyles.badge, { backgroundColor: colors.background, borderColor: colors.background }]}>
@@ -292,14 +300,13 @@ const arStyles = StyleSheet.create({
   swipeAction: {
     justifyContent: 'center',
     width: scale(75),
+    height: '100%',
   },
   swipeLeft: {
-    alignItems: 'flex-start',
-    paddingLeft: scale(20),
+    alignItems: 'center',
   },
   swipeRight: {
-    alignItems: 'flex-end',
-    paddingRight: scale(20),
+    alignItems: 'center',
   },
 });
 
@@ -312,6 +319,7 @@ const ActivityScreen = ({ navigation }) => {
     notifications, unreadCount, fetchNotifications, markAllAsRead,
     isLoading, hasMore, cursor,
   } = useNotificationStore();
+  const { t } = useTranslation();
 
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
@@ -356,7 +364,7 @@ const ActivityScreen = ({ navigation }) => {
     <AppScreen style={[styles.container, { backgroundColor: colors.background }]} edges={["top"]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Activity</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>{t("Activity")}</Text>
         {unreadCount > 0 && (
           <TouchableOpacity onPress={markAllAsRead} hitSlop={8}>
             <Text style={[styles.markRead, { color: colors.primary }]}>

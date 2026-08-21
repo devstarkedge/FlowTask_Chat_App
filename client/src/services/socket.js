@@ -82,6 +82,12 @@ const SOCKET_EVENTS = {
   CHANNEL_SYNC_FAILED: 'channel-sync:failed',
   USER_ACTIVATED: 'user:activated',
 
+  // Categories
+  CATEGORY_CREATED: 'category:created',
+  CATEGORY_UPDATED: 'category:updated',
+  CATEGORY_DELETED: 'category:deleted',
+  CATEGORY_REORDERED: 'category:reordered',
+
   // Threads
   THREAD_CREATED: 'thread:created',
   THREAD_UPDATED: 'thread:updated',
@@ -496,6 +502,38 @@ export function connectSocket() {
     }
   })
 
+  // ─── Categories ──────────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.CATEGORY_CREATED, (category) => {
+    if (category) {
+      useChannelStore.getState().addCategory(category)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.CATEGORY_UPDATED, (category) => {
+    if (category) {
+      useChannelStore.getState().updateCategory(category)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.CATEGORY_DELETED, (categoryId) => {
+    if (categoryId) {
+      useChannelStore.getState().removeCategory(categoryId)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.CATEGORY_REORDERED, (categoryOrders) => {
+    if (categoryOrders) {
+      // If we have a method for reordering in channelStore, call it
+      const store = useChannelStore.getState()
+      if (store.reorderCategories) {
+        store.reorderCategories(categoryOrders)
+      } else {
+        // Fallback: force a refetch if we don't have optimistic reordering
+        store.fetchCategories?.()
+      }
+    }
+  })
+
   // ─── FlowTask Sync Events ─────────────────────────────────────────
   // Handles real-time channel creation from FlowTask board syncs
   socket.on(SOCKET_EVENTS.CHANNEL_CREATED, ({ channel }) => {
@@ -587,7 +625,7 @@ export function connectSocket() {
           user: { 
             ...state.user, 
             onlineStatus: u.onlineStatus, 
-            customStatus: u.customStatus || state.user.customStatus 
+            customStatus: u.customStatus !== undefined ? u.customStatus : state.user.customStatus 
           }
         }))
       }
@@ -671,6 +709,14 @@ export function connectSocket() {
     const activeChannelId = useChannelStore.getState().activeChannelId
     const notifChannelId = notification.channelId?._id || notification.channelId || notification.conversationId
     const isCriticalNotification = ['reminder_overdue', 'system', 'bot_alert'].includes(notification.type) || notification.priority === 'high'
+
+    // Drop notification if channel/user is muted
+    const store = useNotificationStore.getState();
+    const channelPrefs = store.preferences?.channels?.[notifChannelId] || store.preferences?.channels?.[String(notifChannelId)];
+    const isMuted = notifChannelId && (channelPrefs?.muted || channelPrefs?.paused);
+    if (isMuted && !isCriticalNotification) {
+      return // Suppress notification completely
+    }
     
     if (
       !isCriticalNotification &&

@@ -21,7 +21,7 @@ import logger from '../utils/logger';
 import { useAuthStore } from '../stores/authStore';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from '../utils/i18n';
 
 const ThreadsScreen = ({ navigation }) => {
   const { t } = useTranslation();
@@ -214,7 +214,7 @@ const ThreadsScreen = ({ navigation }) => {
 
   return (
     <ScreenLayout>
-      <ScreenHeader title={t('threads.title')} onBack={() => navigation.goBack()} />
+      <ScreenHeader title={t('Threads')} onBack={() => navigation.goBack()} />
 
       {/* Content */}
       {/* <View style={[styles.subHeader, { backgroundColor: colors.background }]}>
@@ -225,7 +225,7 @@ const ThreadsScreen = ({ navigation }) => {
       {isLoading ? (
         <LoadingState />
       ) : threads.length === 0 ? (
-        <EmptyState icon={MessageSquare} title={t('threads.noThreadsFound')} />
+        <EmptyState icon={MessageSquare} title={t('No threads found')} />
       ) : (
         <FlashList
           data={threads}

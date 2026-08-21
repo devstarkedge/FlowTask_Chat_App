@@ -121,8 +121,11 @@ const savedMessageSchema = new Schema({
 });
 
 // ─── Indexes ─────────────────────────────────────────────────────────────────
-// Unique: one save per user per message/attachment combo
-savedMessageSchema.index({ userId: 1, messageId: 1, attachmentId: 1 }, { unique: true });
+// Unique: one save per user per message/attachment combo for saved messages only
+savedMessageSchema.index(
+  { userId: 1, messageId: 1, attachmentId: 1 },
+  { unique: true, partialFilterExpression: { type: 'saved_message' } }
+);
 // User's saved messages sorted by newest
 savedMessageSchema.index({ userId: 1, workspaceId: 1, createdAt: -1 });
 

@@ -5,6 +5,7 @@ import { ChevronLeft } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+import { useTranslation } from '../../utils/i18n';
 
 
 const LANGUAGE_OPTIONS = [
@@ -25,6 +26,7 @@ const LANGUAGE_OPTIONS = [
 const LanguageScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
   const prefs = usePreferencesStore();
+  const { t } = useTranslation();
 
   const renderOption = (option) => {
     const isSelected = prefs.language === option.value;
@@ -50,7 +52,7 @@ const LanguageScreen = ({ navigation }) => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <ChevronLeft size={28} color={colors.textPrimary} strokeWidth={2.5} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Language</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{t("Language")}</Text>
         <View style={styles.headerRight} />
       </View>
 

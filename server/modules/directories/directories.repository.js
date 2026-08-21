@@ -46,7 +46,7 @@ class DirectoriesRepository {
     // Title filter
     if (title) {
       const regex = new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      pipeline.push({ $match: { 'user.role': regex } });
+      pipeline.push({ $match: { role: regex } });
     }
 
     // Sort
@@ -70,7 +70,7 @@ class DirectoriesRepository {
         name: '$user.name',
         email: '$user.email',
         avatar: '$user.avatar',
-        role: '$user.role',
+        role: '$role',
         onlineStatus: '$user.onlineStatus',
         customStatus: '$user.customStatus',
         workspaceRole: '$role',

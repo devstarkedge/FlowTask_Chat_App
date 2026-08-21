@@ -1,5 +1,5 @@
 import ChatUser from './ChatUser.model.js';
-import { BOT, CHANNEL_MEMBER_ROLES } from '../../config/constants.js';
+import { BOT } from '../../config/constants.js';
 
 function normalizePushSubscription(subscription = {}) {
   return {
@@ -225,15 +225,6 @@ class UserRepository {
     // member role as a side effect.
     if (!membership) return { user, membership: null };
 
-    if (!membership && user.authProvider === 'flowtask' && user.flowTaskUserId) {
-      try {
-        await workspaceRepository.addMember(user._id, workspaceId, CHANNEL_MEMBER_ROLES.MEMBER);
-      } catch {
-        // race: another concurrent request added it first — fall through to re-check
-      }
-      membership = await workspaceRepository.getMembership(user._id, workspaceId);
-    }
-
     return { user, membership };
   }
 
@@ -245,16 +236,10 @@ class UserRepository {
    * @returns {Promise<ChatUser>}
    */
   async upsertFromFlowTask(flowTaskUser, options = {}) {
-    const { _id, name, email, role, department, team, avatar } = flowTaskUser;
+    const { _id, name, email, avatar } = flowTaskUser;
     const markRegistered = typeof options === 'object' && options.markRegistered === true;
     const createIfMissing = typeof options === 'object' && options.createIfMissing === true;
-    const syncWorkspaceScopedFields = typeof options === 'object'
-      && options.syncWorkspaceScopedFields === true;
     const normalizedEmail = email?.trim().toLowerCase();
-
-    const departmentIds = Array.isArray(department)
-      ? department.map((d) => (typeof d === 'object' ? d._id || d : d).toString())
-      : department ? [department.toString()] : [];
 
     const [byFlowTaskId, byEmail] = await Promise.all([
       ChatUser.findOne({ flowTaskUserId: _id.toString() }),
@@ -272,14 +257,6 @@ class UserRepository {
     if (!existing && !createIfMissing) return null;
     const filter = existing ? { _id: existing._id } : { flowTaskUserId: _id.toString() };
 
-    const workspaceScopedUpdates = syncWorkspaceScopedFields
-      ? {
-          role: role?.toLowerCase() || 'employee',
-          departmentIds,
-          teamId: team ? (typeof team === 'object' ? team._id || team : team).toString() : null,
-        }
-      : {};
-
     const updated = await ChatUser.findOneAndUpdate(
       filter,
       {
@@ -288,7 +265,6 @@ class UserRepository {
           flowTaskUserId: _id.toString(),
           name,
           email: normalizedEmail,
-          ...workspaceScopedUpdates,
           avatar: avatar || null,
           isActive: true,
           emailVerified: true, // FlowTask users are pre-verified
@@ -537,8 +513,13 @@ class UserRepository {
       throw new Error('findAllForWorkspace requires a valid workspaceId');
     }
     const { default: WorkspaceMembership } = await import('../workspaces/WorkspaceMembership.model.js');
-    const memberships = await WorkspaceMembership.find({ workspaceId, isActive: true }).lean();
+    const memberships = await WorkspaceMembership.find({ workspaceId, isActive: true })
+      .select('userId role flowTaskAccess.role')
+      .lean();
     const memberIds = memberships.map((m) => m.userId);
+    const membershipByUserId = new Map(
+      memberships.map((membership) => [membership.userId.toString(), membership]),
+    );
 
     const filter = { _id: { $in: memberIds }, isActive: true };
 
@@ -547,10 +528,20 @@ class UserRepository {
       filter.$or = [{ name: regex }, { email: regex }];
     }
 
-    return ChatUser.find(filter)
-      .select('name email avatar flowTaskUserId onlineStatus role')
+    const users = await ChatUser.find(filter)
+      .select('name email avatar flowTaskUserId onlineStatus')
       .sort({ name: 1 })
       .lean();
+
+    return users.map((user) => {
+      const membership = membershipByUserId.get(user._id.toString());
+      return {
+        ...user,
+        role: membership?.role || null,
+        workspaceRole: membership?.role || null,
+        flowTaskRole: membership?.flowTaskAccess?.role || null,
+      };
+    });
   }
 
   /**
@@ -592,20 +583,6 @@ class UserRepository {
     // FlowTask user lifecycle webhook/SSO path provisions the exact role.
     return users;
 
-    const { default: WorkspaceMembership } = await import('../workspaces/WorkspaceMembership.model.js');
-    const existing = await WorkspaceMembership.find({
-      userId: { $in: users.map((u) => u._id) },
-      workspaceId,
-      isActive: true,
-    }).select('userId').lean();
-    const alreadyMember = new Set(existing.map((m) => m.userId.toString()));
-
-    const { default: workspaceRepository } = await import('../workspaces/workspace.repository.js');
-    await Promise.all(
-      users
-        .filter((u) => !alreadyMember.has(u._id.toString()) && u.authProvider === 'flowtask' && u.flowTaskUserId)
-        .map((u) => workspaceRepository.addMember(u._id, workspaceId, CHANNEL_MEMBER_ROLES.MEMBER).catch(() => {})),
-    );
     return users;
   }
 

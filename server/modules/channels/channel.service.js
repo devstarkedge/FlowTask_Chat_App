@@ -1836,7 +1836,10 @@ class ChannelService {
                 normalizedEmail: participant.email?.trim().toLowerCase() || "",
                 name: participant.name || "FlowTask participant",
                 avatar: participant.avatar || null,
-                role: participant.role || "employee",
+                // Pending FlowTask participants have no ChatApp workspace
+                // membership yet. Preserve a supplied source role, but never
+                // manufacture an employee role for them.
+                role: participant.role || null,
                 sources: participant.sources || [],
                 isActive: true,
                 convertedToUserId: null,
@@ -2287,17 +2290,46 @@ class ChannelService {
     });
     if (!channel) throw new NotFoundError("Channel not found");
 
+    const effectiveWorkspaceId = channel.workspaceId?.toString() || workspaceId;
+
     const [members, pendingParticipants] = await Promise.all([
       channelRepository.listActiveMembers(channelId, {
-        workspaceId: channel.workspaceId?.toString() || workspaceId,
+        workspaceId: effectiveWorkspaceId,
       }),
-      PendingChannelParticipant.find({ channelId, isActive: true }).lean(),
+      PendingChannelParticipant.find({
+        channelId,
+        workspaceId: effectiveWorkspaceId,
+        isActive: true,
+      }).lean(),
     ]);
+
+    // ChatUser is a global identity and its `role` must never decide how a
+    // person is represented inside a workspace. Resolve the exact active
+    // workspace membership once for the channel's persisted users so the
+    // channel panel, profile, and server authorization all see the same role.
+    const memberUserIds = members
+      .map((member) => member.userId?._id || member.userId)
+      .filter(Boolean);
+    const workspaceMemberships = memberUserIds.length > 0
+      ? await WorkspaceMembership.find({
+          workspaceId: effectiveWorkspaceId,
+          userId: { $in: memberUserIds },
+          isActive: true,
+        }).select('userId role flowTaskAccess.role').lean()
+      : [];
+    const membershipByUserId = new Map(
+      workspaceMemberships.map((membership) => [
+        membership.userId.toString(),
+        membership,
+      ]),
+    );
 
     const activeMembers = members
       .map((member) => {
         const user = member.userId;
         if (!user) return null;
+
+        const membership = membershipByUserId.get(user._id.toString());
 
         return {
           _id: user._id,
@@ -2305,7 +2337,11 @@ class ChannelService {
           name: user.name,
           email: user.email,
           avatar: user.avatar,
-          role: user.role,
+          // Deliberately no ChatUser.role fallback: a global identity role is
+          // not valid workspace authorization or workspace member metadata.
+          role: membership?.role || null,
+          workspaceRole: membership?.role || null,
+          flowTaskRole: membership?.flowTaskAccess?.role || null,
           onlineStatus: user.onlineStatus || "offline",
           isActive: user.isActive !== false,
           registrationStatus: "active",

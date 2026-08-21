@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useAuthStore } from '../stores/authStore';
+import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useTranslation } from '../utils/i18n';
 import { OptionsSelectionModal } from '../components/common';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
@@ -131,6 +132,7 @@ const PreferencesScreen = ({ navigation }) => {
   const { colors, effectiveTheme, toggleTheme, customColor, accentColor, setCustomColor } = useThemeStore();
   const prefs = usePreferencesStore();
   const user = useAuthStore(state => state.user);
+  const activeWorkspace = useWorkspaceStore(state => state.activeWorkspace);
   
   const [activeSelection, setActiveSelection] = useState(null);
 
@@ -279,7 +281,7 @@ const PreferencesScreen = ({ navigation }) => {
             colors={colors}
             onPress={() => handleComingSoon('Billing')}
           />
-          {user?.role === 'admin' && (
+          {['owner', 'admin'].includes(activeWorkspace?.role) && (
             <PreferenceItem
               icon={PieChart}
               title={t("Analytics")}

@@ -2,8 +2,6 @@ import asyncHandler from '../../middleware/asyncHandler.js';
 import userService from './user.service.js';
 import flowtaskService from '../flowtask/flowtask.service.js';
 import userRepository from './user.repository.js';
-import workspaceRepository from '../workspaces/workspace.repository.js';
-import { WORKSPACE_ROLES } from '../../config/constants.js';
 import ChatUser from './ChatUser.model.js';
 import logger from '../../utils/logger.js';
 import { broadcastPresenceUpdate, broadcastUserPreferences } from '../../sockets/socketManager.js';
@@ -96,7 +94,9 @@ export const getDMContacts = asyncHandler(async (req, res) => {
       chatUserId: cu._id.toString(),
       onlineStatus: cu.onlineStatus || 'offline',
       isInChatApp: true,
-      role: cu.role || 'employee',
+      role: cu.workspaceRole || null,
+      workspaceRole: cu.workspaceRole || null,
+      flowTaskRole: cu.flowTaskRole || null,
     });
   }
 
@@ -106,12 +106,6 @@ export const getDMContacts = asyncHandler(async (req, res) => {
     try {
       if (!ftu._id || !ftu.email) continue;
       syncedUser = await userRepository.upsertFromFlowTask(ftu);
-      if (syncedUser) {
-        const isMember = await workspaceRepository.isMember(syncedUser._id, workspaceId);
-        if (!isMember) {
-          await workspaceRepository.addMember(syncedUser._id, workspaceId, WORKSPACE_ROLES.MEMBER);
-        }
-      }
     } catch (err) {
       logger.warn('Failed to sync FlowTask user into workspace during DM contacts', {
         email: ftu.email,
@@ -146,7 +140,9 @@ export const getDMContacts = asyncHandler(async (req, res) => {
         chatUserId: syncedUser?._id?.toString() || null,
         onlineStatus: syncedUser?.onlineStatus || 'offline',
         isInChatApp: !!syncedUser,
-        role: ftu.role || 'employee',
+        role: null,
+        workspaceRole: null,
+        flowTaskRole: ftu.role || null,
       });
     }
   }
@@ -188,7 +184,7 @@ export const getProfile = asyncHandler(async (req, res) => {
         userId: req.params.id,
         workspaceId,
         isActive: true,
-      }).select('role').lean();
+      }).select('role flowTaskAccess.role').lean();
 
       let workspaceRole = membership?.role || null;
       if (workspaceRole !== 'guest' && workspaceRole !== 'owner' && workspaceRole !== 'admin') {
@@ -206,6 +202,10 @@ export const getProfile = asyncHandler(async (req, res) => {
         if (guestInvite) workspaceRole = 'guest';
       }
       profile.workspaceRole = workspaceRole;
+      profile.flowTaskRole = membership?.flowTaskAccess?.role || null;
+      // The client supplies the active workspace header for this endpoint;
+      // expose the effective membership role rather than ChatUser.role.
+      profile.role = workspaceRole;
     } catch (err) {
       logger.warn('Failed to attach workspaceRole to profile', { error: err.message });
     }
@@ -474,7 +474,10 @@ export const updateUser = asyncHandler(async (req, res, next) => {
   }
 
   // Users can only update their own profile unless they are an admin
-  if (req.user._id.toString() !== id && req.user.role !== 'admin') {
+  if (
+    req.user._id.toString() !== id &&
+    !['owner', 'admin'].includes(req.membership?.role)
+  ) {
     return res.status(403).json({ success: false, error: 'Not authorized to update this profile' });
   }
 

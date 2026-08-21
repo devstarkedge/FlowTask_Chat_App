@@ -9,7 +9,7 @@ const pendingChannelParticipantSchema = new Schema({
   normalizedEmail: { type: String, default: '', lowercase: true, trim: true },
   name: { type: String, required: true, trim: true },
   avatar: { type: String, default: null },
-  role: { type: String, default: 'employee' },
+  role: { type: String, default: null },
   sources: [{ type: String }],
   isActive: { type: Boolean, default: true },
   convertedToUserId: { type: Schema.Types.ObjectId, ref: 'ChatUser', default: null },

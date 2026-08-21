@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import workspaceRepository from './workspace.repository.js';
 import WorkspaceMapping from '../flowtask/WorkspaceMapping.model.js';
-import { WORKSPACE_ROLES, WORKSPACE_LIMITS, DEFAULT_CHANNELS, CHANNEL_VISIBILITY, CHANNEL_MEMBER_ROLES } from '../../config/constants.js';
+import { WORKSPACE_ROLES, WORKSPACE_LIMITS, DEFAULT_CHANNELS, CHANNEL_VISIBILITY, CHANNEL_MEMBER_ROLES, mapFlowTaskPlanToChatPlan } from '../../config/constants.js';
 import env from '../../config/environment.js';
 import logger from '../../utils/logger.js';
 import { BadRequestError, NotFoundError, ForbiddenError, ConflictError } from '../../middleware/errorHandler.js';
@@ -18,8 +18,15 @@ class WorkspaceService {
    * Find or create the ChatApp workspace linked to ONE specific FlowTask
    * workspace, keyed by FlowTask's real workspace id via WorkspaceMapping.
    * Used during FlowTask SSO login to auto-provision a workspace on first
-   * "Open Chat" click from a given FlowTask workspace. Always assigns
-   * plan = 'enterprise'.
+   * "Open Chat" click from a given FlowTask workspace.
+   *
+   * `plan` is the FlowTask workspace's actual plan slug (free/pro/enterprise/
+   * legacy — see mapFlowTaskPlanToChatPlan), read from the SSO JWT's `plan`
+   * claim by the caller. Defaults to 'free' (fail CLOSED) if omitted —
+   * previously this always hardcoded plan:'enterprise' regardless of the
+   * real FlowTask plan, which silently gave every FlowTask-linked workspace
+   * unlimited ChatApp access. A Free-plan workspace is rejected outright
+   * below (see the entitlement gate) rather than ever being provisioned.
    *
    * Replaces the old singleton lookup (workspaceRepository.findFlowTaskWorkspace(),
    * which returned "the one" source:'flowtask' workspace regardless of which
@@ -32,17 +39,34 @@ class WorkspaceService {
    * @param {string} params.flowTaskWorkspaceId - FlowTask's real workspace ObjectId (string)
    * @param {string} [params.workspaceName] - Display name hint from FlowTask
    * @param {string} [params.workspaceSlug] - Slug hint from FlowTask
+   * @param {string} [params.plan] - ChatApp plan slug (already mapped from FlowTask's), free|pro|enterprise
    * @returns {Promise<object>} workspace document
    */
-  async findOrCreateFlowTaskWorkspace({ creatorId, flowTaskWorkspaceId, workspaceName, workspaceSlug }) {
+  async findOrCreateFlowTaskWorkspace({ creatorId, flowTaskWorkspaceId, workspaceName, workspaceSlug, plan }) {
     if (!flowTaskWorkspaceId) {
       throw new BadRequestError('flowTaskWorkspaceId is required.');
     }
+    const resolvedPlan = plan || 'free';
 
     const existingMapping = await WorkspaceMapping.findByFlowTaskWorkspaceId(flowTaskWorkspaceId);
     if (existingMapping) {
-      const workspace = await workspaceRepository.findById(existingMapping.chatWorkspaceId);
+      let workspace = await workspaceRepository.findById(existingMapping.chatWorkspaceId);
       if (workspace?.isActive) {
+        // Self-healing backstop: the WORKSPACE_PLAN_CHANGED webhook is the
+        // fast/real-time sync path, but if it was ever missed (ChatApp
+        // unreachable at the time, workspace never "connected" yet) this
+        // reconciles the plan fresh from the JWT claim on every real login.
+        if (plan && workspace.plan !== resolvedPlan) {
+          workspace = await workspaceRepository.update(workspace._id, { plan: resolvedPlan });
+          logger.info('FlowTask workspace plan self-healed on login', {
+            workspaceId: workspace._id, flowTaskWorkspaceId, plan: resolvedPlan,
+          });
+        }
+
+        if (workspace.plan === 'free') {
+          throw new ForbiddenError('This FlowTask workspace is on the Free plan — ChatApp requires Pro or Enterprise. Ask your workspace owner to upgrade in FlowTask.');
+        }
+
         const currentMembership = await workspaceRepository.getMembership(creatorId, workspace._id);
         await workspaceRepository.addMember(
           creatorId,
@@ -70,6 +94,14 @@ class WorkspaceService {
       await WorkspaceMapping.deleteOne({ _id: existingMapping._id });
     }
 
+    // Gate BEFORE provisioning anything — a Free-plan FlowTask workspace
+    // must never get a ChatApp counterpart created at all, not created-then-
+    // rejected. Independent of (and a backstop for) the SSO layer's own
+    // check in auth.service.js#loginFlowTask.
+    if (resolvedPlan === 'free') {
+      throw new ForbiddenError('This FlowTask workspace is on the Free plan — ChatApp requires Pro or Enterprise. Ask your workspace owner to upgrade in FlowTask.');
+    }
+
     const name = workspaceName ;
     let slug = (workspaceSlug || name).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'flowtask';
 
@@ -92,7 +124,7 @@ class WorkspaceService {
           name,
           slug,
           description: 'Auto-created workspace for FlowTask integration',
-          plan: 'enterprise',
+          plan: resolvedPlan,
           source: 'flowtask',
           owner: creatorId,
           memberCount: 1,
@@ -1443,6 +1475,15 @@ class WorkspaceService {
 
   async upgradePlan(workspaceId, newPlan, requesterId) {
     const workspace = await this.getWorkspace(workspaceId);
+
+    // FlowTask-linked workspaces have their plan managed from FlowTask —
+    // manually switching it here would drift out of sync with the source
+    // of truth the next time a webhook or login reconciles it. Genuinely
+    // standalone (source:'independent') workspaces are unaffected; this
+    // endpoint remains their only way to change plan.
+    if (workspace.source === 'flowtask') {
+      throw new ForbiddenError("This workspace's plan is managed by FlowTask. Upgrade it from your FlowTask workspace settings — changes sync here automatically.");
+    }
 
     if (workspace.owner.toString() !== requesterId.toString()) {
       throw new ForbiddenError('Only the workspace owner can change the plan.');

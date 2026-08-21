@@ -2,6 +2,7 @@ import asyncHandler from "../../middleware/asyncHandler.js";
 import { getMessageInfo as getMessageInfoService, markAsRead } from "./readReceipt.service.js";
 import ReadReceipt from "./readReceipt.model.js";
 import readReceiptRepository from "./readReceipt.repository.js";
+import channelService from '../channels/channel.service.js';
 import { emitToUser } from "../../sockets/socketManager.js";
 import { SOCKET_EVENTS } from "../../config/constants.js";
 
@@ -18,8 +19,17 @@ export const getUnread = asyncHandler(async (req, res) => {
     workspaceId,
     messageId: null,
   }).populate('channelId', '_id lastMessageAt lastMessagePreview').lean();
+  const accessibleChannels = await channelService.getChannelsForUser(
+    userId,
+    workspaceId,
+    req.membership,
+  );
+  const allowedChannelIds = new Set(accessibleChannels.map((channel) => channel._id.toString()));
+  const authorizedUnreads = unreads.filter((receipt) =>
+    receipt.channelId && allowedChannelIds.has(receipt.channelId._id.toString()),
+  );
 
-  res.json({ success: true, data: { unreads } });
+  res.json({ success: true, data: { unreads: authorizedUnreads } });
 });
 
 /**
@@ -31,6 +41,8 @@ export const markChannelRead = asyncHandler(async (req, res) => {
   const { lastReadMessageId } = req.body;
   const userId = req.user._id;
   const workspaceId = req.workspaceId;
+
+  await channelService.getChannelById(channelId, userId, workspaceId, req.membership);
 
   const receipt = await readReceiptRepository.markChannelAsRead(userId, channelId, lastReadMessageId, workspaceId);
   
@@ -69,6 +81,7 @@ export const markMessageRead = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const workspaceId = req.workspaceId;
 
+  await channelService.getChannelById(channelId, userId, workspaceId, req.membership);
   await markAsRead(messageId, channelId, userId, workspaceId);
   res.json({ success: true });
 });

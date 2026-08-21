@@ -1,4 +1,5 @@
 import axios from 'axios';
+import crypto from 'node:crypto';
 import env from '../../config/environment.js';
 import { CircuitBreaker } from '../../services/circuitBreaker.js';
 import logger from '../../utils/logger.js';
@@ -117,8 +118,14 @@ class FlowTaskService {
    * @param {boolean} [options.useCache=true]
    * @returns {Promise<object>} Response data
    */
-  async get(path, token, { useCache = true } = {}) {
-    const cacheKey = `GET:${path}:${token?.slice(-10)}`;
+  async get(path, token, { useCache = true, workspaceId = null } = {}) {
+    // A suffix of a JWT is not a safe cache identity. More importantly, the
+    // active FlowTask workspace changes the authorized response for the same
+    // person, so both the full token fingerprint and workspace belong here.
+    const tokenFingerprint = token
+      ? crypto.createHash('sha256').update(token).digest('hex')
+      : 'anonymous';
+    const cacheKey = `GET:${path}:${workspaceId || 'no-workspace'}:${tokenFingerprint}`;
 
     if (useCache) {
       const cached = getCached(cacheKey);
@@ -132,7 +139,10 @@ class FlowTaskService {
     });
 
     const data = await breaker.execute(async () => {
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+      };
       const response = await httpClient.get(path, { headers });
       return response.data;
     });
@@ -213,8 +223,8 @@ class FlowTaskService {
    * @param {string} token
    * @returns {Promise<object>}
    */
-  async getBoard(boardId, token) {
-    const result = await this.get(`/api/boards/${boardId}`, token);
+  async getBoard(boardId, token, options = {}) {
+    const result = await this.get(`/api/boards/${boardId}`, token, options);
     return result.data || result;
   }
 
@@ -224,8 +234,8 @@ class FlowTaskService {
    * @param {string} token
    * @returns {Promise<object[]>}
    */
-  async getBoardsByDepartment(departmentId, token) {
-    const result = await this.get(`/api/boards/department/${departmentId}`, token);
+  async getBoardsByDepartment(departmentId, token, options = {}) {
+    const result = await this.get(`/api/boards/department/${departmentId}`, token, options);
     return result.data || result;
   }
 
@@ -266,8 +276,8 @@ class FlowTaskService {
    * @param {string} token
    * @returns {Promise<object[]>}
    */
-  async getUserBoards(token) {
-    const result = await this.get('/api/boards', token);
+  async getUserBoards(token, options = {}) {
+    const result = await this.get('/api/boards', token, options);
     return result.data || result;
   }
 
@@ -277,8 +287,8 @@ class FlowTaskService {
    * @param {string} token
    * @returns {Promise<object[]>}
    */
-  async getBoardCards(boardId, token) {
-    const result = await this.get(`/api/cards/board/${boardId}`, token);
+  async getBoardCards(boardId, token, options = {}) {
+    const result = await this.get(`/api/cards/board/${boardId}`, token, options);
     return result.data || result;
   }
 
@@ -362,9 +372,9 @@ class FlowTaskService {
    * @param {string} token
    * @returns {Promise<Array>}
    */
-  async getSubtasksByBoard(boardId, token) {
+  async getSubtasksByBoard(boardId, token, options = {}) {
     try {
-      const res = await this.get(`/api/subtasks?board=${boardId}&select=assignees,task,title`, token);
+      const res = await this.get(`/api/subtasks?board=${boardId}&select=assignees,task,title`, token, options);
       return res.data || res || [];
     } catch (error) {
       logger.warn('FlowTask getSubtasksByBoard failed', { boardId, error: error.message });
@@ -378,9 +388,9 @@ class FlowTaskService {
    * @param {string} token
    * @returns {Promise<Array>}
    */
-  async getNanosByBoard(boardId, token) {
+  async getNanosByBoard(boardId, token, options = {}) {
     try {
-      const res = await this.get(`/api/subtask-nanos?board=${boardId}&select=assignees,subtask,task,title`, token);
+      const res = await this.get(`/api/subtask-nanos?board=${boardId}&select=assignees,subtask,task,title`, token, options);
       return res.data || res || [];
     } catch (error) {
       logger.warn('FlowTask getNanosByBoard failed', { boardId, error: error.message });
@@ -401,12 +411,12 @@ class FlowTaskService {
    *   - memberIds: Set of all unique FlowTask user ID strings
    *   - sources: Map of userId → array of source labels (board, task, subtask, nano)
    */
-  async getBoardDeepMembers(boardId, token) {
+  async getBoardDeepMembers(boardId, token, options = {}) {
     try {
       const result = await this.get(
         `/api/chat-integration/projects/${boardId}/participants`,
         token,
-        { useCache: false },
+        { ...options, useCache: false },
       );
       const snapshot = result.data || result;
       const participants = Array.isArray(snapshot.participants)
@@ -446,10 +456,10 @@ class FlowTaskService {
     };
 
     const [boardResult, cardsResult, subtasksResult, nanosResult] = await Promise.allSettled([
-      this.getBoard(boardId, token),
-      this.getBoardCards(boardId, token),
-      this.getSubtasksByBoard(boardId, token),
-      this.getNanosByBoard(boardId, token),
+      this.getBoard(boardId, token, options),
+      this.getBoardCards(boardId, token, options),
+      this.getSubtasksByBoard(boardId, token, options),
+      this.getNanosByBoard(boardId, token, options),
     ]);
 
     // Board members + owner

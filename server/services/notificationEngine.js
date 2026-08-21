@@ -464,9 +464,14 @@ class NotificationEngine {
           .filter((p) => p !== senderIdStr);
       }
 
-      // Channel/group: get all member IDs
+      // FlowTask project recipients include current workspace-scoped role
+      // access as well as reconciled direct participants.
+      const { getAuthorizedProjectUserIds, isFlowTaskProjectChannel } =
+        await import('../modules/flowtask/projectAccess.service.js');
       const { default: ChannelMember } = await import('../modules/channels/ChannelMember.model.js');
-      const memberIds = await ChannelMember.getMemberIds(channel._id);
+      const memberIds = isFlowTaskProjectChannel(channel)
+        ? await getAuthorizedProjectUserIds(channel, workspaceId)
+        : await ChannelMember.getMemberIds(channel._id);
       return memberIds.filter((id) => id !== senderIdStr);
     } catch (error) {
       logger.error('NotificationEngine: _getRecipients failed', {

@@ -100,6 +100,14 @@ const channelSchema = new Schema(
       default: 0,
       min: 0,
     },
+    // Authorization-relevant board metadata. This is not a second source of
+    // truth: FlowTask publishes it with each board snapshot so ChatApp can
+    // evaluate a user's already-signed workspace scope without a cross-API
+    // request on every sidebar/message authorization check.
+    flowTaskMetadata: {
+      teamId: { type: String, default: null },
+      sourceVisibility: { type: String, enum: ['public', 'private', null], default: null },
+    },
     membershipSyncLock: {
       token: { type: String, default: null },
       expiresAt: { type: Date, default: null },

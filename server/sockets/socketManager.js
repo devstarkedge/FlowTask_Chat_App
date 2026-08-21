@@ -218,6 +218,7 @@ export async function initializeSocket(httpServer, corsOptions) {
         if (!membership) {
           return next(new Error('Not a member of the requested workspace'));
         }
+        socket.workspaceMembership = membership;
       } catch (err) {
         logger.error('Workspace membership check failed during socket auth', { error: err.message });
         return next(new Error('Workspace validation failed'));
@@ -293,7 +294,10 @@ export async function initializeSocket(httpServer, corsOptions) {
     socket.join(workspaceRoom);
 
     // Department rooms
-    for (const deptId of user.departmentIds) {
+    const workspaceDepartmentIds = socket.workspaceMembership?.flowTaskAccess?.departmentIds
+      || user.departmentIds
+      || [];
+    for (const deptId of workspaceDepartmentIds) {
       const deptRoom = buildRoomName(wsId, 'dept', deptId);
       socket.join(deptRoom);
     }
@@ -311,7 +315,11 @@ export async function initializeSocket(httpServer, corsOptions) {
     let initialChannelIds = [];
     try {
       const { default: channelService } = await import('../modules/channels/channel.service.js');
-      const channels = await channelService.getChannelsForUser(userId, wsId);
+      const channels = await channelService.getChannelsForUser(
+        userId,
+        wsId,
+        socket.workspaceMembership,
+      );
       for (const channel of channels) {
         const channelId = channel._id.toString();
         socket.join(buildRoomName(wsId, 'channel', channelId));
@@ -388,12 +396,33 @@ export async function initializeSocket(httpServer, corsOptions) {
           return;
         }
 
-        // Permission engine: users with VIEW_ALL_CHANNELS capability can join any channel
+        const { canAccessFlowTaskProjectChannel, isFlowTaskProjectChannel } =
+          await import('../modules/flowtask/projectAccess.service.js');
+
+        // FlowTask project visibility comes from the workspace snapshot or a
+        // reconciled direct participant record, never from ChatUser.role.
+        if (isFlowTaskProjectChannel(channel)) {
+          const allowed = await canAccessFlowTaskProjectChannel(
+            channel,
+            userId,
+            wsId,
+          );
+          if (!allowed) {
+            socket.emit('error', { message: 'Not authorized for this FlowTask project' });
+            return;
+          }
+          socket.join(buildRoomName(wsId, 'channel', channelId));
+          return;
+        }
+
+        // Permission engine: workspace-level capability can join native channels.
         const { default: permissionEngine } = await import('../services/permissionEngine.js');
+        const scopedUser = {
+          ...(user.toObject ? user.toObject() : user),
+          role: socket.workspaceMembership?.role || 'member',
+        };
         if (
-          channel.type !== 'project' &&
-          channel.flowTaskRef?.entityType !== 'board' &&
-          permissionEngine.canViewAllChannels(user, { workspaceId: wsId })
+          permissionEngine.canViewAllChannels(scopedUser, { workspaceId: wsId })
         ) {
           const joinRoom = buildRoomName(wsId, 'channel', channelId);
           socket.join(joinRoom);
@@ -560,9 +589,13 @@ export async function initializeSocket(httpServer, corsOptions) {
 
       try {
         // Verify membership in target workspace
-        const { default: workspaceRepository } = await import('../modules/workspaces/workspace.repository.js');
-        const isMember = await workspaceRepository.isMember(userId, newWorkspaceId);
-        if (!isMember) {
+        const { default: WorkspaceMembership } = await import('../modules/workspaces/WorkspaceMembership.model.js');
+        const newMembership = await WorkspaceMembership.findOne({
+          userId,
+          workspaceId: newWorkspaceId,
+          isActive: true,
+        }).lean();
+        if (!newMembership) {
           socket.emit('error', { message: 'Not a member of target workspace' });
           return;
         }
@@ -585,7 +618,9 @@ export async function initializeSocket(httpServer, corsOptions) {
         }
 
         // Update workspace context
+        const previousWorkspaceId = wsId;
         socket.workspaceId = newWorkspaceId;
+        socket.workspaceMembership = newMembership;
         wsId = newWorkspaceId;
 
         // Re-join rooms for new workspace
@@ -596,12 +631,19 @@ export async function initializeSocket(httpServer, corsOptions) {
         const workspaceRoom = `ws:${newWorkspaceId}:workspace`;
         socket.join(workspaceRoom);
 
-        for (const deptId of user.departmentIds) {
+        const newDepartmentIds = newMembership.flowTaskAccess?.departmentIds
+          || user.departmentIds
+          || [];
+        for (const deptId of newDepartmentIds) {
           socket.join(buildRoomName(newWorkspaceId, 'dept', deptId));
         }
 
         const { default: channelService } = await import('../modules/channels/channel.service.js');
-        const newChannels = await channelService.getChannelsForUser(userId, newWorkspaceId);
+        const newChannels = await channelService.getChannelsForUser(
+          userId,
+          newWorkspaceId,
+          newMembership,
+        );
         initialChannelIds = newChannels.map((c) => c._id.toString());
 
         // LAZY JOIN: We no longer auto-join all channel rooms on workspace switch.
@@ -622,7 +664,7 @@ export async function initializeSocket(httpServer, corsOptions) {
         }
 
         socket.emit('workspace:switched', { workspaceId: newWorkspaceId });
-        logger.info('Socket workspace switched', { userId, from: wsId, to: newWorkspaceId });
+        logger.info('Socket workspace switched', { userId, from: previousWorkspaceId, to: newWorkspaceId });
       } catch (error) {
         logger.error('Socket workspace:switch failed', { userId, error: error.message });
         socket.emit('error', { message: 'Failed to switch workspace' });
@@ -1031,8 +1073,9 @@ export async function leaveChannelRoom(userId, channelId, workspaceId) {
 }
 
 /**
- * Remove every socket that is no longer an active member from a channel room.
- * Used when a formerly-public FlowTask channel becomes private.
+ * Remove every socket that no longer has access to a channel room.  FlowTask
+ * boards may be visible through a workspace-scoped access snapshot even when
+ * the user is not a direct ChannelMember.
  */
 export async function reconcileChannelRoomAccess(channelId, workspaceId) {
   if (!io) return;
@@ -1044,10 +1087,18 @@ export async function reconcileChannelRoomAccess(channelId, workspaceId) {
       'reconcileChannelRoomAccess.channelRoom',
     );
     if (!channelRoom) return;
-    const { default: ChannelMember } = await import(
-      '../modules/channels/ChannelMember.model.js'
+    const { default: Channel } = await import('../modules/channels/Channel.model.js');
+    const channel = await Channel.findOne({ _id: channelId, workspaceId }).lean();
+    if (!channel) return;
+    const { default: ChannelMember } = await import('../modules/channels/ChannelMember.model.js');
+    const { getAuthorizedProjectUserIds, isFlowTaskProjectChannel } = await import(
+      '../modules/flowtask/projectAccess.service.js'
     );
-    const allowedUserIds = new Set(await ChannelMember.getMemberIds(channelId));
+    const allowedUserIds = new Set(
+      isFlowTaskProjectChannel(channel)
+        ? await getAuthorizedProjectUserIds(channel, workspaceId)
+        : await ChannelMember.getMemberIds(channelId),
+    );
     const sockets = await io.in(channelRoom).fetchSockets();
     for (const socket of sockets) {
       const userId = socket.chatUser?._id?.toString();

@@ -4,9 +4,28 @@ import channelService from '../../channels/channel.service.js';
 import channelRepository from '../../channels/channel.repository.js';
 import messageService from '../../messages/message.service.js';
 import roleSyncService from '../../../services/roleSync.service.js';
+import WorkspaceMembership from '../../workspaces/WorkspaceMembership.model.js';
+import ChannelMember from '../../channels/ChannelMember.model.js';
+import { emitToUser } from '../../../sockets/socketManager.js';
 import logger from '../../../utils/logger.js';
-import { FLOWTASK_EVENTS, SYSTEM_CHANNELS } from '../../../config/constants.js';
+import { FLOWTASK_EVENTS, SOCKET_EVENTS, SYSTEM_CHANNELS } from '../../../config/constants.js';
 import { requireWorkspaceId } from '../../../utils/webhookEventGuard.js';
+
+function workspaceAccess(payload, user) {
+  if (payload?.access) return payload.access;
+  const departments = Array.isArray(user?.department)
+    ? user.department
+    : (user?.department ? [user.department] : []);
+  return {
+    role: user?.role || 'employee',
+    departmentIds: departments
+      .map((department) => department?._id || department?.id || department)
+      .filter(Boolean)
+      .map(String),
+    teamId: user?.team?._id || user?.team?.id || user?.team || null,
+    accessType: 'assigned_tasks',
+  };
+}
 
 /**
  * User Event Handler — handles FlowTask user lifecycle events.
@@ -38,6 +57,9 @@ export function registerUserEventHandlers() {
       });
       return;
     }
+
+    const access = workspaceAccess(payload, user);
+    await roleSyncService.syncUserRole(user._id, access.role, wsId, access);
 
     // Add to public system channels
     const generalChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.GENERAL.slug, wsId);
@@ -95,7 +117,10 @@ export function registerUserEventHandlers() {
 
     // Get existing ChatUser BEFORE updating to detect role changes
     const existingChatUser = await userRepository.findByFlowTaskId(user._id);
-    const oldRole = existingChatUser?.role;
+    const existingMembership = existingChatUser
+      ? await WorkspaceMembership.findOne({ userId: existingChatUser._id, workspaceId: wsId, isActive: true }).lean()
+      : null;
+    const oldRole = existingMembership?.flowTaskAccess?.role || 'employee';
 
     // Upsert with latest data
     const chatUser = await userRepository.upsertFromFlowTask(user, wsId);
@@ -112,6 +137,17 @@ export function registerUserEventHandlers() {
       oldRole,
       newRole: chatUser.role,
     });
+
+    // Persist the complete FlowTask scope on this workspace membership before
+    // emitting any UI event. This is what sidebar, REST, sockets, unread and
+    // notification authorization read; ChatUser itself is global identity.
+    const effectiveAccess = workspaceAccess(payload, user);
+    await roleSyncService.syncUserRole(
+      user._id,
+      effectiveAccess.role || user.role || 'employee',
+      wsId,
+      effectiveAccess,
+    );
 
     // Handle department change
     if (changes?.department) {
@@ -146,9 +182,9 @@ export function registerUserEventHandlers() {
     }
 
     // Handle role change — detect from changes object OR by comparing old vs new
-    const hasRoleChange = changes?.role || (oldRole && oldRole !== chatUser.role);
+    const hasRoleChange = !!changes?.role || oldRole !== effectiveAccess.role;
     const effectiveOldRole = changes?.role?.old || oldRole;
-    const effectiveNewRole = changes?.role?.new || chatUser.role;
+    const effectiveNewRole = changes?.role?.new || effectiveAccess.role;
 
     if (hasRoleChange && effectiveOldRole !== effectiveNewRole) {
       logger.info('[UserEventHandler] Processing role change', {
@@ -185,7 +221,7 @@ export function registerUserEventHandlers() {
         workspaceId: wsId,
       });
       
-      await roleSyncService.syncUserRole(user._id, effectiveNewRole, wsId);
+      // The workspace-scoped access snapshot was already synchronized above.
     }
 
     logger.info('user.updated handled', {
@@ -207,7 +243,22 @@ export function registerUserEventHandlers() {
     const chatUser = await userRepository.findByFlowTaskId(userId, wsId);
     if (!chatUser) return;
 
-    await userRepository.deactivate(chatUser._id);
+    // Deactivation belongs to the originating FlowTask workspace.  The same
+    // global ChatUser can remain active in a different tenant.
+    await WorkspaceMembership.updateOne(
+      { userId: chatUser._id, workspaceId: wsId, isActive: true },
+      { $set: { isActive: false } },
+    );
+    await ChannelMember.updateMany(
+      { userId: chatUser._id, workspaceId: wsId, isActive: true },
+      { $set: { isActive: false } },
+    );
+    emitToUser(
+      chatUser._id.toString(),
+      SOCKET_EVENTS.WORKSPACE_MEMBER_REMOVED,
+      { workspaceId: wsId, userId: chatUser._id.toString(), removedBy: null },
+      wsId,
+    );
 
     logger.info('user.deactivated handled', {
       chatUserId: chatUser._id,
@@ -236,6 +287,9 @@ export function registerUserEventHandlers() {
       });
       return;
     }
+
+    const access = workspaceAccess(payload, user);
+    await roleSyncService.syncUserRole(user._id, access.role, wsId, access);
 
     // Notify admins only
     const adminChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ADMIN.slug, wsId);
@@ -275,6 +329,10 @@ export function registerUserEventHandlers() {
       return;
     }
 
+    const access = workspaceAccess(payload, user);
+    await roleSyncService.syncUserRole(user._id, access.role, wsId, access);
+    const workspaceRole = access.role;
+
     // Add to #general
     const generalChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.GENERAL.slug, wsId);
     if (generalChannel) {
@@ -299,13 +357,13 @@ export function registerUserEventHandlers() {
     }
 
     // Add to role-specific channels
-    if (chatUser.role === 'admin') {
+    if (workspaceRole === 'admin') {
       const adminChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.ADMIN.slug, wsId);
       if (adminChannel) {
         await channelService.addMember(adminChannel._id, chatUser._id, undefined, wsId);
       }
     }
-    if (chatUser.role === 'manager') {
+    if (workspaceRole === 'manager') {
       const managersChannel = await channelRepository.findBySlug(SYSTEM_CHANNELS.MANAGERS.slug, wsId);
       if (managersChannel) {
         await channelService.addMember(managersChannel._id, chatUser._id, undefined, wsId);

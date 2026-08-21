@@ -243,6 +243,8 @@ class UserRepository {
     const { _id, name, email, role, department, team, avatar } = flowTaskUser;
     const markRegistered = typeof options === 'object' && options.markRegistered === true;
     const createIfMissing = typeof options === 'object' && options.createIfMissing === true;
+    const syncWorkspaceScopedFields = typeof options === 'object'
+      && options.syncWorkspaceScopedFields === true;
     const normalizedEmail = email?.trim().toLowerCase();
 
     const departmentIds = Array.isArray(department)
@@ -265,6 +267,14 @@ class UserRepository {
     if (!existing && !createIfMissing) return null;
     const filter = existing ? { _id: existing._id } : { flowTaskUserId: _id.toString() };
 
+    const workspaceScopedUpdates = syncWorkspaceScopedFields
+      ? {
+          role: role?.toLowerCase() || 'employee',
+          departmentIds,
+          teamId: team ? (typeof team === 'object' ? team._id || team : team).toString() : null,
+        }
+      : {};
+
     const updated = await ChatUser.findOneAndUpdate(
       filter,
       {
@@ -273,9 +283,7 @@ class UserRepository {
           flowTaskUserId: _id.toString(),
           name,
           email: normalizedEmail,
-          role: role?.toLowerCase() || 'employee',
-          departmentIds,
-          teamId: team ? (typeof team === 'object' ? team._id || team : team).toString() : null,
+          ...workspaceScopedUpdates,
           avatar: avatar || null,
           isActive: true,
           emailVerified: true, // FlowTask users are pre-verified

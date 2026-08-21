@@ -15,11 +15,10 @@ function isSystemManagedProjectChannel(channel) {
  * Get all channels for the authenticated user.
  */
 export const getChannels = asyncHandler(async (req, res) => {
-  const role = req.membership?.role || null;
   const channels = await channelService.getChannelsForUser(
     req.user._id,
     req.workspaceId,
-    role,
+    req.membership,
   );
 
   res.json({
@@ -37,6 +36,7 @@ export const getChannel = asyncHandler(async (req, res) => {
     req.params.id,
     req.user._id,
     req.workspaceId,
+    req.membership,
   );
 
   let decoratedChannel = channel;
@@ -60,6 +60,7 @@ export const getChannelBySlug = asyncHandler(async (req, res) => {
     req.params.slug,
     req.workspaceId,
     req.user._id,
+    req.membership,
   );
 
   res.json({
@@ -346,11 +347,15 @@ export const leaveChannel = asyncHandler(async (req, res) => {
  * Search channels by name.
  */
 export const searchChannels = asyncHandler(async (req, res) => {
-  const channels = await channelService.searchChannels(
-    req.query.q || "",
+  const query = (req.query.q || '').trim().toLowerCase();
+  const accessibleChannels = await channelService.getChannelsForUser(
     req.user._id,
     req.workspaceId,
+    req.membership,
   );
+  const channels = accessibleChannels
+    .filter((channel) => !query || channel.name?.toLowerCase().includes(query))
+    .slice(0, 20);
 
   res.json({
     success: true,

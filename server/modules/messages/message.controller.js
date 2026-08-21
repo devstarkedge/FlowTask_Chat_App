@@ -47,6 +47,7 @@ export const getMessagesAround = asyncHandler(async (req, res) => {
     req.params.messageId,
     req.query,
     req.workspaceId,
+    req.membership,
   );
 
   res.json({ success: true, data: result });

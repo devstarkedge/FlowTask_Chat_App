@@ -31,6 +31,11 @@ import logger from "../../utils/logger.js";
 import { isRetryableMongoError, mapWithConcurrency } from "../../utils/mongoRetry.js";
 import { withProjectChannelLock } from "../flowtask/projectChannelLock.service.js";
 import {
+  canAccessFlowTaskProjectChannel,
+  hasSnapshotProjectAccess,
+  isFlowTaskProjectChannel,
+} from "../flowtask/projectAccess.service.js";
+import {
   CHANNEL_TYPES,
   CHANNEL_VISIBILITY,
   SYSTEM_CHANNELS,
@@ -73,6 +78,16 @@ class ChannelService {
     const deptObj = typeof board.department === 'object' ? board.department : null;
     const deptName = deptObj?.name || 'general';
     const deptId = deptObj?._id || deptObj?.id || (typeof board.department === 'string' ? board.department : null);
+    const teamId = typeof board.team === 'object'
+      ? board.team?._id || board.team?.id || null
+      : board.team || null;
+    const sourceVisibility = board.sourceVisibility || null;
+    const flowTaskMetadata = {
+      teamId: teamId?.toString() || null,
+      sourceVisibility: ['public', 'private'].includes(sourceVisibility)
+        ? sourceVisibility
+        : null,
+    };
 
     const existing = await channelRepository.findByFlowTaskRef(
       "board",
@@ -80,6 +95,13 @@ class ChannelService {
       workspaceId,
     );
     if (existing) {
+      const metadataNeedsUpdate =
+        existing.flowTaskMetadata?.teamId !== flowTaskMetadata.teamId
+        || existing.flowTaskMetadata?.sourceVisibility !== flowTaskMetadata.sourceVisibility;
+      if (metadataNeedsUpdate) {
+        await channelRepository.update(existing._id, { flowTaskMetadata }, workspaceId);
+        existing.flowTaskMetadata = flowTaskMetadata;
+      }
       if (existing.visibility !== CHANNEL_VISIBILITY.PRIVATE) {
         const migrated = await channelRepository.update(
           existing._id,
@@ -140,6 +162,7 @@ class ChannelService {
       slug,
       type: CHANNEL_TYPES.PROJECT,
       flowTaskRef: { entityType: "board", entityId: boardId },
+      flowTaskMetadata,
       description: board.description
         ? truncate(stripHtml(board.description), 200)
         : "",
@@ -856,9 +879,20 @@ class ChannelService {
     const flowTaskService = (await import("../flowtask/flowtask.service.js"))
       .default;
 
+    const { default: WorkspaceMapping } = await import('../flowtask/WorkspaceMapping.model.js');
+    const mapping = await WorkspaceMapping.findOne({
+      chatWorkspaceId: workspaceId,
+      status: 'active',
+    }).lean();
+    const flowTaskWorkspaceId = options.flowTaskWorkspaceId || mapping?.flowTaskWorkspaceId;
+    if (!flowTaskWorkspaceId) {
+      throw new ForbiddenError('No active FlowTask workspace mapping is available for project synchronization');
+    }
+    const flowTaskRequest = { workspaceId: flowTaskWorkspaceId, useCache: false };
+
     let boards;
     try {
-      boards = await flowTaskService.getUserBoards(token);
+      boards = await flowTaskService.getUserBoards(token, flowTaskRequest);
     } catch (error) {
       logger.warn("Failed to fetch boards for channel sync", {
         userId: chatUser._id,
@@ -937,7 +971,11 @@ class ChannelService {
 
         let deepFetchError = null;
         try {
-          const deepResult = await flowTaskService.getBoardDeepMembers(boardId, token);
+          const deepResult = await flowTaskService.getBoardDeepMembers(
+            boardId,
+            token,
+            flowTaskRequest,
+          );
           memberIds = [...deepResult.memberIds];
           participants = deepResult.participants || [];
           membershipVersion = deepResult.membershipVersion || 0;
@@ -1090,37 +1128,74 @@ class ChannelService {
    * Get all channels for a user with unread counts.
    * @param {string} userId - User ID
    * @param {string} workspaceId - Workspace ID
-   * @param {string} [role] - User's workspace role (optional, fetched if not provided)
+   * @param {object|string} [membership] - Active workspace membership (or legacy role)
    */
-  async getChannelsForUser(userId, workspaceId, role = null) {
-    // If role not provided, fetch it
-    if (!role) {
-      role = await workspaceRepository.getUserRole(userId, workspaceId);
+  async getChannelsForUser(userId, workspaceId, membership = null) {
+    // FlowTask access is workspace-scoped.  Never use ChatUser.role here: a
+    // user can hold different FlowTask roles in different linked workspaces.
+    if (!membership || typeof membership === 'string') {
+      const legacyRole = typeof membership === 'string' ? membership : null;
+      membership = await WorkspaceMembership.findOne({
+        userId,
+        workspaceId,
+        isActive: true,
+      }).lean();
+      if (!membership && legacyRole) membership = { role: legacyRole };
     }
+
+    const role = membership?.role || 'member';
+    const workspace = await workspaceRepository.findById(workspaceId).lean();
+    const isFlowTaskWorkspace = workspace?.source === 'flowtask';
 
     // For guests, only return channels they are explicitly members of
     const isGuest = role === 'guest';
     const isAdmin = role === 'admin' || role === 'owner';
 
     let channels;
-    if (isAdmin) {
+    const memberChannels = await channelRepository.findByMember(userId, {
+      workspaceId,
+    });
+
+    if (isFlowTaskWorkspace) {
+      // Workspace owners/admins can manage ChatApp-native channels, but their
+      // Chat role must not bypass the FlowTask board scope snapshot.
+      const nativeWorkspaceChannels = isAdmin
+        ? await Channel.find({
+          workspaceId,
+          isArchived: false,
+          type: { $ne: 'dm' },
+          $nor: [
+            { type: 'project' },
+            { 'flowTaskRef.entityType': 'board' },
+          ],
+        }).lean()
+        : [];
+      const projectChannels = await Channel.find({
+        workspaceId,
+        isArchived: false,
+        $or: [
+          { type: 'project' },
+          { 'flowTaskRef.entityType': 'board' },
+        ],
+      }).lean();
+      const authorizedProjects = projectChannels.filter((channel) =>
+        hasSnapshotProjectAccess(channel, membership),
+      );
+      channels = [...memberChannels, ...nativeWorkspaceChannels, ...authorizedProjects];
+    } else if (isAdmin) {
       const workspaceChannels = await Channel.find({
         workspaceId,
         isArchived: false,
         type: { $ne: 'dm' }
       }).lean();
-
-      const memberChannels = await channelRepository.findByMember(userId, {
-        workspaceId,
-      });
       const dmOnly = memberChannels.filter(c => c.type === 'dm');
 
       channels = [...workspaceChannels, ...dmOnly];
     } else {
-      channels = await channelRepository.findByMember(userId, {
-        workspaceId,
-      });
+      channels = memberChannels;
     }
+
+    channels = [...new Map(channels.map((channel) => [channel._id.toString(), channel])).values()];
 
     // Guests only see channels they are explicit members of
     if (isGuest) {
@@ -1169,7 +1244,9 @@ class ChannelService {
       .map((pc) => (pc.toObject ? pc.toObject() : pc));
 
 
-    const all = isAdmin ? channels : [...channels, ...missingPublic];
+    const all = (isAdmin && !isFlowTaskWorkspace)
+      ? channels
+      : [...channels, ...missingPublic];
 
     const hiddenSlugs = Object.values(SYSTEM_CHANNELS)
       .filter((sc) => sc.uiHidden)
@@ -1300,7 +1377,7 @@ class ChannelService {
    * Get a single channel by ID with access check.
    * Uses permission engine for default-deny access control.
    */
-  async getChannelById(channelId, userId, workspaceId) {
+  async getChannelById(channelId, userId, workspaceId, membership = null) {
     const channel = await channelRepository.findById(channelId, {
       workspaceId,
     });
@@ -1310,16 +1387,35 @@ class ChannelService {
 
     // Permission-based access check (default-deny)
     if (userId) {
-      const user = await userRepository.findById(userId);
-      if (user) {
+      if (isFlowTaskProjectChannel(channel)) {
+        const allowed = await canAccessFlowTaskProjectChannel(
+          channel,
+          userId,
+          workspaceId,
+          membership,
+        );
+        if (!allowed) throw new ForbiddenError("Access denied to this channel");
+      } else {
+        const user = await userRepository.findById(userId);
+        const activeMembership = membership || await WorkspaceMembership.findOne({
+          userId,
+          workspaceId,
+          isActive: true,
+        }).lean();
+        if (user) {
         const permissionEngine = (await import("../../services/permissionEngine.js")).default;
-        const canAccessChannel = permissionEngine.canAccessChannel(user, channel);
+        const scopedUser = {
+          ...(user.toObject ? user.toObject() : user),
+          role: activeMembership?.role || 'member',
+        };
+        const canAccessChannel = permissionEngine.canAccessChannel(scopedUser, channel);
         const isPersistedMember = canAccessChannel
           ? true
           : await ChannelMember.isMember(channelId, userId);
 
         if (!canAccessChannel && !isPersistedMember) {
           throw new ForbiddenError("Access denied to this channel");
+        }
         }
       }
     }
@@ -1330,12 +1426,12 @@ class ChannelService {
   /**
    * Get a single channel by slug.
    */
-  async getChannelBySlug(slug, workspaceId, userId) {
+  async getChannelBySlug(slug, workspaceId, userId, membership = null) {
     const channel = await channelRepository.findBySlug(slug, workspaceId);
     if (!channel) {
       throw new NotFoundError("Channel not found");
     }
-    return this.getChannelById(channel._id, userId, workspaceId);
+    return this.getChannelById(channel._id, userId, workspaceId, membership);
   }
 
   // ──────────────────── Membership Management ──────────────────────────────
@@ -1801,6 +1897,22 @@ class ChannelService {
     for (const userId of existingUserIds) {
       if (desiredUserIds.has(userId)) continue;
 
+      // A manager/admin may still see this board through the current
+      // FlowTask workspace snapshot after a direct assignment is removed.
+      const stillAuthorized = await canAccessFlowTaskProjectChannel(
+        updated || channel,
+        userId,
+        effectiveWorkspaceId,
+      );
+      if (stillAuthorized) continue;
+
+      const { default: ReadReceipt } = await import('../readReceipts/readReceipt.model.js');
+      const { default: Notification } = await import('../notifications/Notification.model.js');
+      await Promise.all([
+        ReadReceipt.deleteMany({ userId, channelId, workspaceId: effectiveWorkspaceId }),
+        Notification.deleteMany({ recipientId: userId, channelId, workspaceId: effectiveWorkspaceId }),
+      ]);
+
       emitToUser(
         userId,
         SOCKET_EVENTS.CHANNEL_REMOVED,
@@ -1809,6 +1921,8 @@ class ChannelService {
       );
       await leaveChannelRoom(userId, channelId.toString(), effectiveWorkspaceId);
     }
+
+    await reconcileChannelRoomAccess(channelId.toString(), effectiveWorkspaceId);
 
     emitToChannel(
       channelId.toString(),
@@ -2008,7 +2122,9 @@ class ChannelService {
       workspaceId,
     });
     if (!channel) throw new NotFoundError("Channel not found");
-    if (channel.isArchived) throw new ForbiddenError("Channel is archived");
+    if (channel.isArchived && updates.isArchived !== false) {
+      throw new ForbiddenError("Channel is archived");
+    }
 
     // System-managed channel protection
     if (channel.systemManaged && userId !== null) {
@@ -2068,6 +2184,9 @@ class ChannelService {
         allowed.archivedAt = null;
         allowed.archivedBy = null;
       }
+    }
+    if (updates.flowTaskMetadata !== undefined && userId === null) {
+      allowed.flowTaskMetadata = updates.flowTaskMetadata;
     }
 
     // Detect visibility change for workspace-wide broadcast

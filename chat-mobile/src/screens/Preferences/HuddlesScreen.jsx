@@ -5,11 +5,12 @@ import { ChevronLeft, Music } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-
+import { useTranslation } from '../../utils/i18n';
 
 const HuddlesScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
   const prefs = usePreferencesStore();
+  const { t } = useTranslation();
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -18,7 +19,7 @@ const HuddlesScreen = ({ navigation }) => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <ChevronLeft size={28} color={colors.textPrimary} strokeWidth={2.5} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Huddles</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{t("Huddles")}</Text>
         <View style={styles.headerRight} />
       </View>
 

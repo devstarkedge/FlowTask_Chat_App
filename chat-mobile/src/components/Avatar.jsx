@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useThemeStore } from "../stores/themeStore";
 import { Moon } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { isCustomStatusValid } from '../utils/statusUtils';
 
 
 const AVATAR_COLORS = [
@@ -46,7 +47,9 @@ const Avatar = React.memo(
     const isOnline = data.onlineStatus === "online";
     const isAway = data.onlineStatus === "away";
     const isDnd =
-      data.onlineStatus === "dnd" || data.chatPreferences?.dnd?.enabled;
+      data.onlineStatus === "dnd" || 
+      (data.chatPreferences?.dnd?.enabled && (!data.chatPreferences?.dnd?.pausedUntil || new Date(data.chatPreferences.dnd.pausedUntil).getTime() > Date.now())) ||
+      (data.chatPreferences?.pausedUntil && new Date(data.chatPreferences.pausedUntil).getTime() > Date.now());
 
     // Backend uses 'avatar' primarily; also handle avatarUrl, profileImage, profilePicture, image
     const avatarUrl = useMemo(
@@ -127,7 +130,7 @@ const Avatar = React.memo(
           />
         )}
 
-        {showCustomStatus && data.customStatus?.emoji && (
+        {showCustomStatus && isCustomStatusValid(data.customStatus) && (
           <View
             style={[
               styles.customStatus,
@@ -141,7 +144,7 @@ const Avatar = React.memo(
             ]}
           >
             <Text style={{ fontSize: Math.max(10, size * 0.35) }}>
-              {data.customStatus.emoji}
+              {data.customStatus.emoji || '💬'}
             </Text>
           </View>
         )}

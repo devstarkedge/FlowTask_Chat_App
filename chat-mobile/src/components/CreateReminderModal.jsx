@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, Platform, ScrollView } from 'react-native';
-import KeyboardAwareContainer from './common/KeyboardAwareContainer';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, Platform, ScrollView, KeyboardAvoidingView } from 'react-native';
 import { X, Check } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { formatMessageTime } from '../utils/dateUtils';
@@ -10,13 +9,27 @@ import IconButton from './common/IconButton';
 const RECURRENCE_OPTIONS = ['None', 'Daily', 'Weekly', 'Monthly', 'Yearly'];
 
 const CreateReminderModal = ({ visible, onClose, onSubmit, colors }) => {
-  const [date, setDate] = useState(new Date());
+  const [date, setDate] = useState(() => {
+    const d = new Date();
+    d.setHours(d.getHours() + 1);
+    return d;
+  });
   const [description, setDescription] = useState('');
   const [recurrence, setRecurrence] = useState('None');
   
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showRecurrencePicker, setShowRecurrencePicker] = useState(false);
+
+  React.useEffect(() => {
+    if (visible) {
+      const d = new Date();
+      d.setHours(d.getHours() + 1);
+      setDate(d);
+      setDescription('');
+      setRecurrence('None');
+    }
+  }, [visible]);
 
   const handleDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
@@ -32,8 +45,12 @@ const CreateReminderModal = ({ visible, onClose, onSubmit, colors }) => {
   const formattedTime = formatMessageTime(date);
 
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <KeyboardAwareContainer disablePadding={false} style={styles.overlay}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        style={styles.overlay}
+      >
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
         <View style={[styles.container, { backgroundColor: colors.background }]}>
           {/* Header */}
           <View style={styles.header}>
@@ -169,7 +186,7 @@ const CreateReminderModal = ({ visible, onClose, onSubmit, colors }) => {
             </TouchableOpacity>
           </Modal>
         )}
-      </KeyboardAwareContainer>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };

@@ -496,11 +496,18 @@ export const connectSocket = async () => {
     // (mirrors web). Critical notifications still surface.
     try {
       const { conversationPresence } = require('./conversationPresence');
+      const { useNotificationPrefStore } = require('../stores/notificationPrefStore');
       const notifChannelId =
         notification.channelId?._id || notification.channelId || notification.conversationId;
       const isCritical =
         ['reminder_overdue', 'system', 'bot_alert'].includes(notification.type) ||
         notification.priority === 'high';
+
+      // Drop notification if channel/user is muted
+      const isMuted = notifChannelId && useNotificationPrefStore.getState().mutedChannels?.[notifChannelId];
+      if (isMuted && !isCritical) {
+        return; // Suppress notification completely
+      }
 
       if (
         !isCritical &&
@@ -510,7 +517,7 @@ export const connectSocket = async () => {
         return;
       }
     } catch (err) {
-      logger.debug('[Socket] presence check for notification failed:', err?.message);
+      logger.debug('[Socket] presence/mute check for notification failed:', err?.message);
     }
 
     const { useNotificationStore } = require('../stores/notificationStore');
@@ -593,21 +600,18 @@ export const connectSocket = async () => {
     import('../stores/workspaceStore').then(({ useWorkspaceStore }) => {
       useWorkspaceStore.getState().updateMemberProfile(userId, { onlineStatus: 'online' });
     });
-    useChannelStore.getState().updateMemberPresence(userId, 'online');
   });
 
   socket.on('presence:offline', ({ userId }) => {
     import('../stores/workspaceStore').then(({ useWorkspaceStore }) => {
       useWorkspaceStore.getState().updateMemberProfile(userId, { onlineStatus: 'offline' });
     });
-    useChannelStore.getState().updateMemberPresence(userId, 'offline');
   });
 
   socket.on('presence:away', ({ userId }) => {
     import('../stores/workspaceStore').then(({ useWorkspaceStore }) => {
       useWorkspaceStore.getState().updateMemberProfile(userId, { onlineStatus: 'away' });
     });
-    useChannelStore.getState().updateMemberPresence(userId, 'away');
   });
 
   socket.on('presence:sync', ({ users }) => {
@@ -626,7 +630,7 @@ export const connectSocket = async () => {
         const currentUser = useAuthStore.getState().user;
         if (currentUser && (currentUser._id === u._id || currentUser.flowTaskUserId === u.flowTaskUserId)) {
           useAuthStore.setState(state => ({
-            user: { ...state.user, onlineStatus: u.onlineStatus, customStatus: u.customStatus || state.user.customStatus }
+            user: { ...state.user, onlineStatus: u.onlineStatus, customStatus: u.customStatus !== undefined ? u.customStatus : state.user.customStatus }
           }));
         }
       }
@@ -647,6 +651,29 @@ export const connectSocket = async () => {
       useAuthStore.setState({ user: updatedUser });
       // We don't have direct access to storage here, but state is updated.
       // Next app reload will fetch it from server or it will be persisted if we add a helper.
+    }
+  });
+
+  socket.on('notification:preferences:updated', ({ preferences }) => {
+    try {
+      const { useNotificationPrefStore } = require('../stores/notificationPrefStore');
+      if (preferences) {
+        useNotificationPrefStore.getState().fetchPreferences();
+      }
+    } catch (e) {
+      logger.error('Failed to update notification prefs', e);
+    }
+  });
+
+  socket.on('user:activated', ({ channelId }) => {
+    try {
+      const { queryClient } = require('../queries/queryClient');
+      const queryKeys = require('../queries/queryKeys').default || require('../queries/queryKeys');
+      if (queryClient && queryKeys && channelId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.channelMembers ? queryKeys.channelMembers(channelId) : ['channelMembers', channelId] });
+      }
+    } catch (err) {
+      logger.error('[Socket] user:activated handler error:', err.message);
     }
   });
 

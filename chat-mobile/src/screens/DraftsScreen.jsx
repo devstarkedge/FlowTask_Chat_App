@@ -30,7 +30,7 @@ import { Alert } from 'react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import api from '../services/api';
 import Toast from 'react-native-toast-message';
-
+import { useTranslation } from '../utils/i18n';
 
 const DraftItem = React.memo(({ item, onPress, onSchedule, onDelete, onSend, colors }) => {
   const isThread = item.threadId && item.threadId !== 'root';
@@ -108,6 +108,7 @@ const DraftsScreen = ({ navigation }) => {
   const { data: channels = [] } = useChannels(activeWorkspace?._id);
   const [refreshing, setRefreshing] = useState(false);
   const [scheduleDraft, setScheduleDraft] = useState(null);
+  const { t } = useTranslation();
 
   const fetchDraftsRef = useRef(fetchDrafts);
   fetchDraftsRef.current = fetchDrafts;
@@ -196,7 +197,7 @@ const DraftsScreen = ({ navigation }) => {
 
   return (
     <ScreenLayout>
-      <ScreenHeader title="Drafts" onBack={() => navigation.goBack()} />
+      <ScreenHeader title={t("Drafts")} onBack={() => navigation.goBack()} />
 
       {/* Content */}
       {workspaceDrafts.length === 0 ? (

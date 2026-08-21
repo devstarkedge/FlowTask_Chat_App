@@ -24,6 +24,7 @@ import ScheduledMessageDetailsModal from '../components/ScheduledMessageDetailsM
 import { AppAvatar } from '../components/common';
 import { useConversationDetails } from '../hooks/useConversationDetails';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { useTranslation } from '../utils/i18n';
 
 
 const ScheduledItem = React.memo(({ item, onPress, colors }) => {
@@ -87,6 +88,7 @@ const ScheduledScreen = ({ navigation }) => {
   const fetchScheduledMessages = useScheduledStore(state => state.fetchScheduledMessages);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
+  const { t } = useTranslation();
 
   // Stable ref so timers/callbacks never capture a stale function
   const fetchRef = useRef(fetchScheduledMessages);
@@ -174,7 +176,7 @@ const ScheduledScreen = ({ navigation }) => {
 
   return (
     <ScreenLayout>
-      <ScreenHeader title="Scheduled" onBack={() => navigation.goBack()} />
+      <ScreenHeader title={t("Scheduled")} onBack={() => navigation.goBack()} />
 
       {/* Content */}
       {isLoading ? (

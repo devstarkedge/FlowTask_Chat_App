@@ -19,10 +19,10 @@ import { useAuthStore } from "../stores/authStore";
 import { useThemeStore } from "../stores/themeStore";
 import { useChannelStore } from "../stores/channelStore";
 import { disconnectSocket } from "../services/socket";
-import CreateChannelModal from "./CreateChannelModal";
 import ManageCategoryChannelsModal from "./ManageCategoryChannelsModal";
 import CategoryActionSheet from "./CategoryActionSheet";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { useTranslation } from "../utils/i18n";
 import { useChannels } from '../hooks/queries/useChannels';
 import useResponsive from '../hooks/useResponsive';
 
@@ -313,8 +313,8 @@ const DrawerNavigation = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { isDrawerOpen, closeDrawer } = useUIStore();
   const { activeWorkspace } = useWorkspaceStore();
-  const { user, logout } = useAuthStore();
   const { colors } = useThemeStore();
+  const { t } = useTranslation();
   const { data: channels = [] } = useChannels(activeWorkspace?._id);
   const categories = useChannelStore((s) => s.categories) || [];
   const unreads = useChannelStore((s) => s.unreads) || {};
@@ -426,7 +426,6 @@ const DrawerNavigation = ({ navigation }) => {
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Workspace name */}
           <TouchableOpacity
             style={styles.wsHeader}
             onPress={() => {
@@ -436,7 +435,7 @@ const DrawerNavigation = ({ navigation }) => {
             activeOpacity={0.7}
           >
             <Text style={[styles.wsName, { color: colors.textOnPrimary }]} numberOfLines={1}>
-              {activeWorkspace?.name || "Workspace"}
+              {activeWorkspace?.name || t("Workspace")}
             </Text>
             <ChevronDown size={14} color={colors.textOnPrimary} style={{ opacity: 0.5 }} />
           </TouchableOpacity>
@@ -445,15 +444,15 @@ const DrawerNavigation = ({ navigation }) => {
           <View style={styles.userRow}>
             <View style={[styles.statusDot, { backgroundColor: colors.online }]} />
             <Text style={[styles.userName, { color: colors.textOnPrimary }]} numberOfLines={1}>
-              {user?.name || "You"}
+              {user?.name || t("You")}
             </Text>
           </View>
 
           {/* Nav items */}
           <View style={[styles.sep, { backgroundColor: colors.primaryOverlayLight }]} />
-          <NavItem label="Home" onPress={() => navigateAndClose("Main")} colors={colors} />
+          <NavItem label={t("Home")} onPress={() => navigateAndClose("Main")} colors={colors} />
           <NavItem
-            label="Direct messages"
+            label={t("Direct Messages")}
             onPress={() => {
               closeDrawer();
               navigation.navigate("Main", { screen: "DMsTab" });
@@ -465,7 +464,7 @@ const DrawerNavigation = ({ navigation }) => {
           {starredChannels.length > 0 && (
             <>
               <View style={[styles.sep, { backgroundColor: colors.primaryOverlayLight }]} />
-              <SectionHeader title="Starred" isExpanded={true} onToggle={() => {}} colors={colors} />
+              <SectionHeader title={t("Starred")} isExpanded={true} onToggle={() => {}} colors={colors} />
               {starredChannels.map((ch) => (
                 ch.type === "dm" ? (
                   <DMRow key={ch._id} channel={ch} unreadCount={unreads[ch._id] || 0} onPress={handleDMPress} colors={colors} />
@@ -508,7 +507,7 @@ const DrawerNavigation = ({ navigation }) => {
           {/* Channels */}
           <View style={[styles.sep, { backgroundColor: colors.primaryOverlayLight }]} />
           <SectionHeader
-            title="Channels"
+            title={t("Channels")}
             isExpanded={channelsExpanded}
             onToggle={() => setChannelsExpanded((p) => !p)}
             onAdd={() => setCreateChannelVisible(true)}
@@ -522,7 +521,7 @@ const DrawerNavigation = ({ navigation }) => {
           {/* Direct messages */}
           <View style={[styles.sep, { backgroundColor: colors.primaryOverlayLight }]} />
           <SectionHeader
-            title="Direct messages"
+            title={t("Direct Messages")}
             isExpanded={dmsExpanded}
             onToggle={() => setDmsExpanded((p) => !p)}
             onAdd={() => {
@@ -538,15 +537,15 @@ const DrawerNavigation = ({ navigation }) => {
 
           {/* Bottom nav */}
           <View style={[styles.sep, { backgroundColor: colors.primaryOverlayLight }]} />
-          <NavItem label="Profile" onPress={() => navigateAndClose("Profile")} colors={colors} />
-          <NavItem label="Preferences" onPress={() => navigateAndClose("Preferences")} colors={colors} />
-          <NavItem label="People" onPress={() => navigateAndClose("People")} colors={colors} />
-          <NavItem label="Invite people" onPress={() => navigateAndClose("InviteManagement")} colors={colors} />
-          <NavItem label="Starred messages" onPress={() => navigateAndClose("StarredMessages")} colors={colors} />
-          <NavItem label="Saved items" onPress={() => navigateAndClose("Later")} colors={colors} />
+          <NavItem label={t("View profile")} onPress={() => navigateAndClose("Profile")} colors={colors} />
+          <NavItem label={t("Preferences")} onPress={() => navigateAndClose("Preferences")} colors={colors} />
+          <NavItem label={t("People")} onPress={() => navigateAndClose("People")} colors={colors} />
+          <NavItem label={t("Invite members")} onPress={() => navigateAndClose("InviteManagement")} colors={colors} />
+          <NavItem label={t("Starred messages")} onPress={() => navigateAndClose("StarredMessages")} colors={colors} />
+          <NavItem label={t("Saved items")} onPress={() => navigateAndClose("Later")} colors={colors} />
 
           <View style={[styles.sep, { backgroundColor: colors.primaryOverlayLight }]} />
-          <NavItem label="Sign out" onPress={handleLogout} colors={colors} />
+          <NavItem label={t("Sign out")} onPress={handleLogout} colors={colors} />
           <View style={{ height: verticalScale(20) }} />
         </ScrollView>
       </Animated.View>

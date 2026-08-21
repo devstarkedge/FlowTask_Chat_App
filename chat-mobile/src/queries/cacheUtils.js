@@ -115,7 +115,12 @@ export const reconcileMessageInCache = (channelId, tempId, serverMessage) => {
       .map(m => {
         if (m._id === tempId) {
           reconciled = true;
-          return { ...serverMessage, pending: false, tempId };
+          return { 
+            ...serverMessage, 
+            pending: false, 
+            tempId,
+            optimisticAttachments: m.optimisticAttachments || serverMessage.optimisticAttachments 
+          };
         }
         return m;
       })

@@ -48,7 +48,7 @@ const PAGE_LIMIT = 30;
  * Uses Chat App directoriesAPI — no FlowTask dependency.
  */
 const ExternalConnectionsScreen = ({ navigation }) => {
-  const { colors } = useThemeStore();
+  const { colors, effectiveTheme } = useThemeStore();
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
 
@@ -365,7 +365,7 @@ const ExternalConnectionsScreen = ({ navigation }) => {
       edges={["top"]}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={effectiveTheme === "dark" ? "light-content" : "dark-content"} />
 
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>

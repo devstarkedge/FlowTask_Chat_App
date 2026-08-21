@@ -5,7 +5,7 @@ import { ChevronLeft } from 'lucide-react-native';
 import { useThemeStore } from '../../stores/themeStore';
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-
+import { useTranslation } from '../../utils/i18n';
 
 const SKIN_TONE_OPTIONS = [
   { label: 'Default', value: 'Default', emojis: '✋👍👏✌️' },
@@ -19,6 +19,7 @@ const SKIN_TONE_OPTIONS = [
 const EmojiSkinToneScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
   const prefs = usePreferencesStore();
+  const { t } = useTranslation();
 
   const renderOption = (option) => {
     const isSelected = prefs.emojiSkinTone === option.value;
@@ -44,7 +45,7 @@ const EmojiSkinToneScreen = ({ navigation }) => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <ChevronLeft size={28} color={colors.textPrimary} strokeWidth={2.5} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Default Emoji Skin Tone</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{t("Emoji Skin Tone")}</Text>
         <View style={styles.headerRight} />
       </View>
 

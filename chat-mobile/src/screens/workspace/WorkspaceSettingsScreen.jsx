@@ -207,8 +207,8 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   };
 
   const copyInviteCode = async () => {
-    if (activeWorkspace?.inviteCode) {
-      await Clipboard.setStringAsync(activeWorkspace.inviteCode);
+    if (currentWorkspace?.inviteCode) {
+      await Clipboard.setStringAsync(currentWorkspace.inviteCode);
       Toast.show({ type: 'success', text1: 'Invite code copied' });
     }
   };

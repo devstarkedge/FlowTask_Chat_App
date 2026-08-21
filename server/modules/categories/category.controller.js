@@ -6,6 +6,11 @@ import { syncDepartments } from "./syncDepartmentsService.js";
 import asyncHandler from "../../middleware/asyncHandler.js";
 import { AppError, NotFoundError, ForbiddenError, BadRequestError, ConflictError } from "../../middleware/errorHandler.js";
 
+export function isCustomCategoryEligibleChannel(channel) {
+  if (!channel || channel.isArchived) return false;
+  return !['dm', 'self', 'system'].includes(channel.type);
+}
+
 async function validateAccessibleCategoryChannels(req, channelIds) {
   const requestedIds = [...new Set(channelIds.map((channelId) => String(channelId)).filter(Boolean))];
   if (requestedIds.length === 0) return [];
@@ -17,20 +22,12 @@ async function validateAccessibleCategoryChannels(req, channelIds) {
   );
   const accessibleIds = new Set(
     accessibleChannels
-      .filter((channel) => {
-        if (channel.type === 'dm' || channel.type === 'self' || channel.type === 'system' || channel.isArchived) {
-          return false;
-        }
-        if (channel.systemManaged || channel.flowTaskRef?.entityType || channel.flowTaskRef?.entityId) {
-          return false;
-        }
-        return !['project', 'department', 'team'].includes(channel.type);
-      })
+      .filter(isCustomCategoryEligibleChannel)
       .map((channel) => String(channel._id)),
   );
 
   if (requestedIds.some((channelId) => !accessibleIds.has(channelId))) {
-    throw new ForbiddenError('Only Chat App channels can be added to a custom category');
+    throw new ForbiddenError('Only channels you can access in this workspace can be added to a custom category');
   }
 
   return requestedIds;

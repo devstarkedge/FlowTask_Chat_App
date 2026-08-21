@@ -212,7 +212,10 @@ export default function NavigationSidebar({
 
   const [selfDmLoading, setSelfDmLoading] = useState(false);
 
-  const isManagerOrAdmin = user?.role === 'admin' || user?.role === 'owner' || user?.role === 'manager';
+  const activeFlowTaskRole = activeWorkspace?.flowTaskRole;
+  const isManagerOrAdmin = ['admin', 'owner', 'manager'].includes(
+    activeFlowTaskRole || activeWorkspace?.role || user?.role,
+  );
 
   const toggleSection = (section) => {
     setExpandedSections((s) => ({ ...s, [section]: !s[section] }));

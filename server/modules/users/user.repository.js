@@ -220,6 +220,11 @@ class UserRepository {
     const { default: workspaceRepository } = await import('../workspaces/workspace.repository.js');
     let membership = await workspaceRepository.getMembership(user._id, workspaceId);
 
+    // FlowTask workspace access can only originate from its signed SSO or
+    // webhook access snapshot. Channel/DM lookup must not create a default
+    // member role as a side effect.
+    if (!membership) return { user, membership: null };
+
     if (!membership && user.authProvider === 'flowtask' && user.flowTaskUserId) {
       try {
         await workspaceRepository.addMember(user._id, workspaceId, CHANNEL_MEMBER_ROLES.MEMBER);
@@ -582,6 +587,10 @@ class UserRepository {
   async resolveWorkspaceMembers(flowTaskUserIds, workspaceId) {
     const users = await ChatUser.find({ flowTaskUserId: { $in: flowTaskUserIds } }).exec();
     if (!workspaceId || users.length === 0) return users;
+
+    // Do not convert project participation into workspace membership. The
+    // FlowTask user lifecycle webhook/SSO path provisions the exact role.
+    return users;
 
     const { default: WorkspaceMembership } = await import('../workspaces/WorkspaceMembership.model.js');
     const existing = await WorkspaceMembership.find({

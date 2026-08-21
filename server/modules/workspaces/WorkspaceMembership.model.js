@@ -6,7 +6,8 @@ const { Schema, model } = mongoose;
 // the user+workspace relation, never on ChatUser: the same person can be an
 // admin in one FlowTask workspace and an employee in another.
 const flowTaskAccessSchema = new Schema({
-  role: { type: String, default: 'employee', lowercase: true },
+  // Missing FlowTask access is invalid; never manufacture an employee role.
+  role: { type: String, default: null, lowercase: true },
   roleId: { type: String, default: null },
   departmentIds: [{ type: String }],
   teamId: { type: String, default: null },
@@ -20,6 +21,10 @@ const flowTaskAccessSchema = new Schema({
   canViewDepartmentProjects: { type: Boolean, default: false },
   canViewSelectedProjects: { type: Boolean, default: false },
   canViewPublicProjects: { type: Boolean, default: false },
+  // Signed, workspace-scoped FlowTask custom-role permissions. ChatApp keeps
+  // this with the membership so another workspace's custom role cannot leak
+  // into permission decisions.
+  rolePermissions: { type: Schema.Types.Mixed, default: null },
   syncedAt: { type: Date, default: null },
 }, { _id: false });
 

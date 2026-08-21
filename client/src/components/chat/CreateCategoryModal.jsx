@@ -5,7 +5,7 @@ import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import api, { categoryAPI } from "../../services/api";
 import EmojiPickerPortal from "./EmojiPickerPortal";
-import { isChatAppChannel } from "../../utils/channelOrigin";
+import { isPersonalCategoryChannel } from "../../utils/channelOrigin";
 
 let departmentSyncInFlight = null;
 
@@ -184,7 +184,7 @@ export default function CreateCategoryModal({ onClose }) {
 
   const nonDmChannels = useMemo(() => {
     return channels
-      .filter((c) => isChatAppChannel(c) && !c.isArchived)
+      .filter(isPersonalCategoryChannel)
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [channels]);
 

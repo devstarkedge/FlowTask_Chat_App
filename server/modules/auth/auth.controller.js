@@ -12,36 +12,29 @@ import FlowTaskAuthAttempt from './FlowTaskAuthAttempt.model.js';
 import projectChannelSyncService from '../flowtask/projectChannelSync.service.js';
 import logger from '../../utils/logger.js';
 import { ForbiddenError } from '../../middleware/errorHandler.js';
+import { normalizeFlowTaskAccess } from '../flowtask/flowTaskWorkspaceRoleMap.js';
 
 /**
  * Ensure the user has a WorkspaceMembership record for the given workspace.
  * Called after login/register so subsequent resolveWorkspace checks pass.
  */
 async function ensureWorkspaceMembership(userId, workspaceId, flowTaskAccess = null) {
-  if (!workspaceId) return;
-  const existing = await WorkspaceMembership.findOne({
-    userId,
-    workspaceId,
-    isActive: true,
-  }).lean();
-  if (!existing) {
-    await WorkspaceMembership.addMember(userId, workspaceId);
-  }
-  if (flowTaskAccess) {
-    await WorkspaceMembership.updateOne(
-      { userId, workspaceId, isActive: true },
-      {
-        $set: {
-          flowTaskAccess: {
-            ...flowTaskAccess,
-            syncedAt: flowTaskAccess.syncedAt
-              ? new Date(flowTaskAccess.syncedAt)
-              : new Date(),
-          },
-        },
-      },
-    );
-  }
+  if (!workspaceId) throw new ForbiddenError('FlowTask workspace context is required.');
+  if (!flowTaskAccess) throw new ForbiddenError('FlowTask workspace access is required.');
+
+  const normalized = normalizeFlowTaskAccess(flowTaskAccess);
+  const { _workspaceRole, _isCustomRole, ...persistedAccess } = normalized;
+
+  // A FlowTask workspace membership must always be written together with its
+  // signed FlowTask role. `addMember` is idempotent and safely handles both
+  // the first SSO login and an existing/re-activated membership.
+  await WorkspaceMembership.addMember(userId, workspaceId, _workspaceRole);
+  await WorkspaceMembership.updateOne(
+    { userId, workspaceId, isActive: true },
+    { $set: { role: _workspaceRole, flowTaskAccess: persistedAccess } },
+  );
+
+  return { workspaceRole: _workspaceRole, flowTaskRole: persistedAccess.role, isCustomRole: _isCustomRole };
 }
 
 function summarizeChannel(channel) {
@@ -235,6 +228,12 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
     let flowtaskWorkspace = null;
     if (env.FLOWTASK_ENABLED) {
       if (flowTaskWorkspaceId) {
+        let membershipRole;
+        try {
+          ({ _workspaceRole: membershipRole } = normalizeFlowTaskAccess(flowTaskAccess));
+        } catch (error) {
+          throw new ForbiddenError(`Invalid FlowTask workspace access: ${error.message}`);
+        }
         try {
           flowtaskWorkspace = await workspaceService.findOrCreateFlowTaskWorkspace({
             creatorId: chatUser._id,
@@ -242,6 +241,7 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
             workspaceName: flowTaskWorkspaceName,
             workspaceSlug: flowTaskWorkspaceSlug,
             plan: flowTaskPlan,
+            membershipRole,
           });
         } catch (error) {
           if (error instanceof ForbiddenError) {
@@ -434,8 +434,13 @@ export const syncUser = asyncHandler(async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(wsId)) {
       return res.status(400).json({ success: false, error: { message: 'Invalid workspace ID format' } });
     }
-    // Ensure workspace membership exists
-    await ensureWorkspaceMembership(chatUser._id, wsId);
+    // Legacy tokens have no signed workspace-scoped role/access snapshot.
+    // They may refresh an existing membership but can never create one from a
+    // caller-controlled workspace header.
+    const existingMembership = await WorkspaceMembership.isMember(chatUser._id, wsId);
+    if (!existingMembership) {
+      throw new ForbiddenError('Use the FlowTask Open Chat redirect to establish workspace access.');
+    }
 
     // Auto-join public system channels
     const systemChannels = await channelRepository.findSystemChannels(wsId);

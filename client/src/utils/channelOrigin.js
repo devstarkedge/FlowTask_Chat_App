@@ -13,3 +13,12 @@ export function isChatAppChannel(channel) {
   if (type === 'dm' || type === 'self' || type === 'system') return false;
   return !isFlowTaskSyncedChannel(channel);
 }
+
+// Custom categories are personal organization only. They must not change
+// FlowTask channel authority, so every active channel already returned by the
+// workspace-scoped channel endpoint can be grouped except private-message and
+// system channel types.
+export function isPersonalCategoryChannel(channel) {
+  if (!channel || channel.isArchived) return false;
+  return !['dm', 'self', 'system'].includes(channel.type);
+}

@@ -9,10 +9,9 @@ class DirectoriesService {
    * People tab — workspace users with isCurrentUser flag.
    */
   async getUsers(userId, workspaceId, params, flowTaskToken = null) {
-    // If a FlowTask token is available, attempt to fetch FlowTask users and
-    // ensure they're upserted into ChatApp and added to this workspace. This
-    // mirrors the behaviour of /users/dm-contacts so FlowTask users appear
-    // in the Directories People tab.
+    // If a FlowTask token is available, refresh known ChatApp identities.
+    // Membership remains strictly scoped to the signed FlowTask workspace
+    // access path, so this directory query cannot grant a default role.
     try {
       // Resolve a usable token: prefer provided token, otherwise check persisted
       // token on the ChatUser record (ignore expired persisted tokens).

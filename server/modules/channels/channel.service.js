@@ -534,12 +534,8 @@ class ChannelService {
       targetUser = await userRepository.findById(targetUserId);
     }
 
-    // Strategy 2: Try as a flowTaskUserId (if not found above) — resolves
-    // the identity AND ensures workspace membership for FlowTask-synced
-    // users in one call (see user.repository.js#resolveWorkspaceMember).
-    // The generic membership-verify-and-auto-add block below still runs
-    // for whichever strategy found the user — harmless/idempotent when it
-    // re-checks a membership this call already provisioned.
+    // Strategy 2: Try as a FlowTask user id. This resolves an existing
+    // ChatApp identity but never grants workspace access as a DM side effect.
     if (!targetUser) {
       const resolved = await userRepository.resolveWorkspaceMember(targetUserId, workspaceId);
       targetUser = resolved?.user || null;
@@ -579,50 +575,15 @@ class ChannelService {
     }
 
     // ── Verify workspace membership (ChatUser is global — workspace link is via WorkspaceMembership) ──
-    let membership = await workspaceRepository.getMembership(
+    const membership = await workspaceRepository.getMembership(
       targetUser._id,
       workspaceId,
     );
 
     if (!membership) {
-      // Auto-add FlowTask users to workspace if they've been synced but not yet added as members
-      if (targetUser.authProvider === "flowtask" && targetUser.flowTaskUserId) {
-        try {
-          await workspaceRepository.addMember(
-            targetUser._id,
-            workspaceId,
-            CHANNEL_MEMBER_ROLES.MEMBER,
-          );
-          logger.info("Auto-added FlowTask user to workspace for DM", {
-            userId: targetUser._id,
-            workspaceId,
-          });
-          membership = await workspaceRepository.getMembership(
-            targetUser._id,
-            workspaceId,
-          );
-        } catch (addError) {
-          // Re-check membership in case of race condition (concurrent add)
-          membership = await workspaceRepository.getMembership(
-            targetUser._id,
-            workspaceId,
-          );
-          if (!membership) {
-            logger.error("Failed to auto-add FlowTask user to workspace", {
-              userId: targetUser._id,
-              workspaceId,
-              error: addError.message,
-            });
-            throw new ForbiddenError(
-              `Unable to add user '${targetUser.name}' to workspace '${workspaceName || workspaceId}'.`,
-            );
-          }
-        }
-      } else {
-        throw new ForbiddenError(
-          `User '${targetUser.name}' is not a member of workspace '${workspaceName || workspaceId}'.`,
-        );
-      }
+      throw new ForbiddenError(
+        `User '${targetUser.name}' is not a member of workspace '${workspaceName || workspaceId}'.`,
+      );
     }
 
     return { chatUserId: targetUser._id.toString(), user: targetUser };
@@ -1402,11 +1363,15 @@ class ChannelService {
           workspaceId,
           isActive: true,
         }).lean();
+        if (!activeMembership) {
+          throw new ForbiddenError("Workspace membership is required");
+        }
         if (user) {
         const permissionEngine = (await import("../../services/permissionEngine.js")).default;
         const scopedUser = {
           ...(user.toObject ? user.toObject() : user),
-          role: activeMembership?.role || 'member',
+          workspaceRole: activeMembership.role,
+          flowTaskAccess: activeMembership.flowTaskAccess || null,
         };
         const canAccessChannel = permissionEngine.canAccessChannel(scopedUser, channel);
         const isPersistedMember = canAccessChannel
@@ -1999,18 +1964,24 @@ class ChannelService {
       chatUser.flowTaskUserId = linkedUser.flowTaskUserId;
     }
 
+    const workspaceIds = [...new Set(pending.map((item) => item.workspaceId.toString()))];
+    const activeMemberships = await WorkspaceMembership.find({
+      userId: chatUser._id,
+      workspaceId: { $in: workspaceIds },
+      isActive: true,
+    }).select('workspaceId').lean();
+    const activeWorkspaceIds = new Set(
+      activeMemberships.map((membership) => membership.workspaceId.toString()),
+    );
+    const eligiblePending = pending.filter((item) =>
+      activeWorkspaceIds.has(item.workspaceId.toString()),
+    );
+
     const channels = new Map();
-    for (const item of pending) {
+    for (const item of eligiblePending) {
       channels.set(item.channelId.toString(), item.workspaceId.toString());
     }
     for (const [channelId, pendingWorkspaceId] of channels) {
-      if (!await workspaceRepository.isMember(chatUser._id, pendingWorkspaceId)) {
-        await workspaceRepository.addMember(
-          chatUser._id,
-          pendingWorkspaceId,
-          'member',
-        );
-      }
       await this.addMember(
         channelId,
         chatUser._id,
@@ -2019,9 +1990,9 @@ class ChannelService {
       );
     }
 
-    if (pending.length > 0) {
+    if (eligiblePending.length > 0) {
       await PendingChannelParticipant.updateMany(
-        { _id: { $in: pending.map((item) => item._id) } },
+        { _id: { $in: eligiblePending.map((item) => item._id) } },
         {
           $set: {
             isActive: false,
@@ -2044,9 +2015,10 @@ class ChannelService {
     logger.info("Pending FlowTask participants activated", {
       workspaceId: workspaceId || 'all-matching-workspaces',
       chatUserId: chatUser._id,
-      converted: pending.length,
+      converted: eligiblePending.length,
+      deferred: pending.length - eligiblePending.length,
     });
-    return { converted: pending.length };
+    return { converted: eligiblePending.length };
   }
 
   /**

@@ -319,8 +319,23 @@ async function getAccessibleChannelIds(userId, workspaceId) {
 
 async function searchUsers(query, regex, workspaceId) {
   const limit = SECTION_LIMITS.users;
-  const memberships = await WorkspaceMembership.find({ workspaceId, isActive: true }).select('userId').lean();
+  const memberships = await WorkspaceMembership.find({ workspaceId, isActive: true })
+    .select('userId role flowTaskAccess.role flowTaskAccess.departmentIds')
+    .lean();
   const memberIds = memberships.map((membership) => membership.userId);
+  const membershipByUserId = new Map(
+    memberships.map((membership) => [membership.userId.toString(), membership]),
+  );
+  const roleOrDepartmentMatchedIds = memberships
+    .filter((membership) => {
+      const values = [
+        membership.role,
+        membership.flowTaskAccess?.role,
+        ...(membership.flowTaskAccess?.departmentIds || []),
+      ];
+      return values.some((value) => typeof value === 'string' && regex.test(value));
+    })
+    .map((membership) => membership.userId);
 
   const users = await ChatUser.find({
     _id: { $in: memberIds },
@@ -328,31 +343,37 @@ async function searchUsers(query, regex, workspaceId) {
     $or: [
       { name: regex },
       { email: regex },
-      { role: regex },
-      { departmentIds: regex },
       { onlineStatus: regex },
       { 'customStatus.text': regex },
       { flowTaskUserId: regex },
+      ...(roleOrDepartmentMatchedIds.length > 0
+        ? [{ _id: { $in: roleOrDepartmentMatchedIds } }]
+        : []),
     ],
   })
-    .select('name email avatar role onlineStatus flowTaskUserId customStatus departmentIds lastSeenAt updatedAt')
+    .select('name email avatar onlineStatus flowTaskUserId customStatus lastSeenAt updatedAt')
     .limit(limit + 1)
     .lean();
 
-  const ranked = sortByRank(users.map((user) => ({
-    id: user._id.toString(),
-    name: user.name,
-    email: user.email,
-    avatar: user.avatar,
-    role: user.role,
-    status: user.onlineStatus,
-    department: user.departmentIds?.join(', ') || '',
-    customStatus: user.customStatus,
-    flowTaskUserId: user.flowTaskUserId,
-    lastSeenAt: user.lastSeenAt,
-    updatedAt: user.updatedAt,
-    type: 'user',
-  })), (item) => (
+  const ranked = sortByRank(users.map((user) => {
+    const membership = membershipByUserId.get(user._id.toString());
+    return {
+      id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      avatar: user.avatar,
+      role: membership?.role || null,
+      workspaceRole: membership?.role || null,
+      flowTaskRole: membership?.flowTaskAccess?.role || null,
+      status: user.onlineStatus,
+      department: membership?.flowTaskAccess?.departmentIds?.join(', ') || '',
+      customStatus: user.customStatus,
+      flowTaskUserId: user.flowTaskUserId,
+      lastSeenAt: user.lastSeenAt,
+      updatedAt: user.updatedAt,
+      type: 'user',
+    };
+  }), (item) => (
     scoreText(query, item.name, item.email, item.role, item.status, item.department, item.customStatus?.text)
     + (item.status === 'online' ? 8 : 0)
     + (item.status === 'away' ? 4 : 0)

@@ -7,7 +7,7 @@ import {
   Modal,
 } from 'react-native';
 import { X, Download } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaProvider } from 'react-native-safe-area-context';
 import { downloadAndSaveFile } from '../../../utils/fileDownload';
 import { PreviewUnsupported } from './PreviewStateViews';
 import { scale, verticalScale, moderateScale } from '../../../utils/responsive';
@@ -21,8 +21,9 @@ export default function UnsupportedPreviewModal({ visible, name, fileUrl, mimeTy
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.modalBg}>
-        <View style={[styles.header, { paddingTop: headerTopPadding }]}>
+      <SafeAreaProvider>
+        <View style={styles.modalBg}>
+          <View style={[styles.header, { paddingTop: headerTopPadding }]}>
           <TouchableOpacity onPress={onClose} style={styles.headerBtn}>
             <X size={24} color="#fff" />
           </TouchableOpacity>
@@ -34,7 +35,8 @@ export default function UnsupportedPreviewModal({ visible, name, fileUrl, mimeTy
         <View style={styles.contentArea}>
           <PreviewUnsupported onDownload={handleDownload} />
         </View>
-      </View>
+        </View>
+      </SafeAreaProvider>
     </Modal>
   );
 }

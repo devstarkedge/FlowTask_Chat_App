@@ -15,7 +15,7 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import KeyboardAwareContainer from './common/KeyboardAwareContainer';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
@@ -320,7 +320,8 @@ export default function CreateCategoryModal({ visible, onClose }) {
   // ── Render ──
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAwareContainer bottomSafeContext={true} style={styles.overlay}>
+      <SafeAreaProvider>
+        <KeyboardAwareContainer bottomSafeContext={true} style={styles.overlay}>
         <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={onClose} />
 
         <SafeAreaView
@@ -697,6 +698,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
           </View>
         </SafeAreaView>
       </KeyboardAwareContainer>
+    </SafeAreaProvider>
     </Modal>
   );
 }

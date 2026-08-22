@@ -25,10 +25,10 @@ import {
   ScrollView,
   Modal,
   AppState,
+  FlatList,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useShallow } from 'zustand/react/shallow';
-import { FlashList } from "@shopify/flash-list";
 import ChatMessageItem from "../../components/ChatMessageItem";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
@@ -167,8 +167,11 @@ const ChatScreen = ({ route, navigation }) => {
     refetch: refetchMessages, // force a fresh first-page load
   } = useMessages(channelId);
   // pages[0] = latest messages (oldest-to-newest within page).
-  // flatMap gives a single oldest-first array across all loaded pages.
-  const messages = messagesData?.pages?.flatMap(page => page.items) || [];
+  // pages[N] are older pages. Reversing the pages array before flattening
+  // yields a consistent oldest-to-newest chronological order across all pages.
+  const messages = messagesData?.pages
+    ? [...messagesData.pages].reverse().flatMap(page => page.items)
+    : [];
   const { mutateAsync: sendMessage } = useSendMessage();
   const { mutateAsync: editMessage } = useEditMessage();
   const { mutateAsync: deleteMessage } = useDeleteMessage();
@@ -249,6 +252,46 @@ const ChatScreen = ({ route, navigation }) => {
       }
     }
   }, [messages, user?._id]);
+
+  // Synchronize channel preview with the actual latest message currently loaded in the chat screen
+  useEffect(() => {
+    if (channelId && messages.length > 0 && activeWorkspaceId) {
+      // Find the chronologically latest message by checking timestamps/createdAt
+      let latestMsg = messages[0];
+      for (let i = 1; i < messages.length; i++) {
+        if (new Date(messages[i].createdAt) > new Date(latestMsg.createdAt)) {
+          latestMsg = messages[i];
+        }
+      }
+
+      if (latestMsg) {
+        let preview = "";
+        if (latestMsg.isDeleted) {
+          preview = "This message was deleted";
+        } else {
+          const rawText = (latestMsg.content || '').replace(/<[^>]*>/g, '').trim();
+          preview = rawText.length > 80 ? rawText.substring(0, 80) + '\u2026' : rawText;
+        }
+        const timestamp = latestMsg.createdAt;
+
+        const channelStore = useChannelStore.getState();
+        const cachedChannels = queryClient.getQueryData(queryKeys.channels(activeWorkspaceId));
+        if (Array.isArray(cachedChannels)) {
+          const channel = cachedChannels.find(c => (c._id?.toString ? c._id.toString() : c._id) === channelId);
+          if (channel) {
+            const currentLastMessageAt = channel.lastMessageAt;
+            // Only update if the timestamp is different or preview is different
+            if (channel.lastMessagePreview !== preview || currentLastMessageAt !== timestamp) {
+              channelStore.updateChannel(channelId, {
+                lastMessageAt: timestamp,
+                lastMessagePreview: preview
+              });
+            }
+          }
+        }
+      }
+    }
+  }, [messages, channelId, activeWorkspaceId, queryClient]);
 
   // ─── Message Info handler ─────────────────────────────────────────────
   const handleMessageInfo = useCallback((message) => {
@@ -942,10 +985,9 @@ const ChatScreen = ({ route, navigation }) => {
           style={{ flex: 1 }}
           {...keyboardProps}
         >
-          <FlashList
+          <FlatList
             ref={flatListRef}
             style={{ flex: 1 }}
-            estimatedItemSize={80}
             data={displayedMessages}
             extraData={{ highlightedMessageId, searchQuery, searchResults, currentMatch, colors }}
             renderItem={renderMessage}

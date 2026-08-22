@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { Play, Pause, X, Music } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaProvider } from 'react-native-safe-area-context';
 import { scale, verticalScale, moderateScale } from '../../../utils/responsive';
 import FileService from '../../../services/FileService';
 import logger from '../../../utils/logger';
@@ -128,8 +128,9 @@ export default function AudioPlayerModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={[styles.modalBg, { paddingBottom }]}>
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+      <SafeAreaProvider>
+        <View style={[styles.modalBg, { paddingBottom }]}>
+          <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
         <View style={[styles.sheet, { backgroundColor: colors?.backgroundSecondary || '#161b22' }]}>
           <View style={styles.sheetHeader}>
             <View style={styles.sheetIcon}>
@@ -150,7 +151,8 @@ export default function AudioPlayerModal({
             cacheFile={cacheFile}
           />
         </View>
-      </View>
+        </View>
+      </SafeAreaProvider>
     </Modal>
   );
 }

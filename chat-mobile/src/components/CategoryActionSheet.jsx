@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform } from 'react-native';
 import KeyboardAwareContainer from './common/KeyboardAwareContainer';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
 import { categoryAPI } from '../services/api';
@@ -84,10 +84,11 @@ const CategoryActionSheet = ({ visible, onClose, category, onAddChannels, onRemo
 
   return (
     <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose} statusBarTranslucent={Platform.OS === 'android'}>
-      <KeyboardAwareContainer style={{ flex: 1 }} disablePadding={false} bottomSafeContext={false}>
-        <View style={styles.overlay}>
-          <TouchableOpacity style={styles.backdrop} onPress={onClose} />
-          <View style={[styles.sheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+      <SafeAreaProvider>
+        <KeyboardAwareContainer style={{ flex: 1 }} disablePadding={false} bottomSafeContext={false}>
+          <View style={styles.overlay}>
+            <TouchableOpacity style={styles.backdrop} onPress={onClose} />
+            <View style={[styles.sheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <Text style={[styles.title, { color: colors.textPrimary }]}>Category Options</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -147,7 +148,8 @@ const CategoryActionSheet = ({ visible, onClose, category, onAddChannels, onRemo
           )}
         </View>
       </View>
-      </KeyboardAwareContainer>
+        </KeyboardAwareContainer>
+      </SafeAreaProvider>
     </Modal>
   );
 };

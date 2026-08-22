@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { X, Download } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaProvider } from 'react-native-safe-area-context';
 import { downloadAndSaveFile } from '../../../utils/fileDownload';
 import FileSystemAdapter from '../../../services/FileSystemAdapter';
 import FileService from '../../../services/FileService';
@@ -225,8 +225,9 @@ export default function DocumentPreviewModal({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.modalBg}>
-        <View style={[styles.header, { paddingTop: headerTopPadding }]}>
+      <SafeAreaProvider>
+        <View style={styles.modalBg}>
+          <View style={[styles.header, { paddingTop: headerTopPadding }]}>
           <TouchableOpacity onPress={onClose} style={styles.headerBtn}>
             <X size={24} color="#fff" />
           </TouchableOpacity>
@@ -238,7 +239,8 @@ export default function DocumentPreviewModal({
         <View style={styles.contentArea}>
           {renderContent()}
         </View>
-      </View>
+        </View>
+      </SafeAreaProvider>
     </Modal>
   );
 }

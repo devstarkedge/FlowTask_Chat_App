@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { X, Download, Image as ImageIcon } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaProvider } from 'react-native-safe-area-context';
 import ImageViewer from 'react-native-image-zoom-viewer';
 import { scale, verticalScale, moderateScale } from '../../../utils/responsive';
 import { downloadAndSaveFile } from '../../../utils/fileDownload';
@@ -110,7 +110,8 @@ export default function ImagePreviewModal({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={styles.root}>
+      <SafeAreaProvider>
+        <View style={styles.root}>
         {/* ── Fixed header — measured dynamically ────────────────────────── */}
         <View
           style={[styles.header, { paddingTop: headerTopPadding }]}
@@ -168,7 +169,8 @@ export default function ImagePreviewModal({
             <ActivityIndicator color="#fff" size="large" />
           </View>
         )}
-      </View>
+        </View>
+      </SafeAreaProvider>
     </Modal>
   );
 }

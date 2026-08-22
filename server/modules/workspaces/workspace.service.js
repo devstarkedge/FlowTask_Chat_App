@@ -605,13 +605,21 @@ class WorkspaceService {
     return membership;
   }
 
-  /**
-   * Remove a member from a workspace.
-   */
   async removeMember(workspaceId, userId, requesterId) {
-    this._assertMembershipManagedOutsideChatApp(await this.getWorkspace(workspaceId));
+    const workspace = await this.getWorkspace(workspaceId);
+    const targetMembership = await workspaceRepository.getMembership(userId, workspaceId);
+    
+    // Check if target is a FlowTask synced member vs an external connection / guest.
+    // If target has no membership or has a flowTaskAccess.role, they are treated as FlowTask-synced.
+    // Otherwise, they are an external connection/guest and can be directly removed.
+    const isFlowTaskSyncedMember = targetMembership && targetMembership.flowTaskAccess && targetMembership.flowTaskAccess.role;
+
+    if (isFlowTaskSyncedMember) {
+      this._assertMembershipManagedOutsideChatApp(workspace);
+    }
+
     const requesterRole = await workspaceRepository.getUserRole(requesterId, workspaceId);
-    const targetRole = await workspaceRepository.getUserRole(userId, workspaceId);
+    const targetRole = targetMembership ? targetMembership.role : null;
 
     if (!requesterRole) {
       throw new ForbiddenError('You are not a member of this workspace.');
@@ -666,9 +674,9 @@ class WorkspaceService {
       logger.error(`[removeMember] Failed to revoke invites for user ${userId}`, { error: err.message });
     }
 
-    // 4. Emit socket event so all connected clients update in real-time
+    // 4. Emit socket event so all connected clients update in real-time and disconnect sockets
     try {
-      const { emitToWorkspace, emitToUser } = await import('../../sockets/socketManager.js');
+      const { emitToWorkspace, emitToUser, forceDisconnectUserFromWorkspace } = await import('../../sockets/socketManager.js');
       const { SOCKET_EVENTS } = await import('../../config/constants.js');
       const wsId = workspaceId.toString();
       const uid = userId.toString();
@@ -684,8 +692,11 @@ class WorkspaceService {
         userId: uid,
         removedBy: requesterId.toString(),
       }, wsId);
+      
+      // Force disconnect user sockets from this workspace
+      await forceDisconnectUserFromWorkspace(uid, wsId);
     } catch (err) {
-      logger.warn(`[removeMember] Failed to emit socket event for user ${userId}`, { error: err.message });
+      logger.warn(`[removeMember] Failed to emit socket event/disconnect for user ${userId}`, { error: err.message });
     }
 
     logger.info(`User ${userId} fully removed from workspace ${workspaceId} by ${requesterId}`);

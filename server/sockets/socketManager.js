@@ -1073,6 +1073,30 @@ export async function leaveChannelRoom(userId, channelId, workspaceId) {
 }
 
 /**
+ * Force disconnect all active socket connections of a user for a specific workspace.
+ * @param {string} userId
+ * @param {string} workspaceId
+ */
+export async function forceDisconnectUserFromWorkspace(userId, workspaceId) {
+  if (!io) return;
+  try {
+    const userRoom = resolveScopedRoom(workspaceId, 'user', userId, 'forceDisconnectUserFromWorkspace');
+    if (!userRoom) return;
+    const socketList = await io.in(userRoom).fetchSockets();
+    for (const socket of socketList) {
+      socket.emit('workspace:removed', { workspaceId });
+      socket.disconnect(true);
+    }
+  } catch (error) {
+    logger.error('Failed to force disconnect user from workspace', {
+      userId,
+      workspaceId,
+      error: error.message,
+    });
+  }
+}
+
+/**
  * Remove every socket that no longer has access to a channel room.  FlowTask
  * boards may be visible through a workspace-scoped access snapshot even when
  * the user is not a direct ChannelMember.

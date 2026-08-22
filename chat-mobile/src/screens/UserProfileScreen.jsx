@@ -144,7 +144,7 @@ const UserProfileScreen = ({ route, navigation }) => {
     Toast.show({ type: 'info', text1: 'Huddles are coming soon!' });
   };
 
-  const imageSize = width - 32;
+  const imageSize = Math.min(width - scale(32), scale(320));
 
   const handleCopyHuddle = () => {
     setShowDropdown(false);
@@ -383,10 +383,9 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
     marginHorizontal: scale(16),
     marginBottom: verticalScale(20),
-    borderRadius: moderateScale(24),
-    overflow: 'hidden',
   },
   infoSection: {
     paddingHorizontal: scale(16),

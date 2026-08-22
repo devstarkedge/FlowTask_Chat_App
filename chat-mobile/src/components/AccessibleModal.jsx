@@ -8,6 +8,8 @@ import { Modal, Platform } from 'react-native';
  * This component fixes the "Blocked aria-hidden on an element because its 
  * descendant retained focus" warning on React Native Web.
  */
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
 const AccessibleModal = ({ visible, onRequestClose, children, ...props }) => {
   const previousActiveElement = useRef(null);
 
@@ -51,7 +53,9 @@ const AccessibleModal = ({ visible, onRequestClose, children, ...props }) => {
       onRequestClose={handleRequestClose}
       {...props}
     >
-      {children}
+      <SafeAreaProvider>
+        {children}
+      </SafeAreaProvider>
     </Modal>
   );
 };

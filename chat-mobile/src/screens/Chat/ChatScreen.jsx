@@ -1099,6 +1099,7 @@ const ChatScreen = ({ route, navigation }) => {
             text={text}
             onChangeText={setText}
             channelMembers={channelMembers}
+            members={channelMembers}
             onSend={(content, options) => {
               if (editingMessage) {
                 editMessage({ messageId: editingMessage._id, channelId, content, htmlContent: options?.htmlContent, fileReferences: options?.fileReferences });

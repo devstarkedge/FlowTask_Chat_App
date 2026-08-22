@@ -8,6 +8,7 @@ import {
   ScrollView,
   Platform,
 } from "react-native";
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import AccessibleModal from "./AccessibleModal";
 import { useThemeStore } from "../stores/themeStore";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
@@ -40,17 +41,19 @@ const CustomizeHomeModal = ({ visible, onClose, enabledCards, onToggleCard }) =>
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
-        <View
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: colors.background,
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-            },
-          ]}
-        >
+      <SafeAreaProvider>
+        <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+          <SafeAreaView
+            edges={['bottom']}
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: colors.background,
+                borderTopLeftRadius: 24,
+                borderTopRightRadius: 24,
+              },
+            ]}
+          >
           {/* Header */}
           <View style={styles.header}>
             <View style={{ width: scale(40) }} />
@@ -118,10 +121,9 @@ const CustomizeHomeModal = ({ visible, onClose, enabledCards, onToggleCard }) =>
             })}
           </ScrollView>
 
-          {/* Bottom safe area */}
-          <View style={{ height: Platform.OS === "ios" ? 34 : 20 }} />
+          </SafeAreaView>
         </View>
-      </View>
+      </SafeAreaProvider>
     </AccessibleModal>
   );
 };

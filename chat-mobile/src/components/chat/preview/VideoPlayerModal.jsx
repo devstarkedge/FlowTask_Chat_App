@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import { ChevronLeft, Volume2, VolumeX } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaProvider } from 'react-native-safe-area-context';
 import { scale, verticalScale, moderateScale } from '../../../utils/responsive';
 import FileService from '../../../services/FileService';
 import logger from '../../../utils/logger';
@@ -36,6 +36,7 @@ export default function VideoPlayerModal({
   const insets = useSafeAreaInsets();
   // Derive top padding purely from device safe-area insets — no hardcoded values.
   const headerTopPadding = insets.top;
+  const footerPaddingBottom = Math.max(insets.bottom, verticalScale(20));
 
   useEffect(() => {
     if (!visible) {
@@ -83,8 +84,9 @@ export default function VideoPlayerModal({
 
   return (
     <Modal visible={visible} transparent={false} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.videoModalBg}>
-        <View style={[styles.videoHeader, { paddingTop: headerTopPadding }]}>
+      <SafeAreaProvider>
+        <View style={styles.videoModalBg}>
+          <View style={[styles.videoHeader, { paddingTop: headerTopPadding }]}>
           <TouchableOpacity onPress={onClose} style={styles.videoHeaderBtn}>
             <ChevronLeft size={26} color="#fff" />
           </TouchableOpacity>
@@ -115,7 +117,7 @@ export default function VideoPlayerModal({
           ) : null}
         </View>
 
-        <View style={styles.videoFooter}>
+        <View style={[styles.videoFooter, { paddingBottom: footerPaddingBottom }]}>
           <Text style={styles.videoTimeText}>
             {formatDuration(status.positionMillis)} / {formatDuration(status.durationMillis)}
           </Text>
@@ -133,6 +135,7 @@ export default function VideoPlayerModal({
           </View>
         </View>
       </View>
+      </SafeAreaProvider>
     </Modal>
   );
 }

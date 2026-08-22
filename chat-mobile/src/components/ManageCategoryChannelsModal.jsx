@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ActivityIndicator, FlatList, Alert, Platform } from 'react-native';
 import KeyboardAwareContainer from './common/KeyboardAwareContainer';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
 import { categoryAPI, directoriesAPI } from '../services/api';
@@ -156,11 +156,12 @@ const ManageCategoryChannelsModal = ({ visible, onClose, category, mode = 'add' 
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <KeyboardAwareContainer 
-        style={[styles.overlay, { backgroundColor: colors.overlay || 'rgba(0,0,0,0.5)' }]} 
-        disablePadding={false}
-      >
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaProvider>
+        <KeyboardAwareContainer 
+          style={[styles.overlay, { backgroundColor: colors.overlay || 'rgba(0,0,0,0.5)' }]} 
+          disablePadding={false}
+        >
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
             <X size={24} color={colors.textPrimary} />
@@ -237,7 +238,8 @@ const ManageCategoryChannelsModal = ({ visible, onClose, category, mode = 'add' 
           </TouchableOpacity>
         </View>
       </SafeAreaView>
-      </KeyboardAwareContainer>
+        </KeyboardAwareContainer>
+      </SafeAreaProvider>
     </Modal>
   );
 };

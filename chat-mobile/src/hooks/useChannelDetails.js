@@ -152,6 +152,7 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
     try {
       setAddingMemberId(userId);
       await channelAPI.addMember(channelId, userId);
+      Alert.alert("Success", "Members added successfully.");
       Toast.show({ type: 'success', text1: `${userName} added to channel` });
       fetchMembers();
       setMemberSearchResults(prev => prev.filter(m => m._id !== userId));
@@ -232,7 +233,7 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
   const isSystemAdminOrManager = userRole === 'admin' || userRole === 'manager' || currentUser?.isAdmin;
   const isChannelCreator = channel?.createdBy === currentUser?._id;
   const isChannelAdmin = channel?.admins?.includes(currentUser?._id);
-  const canAddMember = !isOneToOneDM && (isSystemAdminOrManager || isChannelCreator || isChannelAdmin || (!channel?.systemManaged || channel?.slug === 'flowtask-managers')) && channel?.slug !== 'flowtask-admin';
+  const canAddMember = isChatAppChannel(channel);
   const canMoveToCategory = channel?.type !== 'dm' && isChatAppChannel(channel);
 
   const categories = useChannelStore((s) => s.categories) || [];

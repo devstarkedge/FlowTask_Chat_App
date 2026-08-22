@@ -45,15 +45,31 @@ const MentionDropdown = React.memo(function MentionDropdown({
     setSearchQuery(query);
   }, [query]);
 
+  const normalizedMembers = useMemo(() => {
+    return (members || [])
+      .map(m => {
+        if (!m) return null;
+        if (m.userId && typeof m.userId === 'object') {
+          return {
+            ...m,
+            ...m.userId,
+            _id: m.userId._id || m.userId.id || m._id,
+          };
+        }
+        return m;
+      })
+      .filter(Boolean);
+  }, [members]);
+
   const filteredMembers = useMemo(() => {
     const q = (searchQuery || '').trim().toLowerCase();
-    if (!q) return members;
-    return members.filter(m =>
+    if (!q) return normalizedMembers;
+    return normalizedMembers.filter(m =>
       (m.name || '').toLowerCase().includes(q) ||
       (m.email || '').toLowerCase().includes(q) ||
       (m.username || '').toLowerCase().includes(q)
     );
-  }, [members, searchQuery]);
+  }, [normalizedMembers, searchQuery]);
 
   if (!visible) return null;
 

@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { TERMS_INTRO, TERMS_SECTIONS } from "../../data/termsContent";
 
 /**
- * TermsAndConditionsModal — scrollable viewer for the Flow Task Terms &
+ * TermsAndConditionsModal — scrollable viewer for the TaskChat Terms &
  * Conditions, shown from the registration page. Locks background scroll
  * while open and closes on overlay click or Escape.
  */
@@ -28,7 +28,7 @@ export default function TermsAndConditionsModal({ isOpen, onClose }) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Flow Task Terms & Conditions"
+      aria-label="TaskChat Terms & Conditions"
       onClick={onClose}
       style={{
         position: "fixed",
@@ -68,7 +68,7 @@ export default function TermsAndConditionsModal({ isOpen, onClose }) {
         >
           <div>
             <p style={{ margin: 0, fontSize: 17, fontWeight: 800, letterSpacing: "-.02em", color: "var(--text-primary, #18181b)" }}>
-              Flow Task — Terms &amp; Conditions
+              TaskChat — Terms &amp; Conditions
             </p>
           </div>
           <button

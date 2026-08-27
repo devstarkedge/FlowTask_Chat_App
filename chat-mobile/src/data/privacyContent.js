@@ -1,25 +1,25 @@
-// Flow Task — Privacy Policy
-// Source: Flow Task Privacy Policy document.
+// TaskChat — Privacy Policy
+// Source: TaskChat Privacy Policy document.
 // Rendered in the registration flow (RegisterScreen) and Settings via PrivacyModal.
 
 // export const PRIVACY_LAST_UPDATED = 'August 25, 2026';
 
 export const PRIVACY_INTRO = [
-  'Welcome to Flow Task. We respect your privacy and are committed to protecting the personal information you share with us.',
-  'This Privacy Policy explains what information we collect, how we use it, who we share it with, and your choices regarding your information when you use the Flow Task application ("Service").',
+  'Welcome to TaskChat. We respect your privacy and are committed to protecting the personal information you share with us.',
+  'This Privacy Policy explains what information we collect, how we use it, who we share it with, and your choices regarding your information when you use the TaskChat application ("Service").',
 ];
 
 export const PRIVACY_SECTIONS = [
   {
     heading: '1. Information We Collect',
     blocks: [
-      { type: 'p', text: 'We may collect the following types of information when you use Flow Task:' },
+      { type: 'p', text: 'We may collect the following types of information when you use TaskChat:' },
       { type: 'ul', items: [
         'Account Information: Name, email address, password, and profile picture.',
         'User-Generated Content (UGC): Messages, tasks, boards, comments, media, files, and other data you upload or send.',
         'Device and Usage Data: IP address, device type, operating system, app usage statistics, crash reports, and identifiers.',
         'Camera and Audio: We may collect images or audio if you grant us permission to use your camera and microphone within the app.',
-        'Third-Party Integrations: Data from third-party services you connect to Flow Task.'
+        'Third-Party Integrations: Data from third-party services you connect to TaskChat.'
       ] },
     ],
   },
@@ -43,7 +43,7 @@ export const PRIVACY_SECTIONS = [
       { type: 'ul', items: [
         'With other users: Content you share in workspaces or direct messages is visible to those users.',
         'With service providers: Third-party vendors that provide hosting, analytics, and infrastructure (e.g., cloud storage, push notifications).',
-        'For legal reasons: If required by law, subpoena, or to protect the safety and rights of Flow Task or its users.',
+        'For legal reasons: If required by law, subpoena, or to protect the safety and rights of TaskChat or its users.',
         'Business transfers: In the event of a merger, acquisition, or sale of assets.'
       ] },
     ],

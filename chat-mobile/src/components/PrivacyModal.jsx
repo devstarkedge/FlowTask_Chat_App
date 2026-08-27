@@ -13,7 +13,7 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { PRIVACY_LAST_UPDATED, PRIVACY_INTRO, PRIVACY_SECTIONS } from '../data/privacyContent';
 
 /**
- * PrivacyModal — scrollable viewer for the Flow Task Privacy Policy,
+ * PrivacyModal — scrollable viewer for the TaskChat Privacy Policy,
  * opened from the registration screen and preferences.
  */
 const PrivacyModal = ({ visible, onClose }) => {
@@ -32,7 +32,7 @@ const PrivacyModal = ({ visible, onClose }) => {
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTextWrap}>
-              <Text style={styles.title}>Flow Task — Privacy Policy</Text>
+              <Text style={styles.title}>TaskChat — Privacy Policy</Text>
             </View>
             <TouchableOpacity
               onPress={onClose}

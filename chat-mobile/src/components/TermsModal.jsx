@@ -12,7 +12,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { TERMS_LAST_UPDATED, TERMS_INTRO, TERMS_SECTIONS } from '../data/termsContent';
 /**
- * TermsModal — scrollable viewer for the Flow Task Terms & Conditions,
+ * TermsModal — scrollable viewer for the TaskChat Terms & Conditions,
  * opened from the registration screen.
  */
 const TermsModal = ({ visible, onClose }) => {
@@ -31,7 +31,7 @@ const TermsModal = ({ visible, onClose }) => {
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTextWrap}>
-              <Text style={styles.title}>Flow Task — Terms &amp; Conditions</Text>
+              <Text style={styles.title}>TaskChat — Terms &amp; Conditions</Text>
             </View>
             <TouchableOpacity
               onPress={onClose}

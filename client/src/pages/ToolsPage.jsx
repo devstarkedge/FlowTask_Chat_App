@@ -205,7 +205,7 @@ const STYLES = `
 
 const TEMPLATES = [
   { id: 't1', icon: Megaphone, title: 'Weekly Check in', desc: 'Automatically send a weekly message asking for updates from the team' },
-  { id: 't2', icon: FileText, title: 'Google Sheets feedback log', desc: 'Request information in a form and add it to a Google Sheet from Flow Task' },
+  { id: 't2', icon: FileText, title: 'Google Sheets feedback log', desc: 'Request information in a form and add it to a Google Sheet from TaskChat' },
   { id: 't3', icon: Hand, title: 'New hire onboarding', desc: 'Let newcomers join team channels from a simple link' },
   { id: 't4', icon: Bell, title: 'Emoji reaction notification', desc: 'When someone emoji reacts to a message, send them a link to the...' },
 ];
@@ -213,11 +213,11 @@ const TEMPLATES = [
 const MORE_TEMPLATES = [
   { id: 't5', icon: Send, title: 'Scheduled message', desc: 'Schedule a recurring message to ask for status or project updates' },
   { id: 't6', icon: Calendar, title: 'Giphy meeting reminders', desc: 'Send a GIF with your scheduled weekly meeting reminder' },
-  { id: 't7', icon: Layers, title: 'New Jira Cloud issue', desc: 'Fill out a form in Flow Task to create an issue in Jira Cloud' },
-  { id: 't8', icon: FileText, title: 'Google Sheets sales lead tracker', desc: 'Fill out a form in Flow Task to add Sales leads to a Google Sheet' },
-  { id: 't9', icon: Activity, title: 'Asana task from emoji reaction', desc: 'Use emoji reactions to turn Flow Task messages into Asana tasks' },
-  { id: 't10', icon: Mail, title: 'New Gmail message', desc: 'Fill out a form in Flow Task to send a Gmail message' },
-  { id: 't11', icon: Calendar, title: 'New Google Calendar event', desc: 'Use Flow Task to create a Google Calendar event' },
+  { id: 't7', icon: Layers, title: 'New Jira Cloud issue', desc: 'Fill out a form in TaskChat to create an issue in Jira Cloud' },
+  { id: 't8', icon: FileText, title: 'Google Sheets sales lead tracker', desc: 'Fill out a form in TaskChat to add Sales leads to a Google Sheet' },
+  { id: 't9', icon: Activity, title: 'Asana task from emoji reaction', desc: 'Use emoji reactions to turn TaskChat messages into Asana tasks' },
+  { id: 't10', icon: Mail, title: 'New Gmail message', desc: 'Fill out a form in TaskChat to send a Gmail message' },
+  { id: 't11', icon: Calendar, title: 'New Google Calendar event', desc: 'Use TaskChat to create a Google Calendar event' },
   { id: 't12', icon: Eye, title: 'Support response', desc: 'Use emoji reactions to respond to and manage support requests' },
 ];
 

@@ -271,7 +271,7 @@ class WorkspaceService {
 
     // Removed transaction because standalone MongoDB deployments do not support them
     // and can cause 'ClientSession must be from the same MongoClient' errors.
-    const ws = await mongoose.model('Workspace').create({
+    const workspace = await mongoose.model('Workspace').create({
       name,
       slug,
       description,
@@ -282,12 +282,10 @@ class WorkspaceService {
       memberCount: 1,
       inviteCode: crypto.randomBytes(16).toString('hex'),
     });
-    
-    workspace = ws;
 
     await mongoose.model('WorkspaceMembership').create({
       userId: creatorId,
-      workspaceId: ws._id,
+      workspaceId: workspace._id,
       role: WORKSPACE_ROLES.OWNER,
       isActive: true,
       joinedAt: new Date(),

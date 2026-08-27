@@ -12,6 +12,7 @@ import {
   resetPassword,
   getMe,
   updatePreferences,
+  deleteAccount,
   searchUsers,
   getFlowTaskChannelSyncStatus,
 } from './auth.controller.js';
@@ -69,6 +70,7 @@ router.post('/reset-password', passwordResetLimiter, validate({ body: resetPassw
 router.get('/me', protect, getMe);
 router.get('/channel-sync/status', protect, resolveWorkspace, getFlowTaskChannelSyncStatus);
 router.put('/preferences', protect, resolveWorkspace, updatePreferences);
+router.delete('/account', protect, deleteAccount);
 router.post('/logout', logout);
 
 // User search (protected)

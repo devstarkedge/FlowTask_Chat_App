@@ -388,6 +388,9 @@ export const getTheme = (mode = 'light', accentColor = 'blue', customColor = nul
     ...accent,
     ...workspace,
     ...primaryOverlays,
+    // Keep outgoing messages visually distinct while respecting the active
+    // workspace accent in both light and dark themes.
+    messageBubbleSent: withAlpha(finalPrimary, mode === 'dark' ? 0.32 : 0.14),
     effectiveTheme: mode,
     fontSizes,
     fontWeights,

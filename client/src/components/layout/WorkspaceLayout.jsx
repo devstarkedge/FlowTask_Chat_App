@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useChatStore } from '../../stores/chatStore'
@@ -22,24 +22,31 @@ export default function WorkspaceLayout() {
     switchWorkspace,
     fetchWorkspaces,
   } = useWorkspaceStore()
+  
+  const [hasInitialFetchRun, setHasInitialFetchRun] = useState(false)
 
   // Ensure workspaces are loaded — run ONCE on mount using a store snapshot
   // to avoid an infinite loop when the user has no workspaces (workspaces stays
   // [] after every fetch, re-triggering an effect that watches workspaces.length)
   useEffect(() => {
-    const { workspaces: ws, isLoading: loading } = useWorkspaceStore.getState()
-    if (ws.length === 0 && !loading) {
-      fetchWorkspaces()
+    const init = async () => {
+      const { workspaces: ws, isLoading: loading } = useWorkspaceStore.getState()
+      if (ws.length === 0 && !loading) {
+        await fetchWorkspaces()
+      }
+      setHasInitialFetchRun(true)
     }
+    init()
   }, [fetchWorkspaces])
 
   // Sync URL workspaceId → store
   useEffect(() => {
     if (!workspaceId) return
 
-    if (workspaceId !== activeWorkspaceId) {
-      if (isLoading && workspaces.length === 0) return
+    // Don't validate until we've at least tried to load workspaces once
+    if (!hasInitialFetchRun && isLoading) return
 
+    if (!isLoading && hasInitialFetchRun) {
       const valid = workspaces.find((w) => w._id === workspaceId)
       if (!valid) {
         if (workspaces.length > 0) {
@@ -49,9 +56,12 @@ export default function WorkspaceLayout() {
         }
         return
       }
+    }
+
+    if (workspaceId !== activeWorkspaceId) {
       switchWorkspace(workspaceId)
     }
-  }, [workspaceId, activeWorkspaceId, workspaces, isLoading, switchWorkspace, navigate])
+  }, [workspaceId, activeWorkspaceId, workspaces, isLoading, hasInitialFetchRun, switchWorkspace, navigate])
 
   // Ensure socket is connected once workspace context is ready
   const connectionStatus = useChatStore((s) => s.connectionStatus)

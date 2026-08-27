@@ -12,7 +12,7 @@ import {
   Image,
   Alert,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { AppAvatar, HomeHeaderLoader } from "../components/common";
 import FAB from "../components/common/FAB";
@@ -57,6 +57,7 @@ const HomeScreen = ({ navigation }) => {
     navigation.setOptions({ headerShown: false });
   }, []);
   const colors = useThemeStore((s) => s.colors);
+  const insets = useSafeAreaInsets();
   
   const {
     user,
@@ -361,7 +362,7 @@ const HomeScreen = ({ navigation }) => {
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundSecondary }]}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} translucent />
-      <SafeAreaView edges={["top"]} style={{ backgroundColor: colors.primary }}>
+      <View style={{ backgroundColor: colors.primary, paddingTop: insets.top }}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerLeft} onPress={() => navigation.navigate("WorkspaceSwitcher")} activeOpacity={0.7}>
             <WorkspaceAvatar workspace={activeWorkspace} size={32} />
@@ -378,7 +379,7 @@ const HomeScreen = ({ navigation }) => {
           </View>
         </View>
         {showHomeLoader && <HomeHeaderLoader colors={colors} />}
-      </SafeAreaView>
+      </View>
 
       {error ? (
         <View style={styles.errorContainer}>
@@ -407,7 +408,6 @@ const HomeScreen = ({ navigation }) => {
             initialNumToRender={20}
             maxToRenderPerBatch={10}
             windowSize={11}
-            removeClippedSubviews={Platform.OS !== "web"}
             refreshControl={
               Platform.OS === "android"
                 ? (

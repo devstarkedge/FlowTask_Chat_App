@@ -4,6 +4,12 @@ import storage from '../services/storage';
 import { useAuthStore } from './authStore';
 import { useChannelStore } from './channelStore';
 import { reactionAPI, messageAPI } from '../services/api';
+import {
+  addReactionToMessageCache,
+  removeReactionFromMessageCache,
+  addReactionToThreadReplyCache,
+  removeReactionFromThreadReplyCache,
+} from '../queries/cacheUtils';
 import api from '../services/api';
 import logger from '../utils/logger';
 import { useScheduledStore } from './scheduledStore';
@@ -181,24 +187,39 @@ export const useChatStore = create(
   })),
 
   // ─── Reactions ─────────────────────────────────────────────────────────────
-  addReaction: async (messageId, emoji) => {
+  addReaction: async (messageId, emoji, channelId) => {
     const user = useAuthStore.getState().user;
     if (!user) return;
-
+    const reactionUser = { _id: user._id, name: user.name, avatar: user.avatar };
+    // Optimistic: apply locally for instant feedback. The socket listener
+    // reuses the same cache helpers and is idempotent (it skips a user that is
+    // already present), so the database stays the single source of truth with
+    // no double count.
+    addReactionToMessageCache(channelId, messageId, emoji, reactionUser);
+    addReactionToThreadReplyCache(messageId, emoji, reactionUser);
     try {
       await reactionAPI.add(messageId, emoji);
     } catch (error) {
+      // Roll back the optimistic update if the server rejected it.
+      removeReactionFromMessageCache(channelId, messageId, emoji, user._id);
+      removeReactionFromThreadReplyCache(messageId, emoji, user._id);
       logger.error('Failed to add reaction:', error);
     }
   },
 
-  removeReaction: async (messageId, emoji) => {
+  removeReaction: async (messageId, emoji, channelId) => {
     const user = useAuthStore.getState().user;
     if (!user) return;
-
+    // Optimistic: remove locally for instant feedback.
+    removeReactionFromMessageCache(channelId, messageId, emoji, user._id);
+    removeReactionFromThreadReplyCache(messageId, emoji, user._id);
     try {
       await reactionAPI.remove(messageId, emoji);
     } catch (error) {
+      // Roll back the optimistic removal if the server rejected it.
+      const reactionUser = { _id: user._id, name: user.name, avatar: user.avatar };
+      addReactionToMessageCache(channelId, messageId, emoji, reactionUser);
+      addReactionToThreadReplyCache(messageId, emoji, reactionUser);
       logger.error('Failed to remove reaction:', error);
     }
   },

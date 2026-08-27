@@ -195,7 +195,7 @@ export default function NavigationSidebar({
 
   const [externalUsers, setExternalUsers] = useState([]);
   useEffect(() => {
-    if (activeWorkspaceId) {
+    if (activeWorkspaceId && isWorkspaceAdmin) {
       directoriesAPI.getExternalUsers({ status: 'active', limit: 50 })
         .then(({ data }) => {
           const payload = data?.data ?? data;

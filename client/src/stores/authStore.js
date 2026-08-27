@@ -63,10 +63,10 @@ export const useAuthStore = create((set, get) => ({
   },
 
   // ─── Native Registration ──────────────────────────────────────────
-  register: async ({ name, email, password }) => {
+  register: async ({ name, email, password, termsVersion }) => {
     set({ isLoading: true, error: null })
     try {
-      const { data } = await authAPI.register({ name, email, password })
+      const { data } = await authAPI.register({ name, email, password, termsVersion })
       set({ isLoading: false })
       return data
     } catch (error) {
@@ -201,6 +201,35 @@ export const useAuthStore = create((set, get) => ({
     useWorkspaceStore.getState().clearWorkspaceState()
     flowTaskLoginInFlight = null
     set({ accessToken: null, refreshToken: null, user: null, channelSync: null, error: null, isLoading: false, isInitialized: true })
+  },
+
+  // ─── Account Deletion ─────────────────────────────────────────────
+  deleteAccount: async (password) => {
+    set({ isLoading: true, error: null });
+    try {
+      await authAPI.deleteAccount(password);
+    } catch (error) {
+      const msg = error.response?.data?.error?.message || 'Failed to delete account';
+      set({ isLoading: false, error: msg });
+      throw error;
+    }
+
+    // Wipe local session state (same cleanup as logout)
+    localStorage.removeItem('chat_access_token');
+    localStorage.removeItem('chat_refresh_token');
+    localStorage.removeItem('flowtask_token');
+    disconnectSocket();
+    useWorkspaceStore.getState().clearWorkspaceState();
+    flowTaskLoginInFlight = null;
+    set({
+      accessToken: null,
+      refreshToken: null,
+      user: null,
+      channelSync: null,
+      error: null,
+      isLoading: false,
+      isInitialized: true,
+    });
   },
 
   // ─── Password Reset ──────────────────────────────────────────────

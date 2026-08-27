@@ -535,6 +535,28 @@ class MessageRepository {
   }
 
   /**
+   * Get detailed reaction data for a specific message + emoji,
+   * including the list of users who reacted (populated from ChatUser).
+   * This returns the filtered reaction (not the whole message), sourced
+   * from the server/database so clients never rely on local/stale data.
+   *
+   * @param {string} messageId
+   * @param {string} emoji
+   * @returns {Promise<{emoji: string, count: number, users: Array}>}
+   */
+  async getReaction(messageId, emoji) {
+    const reactionDocs = await MessageReaction.find({ messageId, emoji })
+      .populate('userId', 'name email avatar flowTaskUserId')
+      .lean();
+
+    const users = reactionDocs
+      .map((doc) => doc.userId)
+      .filter((u) => u && u._id);
+
+    return { emoji, count: users.length, users };
+  }
+
+  /**
    * Search messages by content.
    * @param {string} query
    * @param {object} options

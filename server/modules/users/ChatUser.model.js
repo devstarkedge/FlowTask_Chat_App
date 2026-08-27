@@ -201,6 +201,26 @@ const chatUserSchema = new Schema({
     // index: removed — covered by compound { role: 1, isActive: 1 }
   },
 
+  // ─── Account Deletion (soft delete & 90-day recovery) ──────────────────
+  accountStatus: {
+    type: String,
+    enum: ['active', 'deletion_pending'],
+    default: 'active',
+  },
+  deletionRequestedAt: {
+    type: Date,
+    default: null,
+  },
+  scheduledDeletionAt: {
+    type: Date,
+    default: null,
+  },
+  deletedAt: {
+    type: Date,
+    default: null,
+    select: false,
+  },
+
   // ─── Password (native auth only, excluded from queries by default) ────
   password: {
     type: String,
@@ -277,6 +297,7 @@ const chatUserSchema = new Schema({
     type: chatPreferencesSchema,
     default: () => ({}),
   },
+
   socketIds: [{
     type: String,
   }],
@@ -295,6 +316,8 @@ chatUserSchema.index({ flowTaskUserId: 1 }, { unique: true, sparse: true });
 chatUserSchema.index({ role: 1, isActive: 1 });
 chatUserSchema.index({ onlineStatus: 1 });
 chatUserSchema.index({ departmentIds: 1, isActive: 1 });
+// Account Deletion Cron Lookup
+chatUserSchema.index({ accountStatus: 1, scheduledDeletionAt: 1 });
 
 // ─── Pre-save: Hash password on change ───────────────────────────────────────
 // Mongoose 7+ no longer passes a next() callback into pre hooks (an async

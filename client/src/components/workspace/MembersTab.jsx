@@ -17,6 +17,7 @@ export default function MembersTab({
   onRemove,
   onUpdateRole,
   navigation,
+  workspace,
 }) {
   const [search, setSearch] = useState("");
   const [openMenuId, setOpenMenuId] = useState(null);
@@ -94,6 +95,7 @@ export default function MembersTab({
             onRoleChange={handleRoleChange}
             onRemove={handleRemoveMember}
             menuRef={menuRef}
+            workspace={workspace}
           />
         ))}
       </div>
@@ -123,6 +125,7 @@ function MemberCard({
   onRoleChange,
   onRemove,
   menuRef,
+  workspace,
 }) {
   const memberUser =
     member.userId && typeof member.userId === "object"
@@ -131,7 +134,13 @@ function MemberCard({
   const memberId = memberUser._id || member.userId;
   const isCurrentUser = memberId === currentUserId;
   const role = ROLE_CFG[member.role] || ROLE_CFG.member;
-  const canEditRole = canManage && !isCurrentUser && member.role !== "owner";
+
+  // FlowTask synced workspace check: member is synced if the workspace is FlowTask-synced AND the member has a synced FlowTask identity/role
+  const isFlowTaskWorkspace = workspace?.source === "flowtask";
+  const isFlowTaskSyncedMember = !!(member.flowTaskAccess && member.flowTaskAccess.role);
+
+  const canEditRole = canManage && !isCurrentUser && member.role !== "owner" && (!isFlowTaskWorkspace || !isFlowTaskSyncedMember);
+  const canRemoveMember = canManage && !isCurrentUser && member.role !== "owner" && (!isFlowTaskWorkspace || !isFlowTaskSyncedMember);
 
   return (
     <div className="mt-member-card">
@@ -232,14 +241,18 @@ function MemberCard({
                   Transfer Ownership
                 </button>
               )}
-              <div className="mt-dropdown-sep" />
-              <button
-                className="mt-dropdown-item danger"
-                onClick={() => onRemove(memberId, memberUser.name || member.displayName)}
-              >
-                <UserMinus size={14} />
-                Remove Member
-              </button>
+              {canRemoveMember && (
+                <>
+                  <div className="mt-dropdown-sep" />
+                  <button
+                    className="mt-dropdown-item danger"
+                    onClick={() => onRemove(memberId, memberUser.name || member.displayName)}
+                  >
+                    <UserMinus size={14} />
+                    Remove Member
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

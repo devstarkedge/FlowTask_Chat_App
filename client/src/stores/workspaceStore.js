@@ -40,11 +40,22 @@ export const useWorkspaceStore = create(
           // Auto-select if no active workspace or current one is invalid
           const { activeWorkspaceId } = get()
           if (!activeWorkspaceId || !workspaces.find((w) => w._id === activeWorkspaceId)) {
-            // Only auto-select first workspace if not skipping (used during invite flow)
-            if (!skipAutoSelect && workspaces.length > 0) {
+            if (workspaces.length > 0) {
+              if (!skipAutoSelect) {
+                set({
+                  activeWorkspaceId: workspaces[0]._id,
+                  activeWorkspace: workspaces[0],
+                })
+              } else {
+                set({
+                  activeWorkspaceId: null,
+                  activeWorkspace: null,
+                })
+              }
+            } else {
               set({
-                activeWorkspaceId: workspaces[0]._id,
-                activeWorkspace: workspaces[0],
+                activeWorkspaceId: null,
+                activeWorkspace: null,
               })
             }
           } else {

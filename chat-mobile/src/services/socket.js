@@ -15,6 +15,7 @@ import {
   reconcileMessageInCache,
   addReactionToMessageCache,
   removeReactionFromMessageCache,
+  invalidateReactionDetails,
 } from '../queries/cacheUtils';
 
 // Dynamic getters to resolve require cycles
@@ -485,11 +486,14 @@ export const connectSocket = async () => {
     const reactionUser = userId === user?._id ? { _id: user._id, name: user.name } : { _id: userId };
     addReactionToMessageCache(channelId, messageId, emoji, reactionUser);
     addReactionToThreadReplyCache(messageId, emoji, reactionUser);
+    // Keep the open details popup (user list) live.
+    invalidateReactionDetails(messageId, emoji);
   });
 
   socket.on('reaction:remove', ({ messageId, userId, emoji, channelId }) => {
     removeReactionFromMessageCache(channelId, messageId, emoji, userId);
     removeReactionFromThreadReplyCache(messageId, emoji, userId);
+    invalidateReactionDetails(messageId, emoji);
   });
 
   // Notification Events

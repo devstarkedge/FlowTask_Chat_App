@@ -196,6 +196,20 @@ export const removeReaction = asyncHandler(async (req, res) => {
 });
 
 /**
+ * GET /api/chat/messages/:id/reactions/:emoji
+ * Get the filtered reaction for a specific message + emoji, including the
+ * list of users who reacted (populated) and the reaction count.
+ */
+export const getReaction = asyncHandler(async (req, res) => {
+  const reaction = await messageService.getReaction(
+    req.params.id,
+    req.params.emoji,
+    req.workspaceId,
+  );
+  res.json({ success: true, data: reaction });
+});
+
+/**
  * POST /api/chat/messages/:id/pin
  * Pin a message.
  */

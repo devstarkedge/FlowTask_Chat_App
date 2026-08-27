@@ -11,13 +11,20 @@
     "preview": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "credentialsSource": "remote"
       }
     },
     "production": {
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://chat-app-api-cyyl.onrender.com/api/chat",
+        "EXPO_PUBLIC_SOCKET_URL": "https://chat-app-api-cyyl.onrender.com",
+        "EXPO_PUBLIC_CLIENT_URL": "https://chat-app-kte1.onrender.com"
+      },
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "credentialsSource": "remote"
       }
     }
   },

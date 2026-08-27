@@ -393,6 +393,33 @@ function MoreMenuItem({ icon: Icon, label, onClick, danger }) {
 /* ─── Thread Message Item ─────────────────────────────────────────────────── */
 function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
   const { user } = useAuthStore();
+  // Channel members are used to resolve reaction `userIds` → user objects.
+  const threadChannelId = message.channelId;
+  const channelMembers =
+    useChannelStore(
+      useCallback((s) => s.membersByChannel?.[threadChannelId], [threadChannelId]),
+    ) || [];
+  const memberMap = useMemo(
+    () =>
+      new Map(
+        channelMembers.map((m) => [String(m._id ?? m.userId ?? m.id), m]),
+      ),
+    [channelMembers],
+  );
+  const resolveReactionUsers = useCallback(
+    (reaction) =>
+      (reaction.userIds || []).map((id) => {
+        const key = String(id);
+        return (
+          memberMap.get(key) || {
+            _id: id,
+            name: key === String(user?._id) ? user?.name || "You" : undefined,
+            email: undefined,
+          }
+        );
+      }),
+    [memberMap, user?._id, user?.name],
+  );
   const {
     addReaction,
     removeReaction,
@@ -490,14 +517,15 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
   );
 
   const handleReaction = (emoji) => {
+    const currentUserId = String(user?._id || "");
     const existing = message.reactions?.find(
       (r) =>
         r.emoji === emoji &&
-        (r.users?.includes(user?._id) ||
-          r.userIds?.some((id) => id?.toString() === user?._id)),
+        (r.users?.some((id) => String(id?._id || id) === currentUserId) ||
+          r.userIds?.some((id) => String(id) === currentUserId)),
     );
-    if (existing) removeReaction(message._id, emoji);
-    else addReaction(message._id, emoji);
+    if (existing) removeReaction(message._id, emoji, message.channelId);
+    else addReaction(message._id, emoji, message.channelId);
     setShowReactionPicker(false);
   };
 
@@ -708,9 +736,10 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
         {message.reactions?.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
             {message.reactions.map((reaction) => {
+              const currentUserId = String(user?._id || "");
               const hasReacted =
-                reaction.users?.includes(user?._id) ||
-                reaction.userIds?.some((id) => id?.toString() === user?._id);
+                reaction.users?.some((id) => String(id?._id || id) === currentUserId) ||
+                reaction.userIds?.some((id) => String(id) === currentUserId);
               const count = reaction.users?.length || reaction.count || 0;
               return (
                 <ReactionRenderer
@@ -718,7 +747,13 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
                   emoji={reaction.emoji}
                   count={count}
                   hasReacted={hasReacted}
-                  onClick={handleReaction}
+                  users={resolveReactionUsers(reaction)}
+                  currentUserId={user?._id}
+                  messageId={message._id}
+                  onToggle={handleReaction}
+                  onAddMore={() => {
+                    setShowReactionPicker(true);
+                  }}
                 />
               );
             })}

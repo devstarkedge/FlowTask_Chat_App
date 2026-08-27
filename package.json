@@ -2,6 +2,7 @@
   "name": "flowtask-chat",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "FlowTask Chat Application — Real-time messaging integrated with FlowTask",
   "scripts": {
     "dev:server": "cd server && npm run dev",

@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { View as RNView, Text as RNText, TouchableOpacity as RNTouchableOpacity, Pressable, Platform, Linking } from 'react-native';
+import { View as RNView, Text as RNText, TouchableOpacity as RNTouchableOpacity, Pressable, Platform, Linking, StyleSheet } from 'react-native';
 import { Reply, Pin, Bookmark } from 'lucide-react-native';
 import AppAvatar from './common/AppAvatar';
 import { formatTime, isSameDay } from '../utils/dateUtils';
@@ -214,6 +214,8 @@ const ChatMessageItem = memo(({
                   ? colors.messageBubbleSent
                   : colors.messageBubbleReceived,
                 alignSelf: isMe ? 'flex-end' : 'flex-start',
+                borderWidth: isMe ? 0 : StyleSheet.hairlineWidth,
+                borderColor: isMe ? 'transparent' : colors.border,
               },
               isReplyTarget && {
                 borderWidth: 2,
@@ -362,6 +364,7 @@ const ChatMessageItem = memo(({
               reactions={item.reactions}
               messageId={item._id}
               currentUserId={user?._id}
+              channelMembers={channelMembers}
               onAddReaction={(emoji) => addReaction(item._id, emoji)}
               onRemoveReaction={(emoji) => removeReaction(item._id, emoji)}
               onOpenPicker={() => setEmojiPickerTarget(item._id)}

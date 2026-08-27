@@ -1,6 +1,21 @@
 import MarkdownIt from "markdown-it";
 
-const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
+const md = new MarkdownIt({
+  html: false,
+  linkify: true,
+  typographer: true,
+  // Chat messages use single newlines intentionally; preserve them visually.
+  breaks: true,
+});
+
+/**
+ * Converts legacy/plain message text to safe display HTML. This keeps older
+ * bot and activity messages readable while the rich-text editor continues to
+ * use its own stored HTML.
+ */
+export function markdownToHtml(markdown = "") {
+  return md.render(String(markdown || ""));
+}
 
 function parseInline(inlineTokens) {
   const out = [];

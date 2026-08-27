@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { X, Bell, BellOff, Volume2, VolumeX, Monitor, Moon, Sun, AlignLeft, Check, RotateCcw, Palette, Sidebar, MessageSquare, ClipboardList, Inbox } from 'lucide-react';
+import { X, Bell, BellOff, Volume2, VolumeX, Monitor, Moon, Sun, AlignLeft, Check, RotateCcw, Palette, Sidebar, MessageSquare, ClipboardList, Inbox, AlertTriangle, Trash2 } from 'lucide-react';
 import Loader from '../shared/Loader';
 import { useAuthStore } from '../../stores/authStore'
 import {
@@ -28,7 +28,7 @@ const COLOR_FIELDS = [
 ]
 
 export default function PreferencesModal({ onClose }) {
-  const { user } = useAuthStore()
+  const { user, deleteAccount } = useAuthStore()
   const mode = useThemeStore((s) => s.mode)
   const sidebarTheme = useThemeStore((s) => s.sidebarTheme)
   const customTheme = useThemeStore((s) => s.customTheme)
@@ -55,6 +55,27 @@ export default function PreferencesModal({ onClose }) {
   const [notifPermission, setNotifPermission] = useState(
     typeof Notification !== 'undefined' ? Notification.permission : 'denied',
   )
+
+  // ─── Delete account (danger zone) ────────────────────────────────────
+  const isNativeAccount = user?.authProvider === 'native' || !user?.authProvider
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deletingAccount, setDeletingAccount] = useState(false)
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword || deletingAccount) return
+    setDeletingAccount(true)
+    try {
+      await deleteAccount(deletePassword)
+      toast.success('Your account deletion has been scheduled for 90 days from now.')
+      onClose()
+      window.location.assign('/login')
+    } catch {
+      // Error message surfaced via authStore.error / toast below
+      toast.error(useAuthStore.getState().error || 'Failed to schedule account deletion')
+      setDeletingAccount(false)
+    }
+  }
 
   useEffect(() => {
     setPrefs(loadedPrefs)
@@ -382,6 +403,66 @@ export default function PreferencesModal({ onClose }) {
                 />
               </div>
             </section>
+
+            {/* ── Danger zone — account deletion ── */}
+            <section className="appearance-section" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: 18 }}>
+              <SectionTitle
+                icon={AlertTriangle}
+                title="Danger zone"
+                description="Irreversible actions for your account."
+              />
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  padding: 14,
+                  borderRadius: 12,
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  background: 'rgba(239, 68, 68, 0.06)',
+                }}
+              >
+                <div>
+                  <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Delete my account
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: 12.5, lineHeight: 1.55, color: 'var(--text-muted)' }}>
+                    Your account will be permanently deleted after 90 days. If you log in before the 90-day period ends, your account deletion will be cancelled and your account will be restored.
+                  </p>
+                </div>
+                {isNativeAccount ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeletePassword('')
+                      setShowDeleteConfirm(true)
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      flexShrink: 0,
+                      padding: '8px 14px',
+                      borderRadius: 9,
+                      border: '1px solid rgba(239, 68, 68, 0.5)',
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      color: '#ef4444',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    Delete account
+                  </button>
+                ) : (
+                  <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
+                    Managed by FlowTask SSO
+                  </span>
+                )}
+              </div>
+            </section>
           </main>
 
           <aside className="appearance-modal__preview" aria-label="Live appearance preview">
@@ -410,6 +491,131 @@ export default function PreferencesModal({ onClose }) {
             </button>
           </div>
         </footer>
+
+        {/* ── Delete account confirmation ── */}
+        {showDeleteConfirm && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirm account deletion"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 20,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20,
+              background: 'rgba(9, 9, 11, 0.55)',
+              backdropFilter: 'blur(3px)',
+            }}
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget && !deletingAccount) setShowDeleteConfirm(false)
+            }}
+          >
+            <div
+              style={{
+                width: 'min(440px, 100%)',
+                borderRadius: 14,
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                background: 'var(--bg-primary, #fff)',
+                boxShadow: '0 20px 60px rgba(0,0,0,.35)',
+                padding: 20,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <span
+                  style={{
+                    display: 'grid',
+                    placeItems: 'center',
+                    width: 34,
+                    height: 34,
+                    borderRadius: 10,
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    color: '#ef4444',
+                    flexShrink: 0,
+                  }}
+                >
+                  <AlertTriangle size={17} />
+                </span>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, letterSpacing: '-.01em', color: 'var(--text-primary)' }}>
+                  Delete your account?
+                </h3>
+              </div>
+              <p style={{ margin: '0 0 14px', fontSize: 13, lineHeight: 1.6, color: 'var(--text-muted)' }}>
+                Your account will be permanently deleted after 90 days. If you log in before the 90-day period ends, your account deletion will be cancelled and your account will be restored.
+              </p>
+              <label htmlFor="delete-account-password" style={{ display: 'block', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, color: 'var(--text-muted)' }}>
+                Confirm with your password
+              </label>
+              <input
+                id="delete-account-password"
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleDeleteAccount()
+                }}
+                placeholder="Enter your current password"
+                autoFocus
+                disabled={deletingAccount}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '10px 12px',
+                  borderRadius: 9,
+                  border: '1px solid var(--border-primary)',
+                  background: 'var(--bg-secondary, transparent)',
+                  color: 'var(--text-primary)',
+                  fontSize: 13.5,
+                  marginBottom: 16,
+                  outline: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deletingAccount}
+                  style={{
+                    padding: '9px 16px',
+                    borderRadius: 9,
+                    border: '1px solid var(--border-primary)',
+                    background: 'transparent',
+                    color: 'var(--text-secondary)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: deletingAccount ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteAccount}
+                  disabled={deletingAccount || !deletePassword}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '9px 16px',
+                    borderRadius: 9,
+                    border: 'none',
+                    background: '#ef4444',
+                    color: '#fff',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: deletingAccount || !deletePassword ? 'not-allowed' : 'pointer',
+                    opacity: deletingAccount || !deletePassword ? 0.6 : 1,
+                  }}
+                >
+                  {deletingAccount ? <Loader size={14} /> : <Trash2 size={14} />}
+                  {deletingAccount ? 'Deleting…' : 'Schedule deletion'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   )

@@ -216,5 +216,17 @@ export const useAuthStore = create((set, get) => ({
     });
   },
 
+  deleteAccount: async (password) => {
+    set({ isLoading: true, error: null });
+    try {
+      await authAPI.deleteAccount(password);
+      await get().logout();
+    } catch (error) {
+      const msg = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to delete account';
+      set({ isLoading: false, error: msg });
+      throw error;
+    }
+  },
+
   clearError: () => set({ error: null }),
 }));

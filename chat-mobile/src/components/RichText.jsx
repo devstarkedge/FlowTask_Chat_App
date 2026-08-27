@@ -627,6 +627,24 @@ function markdownToHtml(text) {
   return html;
 }
 
+/**
+ * Some legacy bot events were stored in `htmlContent` as Markdown rather
+ * than TipTap HTML. Treating that value as HTML makes markers such as **8h**
+ * appear literally. Detect those payloads and run them through the Markdown
+ * formatter instead.
+ */
+function shouldFormatAsMarkdown(value) {
+  const source = String(value || '').trim();
+  if (!source) return true;
+
+  const hasHtmlTags = /<\s*[a-z][^>]*>/i.test(source);
+  if (!hasHtmlTags) return true;
+
+  const hasMarkdown = /\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|`[^`]+`|\[[^\]]+\]\([^)]+\)/.test(source);
+  const hasFormattedHtml = /<\s*(?:strong|b|em|i|u|s|del|strike|code|pre|ul|ol|li|blockquote|a)\b/i.test(source);
+  return hasMarkdown && !hasFormattedHtml;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 const RichText = React.memo(function RichText({ html, text, colors, baseStyle, mentions = [], onMentionPress, searchQuery }) {
@@ -637,9 +655,11 @@ const RichText = React.memo(function RichText({ html, text, colors, baseStyle, m
     const ctx = { colors: colors || {}, mentions, onMentionPress, searchQuery };
     const textStyle = [styles.paragraphText, baseStyle || {}];
 
-    const rawHtml = (html && html.trim() && html.trim() !== '<p></p>')
-      ? html
-      : markdownToHtml(text || '');
+    const htmlValue = String(html || '').trim();
+    const sourceValue = htmlValue || text || '';
+    const rawHtml = shouldFormatAsMarkdown(sourceValue)
+      ? markdownToHtml(htmlToPlainWithNewlines(sourceValue))
+      : htmlValue;
 
     const targetHtml = pellToTipTap(rawHtml);
 

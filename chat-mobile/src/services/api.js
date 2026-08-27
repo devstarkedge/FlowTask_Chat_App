@@ -280,6 +280,7 @@ export const authAPI = {
   logout: (refreshToken) => api.post('/auth/logout', { refreshToken }),
   refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken }),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  deleteAccount: (password) => api.delete('/auth/account', { data: { password } }),
 };
 
 // Workspace API
@@ -405,6 +406,7 @@ export const messageAPI = {
 export const reactionAPI = {
   add: (messageId, emoji) => api.post(`/messages/${messageId}/reactions`, { emoji }),
   remove: (messageId, emoji) => api.delete(`/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`),
+  get: (messageId, emoji) => api.get(`/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`),
 };
 
 // Files API — reuse backend endpoints used by web client
@@ -625,5 +627,7 @@ export const categoryAPI = {
   removeChannel: (id, channelId) => api.delete(`/categories/${id}/channels/${channelId}`),
   clearAll: () => api.delete('/categories'),
 };
+
+
 
 export default api;

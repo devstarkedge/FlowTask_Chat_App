@@ -24,7 +24,8 @@ import { useThemeStore } from "../../stores/themeStore";
 import { scale, verticalScale, moderateScale } from "../../utils/responsive";
 
 const LoginScreen = ({ navigation }) => {
-  const { loginNative, isLoading, error, clearError } = useAuthStore();
+  const { loginNative, error, clearError } = useAuthStore();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { colors } = useThemeStore();
   const styles = createStyles(colors);
 
@@ -43,6 +44,7 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
     try {
+      setIsSubmitting(true);
       await loginNative({ email: email.toLowerCase(), password });
       Toast.show({
         type: "success",
@@ -51,6 +53,8 @@ const LoginScreen = ({ navigation }) => {
       });
     } catch {
       // handled by store
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -138,13 +142,13 @@ const LoginScreen = ({ navigation }) => {
                 <TouchableOpacity
                   style={[
                     styles.submitButton,
-                    isLoading && styles.submitButtonDisabled,
+                    isSubmitting && styles.submitButtonDisabled,
                   ]}
                   onPress={handleNativeLogin}
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                   activeOpacity={0.85}
                 >
-                  {isLoading ? (
+                  {isSubmitting ? (
                     <ActivityIndicator
                       size="small"
                       color={colors.messageTextSent}

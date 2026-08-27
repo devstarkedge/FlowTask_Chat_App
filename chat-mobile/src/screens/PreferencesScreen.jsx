@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, Modal, TextInput, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, Modal, TextInput, ActivityIndicator, Linking, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
@@ -293,21 +293,63 @@ const PreferencesScreen = ({ navigation }) => {
         animationType="fade"
         onRequestClose={() => !deletingAccount && setShowDeleteModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.backgroundSecondary }]}>
-            <View style={styles.modalHeader}>
-              <View style={[styles.modalIconContainer, { backgroundColor: `${colors.error}1A` }]}>
-                <AlertTriangle size={20} color={colors.error} />
-              </View>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Delete your account?</Text>
-            </View>
-            
-            <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
-              Your account will be permanently deleted after 90 days. If you log in before the 90-day period ends, your account deletion will be cancelled and your account will be restored.
-            </Text>
-            
-            {isNativeAccount && (
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+          style={styles.modalOverlay}
+        >
+          <ScrollView 
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} 
+            style={{ width: '100%' }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.backgroundSecondary }]}>
+            {!isNativeAccount ? (
               <>
+                <View style={styles.modalHeader}>
+                  <View style={[styles.modalIconContainer, { backgroundColor: `${colors.error}1A` }]}>
+                    <AlertTriangle size={20} color={colors.error} />
+                  </View>
+                  <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Delete Account</Text>
+                </View>
+                
+                <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
+                  Your account is managed through FlowTask. To delete your account, please go to FlowTask and request account deletion there.
+                </Text>
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity 
+                    style={[styles.modalBtn, { backgroundColor: colors.primary }]} 
+                    onPress={() => {
+                      setShowDeleteModal(false);
+                      Linking.openURL('https://flowtask-5viz.onrender.com/');
+                    }}
+                  >
+                    <Globe size={16} color="#fff" />
+                    <Text style={[styles.modalBtnText, { color: '#fff' }]}>Go to FlowTask</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.modalBtn, styles.cancelBtn, { borderColor: colors.border }]} 
+                    onPress={() => setShowDeleteModal(false)}
+                  >
+                    <Text style={[styles.modalBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.modalHeader}>
+                  <View style={[styles.modalIconContainer, { backgroundColor: `${colors.error}1A` }]}>
+                    <AlertTriangle size={20} color={colors.error} />
+                  </View>
+                  <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Delete your account?</Text>
+                </View>
+                
+                <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
+                  Your account will be permanently deleted after 90 days. If you log in before the 90-day period ends, your account deletion will be cancelled and your account will be restored.
+                </Text>
+                
                 <Text style={[styles.inputLabel, { color: colors.textTertiary }]}>CONFIRM WITH YOUR PASSWORD</Text>
                 <TextInput
                   style={[styles.passwordInput, { 
@@ -323,35 +365,36 @@ const PreferencesScreen = ({ navigation }) => {
                   autoCapitalize="none"
                   editable={!deletingAccount}
                 />
+                
+                <View style={styles.modalActions}>
+                  <TouchableOpacity 
+                    style={[styles.modalBtn, styles.deleteBtn, { opacity: deletingAccount || !deletePassword ? 0.6 : 1 }]} 
+                    onPress={handleDeleteAccount}
+                    disabled={deletingAccount || !deletePassword}
+                  >
+                    {deletingAccount ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Trash2 size={16} color="#fff" />
+                        <Text style={[styles.modalBtnText, { color: '#fff' }]}>Schedule deletion</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.modalBtn, styles.cancelBtn, { borderColor: colors.border }]} 
+                    onPress={() => setShowDeleteModal(false)}
+                    disabled={deletingAccount}
+                  >
+                    <Text style={[styles.modalBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
               </>
             )}
-            
-            <View style={styles.modalActions}>
-              <TouchableOpacity 
-                style={[styles.modalBtn, styles.cancelBtn, { borderColor: colors.border }]} 
-                onPress={() => setShowDeleteModal(false)}
-                disabled={deletingAccount}
-              >
-                <Text style={[styles.modalBtnText, { color: colors.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.modalBtn, styles.deleteBtn, { opacity: deletingAccount || (isNativeAccount && !deletePassword) ? 0.6 : 1 }]} 
-                onPress={handleDeleteAccount}
-                disabled={deletingAccount || (isNativeAccount && !deletePassword)}
-              >
-                {deletingAccount ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Trash2 size={16} color="#fff" />
-                    <Text style={[styles.modalBtnText, { color: '#fff' }]}>Schedule deletion</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
           </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       <TermsModal visible={showTerms} onClose={() => setShowTerms(false)} />

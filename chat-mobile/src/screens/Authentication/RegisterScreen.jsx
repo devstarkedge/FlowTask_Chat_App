@@ -39,7 +39,8 @@ function getStrength(pass) {
 }
 
 const RegisterScreen = ({ navigation }) => {
-  const { register, isLoading, error, clearError } = useAuthStore();
+  const { register, error, clearError } = useAuthStore();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { colors } = useThemeStore();
   const styles = createStyles(colors);
 
@@ -107,19 +108,21 @@ const RegisterScreen = ({ navigation }) => {
     }
 
     try {
+      setIsSubmitting(true);
       await register({
-        name: form.name,
-        email: form.email.toLowerCase(),
+        name: form.name.trim(),
+        email: form.email,
         password: form.password,
       });
       setSuccess(true);
       Toast.show({
         type: 'success',
-        text1: 'Account created!',
-        text2: 'Check your email for verification',
+        text1: 'Account created successfully!',
       });
-    } catch {
-      // Error handled by store
+    } catch (err) {
+      // error is handled by store
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -307,13 +310,13 @@ const RegisterScreen = ({ navigation }) => {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.submitButton, (isLoading || !canSubmit) && styles.submitButtonDisabled, { backgroundColor: colors.primary }]}
+          <TouchableOpacity 
+            style={[styles.submitButton, (isSubmitting || !canSubmit) && styles.submitButtonDisabled, { backgroundColor: colors.primary }]}
             onPress={handleSubmit}
-            disabled={isLoading || !canSubmit}
+            disabled={isSubmitting || !canSubmit}
             activeOpacity={0.85}
           >
-            {isLoading ? (
+            {isSubmitting ? (
               <ActivityIndicator size="small" color={colors.messageTextSent} />
             ) : (
               <>

@@ -1,4 +1,4 @@
-// Theme color system for FlowTask-Chat Mobile
+// Theme color system for TaskChat Mobile
 // Supports Light, Dark, and Custom Workspace Themes
 // Matches web application architecture
 import { Platform } from 'react-native';

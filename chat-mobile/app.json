@@ -1,26 +1,26 @@
 {
   "expo": {
-    "name": "FlowTask-Chat",
+    "name": "TaskChat",
     "slug": "chat-mobile-js",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "flowtaskchat",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/Vector.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "cover",
-      "backgroundColor": "#070534"
+      "image": "./assets/Vector.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mohitgahlyan.chatmobilejs",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "FlowTask-Chat needs access to your photo library to save downloaded images and videos.",
-        "NSPhotoLibraryAddUsageDescription": "FlowTask-Chat needs permission to save images and videos to your photo library.",
-        "NSCameraUsageDescription": "FlowTask-Chat needs access to your camera to let you take photos and record videos to share in chats.",
-        "NSMicrophoneUsageDescription": "FlowTask-Chat needs access to your microphone to let you record audio and video messages."
+        "NSPhotoLibraryUsageDescription": "TaskChat needs access to your photo library to save downloaded images and videos.",
+        "NSPhotoLibraryAddUsageDescription": "TaskChat needs permission to save images and videos to your photo library.",
+        "NSCameraUsageDescription": "TaskChat needs access to your camera to let you take photos and record videos to share in chats.",
+        "NSMicrophoneUsageDescription": "TaskChat needs access to your microphone to let you record audio and video messages."
       },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -38,9 +38,14 @@
       ]
     },
     "android": {
+      "splash": {
+        "image": "./assets/Vector.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#ffffff"
+      },
       "adaptiveIcon": {
-        "backgroundColor": "#070534",
-        "foregroundImage": "./assets/icon.png"
+        "backgroundColor": "#ffffff",
+        "foregroundImage": "./assets/Vector.png"
       },
       "package": "com.mohitgahlyan.chatmobilejs",
       "googleServicesFile": "./google-services.json",
@@ -93,23 +98,23 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Allow FlowTask-Chat to access your photos.",
-          "savePhotosPermission": "Allow FlowTask-Chat to save photos and videos to your gallery."
+          "photosPermission": "Allow TaskChat to access your photos.",
+          "savePhotosPermission": "Allow TaskChat to save photos and videos to your gallery."
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "FlowTask-Chat needs access to your camera to let you take photos and record videos to share in chats.",
-          "microphonePermission": "FlowTask-Chat needs access to your microphone to let you record audio and video messages.",
+          "cameraPermission": "TaskChat needs access to your camera to let you take photos and record videos to share in chats.",
+          "microphonePermission": "TaskChat needs access to your microphone to let you record audio and video messages.",
           "recordAudioAndroid": true
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "FlowTask-Chat needs access to your photo library to save downloaded images and videos.",
-          "cameraPermission": "FlowTask-Chat needs access to your camera to let you take photos and record videos to share in chats."
+          "photosPermission": "TaskChat needs access to your photo library to save downloaded images and videos.",
+          "cameraPermission": "TaskChat needs access to your camera to let you take photos and record videos to share in chats."
         }
       ],
       [

@@ -201,7 +201,7 @@ app.get('/api/chat/health', (_req, res) => {
 
   res.status(allHealthy ? 200 : 503).json({
     status,
-    service: 'flowtask-chat',
+    service: 'TaskChat',
     uptime: Math.floor(process.uptime()),
     connections: getConnectionCount(),
     database: dbHealth,
@@ -219,7 +219,7 @@ app.get('/api/chat/health', (_req, res) => {
 // ─── Debug Env Check ────────────────────────────────────────────────────────────────
 // Returns non-sensitive config for deployment verification.
 // Gated by X-Debug-Token header matching DEBUG_TOKEN env var.
-// Usage: curl -H "X-Debug-Token: <your-token>" https://flowtask-chat-app.onrender.com/api/chat/debug/env
+// Usage: curl -H "X-Debug-Token: <your-token>" https://TaskChat-app.onrender.com/api/chat/debug/env
 app.get('/api/chat/debug/env', (req, res) => {
   const debugToken = process.env.DEBUG_TOKEN;
   if (debugToken && req.headers['x-debug-token'] !== debugToken) {
@@ -229,7 +229,7 @@ app.get('/api/chat/debug/env', (req, res) => {
   const maskSecret = (v) => (v ? `${v.slice(0, 4)}****` : 'MISSING');
 
   res.json({
-    service: 'flowtask-chat',
+    service: 'TaskChat',
     node_env: env.NODE_ENV,
     timestamp: new Date().toISOString(),
     config: {

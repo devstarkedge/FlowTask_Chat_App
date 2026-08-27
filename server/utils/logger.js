@@ -47,7 +47,7 @@ const prodFormat = combine(
 const logger = winston.createLogger({
   level: env.LOG_LEVEL,
   format: env.IS_PRODUCTION ? prodFormat : devFormat,
-  defaultMeta: { service: 'flowtask-chat' },
+  defaultMeta: { service: 'TaskChat' },
   transports: [
     // Single Console transport — Render captures stdout/stderr automatically.
     // File transports are omitted: Render's filesystem is ephemeral and wiped

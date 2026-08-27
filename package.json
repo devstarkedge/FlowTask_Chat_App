@@ -1,9 +1,9 @@
 {
-  "name": "flowtask-chat",
+  "name": "TaskChat",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "FlowTask Chat Application — Real-time messaging integrated with FlowTask",
+  "description": "TaskChat Application — Real-time messaging integrated with FlowTask",
   "scripts": {
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",

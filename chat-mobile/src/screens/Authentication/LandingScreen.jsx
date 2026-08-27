@@ -106,7 +106,7 @@ const LandingScreen = ({ navigation }) => {
           <View style={styles.logo}>
             <Logo width={32} height={32} style={styles.logoIcon} />
             <Text style={[styles.logoText, { color: colors.textPrimary }]}>
-              FlowTask-Chat
+              TaskChat
             </Text>
           </View>
         </View>
@@ -195,7 +195,7 @@ const LandingScreen = ({ navigation }) => {
 
         {/* Benefits Section */}
         <View style={styles.benefitsSection}>
-          <Text style={styles.sectionHeading}>Why choose FlowTask-Chat?</Text>
+          <Text style={styles.sectionHeading}>Why choose TaskChat?</Text>
 
           <FlatList
             data={benefits}
@@ -289,7 +289,7 @@ const LandingScreen = ({ navigation }) => {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            © 2025 FlowTask-Chat. All rights reserved.
+            © 2025 TaskChat. All rights reserved.
           </Text>
         </View>
       </ScrollView>

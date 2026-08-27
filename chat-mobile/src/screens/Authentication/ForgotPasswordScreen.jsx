@@ -61,7 +61,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
         </TouchableOpacity>
         <View style={styles.logo}>
           <Logo width={32} height={32} style={styles.logoIcon} />
-          <Text style={[styles.logoText, { color: colors.textPrimary }]}>FlowTask-Chat</Text>
+          <Text style={[styles.logoText, { color: colors.textPrimary }]}>TaskChat</Text>
         </View>
       </View>
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Alert, Platform, Keyboard } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -47,7 +47,7 @@ export default function SearchScreen({ navigation }) {
 
       return () => {
         if (timer) clearTimeout(timer);
-        import('react-native').then(({ Keyboard }) => Keyboard.dismiss());
+        Keyboard.dismiss();
         inputRef.current?.blur();
       };
     }, [])
@@ -403,7 +403,7 @@ export default function SearchScreen({ navigation }) {
                   borderWidth: 1
                 }
               ]}
-              onPress={() => { setQuery(''); navigation.goBack(); }}
+              onPress={() => { setQuery(''); navigation.navigate('HomeTab'); }}
             >
               <X size={24} color={colors.textPrimary} />
             </TouchableOpacity>

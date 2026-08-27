@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { X } from "lucide-react";
-import { TERMS_LAST_UPDATED, TERMS_INTRO, TERMS_SECTIONS } from "../../data/termsContent";
+import { TERMS_INTRO, TERMS_SECTIONS } from "../../data/termsContent";
 
 /**
  * TermsAndConditionsModal — scrollable viewer for the Flow Task Terms &
@@ -69,9 +69,6 @@ export default function TermsAndConditionsModal({ isOpen, onClose }) {
           <div>
             <p style={{ margin: 0, fontSize: 17, fontWeight: 800, letterSpacing: "-.02em", color: "var(--text-primary, #18181b)" }}>
               Flow Task — Terms &amp; Conditions
-            </p>
-            <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--text-muted, #71717a)" }}>
-              Last Updated: {TERMS_LAST_UPDATED}
             </p>
           </div>
           <button

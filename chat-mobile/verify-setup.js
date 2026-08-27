@@ -4,7 +4,7 @@
  * Quick verification that all imports and dependencies are working
  */
 
-console.log('🔍 Verifying FlowTask-Chat Mobile setup...\n');
+console.log('🔍 Verifying TaskChat Mobile setup...\n');
 
 try {
   // Test theme imports

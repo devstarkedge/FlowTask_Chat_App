@@ -15,7 +15,7 @@ if (
   logger.error(
     '[API] VITE_API_BASE_URL is a relative path ("%s") but the app is running on %s. ' +
       "API calls will go to the frontend host instead of the backend. " +
-      "Set VITE_API_BASE_URL to the full backend URL (e.g. https://flowtask-chat-app.onrender.com/api/chat) " +
+      "Set VITE_API_BASE_URL to the full backend URL (e.g. https://TaskChat-app.onrender.com/api/chat) " +
       "in Render → Chat Frontend → Environment, then redeploy.",
     baseURL,
     window.location.origin,

@@ -313,7 +313,7 @@ export const useChatStore = create(
 
     }),
     {
-      name: 'flowtask-chat-storage',
+      name: 'TaskChat-storage',
       storage: createJSONStorage(() => storage),
       partialize: (state) => ({
         offlineQueueStatus: state.offlineQueueStatus,

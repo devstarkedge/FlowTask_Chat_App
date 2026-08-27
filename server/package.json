@@ -1,5 +1,5 @@
 {
-  "name": "flowtask-chat-server",
+  "name": "TaskChat-server",
   "version": "1.0.0",
   "description": "Enterprise Chat Application for FlowTask — real-time messaging, threaded discussions, and contextual notifications",
   "type": "module",

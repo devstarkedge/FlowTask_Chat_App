@@ -133,7 +133,7 @@ const RegisterScreen = ({ navigation }) => {
         <View style={[styles.header, { borderBottomColor: colors.borderLight }]}> 
           <View style={styles.logo}>
             <Logo width={32} height={32} style={styles.logoIcon} />
-            <Text style={[styles.logoText, { color: colors.textPrimary }]}>FlowTask-Chat</Text>
+            <Text style={[styles.logoText, { color: colors.textPrimary }]}>TaskChat</Text>
           </View>
         </View>
         
@@ -174,14 +174,14 @@ const RegisterScreen = ({ navigation }) => {
         <View style={[styles.header, { borderBottomColor: colors.borderLight }]}> 
           <View style={styles.logo}>
             <Logo width={32} height={32} style={styles.logoIcon} />
-            <Text style={[styles.logoText, { color: colors.textPrimary }]}>FlowTask-Chat</Text>
+            <Text style={[styles.logoText, { color: colors.textPrimary }]}>TaskChat</Text>
           </View>
         </View>
 
         <View style={styles.introSection}>
           <Text style={styles.heading}>Create your account</Text>
           <Text style={[styles.subheading, { color: colors.textSecondary }]}>
-            Join teams already using FlowTask-Chat to communicate faster
+            Join teams already using TaskChat to communicate faster
           </Text>
         </View>
 

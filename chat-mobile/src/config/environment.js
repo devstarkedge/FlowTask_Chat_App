@@ -25,7 +25,7 @@ const validateEnv = () => {
 
   // ── Startup diagnostic logs ──────────────────────────────────────────────
   logger.info('═══════════════════════════════════════════════════');
-  logger.info('[ENV] FlowTask-Chat Mobile — Environment Report');
+  logger.info('[ENV] TaskChat Mobile — Environment Report');
   logger.info('[ENV] API_BASE_URL :', ENV.API_BASE_URL);
   logger.info('[ENV] SOCKET_URL   :', ENV.SOCKET_URL);
   logger.info('[ENV] FLOWTASK     :', ENV.FLOWTASK_ENABLED ? 'enabled' : 'disabled');

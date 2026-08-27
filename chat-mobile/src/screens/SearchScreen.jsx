@@ -33,11 +33,22 @@ export default function SearchScreen({ navigation }) {
   // Tab screens stay mounted — autoFocus on TextInput handles initial mount focus.
   // We no longer manually focus on every focus effect to prevent the keyboard from popping up
   // when returning from a channel.
+  const hasAutoFocused = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
-      // Intentionally left empty to avoid reopening keyboard on back navigation
+      let timer;
+      if (!hasAutoFocused.current) {
+        hasAutoFocused.current = true;
+        timer = setTimeout(() => {
+          inputRef.current?.focus();
+        }, 200); // Wait for tab transition
+      }
+
       return () => {
-        // cleanup if needed
+        if (timer) clearTimeout(timer);
+        import('react-native').then(({ Keyboard }) => Keyboard.dismiss());
+        inputRef.current?.blur();
       };
     }, [])
   );
@@ -380,8 +391,6 @@ export default function SearchScreen({ navigation }) {
                 onChangeText={setQuery}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
-                autoFocus
-                showSoftInputOnFocus
               />
             </View>
             <TouchableOpacity

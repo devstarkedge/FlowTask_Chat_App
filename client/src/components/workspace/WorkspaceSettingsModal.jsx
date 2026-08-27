@@ -269,6 +269,7 @@ export default function WorkspaceSettingsModal({ onClose }) {
                 onRemove={removeMember}
                 onUpdateRole={updateMemberRole}
                 confirm={confirm}
+                workspace={activeWorkspace}
               />
             )}
             {activeTab === "invite" && (

@@ -737,6 +737,19 @@ class MessageService {
     return updated;
   }
 
+  /**
+   * Get detailed reaction data for a specific message + emoji.
+   * Returns the filtered reaction with the users who reacted (populated),
+   * sourced directly from the database.
+   */
+  async getReaction(messageId, emoji, workspaceId) {
+    const message = await messageRepository.findById(messageId, { workspaceId });
+    if (!message) throw new NotFoundError('Message not found');
+    this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
+
+    return messageRepository.getReaction(messageId, emoji);
+  }
+
   // ──────────────────── Pins ────────────────────────────────────────────────
 
   /**

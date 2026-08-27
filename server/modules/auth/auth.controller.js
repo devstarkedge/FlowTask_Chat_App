@@ -668,3 +668,19 @@ export const updatePreferences = asyncHandler(async (req, res) => {
     data: { user },
   });
 });
+
+/**
+ * DELETE /api/chat/auth/account
+ * Self-service account deletion. Requires the current password in the body.
+ * Soft-deletes the account, revokes all sessions on all devices.
+ */
+export const deleteAccount = asyncHandler(async (req, res) => {
+  const { password } = req.body || {};
+  const { scheduledDeletionAt } = await authService.deleteAccount(req.user._id, password);
+
+  res.status(200).json({
+    success: true,
+    data: { scheduledDeletionAt },
+    message: 'Your account deletion has been scheduled.',
+  });
+});

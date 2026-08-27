@@ -15,7 +15,7 @@ import {
 import { AppAvatar, AppScreen, FAB } from "../components/common";
 import AccountDrawer from "../components/AccountDrawer";
 import CreateNewBottomSheet from "../components/CreateNewBottomSheet";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useChannelStore } from "../stores/channelStore";
 import { useAuthStore } from "../stores/authStore";
 import { useUIStore } from "../stores/uiStore";
@@ -137,6 +137,7 @@ const DMListScreen = ({ navigation }) => {
 
   const { colors, effectiveTheme } = useThemeStore();
   const { openDrawer } = useUIStore();
+  const insets = useSafeAreaInsets();
   const { activeWorkspace } = useWorkspaceStore();
   const { data: channels = [] } = useChannels(activeWorkspace?._id);
   const { data: members = [] } = useWorkspaceMembers(activeWorkspace?._id);
@@ -256,12 +257,12 @@ const DMListScreen = ({ navigation }) => {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header Area */}
       <View style={[styles.header, { backgroundColor: colors.primary }]}>
-        <SafeAreaView edges={['top']} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: scale(16), paddingBottom: verticalScale(12), paddingTop: verticalScale(12) }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: scale(16), paddingBottom: verticalScale(12), paddingTop: insets.top + verticalScale(12) }}>
           <Text style={[styles.title, { color: '#ffffff' }]}>DMs</Text>
           <TouchableOpacity onPress={() => setAccountDrawerVisible(true)}>
             <AppAvatar user={currentUser} size={30} showStatus={true} statusSize={8} />
           </TouchableOpacity>
-        </SafeAreaView>
+        </View>
       </View>
 
       {/* Recent List */}
@@ -271,6 +272,8 @@ const DMListScreen = ({ navigation }) => {
           showsHorizontalScrollIndicator={false}
           data={dmChannels.slice(0, 10)}
           keyExtractor={(item) => item._id}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
           renderItem={renderRecentItem}
           contentContainerStyle={{ paddingHorizontal: scale(16), paddingVertical: verticalScale(16), gap: 16 }}
         />
@@ -360,12 +363,11 @@ const DMListScreen = ({ navigation }) => {
         <FlatList
           data={dmChannels}
           keyExtractor={(item) => item._id}
+          initialNumToRender={15}
+          maxToRenderPerBatch={15}
+          windowSize={5}
           renderItem={renderItem}
           showsVerticalScrollIndicator={false}
-          initialNumToRender={12}
-          maxToRenderPerBatch={10}
-          windowSize={11}
-          removeClippedSubviews={Platform.OS !== 'web'}
           contentContainerStyle={{ paddingTop: verticalScale(4), paddingBottom: verticalScale(80) }}
           ListEmptyComponent={
             <View style={styles.empty}>

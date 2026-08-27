@@ -917,7 +917,10 @@ export default function CanvasListScreen({ route, navigation }) {
                                       },
                                     ]}
                                   >
-                                    {isGradient ? (
+                                    <View style={[styles.coverOptionPreview, { backgroundColor: cov.colorPalette?.[0] || '#4f46e5' }]}>
+                                        <Text style={styles.coverOptionText}>Gradient</Text>
+                                      </View>
+                                    {/* {isGradient ? (
                                       <View style={[styles.coverOptionPreview, { backgroundColor: cov.colorPalette?.[0] || '#4f46e5' }]}>
                                         <Text style={styles.coverOptionText}>Gradient</Text>
                                       </View>
@@ -926,7 +929,7 @@ export default function CanvasListScreen({ route, navigation }) {
                                         <ImageIcon size={14} color="#6b7280" />
                                         <Text style={[styles.coverOptionText, { color: '#4b5563' }]}>Preset</Text>
                                       </View>
-                                    )}
+                                    )} */}
                                   </TouchableOpacity>
                                 );
                               })}

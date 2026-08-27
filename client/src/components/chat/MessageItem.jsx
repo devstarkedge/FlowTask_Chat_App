@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useCallback, memo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
+import { useChannelStore } from "../../stores/channelStore";
 import { format } from "date-fns";
 import {
   Smile,
@@ -43,6 +44,7 @@ import FloatingPortal from "./FloatingPortal";
 import MessageInfoModal from "./MessageInfoModal";
 import { sanitizeHtml } from "../../utils/sanitize";
 import { extractPlainText } from "../../utils/extractPlainText";
+import { markdownToHtml } from "../../utils/markdownToDoc";
 import toast from "react-hot-toast";
 import { handleDownload } from "../../utils/handleDownload";
 import { getFileUrl, getFileAssetId } from "../../utils/fileProxy";
@@ -413,6 +415,33 @@ const MessageItem = memo(
     onSelectMessage,
   }) {
     const { user } = useAuthStore();
+    // Channel members are used to resolve reaction `userIds` → user objects.
+    const channelIdForMembers = message.channelId;
+    const channelMembers =
+      useChannelStore(
+        useCallback((s) => s.membersByChannel?.[channelIdForMembers], [channelIdForMembers]),
+      ) || [];
+    const memberMap = useMemo(
+      () =>
+        new Map(
+          channelMembers.map((m) => [String(m._id ?? m.userId ?? m.id), m]),
+        ),
+      [channelMembers],
+    );
+    const resolveReactionUsers = useCallback(
+      (reaction) =>
+        (reaction.userIds || []).map((id) => {
+          const key = String(id);
+          return (
+            memberMap.get(key) || {
+              _id: id,
+              name: key === String(user?._id) ? user?.name || "You" : undefined,
+              email: undefined,
+            }
+          );
+        }),
+      [memberMap, user?._id, user?.name],
+    );
     const {
       addReaction,
       removeReaction,
@@ -588,14 +617,15 @@ const MessageItem = memo(
     );
 
     const handleReaction = (emoji) => {
+      const currentUserId = String(user?._id || "");
       const existing = message.reactions?.find(
         (r) =>
           r.emoji === emoji &&
-          (r.users?.includes(user?._id) ||
-            r.userIds?.some((id) => id?.toString() === user?._id)),
+          (r.users?.some((id) => String(id?._id || id) === currentUserId) ||
+            r.userIds?.some((id) => String(id) === currentUserId)),
       );
-      if (existing) removeReaction(message._id, emoji);
-      else addReaction(message._id, emoji);
+      if (existing) removeReaction(message._id, emoji, message.channelId);
+      else addReaction(message._id, emoji, message.channelId);
       setShowReactionPicker(false);
     };
 
@@ -638,7 +668,7 @@ const MessageItem = memo(
             className="text-xs italic px-2"
             style={{ color: "var(--text-muted)" }}
           >
-            {message.content}
+            {extractPlainText(message.content || "")}
           </p>
           <div
             className="flex-1 h-px"
@@ -866,14 +896,17 @@ const MessageItem = memo(
         );
       }
 
-      // Plain Text Fallback
+      // Legacy plain-text messages (especially bot/activity updates) can
+      // contain Markdown. Render it safely so emphasis, links, lists, and
+      // deliberate line breaks are presented rather than shown as syntax.
       return (
         <div
-          className="message-content text-[14px] leading-relaxed break-words whitespace-pre-wrap"
+          className="message-content rich-message-content"
           style={{ color: "inherit" }}
-        >
-          {rawContent}
-        </div>
+          dangerouslySetInnerHTML={{
+            __html: sanitizeHtml(markdownToHtml(rawContent)),
+          }}
+        />
       );
     };
 
@@ -958,7 +991,7 @@ const MessageItem = memo(
           {/* Column: name + bubble */}
           <div
             className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}
-            style={{ maxWidth: "min(65%, 480px)" }}
+            style={{ maxWidth: "min(72%, 620px)", minWidth: 0 }}
           >
             {!compact && !isDMChannel && (
               <div
@@ -1151,10 +1184,11 @@ const MessageItem = memo(
             {message.reactions?.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1 px-1">
                 {message.reactions.map((reaction) => {
+                  const currentUserId = String(user?._id || "");
                   const hasReacted =
-                    reaction.users?.includes(user?._id) ||
+                    reaction.users?.some((id) => String(id?._id || id) === currentUserId) ||
                     reaction.userIds?.some(
-                      (id) => id?.toString() === user?._id,
+                      (id) => String(id) === currentUserId,
                     );
                   const count = reaction.users?.length || reaction.count || 0;
                   return (
@@ -1163,7 +1197,13 @@ const MessageItem = memo(
                       emoji={reaction.emoji}
                       count={count}
                       hasReacted={hasReacted}
-                      onClick={handleReaction}
+                      users={resolveReactionUsers(reaction)}
+                      currentUserId={user?._id}
+                      messageId={message._id}
+                      onToggle={handleReaction}
+                      onAddMore={() => {
+                        setShowReactionPicker(true);
+                      }}
                     />
                   );
                 })}

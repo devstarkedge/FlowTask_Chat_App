@@ -26,14 +26,17 @@ class AuthService {
    * @returns {Promise<{ chatUser: object, message: string }>}
    */
   async register({ name, email, password }) {
-    // Check for existing user
-    const existing = await userRepository.findByEmailPublic(email);
-    if (existing) {
-      throw new ValidationError('An account with this email already exists');
-    }
 
-    // Create user (global identity — no workspace scope)
-    const chatUser = await userRepository.createNativeUser({ name, email, password });
+    let chatUser;
+    try {
+      // Create user (global identity — no workspace scope)
+      chatUser = await userRepository.createNativeUser({ name, email, password });
+    } catch (error) {
+      if (error.code === 11000 && error.keyPattern && error.keyPattern.email) {
+        throw new ValidationError('An account with this email already exists');
+      }
+      throw error;
+    }
 
     // Generate verification token
     const verificationToken = tokenService.generateRandomToken();
@@ -105,6 +108,12 @@ class AuthService {
     if (!isMatch) {
       await user.incrementLoginAttempts();
       throw new UnauthorizedError('Invalid email or password');
+    }
+
+    // Check if account is in deletion_pending state and recover if necessary
+    if (user.accountStatus === 'deletion_pending') {
+      await userRepository.recoverAccount(user._id);
+      logger.info('Account recovered during native login', { userId: user._id });
     }
 
     // Reset login attempts on success
@@ -255,6 +264,12 @@ class AuthService {
       createIfMissing: true,
     });
 
+    // Recover account if it was pending deletion
+    if (chatUser.accountStatus === 'deletion_pending') {
+      await userRepository.recoverAccount(chatUser._id);
+      logger.info('Account recovered during FlowTask login', { userId: chatUser._id });
+    }
+
     // 5. Issue Chat tokens (no workspaceId in JWT)
     const accessToken = tokenService.issueAccessToken({ id: chatUser._id.toString() });
     const refreshToken = tokenService.issueRefreshToken({ id: chatUser._id.toString() });
@@ -362,6 +377,55 @@ class AuthService {
   async logoutAll(userId) {
     await userRepository.clearAllRefreshTokens(userId);
     logger.info('User logged out from all devices', { userId });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // ACCOUNT DELETION
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /**
+   * Delete the current user's account (self-service).
+   * Requires password re-authentication for native accounts. FlowTask SSO
+   * accounts are managed by FlowTask and cannot be deleted from Chat.
+   *
+   * Performs a soft delete: deactivates the account, anonymizes identity
+   * fields (freeing the unique email for re-registration), clears the
+   * password hash, and revokes all refresh tokens (every device logged out).
+   *
+   * @param {string} userId
+   * @param {string} password — current password, required for confirmation
+   */
+  async deleteAccount(userId, password) {
+    if (!password) {
+      throw new ValidationError('Password confirmation is required to delete your account.');
+    }
+
+    const user = await userRepository.findByIdWithPassword(userId);
+    if (!user) {
+      throw new NotFoundError('Account not found');
+    }
+    if (user.deletedAt) {
+      throw new ForbiddenError('Account is already deleted.');
+    }
+    if (user.authProvider !== 'native') {
+      throw new ForbiddenError(
+        'This account is managed by FlowTask SSO. Please delete it from FlowTask instead.',
+      );
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      throw new UnauthorizedError('Incorrect password. Account was not deleted.');
+    }
+
+    const scheduledDeletionAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+    await userRepository.requestDeletion(userId, scheduledDeletionAt);
+
+    // Revoke every session across all devices
+    await userRepository.clearAllRefreshTokens(userId);
+
+    logger.info('User requested account deletion (90-day wait)', { userId, scheduledDeletionAt });
+    return { deleted: true, scheduledDeletionAt };
   }
 
   // ═══════════════════════════════════════════════════════════════════════

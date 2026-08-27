@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,14 @@ import {
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppScreen from '../../components/common/AppScreen';
 import Logo from '../../components/Logo';
+import TermsModal from '../../components/TermsModal';
+import PrivacyModal from '../../components/PrivacyModal';
 import { Eye, EyeOff, CircleChevronRight, Lock, Check } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+
 
 // Password strength calculator (colors will be mapped at render time)
 function getStrength(pass) {
@@ -49,6 +52,9 @@ const RegisterScreen = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   const updateField = (field, value) => {
     let newValue = value;
@@ -73,6 +79,7 @@ const RegisterScreen = ({ navigation }) => {
     },
   ];
   const allChecks = passwordChecks.every((c) => c.ok);
+  const canSubmit = allChecks && agreedToTerms;
   const strength = getStrength(form.password);
 
   const handleSubmit = async () => {
@@ -88,6 +95,13 @@ const RegisterScreen = ({ navigation }) => {
       Toast.show({
         type: 'error',
         text1: 'Please fix password requirements',
+      });
+      return;
+    }
+    if (!agreedToTerms) {
+      Toast.show({
+        type: 'error',
+        text1: 'Please accept the Terms & Privacy Policy',
       });
       return;
     }
@@ -260,10 +274,43 @@ const RegisterScreen = ({ navigation }) => {
             </View>
           ) : null}
 
+          {/* ── Terms & Conditions acceptance ── */}
           <TouchableOpacity
-            style={[styles.submitButton, (isLoading || !allChecks) && styles.submitButtonDisabled, { backgroundColor: colors.primary }]}
+            style={styles.termsRow}
+            onPress={() => setAgreedToTerms(!agreedToTerms)}
+            activeOpacity={0.7}
+          >
+            <View
+              style={[
+                styles.termsCheckbox,
+                agreedToTerms && { backgroundColor: colors.primary, borderColor: colors.primary },
+                { borderColor: agreedToTerms ? colors.primary : colors.inputBorder },
+              ]}
+            >
+              {agreedToTerms && <Check size={12} color={colors.messageTextSent} strokeWidth={3} />}
+            </View>
+            <Text style={[styles.termsText, { color: colors.textSecondary }]}>
+              I have read and agree to the{' '}
+              <Text
+                style={[styles.termsLink, { color: colors.primary }]}
+                onPress={() => setShowTerms(true)}
+              >
+                Terms &amp; Conditions
+              </Text>
+              {' '}and{' '}
+              <Text
+                style={[styles.termsLink, { color: colors.primary }]}
+                onPress={() => setShowPrivacy(true)}
+              >
+                Privacy Policy
+              </Text>
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.submitButton, (isLoading || !canSubmit) && styles.submitButtonDisabled, { backgroundColor: colors.primary }]}
             onPress={handleSubmit}
-            disabled={isLoading || !allChecks}
+            disabled={isLoading || !canSubmit}
             activeOpacity={0.85}
           >
             {isLoading ? (
@@ -285,6 +332,11 @@ const RegisterScreen = ({ navigation }) => {
         </View>
       </ScrollView>
     </ScreenContainer>
+
+    {/* Terms & Conditions viewer */}
+    <TermsModal visible={showTerms} onClose={() => setShowTerms(false)} />
+    {/* Privacy Policy viewer */}
+    <PrivacyModal visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
     </AppScreen>
   );
 };
@@ -318,6 +370,18 @@ const createStyles = (colors) =>
     checkCircle: { width: scale(16), height: verticalScale(16), borderRadius: moderateScale(8), justifyContent: 'center', alignItems: 'center', backgroundColor: colors.border },
     checkLabel: { fontSize: moderateScale(12), fontWeight: '500', color: colors.textTertiary },
     submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: verticalScale(14), paddingHorizontal: scale(18), borderRadius: moderateScale(11), marginBottom: verticalScale(12), backgroundColor: colors.primary },
+    termsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: verticalScale(4), marginBottom: verticalScale(14) },
+    termsCheckbox: {
+      width: scale(18),
+      height: verticalScale(18),
+      borderRadius: moderateScale(5),
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: verticalScale(1),
+    },
+    termsText: { flex: 1, fontSize: moderateScale(12.5), lineHeight: moderateScale(18) },
+    termsLink: { fontWeight: '700' },
     submitButtonDisabled: { opacity: 0.5 },
     submitButtonText: { fontSize: moderateScale(15), fontWeight: '700', letterSpacing: -0.3, color: colors.messageTextSent },
     footerLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },

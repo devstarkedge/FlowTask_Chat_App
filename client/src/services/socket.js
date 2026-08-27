@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client'
+import { queryClient } from '../queries/queryClient'
 import { useAuthStore } from '../stores/authStore'
 import { useChatStore } from '../stores/chatStore'
 import { useChannelStore } from '../stores/channelStore'
@@ -415,13 +416,20 @@ export function connectSocket() {
     useChatStore.getState().handleMessageUnpinned(payload)
   })
 
-  // ─── Reaction Events ────────────────────────────────────────────────
+    // ─── Reaction Events ────────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.REACTION_ADD, ({ messageId, userId, emoji, channelId }) => {
     useChatStore.getState().addReactionLocal(messageId, userId, emoji, channelId)
+    // Keep the open reaction-details popup (user list) live.
+    queryClient.invalidateQueries({
+      queryKey: ['reactionDetails', String(messageId), emoji],
+    })
   })
 
   socket.on(SOCKET_EVENTS.REACTION_REMOVE, ({ messageId, userId, emoji, channelId }) => {
     useChatStore.getState().removeReactionLocal(messageId, userId, emoji, channelId)
+    queryClient.invalidateQueries({
+      queryKey: ['reactionDetails', String(messageId), emoji],
+    })
   })
 
   // ─── Typing Events ──────────────────────────────────────────────────

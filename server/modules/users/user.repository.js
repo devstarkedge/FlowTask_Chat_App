@@ -551,6 +551,84 @@ class UserRepository {
   }
 
   /**
+   * Find a user by ID including the password hash (for re-authentication
+   * before destructive actions like account deletion).
+   * @param {string} id
+   * @returns {Promise<ChatUser|null>}
+   */
+  async findByIdWithPassword(id) {
+    return ChatUser.findById(id).select('+password').exec();
+  }
+
+  /**
+   * Request account deletion: set status to pending and schedule deletion date.
+   * Leaves identity and credentials intact for recovery.
+   * @param {string} id
+   * @param {Date} scheduledDeletionAt
+   * @returns {Promise<ChatUser|null>}
+   */
+  async requestDeletion(id, scheduledDeletionAt) {
+    return ChatUser.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          accountStatus: 'deletion_pending',
+          deletionRequestedAt: new Date(),
+          scheduledDeletionAt,
+        }
+      },
+      { returnDocument: 'after' }
+    );
+  }
+
+  /**
+   * Cancel account deletion and restore to active state.
+   * @param {string} id
+   * @returns {Promise<ChatUser|null>}
+   */
+  async recoverAccount(id) {
+    return ChatUser.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          accountStatus: 'active',
+          deletionRequestedAt: null,
+          scheduledDeletionAt: null,
+        }
+      },
+      { returnDocument: 'after' }
+    );
+  }
+
+  /**
+   * Soft-delete an account: deactivate, anonymize identity fields
+   * (freeing the unique email), clear credentials and revoke all sessions.
+   * @param {string} id
+   * @returns {Promise<ChatUser|null>}
+   */
+  async softDelete(id) {
+    return ChatUser.findByIdAndUpdate(
+      id,
+      {
+        $set: {   
+          isActive: false,
+          onlineStatus: 'offline',
+          accountStatus: 'active', // reset to avoid cron re-processing
+          deletionRequestedAt: null,
+          scheduledDeletionAt: null,
+          name: 'Deleted User',
+          email: `deleted-${id.toString()}`,
+          password: undefined,
+          refreshTokens: [],
+          socketIds: [],
+          deletedAt: new Date(),
+        },
+      },
+      { returnDocument: 'after' },
+    );
+  }
+
+  /**
    * Find multiple users by FlowTask IDs.
    * @param {string[]} flowTaskUserIds
    * @returns {Promise<ChatUser[]>}

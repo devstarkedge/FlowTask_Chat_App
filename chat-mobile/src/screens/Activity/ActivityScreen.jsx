@@ -10,11 +10,13 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  StatusBar,
 } from "react-native";
 import { MessageSquare, AtSign, MessageCircle } from 'lucide-react-native';
 import { useNotificationStore } from "../../stores/notificationStore";
 import { useThemeStore } from "../../stores/themeStore";
-import { AppAvatar, AppScreen } from "../../components/common";
+import { AppAvatar } from "../../components/common";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ReplyQuotePreview from "../../components/ReplyQuotePreview";
 import { hasValidReplyTo } from "../../utils/replyUtils";
 import { useTranslation } from "../../utils/i18n";
@@ -320,6 +322,7 @@ const ActivityScreen = ({ navigation }) => {
     isLoading, hasMore, cursor,
   } = useNotificationStore();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
 
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
@@ -361,7 +364,8 @@ const ActivityScreen = ({ navigation }) => {
   );
 
   return (
-    <AppScreen style={[styles.container, { backgroundColor: colors.background }]} edges={["top"]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+      <StatusBar barStyle={colors.effectiveTheme === "dark" ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>{t("Activity")}</Text>
@@ -410,6 +414,9 @@ const ActivityScreen = ({ navigation }) => {
         keyExtractor={(item) => item._id || String(item.createdAt)}
         renderItem={renderItem}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={15}
+        maxToRenderPerBatch={15}
+        windowSize={5}
         onEndReached={loadMore}
         onEndReachedThreshold={0.3}
         contentContainerStyle={{ paddingBottom: verticalScale(40) }}
@@ -432,7 +439,7 @@ const ActivityScreen = ({ navigation }) => {
           ) : null
         }
       />
-    </AppScreen>
+    </View>
   );
 };
 

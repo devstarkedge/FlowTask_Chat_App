@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuthStore } from "../stores/authStore";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import TermsAndConditionsModal from "../components/shared/TermsAndConditionsModal";
 import './custom-css/registerPage.css'
 
 
@@ -73,6 +74,8 @@ export default function RegisterPage() {
   const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   const updateField = (field) => (e) => {
     let value = e.target.value;
@@ -90,11 +93,13 @@ export default function RegisterPage() {
     { label: "Passwords match",       ok: !!form.password && !!form.confirmPassword && form.password === form.confirmPassword },
   ];
   const allChecks = passwordChecks.every((c) => c.ok);
+  const canSubmit = allChecks && agreedToTerms;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     clearError();
     if (!allChecks) { toast.error("Please fix password requirements"); return; }
+    if (!agreedToTerms) { toast.error("Please accept the Terms & Conditions"); return; }
     try {
       await register({ name: form.name, email: form.email, password: form.password });
       setSuccess(true);
@@ -338,13 +343,47 @@ export default function RegisterPage() {
                 )}
               </AnimatePresence>
 
+              {/* ── Terms & Conditions acceptance ── */}
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", userSelect: "none" }}>
+                  <input
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                    style={{ marginTop: 2, width: 16, height: 16, accentColor: "#6366f1", cursor: "pointer", flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 13, lineHeight: 1.55, color: "var(--text-muted)" }}>
+                    I have read and agree to the{" "}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setShowTerms(true);
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        font: "inherit",
+                        color: "#6366f1",
+                        fontWeight: 600,
+                        textDecoration: "underline",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Terms &amp; Conditions
+                    </button>
+                  </span>
+                </label>
+              </div>
+
               {/* ── Submit (gradient + shimmer — no global equivalent) ── */}
               <motion.button
                 type="submit"
-                disabled={isLoading || !allChecks}
+                disabled={isLoading || !canSubmit}
                 className="rp-submit rp-shimmer-btn"
-                whileHover={isLoading || !allChecks ? {} : { y: -2, boxShadow: "0 8px 28px rgba(99,102,241,.48), 0 18px 44px rgba(99,102,241,.22)" }}
-                whileTap={isLoading || !allChecks ? {} : { y: 0, scale: 0.98 }}
+                whileHover={isLoading || !canSubmit ? {} : { y: -2, boxShadow: "0 8px 28px rgba(99,102,241,.48), 0 18px 44px rgba(99,102,241,.22)" }}
+                whileTap={isLoading || !canSubmit ? {} : { y: 0, scale: 0.98 }}
               >
                 {isLoading ? (
                   <>
@@ -395,6 +434,9 @@ export default function RegisterPage() {
             ))}
           </motion.div>
         </motion.div>
+
+        {/* Terms & Conditions viewer */}
+        <TermsAndConditionsModal isOpen={showTerms} onClose={() => setShowTerms(false)} />
 
       </div>
     </div>

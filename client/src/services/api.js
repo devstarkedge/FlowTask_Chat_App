@@ -146,6 +146,7 @@ export const authAPI = {
   me: () => api.get("/auth/me"),
   updatePreferences: (prefs) => api.put("/auth/preferences", prefs),
   searchUsers: (q) => api.get("/auth/users/search", { params: { q } }),
+  deleteAccount: (password) => api.delete("/auth/account", { data: { password } }),
 };
 
 // ─── Channels ────────────────────────────────────────────────────────────
@@ -200,6 +201,8 @@ export const messageAPI = {
   addReaction: (id, emoji) => api.post(`/messages/${id}/reactions`, { emoji }),
   removeReaction: (id, emoji) =>
     api.delete(`/messages/${id}/reactions/${emoji}`),
+  getReaction: (id, emoji) =>
+    api.get(`/messages/${id}/reactions/${encodeURIComponent(emoji)}`),
   pin: (id) => api.post(`/messages/${id}/pin`),
   unpin: (id) => api.delete(`/messages/${id}/pin`),
   forward: (id, destinationIds, attachmentFileIds, customMessage) =>
@@ -508,5 +511,7 @@ export const categoryAPI = {
   syncDepartments: () => api.post('/categories/sync-departments'),
   getDepartments: () => api.get('/categories/departments'),
 };
+
+
 
 export default api;

@@ -269,35 +269,29 @@ class WorkspaceService {
       throw new BadRequestError(`Workspace "${slug}" is already taken.`);
     }
 
-    // Atomic: workspace creation + owner membership
-    const session = await mongoose.startSession();
-    let workspace;
-    try {
-      await session.withTransaction(async () => {
-        const [ws] = await mongoose.model('Workspace').create([{
-          name,
-          slug,
-          description,
-          logo,
-          plan,
-          source,
-          owner: creatorId,
-          memberCount: 1,
-          inviteCode: crypto.randomBytes(16).toString('hex'),
-        }], { session });
-        workspace = ws;
+    // Removed transaction because standalone MongoDB deployments do not support them
+    // and can cause 'ClientSession must be from the same MongoClient' errors.
+    const ws = await mongoose.model('Workspace').create({
+      name,
+      slug,
+      description,
+      logo,
+      plan,
+      source,
+      owner: creatorId,
+      memberCount: 1,
+      inviteCode: crypto.randomBytes(16).toString('hex'),
+    });
+    
+    workspace = ws;
 
-        await mongoose.model('WorkspaceMembership').create([{
-          userId: creatorId,
-          workspaceId: ws._id,
-          role: WORKSPACE_ROLES.OWNER,
-          isActive: true,
-          joinedAt: new Date(),
-        }], { session });
-      });
-    } finally {
-      await session.endSession();
-    }
+    await mongoose.model('WorkspaceMembership').create({
+      userId: creatorId,
+      workspaceId: ws._id,
+      role: WORKSPACE_ROLES.OWNER,
+      isActive: true,
+      joinedAt: new Date(),
+    });
 
     // Default channels are non-critical — create outside transaction
     await this._createDefaultChannels(workspace._id, creatorId);

@@ -267,6 +267,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
               reactions={item.reactions}
               messageId={item._id}
               currentUserId={user?._id}
+              channelMembers={channelMembers}
               onAddReaction={(emoji) => addReaction(item._id, emoji)}
               onRemoveReaction={(emoji) => removeReaction(item._id, emoji)}
               onOpenPicker={() => setEmojiPickerTarget(item._id)}
@@ -400,6 +401,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                   reactions={effectiveRoot.reactions}
                   messageId={effectiveRoot._id}
                   currentUserId={user?._id}
+                  channelMembers={channelMembers}
                   onAddReaction={(emoji) => addReaction(effectiveRoot._id, emoji)}
                   onRemoveReaction={(emoji) => removeReaction(effectiveRoot._id, emoji)}
                   onOpenPicker={() => setEmojiPickerTarget(effectiveRoot._id)}

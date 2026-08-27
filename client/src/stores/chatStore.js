@@ -135,6 +135,47 @@ function logSlowMutation(metricName, startedAt, meta = {}) {
   });
 }
 
+// ─── Reaction mutators (pure helpers) ───────────────────────────────────
+// Reused by addReactionLocal / removeReactionLocal so a single source of
+// truth updates the legacy messagesByChannel store, the normalized
+// messagesById store, and the threadRepliesById store together.
+// Add `userId` to the reaction matching `emoji` (or create it). Idempotent:
+// a user already present is never added twice, so an optimistic local update
+// followed by the server echo cannot double-count.
+function addReactionToUser(reactions, userId, emoji) {
+  const next = (reactions || []).map((r) => ({ ...r }));
+  const existing = next.find((r) => r.emoji === emoji);
+  if (existing) {
+    if (
+      !existing.users?.includes(userId) &&
+      !existing.userIds?.some((id) => id?.toString() === userId)
+    ) {
+      existing.users = [...(existing.users || []), userId];
+      existing.userIds = [...(existing.userIds || []), userId];
+      existing.count = (existing.count || 0) + 1;
+    }
+  } else {
+    next.push({ emoji, users: [userId], userIds: [userId], count: 1 });
+  }
+  return next;
+}
+
+// Remove `userId` from the reaction matching `emoji`. Drops the entry when
+// no users remain.
+function removeReactionFromUser(reactions, userId, emoji) {
+  return (reactions || [])
+    .map((r) => {
+      if (r.emoji !== emoji) return { ...r };
+      return {
+        ...r,
+        users: (r.users || []).filter((u) => u !== userId),
+        userIds: (r.userIds || []).filter((u) => u?.toString() !== userId),
+        count: Math.max(0, (r.count || 1) - 1),
+      };
+    })
+    .filter((r) => r.users?.length > 0 || r.count > 0);
+}
+
 export const useChatStore = create((set, get) => ({
   // Messages keyed by channelId
   messagesByChannel: {},
@@ -1245,18 +1286,39 @@ export const useChatStore = create((set, get) => ({
   },
 
   // ─── Reactions ──────────────────────────────────────────────────────
-  addReaction: async (messageId, emoji) => {
+    // Optimistic: mirror the reacting viewer's own reaction into the local
+  // store immediately so the pill count + user bump is instantly reflected on
+  // the reacting client (no socket round-trip, no need to open the
+  // reaction-details popup). The server REACTION_ADD / REACTION_REMOVE echo
+  // (addReactionLocal / removeReactionLocal in socket.js) is idempotent — the
+  // helpers ignore an already-present user — so the database remains the
+  // single source of truth with no double count.
+  addReaction: async (messageId, emoji, channelId) => {
+    const user = useAuthStore.getState().user;
+    if (!user?._id) return;
+    const userId = String(user._id);
+    // Optimistically apply locally for instant feedback.
+    get().addReactionLocal(messageId, userId, emoji, channelId);
     try {
       await messageAPI.addReaction(messageId, emoji);
     } catch {
+      // Roll back the optimistic update if the server rejected it.
+      get().removeReactionLocal(messageId, userId, emoji, channelId);
       toast.error("Failed to add reaction");
     }
   },
 
-  removeReaction: async (messageId, emoji) => {
+  removeReaction: async (messageId, emoji, channelId) => {
+    const user = useAuthStore.getState().user;
+    if (!user?._id) return;
+    const userId = String(user._id);
+    // Optimistically remove locally for instant feedback.
+    get().removeReactionLocal(messageId, userId, emoji, channelId);
     try {
       await messageAPI.removeReaction(messageId, emoji);
     } catch {
+      // Roll back the optimistic removal if the server rejected it.
+      get().addReactionLocal(messageId, userId, emoji, channelId);
       toast.error("Failed to remove reaction");
     }
   },
@@ -1273,40 +1335,55 @@ export const useChatStore = create((set, get) => ({
         hintedChannelId && newState[hintedChannelId]
           ? [hintedChannelId]
           : Object.keys(newState);
+      let updatedReactions = null;
       for (const cid of channelsToScan) {
         newState[cid] = newState[cid].map((m) => {
           if (m._id !== messageId) return m;
-          const reactions = [...(m.reactions || [])];
-          const existing = reactions.find((r) => r.emoji === emoji);
-          if (existing) {
-            if (
-              !existing.users?.includes(userId) &&
-              !existing.userIds?.some((id) => id?.toString() === userId)
-            ) {
-              existing.users = [...(existing.users || []), userId];
-              existing.userIds = [...(existing.userIds || []), userId];
-              existing.count = (existing.count || 0) + 1;
-            }
-          } else {
-            reactions.push({
-              emoji,
-              users: [userId],
-              userIds: [userId],
-              count: 1,
-            });
-          }
-          return { ...m, reactions };
+          updatedReactions = addReactionToUser(m.reactions, userId, emoji);
+          return { ...m, reactions: updatedReactions };
         });
       }
+      const nextState = { messagesByChannel: newState };
+
+      // Normalized channel/root message entity (feature-flagged) — keep its
+      // reaction count in sync so counts update live in that viewer too.
+      if (
+        CHAT_FEATURE_FLAGS.normalizedMessageStore &&
+        updatedReactions !== null &&
+        state.messagesById[messageId]
+      ) {
+        nextState.messagesById = {
+          ...state.messagesById,
+          [messageId]: {
+            ...state.messagesById[messageId],
+            reactions: updatedReactions,
+          },
+        };
+      }
+
+      // Thread replies live in a separate map; keep their pills live too.
+      const existingReply = state.threadRepliesById?.[messageId];
+      if (existingReply) {
+        const replyReactions = addReactionToUser(
+          existingReply.reactions,
+          userId,
+          emoji,
+        );
+        nextState.threadRepliesById = {
+          ...state.threadRepliesById,
+          [messageId]: { ...existingReply, reactions: replyReactions },
+        };
+      }
+
       logSlowMutation("addReactionLocal", startedAt, {
         channelsScanned: channelsToScan.length,
         usedHint: Boolean(hintedChannelId),
       });
-      return { messagesByChannel: newState };
+      return nextState;
     });
   },
 
-  removeReactionLocal: (messageId, userId, emoji, channelId) => {
+    removeReactionLocal: (messageId, userId, emoji, channelId) => {
     set((state) => {
       const startedAt = nowMs();
       const newState = { ...state.messagesByChannel };
@@ -1317,30 +1394,49 @@ export const useChatStore = create((set, get) => ({
         hintedChannelId && newState[hintedChannelId]
           ? [hintedChannelId]
           : Object.keys(newState);
+      let updatedReactions = null;
       for (const cid of channelsToScan) {
         newState[cid] = newState[cid].map((m) => {
           if (m._id !== messageId) return m;
-          const reactions = (m.reactions || [])
-            .map((r) => {
-              if (r.emoji !== emoji) return r;
-              return {
-                ...r,
-                users: (r.users || []).filter((u) => u !== userId),
-                userIds: (r.userIds || []).filter(
-                  (u) => u?.toString() !== userId,
-                ),
-                count: Math.max(0, (r.count || 1) - 1),
-              };
-            })
-            .filter((r) => r.users?.length > 0 || r.count > 0);
-          return { ...m, reactions };
+          updatedReactions = removeReactionFromUser(m.reactions, userId, emoji);
+          return { ...m, reactions: updatedReactions };
         });
       }
+      const nextState = { messagesByChannel: newState };
+
+      if (
+        CHAT_FEATURE_FLAGS.normalizedMessageStore &&
+        updatedReactions !== null &&
+        state.messagesById[messageId]
+      ) {
+        nextState.messagesById = {
+          ...state.messagesById,
+          [messageId]: {
+            ...state.messagesById[messageId],
+            reactions: updatedReactions,
+          },
+        };
+      }
+
+      // Thread replies live in a separate map; keep their pills live too.
+      const existingReply = state.threadRepliesById?.[messageId];
+      if (existingReply) {
+        const replyReactions = removeReactionFromUser(
+          existingReply.reactions,
+          userId,
+          emoji,
+        );
+        nextState.threadRepliesById = {
+          ...state.threadRepliesById,
+          [messageId]: { ...existingReply, reactions: replyReactions },
+        };
+      }
+
       logSlowMutation("removeReactionLocal", startedAt, {
         channelsScanned: channelsToScan.length,
         usedHint: Boolean(hintedChannelId),
       });
-      return { messagesByChannel: newState };
+      return nextState;
     });
   },
 

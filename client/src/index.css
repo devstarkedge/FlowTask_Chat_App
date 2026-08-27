@@ -3413,12 +3413,15 @@ body {
 
 .message-bubble {
   width: fit-content;
-  padding: 7px 13px;
+  max-width: 100%;
+  padding: 10px 14px;
   position: relative;
   word-wrap: break-word;
-  overflow-wrap: break-word;
-  line-height: 1.5;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
   font-size: 14px;
+  text-align: left;
+  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.04);
   /* Default: solo bubble — fully rounded */
   border-radius: 18px;
 }
@@ -3431,8 +3434,41 @@ body {
 
 /* ── Received (left) colour ────────────────────────────────────────────── */
 .message-bubble.received {
-  background:var(--bubble-sender-bg) ;
-  color: var(--bubble-sender-text);
+  background: var(--bg-secondary, #f3f4f6);
+  color: var(--text-primary, #172033);
+  border: 1px solid var(--border-secondary, rgba(15, 23, 42, 0.08));
+}
+
+/* Keep formatted content compact but distinctly structured inside bubbles. */
+.message-bubble .message-content {
+  min-width: 0;
+  text-align: left;
+}
+
+.message-bubble .rich-message-content > :first-child {
+  margin-top: 0;
+}
+
+.message-bubble .rich-message-content > :last-child {
+  margin-bottom: 0;
+}
+
+.message-bubble .rich-message-content p {
+  margin: 0 0 0.45em;
+}
+
+.message-bubble .rich-message-content p + p {
+  margin-top: 0.45em;
+}
+
+.message-bubble .rich-message-content ul,
+.message-bubble .rich-message-content ol {
+  margin: 0.5em 0;
+  padding-left: 1.35em;
+}
+
+.message-bubble .rich-message-content li + li {
+  margin-top: 0.2em;
 }
 
 /*
@@ -7837,6 +7873,7 @@ textarea:focus-visible,
 }
 
 .appearance-modal {
+  position: relative;
   width: min(1120px, 100%);
   max-height: min(860px, calc(100vh - 48px));
   display: flex;

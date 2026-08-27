@@ -8,6 +8,7 @@ import {
   deleteMessage,
   addReaction,
   removeReaction,
+  getReaction,
   pinMessage,
   unpinMessage,
   getPinnedMessages,
@@ -101,6 +102,7 @@ router.get('/:id', requireMessageAccess(), getMessage);
 router.put('/:id', requireMessageAccess(), validate({ body: editMessageSchema }), editMessage);
 router.delete('/:id', requireMessageAccess(), deleteMessage);
 router.post('/:id/reactions', requireMessageAccess(), validate({ body: reactionSchema }), addReaction);
+router.get('/:id/reactions/:emoji', requireMessageAccess(), getReaction);
 router.delete('/:id/reactions/:emoji', requireMessageAccess(), removeReaction);
 router.post('/:id/pin', requireMessageAccess(), pinMessage);
 router.delete('/:id/pin', requireMessageAccess(), unpinMessage);

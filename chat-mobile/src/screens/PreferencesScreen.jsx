@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Alert, Modal, TextInput, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useAuthStore } from '../stores/authStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useTranslation } from '../utils/i18n';
-import { OptionsSelectionModal } from '../components/common';
+import TermsModal from '../components/TermsModal';
+import PrivacyModal from '../components/PrivacyModal';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 import {
@@ -22,9 +23,13 @@ import {
   Globe,
   Clock,
   ArrowRight,
-  CreditCard,
-  PieChart,
   Info,
+  AlertTriangle,
+  Trash2,
+  Shield,
+  FileText,
+  Mail,
+  HardDrive
 } from 'lucide-react-native';
 
 const SectionTitle = ({ title, colors }) => (
@@ -53,97 +58,41 @@ const PreferenceItem = ({ icon: Icon, title, subtitle, rightIcon, rightText, onP
   </TouchableOpacity>
 );
 
-const SELECTION_CONFIGS = {
-  emojiSkinTone: {
-    title: 'Default Emoji Skin Tone',
-    options: [
-      { label: 'Default (Yellow) ✋', value: 'Default' },
-      { label: 'Light ✋🏻', value: 'Light' },
-      { label: 'Medium-Light ✋🏼', value: 'Medium-Light' },
-      { label: 'Medium ✋🏽', value: 'Medium' },
-      { label: 'Medium-Dark ✋🏾', value: 'Medium-Dark' },
-      { label: 'Dark ✋🏿', value: 'Dark' },
-    ],
-  },
-  messageDisplay: {
-    title: 'Message Display',
-    options: [
-      { label: 'Clean (Default)', value: 'Clean' },
-      { label: 'Compact', value: 'Compact' },
-    ],
-  },
-  linkStyle: {
-    title: 'Links',
-    options: [
-      { label: 'Show Preview', value: 'Preview' },
-      { label: 'Text Only', value: 'Text Only' },
-    ],
-  },
-  inputOptions: {
-    title: 'Input Options',
-    options: [
-      { label: 'Rich Text', value: 'Rich Text' },
-      { label: 'Markdown', value: 'Markdown' },
-    ],
-  },
-  screenReader: {
-    title: 'Screen Reader',
-    options: [
-      { label: 'Default', value: 'Default' },
-      { label: 'Verbose', value: 'Verbose' },
-    ],
-  },
-  swipeActions: {
-    title: 'Swipe Actions',
-    options: [
-      { label: 'Reply', value: 'Reply' },
-      { label: 'Save', value: 'Save' },
-      { label: 'Mark Unread', value: 'Mark Unread' },
-    ],
-  },
-  language: {
-    title: 'Language',
-    options: [
-      { label: 'English (US)', value: 'English (US)' },
-      { label: 'English (UK)', value: 'English (UK)' },
-      { label: 'Spanish', value: 'Spanish' },
-      { label: 'French', value: 'French' },
-      { label: 'German', value: 'German' },
-      { label: 'Japanese', value: 'Japanese' },
-    ],
-  },
-  timeFormat: {
-    title: 'Time Format',
-    options: [
-      { label: '12-hour (AM/PM)', value: '12-hour' },
-      { label: '24-hour', value: '24-hour' },
-    ],
-  },
-  browserApp: {
-    title: 'Browser Application',
-    options: [
-      { label: 'In-App Browser', value: 'In-App' },
-      { label: 'System Default', value: 'System' },
-    ],
-  },
-};
-
 const PreferencesScreen = ({ navigation }) => {
   const { colors, effectiveTheme, toggleTheme, customColor, accentColor, setCustomColor } = useThemeStore();
   const prefs = usePreferencesStore();
   const user = useAuthStore(state => state.user);
   const activeWorkspace = useWorkspaceStore(state => state.activeWorkspace);
   
-  const [activeSelection, setActiveSelection] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  
+  const isNativeAccount = user?.authProvider === 'native' || !user?.authProvider;
 
-  const openSelection = (key) => setActiveSelection(key);
-  const closeSelection = () => setActiveSelection(null);
+  const handleDeleteAccount = async () => {
+    if (!deletePassword || deletingAccount) return;
+    setDeletingAccount(true);
+    try {
+      const { useAuthStore: authStoreRef } = require('../stores/authStore');
+      await authStoreRef.getState().deleteAccount(deletePassword);
+      
+      const Toast = require('react-native-toast-message').default;
+      Toast.show({ type: 'success', text1: 'Account deletion scheduled for 90 days from now.' });
+      
+      setShowDeleteModal(false);
+      // Wait for logout to process and navigation to kick in automatically
+    } catch (error) {
+      const Toast = require('react-native-toast-message').default;
+      Toast.show({ type: 'error', text1: error?.message || 'Failed to schedule account deletion' });
+      setDeletingAccount(false);
+    }
+  };
 
   const { t } = useTranslation();
-
-  const handleComingSoon = (feature) => {
-    Alert.alert(feature, 'Coming Soon');
-  };
 
   const handleClearCache = () => {
     Alert.alert(
@@ -271,25 +220,40 @@ const PreferencesScreen = ({ navigation }) => {
           />
         </View>
 
-        {/* Administration */}
+        {/* Data & Storage */}
         <View style={styles.section}>
-          <SectionTitle title={t("Administration")} colors={colors} />
+          <SectionTitle title={t("Data & Storage")} colors={colors} />
           <PreferenceItem
-            icon={CreditCard}
-            title={t("Billing")}
-            subtitle={t("View or manage your Free Plan")}
+            icon={HardDrive}
+            title={t("Clear Cache")}
+            subtitle={t("Free up space on your device")}
             colors={colors}
-            onPress={() => handleComingSoon('Billing')}
+            onPress={handleClearCache}
           />
-          {['owner', 'admin'].includes(activeWorkspace?.role) && (
-            <PreferenceItem
-              icon={PieChart}
-              title={t("Analytics")}
-              subtitle={t("View your analytics dashboard")}
-              colors={colors}
-              onPress={() => handleComingSoon('Analytics')}
-            />
-          )}
+        </View>
+
+        {/* Support & Legal */}
+        <View style={styles.section}>
+          <SectionTitle title={t("Support & Legal")} colors={colors} />
+          <PreferenceItem
+            icon={Mail}
+            title={t("Contact Support")}
+            subtitle={t("Email us for help or feedback")}
+            colors={colors}
+            onPress={() => Linking.openURL('mailto:support@flowtask.com')}
+          />
+          <PreferenceItem
+            icon={FileText}
+            title={t("Terms & Conditions")}
+            colors={colors}
+            onPress={() => setShowTerms(true)}
+          />
+          <PreferenceItem
+            icon={Shield}
+            title={t("Privacy Policy")}
+            colors={colors}
+            onPress={() => setShowPrivacy(true)}
+          />
         </View>
 
         {/* About */}
@@ -304,20 +268,94 @@ const PreferencesScreen = ({ navigation }) => {
           />
         </View>
 
+        {/* Danger Zone */}
+        <View style={styles.section}>
+          <SectionTitle title={t("Danger Zone")} colors={colors} />
+          <PreferenceItem
+            icon={AlertTriangle}
+            title={t("Delete Account")}
+            subtitle={t("Permanently delete your account")}
+            colors={{ ...colors, textPrimary: colors.error, textSecondary: colors.error }}
+            onPress={() => {
+              setDeletePassword('');
+              setShowDeleteModal(true);
+            }}
+          />
+        </View>
+
       </ScrollView>
 
 
-      
-      {activeSelection && SELECTION_CONFIGS[activeSelection] && (
-        <OptionsSelectionModal
-          visible={!!activeSelection}
-          onClose={closeSelection}
-          title={SELECTION_CONFIGS[activeSelection].title}
-          options={SELECTION_CONFIGS[activeSelection].options}
-          selectedValue={prefs[activeSelection]}
-          onSelect={(val) => prefs.setPreference(activeSelection, val)}
-        />
-      )}
+      {/* Delete Account Modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !deletingAccount && setShowDeleteModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.backgroundSecondary }]}>
+            <View style={styles.modalHeader}>
+              <View style={[styles.modalIconContainer, { backgroundColor: `${colors.error}1A` }]}>
+                <AlertTriangle size={20} color={colors.error} />
+              </View>
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Delete your account?</Text>
+            </View>
+            
+            <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
+              Your account will be permanently deleted after 90 days. If you log in before the 90-day period ends, your account deletion will be cancelled and your account will be restored.
+            </Text>
+            
+            {isNativeAccount && (
+              <>
+                <Text style={[styles.inputLabel, { color: colors.textTertiary }]}>CONFIRM WITH YOUR PASSWORD</Text>
+                <TextInput
+                  style={[styles.passwordInput, { 
+                    borderColor: colors.border,
+                    backgroundColor: colors.background,
+                    color: colors.textPrimary 
+                  }]}
+                  value={deletePassword}
+                  onChangeText={setDeletePassword}
+                  placeholder="Enter your current password"
+                  placeholderTextColor={colors.textTertiary}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  editable={!deletingAccount}
+                />
+              </>
+            )}
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={[styles.modalBtn, styles.cancelBtn, { borderColor: colors.border }]} 
+                onPress={() => setShowDeleteModal(false)}
+                disabled={deletingAccount}
+              >
+                <Text style={[styles.modalBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.modalBtn, styles.deleteBtn, { opacity: deletingAccount || (isNativeAccount && !deletePassword) ? 0.6 : 1 }]} 
+                onPress={handleDeleteAccount}
+                disabled={deletingAccount || (isNativeAccount && !deletePassword)}
+              >
+                {deletingAccount ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Trash2 size={16} color="#fff" />
+                    <Text style={[styles.modalBtnText, { color: '#fff' }]}>Schedule deletion</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <TermsModal visible={showTerms} onClose={() => setShowTerms(false)} />
+      <PrivacyModal visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
 
     </SafeAreaView>
   );
@@ -390,6 +428,78 @@ const styles = StyleSheet.create({
   rightEmoji: {
     fontSize: moderateScale(18),
     marginRight: scale(4),
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: scale(20),
+  },
+  modalContent: {
+    width: '100%',
+    borderRadius: moderateScale(16),
+    padding: scale(20),
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: verticalScale(12),
+  },
+  modalIconContainer: {
+    width: scale(36),
+    height: scale(36),
+    borderRadius: moderateScale(10),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: scale(12),
+  },
+  modalTitle: {
+    fontSize: moderateScale(18),
+    fontWeight: '700',
+  },
+  modalDescription: {
+    fontSize: moderateScale(14),
+    lineHeight: moderateScale(20),
+    marginBottom: verticalScale(16),
+  },
+  inputLabel: {
+    fontSize: moderateScale(12),
+    fontWeight: '700',
+    marginBottom: verticalScale(8),
+  },
+  passwordInput: {
+    borderWidth: 1,
+    borderRadius: moderateScale(10),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(10),
+    fontSize: moderateScale(14),
+    marginBottom: verticalScale(20),
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: scale(12),
+  },
+  modalBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: verticalScale(10),
+    paddingHorizontal: scale(16),
+    borderRadius: moderateScale(10),
+    gap: scale(6),
+  },
+  cancelBtn: {
+    borderWidth: 1,
+    backgroundColor: 'transparent',
+  },
+  deleteBtn: {
+    backgroundColor: '#ef4444',
+  },
+  modalBtnText: {
+    fontSize: moderateScale(14),
+    fontWeight: '700',
   },
 });
 

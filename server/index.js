@@ -34,8 +34,10 @@ import pushRoutes from './modules/push/push.routes.js';
 import favoritesRoutes from './modules/favorites/favorites.routes.js';
 import gifsRoutes from './modules/gifs/gifs.routes.js';
 import categoryRoutes from './modules/categories/category.routes.js';
+
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
 import { registerFileUploadEventHandlers } from './services/fileUploadEvents.service.js';
+
 import eventBus from './services/eventBus.js';
 import { startDeadlineWarningCron, stopDeadlineWarningCron } from './modules/bot/deadlineWarning.js';
 import { startDNDScheduler, stopDNDScheduler } from './services/dndScheduler.service.js';
@@ -43,6 +45,7 @@ import fileCleanupService from './services/fileCleanup.service.js';
 import fileUploadService from './services/fileUpload.service.js';
 import webhookRetryService from './services/webhookRetry.service.js';
 import cache from './services/cache.service.js';
+import accountDeletionService from './services/accountDeletion.service.js';
 import canvasRoutes from './modules/canvas/canvas.routes.js';
 import { startCanvasCollaborationServer, stopCanvasCollaborationServer } from './modules/canvas/canvasCollaboration.server.js';
 import projectChannelSyncService from './modules/flowtask/projectChannelSync.service.js';
@@ -266,6 +269,7 @@ app.use('/api/chat/directories', directoriesRoutes);
 app.use('/api/chat/drafts', draftRoutes);
 app.use('/api/chat/search', searchRoutes);
 app.use('/api/chat/categories', categoryRoutes);
+
 // Mount read receipt routes
 app.use('/api/chat', readReceiptRoutes);
 // Debug routes (local dev only)
@@ -372,6 +376,9 @@ async function startServer() {
     // 7. Start file cleanup service
     fileCleanupService.init();
 
+    // 7a. Start account deletion service
+    accountDeletionService.init();
+
     // 7b. Recover uploads that were interrupted by last shutdown
     await fileUploadService.recoverStuckUploads();
 
@@ -474,6 +481,7 @@ async function shutdown(signal) {
   // 3. Stop cron jobs
   stopDeadlineWarningCron();
   stopDNDScheduler();
+  accountDeletionService.stop();
 
   // 3b. Stop webhook retry service
   if (env.FLOWTASK_ENABLED) {

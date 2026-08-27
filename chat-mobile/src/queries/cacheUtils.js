@@ -310,9 +310,21 @@ export const removeReactionFromMessageCache = (channelId, messageId, emoji, user
         const users = (rx.users || []).filter(u => u._id !== userId);
         const userIds = (rx.userIds || []).filter(id => id !== userId);
         return { ...rx, users, userIds, count: users.length };
-      }).filter(rx => rx.count > 0);
+            }).filter(rx => rx.count > 0);
       return { ...m, reactions };
     })
   }));
   queryClient.setQueryData(queryKey, { ...oldData, pages: newPages });
+};
+
+/**
+ * Invalidate the cached reaction-details query so an open details popup — or
+ * the next open — reflects live changes from reaction:add / reaction:remove
+ * socket events.
+ */
+export const invalidateReactionDetails = (messageId, emoji) => {
+  if (!messageId || !emoji) return;
+  queryClient.invalidateQueries({
+    queryKey: ['reactionDetails', String(messageId), emoji],
+  });
 };

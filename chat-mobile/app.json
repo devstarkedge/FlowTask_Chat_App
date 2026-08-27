@@ -18,7 +18,19 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "FlowTask-Chat needs access to your photo library to save downloaded images and videos.",
-        "NSPhotoLibraryAddUsageDescription": "FlowTask-Chat needs permission to save images and videos to your photo library."
+        "NSPhotoLibraryAddUsageDescription": "FlowTask-Chat needs permission to save images and videos to your photo library.",
+        "NSCameraUsageDescription": "FlowTask-Chat needs access to your camera to let you take photos and record videos to share in chats.",
+        "NSMicrophoneUsageDescription": "FlowTask-Chat needs access to your microphone to let you record audio and video messages."
+      },
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          }
+        ],
+        "NSPrivacyTracking": false,
+        "NSPrivacyCollectedDataTypes": []
       },
       "associatedDomains": [
         "applinks:chat.flowtask.com",
@@ -33,11 +45,12 @@
       "package": "com.mohitgahlyan.chatmobilejs",
       "googleServicesFile": "./google-services.json",
       "permissions": [
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
         "READ_MEDIA_IMAGES",
         "READ_MEDIA_VIDEO",
         "READ_MEDIA_AUDIO"
+      ],
+      "blockedPermissions": [
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
       "intentFilters": [
         {
@@ -66,8 +79,6 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiUrl": "https://chat-app-api-cyyl.onrender.com/api/chat",
-      "socketUrl": "https://chat-app-api-cyyl.onrender.com",
       "eas": {
         "projectId": "dcfa4a56-c26e-4daf-9e3b-751f3136bd8d"
       }
@@ -84,6 +95,30 @@
         {
           "photosPermission": "Allow FlowTask-Chat to access your photos.",
           "savePhotosPermission": "Allow FlowTask-Chat to save photos and videos to your gallery."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "FlowTask-Chat needs access to your camera to let you take photos and record videos to share in chats.",
+          "microphonePermission": "FlowTask-Chat needs access to your microphone to let you record audio and video messages.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FlowTask-Chat needs access to your photo library to save downloaded images and videos.",
+          "cameraPermission": "FlowTask-Chat needs access to your camera to let you take photos and record videos to share in chats."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
+          }
         }
       ]
     ]

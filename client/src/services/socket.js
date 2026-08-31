@@ -103,6 +103,10 @@ const SOCKET_EVENTS = {
   ANNOUNCEMENT_DELETED: 'announcement:deleted',
   ANNOUNCEMENT_UPDATED: 'announcement:updated',
 
+  // Tasks
+  TASK_DELETED: 'task:deleted',
+  TASK_UPDATED: 'task:updated',
+
   // Drafts
   DRAFT_UPDATED: 'draft:updated',
   DRAFT_DELETED: 'draft:deleted',
@@ -846,6 +850,16 @@ export function connectSocket() {
   socket.on(SOCKET_EVENTS.ANNOUNCEMENT_UPDATED, ({ announcementId, title, description }) => {
     if (!announcementId) return
     logger.log('[Socket] Announcement updated:', announcementId, title)
+  })
+
+  // ─── Task Events ─────────────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.TASK_DELETED, ({ taskId, cardId, channelId, workspaceId }) => {
+    const id = taskId || cardId
+    if (!id) return
+    const activeWsId = useWorkspaceStore.getState().activeWorkspaceId
+    if (workspaceId && workspaceId !== activeWsId) return
+    useChatStore.getState().handleTaskDeleted?.(id, channelId)
+    logger.log('[Socket] Task deleted:', id)
   })
 
   // ─── Draft Sync Events (cross-device) ───────────────────────────────

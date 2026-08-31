@@ -211,10 +211,12 @@ export default function MessageList({
 
   // ─── Flatten: date separators + unread marker ─────────────────────────
   const isActivityMessage = (msg) =>
-    msg.contentType === "activity" ||
-    msg.contentType === "system" ||
-    msg.contentType === "bot" ||
-    !!msg.activityMeta;
+    !msg.isDeleted && (
+      msg.contentType === "activity" ||
+      msg.contentType === "system" ||
+      msg.contentType === "bot" ||
+      !!msg.activityMeta
+    );
 
   const flattenedItems = useMemo(() => {
     const flattened = [];

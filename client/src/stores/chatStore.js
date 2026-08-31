@@ -871,6 +871,60 @@ export const useChatStore = create((set, get) => ({
   },
 
   /**
+   * Real-time handler for task deletion: soft-deletes linked task messages in local store timeline.
+   */
+  handleTaskDeleted: (taskId, channelId) => {
+    if (!taskId) return;
+    set((state) => {
+      const targetChannelIds = channelId && state.messagesByChannel[channelId]
+        ? [channelId]
+        : Object.keys(state.messagesByChannel);
+
+      const nextMessagesByChannel = { ...state.messagesByChannel };
+      const nextMessagesById = { ...state.messagesById };
+      let updatedAny = false;
+
+      for (const chId of targetChannelIds) {
+        const msgs = nextMessagesByChannel[chId] || [];
+        let channelChanged = false;
+        const updatedMsgs = msgs.map((m) => {
+          const isLinked =
+            m.flowTaskRef?.entityId === String(taskId) ||
+            String(m.activityMeta?.taskId) === String(taskId);
+
+          if (isLinked && m.activityMeta?.eventType !== 'TASK_DELETED' && !m.isDeleted) {
+            channelChanged = true;
+            updatedAny = true;
+            const updated = {
+              ...m,
+              isDeleted: true,
+              content: "[Message deleted]",
+              htmlContent: "<p>[Message deleted]</p>",
+              deletedAt: new Date().toISOString(),
+            };
+            if (m._id && nextMessagesById[m._id]) {
+              nextMessagesById[m._id] = updated;
+            }
+            return updated;
+          }
+          return m;
+        });
+
+        if (channelChanged) {
+          nextMessagesByChannel[chId] = updatedMsgs;
+        }
+      }
+
+      if (!updatedAny) return state;
+
+      return {
+        messagesByChannel: nextMessagesByChannel,
+        messagesById: nextMessagesById,
+      };
+    });
+  },
+
+  /**
    * Update message delivery status (DM-only: sent → delivered → seen).
    */
   updateMessageStatus: (

@@ -501,6 +501,11 @@ class MessageService {
       emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, { message: socketPayload }, workspaceId?.toString());
     }
 
+    // Increment unread counts for members not currently viewing the channel.
+    // Pass the bot user id as the "sender" so it is excluded from its own unread count
+    // (the bot never reads messages, but we exclude it to avoid noise).
+    this._incrementUnreadForChannel(channelId, botUser._id, workspaceId?.toString()).catch(() => {});
+
     return message;
   }
 

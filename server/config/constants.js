@@ -319,6 +319,10 @@ export const SOCKET_EVENTS = Object.freeze({
   ANNOUNCEMENT_UPDATED: 'announcement:updated',
   ANNOUNCEMENT_DELETED: 'announcement:deleted',
 
+  // Tasks
+  TASK_DELETED: 'task:deleted',
+  TASK_UPDATED: 'task:updated',
+
   // Drafts
   DRAFT_UPDATED: 'draft:updated',
   DRAFT_DELETED: 'draft:deleted',

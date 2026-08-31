@@ -481,20 +481,37 @@ export function registerTaskEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.TASK_DELETED);
     if (!wsId) return;
     const { cardId, cardTitle, boardId, userId, departmentId, project } = payload;
+    const taskId = cardId || payload.task?.id || payload.card?.id;
     const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.project?.id || payload.boardId);
 
-    if (!normalizedBoardId) return;
+    if (!normalizedBoardId || !taskId) return;
 
     const channel = await channelRepository.findByFlowTaskRef('board', normalizedBoardId, wsId);
     if (!channel) return;
 
+    // 1. Soft-delete linked task messages in DB and broadcast MESSAGE_UPDATE events
+    await messageService.deleteByFlowTaskRef('card', taskId, wsId);
+
+    // 2. Broadcast TASK_DELETED socket event to channel
+    const socketPayload = {
+      taskId: taskId.toString(),
+      cardId: taskId.toString(),
+      channelId: channel._id.toString(),
+      boardId: normalizedBoardId,
+      workspaceId: wsId,
+      deletedBy: userId || null,
+      deletedAt: new Date().toISOString(),
+    };
+    emitToChannel(channel._id.toString(), SOCKET_EVENTS.TASK_DELETED, socketPayload, wsId);
+
+    // 3. Send system activity message announcing deletion
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-    const title = cardTitle || cardId || 'a task';
+    const title = cardTitle || payload.task?.title || taskId || 'a task';
     const userName = resolveActorName(payload, user);
 
     const activityMeta = {
       eventType: 'TASK_DELETED',
-      taskId: cardId || null,
+      taskId: taskId.toString(),
       projectId: normalizedBoardId,
       departmentId: departmentId || null,
       projectName: project?.name || null,
@@ -505,7 +522,7 @@ export function registerTaskEventHandlers() {
     await messageService.sendSystemMessage(
       channel._id,
       `${userName} deleted task: **${title}**`,
-      undefined,
+      { entityType: 'card', entityId: taskId.toString() },
       wsId,
       [],
       activityMeta,

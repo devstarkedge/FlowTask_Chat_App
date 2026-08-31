@@ -226,7 +226,7 @@ export default function AutoActivityMessage({ message }) {
   return (
     <div className="auto-activity-card" style={{ borderLeftColor: config.accent }}>
       {/* Hover CTA */}
-      {redirect && (
+      {redirect && eventType !== 'TASK_DELETED' && (
         <div className="activity-cta">
           <a href={redirect.url} target="_blank" rel="noopener noreferrer" className="activity-cta-btn" title="Open in FlowTask">
             {redirect.label}

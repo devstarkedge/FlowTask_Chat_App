@@ -591,14 +591,18 @@ class MessageRepository {
    * @param {string} entityId
    * @returns {Promise<Message[]>}
    */
-async findByFlowTaskRef(entityType, entityId, workspaceId) {
-  return Message.find({
-    workspaceId,
-    'flowTaskRef.entityType': entityType,
-    'flowTaskRef.entityId': entityId,
-    isDeleted: false,
-  }).lean();
-}
+  async findByFlowTaskRef(entityType, entityId, workspaceId) {
+    const strId = entityId?.toString();
+    return Message.find({
+      workspaceId,
+      $or: [
+        { 'flowTaskRef.entityType': entityType, 'flowTaskRef.entityId': strId },
+        { 'flowTaskRef.entityType': entityType, 'flowTaskRef.entityId': entityId },
+        ...(entityType === 'card' ? [{ 'activityMeta.taskId': strId }, { 'activityMeta.taskId': entityId }] : [])
+      ],
+      isDeleted: false,
+    }).lean();
+  }
 
   /**
    * Count messages in a channel after a given message ID.

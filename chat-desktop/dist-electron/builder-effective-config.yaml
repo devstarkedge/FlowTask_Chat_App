@@ -1,0 +1,17 @@
+directories:
+  output: dist-electron
+  buildResources: build
+appId: com.flowtask.chat
+productName: TaskChat
+files:
+  - filter:
+      - dist/**/*
+      - electron/**/*
+      - package.json
+mac:
+  category: public.app-category.productivity
+win:
+  target: nsis
+linux:
+  target: AppImage
+electronVersion: 44.0.0

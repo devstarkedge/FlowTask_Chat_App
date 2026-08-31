@@ -1,0 +1,310 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CANVAS COVER — Cover strip, picker, title zone, action buttons
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Cover Title Zone ─────────────────────────────────────────────────── */
+.canvas-cover-title-zone {
+  position: relative;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: 24px 20px 16px;
+  margin-bottom: 24px;
+}
+
+.canvas-title-input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 48px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  padding: 4px 48px 4px 0;
+  display: block;
+  box-sizing: border-box;
+}
+
+.canvas-title-input::placeholder {
+  color: var(--text-muted);
+}
+
+.canvas-subtitle {
+  margin: 6px 0 16px;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+/* ─── Cover Strip ──────────────────────────────────────────────────────── */
+/*
+ * IMPORTANT: Do NOT use width: 100vw, left, or negative margin-left here.
+ * The strip must fill its parent container naturally (width: 100%).
+ * canvas-cover-tokens.css already sets width: 100% and min-height correctly.
+ */
+.canvas-cover-strip {
+  position: relative;
+  width: 100%;
+  height: 240px;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  margin-bottom: 16px;
+  /* No left / margin-left / 100vw tricks — those break alignment */
+}
+
+.canvas-cover-strip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.08) 40%,
+    rgba(0, 0, 0, 0) 65%
+  );
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ─── Cover Drag Hint ──────────────────────────────────────────────────── */
+/*
+ * Center it both horizontally and vertically over the image.
+ * Sits above the gradient overlay (z-index: 3).
+ */
+.canvas-cover-drag-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+  white-space: nowrap;
+  /* Subtle entrance */
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.canvas-cover-strip:hover .canvas-cover-drag-hint {
+  opacity: 1;
+}
+
+/* ─── Cover Action Buttons (Change / Remove / Reposition) ──────────────── */
+/*
+ * position: absolute (NOT fixed) so buttons are constrained to the strip.
+ * Placed at bottom-right corner of the image with backdrop-blur.
+ */
+.canvas-cover-actions {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  z-index: 10;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 180ms ease, transform 180ms ease;
+  pointer-events: auto;
+}
+
+.canvas-cover-strip:hover .canvas-cover-actions,
+.canvas-cover-strip.is-hovered .canvas-cover-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.canvas-cover-change-btn,
+.canvas-cover-remove-btn,
+.canvas-cover-reposition-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 140ms ease, transform 140ms ease;
+}
+
+.canvas-cover-change-btn {
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+}
+
+.canvas-cover-change-btn:hover {
+  background: rgba(0, 0, 0, 0.65);
+  transform: translateY(-1px);
+}
+
+.canvas-cover-reposition-btn {
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+}
+
+.canvas-cover-reposition-btn:hover {
+  background: rgba(0, 0, 0, 0.65);
+  transform: translateY(-1px);
+}
+
+.canvas-cover-remove-btn {
+  background: rgba(220, 38, 38, 0.65);
+  color: #fff;
+}
+
+.canvas-cover-remove-btn:hover {
+  background: rgba(220, 38, 38, 0.85);
+  transform: translateY(-1px);
+}
+
+.canvas-cover-remove-btn.is-confirming {
+  background: rgba(220, 38, 38, 0.85);
+  animation: coverPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes coverPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.7; }
+}
+
+/* ─── Add Cover Button ─────────────────────────────────────────────────── */
+.canvas-add-cover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin-bottom: 12px;
+  border: 1px dashed var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 180ms ease, transform 180ms ease, background 140ms ease, border-color 140ms ease;
+  pointer-events: none;
+}
+
+.canvas-add-cover-btn.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.canvas-add-cover-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+/* ─── Three-Dot Menu Button in Title Zone ──────────────────────────────── */
+.canvas-title-zone-three-dot {
+  position: absolute;
+  bottom: 16px;
+  right: 0;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.canvas-title-zone-three-dot:hover {
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+
+/* ─── Cover Picker Overlay ─────────────────────────────────────────────── */
+.canvas-cover-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: fadeIn 150ms ease;
+}
+
+.canvas-cover-picker-panel {
+  width: min(480px, 90vw);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: canvasToolbarIn 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ─── Responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 840px) {
+  .canvas-cover-title-zone {
+    width: calc(100% - 28px);
+  }
+
+  .canvas-title-input {
+    font-size: 28px;
+  }
+
+  .canvas-cover-strip {
+    height: 200px;
+    margin-bottom: 4px;
+  }
+}
+
+@media (max-width: 768px) {
+  .canvas-cover-title-zone {
+    width: calc(100% - 20px);
+  }
+
+  .canvas-title-input {
+    font-size: 24px;
+    padding-right: 40px;
+  }
+
+  .canvas-cover-strip {
+    height: 180px;
+    margin-bottom: 2px;
+  }
+
+  .canvas-cover-actions {
+    bottom: 8px;
+    right: 10px;
+    gap: 6px;
+  }
+
+  .canvas-cover-change-btn,
+  .canvas-cover-remove-btn,
+  .canvas-cover-reposition-btn {
+    padding: 5px 9px;
+    height: 28px;
+    font-size: 11px;
+  }
+}

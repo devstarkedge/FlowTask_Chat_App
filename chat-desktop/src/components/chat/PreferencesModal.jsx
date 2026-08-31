@@ -1,0 +1,797 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { X, Bell, BellOff, Volume2, VolumeX, Monitor, Moon, Sun, AlignLeft, Check, RotateCcw, Palette, Sidebar, MessageSquare, ClipboardList, Inbox, AlertTriangle, Trash2 } from 'lucide-react';
+import Loader from '../shared/Loader';
+import { useAuthStore } from '../../stores/authStore'
+import {
+  getSidebarThemeColors,
+  resolveEffectiveTheme,
+  SIDEBAR_THEME_PRESETS,
+  THEME_MODES,
+  DEFAULT_APPEARANCE,
+  useThemeStore,
+} from '../../stores/themeStore'
+import { authAPI } from '../../services/api'
+import logger from '../../utils/logger'
+import toast from 'react-hot-toast'
+
+const MODE_ICONS = {
+  light: Sun,
+  dark: Moon,
+  system: Monitor,
+}
+
+const COLOR_FIELDS = [
+  { key: 'sidebarBg', label: 'Colour' },
+  // { key: 'sidebarText', label: 'Sidebar text' },
+  // { key: 'accentColor', label: 'Accent color' },
+  // { key: 'sidebarActive', label: 'Active item color' },
+]
+
+export default function PreferencesModal({ onClose }) {
+  const { user, deleteAccount } = useAuthStore()
+  const mode = useThemeStore((s) => s.mode)
+  const sidebarTheme = useThemeStore((s) => s.sidebarTheme)
+  const customTheme = useThemeStore((s) => s.customTheme)
+  const applyAppearance = useThemeStore((s) => s.applyAppearance)
+
+  const loadedPrefs = useMemo(() => ({
+    notificationSound: user?.chatPreferences?.notificationSound ?? true,
+    desktopNotifications: user?.chatPreferences?.desktopNotifications ?? true,
+    compactMode: user?.chatPreferences?.compactMode ?? false,
+  }), [user?.chatPreferences])
+
+  const [prefs, setPrefs] = useState({
+    notificationSound: true,
+    desktopNotifications: true,
+    compactMode: false,
+  })
+  const [savingPrefs, setSavingPrefs] = useState(false)
+  const [appearanceSaveState, setAppearanceSaveState] = useState('idle')
+  const [draftAppearance, setDraftAppearance] = useState({
+    mode,
+    sidebarTheme,
+    customTheme,
+  })
+  const [notifPermission, setNotifPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'denied',
+  )
+
+  // ─── Delete account (danger zone) ────────────────────────────────────
+  const isNativeAccount = user?.authProvider === 'native' || !user?.authProvider
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deletingAccount, setDeletingAccount] = useState(false)
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword || deletingAccount) return
+    setDeletingAccount(true)
+    try {
+      await deleteAccount(deletePassword)
+      toast.success('Your account deletion has been scheduled for 90 days from now.')
+      onClose()
+      window.location.assign('/login')
+    } catch {
+      // Error message surfaced via authStore.error / toast below
+      toast.error(useAuthStore.getState().error || 'Failed to schedule account deletion')
+      setDeletingAccount(false)
+    }
+  }
+
+  useEffect(() => {
+    setPrefs(loadedPrefs)
+  }, [loadedPrefs])
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onClose])
+
+  useEffect(() => {
+    console.log('[Preferences] useEffect triggered - resetting draftAppearance')
+    console.log('[Preferences] Store values - mode:', mode, 'sidebarTheme:', sidebarTheme, 'customTheme:', customTheme)
+    setDraftAppearance({
+      mode,
+      sidebarTheme,
+      customTheme,
+    })
+    setAppearanceSaveState('idle')
+  }, [customTheme, mode, sidebarTheme])
+
+  const appearancePayload = useMemo(() => ({
+    theme: draftAppearance.mode,
+    sidebarTheme: draftAppearance.sidebarTheme,
+    customTheme: draftAppearance.customTheme,
+  }), [draftAppearance])
+
+  const previewEffectiveTheme = useMemo(
+    () => resolveEffectiveTheme(draftAppearance.mode),
+    [draftAppearance.mode],
+  )
+
+  const sidebarColors = useMemo(
+    () => getSidebarThemeColors(draftAppearance.sidebarTheme, draftAppearance.customTheme),
+    [draftAppearance.customTheme, draftAppearance.sidebarTheme],
+  )
+
+  const hasAppearanceChanges = useMemo(
+    () => JSON.stringify(draftAppearance) !== JSON.stringify({ mode, sidebarTheme, customTheme }),
+    [customTheme, draftAppearance, mode, sidebarTheme],
+  )
+
+  const hasPreferenceChanges = useMemo(
+    () => JSON.stringify(prefs) !== JSON.stringify(loadedPrefs),
+    [loadedPrefs, prefs],
+  )
+
+  const hasPendingChanges = hasAppearanceChanges || hasPreferenceChanges
+
+  const handleToggle = (key) => {
+    setPrefs((p) => ({ ...p, [key]: !p[key] }))
+  }
+
+  const requestNotifPermission = async () => {
+    if (typeof Notification === 'undefined') return
+    try {
+      const result = await Notification.requestPermission()
+      setNotifPermission(result)
+      if (result === 'granted') {
+        setPrefs((p) => ({ ...p, desktopNotifications: true }))
+      }
+    } catch (error) {
+      setNotifPermission(Notification.permission)
+      logger.error('Failed to request notification permission:', error)
+    }
+  }
+
+  const handleSaveChanges = async () => {
+    if (!hasPendingChanges) {
+      onClose()
+      return
+    }
+
+    let shouldClose = false
+
+    setSavingPrefs(true)
+    setAppearanceSaveState('saving')
+    try {
+      const payload = {
+        ...prefs,
+        ...appearancePayload,
+      }
+      console.log('[Preferences] Saving payload:', payload)
+      const { data } = await authAPI.updatePreferences(payload)
+      console.log('[Preferences] Backend response:', data)
+      console.log('[Preferences] Calling applyAppearance with:', {
+        mode: draftAppearance.mode,
+        sidebarTheme: draftAppearance.sidebarTheme,
+        customTheme: draftAppearance.customTheme,
+      })
+      applyAppearance({
+        mode: draftAppearance.mode,
+        sidebarTheme: draftAppearance.sidebarTheme,
+        customTheme: draftAppearance.customTheme,
+      })
+      // Verify localStorage was updated
+      console.log('[Preferences] localStorage after save:', localStorage.getItem('chat_appearance'))
+      if (data?.data?.user) {
+        useAuthStore.setState({ user: data.data.user })
+      }
+      toast.success('Changes saved')
+      shouldClose = true
+    } catch (error) {
+      logger.error('Failed to save preferences:', error)
+      setAppearanceSaveState('error')
+      toast.error('Failed to save changes')
+    } finally {
+      setSavingPrefs(false)
+    }
+
+    if (shouldClose) {
+      onClose()
+    }
+  }
+
+  const handleModeChange = useCallback((newMode) => {
+    console.log('[Preferences] handleModeChange called with:', newMode)
+
+    // Read current store values to build the full appearance payload.
+    const storeState = useThemeStore.getState ? useThemeStore.getState() : { sidebarTheme, customTheme }
+    const updated = {
+      mode: newMode,
+      sidebarTheme: storeState.sidebarTheme,
+      customTheme: storeState.customTheme,
+    }
+
+    // Update local draft and apply immediately (persist to localStorage)
+    setDraftAppearance(updated)
+    applyAppearance(updated, { persist: true })
+  }, [applyAppearance, sidebarTheme, customTheme])
+
+  const handleSidebarThemeChange = useCallback((newSidebarTheme) => {
+    const storeState = useThemeStore.getState ? useThemeStore.getState() : { mode, customTheme }
+    const updated = {
+      mode: storeState.mode,
+      sidebarTheme: newSidebarTheme,
+      customTheme: storeState.customTheme,
+    }
+
+    setDraftAppearance(updated)
+    // Apply and persist sidebar theme selection immediately to localStorage
+    applyAppearance(updated, { persist: true })
+  }, [applyAppearance, mode, customTheme])
+
+  const handleColorChange = useCallback((key, value) => {
+    setDraftAppearance((current) => ({
+      ...current,
+      sidebarTheme: 'custom',
+      customTheme: {
+        ...current.customTheme,
+        [key]: value,
+      },
+    }))
+  }, [])
+
+  const handleResetAppearance = useCallback(() => {
+    setDraftAppearance({
+      mode: DEFAULT_APPEARANCE.mode,
+      sidebarTheme: DEFAULT_APPEARANCE.sidebarTheme,
+      customTheme: DEFAULT_APPEARANCE.customTheme,
+    })
+    setAppearanceSaveState('idle')
+  }, [])
+
+  return (
+    <div
+      className="appearance-modal-overlay"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <section
+        className="appearance-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="appearance-modal-title"
+      >
+        <header className="appearance-modal__header">
+          <div>
+            <p className="appearance-modal__eyebrow">Preferences</p>
+            <h2 id="appearance-modal-title">Appearance</h2>
+          </div>
+          <div className="appearance-modal__header-actions">
+            <SaveStateIndicator state={appearanceSaveState} />
+            <button className="appearance-icon-btn" onClick={onClose} aria-label="Close preferences">
+              <X size={18} />
+            </button>
+          </div>
+        </header>
+
+        <div className="appearance-modal__body">
+          <main className="appearance-modal__main">
+            <section className="appearance-section">
+              <SectionTitle
+                icon={Monitor}
+                title="Theme mode"
+                description="Choose the app chrome style or follow your device."
+              />
+              <div className="appearance-mode-grid">
+                {THEME_MODES.map((option) => {
+                  const Icon = MODE_ICONS[option.id]
+                  const selected = draftAppearance.mode === option.id
+                  return (
+                    <button
+                      key={option.id}
+                      className={`appearance-mode-card ${selected ? 'is-selected' : ''}`}
+                      onClick={() => handleModeChange(option.id)}
+                      aria-pressed={selected}
+                    >
+                      <span className="appearance-mode-card__icon">
+                        <Icon size={20} />
+                      </span>
+                      <span className="appearance-mode-card__label">{option.label}</span>
+                      {selected && <Check className="appearance-check" size={16} />}
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+
+            <section className="appearance-section">
+              <SectionTitle
+                icon={Sidebar}
+                title="Sidebar theme"
+                description="Apply a workspace-style palette to navigation instantly."
+              />
+              <div className="appearance-theme-grid">
+                {SIDEBAR_THEME_PRESETS.map((preset) => {
+                  const colors = getSidebarThemeColors(preset.id, draftAppearance.customTheme)
+                  const selected = draftAppearance.sidebarTheme === preset.id
+                  return (
+                    <button
+                      key={preset.id}
+                      className={`appearance-theme-card ${selected ? 'is-selected' : ''}`}
+                      style={{
+                        '--theme-card-bg': colors.sidebarBg,
+                        // '--theme-card-text': colors.sidebarText,
+                        // '--theme-card-hover': colors.sidebarHover,
+                        // '--theme-card-active': colors.sidebarActive,
+                        // '--theme-card-accent': colors.accentColor,
+                      }}
+                      onClick={() => handleSidebarThemeChange(preset.id)}
+                      aria-pressed={selected}
+                    >
+                      <span className="appearance-theme-card__mock">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                      <span className="appearance-theme-card__copy">
+                        <strong>{preset.name}</strong>
+                        <small>{preset.description}</small>
+                      </span>
+                      {selected && <Check className="appearance-check" size={16} />}
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+
+            {/* <section className="appearance-section">
+              <SectionTitle
+                icon={Palette}
+                title="Custom theme"
+                description="Fine-tune the sidebar and accent colors."
+              />
+              <div className="space-y-6">
+                {COLOR_FIELDS.map((field) => (
+                  <ColorField
+                    key={field.key}
+                    label={field.label}
+                    value={draftAppearance.customTheme[field.key]}
+                    onChange={(value) => handleColorChange(field.key, value)}
+                  />
+                ))}
+              </div>
+            </section> */}
+
+            <section className="appearance-section">
+              <SectionTitle
+                icon={Bell}
+                title="Notifications and display"
+                description="Keep the rest of your preferences close by."
+              />
+              <div className="appearance-toggle-list">
+                <ToggleRow
+                  icon={prefs.desktopNotifications ? Bell : BellOff}
+                  label="Desktop notifications"
+                  description={
+                    notifPermission === 'denied'
+                      ? 'Blocked by browser settings'
+                      : notifPermission === 'default'
+                        ? 'Ask before showing browser notifications'
+                        : 'Show browser notifications for new messages'
+                  }
+                  checked={prefs.desktopNotifications && notifPermission === 'granted'}
+                  onChange={() => {
+                    if (notifPermission !== 'granted') {
+                      requestNotifPermission()
+                    } else {
+                      handleToggle('desktopNotifications')
+                    }
+                  }}
+                  disabled={notifPermission === 'denied'}
+                />
+                <ToggleRow
+                  icon={prefs.notificationSound ? Volume2 : VolumeX}
+                  label="Notification sounds"
+                  description="Play a sound when a new message arrives"
+                  checked={prefs.notificationSound}
+                  onChange={() => handleToggle('notificationSound')}
+                />
+                <ToggleRow
+                  icon={AlignLeft}
+                  label="Compact mode"
+                  description="Use tighter spacing in dense chat views"
+                  checked={prefs.compactMode}
+                  onChange={() => handleToggle('compactMode')}
+                />
+              </div>
+            </section>
+
+            {/* ── Danger zone — account deletion ── */}
+            <section className="appearance-section" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: 18 }}>
+              <SectionTitle
+                icon={AlertTriangle}
+                title="Danger zone"
+                description="Irreversible actions for your account."
+              />
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  padding: 14,
+                  borderRadius: 12,
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  background: 'rgba(239, 68, 68, 0.06)',
+                }}
+              >
+                <div>
+                  <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Delete my account
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: 12.5, lineHeight: 1.55, color: 'var(--text-muted)' }}>
+                    Your account will be permanently deleted after 90 days. If you log in before the 90-day period ends, your account deletion will be cancelled and your account will be restored.
+                  </p>
+                </div>
+                {isNativeAccount ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeletePassword('')
+                      setShowDeleteConfirm(true)
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      flexShrink: 0,
+                      padding: '8px 14px',
+                      borderRadius: 9,
+                      border: '1px solid rgba(239, 68, 68, 0.5)',
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      color: '#ef4444',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    Delete account
+                  </button>
+                ) : (
+                  <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
+                    Managed by FlowTask SSO
+                  </span>
+                )}
+              </div>
+            </section>
+          </main>
+
+          <aside className="appearance-modal__preview" aria-label="Live appearance preview">
+            <LivePreview
+              effectiveTheme={previewEffectiveTheme}
+              mode={draftAppearance.mode}
+              sidebarColors={sidebarColors}
+            />
+          </aside>
+        </div>
+
+        <footer className="appearance-modal__footer">
+          <button className="appearance-secondary-btn" onClick={handleResetAppearance}>
+            <RotateCcw size={16} />
+            Reset to default
+          </button>
+          <div className="appearance-footer-actions">
+            <span>
+              {hasPendingChanges
+                ? 'Changes are pending'
+                : 'No unsaved changes. Save changes will close this dialog.'}
+            </span>
+            <button className="appearance-primary-btn appearance-save-btn" onClick={handleSaveChanges} disabled={savingPrefs}>
+              {savingPrefs && <Loader size={15} />}
+              Save changes
+            </button>
+          </div>
+        </footer>
+
+        {/* ── Delete account confirmation ── */}
+        {showDeleteConfirm && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirm account deletion"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 20,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20,
+              background: 'rgba(9, 9, 11, 0.55)',
+              backdropFilter: 'blur(3px)',
+            }}
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget && !deletingAccount) setShowDeleteConfirm(false)
+            }}
+          >
+            <div
+              style={{
+                width: 'min(440px, 100%)',
+                borderRadius: 14,
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                background: 'var(--bg-primary, #fff)',
+                boxShadow: '0 20px 60px rgba(0,0,0,.35)',
+                padding: 20,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <span
+                  style={{
+                    display: 'grid',
+                    placeItems: 'center',
+                    width: 34,
+                    height: 34,
+                    borderRadius: 10,
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    color: '#ef4444',
+                    flexShrink: 0,
+                  }}
+                >
+                  <AlertTriangle size={17} />
+                </span>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, letterSpacing: '-.01em', color: 'var(--text-primary)' }}>
+                  Delete your account?
+                </h3>
+              </div>
+              <p style={{ margin: '0 0 14px', fontSize: 13, lineHeight: 1.6, color: 'var(--text-muted)' }}>
+                Your account will be permanently deleted after 90 days. If you log in before the 90-day period ends, your account deletion will be cancelled and your account will be restored.
+              </p>
+              <label htmlFor="delete-account-password" style={{ display: 'block', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, color: 'var(--text-muted)' }}>
+                Confirm with your password
+              </label>
+              <input
+                id="delete-account-password"
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleDeleteAccount()
+                }}
+                placeholder="Enter your current password"
+                autoFocus
+                disabled={deletingAccount}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '10px 12px',
+                  borderRadius: 9,
+                  border: '1px solid var(--border-primary)',
+                  background: 'var(--bg-secondary, transparent)',
+                  color: 'var(--text-primary)',
+                  fontSize: 13.5,
+                  marginBottom: 16,
+                  outline: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deletingAccount}
+                  style={{
+                    padding: '9px 16px',
+                    borderRadius: 9,
+                    border: '1px solid var(--border-primary)',
+                    background: 'transparent',
+                    color: 'var(--text-secondary)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: deletingAccount ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteAccount}
+                  disabled={deletingAccount || !deletePassword}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '9px 16px',
+                    borderRadius: 9,
+                    border: 'none',
+                    background: '#ef4444',
+                    color: '#fff',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: deletingAccount || !deletePassword ? 'not-allowed' : 'pointer',
+                    opacity: deletingAccount || !deletePassword ? 0.6 : 1,
+                  }}
+                >
+                  {deletingAccount ? <Loader size={14} /> : <Trash2 size={14} />}
+                  {deletingAccount ? 'Deleting…' : 'Schedule deletion'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function SectionTitle({ icon: Icon, title, description }) {
+  return (
+    <div className="appearance-section-title">
+      <span><Icon size={17} /></span>
+      <div>
+        <h3>{title}</h3>
+        <p>{description}</p>
+      </div>
+    </div>
+  )
+}
+
+function SaveStateIndicator({ state }) {
+  if (state === 'saving') {
+    return (
+      <span className="appearance-save-state">
+        <Loader size={13} />
+        Saving
+      </span>
+    )
+  }
+  if (state === 'saved') {
+    return (
+      <span className="appearance-save-state is-saved">
+        <Check size={13} />
+        Saved
+      </span>
+    )
+  }
+  if (state === 'error') {
+    return <span className="appearance-save-state is-error">Save failed</span>
+  }
+  return null
+}
+
+function ColorField({ label, value, onChange }) {
+  return (
+    <label className="group block">
+      {/* Header */}
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+          {label}
+        </span>
+      </div>
+
+      {/* Input Area */}
+      <div className="flex items-center gap-3 rounded-2xl border p-2 transition-all focus-within:ring-4"
+        style={{
+          borderColor: 'var(--border-primary)',
+          backgroundColor: 'var(--bg-secondary)',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--border-focus)'}
+        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-primary)'}
+      >
+        
+        {/* Hidden Native Color Picker */}
+        <div className="relative">
+          <input
+            type="color"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            aria-label={label}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          />
+
+          <div
+            className="h-10 w-10 rounded-xl shadow-inner"
+            style={{ backgroundColor: value }}
+          />
+        </div>
+
+        {/* Hex Input */}
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => {
+            const next = e.target.value.trim()
+
+            // allow typing smoothly
+            if (
+              next === "" ||
+              /^#?[0-9a-fA-F]{0,6}$/.test(next)
+            ) {
+              onChange(
+                next.startsWith("#") ? next : `#${next}`
+              )
+            }
+          }}
+          maxLength={7}
+          aria-label={`${label} hex value`}
+          className="h-10 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-zinc-400"
+          style={{
+            color: 'var(--text-primary)',
+          }}
+          placeholder="#5b8f80"
+        />
+      </div>
+    </label>
+  )
+}
+
+function ToggleRow({ icon: Icon, label, description, checked, onChange, disabled }) {
+  return (
+    <div className="appearance-toggle-row">
+      <Icon size={18} style={{ color: checked ? 'var(--accent-color)' : 'var(--text-muted)' }} />
+      <div className="appearance-toggle-row__copy">
+        <p>{label}</p>
+        <span>{description}</span>
+      </div>
+      <button
+        onClick={onChange}
+        disabled={disabled}
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        className={`appearance-switch ${checked ? 'is-on' : ''}`}
+      >
+        <span />
+      </button>
+    </div>
+  )
+}
+
+function LivePreview({ effectiveTheme, mode, sidebarColors }) {
+  return (
+    <div
+      className="appearance-preview-shell"
+      style={{
+        '--preview-sidebar-bg': sidebarColors.sidebarBg,
+        '--preview-sidebar-text': sidebarColors.sidebarText,
+        '--preview-sidebar-hover': sidebarColors.sidebarHover,
+        '--preview-sidebar-active': sidebarColors.sidebarActive,
+        '--preview-sidebar-active-text': sidebarColors.sidebarActiveText,
+        '--preview-accent': sidebarColors.accentColor,
+      }}
+    >
+      <div className="appearance-preview-meta">
+        <span>Live preview</span>
+        <strong>{mode === 'system' ? `System: ${effectiveTheme}` : effectiveTheme}</strong>
+      </div>
+      <div className="appearance-preview-app">
+        <div className="appearance-preview-sidebar">
+          <div className="appearance-preview-workspace">M</div>
+          <button className="is-active"># design</button>
+          <button>team-chat</button>
+          <button>product</button>
+          <button>dm-maya</button>
+        </div>
+        <div className="appearance-preview-chat">
+          <div className="appearance-preview-header">
+            <MessageSquare size={15} />
+            <span>design</span>
+          </div>
+          <div className="appearance-preview-message">
+            <strong>Avery</strong>
+            <p>The new task card uses the active theme tokens.</p>
+          </div>
+          <div className="appearance-preview-card">
+            <ClipboardList size={16} />
+            <div>
+              <strong>Launch checklist</strong>
+              <span>3 tasks due today</span>
+            </div>
+          </div>
+          <div className="appearance-preview-notice">
+            <Inbox size={15} />
+            New mention in product
+          </div>
+          <div className="appearance-preview-composer">Message #design</div>
+        </div>
+      </div>
+    </div>
+  )
+}

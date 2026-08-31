@@ -46,19 +46,6 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  if (!isDev) {
-    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https: wss:;"
-          ]
-        }
-      });
-    });
-  }
-
   createWindow();
 
   app.on('activate', () => {

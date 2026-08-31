@@ -56,7 +56,20 @@ export default ({ mode }) => {
   return defineConfig({
     base: "./",
 
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(), 
+      tailwindcss(),
+      {
+        name: 'html-csp-transform',
+        transformIndexHtml(html) {
+          if (mode === 'production') {
+            const csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https: wss:;";
+            return html.replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />`);
+          }
+          return html;
+        }
+      }
+    ],
 
     resolve: {
       alias: {

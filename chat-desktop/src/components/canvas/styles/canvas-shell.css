@@ -1,0 +1,220 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CANVAS SHELL — Layout, scroll surface, empty state, topbar
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Shell Layout ──────────────────────────────────────────────────────── */
+.canvas-enterprise-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+.canvas-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 44px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border-primary);
+  background: color-mix(in srgb, var(--bg-primary) 92%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  flex-shrink: 0;
+  z-index: 5;
+}
+
+.canvas-topbar-left,
+.canvas-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 90px;
+}
+
+.canvas-topbar-actions {
+  justify-content: flex-end;
+}
+
+.canvas-icon-button,
+.canvas-command-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.canvas-icon-button {
+  width: 32px;
+  height: 32px;
+}
+
+.canvas-command-button {
+  gap: 7px;
+  height: 32px;
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.canvas-icon-button:hover,
+.canvas-command-button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-primary);
+}
+
+.canvas-workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.canvas-scroll-surface {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  background: var(--bg-primary);
+  padding-bottom: 80px;
+}
+
+/* ─── Document Surface (Notion-style centered card) ───────────────────── */
+.canvas-document-surface {
+  position: relative;
+  width: min(800px, calc(100% - 40px));
+  min-height: calc(100vh - 112px);
+  margin: 0 auto;
+  padding: 48px 48px 180px;
+  background: var(--bg-primary);
+  z-index: 2;
+  max-width: none;
+}
+
+/* ─── Loading ─────────────────────────────────────────────────────────── */
+.canvas-loading {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.canvas-loading span {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-primary);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: canvasSpin 800ms linear infinite;
+}
+
+@keyframes canvasSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Footer ──────────────────────────────────────────────────────────── */
+.canvas-footer {
+  position: absolute;
+  right: 18px;
+  bottom: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+/* ─── Animations ──────────────────────────────────────────────────────── */
+@keyframes canvasToolbarIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes canvasSidebarIn {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes canvas-menu-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ─── Responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 840px) {
+  .canvas-document-surface {
+    width: calc(100% - 28px);
+    padding: 28px 24px 160px;
+  }
+
+  .canvas-presence-copy,
+  .canvas-collab-status {
+    display: none;
+  }
+
+  .canvas-sidebar {
+    position: absolute;
+    inset: 44px 0 0 auto;
+    width: min(92vw, 380px);
+    max-width: none;
+    z-index: 20;
+  }
+
+  .canvas-command-button {
+    width: 32px;
+    padding: 0;
+    gap: 0;
+    font-size: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .canvas-document-surface {
+    padding: 20px 16px 140px;
+    width: calc(100% - 20px);
+  }
+}
+
+@media (max-width: 480px) {
+  .canvas-document-surface {
+    padding: 16px 12px 120px;
+  }
+}

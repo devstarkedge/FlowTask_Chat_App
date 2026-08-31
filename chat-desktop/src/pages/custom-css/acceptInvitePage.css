@@ -1,0 +1,375 @@
+/* AcceptInvitePage.css — Styles for the invite acceptance page */
+
+.aip-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: var(--bg-primary, #f5f5f5);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.aip-loading {
+  text-align: center;
+  color: var(--text-secondary, #666);
+}
+
+.aip-spinner {
+  animation: aip-spin 1s linear infinite;
+  color: var(--accent-primary, #6366f1);
+  margin-bottom: 1rem;
+}
+
+.aip-spinner-sm {
+  animation: aip-spin 1s linear infinite;
+}
+
+@keyframes aip-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.aip-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface-primary, #fff);
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
+  padding: 2.5rem;
+  border: 1px solid var(--border-primary, #e5e5e5);
+}
+
+.aip-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.aip-header-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+
+.aip-header h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-primary, #1a1a1a);
+  margin: 0 0 0.5rem;
+}
+
+.aip-subtitle {
+  color: var(--text-secondary, #666);
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.aip-workspace-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: var(--bg-secondary, #f9fafb);
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border-primary, #e5e5e5);
+}
+
+.aip-workspace-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.aip-workspace-logo-placeholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.aip-workspace-details h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+  margin: 0 0 0.5rem;
+}
+
+.aip-badge-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.aip-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.aip-badge-member {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+}
+
+.aip-badge-guest {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+.aip-details {
+  margin-bottom: 1.5rem;
+}
+
+.aip-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0;
+  color: var(--text-secondary, #666);
+  font-size: 0.9rem;
+  border-bottom: 1px solid var(--border-primary, #e5e5e5);
+}
+
+.aip-detail-item:last-child {
+  border-bottom: none;
+}
+
+.aip-detail-item svg {
+  color: var(--text-tertiary, #999);
+  flex-shrink: 0;
+}
+
+.aip-capitalize {
+  text-transform: capitalize;
+}
+
+.aip-guest-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 8px;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #92400e;
+}
+
+.aip-guest-notice svg {
+  color: #d97706;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.aip-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.aip-signed-in-as {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #666);
+  margin: 0 0 0.5rem;
+}
+
+.aip-inline-error {
+  text-align: center;
+  font-size: 0.85rem;
+  color: #dc2626;
+  margin: 0 0 0.5rem;
+}
+
+.aip-accept-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.875rem 1.5rem;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.aip-accept-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.aip-accept-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.aip-skip-link {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #666);
+  text-decoration: none;
+  padding: 0.5rem;
+}
+
+.aip-skip-link:hover {
+  color: var(--text-primary, #1a1a1a);
+}
+
+.aip-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1.5rem;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  text-align: center;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+}
+
+.aip-btn-primary {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+}
+
+.aip-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.aip-btn-secondary {
+  background: var(--bg-secondary, #f3f4f6);
+  color: var(--text-primary, #1a1a1a);
+  border: 1px solid var(--border-primary, #e5e5e5);
+}
+
+.aip-btn-secondary:hover {
+  background: var(--bg-tertiary, #e5e7eb);
+}
+
+.aip-full-width {
+  width: 100%;
+}
+
+/* Error card */
+.aip-error-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface-primary, #fff);
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  padding: 2.5rem;
+  text-align: center;
+  border: 1px solid var(--border-primary, #e5e5e5);
+}
+
+.aip-error-icon {
+  color: #dc2626;
+  margin-bottom: 1rem;
+}
+
+.aip-error-card h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary, #1a1a1a);
+  margin: 0 0 0.75rem;
+}
+
+.aip-error-card p {
+  color: var(--text-secondary, #666);
+  margin: 0 0 1.5rem;
+}
+
+.aip-error-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Success card */
+.aip-success-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface-primary, #fff);
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  padding: 2.5rem;
+  text-align: center;
+  border: 1px solid var(--border-primary, #e5e5e5);
+}
+
+.aip-success-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981, #059669);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+  color: #fff;
+}
+
+.aip-success-card h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary, #1a1a1a);
+  margin: 0 0 0.75rem;
+}
+
+.aip-success-card p {
+  color: var(--text-secondary, #666);
+  margin: 0 0 0.5rem;
+}
+
+.aip-redirect-text {
+  font-size: 0.85rem;
+  color: var(--text-tertiary, #999);
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .aip-container {
+    padding: 1rem;
+  }
+
+  .aip-card,
+  .aip-error-card,
+  .aip-success-card {
+    padding: 1.5rem;
+  }
+
+  .aip-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .aip-workspace-info {
+    flex-direction: column;
+    text-align: center;
+  }
+}

@@ -7,7 +7,9 @@
   "scripts": {
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
+    "dev:desktop": "cd chat-desktop && npm run electron",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:all": "concurrently \"npm run dev:server\" \"npm run dev:desktop\"",
     "install:all": "cd server && npm install && cd ../client && npm install",
     "build:client": "cd client && npm run build",
     "start": "cd server && npm start"

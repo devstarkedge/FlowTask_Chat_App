@@ -1529,7 +1529,9 @@ class MessageService {
       if (!updatedMessage) continue;
 
       const payload = {
-        message: updatedMessage
+        messageId: updatedMessage._id.toString(),
+        channelId: updatedMessage.channelId.toString(),
+        isDeleted: false,
       };
 
       //  If message has visibility → send only to those users
@@ -1537,7 +1539,7 @@ class MessageService {
         updatedMessage.visibleTo.forEach(userId => {
           emitToUser(
             userId.toString(),
-            SOCKET_EVENTS.MESSAGE_UPDATE,
+            SOCKET_EVENTS.MESSAGE_DELETE,
             payload,
             workspaceId?.toString()
           );
@@ -1546,7 +1548,7 @@ class MessageService {
         //  Public message → broadcast to channel
         emitToChannel(
           updatedMessage.channelId.toString(),
-          SOCKET_EVENTS.MESSAGE_UPDATE,
+          SOCKET_EVENTS.MESSAGE_DELETE,
           payload,
           workspaceId?.toString()
         );

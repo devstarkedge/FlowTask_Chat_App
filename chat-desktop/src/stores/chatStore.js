@@ -1579,9 +1579,17 @@ export const useChatStore = create((set, get) => ({
             const messageId = normalized.deepLink?.messageId;
             
             if (workspaceId && channelId && messageId) {
-              window.location.href = `/workspace/${workspaceId}/channel/${channelId}?message=${messageId}`;
+              if (typeof window.electronAPI !== 'undefined') {
+                window.location.hash = `/workspace/${workspaceId}/channel/${channelId}?message=${messageId}`;
+              } else {
+                window.location.href = `/workspace/${workspaceId}/channel/${channelId}?message=${messageId}`;
+              }
             } else if (workspaceId) {
-              window.location.href = `/workspace/${workspaceId}/later`;
+              if (typeof window.electronAPI !== 'undefined') {
+                window.location.hash = `/workspace/${workspaceId}/later`;
+              } else {
+                window.location.href = `/workspace/${workspaceId}/later`;
+              }
             }
             toast.dismiss(t.id);
           },

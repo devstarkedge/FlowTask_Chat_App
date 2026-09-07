@@ -98,7 +98,12 @@ export default function WorkspaceSelectorPage() {
                   toast.success("Signed out successfully 👋")
 
                   onClose?.()
-                  window.location.href = "/login"
+                  if (typeof window.electronAPI !== 'undefined') {
+                    window.location.hash = '/login'
+                    window.location.reload()
+                  } else {
+                    window.location.href = '/login'
+                  }
 
                 } catch (err) {
                   toast.dismiss(loadingToast)

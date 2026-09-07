@@ -17,8 +17,9 @@ import {
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import TermsAndConditionsModal from "../components/shared/TermsAndConditionsModal";
+import { isDesktopApp, setWindowControlsColor } from "../services/desktopService";
+import "./custom-css/registerPage.css";
 import './custom-css/registerPage.css'
-
 
 /* ─────────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -70,6 +71,10 @@ const successCard  = { hidden: { opacity: 0, scale: 0.88, y: 20 }, visible: { op
 export default function RegisterPage() {
   const { register, isLoading, error, clearError } = useAuthStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setWindowControlsColor("#000000");
+  }, []);
 
   const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
   const [showPassword, setShowPassword] = useState(false);
@@ -162,15 +167,15 @@ export default function RegisterPage() {
       </div>
 
       {/* ── Nav (light-bg override, no global match) ── */}
-      <nav className="rp-nav">
-        <div className="rp-nav-inner">
-          <Link to="/" className="rp-logo">
+      <nav className="rp-nav" style={{ WebkitAppRegion: isDesktopApp() ? 'drag' : 'auto' }}>
+        <div className="rp-nav-inner" style={{ paddingRight: isDesktopApp() ? 150 : undefined }}>
+          <Link to="/" className="rp-logo" style={{ WebkitAppRegion: 'no-drag' }}>
             <div className="rp-logo-icon">
               <MessageCircle size={18} color="white" />
             </div>
             <span className="rp-logo-name">FlowTask Chat</span>
           </Link>
-          <p className="rp-nav-link">
+          <p className="rp-nav-link" style={{ WebkitAppRegion: 'no-drag' }}>
             Already have an account?{" "}
             <Link to="/login"><strong>Sign in</strong></Link>
           </p>

@@ -1,6 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { MessageSquare, Check, ArrowRight } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
+import { isDesktopApp, setWindowControlsColor } from '../services/desktopService'
+import { useEffect } from 'react'
 
 const PLANS = [
   {
@@ -60,6 +62,9 @@ const PLANS = [
 ]
 
 export default function PricingPage() {
+  useEffect(() => {
+    setWindowControlsColor("#ffffff");
+  }, []);
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
 
@@ -78,10 +83,11 @@ export default function PricingPage() {
         position: 'sticky', top: 0, zIndex: 50,
         background: 'rgba(10, 10, 15, 0.8)', backdropFilter: 'blur(12px)',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
+        WebkitAppRegion: isDesktopApp() ? 'drag' : 'auto',
       }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', paddingRight: isDesktopApp() ? 150 : 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
-            <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+            <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', WebkitAppRegion: 'no-drag' }}>
               <div style={{
                 width: 32, height: 32, borderRadius: 8,
                 background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
@@ -91,7 +97,7 @@ export default function PricingPage() {
               </div>
               <span style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>FlowTask Chat</span>
             </Link>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, WebkitAppRegion: 'no-drag' }}>
               {user ? (
                 <Link to="/select-workspace" style={{
                   background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',

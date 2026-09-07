@@ -3,6 +3,8 @@ import {
   MessageSquare, Users, Zap, FolderKanban, Shield, ArrowRight,
   Globe, Clock, FileText,
 } from 'lucide-react'
+import { isDesktopApp, setWindowControlsColor } from '../services/desktopService'
+import { useEffect } from 'react'
 
 const FEATURES = [
   {
@@ -38,6 +40,9 @@ const FEATURES = [
 ]
 
 export default function LandingPage() {
+  useEffect(() => {
+    setWindowControlsColor("#ffffff");
+  }, []);
   return (
     <div style={{ background: '#0a0a0f', color: '#e5e7eb', height: '100%', overflowY: 'auto' }}>
       {/* Nav */}
@@ -47,11 +52,12 @@ export default function LandingPage() {
           background: 'rgba(10, 10, 15, 0.8)',
           backdropFilter: 'blur(12px)',
           borderBottom: '1px solid rgba(255,255,255,0.06)',
+          WebkitAppRegion: isDesktopApp() ? 'drag' : 'auto',
         }}
       >
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', paddingRight: isDesktopApp() ? 150 : 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, WebkitAppRegion: 'no-drag' }}>
               <div
                 style={{
                   width: 32, height: 32, borderRadius: 8,
@@ -61,9 +67,9 @@ export default function LandingPage() {
               >
                 <MessageSquare size={18} color="white" />
               </div>
-              <span style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>FlowTask Chat</span>
+              <span style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>TaskChat</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, WebkitAppRegion: 'no-drag' }}>
               <Link
                 to="/pricing"
                 style={{

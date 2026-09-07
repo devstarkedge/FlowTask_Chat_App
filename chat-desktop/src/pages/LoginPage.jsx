@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { isDesktopApp, setWindowControlsColor } from "../services/desktopService";
 import "./custom-css/loginPage.css";
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -121,6 +122,10 @@ export default function LoginPage() {
   const ssoAttempted = useRef(false);
   const [ssoLoading, setSsoLoading] = useState(ssoSource === "flowtask" && !!ssoToken);
 
+  useEffect(() => {
+    setWindowControlsColor("#000000");
+  }, []);
+
   /* ── FlowTask "Open Chat" SSO landing ──────────────────────────────────
      FlowTask redirects here as /login?token=...&source=flowtask&workspaceId=...
      The workspaceId query param is display-only/untrusted — the actual
@@ -219,15 +224,15 @@ export default function LoginPage() {
       </div>
 
       {/* ── Nav ──  */}
-      <nav className="lp-nav">
-        <div className="lp-nav-inner">
-          <Link to="/" className="lp-logo">
+      <nav className="lp-nav" style={{ WebkitAppRegion: isDesktopApp() ? 'drag' : 'auto' }}>
+        <div className="lp-nav-inner" style={{ paddingRight: isDesktopApp() ? 150 : undefined }}>
+          <Link to="/" className="lp-logo" style={{ WebkitAppRegion: 'no-drag' }}>
             <div className="lp-logo-icon">
               <MessageCircle size={18} color="white" />
             </div>
             <span className="lp-logo-name">FlowTask Chat</span>
           </Link>
-          <p className="lp-nav-link">
+          <p className="lp-nav-link" style={{ WebkitAppRegion: 'no-drag' }}>
             New here?{" "}
             <Link to="/register">
               <strong>Create account</strong>

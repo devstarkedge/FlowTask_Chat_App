@@ -16,6 +16,12 @@ function createWindow() {
     minWidth: 600,
     minHeight: 500,
     title: 'TaskChat',
+    icon: path.join(__dirname, '../public/logo.png'),
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#00000000',
+      symbolColor: '#ffffff',
+    },
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -65,4 +71,12 @@ app.on('window-all-closed', () => {
 ipcMain.on('show-notification', (event, { title, body }) => {
   const { Notification } = require('electron');
   new Notification({ title, body }).show();
+});
+
+// Allow renderer to change titleBarOverlay dynamically
+ipcMain.on('set-title-bar-overlay', (event, options) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && win.setTitleBarOverlay) {
+    win.setTitleBarOverlay(options);
+  }
 });

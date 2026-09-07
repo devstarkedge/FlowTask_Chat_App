@@ -87,6 +87,7 @@ import { onPreviewRequest } from "../../services/previewService";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 import { handleDownload } from "../../utils/handleDownload";
 import { useAppHistory } from "../../hooks/useAppHistory";
+import { isDesktopApp, setWindowControlsColor } from "../../services/desktopService";
 
 const EMPTY_LIST = [];
 
@@ -127,11 +128,17 @@ const LAYOUT_STYLES = `
   align-items: center;
   gap: 12px;
   padding: 0 14px;
-  background: var(--sidebar-bg-dark, var(--surface-primary, var(--bg-primary)));
-  border-bottom: 1px solid var(--sidebar-border-color, var(--border-color, var(--border-primary)));
+  background: var(--bg-workspace-sidebar, var(--sidebar-bg-dark));
   flex-shrink: 0;
   position: relative;
   z-index: 100;
+  -webkit-app-region: drag;
+}
+
+.cl-topbar__nav-btn,
+.cl-topbar__search-wrap,
+.cl-topbar__action-btn {
+  -webkit-app-region: no-drag;
 }
 
 .cl-topbar__nav {
@@ -693,6 +700,9 @@ function formatSize(bytes) {
 /* ─── Main ChatLayout ─────────────────────────────────────────────────────── */
 
 export default function ChatLayout() {
+  useEffect(() => {
+    setWindowControlsColor("#ffffff");
+  }, []);
   const {
     fetchChannels,
     fetchMembers,
@@ -1604,70 +1614,71 @@ export default function ChatLayout() {
   };
 
   return (
-    <div className="h-full flex" style={{ background: "var(--bg-primary)" }}>
-      <div className="hide-on-mobile">
-        <ErrorBoundary name="WorkspaceSidebar" compact>
-          <WorkspaceSidebar />
-        </ErrorBoundary>
-      </div>
-
-      <div
-        className="hide-on-mobile relative"
-        style={{
-          width: sidebarCollapsed ? "60px" : (hasResized ? `${sidebarWidth}px` : "var(--nav-sidebar-width)"),
-          minWidth: sidebarCollapsed ? "60px" : (hasResized ? `${sidebarWidth}px` : "var(--nav-sidebar-width)"),
-          transition: isResizing
-            ? "none"
-            : "width 200ms ease, min-width 200ms ease",
+    <div className="h-full flex flex-col" style={{ background: "var(--bg-primary)" }}>
+      <GlobalTopBar
+        user={user}
+        workspaceId={workspaceId}
+        searchRef={globalSearchRef}
+        messages={localSearchMessages}
+        unreadCount={unreadNotifications}
+        onBack={goBack}
+        onForward={goForward}
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        onOpenSearchResult={handleOpenSearchResult}
+        onOpenResultsPage={openLocalSearchResultsPage}
+        onOpenChange={setIsSearchOpen}
+        onNotifications={() => {
+          setShowNotifications((s) => !s);
+          setShowPins(false);
         }}
-      >
-        <ErrorBoundary name="ContextSidebar" compact>
-          {renderContextSidebar(false)}
-        </ErrorBoundary>
+        onHelp={() => setShowShortcuts(true)}
+      />
+
+      <div className="flex-1 flex flex-row min-h-0 overflow-hidden">
+        <div className="hide-on-mobile">
+          <ErrorBoundary name="WorkspaceSidebar" compact>
+            <WorkspaceSidebar />
+          </ErrorBoundary>
+        </div>
+
         <div
-          className="sidebar-resize-handle"
-          onMouseDown={handleResizeStart}
-          onDoubleClick={handleResizeDoubleClick}
-          title="Drag to resize, double-click to collapse"
-        />
-      </div>
-
-      {showMobileSidebar && (
-        <>
-          <div
-            className="sidebar-overlay active"
-            onClick={() => setShowMobileSidebar(false)}
-          />
-          <div className="sidebar-mobile">
-            <ErrorBoundary name="ContextSidebar" compact>
-              {renderContextSidebar(true)}
-            </ErrorBoundary>
-          </div>
-        </>
-      )}
-
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <GlobalTopBar
-          user={user}
-          workspaceId={workspaceId}
-          searchRef={globalSearchRef}
-          messages={localSearchMessages}
-          unreadCount={unreadNotifications}
-          onBack={goBack}
-          onForward={goForward}
-          canGoBack={canGoBack}
-          canGoForward={canGoForward}
-          onOpenSearchResult={handleOpenSearchResult}
-          onOpenResultsPage={openLocalSearchResultsPage}
-          onOpenChange={setIsSearchOpen}
-          onNotifications={() => {
-            setShowNotifications((s) => !s);
-            setShowPins(false);
+          className="hide-on-mobile relative"
+          style={{
+            width: sidebarCollapsed ? "60px" : (hasResized ? `${sidebarWidth}px` : "var(--nav-sidebar-width)"),
+            minWidth: sidebarCollapsed ? "60px" : (hasResized ? `${sidebarWidth}px` : "var(--nav-sidebar-width)"),
+            transition: isResizing
+              ? "none"
+              : "width 200ms ease, min-width 200ms ease",
           }}
-          onHelp={() => setShowShortcuts(true)}
-        />
+        >
+          <ErrorBoundary name="ContextSidebar" compact>
+            {renderContextSidebar(false)}
+          </ErrorBoundary>
+          <div
+            className="sidebar-resize-handle"
+            onMouseDown={handleResizeStart}
+            onDoubleClick={handleResizeDoubleClick}
+            title="Drag to resize, double-click to collapse"
+          />
+        </div>
 
-        <div className="flex-1 flex min-w-0 overflow-hidden">
+        {showMobileSidebar && (
+          <>
+            <div
+              className="sidebar-overlay active"
+              onClick={() => setShowMobileSidebar(false)}
+            />
+            <div className="sidebar-mobile">
+              <ErrorBoundary name="ContextSidebar" compact>
+                {renderContextSidebar(true)}
+              </ErrorBoundary>
+            </div>
+          </>
+        )}
+
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <div className="flex-1 flex min-w-0 overflow-hidden">
           <ErrorBoundary name="Content">
             {(() => {
               if (isActivityRoute)
@@ -1798,6 +1809,7 @@ export default function ChatLayout() {
           )}
         </div>
       </div>
+      </div>
       {previewFile && (
         <ErrorBoundary name="FilePreviewModal">
           <FilePreviewModal
@@ -1854,7 +1866,7 @@ function GlobalTopBar({
   }, [unreadCount]);
 
   return (
-    <header className="cl-topbar">
+    <header className="cl-topbar" style={{ paddingRight: isDesktopApp() ? 150 : 14 }}>
       <div className="cl-topbar__nav">
         <button
           className="cl-topbar__nav-btn"

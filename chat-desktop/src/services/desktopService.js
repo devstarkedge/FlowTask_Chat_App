@@ -9,6 +9,12 @@ export const isDesktopApp = () => {
   return typeof window !== 'undefined' && window.electronAPI !== undefined;
 };
 
+export const setWindowControlsColor = (symbolColor) => {
+  if (isDesktopApp() && window.electronAPI.setTitleBarOverlay) {
+    window.electronAPI.setTitleBarOverlay({ symbolColor });
+  }
+};
+
 export const showDesktopNotification = (title, options = {}) => {
   if (isDesktopApp()) {
     // Call the native Electron notification API

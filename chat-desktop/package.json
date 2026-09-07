@@ -92,6 +92,7 @@
   "build": {
     "appId": "com.flowtask.chat",
     "productName": "TaskChat",
+    "icon": "public/logo.png",
     "directories": {
       "output": "dist-electron"
     },

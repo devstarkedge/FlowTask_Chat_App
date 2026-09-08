@@ -5,6 +5,8 @@ const isDev = !app.isPackaged;
 if (isDev) {
   // Vite requires unsafe-eval for HMR. We disable the warning in dev mode.
   process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
+  // Use a separate user data path for development so it doesn't mix with production builds
+  app.setPath('userData', path.join(app.getPath('appData'), `${app.name}-dev`));
 }
 
 let mainWindow;

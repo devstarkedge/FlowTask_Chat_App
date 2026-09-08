@@ -125,6 +125,14 @@
             "targetSdkVersion": 36
           }
         }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ffffff",
+          "image": "./assets/Vector.png",
+          "imageWidth": 200
+        }
       ]
     ]
   }

@@ -16,11 +16,10 @@ config.resolver = {
   assetExts: [...(config.resolver?.assetExts || []), 'txt'],
 };
 
-// Fix Metro validation warning for unstable_workerThreads
-// Set it explicitly in transformer to avoid watcher validation warning
-if (!config.transformer) {
-  config.transformer = {};
+if (config.watcher && 'unstable_workerThreads' in config.watcher) {
+  delete config.watcher.unstable_workerThreads;
 }
-config.transformer.unstable_workerThreads = false;
-
+if (config.transformer && 'unstable_workerThreads' in config.transformer) {
+  delete config.transformer.unstable_workerThreads;
+}
 module.exports = config;

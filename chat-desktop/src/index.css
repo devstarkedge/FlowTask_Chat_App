@@ -10105,7 +10105,7 @@ textarea:focus-visible,
 .cl-topbar {
   height: 48px;
   display: grid;
-  grid-template-columns: auto minmax(180px, 640px) auto;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 12px;
   padding: 0 14px;
@@ -10147,8 +10147,9 @@ textarea:focus-visible,
 }
 
 .cl-topbar__search-wrap {
-  flex: 1;
+  width: 100%;
   max-width: 640px;
+  justify-self: center;
 }
 
 .cl-topbar__actions {
@@ -10156,6 +10157,14 @@ textarea:focus-visible,
   align-items: center;
   gap: 4px;
   justify-content: flex-end;
+}
+
+.cl-topbar__divider {
+  width: 1px;
+  height: 18px;
+  background-color: var(--sidebar-border-color, rgba(255, 255, 255, 0.2));
+  margin-left: 8px;
+  opacity: 0.6;
 }
 
 .cl-topbar__action-btn {
@@ -15922,7 +15931,7 @@ body.is-electron .cl-empty-pane__mobile-btn {
 }
 
 body.is-electron .cl-topbar {
-  grid-template-columns: auto minmax(140px, 520px) auto !important;
+  grid-template-columns: auto 1fr auto !important;
   gap: 12px !important;
 }
 

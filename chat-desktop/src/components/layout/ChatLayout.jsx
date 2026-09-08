@@ -1866,7 +1866,7 @@ function GlobalTopBar({
   }, [unreadCount]);
 
   return (
-    <header className="cl-topbar" style={{ paddingRight: isDesktopApp() ? 150 : 14 }}>
+    <header className="cl-topbar" style={{ paddingRight: isDesktopApp() ? 135 : 14 }}>
       <div className="cl-topbar__nav">
         <button
           className="cl-topbar__nav-btn"
@@ -1930,6 +1930,7 @@ function GlobalTopBar({
         >
           <CircleHelp size={16} />
         </button>
+        {typeof window.electronAPI !== 'undefined' && <div className="cl-topbar__divider" />}
       </div>
     </header>
   );
@@ -1948,7 +1949,7 @@ function WelcomeScreen({ onOpenMobileSidebar }) {
           Open sidebar
         </button>
         
-           <img src="/logo.png" alt="Logo" className="w-25 h-25 object-contain" />
+           <img src="./logo.png" alt="Logo" className="w-25 h-25 object-contain" />
         
         <h2 className="cl-welcome__title">Welcome to TaskChat</h2>
         <p className="cl-welcome__desc">

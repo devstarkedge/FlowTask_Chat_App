@@ -213,7 +213,7 @@ export default function WorkspaceMenu({
         {/* Logo */}
         <span className="wm-trigger__logo-wrap">
           <img 
-            src="/group2.svg" 
+            src="./group2.svg" 
             alt="FlowTask" 
             className="wm-trigger__logo"
           />

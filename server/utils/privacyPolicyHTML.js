@@ -40,32 +40,36 @@ export function getPrivacyPolicyHTML() {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-gradient: radial-gradient(circle at 50% -20%, #1e1b4b 0%, #0f0f17 60%, #09090e 100%);
-      --topbar-bg: rgba(15, 15, 23, 0.85);
-      --card-bg: rgba(22, 22, 34, 0.85);
-      --card-border: rgba(255, 255, 255, 0.1);
-      --card-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      --text-primary: #f8fafc;
-      --text-secondary: #cbd5e1;
-      --text-muted: #94a3b8;
+      --bg-gradient: linear-gradient(180deg, #09090b 0%, #121217 100%);
+      --topbar-bg: rgba(18, 18, 23, 0.95);
+      --card-bg: #181820;
+      --card-border: #272732;
+      --card-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+      
+      --text-primary: #f4f4f5;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+      
       --accent-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
       --accent-glow: rgba(99, 102, 241, 0.35);
       --accent-link: #818cf8;
-      --border-header: rgba(255, 255, 255, 0.1);
+      --border-header: #272732;
     }
 
     @media (prefers-color-scheme: light) {
       :root {
         --bg-gradient: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-        --topbar-bg: rgba(255, 255, 255, 0.9);
+        --topbar-bg: rgba(255, 255, 255, 0.95);
         --card-bg: #ffffff;
         --card-border: #e2e8f0;
-        --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+        
         --text-primary: #0f172a;
         --text-secondary: #334155;
         --text-muted: #64748b;
-        --accent-gradient: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
-        --accent-glow: rgba(79, 70, 229, 0.2);
+        
+        --accent-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        --accent-glow: rgba(99, 102, 241, 0.25);
         --accent-link: #4f46e5;
         --border-header: #e2e8f0;
       }
@@ -79,7 +83,6 @@ export function getPrivacyPolicyHTML() {
     html, body {
       width: 100%;
       min-height: 100%;
-      background: #0f0f17;
       background: var(--bg-gradient);
       background-attachment: fixed;
       color: var(--text-primary);
@@ -90,11 +93,13 @@ export function getPrivacyPolicyHTML() {
       overflow-y: auto !important;
       -webkit-overflow-scrolling: touch;
     }
+
+    /* Sticky Header Bar */
     .top-header {
       width: 100%;
       background: var(--topbar-bg);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border-header);
       padding: 14px 24px;
       display: flex;
@@ -102,9 +107,10 @@ export function getPrivacyPolicyHTML() {
       align-items: center;
       position: sticky;
       top: 0;
-      z-index: 100;
+      z-index: 1000;
       box-sizing: border-box;
     }
+
     .logo-container {
       display: flex;
       align-items: center;
@@ -113,20 +119,21 @@ export function getPrivacyPolicyHTML() {
       color: var(--text-primary);
       flex-shrink: 0;
     }
-    .logo-badge {
-      width: 34px;
-      height: 34px;
+
+    /* Message Bubble Logo Icon matching TaskChat App branding */
+    .logo-svg {
+      width: 32px;
+      height: 32px;
       border-radius: 8px;
       background: var(--accent-gradient);
       box-shadow: 0 4px 12px var(--accent-glow);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 800;
       color: #ffffff;
-      font-size: 16px;
       flex-shrink: 0;
     }
+
     .logo-title {
       font-size: 18px;
       font-weight: 800;
@@ -134,12 +141,13 @@ export function getPrivacyPolicyHTML() {
       color: var(--text-primary);
       white-space: nowrap;
     }
+
     .app-link {
       color: #ffffff;
       text-decoration: none;
       font-size: 13.5px;
       font-weight: 600;
-      padding: 8px 16px;
+      padding: 8px 18px;
       border-radius: 8px;
       background: var(--accent-gradient);
       box-shadow: 0 4px 12px var(--accent-glow);
@@ -147,79 +155,89 @@ export function getPrivacyPolicyHTML() {
       flex-shrink: 0;
       transition: all 0.2s ease;
     }
+
     .app-link:hover {
       opacity: 0.92;
       transform: translateY(-1px);
     }
+
     .page-wrapper {
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 36px 16px 60px 16px;
+      padding: 40px 16px 60px 16px;
       width: 100%;
       box-sizing: border-box;
     }
+
     main {
-      max-width: 820px;
+      max-width: 840px;
       width: 100%;
       box-sizing: border-box;
     }
+
     .card {
       background: var(--card-bg);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
       border-radius: 16px;
-      padding: 36px 32px;
+      padding: 40px 36px;
       border: 1px solid var(--card-border);
       box-shadow: var(--card-shadow);
       box-sizing: border-box;
       width: 100%;
     }
+
     .badge {
       display: inline-block;
       padding: 4px 12px;
       border-radius: 20px;
-      background: rgba(99, 102, 241, 0.15);
-      border: 1px solid rgba(99, 102, 241, 0.3);
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.25);
       color: var(--accent-link);
       font-size: 12px;
       font-weight: 600;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
       letter-spacing: 0.04em;
       text-transform: uppercase;
     }
+
     h1 {
-      font-size: 28px;
+      font-size: 30px;
       font-weight: 800;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       letter-spacing: -0.02em;
       color: var(--text-primary);
       line-height: 1.3;
       word-wrap: break-word;
     }
+
     .last-updated {
       font-size: 13px;
       color: var(--text-muted);
-      margin-bottom: 24px;
+      margin-bottom: 28px;
       font-weight: 500;
     }
+
     .intro {
       border-bottom: 1px solid var(--card-border);
       padding-bottom: 24px;
       margin-bottom: 28px;
     }
+
     .intro p {
       font-size: 15px;
       color: var(--text-secondary);
       line-height: 1.7;
       margin-bottom: 12px;
     }
+
     .intro p:last-child {
       margin-bottom: 0;
     }
+
     .section {
       margin-bottom: 28px;
     }
+
     h2 {
       font-size: 18px;
       font-weight: 700;
@@ -228,6 +246,7 @@ export function getPrivacyPolicyHTML() {
       line-height: 1.4;
       word-wrap: break-word;
     }
+
     p {
       font-size: 14.5px;
       color: var(--text-secondary);
@@ -235,29 +254,35 @@ export function getPrivacyPolicyHTML() {
       margin-bottom: 10px;
       word-wrap: break-word;
     }
+
     ul {
-      padding-left: 20px;
+      padding-left: 22px;
       margin: 8px 0 14px 0;
       color: var(--text-secondary);
       font-size: 14.5px;
       line-height: 1.7;
     }
+
     li {
       margin-bottom: 6px;
       word-wrap: break-word;
     }
+
     li::marker {
       color: var(--accent-link);
     }
+
     .link {
       color: var(--accent-link);
       text-decoration: none;
       font-weight: 600;
       word-break: break-all;
     }
+
     .link:hover {
       text-decoration: underline;
     }
+
     footer {
       margin-top: 40px;
       text-align: center;
@@ -267,14 +292,17 @@ export function getPrivacyPolicyHTML() {
     }
 
     /* Mobile Device Responsiveness */
-    @media (max-width: 600px) {
+    @media (max-width: 640px) {
       .top-header {
         padding: 12px 16px;
       }
-      .logo-badge {
-        width: 30px;
-        height: 30px;
-        font-size: 14px;
+      .logo-svg {
+        width: 28px;
+        height: 28px;
+      }
+      .logo-svg svg {
+        width: 16px;
+        height: 16px;
       }
       .logo-title {
         font-size: 16px;
@@ -294,7 +322,7 @@ export function getPrivacyPolicyHTML() {
         font-size: 22px;
       }
       h2 {
-        font-size: 16px;
+        font-size: 16.5px;
       }
       p, ul, li {
         font-size: 14px;
@@ -304,20 +332,25 @@ export function getPrivacyPolicyHTML() {
   </style>
 </head>
 <body>
+  <!-- Sticky Header Bar -->
   <header class="top-header">
-    <div class="logo-container">
-      <div class="logo-badge">T</div>
+    <a href="/" class="logo-container">
+      <div class="logo-svg">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>
+        </svg>
+      </div>
       <span class="logo-title">TaskChat</span>
-    </div>
-    <a href="#" class="app-link">Open App</a>
+    </a>
+    <a href="/login" class="app-link">Open App</a>
   </header>
 
+  <!-- Page Content Container -->
   <div class="page-wrapper">
     <main>
       <div class="card">
         <span class="badge">Legal & Security</span>
         <h1>TaskChat Privacy Policy</h1>
-        <p class="last-updated">Last Updated: ${PRIVACY_LAST_UPDATED}</p>
 
         <div class="intro">
           ${introHTML}

@@ -55,14 +55,15 @@ const PrivacyPolicyPage = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontWeight: 'bold',
               color: '#ffffff',
-              fontSize: '16px',
+              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
             }}
           >
-            T
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>
+            </svg>
           </div>
-          <span style={{ fontSize: '18px', fontWeight: '700', letterSpacing: '-0.02em' }}>
+          <span style={{ fontSize: '18px', fontWeight: '800', letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
             TaskChat
           </span>
         </Link>
@@ -106,26 +107,13 @@ const PrivacyPolicyPage = () => {
             style={{
               fontSize: '28px',
               fontWeight: '800',
-              marginBottom: '8px',
+              marginBottom: '20px',
               letterSpacing: '-0.02em',
-              color: '#ffffff',
+              color: 'var(--text-primary)',
             }}
           >
             TaskChat — Privacy Policy
           </h1>
-
-          {PRIVACY_LAST_UPDATED && (
-            <p
-              style={{
-                fontSize: '13px',
-                color: 'var(--text-tertiary, #727280)',
-                marginBottom: '24px',
-                fontWeight: '500',
-              }}
-            >
-              Last Updated: {PRIVACY_LAST_UPDATED}
-            </p>
-          )}
 
           <div
             style={{

@@ -7,6 +7,10 @@ const PrivacyPolicyPage = () => {
     <div
       style={{
         minHeight: '100vh',
+        width: '100%',
+        maxHeight: '100vh',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
         backgroundColor: 'var(--bg-primary, #0f0f13)',
         color: 'var(--text-primary, #e2e2e5)',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',

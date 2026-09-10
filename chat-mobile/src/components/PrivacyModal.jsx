@@ -103,7 +103,8 @@ const createStyles = (colors) =>
       justifyContent: 'flex-end',
     },
     sheet: {
-      maxHeight: '92%',
+      height: '85%',
+      maxHeight: '90%',
       borderTopLeftRadius: moderateScale(18),
       borderTopRightRadius: moderateScale(18),
       overflow: 'hidden',
@@ -141,7 +142,7 @@ const createStyles = (colors) =>
       justifyContent: 'center',
     },
     body: {
-      flexShrink: 1,
+      flex: 1,
       paddingHorizontal: scale(18),
     },
     bodyContent: {

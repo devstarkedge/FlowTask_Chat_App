@@ -33,60 +33,41 @@ export function getPrivacyPolicyHTML() {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>TaskChat — Privacy Policy</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      /* Shared Design System Tokens */
-      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --accent-primary: #4e7cff;
-      --accent-primary-hover: #8fa8ff;
-      
-      /* Dark Theme Tokens (Default) */
-      --bg-primary: #0a0845;
-      --bg-secondary: #151259;
-      --bg-tertiary: #1a1570;
-      --bg-card: #1a1570;
-      
-      --text-primary: #e6edf3;
-      --text-secondary: #8b949e;
-      --text-muted: #6e7681;
-      --text-white: #ffffff;
-      --text-link: var(--accent-primary-hover);
-      
-      --border-primary: #2a2578;
-      --border-secondary: #1e196b;
-      --border-header: #1e196b;
-      --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
-      --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.6);
-      
-      --radius-md: 8px;
-      --radius-lg: 12px;
-      --radius-xl: 16px;
-      --radius-full: 9999px;
+      --bg-gradient: radial-gradient(circle at 50% -20%, #1e1b4b 0%, #0f0f17 60%, #09090e 100%);
+      --topbar-bg: rgba(15, 15, 23, 0.85);
+      --card-bg: rgba(22, 22, 34, 0.85);
+      --card-border: rgba(255, 255, 255, 0.1);
+      --card-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      --accent-glow: rgba(99, 102, 241, 0.35);
+      --accent-link: #818cf8;
+      --border-header: rgba(255, 255, 255, 0.1);
     }
 
     @media (prefers-color-scheme: light) {
       :root {
-        --bg-primary: #ffffff;
-        --bg-secondary: #f6f8fa;
-        --bg-tertiary: #f0f2f5;
-        --bg-card: #f6f8fa;
-        
+        --bg-gradient: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+        --topbar-bg: rgba(255, 255, 255, 0.9);
+        --card-bg: #ffffff;
+        --card-border: #e2e8f0;
+        --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
         --text-primary: #0f172a;
-        --text-secondary: #475569;
+        --text-secondary: #334155;
         --text-muted: #64748b;
-        --text-white: #0f172a;
-        --text-link: var(--accent-primary);
-        
-        --border-primary: #e2e8f0;
-        --border-secondary: #cbd5e1;
+        --accent-gradient: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+        --accent-glow: rgba(79, 70, 229, 0.2);
+        --accent-link: #4f46e5;
         --border-header: #e2e8f0;
-        --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.08);
-        --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.12);
       }
     }
 
@@ -95,24 +76,27 @@ export function getPrivacyPolicyHTML() {
       margin: 0;
       padding: 0;
     }
-    html {
-      overflow-y: scroll;
-      scroll-behavior: smooth;
-    }
-    body {
+    html, body {
       width: 100%;
-      min-height: 100vh;
-      background: var(--bg-primary);
+      min-height: 100%;
+      background: #0f0f17;
+      background: var(--bg-gradient);
+      background-attachment: fixed;
       color: var(--text-primary);
-      font-family: var(--font-sans);
-      line-height: 1.7;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.65;
       -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+      overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch;
     }
     .top-header {
       width: 100%;
-      background: var(--bg-secondary);
+      background: var(--topbar-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--border-header);
-      padding: 16px 32px;
+      padding: 14px 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -124,67 +108,80 @@ export function getPrivacyPolicyHTML() {
     .logo-container {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       text-decoration: none;
       color: var(--text-primary);
+      flex-shrink: 0;
     }
     .logo-badge {
-      width: 36px;
-      height: 36px;
-      border-radius: var(--radius-md);
-      background: var(--accent-primary);
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: var(--accent-gradient);
+      box-shadow: 0 4px 12px var(--accent-glow);
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 800;
       color: #ffffff;
-      font-size: 18px;
+      font-size: 16px;
+      flex-shrink: 0;
     }
     .logo-title {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 800;
-      letter-spacing: -0.03em;
-      color: var(--text-white);
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      white-space: nowrap;
     }
     .app-link {
       color: #ffffff;
       text-decoration: none;
-      font-size: 14px;
+      font-size: 13.5px;
       font-weight: 600;
-      padding: 10px 20px;
-      border-radius: var(--radius-md);
-      background: var(--accent-primary);
-      transition: background var(--transition-normal, 0.2s ease);
+      padding: 8px 16px;
+      border-radius: 8px;
+      background: var(--accent-gradient);
+      box-shadow: 0 4px 12px var(--accent-glow);
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: all 0.2s ease;
     }
     .app-link:hover {
-      background: var(--accent-primary-hover);
+      opacity: 0.92;
+      transform: translateY(-1px);
     }
     .page-wrapper {
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 48px 24px 80px 24px;
+      padding: 36px 16px 60px 16px;
+      width: 100%;
       box-sizing: border-box;
     }
     main {
-      max-width: 860px;
+      max-width: 820px;
       width: 100%;
       box-sizing: border-box;
     }
     .card {
-      background: var(--bg-card);
-      border-radius: var(--radius-xl);
-      padding: 48px 44px;
-      border: 1px solid var(--border-primary);
-      box-shadow: var(--shadow-lg);
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 16px;
+      padding: 36px 32px;
+      border: 1px solid var(--card-border);
+      box-shadow: var(--card-shadow);
+      box-sizing: border-box;
+      width: 100%;
     }
     .badge {
       display: inline-block;
       padding: 4px 12px;
-      border-radius: var(--radius-full);
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-primary);
-      color: var(--text-link);
+      border-radius: 20px;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: var(--accent-link);
       font-size: 12px;
       font-weight: 600;
       margin-bottom: 12px;
@@ -192,91 +189,116 @@ export function getPrivacyPolicyHTML() {
       text-transform: uppercase;
     }
     h1 {
-      font-size: 32px;
+      font-size: 28px;
       font-weight: 800;
       margin-bottom: 8px;
-      letter-spacing: -0.03em;
-      color: var(--text-white);
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      line-height: 1.3;
+      word-wrap: break-word;
     }
     .last-updated {
       font-size: 13px;
       color: var(--text-muted);
-      margin-bottom: 28px;
+      margin-bottom: 24px;
       font-weight: 500;
     }
     .intro {
-      border-bottom: 1px solid var(--border-primary);
+      border-bottom: 1px solid var(--card-border);
       padding-bottom: 24px;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
     }
     .intro p {
-      font-size: 15.5px;
-      color: var(--text-secondary);
-      line-height: 1.75;
-      margin-bottom: 14px;
-    }
-    .intro p:last-child {
-      margin-bottom: 0;
-    }
-    .section {
-      margin-bottom: 32px;
-    }
-    h2 {
-      font-size: 19px;
-      font-weight: 700;
-      color: var(--text-white);
-      margin-bottom: 14px;
-      line-height: 1.4;
-    }
-    p {
       font-size: 15px;
       color: var(--text-secondary);
       line-height: 1.7;
       margin-bottom: 12px;
     }
-    ul {
-      padding-left: 24px;
-      margin: 10px 0 16px 0;
+    .intro p:last-child {
+      margin-bottom: 0;
+    }
+    .section {
+      margin-bottom: 28px;
+    }
+    h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      line-height: 1.4;
+      word-wrap: break-word;
+    }
+    p {
+      font-size: 14.5px;
       color: var(--text-secondary);
-      font-size: 15px;
+      line-height: 1.7;
+      margin-bottom: 10px;
+      word-wrap: break-word;
+    }
+    ul {
+      padding-left: 20px;
+      margin: 8px 0 14px 0;
+      color: var(--text-secondary);
+      font-size: 14.5px;
       line-height: 1.7;
     }
     li {
-      margin-bottom: 8px;
+      margin-bottom: 6px;
+      word-wrap: break-word;
     }
     li::marker {
-      color: var(--accent-primary);
+      color: var(--accent-link);
     }
     .link {
-      color: var(--text-link);
+      color: var(--accent-link);
       text-decoration: none;
       font-weight: 600;
+      word-break: break-all;
     }
     .link:hover {
       text-decoration: underline;
     }
     footer {
-      margin-top: 48px;
+      margin-top: 40px;
       text-align: center;
       color: var(--text-muted);
-      font-size: 13.5px;
+      font-size: 13px;
+      padding-bottom: 20px;
     }
-    @media (max-width: 640px) {
+
+    /* Mobile Device Responsiveness */
+    @media (max-width: 600px) {
       .top-header {
-        padding: 14px 20px;
+        padding: 12px 16px;
       }
-      .card {
-        padding: 28px 20px;
-        border-radius: var(--radius-lg);
+      .logo-badge {
+        width: 30px;
+        height: 30px;
+        font-size: 14px;
       }
-      h1 {
-        font-size: 24px;
+      .logo-title {
+        font-size: 16px;
       }
-      h2 {
-        font-size: 17px;
+      .app-link {
+        font-size: 12px;
+        padding: 6px 12px;
       }
       .page-wrapper {
-        padding: 24px 14px 48px 14px;
+        padding: 16px 12px 40px 12px;
+      }
+      .card {
+        padding: 24px 18px;
+        border-radius: 12px;
+      }
+      h1 {
+        font-size: 22px;
+      }
+      h2 {
+        font-size: 16px;
+      }
+      p, ul, li {
+        font-size: 14px;
+        line-height: 1.65;
       }
     }
   </style>

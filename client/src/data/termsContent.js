@@ -1,5 +1,4 @@
 // TaskChat — Terms & Conditions
-// Source: official TaskChat Terms & Conditions document (Last Updated: August 25, 2026).
 // Rendered in the registration flow (RegisterScreen) via TermsModal.
 
 // export const TERMS_LAST_UPDATED = 'August 25, 2026';

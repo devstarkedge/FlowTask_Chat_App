@@ -209,6 +209,9 @@ app.get('/privacy-policy', handlePrivacyPolicyRequest);
 app.get('/privacy', handlePrivacyPolicyRequest);
 app.get('/api/chat/privacy-policy', handlePrivacyPolicyRequest);
 app.get('/api/chat/privacy', handlePrivacyPolicyRequest);
+app.get('/api/chat/auth/privacy-policy', handlePrivacyPolicyRequest);
+app.get('/api/chat/auth/privacy', handlePrivacyPolicyRequest);
+
 
 
 // ─── Debug Env Check ────────────────────────────────────────────────────────────────

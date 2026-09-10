@@ -59,15 +59,15 @@ export function getPrivacyPolicyHTML() {
         --bg-gradient: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
         --topbar-bg: rgba(255, 255, 255, 0.95);
         --card-bg: #ffffff;
-        --card-border: #e2e8f0;
+        --card-border: #cbd5e1;
         --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
         
-        --text-heading: #0f172a;
-        --text-body: #1e293b;
-        --text-muted: #64748b;
+        --text-heading: #000000;
+        --text-body: #0f172a;
+        --text-muted: #334155;
         
         --accent-link: #4f46e5;
-        --border-header: #e2e8f0;
+        --border-header: #cbd5e1;
       }
     }
 
@@ -153,8 +153,8 @@ export function getPrivacyPolicyHTML() {
       font-weight: 600;
       padding: 8px 16px;
       border-radius: 8px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: var(--bg-tertiary, #1e293b);
+      border: 1px solid var(--border-header, #334155);
       display: inline-flex;
       align-items: center;
       gap: 8px;
@@ -170,8 +170,8 @@ export function getPrivacyPolicyHTML() {
       }
     }
     .app-link:hover {
-      background: rgba(255, 255, 255, 0.12);
-      border-color: rgba(255, 255, 255, 0.3);
+      background: var(--card-border, #334155);
+      border-color: var(--accent-link, #818cf8);
     }
 
     .page-wrapper {
@@ -217,7 +217,7 @@ export function getPrivacyPolicyHTML() {
 
     .intro p {
       font-size: 15.5px;
-      font-weight: 450;
+      font-weight: 500;
       color: var(--text-body);
       line-height: 1.75;
       margin-bottom: 14px;
@@ -233,7 +233,7 @@ export function getPrivacyPolicyHTML() {
 
     h2 {
       font-size: 19px;
-      font-weight: 700;
+      font-weight: 800;
       color: var(--text-heading);
       margin-bottom: 12px;
       line-height: 1.4;
@@ -242,7 +242,7 @@ export function getPrivacyPolicyHTML() {
 
     p {
       font-size: 15px;
-      font-weight: 450;
+      font-weight: 500;
       color: var(--text-body);
       line-height: 1.7;
       margin-bottom: 12px;
@@ -254,7 +254,7 @@ export function getPrivacyPolicyHTML() {
       margin: 10px 0 16px 0;
       color: var(--text-body);
       font-size: 15px;
-      font-weight: 450;
+      font-weight: 500;
       line-height: 1.7;
     }
 

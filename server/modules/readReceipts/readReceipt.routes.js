@@ -27,3 +27,13 @@ router.get('/messages/:messageId/info', requireMessageAccess(), getMessageInfo);
 router.post('/channels/:channelId/messages/:messageId/mark-read', markMessageRead);
 
 export default router;
+
+/**
+ * Channel-scoped read receipt routes.
+ * Mounted on /api/chat/channels/:channelId
+ */
+export const channelReadRouter = Router({ mergeParams: true });
+channelReadRouter.use(protect);
+channelReadRouter.use(resolveWorkspace);
+channelReadRouter.post('/read', markChannelRead);
+channelReadRouter.post('/messages/:messageId/mark-read', markMessageRead);

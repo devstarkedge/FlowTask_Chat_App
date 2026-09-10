@@ -18,6 +18,37 @@ class WorkspaceService {
     }
   }
 
+  /**
+   * Ensure default workspace exists on boot.
+   * @returns {Promise<object>}
+   */
+  async ensureDefaultWorkspace() {
+    let workspace = await workspaceRepository.findBySlug('default');
+    if (!workspace) {
+      workspace = await workspaceRepository.findBySlug('flowtask');
+    }
+    if (!workspace) {
+      const existing = await mongoose.model('Workspace').findOne({ isActive: true }).sort({ createdAt: 1 });
+      if (existing) {
+        workspace = existing;
+      }
+    }
+    if (!workspace) {
+      workspace = await mongoose.model('Workspace').create({
+        name: 'Default Workspace',
+        slug: 'default',
+        description: 'Default system workspace',
+        plan: 'enterprise',
+        source: 'independent',
+        settings: {
+          defaultChannelVisibility: 'public',
+        },
+      });
+      logger.info('Created default workspace on startup', { workspaceId: workspace._id, slug: workspace.slug });
+    }
+    return workspace;
+  }
+
   // ─── FlowTask Integration ───────────────────────────────────────────────
 
   /**

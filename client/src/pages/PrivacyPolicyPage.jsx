@@ -57,9 +57,7 @@ const PrivacyPolicyPage = () => {
               height: '24px',
             }}
           >
-            <span style={{ display: 'block', width: '24px', height: '3.5px', borderRadius: '2px', background: 'linear-gradient(90deg, #ff5e00 0%, #ff8c00 100%)' }} />
-            <span style={{ display: 'block', width: '16px', height: '3.5px', borderRadius: '2px', background: 'linear-gradient(90deg, #ff5e00 0%, #ff8c00 100%)', marginLeft: '4px' }} />
-            <span style={{ display: 'block', width: '20px', height: '3.5px', borderRadius: '2px', background: 'linear-gradient(90deg, #ff5e00 0%, #ff8c00 100%)' }} />
+            <img src="./logo.png" alt="TaskChat Logo" />
           </div>
           <span style={{ fontSize: '22px', fontWeight: '800', letterSpacing: '-0.03em', color: 'var(--text-primary)' }}>
             TaskChat
@@ -75,8 +73,6 @@ const PrivacyPolicyPage = () => {
             fontWeight: '600',
             padding: '8px 16px',
             borderRadius: '8px',
-            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-            border: '1px solid rgba(255, 255, 255, 0.18)',
             display: 'inline-flex',
             alignItems: 'center',
             gap: '8px',
@@ -103,11 +99,11 @@ const PrivacyPolicyPage = () => {
       >
         <div
           style={{
-            backgroundColor: 'var(--bg-secondary, #1a1a24)',
+            backgroundColor: 'var(--bg-card, var(--bg-secondary))',
             borderRadius: '16px',
             padding: '36px',
-            border: '1px solid var(--border-light, #2a2a3a)',
-            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.25)',
+            border: '1px solid var(--border-primary)',
+            boxShadow: 'var(--shadow-md, 0 10px 30px rgba(0, 0, 0, 0.25))',
           }}
         >
           <h1
@@ -124,7 +120,7 @@ const PrivacyPolicyPage = () => {
 
           <div
             style={{
-              borderBottom: '1px solid var(--border-light, #2a2a3a)',
+              borderBottom: '1px solid var(--border-primary, #2a2a3a)',
               paddingBottom: '20px',
               marginBottom: '28px',
             }}
@@ -156,7 +152,7 @@ const PrivacyPolicyPage = () => {
                 style={{
                   fontSize: '18px',
                   fontWeight: '700',
-                  color: '#ffffff',
+                  color: 'var(--text-primary)',
                   marginBottom: '12px',
                   lineHeight: '1.4',
                 }}

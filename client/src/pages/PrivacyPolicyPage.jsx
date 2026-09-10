@@ -26,9 +26,9 @@ const PrivacyPolicyPage = () => {
           width: '100%',
           backgroundColor: 'var(--bg-secondary, #16161e)',
           borderBottom: '1px solid var(--border-light, #282836)',
-          padding: '16px 24px',
+          padding: '16px 32px',
           display: 'flex',
-          justify: 'space-between',
+          justifyContent: 'space-between',
           alignItems: 'center',
           boxSizing: 'border-box',
           position: 'sticky',
@@ -67,12 +67,15 @@ const PrivacyPolicyPage = () => {
         <Link
           to="/login"
           style={{
+            marginLeft: 'auto',
             color: 'var(--text-primary)',
             textDecoration: 'none',
             fontSize: '14px',
             fontWeight: '600',
             padding: '8px 16px',
             borderRadius: '8px',
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--border-primary)',
             display: 'inline-flex',
             alignItems: 'center',
             gap: '8px',
@@ -162,7 +165,34 @@ const PrivacyPolicyPage = () => {
 
               {section.blocks.map((block, bIdx) => {
                 if (block.type === 'p') {
-                  const isContactEmail = block.text.includes('Email:');
+                  const hasEmail = block.text.includes('info@starkedge.com');
+                  if (hasEmail) {
+                    const parts = block.text.split('info@starkedge.com');
+                    return (
+                      <p
+                        key={bIdx}
+                        style={{
+                          lineHeight: '1.65',
+                          color: 'var(--text-secondary, #a0a0ab)',
+                          fontSize: '14.5px',
+                          marginBottom: '10px',
+                        }}
+                      >
+                        {parts[0]}
+                        <a
+                          href="mailto:info@starkedge.com"
+                          style={{
+                            color: 'var(--accent-primary, #6366f1)',
+                            textDecoration: 'none',
+                            fontWeight: '600',
+                          }}
+                        >
+                          info@starkedge.com
+                        </a>
+                        {parts[1]}
+                      </p>
+                    );
+                  }
                   return (
                     <p
                       key={bIdx}
@@ -173,23 +203,7 @@ const PrivacyPolicyPage = () => {
                         marginBottom: '10px',
                       }}
                     >
-                      {isContactEmail ? (
-                        <>
-                          Email:{' '}
-                          <a
-                            href="mailto:info@starkedge.com"
-                            style={{
-                              color: 'var(--accent-primary, #6366f1)',
-                              textDecoration: 'none',
-                              fontWeight: '600',
-                            }}
-                          >
-                            info@starkedge.com
-                          </a>
-                        </>
-                      ) : (
-                        block.text
-                      )}
+                      {block.text}
                     </p>
                   );
                 }

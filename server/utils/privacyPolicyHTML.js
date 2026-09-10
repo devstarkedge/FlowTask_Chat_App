@@ -8,10 +8,12 @@ export function getPrivacyPolicyHTML() {
   const sectionsHTML = PRIVACY_SECTIONS.map(section => {
     const blocksHTML = section.blocks.map(block => {
       if (block.type === 'p') {
-        const textWithLinks = block.text.replace(
-          'Email: info@starkedge.com',
-          'Email: <a href="mailto:info@starkedge.com" class="link">info@starkedge.com</a>'
-        );
+        const textWithLinks = block.text.includes('info@starkedge.com')
+          ? block.text.replace(
+              'info@starkedge.com',
+              '<a href="mailto:info@starkedge.com" class="link">info@starkedge.com</a>'
+            )
+          : block.text;
         return `<p>${textWithLinks}</p>`;
       }
       if (block.type === 'ul') {
@@ -147,14 +149,15 @@ export function getPrivacyPolicyHTML() {
 
     /* Ghost Button Header Action matching mockup */
     .app-link {
+      margin-left: auto;
       color: var(--text-heading);
       text-decoration: none;
       font-size: 14px;
       font-weight: 600;
       padding: 8px 16px;
       border-radius: 8px;
-      background: var(--bg-tertiary, #1e293b);
-      border: 1px solid var(--border-header, #334155);
+      background: var(--bg-card);
+      border: 1px solid var(--card-border);
       display: inline-flex;
       align-items: center;
       gap: 8px;
@@ -162,16 +165,8 @@ export function getPrivacyPolicyHTML() {
       flex-shrink: 0;
       transition: all 0.2s ease;
     }
-    @media (prefers-color-scheme: light) {
-      .app-link {
-        background: #ffffff;
-        border: 1px solid #cbd5e1;
-        color: #0f172a;
-      }
-    }
     .app-link:hover {
-      background: var(--card-border, #334155);
-      border-color: var(--accent-link, #818cf8);
+      background: var(--border-header);
     }
 
     .page-wrapper {

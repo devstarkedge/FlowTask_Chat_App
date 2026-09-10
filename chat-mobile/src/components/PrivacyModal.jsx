@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import { X } from 'lucide-react-native';
 import { useThemeStore } from '../stores/themeStore';

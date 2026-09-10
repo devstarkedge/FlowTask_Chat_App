@@ -29,6 +29,8 @@ import directoriesRoutes from './modules/directories/directories.routes.js';
 import draftRoutes from './modules/drafts/draft.routes.js';
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
 import eventBus from './services/eventBus.js';
+import projectChannelSyncService from './modules/flowtask/projectChannelSync.service.js';
+import { getPrivacyPolicyHTML } from './utils/privacyPolicyHTML.js';
 import channelService from './modules/channels/channel.service.js';
 import workspaceService from './modules/workspaces/workspace.service.js';
 import { startDeadlineWarningCron, stopDeadlineWarningCron } from './modules/bot/deadlineWarning.js';
@@ -180,7 +182,7 @@ app.get('/api/chat/health', (_req, res) => {
 
   res.status(allHealthy ? 200 : 503).json({
     status,
-    service: 'flowtask-chat',
+    service: 'TaskChat',
     uptime: Math.floor(process.uptime()),
     connections: getConnectionCount(),
     database: dbHealth,
@@ -195,6 +197,18 @@ app.get('/api/chat/health', (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// ─── Public Privacy Policy (No authentication required — Slack style) ──────
+const handlePrivacyPolicyRequest = (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(getPrivacyPolicyHTML());
+};
+
+app.get('/privacy-policy', handlePrivacyPolicyRequest);
+app.get('/privacy', handlePrivacyPolicyRequest);
+app.get('/api/chat/privacy-policy', handlePrivacyPolicyRequest);
+app.get('/api/chat/privacy', handlePrivacyPolicyRequest);
+
 // ─── Debug Env Check ────────────────────────────────────────────────────────────────
 // Returns non-sensitive config for deployment verification.
 // Gated by X-Debug-Token header matching DEBUG_TOKEN env var.

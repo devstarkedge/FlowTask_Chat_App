@@ -21,7 +21,7 @@ import {
   ScrollView,
   Modal,
 } from "react-native";
-import { Video } from "expo-av";
+import AppVideo from "./common/AppVideo";
 import {
   Plus,
   Clock,
@@ -800,7 +800,7 @@ const MessageComposer = React.memo(function MessageComposer({
       let fileUri = uri || '';
       if (fileUri.startsWith('ph://')) {
         try {
-          const MediaLibrary = require('expo-media-library');
+          const MediaLibrary = require('../utils/safeMediaLibrary').default;
           const info = await MediaLibrary.getAssetInfoAsync(fileUri);
           if (info?.localUri || info?.uri) {
             fileUri = info.localUri || info.uri;
@@ -1005,7 +1005,7 @@ const MessageComposer = React.memo(function MessageComposer({
                         <Image source={{ uri: file.url || file._tempUri || file.thumbnailUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                       ) : isVideo ? (
                         <View style={{ width: '100%', height: '100%' }}>
-                          <Video source={{ uri: file.url || file._tempUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" shouldPlay={false} useNativeControls={false} />
+                          <AppVideo sourceUri={file.url || file._tempUri} style={{ width: '100%', height: '100%' }} resizeMode="cover" shouldPlay={false} useNativeControls={false} />
                           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
                             <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, padding: 4 }}>
                               <Play size={16} color="#FFF" />

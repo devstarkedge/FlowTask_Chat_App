@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, SafeAreaView } from 'react-native';
 import { Camera, CameraView } from 'expo-camera';
-import { Video } from 'expo-av';
+import AppVideo from './common/AppVideo';
 import { X, FlipHorizontal, Zap, ZapOff, Circle, Square, Send, RotateCcw } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
@@ -81,13 +81,14 @@ const VideoRecorderModal = ({
           </View>
         ) : (
           <View style={styles.previewContainer}>
-            <Video
-              source={{ uri: videoUri }}
+            <AppVideo
+              sourceUri={videoUri}
               style={styles.previewVideo}
               useNativeControls
               resizeMode="contain"
               shouldPlay
               isLooping
+              isMuted={false}
             />
             <View style={styles.previewBottomControls}>
               <TouchableOpacity onPress={onRetake} style={styles.retakeButton}>

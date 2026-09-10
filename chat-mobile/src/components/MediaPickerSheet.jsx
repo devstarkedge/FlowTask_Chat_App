@@ -9,7 +9,7 @@ import {
   Image,
 } from 'react-native';
 import { Camera, Image as ImageIcon, Mic, Video, FileText, Smile, Layers, Clock, X } from 'lucide-react-native';
-import * as MediaLibrary from 'expo-media-library';
+import MediaLibrary from '../utils/safeMediaLibrary';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
@@ -27,20 +27,20 @@ export default function MediaPickerSheet({
   onRecordVideo,
 }) {
   const [photos, setPhotos] = useState([]);
-  const [permissionResponse, requestPermission] = MediaLibrary.usePermissions();
+  const [hasPermission, setHasPermission] = useState(false);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    if (visible && (!permissionResponse || permissionResponse.status !== 'granted')) {
-      requestPermission();
+    if (visible) {
+      (async () => {
+        const res = await MediaLibrary.requestPermissionsAsync();
+        if (res?.granted || res?.status === 'granted') {
+          setHasPermission(true);
+          loadRecentPhotos();
+        }
+      })();
     }
-  }, [visible, permissionResponse]);
-
-  useEffect(() => {
-    if (visible && permissionResponse?.status === 'granted') {
-      loadRecentPhotos();
-    }
-  }, [visible, permissionResponse]);
+  }, [visible]);
 
   const loadRecentPhotos = async () => {
     try {
@@ -49,7 +49,9 @@ export default function MediaPickerSheet({
         mediaType: ['photo', 'video'],
         sortBy: [[MediaLibrary.SortBy.creationTime, false]],
       });
-      setPhotos(assets);
+      if (assets && assets.length) {
+        setPhotos(assets);
+      }
     } catch (e) {
       console.log('Error loading photos', e);
     }

@@ -9,7 +9,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { Audio } from 'expo-av';
+import { createUniversalAudioSound } from '../../../utils/audioPlayerService';
 import { Play, Pause, X, Music } from 'lucide-react-native';
 import { useSafeAreaInsets, SafeAreaProvider } from 'react-native-safe-area-context';
 import { scale, verticalScale, moderateScale } from '../../../utils/responsive';
@@ -29,7 +29,7 @@ export function AudioPlayerCard({ fileUrl, name, activeColor, colors, cacheFile 
 
   useEffect(() => {
     return () => {
-      soundRef.current?.unloadAsync?.().catch(() => {});
+      soundRef.current?.unload?.();
     };
   }, []);
 
@@ -47,33 +47,29 @@ export function AudioPlayerCard({ fileUrl, name, activeColor, colors, cacheFile 
   const loadAndPlay = async () => {
     if (soundRef.current) {
       if (playing) {
-        await soundRef.current.pauseAsync();
+        await soundRef.current.pause();
         setPlaying(false);
       } else {
-        await soundRef.current.playAsync();
+        await soundRef.current.play();
         setPlaying(true);
       }
       return;
     }
     setLoading(true);
     try {
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
       const uri = await resolveUri();
-      const { sound } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: true },
-        (s) => {
-          if (s.isLoaded) {
-            setPosition(s.positionMillis);
-            setDuration(s.durationMillis || 0);
-            setPlaying(s.isPlaying);
-            if (s.didJustFinish) {
-              setPlaying(false);
-              setPosition(0);
-            }
+      const sound = await createUniversalAudioSound(uri, (s) => {
+        if (s.isLoaded) {
+          setPosition(s.positionMillis);
+          setDuration(s.durationMillis || 0);
+          setPlaying(s.isPlaying);
+          if (s.didJustFinish) {
+            setPlaying(false);
+            setPosition(0);
           }
-        },
-      );
+        }
+      });
+      await sound.play();
       soundRef.current = sound;
       setPlaying(true);
     } catch {

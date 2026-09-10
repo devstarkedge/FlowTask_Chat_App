@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
+import MediaLibrary from '../utils/safeMediaLibrary';
 
 export const FileSystemAdapter = {
   cacheDirectory: FileSystem.cacheDirectory,

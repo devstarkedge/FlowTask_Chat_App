@@ -1,10 +1,11 @@
 import { registerRootComponent } from 'expo';
 import { LogBox } from 'react-native';
 
-// Suppress expo-notifications warnings in Expo Go
+// Suppress expo-notifications warnings when testing in Expo Go
 LogBox.ignoreLogs([
   'expo-notifications: Android Push notifications',
   '`expo-notifications` functionality is not fully supported in Expo Go',
+  'Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go',
 ]);
 
 import App from './App';

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Modal, SafeAreaView } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
+import AppVideo from './common/AppVideo';
 import { Play, X, Loader2 } from 'lucide-react-native';
 import { scale, moderateScale } from '../utils/responsive';
 import { normalizeMediaUrl } from '../utils/mediaUtils';
@@ -33,11 +33,11 @@ const VideoMessagePlayer = ({ videoUrl, thumbnailUrl, colors, width, height, onL
              <Loader2 size={24} color="#FFF" />
           </View>
         ) : (
-          <Video
-            source={{ uri: normalizedVideoUrl }}
-            posterSource={normalizedThumbUrl ? { uri: normalizedThumbUrl } : undefined}
+          <AppVideo
+            sourceUri={normalizedVideoUrl}
+            posterUri={normalizedThumbUrl}
             style={StyleSheet.absoluteFillObject}
-            resizeMode={ResizeMode.COVER}
+            resizeMode="cover"
             shouldPlay={false}
             isMuted={true}
           />
@@ -55,14 +55,15 @@ const VideoMessagePlayer = ({ videoUrl, thumbnailUrl, colors, width, height, onL
 
       <Modal visible={isFullScreen} transparent={false} animationType="fade">
         <SafeAreaView style={styles.fullScreenContainer}>
-          <Video
-            ref={videoRef}
-            source={{ uri: normalizedVideoUrl }}
+          <AppVideo
+            videoRef={videoRef}
+            sourceUri={normalizedVideoUrl}
             style={styles.fullScreenVideo}
             useNativeControls
-            resizeMode={ResizeMode.CONTAIN}
+            resizeMode="contain"
             shouldPlay={isFullScreen}
-            onPlaybackStatusUpdate={(status) => {
+            isMuted={false}
+            onStatusChange={(status) => {
               if (status.error) {
                 logger.error('Video Error:', status.error);
               }

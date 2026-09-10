@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { Audio } from 'expo-av';
+import { createUniversalAudioSound } from '../utils/audioPlayerService';
 import { Play, Pause } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { normalizeMediaUrl } from '../utils/mediaUtils';
@@ -34,7 +34,7 @@ const AudioMessagePlayer = ({ audioUrl, duration, fileSize, colors, isMe, onLong
   useEffect(() => {
     return () => {
       if (sound) {
-        sound.unloadAsync();
+        sound.unload?.();
       }
     };
   }, [sound]);
@@ -46,23 +46,19 @@ const AudioMessagePlayer = ({ audioUrl, duration, fileSize, colors, isMe, onLong
     }
     try {
       if (!sound) {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: normalizedAudioUrl },
-          { shouldPlay: true },
-          onPlaybackStatusUpdate
-        );
+        const newSound = await createUniversalAudioSound(normalizedAudioUrl, onPlaybackStatusUpdate);
+        await newSound.play();
         setSound(newSound);
         setIsPlaying(true);
       } else {
         if (isPlaying) {
-          await sound.pauseAsync();
+          await sound.pause();
         } else {
           // Check if it reached the end, if so restart
-          if (positionMillis >= durationMillis) {
-            await sound.replayAsync();
+          if (positionMillis >= durationMillis && durationMillis > 0) {
+            await sound.replay();
           } else {
-            await sound.playAsync();
+            await sound.play();
           }
         }
       }

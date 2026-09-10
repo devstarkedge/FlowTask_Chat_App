@@ -21,6 +21,7 @@ const WorkspaceSelectorPage = lazy(() => import('./pages/WorkspaceSelectorPage')
 const WorkspaceSetupWizard = lazy(() => import('./components/workspace/WorkspaceSetupWizard'))
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage'))
 const AccountDeletionPage = lazy(() => import('./pages/AccountDeletionPage'))
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'))
 
 function PageFallback() {
   return (
@@ -92,6 +93,8 @@ function App() {
         <Route path="/forgot-password" element={!user ? <ForgotPasswordPage /> : <SmartAuthRedirect />} />
         <Route path="/reset-password/:token" element={!user ? <ResetPasswordPage /> : <SmartAuthRedirect />} />
         <Route path="/delete-account" element={<AccountDeletionPage />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
 
         {/* Invite acceptance — public (works for both logged-in and logged-out users) */}
         <Route path="/invite/:token" element={<AcceptInvitePage />} />

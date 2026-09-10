@@ -1,14 +1,23 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { Platform } from 'react-native';
 import { Camera } from 'expo-camera';
-import { Audio } from 'expo-av';
 import logger from '../utils/logger';
+
+let expoAudio;
+if (Platform.OS !== 'web') {
+  try {
+    expoAudio = require('expo-audio');
+  } catch (e) {
+    logger.warn('Failed to load expo-audio module', e);
+  }
+}
 
 export const useVideoRecorder = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [videoUri, setVideoUri] = useState(null);
   const [hasPermissions, setHasPermissions] = useState(null);
-  const [cameraType, setCameraType] = useState('back'); // expo-camera defaults to 'back' or 'front' depending on version, newer expo-camera uses CameraType.back/front
+  const [cameraType, setCameraType] = useState('back');
   const [flashMode, setFlashMode] = useState('off');
 
   const cameraRef = useRef(null);
@@ -17,11 +26,28 @@ export const useVideoRecorder = () => {
   useEffect(() => {
     (async () => {
       try {
-        const cameraStatus = await Camera.requestCameraPermissionsAsync();
-        const micStatus = await Audio.requestPermissionsAsync();
-        setHasPermissions(cameraStatus.status === 'granted' && micStatus.status === 'granted');
+        if (Platform.OS === 'web') {
+          if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            stream.getTracks().forEach((track) => track.stop());
+            setHasPermissions(true);
+          } else {
+            setHasPermissions(false);
+          }
+        } else {
+          const cameraStatus = await Camera.requestCameraPermissionsAsync();
+          let micGranted = false;
+          if (expoAudio?.requestRecordingPermissionsAsync) {
+            const micStatus = await expoAudio.requestRecordingPermissionsAsync();
+            micGranted = micStatus.status === 'granted';
+          } else {
+            micGranted = true;
+          }
+          setHasPermissions(cameraStatus.status === 'granted' && micGranted);
+        }
       } catch (err) {
         logger.error('Failed to get video/mic permissions', err);
+        setHasPermissions(false);
       }
     })();
   }, []);
@@ -63,7 +89,9 @@ export const useVideoRecorder = () => {
 
   const stopRecording = useCallback(() => {
     if (!cameraRef.current || !isRecording) return;
-    cameraRef.current.stopRecording();
+    try {
+      cameraRef.current.stopRecording();
+    } catch (e) {}
     clearTimer();
   }, [isRecording]);
 
@@ -72,8 +100,10 @@ export const useVideoRecorder = () => {
       setVideoUri(null);
       return;
     }
-    if (isRecording) {
-      cameraRef.current.stopRecording();
+    if (isRecording && cameraRef.current) {
+      try {
+        cameraRef.current.stopRecording();
+      } catch (e) {}
     }
     clearTimer();
     setIsRecording(false);
@@ -110,6 +140,6 @@ export const useVideoRecorder = () => {
     cancelRecording,
     toggleCamera,
     toggleFlash,
-    setVideoUri, // allow clearing after sending
+    setVideoUri,
   };
 };

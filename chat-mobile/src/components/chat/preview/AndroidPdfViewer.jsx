@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { NativeModules, StyleSheet } from 'react-native';
+import { NativeModules, StyleSheet, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system/legacy';
 import { prepareAndroidPdfPreview } from '../../../utils/pdfViewerAssets';
 import logger from '../../../utils/logger';
 
-const HAS_NATIVE_PDF = !!NativeModules.PdfManager;
+const HAS_NATIVE_PDF = Platform.OS !== 'web' && !!NativeModules.PdfManager;
 
 let NativePdf = null;
 if (HAS_NATIVE_PDF) {

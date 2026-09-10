@@ -9,15 +9,16 @@
  *   - Server stores the token in chatPreferences.fcmTokens
  *   - Server sends via expo-server-sdk when platform === 'expo'
  */
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
+import { isRunningInExpoGo } from 'expo';
 import storage from './storage';
 import { pushAPI } from './api';
 import logger from '../utils/logger';
 import {
   ANDROID_NOTIFICATION_SOUND,
   getNotificationSound,
+  IOS_NOTIFICATION_SOUND,
 } from '../constants/notificationSounds';
 
 const PUSH_TOKEN_KEY = 'expo_push_token';
@@ -27,23 +28,63 @@ export { IOS_NOTIFICATION_SOUND as FLOWTASK_NOTIFICATION_SOUND } from '../consta
 let _navigationRef = null;
 export const setNavigationRef = (ref) => { _navigationRef = ref; };
 
+// Helper to check if running inside Expo Go app
+export const checkIsExpoGo = () => {
+  try {
+    if (typeof isRunningInExpoGo === 'function' && isRunningInExpoGo()) {
+      return true;
+    }
+  } catch (e) {}
+  try {
+    const Constants = require('expo-constants').default;
+    return Constants?.appOwnership === 'expo' || Constants?.executionEnvironment === 'storeClient';
+  } catch (e) {
+    return false;
+  }
+};
+
+let NotificationsModule = null;
+const getNotificationsModule = () => {
+  if (NotificationsModule) return NotificationsModule;
+  if (checkIsExpoGo()) return null;
+  try {
+    NotificationsModule = require('expo-notifications');
+    return NotificationsModule;
+  } catch (e) {
+    logger.warn('[Push] Could not load expo-notifications module:', e?.message);
+    return null;
+  }
+};
+
 // ─── Foreground Presentation ─────────────────────────────────────────────────
 
-// Suppress duplicate remote pushes when foregrounded; socket shows a local notification instead.
-// Local notifications still play the custom Flowtask sound.
-Notifications.setNotificationHandler({
-  handleNotification: async (notification) => {
-    const isRemotePush = notification.request.trigger?.type === 'push';
-    const isScheduledSent = notification.request.content?.data?.type === 'scheduled_sent'
-      || notification.request.content?.data?.type === 'scheduled_failed';
-    return {
-      shouldPlaySound: !isRemotePush || isScheduledSent,
-      shouldSetBadge: true,
-      shouldShowBanner: !isRemotePush || isScheduledSent,
-      shouldShowList: true,
-    };
-  },
-});
+// Configure notification handler safely if not in Expo Go
+const initNotificationHandler = () => {
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return;
+
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async (notification) => {
+        const isRemotePush = notification.request?.trigger?.type === 'push';
+        const isScheduledSent = notification.request?.content?.data?.type === 'scheduled_sent'
+          || notification.request?.content?.data?.type === 'scheduled_failed';
+        return {
+          shouldPlaySound: !isRemotePush || isScheduledSent,
+          shouldSetBadge: true,
+          shouldShowBanner: !isRemotePush || isScheduledSent,
+          shouldShowList: true,
+        };
+      },
+    });
+  } catch (err) {
+    logger.warn('[Push] Unable to set notification handler:', err?.message);
+  }
+};
+
+if (!checkIsExpoGo()) {
+  initNotificationHandler();
+}
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -54,6 +95,14 @@ Notifications.setNotificationHandler({
  * @returns {string|null} The Expo push token, or null on failure.
  */
 export async function registerForPushNotifications() {
+  if (checkIsExpoGo()) {
+    logger.warn('[Push] Remote push notifications are removed from Expo Go on SDK 53+. Use a dev build for push notifications.');
+    return null;
+  }
+
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return null;
+
   if (!Device.isDevice) {
     logger.info('[Push] Push notifications require a physical device');
     return null;
@@ -82,25 +131,36 @@ export async function registerForPushNotifications() {
 
     // Android: set notification channel for importance
     if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'Default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#4F46E5',
-        sound: ANDROID_NOTIFICATION_SOUND,
-        enableVibrate: true,
-      });
+      try {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'Default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#4F46E5',
+          sound: ANDROID_NOTIFICATION_SOUND,
+          enableVibrate: true,
+        });
+      } catch (e) {
+        logger.warn('[Push] Failed to set notification channel:', e?.message);
+      }
     }
 
     // 2. Get Expo push token
-    const projectId =
-      Constants?.expoConfig?.extra?.eas?.projectId ??
-      Constants?.easConfig?.projectId;
+    let projectId;
+    try {
+      const Constants = require('expo-constants').default;
+      projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+    } catch (e) {}
 
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId,
-    });
-    const token = tokenData.data;
+    let tokenData;
+    try {
+      tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    } catch (err) {
+      logger.warn('[Push] getExpoPushTokenAsync failed:', err?.message);
+      return null;
+    }
+
+    const token = tokenData?.data;
 
     if (!token) {
       logger.warn('[Push] Could not obtain push token');
@@ -143,9 +203,11 @@ export async function unregisterPushNotifications() {
     }
     await storage.removeItem(PUSH_TOKEN_KEY);
     
-    // Dismiss all active notifications and clear application badge count
-    await Notifications.dismissAllNotificationsAsync().catch(() => {});
-    await Notifications.setBadgeCountAsync(0).catch(() => {});
+    const Notifications = getNotificationsModule();
+    if (Notifications) {
+      await Notifications.dismissAllNotificationsAsync().catch(() => {});
+      await Notifications.setBadgeCountAsync(0).catch(() => {});
+    }
 
     _detachListeners();
     logger.info('[Push] Token unregistered and device notifications cleared');
@@ -158,6 +220,9 @@ export async function unregisterPushNotifications() {
  * Check if push notifications are currently enabled (permission granted + token stored).
  */
 export async function isPushEnabled() {
+  if (checkIsExpoGo()) return false;
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return false;
   try {
     const token = await storage.getItem(PUSH_TOKEN_KEY);
     if (!token) return false;
@@ -172,6 +237,8 @@ export async function isPushEnabled() {
  * Programmatically show a local notification (e.g., from a socket event).
  */
 export async function showLocalNotification({ title, body, data = {} }) {
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return;
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -194,49 +261,59 @@ let _foregroundSub = null;
 let _responseSub = null;
 
 function _attachListeners() {
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return;
   // Prevent duplicate listeners
   _detachListeners();
 
-  // Foreground: notification data received while app is open
-  _foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
-    const data = notification.request?.content?.data || {};
+  try {
+    // Foreground: notification data received while app is open
+    _foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request?.content?.data || {};
 
-    // Update unread count in store
-    try {
-      const { useNotificationStore } = require('../stores/notificationStore');
-      useNotificationStore.getState().fetchUnreadCount();
-    } catch {}
+      // Update unread count in store
+      try {
+        const { useNotificationStore } = require('../stores/notificationStore');
+        useNotificationStore.getState().fetchUnreadCount();
+      } catch {}
 
-    // If we're currently viewing the channel this notification belongs to, dismiss badge
-    try {
-      const { useChannelStore } = require('../stores/channelStore');
-      if (data.channelId) {
-        const activeId = useChannelStore.getState().activeChannelId;
-        if (activeId === data.channelId) {
-          // User is already viewing this channel — clear the badge
-          Notifications.setBadgeCountAsync(0).catch(() => {});
+      // If we're currently viewing the channel this notification belongs to, dismiss badge
+      try {
+        const { useChannelStore } = require('../stores/channelStore');
+        if (data.channelId) {
+          const activeId = useChannelStore.getState().activeChannelId;
+          if (activeId === data.channelId) {
+            // User is already viewing this channel — clear the badge
+            Notifications.setBadgeCountAsync(0).catch(() => {});
+          }
         }
-      }
-    } catch {}
-  });
+      } catch {}
+    });
+  } catch (e) {
+    logger.warn('[Push] addNotificationReceivedListener error:', e?.message);
+  }
 
-  // Notification tapped: navigate to the relevant screen
-  _responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
-    const data = response.notification?.request?.content?.data || {};
-    _navigateFromNotification(data);
+  try {
+    // Notification tapped: navigate to the relevant screen
+    _responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification?.request?.content?.data || {};
+      _navigateFromNotification(data);
 
-    // Clear badge when user interacts with a notification
-    Notifications.setBadgeCountAsync(0).catch(() => {});
-  });
+      // Clear badge when user interacts with a notification
+      Notifications.setBadgeCountAsync(0).catch(() => {});
+    });
+  } catch (e) {
+    logger.warn('[Push] addNotificationResponseReceivedListener error:', e?.message);
+  }
 }
 
 function _detachListeners() {
   if (_foregroundSub) {
-    _foregroundSub.remove();
+    try { _foregroundSub.remove(); } catch (e) {}
     _foregroundSub = null;
   }
   if (_responseSub) {
-    _responseSub.remove();
+    try { _responseSub.remove(); } catch (e) {}
     _responseSub = null;
   }
 }
@@ -280,12 +357,4 @@ function _navigateFromNotification(data) {
   } catch (error) {
     runNavigation();
   }
-}
-
-// ─── Constants import (lazy to avoid circular deps) ──────────────────────────
-let Constants;
-try {
-  Constants = require('expo-constants').default;
-} catch {
-  Constants = null;
 }

@@ -9,7 +9,7 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
+import AppVideo from '../../common/AppVideo';
 import { ChevronLeft, Volume2, VolumeX } from 'lucide-react-native';
 import { useSafeAreaInsets, SafeAreaProvider } from 'react-native-safe-area-context';
 import { scale, verticalScale, moderateScale } from '../../../utils/responsive';
@@ -101,15 +101,12 @@ export default function VideoPlayerModal({
             <ActivityIndicator color="#fff" style={StyleSheet.absoluteFillObject} />
           )}
           {sourceUri ? (
-            <Video
-              ref={videoRef}
-              source={{
-                uri: sourceUri,
-                ...(sourceUri.startsWith('http') ? { headers } : {}),
-              }}
+            <AppVideo
+              videoRef={videoRef}
+              sourceUri={sourceUri}
               style={styles.videoPlayer}
-              resizeMode={ResizeMode.CONTAIN}
-              onPlaybackStatusUpdate={setStatus}
+              resizeMode="contain"
+              onStatusChange={setStatus}
               useNativeControls
               shouldPlay={visible}
               isMuted={muted}

@@ -8,7 +8,6 @@ import compression from 'compression';
 import morgan from 'morgan';
 
 import env from './config/environment.js';
-import { CORS_ALLOWED_HEADERS } from './config/constants.js';
 import { connectDatabase, disconnectDatabase, isDatabaseConnected, getDatabaseHealth, stopHealthCheck } from './config/database.js';
 import logger from './utils/logger.js';
 import { errorHandler, NotFoundError } from './middleware/errorHandler.js';
@@ -19,7 +18,7 @@ import authRoutes from './modules/auth/auth.routes.js';
 import channelRoutes from './modules/channels/channel.routes.js';
 import messageRoutes, { channelMessageRouter } from './modules/messages/message.routes.js';
 import threadRoutes, { channelThreadRouter } from './modules/threads/thread.routes.js';
-import readReceiptRoutes from './modules/readReceipts/readReceipt.routes.js';
+import readReceiptRoutes, { channelReadRouter } from './modules/readReceipts/readReceipt.routes.js';
 import webhookRoutes from './modules/webhooks/webhook.routes.js';
 import botRoutes from './modules/bot/bot.routes.js';
 import userRoutes from './modules/users/user.routes.js';
@@ -28,27 +27,15 @@ import notificationRoutes from './modules/notifications/notification.routes.js';
 import adminRoutes from './modules/admin/admin.routes.js';
 import directoriesRoutes from './modules/directories/directories.routes.js';
 import draftRoutes from './modules/drafts/draft.routes.js';
-import searchRoutes from './modules/search/search.routes.js';
-import debugRoutes from './modules/debug/debug.routes.js';
-import pushRoutes from './modules/push/push.routes.js';
-import favoritesRoutes from './modules/favorites/favorites.routes.js';
-import gifsRoutes from './modules/gifs/gifs.routes.js';
-import categoryRoutes from './modules/categories/category.routes.js';
-
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
-import { registerFileUploadEventHandlers } from './services/fileUploadEvents.service.js';
-
 import eventBus from './services/eventBus.js';
+import channelService from './modules/channels/channel.service.js';
+import workspaceService from './modules/workspaces/workspace.service.js';
 import { startDeadlineWarningCron, stopDeadlineWarningCron } from './modules/bot/deadlineWarning.js';
-import { startDNDScheduler, stopDNDScheduler } from './services/dndScheduler.service.js';
 import fileCleanupService from './services/fileCleanup.service.js';
 import fileUploadService from './services/fileUpload.service.js';
 import webhookRetryService from './services/webhookRetry.service.js';
 import cache from './services/cache.service.js';
-import accountDeletionService from './services/accountDeletion.service.js';
-import canvasRoutes from './modules/canvas/canvas.routes.js';
-import { startCanvasCollaborationServer, stopCanvasCollaborationServer } from './modules/canvas/canvasCollaboration.server.js';
-import projectChannelSyncService from './modules/flowtask/projectChannelSync.service.js';
 
 // ─── Express App ─────────────────────────────────────────────────────────────
 const app = express();
@@ -80,15 +67,7 @@ const corsOptions = {
     if (!incomingOrigin) return callback(null, true);
     // Normalise the incoming origin exactly as we do our config (no trailing slash)
     const normalized = incomingOrigin.replace(/\/+$/, '');
-    if (
-      effectiveOrigins.includes(normalized) ||
-      normalized.startsWith('exp://') ||
-      normalized.includes('localhost') ||
-      normalized.includes('127.0.0.1') ||
-      /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}/.test(normalized) ||
-      /^http:\/\/172\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(normalized) ||
-      /^http:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(normalized)
-    ) {
+    if (effectiveOrigins.includes(normalized)) {
       callback(null, true);
     } else {
       logger.warn('CORS: blocked request from unlisted origin', {
@@ -102,7 +81,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: CORS_ALLOWED_HEADERS,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Workspace-Id', 'X-FlowTask-Token'],
   exposedHeaders: ['X-Total-Count', 'X-Page', 'X-Has-More'],
   maxAge: 86400,
 };
@@ -201,7 +180,7 @@ app.get('/api/chat/health', (_req, res) => {
 
   res.status(allHealthy ? 200 : 503).json({
     status,
-    service: 'TaskChat',
+    service: 'flowtask-chat',
     uptime: Math.floor(process.uptime()),
     connections: getConnectionCount(),
     database: dbHealth,
@@ -219,7 +198,7 @@ app.get('/api/chat/health', (_req, res) => {
 // ─── Debug Env Check ────────────────────────────────────────────────────────────────
 // Returns non-sensitive config for deployment verification.
 // Gated by X-Debug-Token header matching DEBUG_TOKEN env var.
-// Usage: curl -H "X-Debug-Token: <your-token>" https://TaskChat-app.onrender.com/api/chat/debug/env
+// Usage: curl -H "X-Debug-Token: <your-token>" https://flowtask-chat-app.onrender.com/api/chat/debug/env
 app.get('/api/chat/debug/env', (req, res) => {
   const debugToken = process.env.DEBUG_TOKEN;
   if (debugToken && req.headers['x-debug-token'] !== debugToken) {
@@ -229,12 +208,11 @@ app.get('/api/chat/debug/env', (req, res) => {
   const maskSecret = (v) => (v ? `${v.slice(0, 4)}****` : 'MISSING');
 
   res.json({
-    service: 'TaskChat',
+    service: 'flowtask-chat',
     node_env: env.NODE_ENV,
     timestamp: new Date().toISOString(),
     config: {
       BASE_URL: env.BASE_URL || '(not set)',
-      CLIENT_URL: env.CLIENT_URL || '(not set)',
       PORT: env.PORT,
       FLOWTASK_ENABLED: env.FLOWTASK_ENABLED,
       FLOWTASK_API_URL: env.FLOWTASK_API_URL || '(not set)',
@@ -256,6 +234,7 @@ app.use('/api/chat/workspaces', workspaceRoutes);
 app.use('/api/chat/channels', channelRoutes);
 app.use('/api/chat/channels/:channelId', channelMessageRouter);
 app.use('/api/chat/channels/:channelId', channelThreadRouter);
+app.use('/api/chat/channels/:channelId', channelReadRouter);
 app.use('/api/chat/messages', messageRoutes);
 app.use('/api/chat/threads', threadRoutes);
 if (env.FLOWTASK_ENABLED) {
@@ -267,17 +246,7 @@ app.use('/api/chat/notifications', notificationRoutes);
 app.use('/api/chat/admin', adminRoutes);
 app.use('/api/chat/directories', directoriesRoutes);
 app.use('/api/chat/drafts', draftRoutes);
-app.use('/api/chat/search', searchRoutes);
-app.use('/api/chat/categories', categoryRoutes);
-
-// Mount read receipt routes
 app.use('/api/chat', readReceiptRoutes);
-// Debug routes (local dev only)
-app.use('/api/chat/debug', debugRoutes);
-// Push subscription management
-app.use('/api/chat/push', pushRoutes);
-app.use('/api/chat/favorites', favoritesRoutes);
-app.use('/api/chat/gifs', gifsRoutes);
 
 // ─── Static File Serving (Uploads) ───────────────────────────────────────────
 app.use('/api/chat/uploads', express.static(path.resolve(env.UPLOAD_DIR), {
@@ -292,8 +261,6 @@ app.use('/api/chat/uploads', express.static(path.resolve(env.UPLOAD_DIR), {
     res.setHeader('X-Content-Type-Options', 'nosniff');
   },
 }));
-
-app.use("/api/chat/canvas", canvasRoutes);
 
 // ─── 404 Catch-All ───────────────────────────────────────────────────────────
 // Use `app.use` with a mounted path to avoid path-to-regexp parsing errors
@@ -315,69 +282,26 @@ async function startServer() {
     // 1. Connect to MongoDB
     await connectDatabase();
 
-    // 1b. Initialize Cache Service (loads Redis if configured)
-    const { default: redisManager } = await import('./config/redisManager.js');
-    await redisManager.init();
-
-    await cache.initialize();
-
-    // 1c. Initialize BullMQ queues AFTER Redis is ready
-    await import('./services/notificationQueue.service.js');
-    const { initQueues } = await import('./services/jobQueue.service.js');
-    await initQueues();
-
     // 2. Register webhook event handlers (only when FlowTask is enabled)
     if (env.FLOWTASK_ENABLED) {
       registerAllEventHandlers();
     }
 
-    // 2b. Sync media messages when async uploads complete
-    registerFileUploadEventHandlers();
-
     // 3. Initialize Socket.IO
     await initializeSocket(httpServer, corsOptions);
-    if (env.FLOWTASK_ENABLED) {
-      projectChannelSyncService.startRecovery();
-    }
 
-    // 3b. Start Canvas CRDT collaboration server
-    await startCanvasCollaborationServer();
+    // 4. Ensure default workspace exists
+    const defaultWorkspace = await workspaceService.ensureDefaultWorkspace();
+    logger.info('Default workspace ready', { workspaceId: defaultWorkspace._id, slug: defaultWorkspace.slug });
 
-    // 4/5. No default/global workspace is bootstrapped here anymore — every
-    // workspace is created dynamically (FlowTask SSO or ChatApp-native
-    // creation), and each one gets its own system channels bootstrapped at
-    // creation time (see workspace.service.js#_createDefaultChannels).
-    //
-    // Reconcile Workspace's indexes with the current schema on every boot.
-    // Removing an index from a Mongoose schema file does NOT drop it from
-    // an already-existing MongoDB deployment — that requires an explicit
-    // syncIndexes() call. The old partial-unique index on {source:1}
-    // (pre-multi-tenant: "at most one active source:'flowtask' workspace,
-    // ever") was previously only dropped by the one-time
-    // scripts/migrateChatWorkspaceMapping.js migration — if that was never
-    // run against a given deployment, every second FlowTask-linked
-    // workspace creation fails with a raw duplicate-key error on `source`
-    // that looks unrelated to slug/mapping collisions. Doing this at every
-    // boot instead of relying on a manually-run script means new
-    // deployments (and ones that missed the migration) self-heal
-    // automatically. Non-fatal — an index-sync failure must never prevent
-    // the server from starting.
-    try {
-      const { default: Workspace } = await import('./modules/workspaces/Workspace.model.js');
-      const indexChanges = await Workspace.syncIndexes();
-      logger.info('Workspace indexes synced', { indexChanges });
-    } catch (err) {
-      logger.error('Failed to sync Workspace indexes at boot — continuing startup', { error: err.message });
-    }
+    // 5. Bootstrap system channels (for default workspace)
+    await channelService.bootstrapSystemChannels(defaultWorkspace._id.toString());
 
     // 6. Start deadline warning cron
     startDeadlineWarningCron();
 
     // 7. Start file cleanup service
     fileCleanupService.init();
-
-    // 7a. Start account deletion service
-    accountDeletionService.init();
 
     // 7b. Recover uploads that were interrupted by last shutdown
     await fileUploadService.recoverStuckUploads();
@@ -386,9 +310,6 @@ async function startServer() {
     if (env.FLOWTASK_ENABLED) {
       webhookRetryService.start();
     }
-
-    // 7d. Start DND scheduler (clears expired manual DND and applies recurring schedules)
-    startDNDScheduler();
 
     // 8. Start memory usage monitor
     memoryMonitorTimer = setInterval(() => {
@@ -411,20 +332,11 @@ async function startServer() {
     const { startScheduledMessageProcessor } = await import('./services/scheduledMessages.service.js');
     startScheduledMessageProcessor();
 
-    // 8c. Start saved reminder checker (in-app reminders / Later feature)
-    try {
-      const { startSavedReminderChecker } = await import('./services/savedReminderChecker.js');
-      startSavedReminderChecker();
-    } catch (err) {
-      logger.warn('Failed to start saved reminder checker', { error: err?.message || err });
-    }
-
     // 9. Start HTTP server
     httpServer.listen(env.PORT, () => {
       logger.info(`FlowTask Chat server running`, {
         port: env.PORT,
         env: env.NODE_ENV,
-        clientUrl: env.CLIENT_URL,
         flowtaskEnabled: env.FLOWTASK_ENABLED,
         flowtaskApi: env.FLOWTASK_ENABLED ? env.FLOWTASK_API_URL : 'disabled',
       });
@@ -438,7 +350,6 @@ async function startServer() {
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 async function shutdown(signal) {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
-  projectChannelSyncService.stopRecovery();
 
   // 1. Stop memory monitor
   if (memoryMonitorTimer) {
@@ -449,7 +360,6 @@ async function shutdown(signal) {
   // 2. Close Socket.IO first (clean disconnect for clients)
   const { getIO } = await import('./sockets/socketManager.js');
   try {
-    await stopCanvasCollaborationServer();
     const io = getIO();
     if (io) {
       io.close();
@@ -461,27 +371,8 @@ async function shutdown(signal) {
     // Socket may not be initialized
   }
 
-  // 2b. Stop queue workers before closing the Redis connections they use.
-  try {
-    const { shutdownQueues } = await import('./services/jobQueue.service.js');
-    await shutdownQueues();
-    logger.info('Job queues closed');
-  } catch (err) {
-    logger.error('Error closing job queues', { error: err.message });
-  }
-
-  // 2c. Close global Redis clients using the unified manager
-  try {
-    const { default: redisManager } = await import('./config/redisManager.js');
-    await redisManager.closeAll();
-  } catch (err) {
-    logger.warn('Failed to cleanly close redisManager', { error: err.message });
-  }
-
   // 3. Stop cron jobs
   stopDeadlineWarningCron();
-  stopDNDScheduler();
-  accountDeletionService.stop();
 
   // 3b. Stop webhook retry service
   if (env.FLOWTASK_ENABLED) {
@@ -497,21 +388,20 @@ async function shutdown(signal) {
     // May not be initialized
   }
 
-  // Stop saved reminder checker
-  try {
-    const { stopSavedReminderChecker } = await import('./services/savedReminderChecker.js');
-    stopSavedReminderChecker();
-    logger.info('Saved reminder checker stopped');
-  } catch {
-    // Not initialized or failed to stop
-  }
-
   // 4. Stop DB health check
   stopHealthCheck();
 
   // 5. Stop accepting new connections, wait for in-flight to drain
   httpServer.close(async () => {
     logger.info('HTTP server closed');
+
+    try {
+      const { shutdownQueues } = await import('./services/jobQueue.service.js');
+      await shutdownQueues();
+      logger.info('Job queues closed');
+    } catch (err) {
+      logger.error('Error closing job queues', { error: err.message });
+    }
 
     try {
       await disconnectDatabase();
@@ -532,12 +422,6 @@ async function shutdown(signal) {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
-
-// Nodemon graceful restart
-process.once('SIGUSR2', async () => {
-  await shutdown('SIGUSR2');
-  process.kill(process.pid, 'SIGUSR2');
-});
 
 // Unhandled rejections / uncaught exceptions
 process.on('unhandledRejection', (reason) => {

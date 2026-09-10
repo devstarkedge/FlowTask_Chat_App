@@ -238,16 +238,18 @@ export const connectSocket = async () => {
   // Delivery receipt updates
   socket.on('message:delivered', ({ messageId, channelId, userId, deliveredAt }) => {
     // 1. Update tick marks in main chat store
-    const store = useChatStore.getState();
-    const messages = store.messagesByChannel[channelId];
-    if (messages) {
-      store.updateMessageStatus(channelId, messageId, [messageId], 'delivered', { deliveredAt });
-    }
+    try {
+      const store = useChatStore.getState();
+      const messages = store?.messagesByChannel?.[channelId];
+      if (messages && store?.updateMessageStatus) {
+        store.updateMessageStatus(channelId, messageId, [messageId], 'delivered', { deliveredAt });
+      }
+    } catch (e) {}
     
     // 2. Update new chat receipts store (Message Info modal)
     try {
       const { useChatStore: useNewChatStore } = require('../chat/store');
-      useNewChatStore.getState().addDeliveryReceipt(messageId, { userId, deliveredAt });
+      useNewChatStore.getState()?.addDeliveryReceipt?.(messageId, { userId, deliveredAt });
     } catch (e) {
       console.warn('[Socket] Could not update new chat receipts store on delivery:', e);
     }
@@ -256,16 +258,18 @@ export const connectSocket = async () => {
   // Read receipt updates
   socket.on('message:read', ({ messageId, channelId, userId, readAt }) => {
     // 1. Update tick marks in main chat store (use 'seen' instead of 'read' to match MessageStatusTicks checks)
-    const store = useChatStore.getState();
-    const messages = store.messagesByChannel[channelId];
-    if (messages) {
-      store.updateMessageStatus(channelId, messageId, [messageId], 'seen', { seenAt: readAt });
-    }
+    try {
+      const store = useChatStore.getState();
+      const messages = store?.messagesByChannel?.[channelId];
+      if (messages && store?.updateMessageStatus) {
+        store.updateMessageStatus(channelId, messageId, [messageId], 'seen', { seenAt: readAt });
+      }
+    } catch (e) {}
 
     // 2. Update new chat receipts store (Message Info modal)
     try {
       const { useChatStore: useNewChatStore } = require('../chat/store');
-      useNewChatStore.getState().addReadReceipt(messageId, { userId, readAt });
+      useNewChatStore.getState()?.addReadReceipt?.(messageId, { userId, readAt });
     } catch (e) {
       console.warn('[Socket] Could not update new chat receipts store on read:', e);
     }

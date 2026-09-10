@@ -1,5 +1,5 @@
 {
-  "name": "TaskChat-server",
+  "name": "flowtask-chat-server",
   "version": "1.0.0",
   "description": "Enterprise Chat Application for FlowTask — real-time messaging, threaded discussions, and contextual notifications",
   "type": "module",
@@ -10,43 +10,25 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "db:repair-thread-task-index": "node scripts/repairThreadTaskIndex.js",
-    "db:fix-raw-urls": "node scripts/fix-raw-urls.js",
-    "db:fix-raw-urls:apply": "node scripts/fix-raw-urls.js --fix",
-    "db:check-file": "node scripts/check-file.js",
-    "db:migrate-flowtask-project-privacy": "node scripts/migrateFlowTaskProjectPrivacy.js",
-    "db:migrate-flowtask-project-privacy:apply": "node scripts/migrateFlowTaskProjectPrivacy.js --apply",
-    "db:migrate-flowtask-sync-indexes": "node scripts/migrateFlowTaskSyncIndexes.js",
-    "db:migrate-flowtask-sync-indexes:apply": "node scripts/migrateFlowTaskSyncIndexes.js --apply",
-    "db:fix-guest-memberships": "node scripts/migrate/fix-guest-memberships.js --dry-run",
-    "db:fix-guest-memberships:apply": "node scripts/migrate/fix-guest-memberships.js",
-    "db:sync-flowtask-workspace-roles": "node scripts/migrate/sync-flowtask-workspace-roles.js",
-    "db:sync-flowtask-workspace-roles:apply": "node scripts/migrate/sync-flowtask-workspace-roles.js --apply",
-    "debug:notify": "node scripts/send_debug_notification.js"
+    "db:repair-thread-task-index": "node scripts/repairThreadTaskIndex.js"
   },
   "dependencies": {
-    "@hocuspocus/extension-redis": "^4.1.0",
-    "@hocuspocus/server": "^4.1.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "axios": "^1.7.9",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.70.4",
-    "chrono-node": "^2.3.2",
     "cloudinary": "^2.9.0",
     "compression": "^1.7.5",
     "cors": "^2.8.5",
     "dompurify": "^3.2.4",
     "dotenv": "^16.4.7",
-    "expo-server-sdk": "^6.1.0",
     "express": "^5.2.1",
     "express-rate-limit": "^7.5.0",
-    "firebase-admin": "^11.11.1",
     "helmet": "^8.0.0",
     "ioredis": "^5.10.0",
     "jsdom": "^25.0.1",
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.18.1",
-    "luxon": "^3.4.0",
     "mongodb": "^7.1.1",
     "mongoose": "^9.4.1",
     "morgan": "^1.10.0",
@@ -55,21 +37,17 @@
     "nodemailer": "^8.0.1",
     "rate-limit-redis": "^4.3.1",
     "redis": "^5.11.0",
-    "rrule": "^2.7.0",
     "socket.io": "^4.8.1",
     "uuid": "^11.1.0",
-    "web-push": "^3.6.7",
     "winston": "^3.17.0",
-    "yjs": "^13.6.30",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "eslint": "^9.18.0",
-    "mongodb-memory-server": "^8.15.3",
     "nodemon": "^3.1.14",
     "vitest": "^3.0.4"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=18.0.0"
   }
 }

@@ -57,10 +57,10 @@ const PrivacyPolicyPage = () => {
               height: '24px',
             }}
           >
-            <img src="./logo.png" alt="TaskChat Logo" />
+            <img src="./logo.png" alt="TaskChat: Channels Logo" />
           </div>
           <span style={{ fontSize: '22px', fontWeight: '800', letterSpacing: '-0.03em', color: 'var(--text-primary)' }}>
-            TaskChat
+            TaskChat: Channels
           </span>
         </Link>
 
@@ -118,7 +118,7 @@ const PrivacyPolicyPage = () => {
               color: 'var(--text-primary)',
             }}
           >
-            TaskChat — Privacy Policy
+            TaskChat: Channels — Privacy Policy
           </h1>
 
           <div
@@ -245,7 +245,7 @@ const PrivacyPolicyPage = () => {
           fontSize: '13px',
         }}
       >
-        <p>© {new Date().getFullYear()} TaskChat. All rights reserved.</p>
+        <p>© {new Date().getFullYear()} TaskChat: Channels. All rights reserved.</p>
       </footer>
     </div>
   );

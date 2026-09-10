@@ -20,6 +20,8 @@ import { protect } from './auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
 import { authLimiter, refreshLimiter, passwordResetLimiter } from '../../middleware/rateLimiter.js';
 import { validate } from '../../middleware/validate.js';
+import { getPrivacyPolicyHTML } from '../../utils/privacyPolicyHTML.js';
+
 import {
   registerSchema,
   loginSchema,
@@ -62,9 +64,18 @@ router.post('/refresh', refreshLimiter, validate({ body: refreshTokenSchema }), 
 router.get('/verify-email', verifyEmail);
 router.post('/resend-verification', authLimiter, resendVerification);
 
+// Public privacy policy route
+router.get('/privacy-policy', (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.status(200).send(getPrivacyPolicyHTML());
+});
+
+
 // Password reset
 router.post('/forgot-password', passwordResetLimiter, validate({ body: forgotPasswordSchema }), forgotPassword);
 router.post('/reset-password', passwordResetLimiter, validate({ body: resetPasswordSchema }), resetPassword);
+
 
 // Protected routes
 router.get('/me', protect, getMe);

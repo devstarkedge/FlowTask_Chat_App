@@ -10,6 +10,7 @@ import {
   resendVerification,
   forgotPassword,
   resetPassword,
+  privacyPolicy,
   getMe,
   updatePreferences,
   deleteAccount,
@@ -61,6 +62,10 @@ router.post('/refresh', refreshLimiter, validate({ body: refreshTokenSchema }), 
 // Email verification
 router.get('/verify-email', verifyEmail);
 router.post('/resend-verification', authLimiter, resendVerification);
+
+// Privacy Policy (Public)
+router.get('/privacy-policy', privacyPolicy);
+router.get('/privacy', privacyPolicy);
 
 // Password reset
 router.post('/forgot-password', passwordResetLimiter, validate({ body: forgotPasswordSchema }), forgotPassword);

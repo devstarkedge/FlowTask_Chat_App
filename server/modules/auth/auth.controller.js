@@ -13,6 +13,7 @@ import projectChannelSyncService from '../flowtask/projectChannelSync.service.js
 import logger from '../../utils/logger.js';
 import { ForbiddenError } from '../../middleware/errorHandler.js';
 import { normalizeFlowTaskAccess } from '../flowtask/flowTaskWorkspaceRoleMap.js';
+import { getPrivacyPolicyHTML } from '../../utils/privacyPolicyHTML.js';
 
 /**
  * Ensure the user has a WorkspaceMembership record for the given workspace.
@@ -596,6 +597,16 @@ export const resetPassword = asyncHandler(async (req, res) => {
     message: 'Password reset successful. Please log in with your new password.',
   });
 });
+
+/**
+ * GET /api/chat/auth/privacy-policy
+ * GET /api/chat/auth/privacy
+ * Render public HTML Privacy Policy page (No auth required)
+ */
+export const privacyPolicy = (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(getPrivacyPolicyHTML());
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // USER PROFILE

@@ -75,13 +75,7 @@ export const PRIVACY_SECTIONS = [
     ],
   },
   {
-    heading: '8. Changes to this Privacy Policy',
-    blocks: [
-      { type: 'p', text: 'We may update this Privacy Policy from time to time. We will notify you of any changes by updating the "Last Updated" date and providing notice through the app when appropriate.' },
-    ],
-  },
-  {
-    heading: '9. Contact Us',
+    heading: '8. Contact Us',
     blocks: [
       { type: 'p', text: 'If you have questions or concerns about this Privacy Policy or your data, please contact us:' },
       { type: 'p', text: 'Email: info@starkedge.com' },

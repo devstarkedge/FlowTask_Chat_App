@@ -1,6 +1,6 @@
 // TaskChat — Public HTML Privacy Policy Generator
 
-import { PRIVACY_LAST_UPDATED, PRIVACY_INTRO, PRIVACY_SECTIONS } from '../../client/src/data/privacyContent.js';
+import { PRIVACY_INTRO, PRIVACY_SECTIONS } from '../../client/src/data/privacyContent.js';
 
 export function getPrivacyPolicyHTML() {
   const introHTML = PRIVACY_INTRO.map(p => `<p>${p}</p>`).join('');
@@ -40,20 +40,18 @@ export function getPrivacyPolicyHTML() {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-gradient: linear-gradient(180deg, #09090b 0%, #121217 100%);
-      --topbar-bg: rgba(18, 18, 23, 0.95);
-      --card-bg: #181820;
-      --card-border: #272732;
-      --card-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+      --bg-gradient: linear-gradient(180deg, #0b0d14 0%, #06070a 100%);
+      --topbar-bg: rgba(11, 13, 20, 0.95);
+      --card-bg: #121520;
+      --card-border: #1e2333;
+      --card-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
       
-      --text-primary: #f4f4f5;
-      --text-secondary: #a1a1aa;
-      --text-muted: #71717a;
+      --text-heading: #ffffff;
+      --text-body: #cbd5e1;
+      --text-muted: #64748b;
       
-      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-      --accent-glow: rgba(99, 102, 241, 0.35);
       --accent-link: #818cf8;
-      --border-header: #272732;
+      --border-header: #1e2333;
     }
 
     @media (prefers-color-scheme: light) {
@@ -62,14 +60,12 @@ export function getPrivacyPolicyHTML() {
         --topbar-bg: rgba(255, 255, 255, 0.95);
         --card-bg: #ffffff;
         --card-border: #e2e8f0;
-        --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+        --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
         
-        --text-primary: #0f172a;
-        --text-secondary: #334155;
+        --text-heading: #0f172a;
+        --text-body: #1e293b;
         --text-muted: #64748b;
         
-        --accent-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-        --accent-glow: rgba(99, 102, 241, 0.25);
         --accent-link: #4f46e5;
         --border-header: #e2e8f0;
       }
@@ -85,23 +81,23 @@ export function getPrivacyPolicyHTML() {
       min-height: 100%;
       background: var(--bg-gradient);
       background-attachment: fixed;
-      color: var(--text-primary);
+      color: var(--text-body);
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      line-height: 1.65;
+      line-height: 1.7;
       -webkit-font-smoothing: antialiased;
       overflow-x: hidden;
       overflow-y: auto !important;
       -webkit-overflow-scrolling: touch;
     }
 
-    /* Sticky Header Bar */
+    /* Sticky Top Header Bar matching user mockup */
     .top-header {
       width: 100%;
       background: var(--topbar-bg);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border-header);
-      padding: 14px 24px;
+      padding: 16px 40px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -114,64 +110,81 @@ export function getPrivacyPolicyHTML() {
     .logo-container {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       text-decoration: none;
-      color: var(--text-primary);
+      color: var(--text-heading);
       flex-shrink: 0;
     }
 
-    /* Message Bubble Logo Icon matching TaskChat App branding */
-    .logo-svg {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      background: var(--accent-gradient);
-      box-shadow: 0 4px 12px var(--accent-glow);
+    /* TaskChat Brand Logo Icon (Stacked Orange Horizontal Bars) */
+    .brand-logo-icon {
       display: flex;
-      align-items: center;
+      flex-direction: column;
       justify-content: center;
-      color: #ffffff;
+      align-items: flex-start;
+      gap: 4px;
+      width: 28px;
+      height: 24px;
       flex-shrink: 0;
     }
+    .brand-logo-icon span {
+      display: block;
+      height: 3.5px;
+      border-radius: 2px;
+      background: linear-gradient(90deg, #ff5e00 0%, #ff8c00 100%);
+    }
+    .brand-logo-icon span:nth-child(1) { width: 24px; }
+    .brand-logo-icon span:nth-child(2) { width: 16px; margin-left: 4px; }
+    .brand-logo-icon span:nth-child(3) { width: 20px; }
 
     .logo-title {
-      font-size: 18px;
+      font-size: 22px;
       font-weight: 800;
-      letter-spacing: -0.02em;
-      color: var(--text-primary);
+      letter-spacing: -0.03em;
+      color: var(--text-heading);
       white-space: nowrap;
     }
 
+    /* Ghost Button Header Action matching mockup */
     .app-link {
-      color: #ffffff;
+      color: var(--text-heading);
       text-decoration: none;
-      font-size: 13.5px;
+      font-size: 14px;
       font-weight: 600;
-      padding: 8px 18px;
+      padding: 8px 16px;
       border-radius: 8px;
-      background: var(--accent-gradient);
-      box-shadow: 0 4px 12px var(--accent-glow);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       white-space: nowrap;
       flex-shrink: 0;
       transition: all 0.2s ease;
     }
-
+    @media (prefers-color-scheme: light) {
+      .app-link {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        color: #0f172a;
+      }
+    }
     .app-link:hover {
-      opacity: 0.92;
-      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.3);
     }
 
     .page-wrapper {
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 40px 16px 60px 16px;
+      padding: 44px 16px 60px 16px;
       width: 100%;
       box-sizing: border-box;
     }
 
     main {
-      max-width: 840px;
+      max-width: 800px;
       width: 100%;
       box-sizing: border-box;
     }
@@ -179,55 +192,35 @@ export function getPrivacyPolicyHTML() {
     .card {
       background: var(--card-bg);
       border-radius: 16px;
-      padding: 40px 36px;
+      padding: 44px 40px;
       border: 1px solid var(--card-border);
       box-shadow: var(--card-shadow);
       box-sizing: border-box;
       width: 100%;
     }
 
-    .badge {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 20px;
-      background: rgba(99, 102, 241, 0.12);
-      border: 1px solid rgba(99, 102, 241, 0.25);
-      color: var(--accent-link);
-      font-size: 12px;
-      font-weight: 600;
-      margin-bottom: 14px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-
     h1 {
       font-size: 30px;
       font-weight: 800;
-      margin-bottom: 6px;
+      margin-bottom: 24px;
       letter-spacing: -0.02em;
-      color: var(--text-primary);
+      color: var(--text-heading);
       line-height: 1.3;
       word-wrap: break-word;
-    }
-
-    .last-updated {
-      font-size: 13px;
-      color: var(--text-muted);
-      margin-bottom: 28px;
-      font-weight: 500;
     }
 
     .intro {
       border-bottom: 1px solid var(--card-border);
       padding-bottom: 24px;
-      margin-bottom: 28px;
+      margin-bottom: 32px;
     }
 
     .intro p {
-      font-size: 15px;
-      color: var(--text-secondary);
-      line-height: 1.7;
-      margin-bottom: 12px;
+      font-size: 15.5px;
+      font-weight: 450;
+      color: var(--text-body);
+      line-height: 1.75;
+      margin-bottom: 14px;
     }
 
     .intro p:last-child {
@@ -235,36 +228,38 @@ export function getPrivacyPolicyHTML() {
     }
 
     .section {
-      margin-bottom: 28px;
+      margin-bottom: 32px;
     }
 
     h2 {
-      font-size: 18px;
+      font-size: 19px;
       font-weight: 700;
-      color: var(--text-primary);
+      color: var(--text-heading);
       margin-bottom: 12px;
       line-height: 1.4;
       word-wrap: break-word;
     }
 
     p {
-      font-size: 14.5px;
-      color: var(--text-secondary);
+      font-size: 15px;
+      font-weight: 450;
+      color: var(--text-body);
       line-height: 1.7;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
       word-wrap: break-word;
     }
 
     ul {
       padding-left: 22px;
-      margin: 8px 0 14px 0;
-      color: var(--text-secondary);
-      font-size: 14.5px;
+      margin: 10px 0 16px 0;
+      color: var(--text-body);
+      font-size: 15px;
+      font-weight: 450;
       line-height: 1.7;
     }
 
     li {
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       word-wrap: break-word;
     }
 
@@ -287,7 +282,8 @@ export function getPrivacyPolicyHTML() {
       margin-top: 40px;
       text-align: center;
       color: var(--text-muted);
-      font-size: 13px;
+      font-size: 13.5px;
+      font-weight: 500;
       padding-bottom: 20px;
     }
 
@@ -296,19 +292,11 @@ export function getPrivacyPolicyHTML() {
       .top-header {
         padding: 12px 16px;
       }
-      .logo-svg {
-        width: 28px;
-        height: 28px;
-      }
-      .logo-svg svg {
-        width: 16px;
-        height: 16px;
-      }
       .logo-title {
-        font-size: 16px;
+        font-size: 18px;
       }
       .app-link {
-        font-size: 12px;
+        font-size: 12.5px;
         padding: 6px 12px;
       }
       .page-wrapper {
@@ -322,35 +310,41 @@ export function getPrivacyPolicyHTML() {
         font-size: 22px;
       }
       h2 {
-        font-size: 16.5px;
+        font-size: 17px;
       }
       p, ul, li {
-        font-size: 14px;
+        font-size: 14.5px;
         line-height: 1.65;
       }
     }
   </style>
 </head>
 <body>
-  <!-- Sticky Header Bar -->
+  <!-- Header Bar matching target design mockup -->
   <header class="top-header">
     <a href="/" class="logo-container">
-      <div class="logo-svg">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>
-        </svg>
+      <div class="brand-logo-icon">
+        <span></span>
+        <span></span>
+        <span></span>
       </div>
       <span class="logo-title">TaskChat</span>
     </a>
-    <a href="/login" class="app-link">Open App</a>
+    <a href="/login" class="app-link">
+      <span>Open App</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+        <polyline points="15 3 21 3 21 9"></polyline>
+        <line x1="10" y1="14" x2="21" y2="3"></line>
+      </svg>
+    </a>
   </header>
 
   <!-- Page Content Container -->
   <div class="page-wrapper">
     <main>
       <div class="card">
-        <span class="badge">Legal & Security</span>
-        <h1>TaskChat Privacy Policy</h1>
+        <h1>TaskChat — Privacy Policy</h1>
 
         <div class="intro">
           ${introHTML}

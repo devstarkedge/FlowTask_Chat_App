@@ -41,29 +41,27 @@ const PrivacyPolicyPage = () => {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '10px',
+            gap: '12px',
             textDecoration: 'none',
             color: 'inherit',
           }}
         >
           <div
             style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
               display: 'flex',
-              alignItems: 'center',
+              flexDirection: 'column',
               justifyContent: 'center',
-              color: '#ffffff',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+              alignItems: 'flex-start',
+              gap: '4px',
+              width: '28px',
+              height: '24px',
             }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>
-            </svg>
+            <span style={{ display: 'block', width: '24px', height: '3.5px', borderRadius: '2px', background: 'linear-gradient(90deg, #ff5e00 0%, #ff8c00 100%)' }} />
+            <span style={{ display: 'block', width: '16px', height: '3.5px', borderRadius: '2px', background: 'linear-gradient(90deg, #ff5e00 0%, #ff8c00 100%)', marginLeft: '4px' }} />
+            <span style={{ display: 'block', width: '20px', height: '3.5px', borderRadius: '2px', background: 'linear-gradient(90deg, #ff5e00 0%, #ff8c00 100%)' }} />
           </div>
-          <span style={{ fontSize: '18px', fontWeight: '800', letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+          <span style={{ fontSize: '22px', fontWeight: '800', letterSpacing: '-0.03em', color: 'var(--text-primary)' }}>
             TaskChat
           </span>
         </Link>
@@ -71,17 +69,26 @@ const PrivacyPolicyPage = () => {
         <Link
           to="/login"
           style={{
-            color: 'var(--accent-primary, #6366f1)',
+            color: 'var(--text-primary)',
             textDecoration: 'none',
             fontSize: '14px',
             fontWeight: '600',
             padding: '8px 16px',
-            borderRadius: '6px',
-            border: '1px solid rgba(99, 102, 241, 0.3)',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.18)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
             transition: 'all 0.2s ease',
           }}
         >
           Open App
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
         </Link>
       </header>
 

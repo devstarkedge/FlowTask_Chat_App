@@ -201,13 +201,15 @@ app.get('/api/chat/health', (_req, res) => {
 // ─── Public Privacy Policy (No authentication required — Slack style) ──────
 const handlePrivacyPolicyRequest = (_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(getPrivacyPolicyHTML());
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.status(200).send(getPrivacyPolicyHTML());
 };
 
 app.get('/privacy-policy', handlePrivacyPolicyRequest);
 app.get('/privacy', handlePrivacyPolicyRequest);
 app.get('/api/chat/privacy-policy', handlePrivacyPolicyRequest);
 app.get('/api/chat/privacy', handlePrivacyPolicyRequest);
+
 
 // ─── Debug Env Check ────────────────────────────────────────────────────────────────
 // Returns non-sensitive config for deployment verification.

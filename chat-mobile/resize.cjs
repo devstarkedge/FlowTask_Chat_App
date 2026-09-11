@@ -31,4 +31,4 @@ async function makeSquare(inputPath, outputPath) {
   }
 }
 
-makeSquare('./assets/Vector.png', './assets/Vector.png');
+makeSquare('./Vector-square.png', './Vector-square.png');

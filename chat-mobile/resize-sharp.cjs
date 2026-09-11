@@ -2,7 +2,7 @@ const sharp = require('sharp');
 
 async function makeSquare() {
   try {
-    const inputPath = './assets/Vector.png';
+    const inputPath = './assets//Vector-square.png';
     const outputPath = './assets/Vector-square.png';
 
     const metadata = await sharp(inputPath).metadata();

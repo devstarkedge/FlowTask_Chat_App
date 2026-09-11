@@ -1,636 +1,341 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useDraftStore, getWorkspaceDrafts } from "../../stores/draftStore";
-import { useScheduledStore } from "../../stores/scheduledStore";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { useChannelStore } from "../../stores/channelStore";
-import { useChatStore } from "../../stores/chatStore";
-import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
-import { Trash2, Send, Search, PencilLine, Hash, Lock, X, FileText, FileArchive, FileCode, Music, Video, File, Clock } from 'lucide-react';
-import Loader from '../shared/Loader';
-import toast from "react-hot-toast";
-import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
-import ScheduleMessageModal from "./ScheduleMessageModal";
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useDraftStore, getDraftKey } from '../../stores/draftStore'
+import { useWorkspaceStore } from '../../stores/workspaceStore'
+import { useChannelStore } from '../../stores/channelStore'
+import { draftAPI } from '../../services/api'
+import { isContentEmpty } from '../../utils/draftUtils'
+import { getChannelPath, getDMPath } from '../../utils/chatRoutes'
+import {
+  FileEdit, Trash2, Send, Paperclip, MessageSquare,
+  Search, Loader2, ChevronDown
+} from 'lucide-react'
+import toast from 'react-hot-toast'
 
 function formatTimeAgo(date) {
-  const diff = Date.now() - new Date(date).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(date).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
+  const now = Date.now()
+  const diff = now - new Date(date).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(date).toLocaleDateString()
 }
 
-function truncatePreview(text, max = 90) {
-  if (!text) return "";
-  const stripped = text.replace(/<[^>]*>/g, "").trim();
-  return stripped.length > max ? `${stripped.slice(0, max)}…` : stripped;
-}
-
-function getInitials(name = "") {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0].toUpperCase())
-    .join("");
-}
-
-const AVATAR_COLORS = [
-  "#1264a3",
-  "#059669",
-  "#7c3aed",
-  "#ea580c",
-  "#0891b2",
-  "#d97706",
-  "#db2777",
-  "#65a30d",
-];
-
-function ChannelAvatar({ name, type, isPrivate, size = 38 }) {
-  const initials = getInitials(name.replace(/^#/, ""));
-  const colorIndex =
-    name
-      .split("")
-      .reduce(
-        (accumulator, character) => accumulator + character.charCodeAt(0),
-        0,
-      ) % AVATAR_COLORS.length;
-  const bg = AVATAR_COLORS[colorIndex];
-
-  return (
-    <div
-      className={`dsl-avatar${type === "dm" ? " dm" : ""}`}
-      style={{
-        width: size,
-        height: size,
-        minWidth: size,
-        background: bg,
-        fontSize: size * 0.35,
-      }}
-    >
-      {type === "dm" ? (
-        initials
-      ) : isPrivate ? (
-        <Lock size={size * 0.42} strokeWidth={2.2} style={{ opacity: 0.9 }} />
-      ) : (
-        <Hash size={size * 0.42} strokeWidth={2.2} style={{ opacity: 0.9 }} />
-      )}
-    </div>
-  );
-}
-
-function SkeletonCard({ delay = 0 }) {
-  return (
-    <div className="dsl-skeleton-card" style={{ animationDelay: `${delay}ms` }}>
-      <div
-        className="dsl-skeleton-line"
-        style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0 }}
-      />
-      <div className="dsl-skeleton-body">
-        <div
-          className="dsl-skeleton-line"
-          style={{ width: "50%", height: 12 }}
-        />
-        <div
-          className="dsl-skeleton-line"
-          style={{ width: "88%", height: 11 }}
-        />
-        <div
-          className="dsl-skeleton-line"
-          style={{ width: "65%", height: 11 }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function formatFileSize(bytes) {
-  if (!bytes) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function AttachmentIcon({ mimeType, size = 14 }) {
-  if (!mimeType) return <File size={size} />;
-  if (mimeType.startsWith("audio/")) return <Music size={size} />;
-  if (mimeType.startsWith("video/")) return <Video size={size} />;
-  if (
-    mimeType.includes("pdf") ||
-    mimeType.includes("word") ||
-    mimeType.includes("excel") ||
-    mimeType.includes("powerpoint") ||
-    mimeType.includes("presentation") ||
-    mimeType.includes("spreadsheet")
-  )
-    return <FileText size={size} />;
-  if (
-    mimeType.includes("zip") ||
-    mimeType.includes("rar") ||
-    mimeType.includes("7z") ||
-    mimeType.includes("tar") ||
-    mimeType.includes("gzip")
-  )
-    return <FileArchive size={size} />;
-  if (
-    mimeType.startsWith("text/") ||
-    mimeType.includes("javascript") ||
-    mimeType.includes("typescript") ||
-    mimeType.includes("json") ||
-    mimeType.includes("xml") ||
-    mimeType.includes("yaml")
-  )
-    return <FileCode size={size} />;
-  return <File size={size} />;
-}
-
-function AttachmentChip({ att, idx }) {
-  const [isImageError, setIsImageError] = useState(false);
-  const isImage = att.mimeType?.startsWith("image/");
-  const showThumb = isImage && att.thumbnailUrl && !isImageError;
-
-  return (
-    <div
-      key={att.fileId || idx}
-      className="dsl-attachment-chip"
-      title={att.fileName}
-    >
-      {showThumb ? (
-        <img
-          src={att.thumbnailUrl}
-          alt={att.fileName || ""}
-          className="dsl-attachment-thumb"
-          onError={() => setIsImageError(true)}
-        />
-      ) : (
-        <span className="dsl-attachment-icon">
-          <AttachmentIcon mimeType={att.mimeType} size={12} />
-        </span>
-      )}
-      <span className="dsl-attachment-name">{att.fileName || "file"}</span>
-      {att.fileSize ? (
-        <span className="dsl-attachment-size">
-          {formatFileSize(att.fileSize)}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function DraftAttachmentPreviews({ attachments }) {
-  if (!attachments || attachments.length === 0) return null;
-
-  const MAX_PREVIEW = 3;
-  const shown = attachments.slice(0, MAX_PREVIEW);
-  const overflow = attachments.length - MAX_PREVIEW;
-
-  return (
-    <div className="dsl-attachments">
-      {shown.map((att, idx) => (
-        <AttachmentChip key={att.fileId || idx} att={att} idx={idx} />
-      ))}
-      {overflow > 0 && (
-        <div className="dsl-attachment-chip dsl-attachment-chip--overflow">
-          +{overflow} more
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DraftCard({
-  draft,
-  channelName,
-  channelType,
-  isPrivate,
-  onNavigate,
-  onSend,
-  onDelete,
-  onSchedule,
-  sendingId,
-}) {
-  const isSending = sendingId === draft._key;
-  const preview = truncatePreview(draft.text || draft.html);
-  const attachments = draft.attachments || [];
-  const attachmentCount =
-    attachments.length || draft.fileReferences?.length || 0;
-  const isScheduled = draft.scheduledTime && new Date(draft.scheduledTime) > new Date();
-  const scheduledTimeStr = isScheduled
-    ? new Date(draft.scheduledTime).toLocaleString([], {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : null;
-
-  return (
-    <div
-      className="dsl-card"
-      onClick={() => onNavigate(draft)}
-      tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onNavigate(draft)}
-      role="button"
-      aria-label={`Draft for ${channelName}`}
-    >
-      <ChannelAvatar
-        name={channelName}
-        type={channelType}
-        isPrivate={isPrivate}
-        size={38}
-      />
-
-      <div className="dsl-body">
-        <div className="dsl-top">
-          <div className="dsl-channel-wrap">
-            <span className="dsl-channel">{channelName}</span>
-            {isScheduled && (
-              <span className="dsl-badge dsl-badge--scheduled" title={`Scheduled: ${scheduledTimeStr}`}>
-                <Clock size={12} />
-                {scheduledTimeStr}
-              </span>
-            )}
-            {attachmentCount > 0 && (
-              <span className="dsl-badge dsl-badge--attach">
-                {attachmentCount} file{attachmentCount > 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
-          <span className="dsl-time">{formatTimeAgo(draft.timestamp)}</span>
-        </div>
-
-        <p className="dsl-preview">
-          {preview || (
-            <em style={{ color: "var(--text-muted)", fontStyle: "italic" }}>
-              No text content
-            </em>
-          )}
-        </p>
-
-        {attachments.length > 0 && (
-          <DraftAttachmentPreviews attachments={attachments} />
-        )}
-      </div>
-
-      <div className="dsl-actions" onClick={(e) => e.stopPropagation()}>
-        <button
-          className="dsl-action-btn dsl-action-btn--send"
-          onClick={(e) => onSend(e, draft)}
-          disabled={isSending}
-          title="Send now"
-          aria-label="Send draft"
-        >
-          {isSending ? (
-            <Loader size={13} />
-          ) : (
-            <Send size={13} />
-          )}
-        </button>
-        <button
-          className="dsl-action-btn dsl-action-btn--send"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSchedule(draft);
-          }}
-          title="Schedule message"
-          aria-label="Schedule message"
-        >
-          <Clock size={15} />
-        </button>
-        <button
-          className="dsl-action-btn dsl-action-btn--delete"
-          onClick={(e) => onDelete(e, draft)}
-          title="Delete draft"
-          aria-label="Delete draft"
-        >
-          <Trash2 size={13} />
-        </button>
-      </div>
-    </div>
-  );
+function truncatePreview(text, max = 80) {
+  if (!text) return ''
+  const stripped = text.replace(/<[^>]*>/g, '').trim()
+  return stripped.length > max ? stripped.slice(0, max) + '…' : stripped
 }
 
 export default function DraftsSidebar() {
-  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
-  const channels = useChannelStore((s) => s.channels);
-  const drafts = useDraftStore((s) => s.drafts);
-  const clearDraft = useDraftStore((s) => s.clearDraft);
-  const sendMessage = useChatStore((s) => s.sendMessage);
-  const fetchScheduledMessages = useScheduledStore((s) => s.fetchScheduledMessages);
-  const navigate = useNavigate();
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const channels = useChannelStore((s) => s.channels)
+  const localDrafts = useDraftStore((s) => s.drafts)
+  const draftListStale = useDraftStore((s) => s.draftListStale)
+  const { setSidebarDrafts, removeServerDraft, clearDraftListStale } = useDraftStore()
+  const navigate = useNavigate()
 
-  const [loading, setLoading] = useState(
-    () => !useDraftStore.persist.hasHydrated(),
-  );
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sendingId, setSendingId] = useState(null);
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [scheduleDraft, setScheduleDraft] = useState(null);
-  const searchRef = useRef(null);
-  const { confirm } = useDeleteConfirm();
+  const [serverDrafts, setServerDrafts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [sendingId, setSendingId] = useState(null)
+  const skipRef = useRef(0)
 
-  const handleSchedule = (draft) => {
-    setScheduleDraft(draft);
-    setShowScheduleModal(true);
-  };
+  const fetchDrafts = useCallback(async (reset = false) => {
+    if (!activeWorkspaceId) return
+    const currentSkip = reset ? 0 : skipRef.current
+    try {
+      if (reset) setLoading(true)
+      else setLoadingMore(true)
+
+      const { data } = await draftAPI.getAll({ limit: 30, skip: currentSkip })
+      const fetched = data?.data?.drafts || []
+      const total = data?.data?.total || 0
+
+      if (reset) {
+        setServerDrafts(fetched)
+        skipRef.current = fetched.length
+      } else {
+        setServerDrafts((prev) => [...prev, ...fetched])
+        skipRef.current = currentSkip + fetched.length
+      }
+      setHasMore(currentSkip + fetched.length < total)
+      setSidebarDrafts(reset ? fetched : [...serverDrafts, ...fetched], total)
+    } catch {
+      // Silent fail — show empty state
+    } finally {
+      setLoading(false)
+      setLoadingMore(false)
+    }
+  }, [activeWorkspaceId, setSidebarDrafts, serverDrafts])
 
   useEffect(() => {
-    if (useDraftStore.persist.hasHydrated()) {
-      setLoading(false);
-      return undefined;
+    fetchDrafts(true)
+  }, [activeWorkspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refetch when draft list is marked stale (after draft save/delete)
+  useEffect(() => {
+    if (draftListStale) {
+      clearDraftListStale()
+      fetchDrafts(true)
     }
+  }, [draftListStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    const unsubscribe = useDraftStore.persist.onFinishHydration(() => {
-      setLoading(false);
-    });
+  // ─── Merge local + server drafts ────────────────────────────────────
+  // Local Zustand drafts may not yet be on the server (sync delay).
+  // Merge by channelId+threadId key, prefer local if newer.
+  const mergedDrafts = useMemo(() => {
+    const draftMap = new Map()
 
-    return unsubscribe;
-  }, []);
-
-  const visibleDrafts = useMemo(
-    () => getWorkspaceDrafts(drafts, activeWorkspaceId),
-    [activeWorkspaceId, drafts],
-  );
-
-  const getChannelInfo = (channelId) => {
-    const channel = channels.find((item) => item._id === channelId);
-    if (!channel) return { name: "Unknown", type: "channel", isPrivate: false };
-
-    if (channel.type === "dm") {
-      return {
-        name:
-          channel.name ||
-          channel.dmRecipientName ||
-          channel.recipientName ||
-          "Direct Message",
-        type: "dm",
-        isPrivate: false,
-      };
-    }
-
-    return {
-      name: `${channel.name}`,
-      type: "channel",
-      isPrivate:
-        channel.isPrivate ??
-        channel.private ??
-        channel.visibility === "private" ??
-        false,
-    };
-  };
-
-  const filteredDrafts = searchQuery
-    ? visibleDrafts.filter((draft) => {
-        const { name } = getChannelInfo(draft.channelId);
-        const query = searchQuery.toLowerCase();
-        return (
-          (draft.text || "").toLowerCase().includes(query) ||
-          name.toLowerCase().includes(query)
-        );
+    // Add server drafts first (they have _id, full metadata)
+    for (const sd of serverDrafts) {
+      if (isContentEmpty(sd.htmlContent, sd.content)) continue
+      const key = getDraftKey(sd.channelId, sd.workspaceId || activeWorkspaceId, sd.threadId)
+      draftMap.set(key, {
+        ...sd,
+        _key: key,
+        _source: 'server',
+        _sortTime: new Date(sd.updatedAt).getTime(),
       })
-    : visibleDrafts;
+    }
+
+    // Overlay local drafts — add if missing or replace if newer
+    const wsPrefix = `${activeWorkspaceId || 'global'}:`
+    for (const [key, ld] of Object.entries(localDrafts)) {
+      if (!key.startsWith(wsPrefix)) continue
+      if (isContentEmpty(ld.html, ld.text)) continue
+
+      const existing = draftMap.get(key)
+      if (!existing || ld.timestamp > existing._sortTime) {
+        draftMap.set(key, {
+          _id: existing?._id || `local-${key}`,
+          _key: key,
+          _source: existing ? 'server' : 'local',
+          channelId: ld.channelId,
+          threadId: ld.threadId,
+          workspaceId: ld.workspaceId || activeWorkspaceId,
+          content: ld.text || '',
+          htmlContent: ld.html || '',
+          attachments: ld.attachments || existing?.attachments || [],
+          mentions: ld.mentions || existing?.mentions || [],
+          updatedAt: new Date(ld.timestamp).toISOString(),
+          _sortTime: ld.timestamp,
+        })
+      }
+    }
+
+    // Sort by most recent first
+    return Array.from(draftMap.values()).sort((a, b) => b._sortTime - a._sortTime)
+  }, [serverDrafts, localDrafts, activeWorkspaceId])
 
   const handleDelete = async (e, draft) => {
-    e.stopPropagation();
-    const ok = await confirm({
-      title: "Delete draft",
-      message: "This draft will be permanently deleted.",
-    });
-    if (!ok) return;
-    clearDraft(
-      draft.channelId,
-      draft.workspaceId || activeWorkspaceId,
-      draft.threadId,
-    );
-    toast.success("Draft deleted");
-  };
+    e.stopPropagation()
+    try {
+      if (draft._id && !draft._id.startsWith('local-')) {
+        await draftAPI.delete(draft._id)
+      }
+      // Remove from local state
+      setServerDrafts((prev) => prev.filter((d) => d._id !== draft._id))
+      // Remove from Zustand
+      removeServerDraft(draft.channelId, draft.threadId, draft.workspaceId || activeWorkspaceId)
+      toast.success('Draft deleted')
+    } catch {
+      toast.error('Failed to delete draft')
+    }
+  }
 
   const handleSendNow = async (e, draft) => {
-    e.stopPropagation();
-
-    const channel = channels.find((item) => item._id === draft.channelId);
-    if (!channel) {
-      toast.error("Channel not found");
-      return;
+    e.stopPropagation()
+    if (!draft._id || draft._id.startsWith('local-')) {
+      toast.error('Draft not yet synced to server. Please wait a moment and try again.')
+      return
     }
-
-    const handleSendNow = async (e, draft) => {
-      e.stopPropagation();
-
-      const channel = channels.find((item) => item._id === draft.channelId);
-      if (!channel) {
-        toast.error("Channel not found");
-        return;
-      }
-
-      setSendingId(draft._key);
-
-      try {
-        await sendMessage(draft.channelId, draft.text?.trim() || " ", {
-          threadId: draft.threadId || undefined,
-          htmlContent: draft.html || undefined,
-          mentions: draft.mentions?.length ? draft.mentions : undefined,
-          // Prefer explicit fileReferences; fall back to attachment stubs stored in draft
-          fileReferences: draft.fileReferences?.length
-            ? draft.fileReferences
-            : draft.attachments?.length
-              ? draft.attachments.map((a) => a.fileId).filter(Boolean)
-              : undefined,
-        });
-        clearDraft(
-          draft.channelId,
-          draft.workspaceId || activeWorkspaceId,
-          draft.threadId,
-        );
-        toast.success("Draft sent");
-      } catch {
-        // sendMessage already reports failures
-      } finally {
-        setSendingId(null);
-      }
-    };
-    toast(
-      (t) => (
-        <div className="dsl-confirm-toast">
-          <p className="dsl-confirm-toast-msg">Send this draft now?</p>
-          <div className="dsl-confirm-toast-actions">
-            <button
-              className="dsl-confirm-toast-btn dsl-confirm-toast-btn--cancel"
-              onClick={() => toast.dismiss(t.id)}
-            >
-              Cancel
-            </button>
-            <button
-              className="dsl-confirm-toast-btn dsl-confirm-toast-btn--send"
-              onClick={async () => {
-                toast.dismiss(t.id);
-                setSendingId(draft._key);
-                try {
-                  await sendMessage(
-                    draft.channelId,
-                    draft.text?.trim() || " ",
-                    {
-                      threadId: draft.threadId || undefined,
-                      htmlContent: draft.html || undefined,
-                      mentions: draft.mentions?.length
-                        ? draft.mentions
-                        : undefined,
-                      fileReferences: draft.fileReferences?.length
-                        ? draft.fileReferences
-                        : undefined,
-                    },
-                  );
-                  clearDraft(
-                    draft.channelId,
-                    draft.workspaceId || activeWorkspaceId,
-                    draft.threadId,
-                  );
-                  toast.success("Draft sent!");
-                } catch {
-                  // sendMessage already reports failures
-                } finally {
-                  setSendingId(null);
-                }
-              }}
-            >
-              <Send size={12} />
-              Send
-            </button>
-          </div>
-        </div>
-      ),
-      { duration: 6000 },
-    );
-  };
+    setSendingId(draft._id)
+    try {
+      await draftAPI.sendDraft(draft._id)
+      // Remove from all states
+      setServerDrafts((prev) => prev.filter((d) => d._id !== draft._id))
+      removeServerDraft(draft.channelId, draft.threadId, draft.workspaceId || activeWorkspaceId)
+      toast.success('Draft sent')
+    } catch (err) {
+      const msg = err?.response?.data?.error?.message || 'Failed to send draft'
+      toast.error(msg)
+    } finally {
+      setSendingId(null)
+    }
+  }
 
   const handleNavigate = (draft) => {
-    const channel = channels.find((item) => item._id === draft.channelId);
+    const channel = channels.find((c) => c._id === draft.channelId)
     if (!channel) {
-      toast.error("Channel not found");
-      return;
+      toast.error('Channel not found')
+      return
     }
+    if (channel.type === 'dm') {
+      navigate(getDMPath(activeWorkspaceId, draft.channelId))
+    } else {
+      navigate(getChannelPath(activeWorkspaceId, draft.channelId))
+    }
+  }
 
-    navigate(
-      channel.type === "dm"
-        ? getDMPath(activeWorkspaceId, draft.channelId)
-        : getChannelPath(activeWorkspaceId, draft.channelId),
-    );
-  };
+  const getChannelName = (channelId) => {
+    const ch = channels.find((c) => c._id === channelId)
+    if (!ch) return 'Unknown'
+    if (ch.type === 'dm') return ch.dmRecipientName || 'Direct Message'
+    return `#${ch.name}`
+  }
+
+  const filteredDrafts = searchQuery
+    ? mergedDrafts.filter((d) => {
+        const content = (d.content || '').toLowerCase()
+        const name = getChannelName(d.channelId).toLowerCase()
+        const q = searchQuery.toLowerCase()
+        return content.includes(q) || name.includes(q)
+      })
+    : mergedDrafts
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12" style={{ color: 'var(--text-muted)' }}>
+        <Loader2 size={20} className="animate-spin" />
+      </div>
+    )
+  }
 
   return (
-    <div className="dsl-root">
-      <div className="dsl-header">
-        <div className="dsl-search">
-          <Search size={13} className="dsl-search-icon" />
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border-primary)' }}>
+        <h2 className="font-semibold text-sm mb-2" style={{ color: 'var(--text-primary)' }}>
+          <FileEdit size={15} className="inline mr-1.5" style={{ verticalAlign: '-2px' }} />
+          Drafts
+          {mergedDrafts.length > 0 && (
+            <span
+              className="ml-2 px-1.5 py-0.5 text-xs rounded-full font-medium"
+              style={{ background: 'var(--accent-primary)', color: 'white' }}
+            >
+              {mergedDrafts.length}
+            </span>
+          )}
+        </h2>
+
+        {/* Search */}
+        <div className="relative">
+          <Search
+            size={14}
+            className="absolute left-2.5 top-1/2 -translate-y-1/2"
+            style={{ color: 'var(--text-muted)' }}
+          />
           <input
-            ref={searchRef}
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search drafts..."
-            className="dsl-search-input"
-            aria-label="Search drafts"
+            className="w-full text-xs py-1.5 pl-8 pr-3 rounded-md"
+            style={{
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border-secondary)',
+              color: 'var(--text-primary)',
+            }}
           />
-          {searchQuery && (
-            <button
-              className="dsl-search-clear"
-              onClick={() => {
-                setSearchQuery("");
-                searchRef.current?.focus();
-              }}
-              aria-label="Clear search"
-            >
-              <X size={10} strokeWidth={3} />
-            </button>
-          )}
         </div>
       </div>
 
-      <div className="dsl-scroll">
-        {loading ? (
-          <>
-            <SkeletonCard delay={0} />
-            <SkeletonCard delay={80} />
-            <SkeletonCard delay={160} />
-            <SkeletonCard delay={240} />
-          </>
-        ) : filteredDrafts.length === 0 ? (
-          <div className="dsl-empty">
-            <div className="dsl-empty-icon">
-              <PencilLine size={28} />
-            </div>
-            <h3 className="dsl-empty-title">
-              {searchQuery ? "No matching drafts" : "No drafts yet"}
-            </h3>
-            <p className="dsl-empty-desc">
-              {searchQuery
-                ? "Try a different search term."
-                : "Start composing a message and it will appear here automatically."}
-            </p>
+      {/* Draft List */}
+      <div className="flex-1 overflow-y-auto">
+        {filteredDrafts.length === 0 ? (
+          <div className="text-center py-10 px-4" style={{ color: 'var(--text-muted)' }}>
+            <FileEdit size={32} className="mx-auto mb-2 opacity-40" />
+            <p className="text-sm font-medium">No drafts</p>
+            <p className="text-xs mt-1">Start typing in any chat to create a draft</p>
           </div>
         ) : (
-          <>
-            <div className="dsl-section-label">
-              {searchQuery
-                ? `${filteredDrafts.length} result${filteredDrafts.length !== 1 ? "s" : ""}`
-                : "Recent"}
-            </div>
+          <div className="py-1">
+            {filteredDrafts.map((draft) => (
+              <div
+                key={draft._id || draft._key}
+                onClick={() => handleNavigate(draft)}
+                className="group px-4 py-2.5 cursor-pointer transition-colors"
+                style={{ borderBottom: '1px solid var(--border-secondary)' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium truncate" style={{ color: 'var(--text-secondary)' }}>
+                    {getChannelName(draft.channelId)}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {draft.threadId && (
+                      <MessageSquare size={11} style={{ color: 'var(--text-muted)' }} title="Thread reply" />
+                    )}
+                    {draft.attachments?.length > 0 && (
+                      <Paperclip size={11} style={{ color: 'var(--text-muted)' }} title="Has attachments" />
+                    )}
+                    <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                      {formatTimeAgo(draft.updatedAt)}
+                    </span>
+                  </div>
+                </div>
 
-            {filteredDrafts.map((draft) => {
-              const { name, type, isPrivate } = getChannelInfo(draft.channelId);
-              return (
-                <DraftCard
-                  key={draft._key}
-                  draft={draft}
-                  channelName={name}
-                  channelType={type}
-                  isPrivate={isPrivate}
-                  onNavigate={handleNavigate}
-                  onSend={handleSendNow}
-                  onDelete={handleDelete}
-                  onSchedule={handleSchedule}
-                  sendingId={sendingId}
-                />
-              );
-            })}
-          </>
+                <p className="text-xs truncate mb-1" style={{ color: 'var(--text-primary)' }}>
+                  {truncatePreview(draft.content || draft.htmlContent)}
+                </p>
+
+                {/* Actions (visible on hover) */}
+                <div className="hidden group-hover:flex items-center gap-1">
+                  <button
+                    onClick={(e) => handleSendNow(e, draft)}
+                    disabled={sendingId === draft._id}
+                    className="p-1 rounded transition-colors"
+                    style={{ color: 'var(--accent-green, #22c55e)', background: 'transparent', border: 'none' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-active)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    title="Send now"
+                  >
+                    {sendingId === draft._id
+                      ? <Loader2 size={12} className="animate-spin" />
+                      : <Send size={12} />}
+                  </button>
+                  <button
+                    onClick={(e) => handleDelete(e, draft)}
+                    className="p-1 rounded transition-colors"
+                    style={{ color: 'var(--accent-red)', background: 'transparent', border: 'none' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-active)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    title="Delete draft"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {/* Load More */}
+            {hasMore && (
+              <button
+                onClick={() => fetchDrafts(false)}
+                disabled={loadingMore}
+                className="w-full py-2 text-xs font-medium transition-colors"
+                style={{ color: 'var(--accent-primary)', background: 'transparent', border: 'none' }}
+              >
+                {loadingMore ? (
+                  <Loader2 size={14} className="animate-spin mx-auto" />
+                ) : (
+                  <span className="flex items-center justify-center gap-1">
+                    <ChevronDown size={13} /> Load more
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
         )}
       </div>
-
-      {showScheduleModal && scheduleDraft && (
-        <ScheduleMessageModal
-          channelId={scheduleDraft.channelId}
-          content={scheduleDraft.text || ""}
-          htmlContent={scheduleDraft.html || ""}
-          attachments={scheduleDraft.attachments || []}
-          mentions={scheduleDraft.mentions || []}
-          threadId={scheduleDraft.threadId || null}
-          onClose={() => {
-            setShowScheduleModal(false);
-            setScheduleDraft(null);
-          }}
-          onScheduled={() => {
-            setShowScheduleModal(false);
-            // Clear the draft when successfully scheduled
-            clearDraft(
-              scheduleDraft.channelId,
-              scheduleDraft.workspaceId || activeWorkspaceId,
-              scheduleDraft.threadId,
-            );
-            // Refresh scheduled messages list
-            fetchScheduledMessages();
-            setScheduleDraft(null);
-            toast.success("Message scheduled");
-          }}
-        />
-      )}
     </div>
-  );
+  )
 }

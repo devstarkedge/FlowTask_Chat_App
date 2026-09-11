@@ -21,6 +21,11 @@ import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
  */
 export async function protect(req, res, next) {
   try {
+    // Bypass protection for public Privacy Policy routes
+    if (req.path?.includes('privacy-policy') || req.path?.includes('privacy') || req.originalUrl?.includes('privacy')) {
+      return next();
+    }
+
     let token;
 
     // Extract Bearer token from Authorization header
@@ -32,6 +37,7 @@ export async function protect(req, res, next) {
     if (!token) {
       throw new UnauthorizedError('No authentication token provided');
     }
+
 
     let chatUser = null;
 

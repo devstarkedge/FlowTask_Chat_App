@@ -226,7 +226,7 @@ export default function AutoActivityMessage({ message }) {
   return (
     <div className="auto-activity-card" style={{ borderLeftColor: config.accent }}>
       {/* Hover CTA */}
-      {redirect && eventType !== 'TASK_DELETED' && (
+      {redirect && eventType !== 'TASK_DELETED' && !meta.isTaskDeleted && (
         <div className="activity-cta">
           <a href={redirect.url} target="_blank" rel="noopener noreferrer" className="activity-cta-btn" title="Open in FlowTask">
             {redirect.label}
@@ -238,18 +238,26 @@ export default function AutoActivityMessage({ message }) {
       <div style={{ paddingRight: redirect ? 100 : 0 }}>
         {/* Actor + Action */}
         <div style={{ lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 6 }}>
-          {meta.actorAvatar && (
-            <img
-              src={meta.actorAvatar}
-              alt={meta.actorName || ''}
-              style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-            />
+          {meta.isTaskDeleted ? (
+            <span className="activity-action" style={{ color: 'var(--danger-color, #ef4444)', fontWeight: 600 }}>
+              This card is deleted
+            </span>
+          ) : (
+            <>
+              {meta.actorAvatar && (
+                <img
+                  src={meta.actorAvatar}
+                  alt={meta.actorName || ''}
+                  style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                />
+              )}
+              <span>
+                <span className="activity-actor">{meta.actorName || 'Someone'}</span>
+                {' '}
+                <span className="activity-action">{actionLabel}</span>
+              </span>
+            </>
           )}
-          <span>
-            <span className="activity-actor">{meta.actorName || 'Someone'}</span>
-            {' '}
-            <span className="activity-action">{actionLabel}</span>
-          </span>
         </div>
 
         {/* Task title (for task events) */}

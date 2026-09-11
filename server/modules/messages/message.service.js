@@ -1519,39 +1519,70 @@ class MessageService {
     if (!messages || messages.length === 0) return;
 
     for (const msg of messages) {
-      //  Get updated message (IMPORTANT)
-      const updatedMessage = await messageRepository.softDelete(
-        msg._id,
-        null, // system delete
-        workspaceId
-      );
+      if (msg.activityMeta && msg.activityMeta.eventType !== 'TASK_DELETED') {
+        const updatedMeta = { ...msg.activityMeta, isTaskDeleted: true };
+        const updatedMessage = await messageRepository.update(msg._id, {
+          activityMeta: updatedMeta
+        }, workspaceId);
 
-      if (!updatedMessage) continue;
+        if (!updatedMessage) continue;
 
-      const payload = {
-        messageId: updatedMessage._id.toString(),
-        channelId: updatedMessage.channelId.toString(),
-        isDeleted: false,
-      };
+        const payload = {
+          message: messageSocketPayload(updatedMessage)
+        };
 
-      //  If message has visibility → send only to those users
-      if (updatedMessage.visibleTo && updatedMessage.visibleTo.length > 0) {
-        updatedMessage.visibleTo.forEach(userId => {
-          emitToUser(
-            userId.toString(),
+        if (updatedMessage.visibleTo && updatedMessage.visibleTo.length > 0) {
+          updatedMessage.visibleTo.forEach(userId => {
+            emitToUser(
+              userId.toString(),
+              SOCKET_EVENTS.MESSAGE_UPDATE,
+              payload,
+              workspaceId?.toString()
+            );
+          });
+        } else {
+          emitToChannel(
+            updatedMessage.channelId.toString(),
+            SOCKET_EVENTS.MESSAGE_UPDATE,
+            payload,
+            workspaceId?.toString()
+          );
+        }
+      } else {
+        //  Get updated message (IMPORTANT)
+        const updatedMessage = await messageRepository.softDelete(
+          msg._id,
+          null, // system delete
+          workspaceId
+        );
+
+        if (!updatedMessage) continue;
+
+        const payload = {
+          messageId: updatedMessage._id.toString(),
+          channelId: updatedMessage.channelId.toString(),
+          isDeleted: false,
+        };
+
+        //  If message has visibility → send only to those users
+        if (updatedMessage.visibleTo && updatedMessage.visibleTo.length > 0) {
+          updatedMessage.visibleTo.forEach(userId => {
+            emitToUser(
+              userId.toString(),
+              SOCKET_EVENTS.MESSAGE_DELETE,
+              payload,
+              workspaceId?.toString()
+            );
+          });
+        } else {
+          //  Public message → broadcast to channel
+          emitToChannel(
+            updatedMessage.channelId.toString(),
             SOCKET_EVENTS.MESSAGE_DELETE,
             payload,
             workspaceId?.toString()
           );
-        });
-      } else {
-        //  Public message → broadcast to channel
-        emitToChannel(
-          updatedMessage.channelId.toString(),
-          SOCKET_EVENTS.MESSAGE_DELETE,
-          payload,
-          workspaceId?.toString()
-        );
+        }
       }
     }
   }

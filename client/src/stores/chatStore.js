@@ -897,10 +897,10 @@ export const useChatStore = create((set, get) => ({
             updatedAny = true;
             const updated = {
               ...m,
-              isDeleted: true,
-              content: "[Message deleted]",
-              htmlContent: "<p>[Message deleted]</p>",
-              deletedAt: new Date().toISOString(),
+              activityMeta: {
+                ...(m.activityMeta || {}),
+                isTaskDeleted: true,
+              },
             };
             if (m._id && nextMessagesById[m._id]) {
               nextMessagesById[m._id] = updated;

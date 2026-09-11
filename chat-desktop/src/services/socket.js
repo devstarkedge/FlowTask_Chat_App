@@ -14,6 +14,7 @@ import { conversationPresence } from './conversationPresence'
 import { usePresenceStore } from '../stores/presenceStore'
 import { unreadManager } from './unreadManager'
 import logger from '../utils/logger'
+import { showDesktopNotification } from './desktopService'
 
 let socket = null
 let _disconnectTime = 0   // timestamp when socket last disconnected
@@ -346,6 +347,28 @@ export function connectSocket() {
     // when user is actively viewing the conversation.
     unreadManager.handleMessageReceived(message)
     useChannelStore.getState().handleNewMessage(message)
+
+    // ── Desktop Notifications ──────────────────────────────────────────────
+    if (currentUserId && authorId !== currentUserId) {
+      const activeChannelId = useChannelStore.getState().activeChannelId
+      const isFocused = activeChannelId === channelId && document.visibilityState === 'visible'
+
+      const store = useNotificationStore.getState()
+      const channelPrefs = channelId ? store.preferences?.channels?.[channelId] : null
+      const isMuted = channelPrefs?.muted || channelPrefs?.paused
+
+      const prefs = useAuthStore.getState().user?.chatPreferences
+      const desktopEnabled = prefs?.desktopNotifications !== false
+
+      if (!isFocused && !isMuted && desktopEnabled) {
+        let bodyText = message.content || 'Sent an attachment'
+        bodyText = bodyText.replace(/<[^>]*>?/gm, '') // Strip HTML tags
+        showDesktopNotification(message.author?.name || 'New Message', {
+          body: bodyText,
+          data: { channelId }
+        })
+      }
+    }
   })
 
   // ─── Thread Reply Events ──────────────────────────────────────────────

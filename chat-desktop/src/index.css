@@ -15935,6 +15935,10 @@ body.is-electron .cl-topbar {
   gap: 12px !important;
 }
 
+body.is-electron .cl-topbar__actions {
+  margin-right: 135px !important;
+}
+
 body.is-electron .cl-topbar__search-wrap {
   display: block !important;
 }

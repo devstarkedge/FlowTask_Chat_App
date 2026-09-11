@@ -18,10 +18,17 @@ if (import.meta.env.PROD) {
 
 // Reset the retry count on a successful load
 sessionStorage.removeItem('vitePreloadRetryCount');
-import { isDesktopApp } from './services/desktopService';
+import { isDesktopApp, onDesktopNotificationClicked } from './services/desktopService';
+import { useChannelStore } from './stores/channelStore';
 
 if (isDesktopApp()) {
   document.body.classList.add('is-electron');
+  
+  onDesktopNotificationClicked((data) => {
+    if (data && data.channelId) {
+      useChannelStore.getState().setActiveChannel(data.channelId);
+    }
+  });
 }
 
 import { StrictMode } from 'react'

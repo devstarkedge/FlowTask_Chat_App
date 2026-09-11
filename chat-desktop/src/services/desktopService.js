@@ -6,7 +6,10 @@
  */
 
 export const isDesktopApp = () => {
-  return typeof window !== 'undefined' && window.electronAPI !== undefined;
+  if (typeof window === 'undefined') return false;
+  if (window.electronAPI !== undefined) return true;
+  if (navigator.userAgent.toLowerCase().includes('electron')) return true;
+  return false;
 };
 
 export const setWindowControlsColor = (symbolColor) => {
@@ -18,12 +21,21 @@ export const setWindowControlsColor = (symbolColor) => {
 export const showDesktopNotification = (title, options = {}) => {
   if (isDesktopApp()) {
     // Call the native Electron notification API
-    window.electronAPI.showNotification(title, options.body || '');
+    window.electronAPI.showNotification(title, options.body || '', options.data);
   } else {
     // Fallback to standard web notifications
     if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, options);
+      const notification = new Notification(title, options);
+      if (options.onClick) {
+        notification.onclick = options.onClick;
+      }
     }
+  }
+};
+
+export const onDesktopNotificationClicked = (callback) => {
+  if (isDesktopApp() && window.electronAPI.onNotificationClicked) {
+    window.electronAPI.onNotificationClicked(callback);
   }
 };
 

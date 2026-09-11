@@ -68,9 +68,7 @@ import {
   Activity,
   ArrowLeft,
   ArrowRight,
-  Bell,
   ChevronRight,
-  CircleHelp,
   Download,
   Info,
   Search,
@@ -87,7 +85,7 @@ import { onPreviewRequest } from "../../services/previewService";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 import { handleDownload } from "../../utils/handleDownload";
 import { useAppHistory } from "../../hooks/useAppHistory";
-import { isDesktopApp, setWindowControlsColor } from "../../services/desktopService";
+import { setWindowControlsColor } from "../../services/desktopService";
 
 const EMPTY_LIST = [];
 
@@ -1620,7 +1618,6 @@ export default function ChatLayout() {
         workspaceId={workspaceId}
         searchRef={globalSearchRef}
         messages={localSearchMessages}
-        unreadCount={unreadNotifications}
         onBack={goBack}
         onForward={goForward}
         canGoBack={canGoBack}
@@ -1628,11 +1625,6 @@ export default function ChatLayout() {
         onOpenSearchResult={handleOpenSearchResult}
         onOpenResultsPage={openLocalSearchResultsPage}
         onOpenChange={setIsSearchOpen}
-        onNotifications={() => {
-          setShowNotifications((s) => !s);
-          setShowPins(false);
-        }}
-        onHelp={() => setShowShortcuts(true)}
       />
 
       <div className="flex-1 flex flex-row min-h-0 overflow-hidden">
@@ -1844,7 +1836,6 @@ function GlobalTopBar({
   workspaceId,
   searchRef,
   messages,
-  unreadCount,
   onBack,
   onForward,
   canGoBack,
@@ -1852,21 +1843,9 @@ function GlobalTopBar({
   onOpenSearchResult,
   onOpenResultsPage,
   onOpenChange,
-  onNotifications,
-  onHelp,
 }) {
-  const prevCountRef = useRef(unreadCount);
-  const [bellShake, setBellShake] = useState(false);
-  useEffect(() => {
-    if (unreadCount > prevCountRef.current) {
-      setBellShake(true);
-      setTimeout(() => setBellShake(false), 600);
-    }
-    prevCountRef.current = unreadCount;
-  }, [unreadCount]);
-
   return (
-    <header className="cl-topbar" style={{ paddingRight: isDesktopApp() ? 135 : 14 }}>
+    <header className="cl-topbar" style={{ position: 'relative', paddingRight: 14 }}>
       <div className="cl-topbar__nav">
         <button
           className="cl-topbar__nav-btn"
@@ -1906,31 +1885,6 @@ function GlobalTopBar({
           onOpenResultsPage={onOpenResultsPage}
           onOpenChange={onOpenChange}
         />
-      </div>
-
-      <div className="cl-topbar__actions">
-        <button
-          className={`cl-topbar__action-btn${bellShake ? " has-notif" : ""}`}
-          onClick={onNotifications}
-          aria-label="Notifications"
-          title="Notifications"
-        >
-          <Bell size={16} />
-          {unreadCount > 0 && (
-            <span className="cl-notif-badge">
-              {unreadCount > 99 ? "99+" : unreadCount}
-            </span>
-          )}
-        </button>
-        <button
-          className="cl-topbar__action-btn"
-          onClick={onHelp}
-          aria-label="Keyboard shortcuts"
-          title="Keyboard shortcuts"
-        >
-          <CircleHelp size={16} />
-        </button>
-        {typeof window.electronAPI !== 'undefined' && <div className="cl-topbar__divider" />}
       </div>
     </header>
   );

@@ -70,10 +70,24 @@ app.on('window-all-closed', () => {
   }
 });
 
-// Example IPC handler for notifications
-ipcMain.on('show-notification', (event, { title, body }) => {
+// IPC handler for notifications
+ipcMain.on('show-notification', (event, { title, body, data }) => {
   const { Notification } = require('electron');
-  new Notification({ title, body }).show();
+  const notification = new Notification({
+    title,
+    body,
+    icon: path.join(__dirname, '../public/logo.png'),
+  });
+
+  notification.on('click', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+      mainWindow.webContents.send('notification-clicked', data);
+    }
+  });
+
+  notification.show();
 });
 
 // Allow renderer to change titleBarOverlay dynamically

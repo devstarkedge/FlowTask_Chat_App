@@ -19,7 +19,7 @@ export const setWindowControlsColor = (symbolColor) => {
 };
 
 export const showDesktopNotification = (title, options = {}) => {
-  if (isDesktopApp()) {
+  if (isDesktopApp() && window.electronAPI && window.electronAPI.showNotification) {
     // Call the native Electron notification API
     window.electronAPI.showNotification(title, options.body || '', options.data);
   } else {

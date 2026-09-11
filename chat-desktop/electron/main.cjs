@@ -9,6 +9,9 @@ if (isDev) {
   app.setPath('userData', path.join(app.getPath('appData'), `${app.name}-dev`));
 }
 
+// Set the App ID for all platforms (Windows, Mac, Linux) to ensure OS-level integrations work
+app.setAppUserModelId(isDev ? 'com.taskchat.dev' : 'com.taskchat.app');
+
 let mainWindow;
 
 function createWindow() {
@@ -29,6 +32,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
   });
 

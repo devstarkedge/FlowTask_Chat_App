@@ -211,7 +211,7 @@ export default function MessageList({
 
   // ─── Flatten: date separators + unread marker ─────────────────────────
   const isActivityMessage = (msg) =>
-    !msg.isDeleted && (
+    (!msg.isDeleted || !!msg.activityMeta || msg.contentType === "system" || msg.contentType === "activity" || msg.contentType === "bot") && (
       msg.contentType === "activity" ||
       msg.contentType === "system" ||
       msg.contentType === "bot" ||

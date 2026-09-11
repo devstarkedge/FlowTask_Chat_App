@@ -216,7 +216,13 @@ export default function AutoActivityMessage({ message }) {
     return (
       <div className="auto-activity-card" style={{ borderLeftColor: 'var(--accent-primary)' }}>
         <div style={{ lineHeight: 1.5 }}>
-          <span className="activity-action" dangerouslySetInnerHTML={{ __html: formatBold(message.content) }} />
+          {message.isDeleted ? (
+            <span className="activity-action" style={{ color: 'var(--danger-color, #ef4444)', fontWeight: 600 }}>
+              This card is deleted
+            </span>
+          ) : (
+            <span className="activity-action" dangerouslySetInnerHTML={{ __html: formatBold(message.content) }} />
+          )}
         </div>
         <div className="activity-timestamp">{formatTime(message.createdAt)}</div>
       </div>
@@ -226,7 +232,7 @@ export default function AutoActivityMessage({ message }) {
   return (
     <div className="auto-activity-card" style={{ borderLeftColor: config.accent }}>
       {/* Hover CTA */}
-      {redirect && eventType !== 'TASK_DELETED' && !meta.isTaskDeleted && (
+      {redirect && eventType !== 'TASK_DELETED' && !meta.isTaskDeleted && !message.isDeleted && (
         <div className="activity-cta">
           <a href={redirect.url} target="_blank" rel="noopener noreferrer" className="activity-cta-btn" title="Open in FlowTask">
             {redirect.label}
@@ -238,7 +244,7 @@ export default function AutoActivityMessage({ message }) {
       <div style={{ paddingRight: redirect ? 100 : 0 }}>
         {/* Actor + Action */}
         <div style={{ lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 6 }}>
-          {meta.isTaskDeleted ? (
+          {(meta.isTaskDeleted || message.isDeleted) ? (
             <span className="activity-action" style={{ color: 'var(--danger-color, #ef4444)', fontWeight: 600 }}>
               This card is deleted
             </span>

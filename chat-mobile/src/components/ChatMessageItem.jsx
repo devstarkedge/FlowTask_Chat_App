@@ -60,9 +60,12 @@ const ChatMessageItem = memo(({
   }
 
   const isDeleted = item.isDeleted === true;
-  const deletedText = isMe
-    ? "You deleted this message"
-    : "This message was deleted";
+  const isActivityCard = item.activityMeta || item.contentType === 'system' || item.contentType === 'activity' || item.contentType === 'bot';
+  const deletedText = isActivityCard
+    ? "This card is deleted"
+    : isMe
+      ? "You deleted this message"
+      : "This message was deleted";
 
   const textToSearch = item?.content || item?.htmlContent || '';
   const isMatch =
@@ -265,9 +268,31 @@ const ChatMessageItem = memo(({
             )}
 
             {isDeleted ? (
-              <RNText style={[styles.messageText, { color: colors.textTertiary, fontStyle: "italic" }]}>
-                {deletedText}
-              </RNText>
+              <RNView>
+                <RNText style={[styles.messageText, { color: colors.textTertiary, fontStyle: "italic", marginBottom: (isActivityCard && item.content && item.content !== '[Message deleted]') ? 4 : 0 }]}>
+                  {deletedText}
+                </RNText>
+                {isActivityCard && (item.htmlContent || item.content) && item.content !== '[Message deleted]' && (
+                  <RichText
+                    html={item.htmlContent}
+                    text={item.content}
+                    mentions={item.mentions}
+                    searchQuery={searchQuery}
+                    onMentionPress={(userId) => {
+                      const userObj = (channelMembers || []).find((m) => m._id === userId) || { _id: userId };
+                      navigation.navigate("UserProfile", { user: userObj, channelId, messageId: item._id });
+                    }}
+                    colors={{
+                      ...colors,
+                      textPrimary: contentColor,
+                      codeBackground: isMe ? colors.surfaceOverlayLight : colors.codeBackground,
+                      codeBlockBackground: isMe ? colors.shadowMd : colors.codeBlockBackground,
+                      codeBlockText: isMe ? colors.textOnPrimary : colors.codeBlockText,
+                    }}
+                    baseStyle={{ color: contentColor, fontSize: moderateScale(15), lineHeight: 22 }}
+                  />
+                )}
+              </RNView>
             ) : item.contentType === 'audio' || item.type === 'audio' ? (
               <AudioMessagePlayer
                 audioUrl={item.audioUrl || item.audioMeta?.audioUrl || attachments[0]?.url || attachments[0]?.secureUrl}

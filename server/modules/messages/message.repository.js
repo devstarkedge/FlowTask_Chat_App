@@ -360,17 +360,25 @@ class MessageRepository {
   async softDelete(messageId, deletedBy, workspaceId) {
     const filter = injectWorkspaceFilter({ _id: messageId }, workspaceId);
 
+    const msg = await Message.findOne(filter);
+    if (!msg) return null;
+
+    const isActivity = msg.contentType === 'activity' || msg.contentType === 'system' || msg.contentType === 'bot' || !!msg.activityMeta;
+
+    const updatePayload = {
+      isDeleted: true,
+      deletedAt: new Date(),
+      deletedBy,
+    };
+
+    if (!isActivity) {
+      updatePayload.content = '[Message deleted]';
+      updatePayload.htmlContent = '<p>[Message deleted]</p>';
+    }
+
     const updated = await Message.findOneAndUpdate(
       filter,
-      {
-        isDeleted: true,
-        deletedAt: new Date(),
-        deletedBy,
-
-        // Keep consistent tombstone content
-        content: '[Message deleted]',
-        htmlContent: '<p>[Message deleted]</p>',
-      },
+      updatePayload,
       { returnDocument: 'after' }
     )
       .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')

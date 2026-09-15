@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, session } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray } = require('electron');
 const path = require('path');
 const isDev = !app.isPackaged;
 
@@ -13,7 +13,8 @@ if (isDev) {
 app.setAppUserModelId(isDev ? 'com.taskchat.dev' : 'com.taskchat.app');
 
 let mainWindow;
-
+let tray = null;
+let isQuitting = false;
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -53,6 +54,18 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // Prevent closing, hide to tray instead
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+      // Hide from dock on macOS
+      if (process.platform === 'darwin' && app.dock) {
+        app.dock.hide();
+      }
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -60,6 +73,45 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+
+  // Create System Tray
+  const iconPath = path.join(__dirname, '../public/logo.png');
+  tray = new Tray(iconPath);
+  
+  const contextMenu = Menu.buildFromTemplate([
+    { 
+      label: 'Open TaskChat', 
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          if (process.platform === 'darwin' && app.dock) app.dock.show();
+        }
+      } 
+    },
+    { type: 'separator' },
+    { 
+      label: 'Quit', 
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      } 
+    }
+  ]);
+  
+  tray.setToolTip('TaskChat');
+  tray.setContextMenu(contextMenu);
+  
+  // Left click on tray icon opens the app
+  tray.on('click', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.focus();
+      } else {
+        mainWindow.show();
+        if (process.platform === 'darwin' && app.dock) app.dock.show();
+      }
+    }
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -85,6 +137,10 @@ ipcMain.on('show-notification', (event, { title, body, data }) => {
 
   notification.on('click', () => {
     if (mainWindow) {
+      if (!mainWindow.isVisible()) {
+        mainWindow.show();
+        if (process.platform === 'darwin' && app.dock) app.dock.show();
+      }
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
       mainWindow.webContents.send('notification-clicked', data);

@@ -246,7 +246,7 @@ export default function AutoActivityMessage({ message }) {
         <div style={{ lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 6 }}>
           {(meta.isTaskDeleted || message.isDeleted) ? (
             <span className="activity-action" style={{ color: 'var(--danger-color, #ef4444)', fontWeight: 600 }}>
-              This card is deleted
+              This card is deleted by @{meta.actorName || 'someone'}
             </span>
           ) : (
             <>

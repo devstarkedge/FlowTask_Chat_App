@@ -38,6 +38,9 @@ const useLaterStore = {
 const useScheduledStore = {
   get getState() { return require('../stores/scheduledStore').useScheduledStore.getState; }
 };
+const useWorkspaceStore = {
+  get getState() { return require('../stores/workspaceStore').useWorkspaceStore.getState; }
+};
 const useStarredStore = {
   get getState() { return require('../stores/useStarredStore').useStarredStore.getState; }
 };
@@ -139,6 +142,18 @@ export const connectSocket = async () => {
       } catch (storeError) {
         logger.error('[Socket] Failed to trigger store logout:', storeError);
       }
+    }
+  });
+
+  // Workspace metadata can change in FlowTask, Chat desktop, web, or another
+  // mobile session. Refresh the cached list so the active name/logo follows
+  // the server immediately.
+  socket.on('workspace:updated', ({ workspaceId: updatedWorkspaceId }) => {
+    if (updatedWorkspaceId) {
+      queryClient.client.invalidateQueries({ queryKey: queryKeys.keys.workspaces });
+      useWorkspaceStore.getState().fetchWorkspaces().catch((error) => {
+        logger.warn('[Socket] Failed to refresh workspace metadata:', error?.message);
+      });
     }
   });
 

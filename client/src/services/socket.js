@@ -67,6 +67,7 @@ const SOCKET_EVENTS = {
   PRESENCE_SYNC: 'presence:sync',
 
   // Workspace
+  WORKSPACE_UPDATED: 'workspace:updated',
   WORKSPACE_PLAN_CHANGED: 'workspace:plan:changed',
 
   // Channels
@@ -583,6 +584,12 @@ export function connectSocket() {
   // with fetchWorkspace's existing merge-into-store behavior used
   // elsewhere in this file.
   socket.on(SOCKET_EVENTS.WORKSPACE_PLAN_CHANGED, ({ workspaceId }) => {
+    if (workspaceId) {
+      useWorkspaceStore.getState().fetchWorkspace(workspaceId)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.WORKSPACE_UPDATED, ({ workspaceId }) => {
     if (workspaceId) {
       useWorkspaceStore.getState().fetchWorkspace(workspaceId)
     }

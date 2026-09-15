@@ -13,6 +13,7 @@ import {
   RefreshControl,
   Modal,
   FlatList,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -43,14 +44,16 @@ import {
   Eye,
   AlertTriangle,
   Smartphone,
+  Upload,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
+import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 
 import { useThemeStore } from '../../stores/themeStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useAuthStore } from '../../stores/authStore';
-import { workspaceAPI } from '../../services/api';
+import { workspaceAPI, fileAPI } from '../../services/api';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import WorkspaceAvatar from '../../components/WorkspaceAvatar';
 import ENV from '../../config/environment';
@@ -457,18 +460,59 @@ export default function WorkspaceSettingsScreen({ navigation }) {
 function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, onLeave, isRemovingWorkspace, onRefresh }) {
   const [name, setName] = useState(workspace?.name || '');
   const [description, setDescription] = useState(workspace?.description || '');
+  const [logo, setLogo] = useState(workspace?.logo || null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setName(workspace?.name || '');
     setDescription(workspace?.description || '');
-  }, [workspace?.name, workspace?.description]);
+    setLogo(workspace?.logo || null);
+  }, [workspace?.name, workspace?.description, workspace?.logo]);
+
+  const handlePickLogo = async () => {
+    if (Platform.OS !== 'web') {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permission.status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow photo access to choose a workspace logo.');
+        return;
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    const asset = result.assets?.[0];
+    if (result.canceled || !asset?.uri) return;
+    if (asset.fileSize && asset.fileSize > 2 * 1024 * 1024) {
+      Toast.show({ type: 'error', text1: 'Logo must be 2 MB or smaller' });
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const filename = asset.fileName || asset.uri.split('/').pop() || 'workspace-logo.jpg';
+      const formData = new FormData();
+      formData.append('files', { uri: asset.uri, name: filename, type: asset.mimeType || 'image/jpeg' });
+      const uploadRes = await fileAPI.uploadFiles('000000000000000000000000', formData, null, true);
+      const uploaded = uploadRes?.data?.data?.files?.[0] || uploadRes?.data?.files?.[0];
+      if (!uploaded?.url) throw new Error('Upload returned no URL');
+      setLogo(uploaded.url);
+      Toast.show({ type: 'success', text1: 'Logo ready', text2: 'Save changes to synchronize it' });
+    } catch (error) {
+      Toast.show({ type: 'error', text1: 'Failed to upload workspace logo' });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await workspaceAPI.update(workspace?._id, { name: name.trim(), description: description.trim() });
+      await workspaceAPI.update(workspace?._id, { name: name.trim(), description: description.trim(), logo });
       Toast.show({ type: 'success', text1: 'Workspace updated' });
       onRefresh();
     } catch (e) {
@@ -484,7 +528,24 @@ function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, 
     <View style={styles.tabContent}>
       {/* Workspace Avatar & Name */}
       <View style={styles.wsHeader}>
-        <WorkspaceAvatar name={workspace?.name || 'W'} size={72} />
+        <WorkspaceAvatar workspace={{ ...workspace, name, logo }} size={72} />
+        {canManage && (
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+            <TouchableOpacity
+              style={[styles.logoButton, { borderColor: colors.border }]}
+              onPress={handlePickLogo}
+              disabled={uploadingLogo}
+            >
+              {uploadingLogo ? <ActivityIndicator size="small" color={colors.primary} /> : <Upload size={15} color={colors.primary} />}
+              <Text style={{ color: colors.primary, fontWeight: '600' }}>{uploadingLogo ? 'Uploading…' : 'Choose logo'}</Text>
+            </TouchableOpacity>
+            {logo && (
+              <TouchableOpacity style={[styles.logoButton, { borderColor: colors.border }]} onPress={() => setLogo(null)}>
+                <Text style={{ color: colors.error, fontWeight: '600' }}>Remove</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
         <Text style={[styles.wsName, { color: colors.textPrimary }]}>{workspace?.name}</Text>
         <View style={[styles.planBadge, { backgroundColor: planColor + '20', borderColor: planColor }]}>
           <Text style={[styles.planText, { color: planColor }]}>{planLabel}</Text>
@@ -1056,6 +1117,7 @@ const styles = StyleSheet.create({
   // General
   wsHeader: { alignItems: 'center', marginBottom: 20 },
   wsName: { fontSize: 22, fontWeight: 'bold', marginTop: 12 },
+  logoButton: { minHeight: 38, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
   planBadge: {
     marginTop: 8,
     paddingHorizontal: 16,

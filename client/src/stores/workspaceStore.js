@@ -171,7 +171,7 @@ export const useWorkspaceStore = create(
       updateWorkspace: async (workspaceId, updates) => {
         try {
           const { data } = await api.patch(`/workspaces/${workspaceId}`, updates)
-          const updated = data.data?.workspace
+          const updated = data.data?.workspace || data.data
           set((state) => ({
             workspaces: state.workspaces.map((w) =>
               w._id === workspaceId ? { ...w, ...updated } : w,

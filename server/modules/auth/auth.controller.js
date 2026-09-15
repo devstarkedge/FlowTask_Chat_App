@@ -10,6 +10,7 @@ import env from '../../config/environment.js';
 import ChatUser from '../users/ChatUser.model.js';
 import FlowTaskAuthAttempt from './FlowTaskAuthAttempt.model.js';
 import projectChannelSyncService from '../flowtask/projectChannelSync.service.js';
+import { announceWorkspaceLinked } from '../flowtask/flowtaskInboundSync.service.js';
 import logger from '../../utils/logger.js';
 import { ForbiddenError } from '../../middleware/errorHandler.js';
 import { normalizeFlowTaskAccess } from '../flowtask/flowTaskWorkspaceRoleMap.js';
@@ -207,7 +208,7 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
   try {
     const {
       chatUser, accessToken, refreshToken,
-      flowTaskWorkspaceId, flowTaskWorkspaceName, flowTaskWorkspaceSlug, flowTaskPlan, flowTaskAccess,
+      flowTaskWorkspaceId, flowTaskWorkspaceName, flowTaskWorkspaceSlug, flowTaskWorkspaceLogo, flowTaskPlan, flowTaskAccess,
     } = await authService.loginFlowTask({ token, userAgent });
     logger.info('FlowTask token validated and ChatApp user resolved', {
       requestId,
@@ -241,8 +242,13 @@ export const loginFlowTask = asyncHandler(async (req, res) => {
             flowTaskWorkspaceId,
             workspaceName: flowTaskWorkspaceName,
             workspaceSlug: flowTaskWorkspaceSlug,
+            workspaceLogo: flowTaskWorkspaceLogo,
             plan: flowTaskPlan,
             membershipRole,
+          });
+          await announceWorkspaceLinked({
+            workspace: flowtaskWorkspace,
+            flowTaskWorkspaceId,
           });
         } catch (error) {
           if (error instanceof ForbiddenError) {

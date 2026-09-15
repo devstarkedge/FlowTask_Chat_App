@@ -199,6 +199,10 @@ class AuthService {
     const flowTaskWorkspaceId = isRedirectFlow ? (decoded.workspaceId || null) : null;
     const flowTaskWorkspaceName = isRedirectFlow ? (decoded.workspaceName || null) : null;
     const flowTaskWorkspaceSlug = isRedirectFlow ? (decoded.workspaceSlug || null) : null;
+    const flowTaskWorkspaceLogo = isRedirectFlow
+      && Object.prototype.hasOwnProperty.call(decoded, 'workspaceLogo')
+      ? (decoded.workspaceLogo || null)
+      : undefined;
     const flowTaskAccess = isRedirectFlow ? (decoded.flowTaskAccess || null) : null;
     // FlowTask's `plan` claim (chatIntegrationController.js#getChatRedirectUrl
     // / workspaceChatSyncService.js) — only trusted for the redirect flow,
@@ -295,6 +299,7 @@ class AuthService {
       flowTaskWorkspaceId,
       flowTaskWorkspaceName,
       flowTaskWorkspaceSlug,
+      flowTaskWorkspaceLogo,
       flowTaskPlan,
       flowTaskAccess,
     };

@@ -88,11 +88,19 @@ export default function WorkspaceSettingsModal({ onClose }) {
   const [description, setDescription] = useState(
     activeWorkspace?.description || "",
   );
+  const [logo, setLogo] = useState(activeWorkspace?.logo || null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [tabKey, setTabKey] = useState(0);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteRefreshKey, setInviteRefreshKey] = useState(0);
+
+  useEffect(() => {
+    setName(activeWorkspace?.name || "");
+    setDescription(activeWorkspace?.description || "");
+    setLogo(activeWorkspace?.logo || null);
+  }, [activeWorkspaceId, activeWorkspace?.name, activeWorkspace?.description, activeWorkspace?.logo]);
 
   useEffect(() => {
     if (activeWorkspaceId) fetchMembers();
@@ -133,9 +141,41 @@ export default function WorkspaceSettingsModal({ onClose }) {
       await updateWorkspace(activeWorkspaceId, {
         name: name.trim(),
         description: description.trim(),
+        logo,
       });
     } catch {}
     setIsSaving(false);
+  };
+
+  const handleLogoUpload = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Workspace logos must be 2 MB or smaller");
+      return;
+    }
+
+    setIsUploadingLogo(true);
+    const formData = new FormData();
+    formData.append("files", file);
+    try {
+      const { data } = await api.post("/messages/upload?sync=true", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const uploaded = data.data?.files?.[0] || data.files?.[0];
+      if (!uploaded?.url) throw new Error("Upload returned no URL");
+      setLogo(uploaded.url);
+      toast.success("Logo ready — save changes to sync it");
+    } catch (error) {
+      toast.error("Failed to upload workspace logo");
+    } finally {
+      setIsUploadingLogo(false);
+    }
   };
 
   const handleRegenerate = async () => {
@@ -251,6 +291,10 @@ export default function WorkspaceSettingsModal({ onClose }) {
                 setName={setName}
                 description={description}
                 setDescription={setDescription}
+                logo={logo}
+                setLogo={setLogo}
+                isUploadingLogo={isUploadingLogo}
+                onLogoUpload={handleLogoUpload}
                 canManage={canManage}
                 isSaving={isSaving}
                 onSave={handleSaveGeneral}
@@ -309,6 +353,10 @@ function GeneralTab({
   setName,
   description,
   setDescription,
+  logo,
+  setLogo,
+  isUploadingLogo,
+  onLogoUpload,
   canManage,
   isSaving,
   onSave,
@@ -319,6 +367,45 @@ function GeneralTab({
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+      <div>
+        <SectionLabel>Workspace Logo</SectionLabel>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{
+            width: 64,
+            height: 64,
+            borderRadius: 16,
+            overflow: "hidden",
+            display: "grid",
+            placeItems: "center",
+            color: "#fff",
+            fontWeight: 800,
+            fontSize: 24,
+            background: logo ? `url(${logo}) center / cover no-repeat` : "linear-gradient(135deg, #6366f1, #8b5cf6)",
+          }}>
+            {!logo && (name?.charAt(0)?.toUpperCase() || "W")}
+          </div>
+          {canManage && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <label className="wsm-btn-ghost" style={{ cursor: isUploadingLogo ? "wait" : "pointer" }}>
+                {isUploadingLogo ? "Uploading…" : "Choose logo"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  hidden
+                  disabled={isUploadingLogo}
+                  onChange={onLogoUpload}
+                />
+              </label>
+              {logo && (
+                <button type="button" className="wsm-btn-ghost" onClick={() => setLogo(null)}>
+                  Remove
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div>
         <SectionLabel>Workspace Name</SectionLabel>
         <input

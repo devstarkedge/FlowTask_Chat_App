@@ -28,8 +28,7 @@ const workspaceMappingSchema = new Schema({
   flowTaskWorkspaceSlug: { type: String, default: null },
   flowTaskWorkspaceName: { type: String, default: null },
   status: { type: String, enum: ['active', 'revoked'], default: 'active' },
-  // Unused until Phase 2's reverse (ChatApp→FlowTask) sync exists, but the
-  // field is added now so it doesn't require a later migration.
+  // Records whether the mapping originated in ChatApp or through FlowTask SSO.
   syncOrigin: { type: String, enum: ['user_initiated', 'sync_provisioned'], required: true, default: 'user_initiated' },
   createdByChatUserId: { type: Schema.Types.ObjectId, ref: 'ChatUser', default: null },
   lastSeenAt: { type: Date, default: Date.now },

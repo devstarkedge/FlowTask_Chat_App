@@ -10,8 +10,7 @@ import { emitToWorkspace } from '../../../sockets/socketManager.js';
  * sync with its FlowTask counterpart after the initial eager-sync at
  * creation (workspaceChatSyncService.js on FlowTask's side).
  *
- * `name` is synced on WORKSPACE_UPDATED (slug isn't mutable on either side
- * post-creation, so there's nothing else to sync from that event) and
+ * Shared metadata (`name` and `logo`) is synced on WORKSPACE_UPDATED and
  * `plan` is synced on WORKSPACE_PLAN_CHANGED, fired by FlowTask's
  * subscriptionService.js#changeSubscription (the one funnel every
  * self-serve upgrade/downgrade AND Super Admin billing change goes
@@ -28,12 +27,32 @@ export function registerWorkspaceEventHandlers() {
     if (!wsId) return;
 
     const { workspace, changes } = payload;
-    if (!workspace?.name) return;
+    if (!workspace) return;
 
-    await Workspace.findByIdAndUpdate(wsId, { $set: { name: workspace.name } });
-    logger.info('ChatApp workspace name synced from FlowTask', {
+    const updates = {};
+    if (typeof workspace.name === 'string' && workspace.name.trim()) {
+      updates.name = workspace.name.trim();
+    }
+    if (typeof workspace.logo === 'string' || workspace.logo === null) {
+      updates.logo = workspace.logo?.trim() || null;
+    }
+    if (Object.keys(updates).length === 0) return;
+
+    const updated = await Workspace.findByIdAndUpdate(
+      wsId,
+      { $set: updates },
+      { returnDocument: 'after', runValidators: true },
+    );
+    if (!updated) return;
+
+    emitToWorkspace(wsId, SOCKET_EVENTS.WORKSPACE_UPDATED, {
+      workspaceId: wsId,
+      workspace: updated.toObject(),
+      changes,
+    });
+    logger.info('ChatApp workspace metadata synced from FlowTask', {
       chatWorkspaceId: wsId,
-      name: workspace.name,
+      fields: Object.keys(updates),
       changes,
     });
   });

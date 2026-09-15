@@ -2,10 +2,26 @@ import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import workspaceRepository from './workspace.repository.js';
 import WorkspaceMapping from '../flowtask/WorkspaceMapping.model.js';
-import { WORKSPACE_ROLES, WORKSPACE_LIMITS, DEFAULT_CHANNELS, CHANNEL_VISIBILITY, CHANNEL_MEMBER_ROLES, mapFlowTaskPlanToChatPlan } from '../../config/constants.js';
+import { WORKSPACE_ROLES, WORKSPACE_LIMITS, DEFAULT_CHANNELS, CHANNEL_VISIBILITY, CHANNEL_MEMBER_ROLES, SOCKET_EVENTS, mapFlowTaskPlanToChatPlan } from '../../config/constants.js';
 import env from '../../config/environment.js';
 import logger from '../../utils/logger.js';
 import { BadRequestError, NotFoundError, ForbiddenError, ConflictError } from '../../middleware/errorHandler.js';
+
+function normalizeWorkspaceLogo(value) {
+  if (value === undefined || value === null || value === '') return value === undefined ? undefined : null;
+  if (typeof value !== 'string') throw new BadRequestError('Workspace logo must be an HTTP(S) URL or null.');
+  const logo = value.trim();
+  let parsed;
+  try {
+    parsed = new URL(logo);
+  } catch {
+    throw new BadRequestError('Workspace logo must be a valid URL.');
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol) || logo.length > 2048) {
+    throw new BadRequestError('Workspace logo must be an HTTP(S) URL no longer than 2048 characters.');
+  }
+  return logo;
+}
 
 /**
  * Workspace Service — business logic for workspace management.
@@ -80,18 +96,41 @@ class WorkspaceService {
    * @returns {Promise<object>} workspace document
    */
   async findOrCreateFlowTaskWorkspace({
-    creatorId, flowTaskWorkspaceId, workspaceName, workspaceSlug, plan,
+    creatorId, flowTaskWorkspaceId, workspaceName, workspaceSlug, workspaceLogo, plan,
     membershipRole = WORKSPACE_ROLES.MEMBER,
   }) {
     if (!flowTaskWorkspaceId) {
       throw new BadRequestError('flowTaskWorkspaceId is required.');
     }
     const resolvedPlan = plan || 'free';
+    const normalizedWorkspaceLogo = workspaceLogo === undefined
+      ? undefined
+      : normalizeWorkspaceLogo(workspaceLogo);
 
     const existingMapping = await WorkspaceMapping.findByFlowTaskWorkspaceId(flowTaskWorkspaceId);
     if (existingMapping) {
       let workspace = await workspaceRepository.findById(existingMapping.chatWorkspaceId);
       if (workspace?.isActive) {
+        const metadataUpdates = {};
+        if (workspaceName && workspace.name !== workspaceName.trim()) metadataUpdates.name = workspaceName.trim();
+        if (normalizedWorkspaceLogo !== undefined
+          && (normalizedWorkspaceLogo || null) !== (workspace.logo || null)) {
+          metadataUpdates.logo = normalizedWorkspaceLogo || null;
+        }
+        if (Object.keys(metadataUpdates).length > 0) {
+          workspace = await workspaceRepository.update(workspace._id, metadataUpdates);
+          const { emitToWorkspace } = await import('../../sockets/socketManager.js');
+          emitToWorkspace(workspace._id, SOCKET_EVENTS.WORKSPACE_UPDATED, {
+            workspaceId: workspace._id.toString(),
+            workspace: workspace.toObject(),
+            changes: metadataUpdates,
+          });
+          logger.info('FlowTask workspace metadata self-healed on login', {
+            workspaceId: workspace._id,
+            flowTaskWorkspaceId,
+            fields: Object.keys(metadataUpdates),
+          });
+        }
         // Self-healing backstop: the WORKSPACE_PLAN_CHANGED webhook is the
         // fast/real-time sync path, but if it was ever missed (ChatApp
         // unreachable at the time, workspace never "connected" yet) this
@@ -157,6 +196,7 @@ class WorkspaceService {
         workspace = await mongoose.model('Workspace').create({
           name,
           slug,
+          logo: normalizedWorkspaceLogo || null,
           description: 'Auto-created workspace for FlowTask integration',
           plan: resolvedPlan,
           source: 'flowtask',
@@ -292,6 +332,7 @@ class WorkspaceService {
    */
   async createWorkspace(data, creatorId) {
     const { name, description, logo, plan = 'free', source = 'independent' } = data;
+    const normalizedLogo = normalizeWorkspaceLogo(logo);
     const slug = (data.slug || name).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
     // Check slug uniqueness
@@ -306,7 +347,7 @@ class WorkspaceService {
       name,
       slug,
       description,
-      logo,
+      logo: normalizedLogo,
       plan,
       source,
       owner: creatorId,
@@ -447,11 +488,41 @@ class WorkspaceService {
       throw new ForbiddenError('Only workspace owner or admin can update settings.');
     }
 
-    // Prevent changing slug after creation (too many side effects)
-    delete updateData.slug;
-    delete updateData.owner;
+    // Explicit allowlist: billing, source, ownership and integration settings
+    // are server-owned and cannot be mutated through this metadata endpoint.
+    const updates = {};
+    if (typeof updateData.name === 'string' && updateData.name.trim()) {
+      updates.name = updateData.name.trim();
+    }
+    if (typeof updateData.description === 'string') {
+      updates.description = updateData.description.trim();
+    }
+    if (typeof updateData.logo === 'string' || updateData.logo === null) {
+      updates.logo = normalizeWorkspaceLogo(updateData.logo);
+    }
 
-    return workspaceRepository.update(workspaceId, updateData);
+    const changes = {};
+    for (const [field, value] of Object.entries(updates)) {
+      if ((workspace[field] ?? null) !== value) {
+        changes[field] = { old: workspace[field] ?? null, new: value };
+      }
+    }
+    if (Object.keys(changes).length === 0) return workspace;
+
+    const updated = await workspaceRepository.update(workspaceId, updates);
+    const [{ announceWorkspaceUpdated }, { emitToWorkspace }] = await Promise.all([
+      import('../flowtask/flowtaskInboundSync.service.js'),
+      import('../../sockets/socketManager.js'),
+    ]);
+
+    emitToWorkspace(workspaceId, SOCKET_EVENTS.WORKSPACE_UPDATED, {
+      workspaceId: workspaceId.toString(),
+      workspace: updated.toObject(),
+      changes,
+    });
+    await announceWorkspaceUpdated({ workspace: updated, changes });
+
+    return updated;
   }
 
   /**

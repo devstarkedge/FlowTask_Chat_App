@@ -26,11 +26,19 @@ function formatFileSize(bytes) {
 }
 
 function ToolbarBtn({ icon: Icon, onClick, title }) {
+  const handleClick = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    onClick?.(event)
+  }
+
   return (
     <button
       type="button"
-      onClick={onClick}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={handleClick}
       title={title}
+      aria-label={title}
       className="file-preview-toolbar-btn"
       style={{
         color: 'var(--preview-icon-color)',
@@ -147,7 +155,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div className="file-preview-toolbar">
           {info.isImage && (
             <>
               <ToolbarBtn title="Zoom out" icon={ZoomOut} onClick={() => setZoom((z) => Math.max(z - 0.25, 0.5))} />

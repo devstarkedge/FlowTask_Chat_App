@@ -35,6 +35,11 @@ import ChannelInfoPanel from "../chat/ChannelInfoPanel";
 import PreferencesModal from "../chat/PreferencesModal";
 import ProfileSidePanel from "../chat/ProfileSidePanel";
 import UnifiedSearch from "../search/UnifiedSearch";
+import WorkspaceSwitcher from "../workspace/WorkspaceSwitcher";
+import CreateWorkspaceModal from "../workspace/CreateWorkspaceModal";
+import JoinWorkspaceModal from "../workspace/JoinWorkspaceModal";
+import WorkspaceSettingsModal from "../workspace/WorkspaceSettingsModal";
+import InviteMembersModal from "../workspace/InviteMembersModal";
 import { useProfileStore } from "../../stores/profileStore";
 import { useAuthStore } from "../../stores/authStore";
 import FilePreviewModal from "../chat/FilePreviewModal";
@@ -123,15 +128,56 @@ const LAYOUT_STYLES = `
 .cl-topbar {
   height: 48px;
   display: grid;
-  grid-template-columns: auto minmax(180px, 640px) auto;
+  grid-template-columns:
+    calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
+    auto
+    minmax(180px, 1fr)
+    auto;
   align-items: center;
   gap: 12px;
-  padding: 0 14px;
+  padding: 0 14px 0 0;
   background: var(--sidebar-bg-dark, var(--surface-primary, var(--bg-primary)));
   border-bottom: 1px solid var(--sidebar-border-color, var(--border-color, var(--border-primary)));
   flex-shrink: 0;
   position: relative;
   z-index: 100;
+}
+
+.cl-topbar__workspace {
+  min-width: 0;
+  width: 100%;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+.cl-topbar__workspace .wss-root {
+  min-width: 0;
+}
+
+.cl-topbar__workspace .wss-trigger {
+  height: 44px;
+  display: grid;
+  grid-template-columns: var(--workspace-sidebar-width) minmax(0, 1fr) auto;
+  gap: 0;
+  padding: 4px 8px 4px 0;
+}
+
+.cl-topbar__workspace .wss-trigger__avatar-wrap {
+  justify-self: center;
+}
+
+.cl-topbar__workspace .wss-trigger__text {
+  padding-left: 14px;
+}
+
+.cl-topbar__workspace .wss-trigger__name {
+  max-width: 190px;
+}
+
+.cl-topbar__workspace .wss-menu {
+  top: 44px;
+  left: 8px;
 }
 
 .cl-topbar__nav {
@@ -185,18 +231,25 @@ const LAYOUT_STYLES = `
 
 @media (max-width: 1024px) {
   .cl-topbar {
-    grid-template-columns: auto minmax(160px, 520px) auto;
+    grid-template-columns:
+      calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
+      auto
+      minmax(160px, 1fr)
+      auto;
   }
 }
 
 @media (max-width: 768px) {
   .cl-topbar {
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 8px;
     padding: 0 10px;
   }
   .cl-topbar__search-wrap {
     display: none;
+  }
+  .cl-topbar__workspace .wss-trigger__name {
+    max-width: 140px;
   }
 }
 
@@ -618,7 +671,7 @@ const LAYOUT_STYLES = `
 }
 
 @media (max-width: 768px) {
-  .cl-topbar { grid-template-columns: auto 1fr auto; gap: 8px; padding: 0 10px; }
+  .cl-topbar { grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; padding: 0 10px; }
   .cl-file-actions { gap: 4px; }
   .cl-file-btn span { display: none; }
   .cl-file-btn { padding: 6px 8px; }
@@ -1604,70 +1657,74 @@ export default function ChatLayout() {
   };
 
   return (
-    <div className="h-full flex" style={{ background: "var(--bg-primary)" }}>
-      <div className="hide-on-mobile">
-        <ErrorBoundary name="WorkspaceSidebar" compact>
-          <WorkspaceSidebar />
-        </ErrorBoundary>
-      </div>
-
-      <div
-        className="hide-on-mobile relative"
-        style={{
-          width: sidebarCollapsed ? "60px" : (hasResized ? `${sidebarWidth}px` : "var(--nav-sidebar-width)"),
-          minWidth: sidebarCollapsed ? "60px" : (hasResized ? `${sidebarWidth}px` : "var(--nav-sidebar-width)"),
-          transition: isResizing
-            ? "none"
-            : "width 200ms ease, min-width 200ms ease",
+    <div className="h-full flex flex-col" style={{ background: "var(--bg-primary)" }}>
+      <GlobalTopBar
+        user={user}
+        workspaceId={workspaceId}
+        navigationSidebarWidth={
+          sidebarCollapsed ? 60 : (hasResized ? sidebarWidth : null)
+        }
+        searchRef={globalSearchRef}
+        messages={localSearchMessages}
+        unreadCount={unreadNotifications}
+        onBack={goBack}
+        onForward={goForward}
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        onOpenSearchResult={handleOpenSearchResult}
+        onOpenResultsPage={openLocalSearchResultsPage}
+        onOpenChange={setIsSearchOpen}
+        onNotifications={() => {
+          setShowNotifications((s) => !s);
+          setShowPins(false);
         }}
-      >
-        <ErrorBoundary name="ContextSidebar" compact>
-          {renderContextSidebar(false)}
-        </ErrorBoundary>
+        onHelp={() => setShowShortcuts(true)}
+      />
+
+      <div className="flex-1 flex flex-row min-h-0 overflow-hidden">
+        <div className="hide-on-mobile">
+          <ErrorBoundary name="WorkspaceSidebar" compact>
+            <WorkspaceSidebar />
+          </ErrorBoundary>
+        </div>
+
         <div
-          className="sidebar-resize-handle"
-          onMouseDown={handleResizeStart}
-          onDoubleClick={handleResizeDoubleClick}
-          title="Drag to resize, double-click to collapse"
-        />
-      </div>
-
-      {showMobileSidebar && (
-        <>
-          <div
-            className="sidebar-overlay active"
-            onClick={() => setShowMobileSidebar(false)}
-          />
-          <div className="sidebar-mobile">
-            <ErrorBoundary name="ContextSidebar" compact>
-              {renderContextSidebar(true)}
-            </ErrorBoundary>
-          </div>
-        </>
-      )}
-
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <GlobalTopBar
-          user={user}
-          workspaceId={workspaceId}
-          searchRef={globalSearchRef}
-          messages={localSearchMessages}
-          unreadCount={unreadNotifications}
-          onBack={goBack}
-          onForward={goForward}
-          canGoBack={canGoBack}
-          canGoForward={canGoForward}
-          onOpenSearchResult={handleOpenSearchResult}
-          onOpenResultsPage={openLocalSearchResultsPage}
-          onOpenChange={setIsSearchOpen}
-          onNotifications={() => {
-            setShowNotifications((s) => !s);
-            setShowPins(false);
+          className="hide-on-mobile relative"
+          style={{
+            width: sidebarCollapsed ? "60px" : (hasResized ? `${sidebarWidth}px` : "var(--nav-sidebar-width)"),
+            minWidth: sidebarCollapsed ? "60px" : (hasResized ? `${sidebarWidth}px` : "var(--nav-sidebar-width)"),
+            transition: isResizing
+              ? "none"
+              : "width 200ms ease, min-width 200ms ease",
           }}
-          onHelp={() => setShowShortcuts(true)}
-        />
+        >
+          <ErrorBoundary name="ContextSidebar" compact>
+            {renderContextSidebar(false)}
+          </ErrorBoundary>
+          <div
+            className="sidebar-resize-handle"
+            onMouseDown={handleResizeStart}
+            onDoubleClick={handleResizeDoubleClick}
+            title="Drag to resize, double-click to collapse"
+          />
+        </div>
 
-        <div className="flex-1 flex min-w-0 overflow-hidden">
+        {showMobileSidebar && (
+          <>
+            <div
+              className="sidebar-overlay active"
+              onClick={() => setShowMobileSidebar(false)}
+            />
+            <div className="sidebar-mobile">
+              <ErrorBoundary name="ContextSidebar" compact>
+                {renderContextSidebar(true)}
+              </ErrorBoundary>
+            </div>
+          </>
+        )}
+
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <div className="flex-1 flex min-w-0 overflow-hidden">
           <ErrorBoundary name="Content">
             {(() => {
               if (isActivityRoute)
@@ -1798,6 +1855,7 @@ export default function ChatLayout() {
           )}
         </div>
       </div>
+      </div>
       {previewFile && (
         <ErrorBoundary name="FilePreviewModal">
           <FilePreviewModal
@@ -1830,6 +1888,7 @@ export default function ChatLayout() {
 function GlobalTopBar({
   user,
   workspaceId,
+  navigationSidebarWidth,
   searchRef,
   messages,
   unreadCount,
@@ -1843,6 +1902,8 @@ function GlobalTopBar({
   onNotifications,
   onHelp,
 }) {
+  const navigate = useNavigate();
+  const [workspaceModal, setWorkspaceModal] = useState(null);
   const prevCountRef = useRef(unreadCount);
   const [bellShake, setBellShake] = useState(false);
   useEffect(() => {
@@ -1852,74 +1913,120 @@ function GlobalTopBar({
     }
     prevCountRef.current = unreadCount;
   }, [unreadCount]);
+  const closeWorkspaceModal = () => setWorkspaceModal(null);
+  const openJoinedWorkspace = (workspace) => {
+    closeWorkspaceModal();
+    if (workspace?._id) navigate(`/workspace/${workspace._id}`);
+  };
 
   return (
-    <header className="cl-topbar">
-      <div className="cl-topbar__nav">
-        <button
-          className="cl-topbar__nav-btn"
-          onClick={onBack}
-          aria-label="Go back"
-          title="Go back"
-          disabled={!canGoBack}
-          style={{
-            opacity: canGoBack ? 1 : 0.4,
-            cursor: canGoBack ? "pointer" : "default"
-          }}
-        >
-          <ArrowLeft size={15} />
-        </button>
-        <button
-          className="cl-topbar__nav-btn"
-          onClick={onForward}
-          aria-label="Go forward"
-          title="Go forward"
-          disabled={!canGoForward}
-          style={{
-            opacity: canGoForward ? 1 : 0.4,
-            cursor: canGoForward ? "pointer" : "default"
-          }}
-        >
-          <ArrowRight size={15} />
-        </button>
-      </div>
+    <>
+      <header
+        className="cl-topbar"
+        style={{
+          '--cl-nav-sidebar-width': navigationSidebarWidth
+            ? `${navigationSidebarWidth}px`
+            : 'var(--nav-sidebar-width)',
+        }}
+      >
+        <div className="cl-topbar__workspace">
+          <WorkspaceSwitcher
+            onOpenCreate={() => setWorkspaceModal("create")}
+            onOpenJoin={() => setWorkspaceModal("join")}
+            onOpenSettings={() => setWorkspaceModal("settings")}
+            onOpenInvite={() => setWorkspaceModal("invite")}
+          />
+        </div>
 
-      <div className="cl-topbar__search-wrap">
-        <UnifiedSearch
-          ref={searchRef}
-          user={user}
-          workspaceId={workspaceId}
-          messages={messages}
-          onOpenResult={onOpenSearchResult}
-          onOpenResultsPage={onOpenResultsPage}
-          onOpenChange={onOpenChange}
+        <div className="cl-topbar__nav">
+          <button
+            className="cl-topbar__nav-btn"
+            onClick={onBack}
+            aria-label="Go back"
+            title="Go back"
+            disabled={!canGoBack}
+            style={{
+              opacity: canGoBack ? 1 : 0.4,
+              cursor: canGoBack ? "pointer" : "default"
+            }}
+          >
+            <ArrowLeft size={15} />
+          </button>
+          <button
+            className="cl-topbar__nav-btn"
+            onClick={onForward}
+            aria-label="Go forward"
+            title="Go forward"
+            disabled={!canGoForward}
+            style={{
+              opacity: canGoForward ? 1 : 0.4,
+              cursor: canGoForward ? "pointer" : "default"
+            }}
+          >
+            <ArrowRight size={15} />
+          </button>
+        </div>
+
+        <div className="cl-topbar__search-wrap">
+          <UnifiedSearch
+            ref={searchRef}
+            user={user}
+            workspaceId={workspaceId}
+            messages={messages}
+            onOpenResult={onOpenSearchResult}
+            onOpenResultsPage={onOpenResultsPage}
+            onOpenChange={onOpenChange}
+          />
+        </div>
+
+        <div className="cl-topbar__actions">
+          <button
+            className={`cl-topbar__action-btn${bellShake ? " has-notif" : ""}`}
+            onClick={onNotifications}
+            aria-label="Notifications"
+            title="Notifications"
+          >
+            <Bell size={16} />
+            {unreadCount > 0 && (
+              <span className="cl-notif-badge">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </button>
+          <button
+            className="cl-topbar__action-btn"
+            onClick={onHelp}
+            aria-label="Keyboard shortcuts"
+            title="Keyboard shortcuts"
+          >
+            <CircleHelp size={16} />
+          </button>
+        </div>
+      </header>
+
+      {workspaceModal === "create" && (
+        <CreateWorkspaceModal
+          onClose={closeWorkspaceModal}
+          onCreated={openJoinedWorkspace}
         />
-      </div>
-
-      <div className="cl-topbar__actions">
-        <button
-          className={`cl-topbar__action-btn${bellShake ? " has-notif" : ""}`}
-          onClick={onNotifications}
-          aria-label="Notifications"
-          title="Notifications"
-        >
-          <Bell size={16} />
-          {unreadCount > 0 && (
-            <span className="cl-notif-badge">
-              {unreadCount > 99 ? "99+" : unreadCount}
-            </span>
-          )}
-        </button>
-        <button
-          className="cl-topbar__action-btn"
-          onClick={onHelp}
-          aria-label="Keyboard shortcuts"
-          title="Keyboard shortcuts"
-        >
-          <CircleHelp size={16} />
-        </button>
-      </div>
-    </header>
+      )}
+      {workspaceModal === "join" && (
+        <JoinWorkspaceModal
+          onClose={closeWorkspaceModal}
+          onJoined={openJoinedWorkspace}
+        />
+      )}
+      {workspaceModal === "settings" && (
+        <WorkspaceSettingsModal onClose={closeWorkspaceModal} />
+      )}
+      {workspaceModal === "invite" && (
+        <InviteMembersModal
+          isOpen
+          onClose={closeWorkspaceModal}
+          workspaceId={workspaceId}
+        />
+      )}
+    </>
   );
 }
 

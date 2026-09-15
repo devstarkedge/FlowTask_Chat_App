@@ -11,6 +11,10 @@ import MentionToast from "../components/notifications/MentionToast";
 import NotificationToast from "../components/notifications/NotificationToast";
 import { normalizeNotification } from "../utils/notificationFormat";
 import {
+  enqueueMessageSend,
+  nextOptimisticTimestamp,
+} from "../utils/messageSendQueue";
+import {
   loadChannelMessagesFromCache,
   saveChannelMessagesToCache,
   clearMessageCache,
@@ -179,6 +183,9 @@ function removeReactionFromUser(reactions, userId, emoji) {
 export const useChatStore = create((set, get) => ({
   // Messages keyed by channelId
   messagesByChannel: {},
+  // Incremented when a newly appended message or its server reconciliation
+  // requires the active timeline to remain locked to the latest message.
+  messageAppendVersionByChannel: {},
   // Normalized message entities (feature-flagged, maintained via subscription)
   hasMore: {},
   isLoadingMessages: false,
@@ -461,6 +468,7 @@ export const useChatStore = create((set, get) => ({
       const user = useAuthStore.getState().user;
       tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const isThreadReply = !!options.threadId;
+      const optimisticTimestamp = nextOptimisticTimestamp();
 
       // Create optimistic message to show immediately
       const optimisticMessage = {
@@ -483,8 +491,8 @@ export const useChatStore = create((set, get) => ({
         isEdited: false,
         isPinned: false,
         isDeleted: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: optimisticTimestamp,
+        updatedAt: optimisticTimestamp,
         pending: true,
         failed: false,
         threadId: options.threadId || null,
@@ -501,12 +509,14 @@ export const useChatStore = create((set, get) => ({
       }
 
       // Send to server with tempId for ACK reconciliation
-      const { data } = await messageAPI.send(channelId, {
-        content,
-        htmlContent: options.htmlContent || undefined,
-        tempId,
-        ...options,
-      });
+      const { data } = await enqueueMessageSend(channelId, () =>
+        messageAPI.send(channelId, {
+          content,
+          htmlContent: options.htmlContent || undefined,
+          tempId,
+          ...options,
+        }),
+      );
 
       // Server ACK will arrive via socket and reconcile via reconcileMessage()
       // But if ACK hasn't arrived yet, reconcile from HTTP response
@@ -592,14 +602,19 @@ export const useChatStore = create((set, get) => ({
         );
         if (isDupe) return state;
       }
-      const merged = [...existing, normalized].sort(
-        (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
-      );
+      // Socket.IO preserves event order and optimistic sends are queued before
+      // reaching the server. Append instead of re-sorting so clock skew or
+      // equal timestamps cannot move a rapid message ahead of an earlier one.
+      const merged = [...existing, normalized];
 
       const nextState = {
         messagesByChannel: {
           ...state.messagesByChannel,
           [channelId]: merged,
+        },
+        messageAppendVersionByChannel: {
+          ...state.messageAppendVersionByChannel,
+          [channelId]: (state.messageAppendVersionByChannel[channelId] || 0) + 1,
         },
       };
 
@@ -670,7 +685,10 @@ export const useChatStore = create((set, get) => ({
 
       // Check if already reconciled (edge case: both HTTP response and socket ACK arrive)
       if (existing.some((m) => m._id === normalized._id)) {
-        // Just remove the temp message
+        const hasTempMessage = existing.some((m) => m._id === tempId);
+        if (!hasTempMessage) return state;
+
+        // Just remove the temp message and keep the viewport at the bottom.
         const nextChannelMessages = existing.filter((m) => m._id !== tempId);
 
         return {
@@ -678,27 +696,44 @@ export const useChatStore = create((set, get) => ({
             ...state.messagesByChannel,
             [channelId]: nextChannelMessages,
           },
+          messageAppendVersionByChannel: {
+            ...state.messageAppendVersionByChannel,
+            [channelId]: (state.messageAppendVersionByChannel[channelId] || 0) + 1,
+          },
         };
       }
 
       // Replace temp message with server message
-      const nextChannelMessages = existing.map((m) =>
-        m._id === tempId
-          ? { ...normalized, pending: false, failed: false }
-          : m,
-      );
+      let didReconcile = false;
+      const nextChannelMessages = existing.map((m) => {
+        if (m._id !== tempId) return m;
+        didReconcile = true;
+        return {
+          ...normalized,
+          _virtuosoKey: m._virtuosoKey || tempId,
+          pending: false,
+          failed: false,
+        };
+      });
+      if (!didReconcile) return state;
 
       const nextState = {
         messagesByChannel: {
           ...state.messagesByChannel,
           [channelId]: nextChannelMessages,
         },
+        messageAppendVersionByChannel: {
+          ...state.messageAppendVersionByChannel,
+          [channelId]: (state.messageAppendVersionByChannel[channelId] || 0) + 1,
+        },
       };
 
       if (CHAT_FEATURE_FLAGS.normalizedMessageStore && normalized._id) {
         nextState.messagesById = {
           ...state.messagesById,
-          [normalized._id]: { ...normalized, pending: false, failed: false },
+          [normalized._id]: nextChannelMessages.find(
+            (message) => message._id === normalized._id,
+          ),
         };
         if (state.messagesById[tempId]) {
           const { [tempId]: _removed, ...rest } = nextState.messagesById;
@@ -1870,6 +1905,7 @@ export const useChatStore = create((set, get) => ({
 
     set({
       messagesByChannel: {},
+      messageAppendVersionByChannel: {},
       messagesById: {},
       channelMessageIds: {},
       hasMore: {},

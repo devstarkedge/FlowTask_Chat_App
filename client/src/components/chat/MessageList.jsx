@@ -1,8 +1,14 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useRef, useMemo, useCallback, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+  useState,
+  useLayoutEffect,
+} from "react";
 import { useChatStore } from "../../stores/chatStore";
 import { useChannelStore } from "../../stores/channelStore";
-import { useAuthStore } from "../../stores/authStore";
 import MessageItem from "./MessageItem";
 import AutoActivityMessage from "./AutoActivityMessage";
 import ForwardMessageModal from "./ForwardMessageModal";
@@ -10,6 +16,10 @@ import { MessageCircle, ChevronDown, Forward } from "lucide-react";
 import { Virtuoso } from "react-virtuoso";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
+import {
+  advanceMessageItemIndex,
+  getVirtuosoMessageKey,
+} from "../../utils/virtuosoMessageIndex";
 
 
 export default function MessageList({
@@ -31,14 +41,21 @@ export default function MessageList({
   const scrollToMessageId = useChatStore((s) => s.scrollToMessageId);
   const setScrollToMessageId = useChatStore((s) => s.setScrollToMessageId);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
+  const messageAppendVersion = useChatStore(
+    (s) => s.messageAppendVersionByChannel?.[channelId] || 0,
+  );
 
   const lastReadMessageId = useChannelStore(
     (s) => s.lastReadByChannel?.[channelId]
   );
-  const currentUserId = useAuthStore((s) => s.user?._id);
-
   const virtuosoRef = useRef(null);
   const lastScrolledHighlightId = useRef(null);
+  const previousAppendVersionRef = useRef(messageAppendVersion);
+  const messageScrollerRef = useRef(null);
+  const scrollFrameRef = useRef(null);
+  const scrollTimeoutRef = useRef(null);
+  const bottomLockUntilRef = useRef(0);
+  const firstItemIndexTrackerRef = useRef(null);
 
   // Forward message modal state
   const [forwardTarget, setForwardTarget] = useState(null);
@@ -77,8 +94,21 @@ export default function MessageList({
   // Show/hide the "scroll to bottom" floating button
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
-  // Snapshot of previous render to detect truly new messages
-  const prevRef = useRef({ count: 0, lastId: null, channelId: null });
+  const scrollToLatest = useCallback(() => {
+    virtuosoRef.current?.scrollToIndex({
+      index: "LAST",
+      align: "end",
+      behavior: "auto",
+    });
+
+    // scrollToIndex can use measurements from the previous render while an
+    // optimistic row is being reconciled. Pin the real scroll container to
+    // its physical end as well, so the last row cannot remain partly clipped.
+    const scroller = messageScrollerRef.current;
+    if (scroller && typeof scroller.scrollHeight === "number") {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+  }, []);
 
   // ─── Multi-message selection helpers ───────────────────────────────────
   const toggleSelectMessage = useCallback((msgId, shiftKey = false) => {
@@ -158,7 +188,7 @@ export default function MessageList({
   useEffect(() => {
     isAtBottomRef.current = true;
     setShowScrollBtn(false);
-    prevRef.current = { count: 0, lastId: null, channelId };
+    previousAppendVersionRef.current = messageAppendVersion;
 
     if (messages.length > 0) {
       setTimeout(() => {
@@ -169,45 +199,36 @@ export default function MessageList({
   }, [channelId]);
 
   // ─── Smart auto-scroll on new messages ───────────────────────────────
-  useEffect(() => {
-    const prev = prevRef.current;
-    const lastMsg = messages[messages.length - 1];
+  useLayoutEffect(() => {
+    if (messageAppendVersion <= previousAppendVersionRef.current) return;
+    previousAppendVersionRef.current = messageAppendVersion;
+    if (messages.length === 0) return;
 
-    if (prev.channelId !== channelId || messages.length === 0) {
-      prevRef.current = {
-        count: messages.length,
-        lastId: lastMsg?._id ?? null,
-        channelId,
-      };
-      return;
-    }
+    // Keep the viewport pinned while Virtuoso renders and measures an appended
+    // message or replaces its optimistic data with the server-confirmed data.
+    // An immediate (non-animated) scroll avoids a smooth scroll being
+    // interrupted by reconciliation and leaving the viewport above the end.
+    bottomLockUntilRef.current = Date.now() + 1500;
+    isAtBottomRef.current = true;
+    setShowScrollBtn(false);
+    scrollToLatest();
 
-    const hasNewMessage =
-      messages.length > prev.count && lastMsg?._id !== prev.lastId;
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      scrollFrameRef.current = requestAnimationFrame(() => {
+        scrollToLatest();
+      });
+    });
+    scrollTimeoutRef.current = setTimeout(scrollToLatest, 600);
 
-    if (hasNewMessage) {
-      const authorId = lastMsg?.authorId?._id ?? lastMsg?.authorId;
-      const isOwnMessage =
-        authorId != null &&
-        currentUserId != null &&
-        String(authorId) === String(currentUserId);
-
-      if ((isAtBottomRef.current || isOwnMessage) && !editingMessageId) {
-        setTimeout(() => {
-          virtuosoRef.current?.scrollToIndex({
-            index: "LAST",
-            behavior: "smooth",
-          });
-        }, 30);
+    return () => {
+      if (scrollFrameRef.current != null) {
+        cancelAnimationFrame(scrollFrameRef.current);
       }
-    }
-
-    prevRef.current = {
-      count: messages.length,
-      lastId: lastMsg?._id ?? null,
-      channelId,
+      if (scrollTimeoutRef.current != null) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
     };
-  }, [messages, channelId, currentUserId]);
+  }, [messageAppendVersion, messages.length, scrollToLatest]);
 
   // ─── Flatten: date separators + unread marker ─────────────────────────
   const isActivityMessage = (msg) =>
@@ -304,6 +325,18 @@ export default function MessageList({
 
     return flattened;
   }, [messages, lastReadMessageId]);
+
+  const firstMessageId = messages[0]?._id ?? null;
+  const virtuosoFirstItemIndex = useMemo(() => {
+    const nextTracker = advanceMessageItemIndex(
+      firstItemIndexTrackerRef.current,
+      channelId,
+      flattenedItems,
+      firstMessageId,
+    );
+    firstItemIndexTrackerRef.current = nextTracker;
+    return nextTracker.firstItemIndex;
+  }, [channelId, firstMessageId, flattenedItems]);
 
   // ─── Auto-scroll to message from deep-link (DownloadsModal folder navigation) ──
   useEffect(() => {
@@ -464,26 +497,41 @@ export default function MessageList({
     >
       <Virtuoso
         ref={virtuosoRef}
+        scrollerRef={(element) => {
+          messageScrollerRef.current = element;
+        }}
         data={flattenedItems}
-        computeItemKey={(index, item) => item._id || index}
+        computeItemKey={getVirtuosoMessageKey}
         className="w-full h-full"
-        firstItemIndex={1000000 - flattenedItems.length}
+        firstItemIndex={virtuosoFirstItemIndex}
         initialTopMostItemIndex={flattenedItems.length - 1}
         startReached={loadMore}
         alignToBottom={true}
         increaseViewportBy={{ top: 400, bottom: 200 }}
         followOutput={(isAtBottom) => {
+          const bottomLockIsActive = Date.now() < bottomLockUntilRef.current;
           // Only update the ref here. Avoid calling setState during Virtuoso's
           // render phase (some Virtuoso internals call `followOutput` while
           // rendering), which can cause render-update loops. `atBottomStateChange`
           // will handle updating component state.
-          isAtBottomRef.current = isAtBottom;
+          isAtBottomRef.current = isAtBottom || bottomLockIsActive;
           if (editingMessageId) return false;
-          return isAtBottom ? "smooth" : false;
+          return isAtBottom || bottomLockIsActive ? "auto" : false;
         }}
         atBottomStateChange={(atBottom) => {
+          if (!atBottom && Date.now() < bottomLockUntilRef.current) {
+            isAtBottomRef.current = true;
+            setShowScrollBtn(false);
+            requestAnimationFrame(scrollToLatest);
+            return;
+          }
           isAtBottomRef.current = atBottom;
           setShowScrollBtn(!atBottom);
+        }}
+        totalListHeightChanged={() => {
+          if (Date.now() < bottomLockUntilRef.current) {
+            requestAnimationFrame(scrollToLatest);
+          }
         }}
         components={{
           Header: () =>

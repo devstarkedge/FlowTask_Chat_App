@@ -345,6 +345,10 @@ export default function WorkspaceSwitcher({
       ws._id !== activeWorkspaceId ? sum + (unread[ws._id] ?? 0) : sum,
     0,
   );
+  const activeWorkspaceIndex = Math.max(
+    workspaces.findIndex((workspace) => workspace._id === activeWorkspaceId),
+    0,
+  );
 
   /* ── render ── */
   return (
@@ -361,6 +365,12 @@ export default function WorkspaceSwitcher({
       >
         {/* Avatar + optional unread dot */}
         <span className="wss-trigger__avatar-wrap">
+          <WorkspaceAvatar
+            workspace={activeWorkspace}
+            index={activeWorkspaceIndex}
+            size={36}
+            isActive={false}
+          />
           {totalUnread > 0 && !isOpen && (
             <span
               className="wss-unread-dot"

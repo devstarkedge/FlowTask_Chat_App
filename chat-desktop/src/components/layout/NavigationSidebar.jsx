@@ -44,11 +44,6 @@ import CategoryHeader from "./CategoryHeader";
 import CategoryList from "./CategoryList";
 import PreferencesModal from "../chat/PreferencesModal";
 import SetStatusModal from "../chat/SetStatusModal";
-import WorkspaceSwitcher from "../workspace/WorkspaceSwitcher";
-import CreateWorkspaceModal from "../workspace/CreateWorkspaceModal";
-import JoinWorkspaceModal from "../workspace/JoinWorkspaceModal";
-import WorkspaceSettingsModal from "../workspace/WorkspaceSettingsModal";
-import InviteMembersModal from "../workspace/InviteMembersModal";
 import { formatDistanceToNowStrict } from "date-fns";
 import {
   getChannelPath,
@@ -99,7 +94,6 @@ export default function NavigationSidebar({
     createDM,
   } = useChannelStore();
   const { user, channelSync } = useAuthStore();
-  const { switchWorkspace } = useWorkspaceStore();
   const drafts = useDraftStore((s) => s.drafts);
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
@@ -181,10 +175,6 @@ export default function NavigationSidebar({
   const [showUserPicker, setShowUserPicker] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
-  const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
-  const [showJoinWorkspace, setShowJoinWorkspace] = useState(false);
-  const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
-  const [showInviteMembers, setShowInviteMembers] = useState(false);
 
   // Fetch favorites when workspace changes
   useEffect(() => {
@@ -452,32 +442,23 @@ export default function NavigationSidebar({
   const fetchUnreadCount = useNotificationStore((s) => s.fetchUnreadCount);
   const laterTotalCount = workspaceDraftCount + scheduledCount;
 
-  const header = (
-    <>
-      <div className="w-full flex items-center justify-between">
-        <WorkspaceSwitcher
-          onOpenCreate={() => setShowCreateWorkspace(true)}
-          onOpenJoin={() => setShowJoinWorkspace(true)}
-          onOpenSettings={() => setShowWorkspaceSettings(true)}
-          onOpenInvite={() => setShowInviteMembers(true)}
-        />
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md cursor-pointer transition-colors mobile-menu-btn"
-            style={{
-              color: "var(--sidebar-text-dim, var(--text-muted))",
-              background: "transparent",
-              border: "none",
-              flexShrink: 0,
-            }}
-          >
-            <X size={18} />
-          </button>
-        )}
-      </div>
-    </>
-  );
+  const header = onClose ? (
+    <div className="w-full flex items-center justify-end">
+      <button
+        onClick={onClose}
+        className="p-1.5 rounded-md cursor-pointer transition-colors mobile-menu-btn"
+        style={{
+          color: "var(--sidebar-text-dim, var(--text-muted))",
+          background: "transparent",
+          border: "none",
+          flexShrink: 0,
+        }}
+        aria-label="Close navigation"
+      >
+        <X size={18} />
+      </button>
+    </div>
+  ) : null;
 
   const handleDeleteCategory = async (categoryId) => {
     if (window.confirm("Are you sure you want to delete this category? The channels will not be deleted.")) {
@@ -915,33 +896,6 @@ export default function NavigationSidebar({
       )}
       {showStatusModal && (
         <SetStatusModal onClose={() => setShowStatusModal(false)} />
-      )}
-      {showCreateWorkspace && (
-        <CreateWorkspaceModal onClose={() => setShowCreateWorkspace(false)} />
-      )}
-      {showJoinWorkspace && (
-        <JoinWorkspaceModal
-          onClose={() => setShowJoinWorkspace(false)}
-          onJoined={(workspace) => {
-            setShowJoinWorkspace(false);
-            if (workspace?._id) {
-              switchWorkspace(workspace._id);
-              navigate(`/chat/${workspace._id}`);
-            }
-          }}
-        />
-      )}
-      {showWorkspaceSettings && (
-        <WorkspaceSettingsModal
-          onClose={() => setShowWorkspaceSettings(false)}
-        />
-      )}
-      {showInviteMembers && (
-        <InviteMembersModal
-          isOpen={showInviteMembers}
-          onClose={() => setShowInviteMembers(false)}
-          workspaceId={workspaceId}
-        />
       )}
     </>
   );

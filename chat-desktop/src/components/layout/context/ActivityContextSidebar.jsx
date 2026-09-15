@@ -16,7 +16,6 @@ import {
 import { formatDistanceToNowStrict } from "date-fns";
 import { useNotificationStore } from "../../../stores/notificationStore";
 import { Avatar } from "../../chat/MemberAvatarGroup";
-import WorkspaceSwitcher from "../../workspace/WorkspaceSwitcher";
 import SidebarContainer from "../sidebar/SidebarContainer";
 import {
   getNotificationText,
@@ -696,11 +695,6 @@ export default function ActivityContextSidebar({
     { id:"dms",     label:"DMs"     },
   ];
 
-  /* ── Header: just WorkspaceSwitcher (dark band) ── */
-  const header = (
-    <WorkspaceSwitcher />
-  );
-
   /* ── Sub-header: Activity title + tabs (section-specific controls) ── */
   const subHeader = (
     <>
@@ -744,7 +738,7 @@ export default function ActivityContextSidebar({
   );
 
   return (
-    <SidebarContainer header={header} subHeader={subHeader} aria-label="Activity notifications">
+    <SidebarContainer subHeader={subHeader} aria-label="Activity notifications">
       <StyleInjector />
 
       <div

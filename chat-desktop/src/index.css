@@ -1137,6 +1137,17 @@ body {
   padding: 12px 16px;
   background: var(--preview-topbar-bg);
   z-index: 10;
+  -webkit-app-region: no-drag;
+}
+
+.file-preview-toolbar {
+  position: relative;
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
 }
 
 .file-preview-topbar-title {
@@ -1162,6 +1173,8 @@ body {
   cursor: pointer;
   color: var(--preview-icon-color);
   transition: background var(--transition-fast);
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
 }
 
 .file-preview-toolbar-btn:hover {
@@ -15931,8 +15944,13 @@ body.is-electron .cl-empty-pane__mobile-btn {
 }
 
 body.is-electron .cl-topbar {
-  grid-template-columns: auto 1fr auto !important;
+  grid-template-columns:
+    calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
+    auto
+    minmax(160px, 1fr) !important;
   gap: 12px !important;
+  padding-left: 0 !important;
+  padding-right: 14px !important;
 }
 
 body.is-electron .cl-topbar__actions {
@@ -15941,6 +15959,11 @@ body.is-electron .cl-topbar__actions {
 
 body.is-electron .cl-topbar__search-wrap {
   display: block !important;
+}
+
+/* Keep media-preview actions clear of the native Windows caption buttons. */
+body.is-electron .file-preview-topbar {
+  padding-right: 156px;
 }
 
 body.is-electron .mobile-full-width {

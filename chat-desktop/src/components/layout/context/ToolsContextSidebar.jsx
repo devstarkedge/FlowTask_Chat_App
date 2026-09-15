@@ -7,7 +7,6 @@ import {
   LayoutList,
 } from "lucide-react";
 
-import WorkspaceSwitcher from "../../workspace/WorkspaceSwitcher";
 import SidebarContainer from "../sidebar/SidebarContainer";
 
 const STYLES = `
@@ -142,7 +141,6 @@ export default function ToolsContextSidebar() {
 
   return (
     <SidebarContainer
-      header={<WorkspaceSwitcher />}
       subHeader={
         <div className="tcs-section-title">
           Tools

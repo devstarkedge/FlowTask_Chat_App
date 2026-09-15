@@ -35,6 +35,11 @@ import ChannelInfoPanel from "../chat/ChannelInfoPanel";
 import PreferencesModal from "../chat/PreferencesModal";
 import ProfileSidePanel from "../chat/ProfileSidePanel";
 import UnifiedSearch from "../search/UnifiedSearch";
+import WorkspaceSwitcher from "../workspace/WorkspaceSwitcher";
+import CreateWorkspaceModal from "../workspace/CreateWorkspaceModal";
+import JoinWorkspaceModal from "../workspace/JoinWorkspaceModal";
+import WorkspaceSettingsModal from "../workspace/WorkspaceSettingsModal";
+import InviteMembersModal from "../workspace/InviteMembersModal";
 import { useProfileStore } from "../../stores/profileStore";
 import { useAuthStore } from "../../stores/authStore";
 import FilePreviewModal from "../chat/FilePreviewModal";
@@ -122,10 +127,13 @@ const LAYOUT_STYLES = `
 .cl-topbar {
   height: 48px;
   display: grid;
-  grid-template-columns: auto minmax(180px, 640px) auto;
+  grid-template-columns:
+    calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
+    auto
+    minmax(180px, 1fr);
   align-items: center;
   gap: 12px;
-  padding: 0 14px;
+  padding: 0 14px 0 0;
   background: var(--bg-workspace-sidebar, var(--sidebar-bg-dark));
   flex-shrink: 0;
   position: relative;
@@ -134,9 +142,47 @@ const LAYOUT_STYLES = `
 }
 
 .cl-topbar__nav-btn,
+.cl-topbar__workspace,
 .cl-topbar__search-wrap,
 .cl-topbar__action-btn {
   -webkit-app-region: no-drag;
+}
+
+.cl-topbar__workspace {
+  min-width: 0;
+  width: 100%;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+.cl-topbar__workspace .wss-root {
+  min-width: 0;
+}
+
+.cl-topbar__workspace .wss-trigger {
+  height: 44px;
+  display: grid;
+  grid-template-columns: var(--workspace-sidebar-width) minmax(0, 1fr) auto;
+  gap: 0;
+  padding: 4px 8px 4px 0;
+}
+
+.cl-topbar__workspace .wss-trigger__avatar-wrap {
+  justify-self: center;
+}
+
+.cl-topbar__workspace .wss-trigger__text {
+  padding-left: 14px;
+}
+
+.cl-topbar__workspace .wss-trigger__name {
+  max-width: 190px;
+}
+
+.cl-topbar__workspace .wss-menu {
+  top: 44px;
+  left: 8px;
 }
 
 .cl-topbar__nav {
@@ -190,18 +236,24 @@ const LAYOUT_STYLES = `
 
 @media (max-width: 1024px) {
   .cl-topbar {
-    grid-template-columns: auto minmax(160px, 520px) auto;
+    grid-template-columns:
+      calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
+      auto
+      minmax(160px, 1fr);
   }
 }
 
 @media (max-width: 768px) {
   .cl-topbar {
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
     padding: 0 10px;
   }
   .cl-topbar__search-wrap {
     display: none;
+  }
+  .cl-topbar__workspace .wss-trigger__name {
+    max-width: 140px;
   }
 }
 
@@ -1616,6 +1668,9 @@ export default function ChatLayout() {
       <GlobalTopBar
         user={user}
         workspaceId={workspaceId}
+        navigationSidebarWidth={
+          sidebarCollapsed ? 60 : (hasResized ? sidebarWidth : null)
+        }
         searchRef={globalSearchRef}
         messages={localSearchMessages}
         onBack={goBack}
@@ -1834,6 +1889,7 @@ export default function ChatLayout() {
 function GlobalTopBar({
   user,
   workspaceId,
+  navigationSidebarWidth,
   searchRef,
   messages,
   onBack,
@@ -1844,49 +1900,99 @@ function GlobalTopBar({
   onOpenResultsPage,
   onOpenChange,
 }) {
-  return (
-    <header className="cl-topbar" style={{ position: 'relative', paddingRight: 14 }}>
-      <div className="cl-topbar__nav">
-        <button
-          className="cl-topbar__nav-btn"
-          onClick={onBack}
-          aria-label="Go back"
-          title="Go back"
-          disabled={!canGoBack}
-          style={{
-            opacity: canGoBack ? 1 : 0.4,
-            cursor: canGoBack ? "pointer" : "default"
-          }}
-        >
-          <ArrowLeft size={15} />
-        </button>
-        <button
-          className="cl-topbar__nav-btn"
-          onClick={onForward}
-          aria-label="Go forward"
-          title="Go forward"
-          disabled={!canGoForward}
-          style={{
-            opacity: canGoForward ? 1 : 0.4,
-            cursor: canGoForward ? "pointer" : "default"
-          }}
-        >
-          <ArrowRight size={15} />
-        </button>
-      </div>
+  const navigate = useNavigate();
+  const [workspaceModal, setWorkspaceModal] = useState(null);
+  const closeWorkspaceModal = () => setWorkspaceModal(null);
+  const openJoinedWorkspace = (workspace) => {
+    closeWorkspaceModal();
+    if (workspace?._id) navigate(`/workspace/${workspace._id}`);
+  };
 
-      <div className="cl-topbar__search-wrap">
-        <UnifiedSearch
-          ref={searchRef}
-          user={user}
-          workspaceId={workspaceId}
-          messages={messages}
-          onOpenResult={onOpenSearchResult}
-          onOpenResultsPage={onOpenResultsPage}
-          onOpenChange={onOpenChange}
+  return (
+    <>
+      <header
+        className="cl-topbar"
+        style={{
+          position: 'relative',
+          '--cl-nav-sidebar-width': navigationSidebarWidth
+            ? `${navigationSidebarWidth}px`
+            : 'var(--nav-sidebar-width)',
+        }}
+      >
+        <div className="cl-topbar__workspace">
+          <WorkspaceSwitcher
+            onOpenCreate={() => setWorkspaceModal("create")}
+            onOpenJoin={() => setWorkspaceModal("join")}
+            onOpenSettings={() => setWorkspaceModal("settings")}
+            onOpenInvite={() => setWorkspaceModal("invite")}
+          />
+        </div>
+
+        <div className="cl-topbar__nav">
+          <button
+            className="cl-topbar__nav-btn"
+            onClick={onBack}
+            aria-label="Go back"
+            title="Go back"
+            disabled={!canGoBack}
+            style={{
+              opacity: canGoBack ? 1 : 0.4,
+              cursor: canGoBack ? "pointer" : "default"
+            }}
+          >
+            <ArrowLeft size={15} />
+          </button>
+          <button
+            className="cl-topbar__nav-btn"
+            onClick={onForward}
+            aria-label="Go forward"
+            title="Go forward"
+            disabled={!canGoForward}
+            style={{
+              opacity: canGoForward ? 1 : 0.4,
+              cursor: canGoForward ? "pointer" : "default"
+            }}
+          >
+            <ArrowRight size={15} />
+          </button>
+        </div>
+
+        <div className="cl-topbar__search-wrap">
+          <UnifiedSearch
+            ref={searchRef}
+            user={user}
+            workspaceId={workspaceId}
+            messages={messages}
+            onOpenResult={onOpenSearchResult}
+            onOpenResultsPage={onOpenResultsPage}
+            onOpenChange={onOpenChange}
+          />
+        </div>
+      </header>
+
+      {workspaceModal === "create" && (
+        <CreateWorkspaceModal
+          onClose={closeWorkspaceModal}
+          onCreated={openJoinedWorkspace}
         />
-      </div>
-    </header>
+      )}
+      {workspaceModal === "join" && (
+        <JoinWorkspaceModal
+          onClose={closeWorkspaceModal}
+          onJoined={openJoinedWorkspace}
+        />
+      )}
+      {workspaceModal === "settings" && (
+        <WorkspaceSettingsModal onClose={closeWorkspaceModal} />
+      )}
+      {workspaceModal === "invite" && (
+        <InviteMembersModal
+          isOpen
+          onClose={closeWorkspaceModal}
+          workspaceId={workspaceId}
+        />
+      )}
+    </>
   );
 }
 

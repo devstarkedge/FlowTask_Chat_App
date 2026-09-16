@@ -4,6 +4,8 @@ import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SOCKET_EVENTS, mapFlowTaskPlanToChatPlan } from '../../../config/constants.js';
 import { requireWorkspaceId } from '../../../utils/webhookEventGuard.js';
 import { emitToWorkspace } from '../../../sockets/socketManager.js';
+import axios from 'axios';
+import { v2 as cloudinary } from 'cloudinary';
 
 /**
  * Workspace Event Handler — keeps a ChatApp workspace's own metadata in
@@ -34,7 +36,28 @@ export function registerWorkspaceEventHandlers() {
       updates.name = workspace.name.trim();
     }
     if (typeof workspace.logo === 'string' || workspace.logo === null) {
-      updates.logo = workspace.logo?.trim() || null;
+      if (changes?.logo?.new && typeof changes.logo.new === 'string') {
+        try {
+          const response = await axios.get(changes.logo.new, { responseType: 'arraybuffer' });
+          const buffer = Buffer.from(response.data);
+          const uploadResult = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              { folder: `chat-app/workspaces/${wsId}/logo`, resource_type: 'image' },
+              (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+              }
+            );
+            stream.end(buffer);
+          });
+          updates.logo = uploadResult.secure_url;
+        } catch (error) {
+          logger.error('Failed to transfer workspace logo to ChatApp Cloudinary, falling back to original URL', { error: error.message, workspaceId: wsId });
+          updates.logo = workspace.logo?.trim() || null;
+        }
+      } else {
+        updates.logo = workspace.logo?.trim() || null;
+      }
     }
     if (Object.keys(updates).length === 0) return;
 

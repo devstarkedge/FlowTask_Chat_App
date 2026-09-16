@@ -74,6 +74,8 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
     "electron": "^44.0.0",
     "electron-builder": "^26.15.3",
     "eslint": "^9.13.0",
@@ -82,17 +84,16 @@
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.11.0",
     "jsdom": "^29.0.0",
+    "png-to-ico": "^3.0.2",
     "tailwindcss": "^4.1.18",
     "vite": "^5.4.10",
     "vitest": "^3.2.4",
-    "concurrently": "^9.1.0",
-    "wait-on": "^8.0.1",
-    "cross-env": "^7.0.3"
+    "wait-on": "^8.0.1"
   },
   "build": {
     "appId": "com.flowtask.chat",
     "productName": "TaskChat",
-    "icon": "public/logo.png",
+    "icon": "build/icon.ico",
     "directories": {
       "output": "dist-electron"
     },

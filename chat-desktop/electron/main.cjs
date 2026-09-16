@@ -22,7 +22,7 @@ function createWindow() {
     minWidth: 600,
     minHeight: 500,
     title: 'TaskChat',
-    icon: path.join(__dirname, '../public/logo.png'),
+    icon: path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png'),
     titleBarStyle: 'hidden',
     titleBarOverlay: {
       color: '#00000000',
@@ -75,7 +75,7 @@ app.whenReady().then(() => {
   createWindow();
 
   // Create System Tray
-  const iconPath = path.join(__dirname, '../public/logo.png');
+  const iconPath = path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png');
   tray = new Tray(iconPath);
   
   const contextMenu = Menu.buildFromTemplate([
@@ -132,7 +132,7 @@ ipcMain.on('show-notification', (event, { title, body, data }) => {
   const notification = new Notification({
     title,
     body,
-    icon: path.join(__dirname, '../public/logo.png'),
+    icon: path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png'),
   });
 
   notification.on('click', () => {

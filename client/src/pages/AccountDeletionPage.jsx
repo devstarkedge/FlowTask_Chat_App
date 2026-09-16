@@ -23,18 +23,18 @@ const AccountDeletionPage = () => {
         boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
       }}>
         <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>
-          FlowTask Account Deletion Request
+          TaskChat Account Deletion Request
         </h1>
         
         <p style={{ lineHeight: '1.6', marginBottom: '20px', color: 'var(--text-secondary, #9a9a9d)' }}>
-          To request the deletion of your FlowTask account and all associated data, you can do so directly from within the FlowTask mobile application or web dashboard. 
+          To request the deletion of your TaskChat account and all associated data, you can do so directly from within the TaskChat mobile application or web dashboard. 
         </p>
 
         <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '12px' }}>
           Delete via Mobile App:
         </h2>
         <ul style={{ paddingLeft: '20px', marginBottom: '20px', color: 'var(--text-secondary, #9a9a9d)', lineHeight: '1.6' }}>
-          <li>Open the FlowTask Chat app on your iOS or Android device.</li>
+          <li>Open the TaskChat app on your iOS or Android device.</li>
           <li>Navigate to your Profile / Preferences screen.</li>
           <li>Scroll down to the "Danger Zone" section.</li>
           <li>Tap "Delete Account" and confirm with your password.</li>
@@ -44,7 +44,7 @@ const AccountDeletionPage = () => {
           Manual Deletion Request:
         </h2>
         <p style={{ lineHeight: '1.6', marginBottom: '20px', color: 'var(--text-secondary, #9a9a9d)' }}>
-          If you no longer have access to the app, you can request account deletion by emailing our support team at <strong>support@flowtask.com</strong> from the email address associated with your account.
+          If you no longer have access to the app, you can request account deletion by emailing our support team at <strong>support@taskchat.com</strong> from the email address associated with your account.
         </p>
 
         <p style={{ lineHeight: '1.6', marginBottom: '32px', color: 'var(--text-secondary, #9a9a9d)' }}>

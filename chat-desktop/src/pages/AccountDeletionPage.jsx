@@ -34,7 +34,7 @@ const AccountDeletionPage = () => {
           Delete via Mobile App:
         </h2>
         <ul style={{ paddingLeft: '20px', marginBottom: '20px', color: 'var(--text-secondary, #9a9a9d)', lineHeight: '1.6' }}>
-          <li>Open the FlowTask Chat app on your iOS or Android device.</li>
+          <li>Open the TaskChat app on your iOS or Android device.</li>
           <li>Navigate to your Profile / Preferences screen.</li>
           <li>Scroll down to the "Danger Zone" section.</li>
           <li>Tap "Delete Account" and confirm with your password.</li>

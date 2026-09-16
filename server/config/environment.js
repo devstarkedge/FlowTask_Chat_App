@@ -57,7 +57,7 @@ function parseCorsOrigins(raw) {
 // ─── Build Config ────────────────────────────────────────────────────────────
 const env = Object.freeze({
   // Application
-  APP_NAME: process.env.APP_NAME || 'FlowTask Chat',
+  APP_NAME: process.env.APP_NAME || 'TaskChat',
   PORT: parseInt(process.env.PORT, 10) || 3200,
   NODE_ENV: process.env.NODE_ENV || 'development',
   IS_PRODUCTION,

@@ -212,22 +212,6 @@ export default function MessageList({
     isAtBottomRef.current = true;
     setShowScrollBtn(false);
     scrollToLatest();
-
-    scrollFrameRef.current = requestAnimationFrame(() => {
-      scrollFrameRef.current = requestAnimationFrame(() => {
-        scrollToLatest();
-      });
-    });
-    scrollTimeoutRef.current = setTimeout(scrollToLatest, 600);
-
-    return () => {
-      if (scrollFrameRef.current != null) {
-        cancelAnimationFrame(scrollFrameRef.current);
-      }
-      if (scrollTimeoutRef.current != null) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
   }, [messageAppendVersion, messages.length, scrollToLatest]);
 
   // ─── Flatten: date separators + unread marker ─────────────────────────

@@ -14,7 +14,10 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { isDesktopApp, setWindowControlsColor } from "../services/desktopService";
+import {
+  isDesktopApp,
+  setWindowControlsColor,
+} from "../services/desktopService";
 import "./custom-css/loginPage.css";
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -110,7 +113,8 @@ const tabContent = {
    COMPONENT
 ───────────────────────────────────────────────────────────────────────── */
 export default function LoginPage() {
-  const { loginNative, loginFlowTask, isLoading, error, clearError, user } = useAuthStore();
+  const { loginNative, loginFlowTask, isLoading, error, clearError, user } =
+    useAuthStore();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const redirectTo = searchParams.get("redirect");
@@ -120,7 +124,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const ssoAttempted = useRef(false);
-  const [ssoLoading, setSsoLoading] = useState(ssoSource === "flowtask" && !!ssoToken);
+  const [ssoLoading, setSsoLoading] = useState(
+    ssoSource === "flowtask" && !!ssoToken,
+  );
 
   useEffect(() => {
     setWindowControlsColor("#000000");
@@ -137,7 +143,10 @@ export default function LoginPage() {
     loginFlowTask(ssoToken)
       .then((data) => {
         const workspaceId = data?.data?.workspaceId;
-        navigate(workspaceId ? `/workspace/${workspaceId}` : "/select-workspace", { replace: true });
+        navigate(
+          workspaceId ? `/workspace/${workspaceId}` : "/select-workspace",
+          { replace: true },
+        );
       })
       .catch(() => {
         // Error surfaces via the store's `error` state below; fall back to
@@ -161,7 +170,6 @@ export default function LoginPage() {
     }
   }, [user, navigate, redirectTo, ssoLoading]);
 
-
   const handleNativeLogin = async (e) => {
     e.preventDefault();
     clearError();
@@ -174,14 +182,27 @@ export default function LoginPage() {
     }
   };
 
-
   /* ─────────────────────────────────────────────────────────────────────
      RENDER
   ───────────────────────────────────────────────────────────────────── */
   if (ssoLoading) {
     return (
-      <div className="lp" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+      <div
+        className="lp"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 16,
+          }}
+        >
           <div
             className="lp-spin"
             style={{
@@ -224,15 +245,29 @@ export default function LoginPage() {
       </div>
 
       {/* ── Nav ──  */}
-      <nav className="lp-nav" style={{ WebkitAppRegion: isDesktopApp() ? 'drag' : 'auto' }}>
-        <div className="lp-nav-inner" style={{ paddingRight: isDesktopApp() ? 150 : undefined }}>
-          <Link to="/" className="lp-logo" style={{ WebkitAppRegion: 'no-drag' }}>
-            <div className="lp-logo-icon">
-              <MessageCircle size={18} color="white" />
+      <nav
+        className="lp-nav"
+        style={{ WebkitAppRegion: isDesktopApp() ? "drag" : "auto" }}
+      >
+        <div
+          className="lp-nav-inner"
+          style={{ paddingRight: isDesktopApp() ? 150 : undefined }}
+        >
+          <Link
+            to="/"
+            className="lp-logo"
+            style={{ WebkitAppRegion: "no-drag" }}
+          >
+            <div>
+              <img
+                src="./logo.png"
+                alt="TaskChat Logo"
+                style={{ width: 27, height: 27 }}
+              />
             </div>
-            <span className="lp-logo-name">FlowTask Chat</span>
+            <span className="lp-logo-name">TaskChat</span>
           </Link>
-          <p className="lp-nav-link" style={{ WebkitAppRegion: 'no-drag' }}>
+          <p className="lp-nav-link" style={{ WebkitAppRegion: "no-drag" }}>
             New here?{" "}
             <Link to="/register">
               <strong>Create account</strong>
@@ -267,7 +302,6 @@ export default function LoginPage() {
           </motion.p>
 
           <motion.div variants={fadeUp} className="lp-card">
-
             <AnimatePresence>
               {error && (
                 <motion.div
@@ -293,119 +327,112 @@ export default function LoginPage() {
             </AnimatePresence>
 
             <AnimatePresence mode="wait">
-
               {/* ── Native email/password login ── */}
-                <motion.form
-                  key="native"
-                  variants={tabContent}
-                  initial="hidden"
-                  animate="visible"
-                  exit="hidden"
-                  onSubmit={handleNativeLogin}
-                >
-                  {/* Email field */}
-                  <div style={{ marginBottom: 18 }}>
-                    <label htmlFor="lp-email" className="lp-label">
-                      Email Address
+              <motion.form
+                key="native"
+                variants={tabContent}
+                initial="hidden"
+                animate="visible"
+                exit="hidden"
+                onSubmit={handleNativeLogin}
+              >
+                {/* Email field */}
+                <div style={{ marginBottom: 18 }}>
+                  <label htmlFor="lp-email" className="lp-label">
+                    Email Address
+                  </label>
+                  <input
+                    id="lp-email"
+                    className="input-field"
+                    type="email"
+                    value={email}
+                    onChange={(e) =>
+                      setEmail(e.target.value.replace(/\s/g, "").toLowerCase())
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === " ") e.preventDefault();
+                    }}
+                    placeholder="you@company.com"
+                    autoComplete="email"
+                    required
+                  />
+                </div>
+
+                {/* Password field */}
+                <div style={{ marginBottom: 18 }}>
+                  <div className="lp-label-row">
+                    <label htmlFor="lp-password" className="lp-label">
+                      Password
                     </label>
+                    <Link to="/forgot-password" className="lp-forgot">
+                      Forgot password?
+                    </Link>
+                  </div>
+                  <div style={{ position: "relative" }}>
                     <input
-                      id="lp-email"
+                      id="lp-password"
                       className="input-field"
-                      type="email"
-                      value={email}
+                      type={showPassword ? "text" : "password"}
+                      value={password}
                       onChange={(e) =>
-                        setEmail(
-                          e.target.value.replace(/\s/g, "").toLowerCase(),
-                        )
+                        setPassword(e.target.value.replace(/\s/g, ""))
                       }
                       onKeyDown={(e) => {
                         if (e.key === " ") e.preventDefault();
                       }}
-                      placeholder="you@company.com"
-                      autoComplete="email"
+                      placeholder="Enter your password"
+                      style={{ paddingRight: 44 }}
+                      autoComplete="current-password"
                       required
                     />
+                    <button
+                      type="button"
+                      className="lp-eye-btn"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
+                </div>
 
-                  {/* Password field */}
-                  <div style={{ marginBottom: 18 }}>
-                    <div className="lp-label-row">
-                      <label htmlFor="lp-password" className="lp-label">
-                        Password
-                      </label>
-                      <Link to="/forgot-password" className="lp-forgot">
-                        Forgot password?
-                      </Link>
-                    </div>
-                    <div style={{ position: "relative" }}>
-                      <input
-                        id="lp-password"
-                        className="input-field"
-                        type={showPassword ? "text" : "password"}
-                        value={password}
-                        onChange={(e) =>
-                          setPassword(e.target.value.replace(/\s/g, ""))
+                <motion.button
+                  type="submit"
+                  disabled={isLoading}
+                  className="lp-submit lp-shimmer-btn"
+                  whileHover={
+                    isLoading
+                      ? {}
+                      : {
+                          y: -2,
+                          boxShadow: "0 8px 28px rgba(99,102,241,.48)",
                         }
-                        onKeyDown={(e) => {
-                          if (e.key === " ") e.preventDefault();
+                  }
+                  whileTap={isLoading ? {} : { y: 0, scale: 0.98 }}
+                >
+                  {isLoading ? (
+                    <>
+                      <div
+                        className="lp-spin"
+                        style={{
+                          width: 17,
+                          height: 17,
+                          border: "2.5px solid rgba(255,255,255,.35)",
+                          borderTopColor: "rgba(255,255,255,.9)",
+                          borderRadius: "50%",
                         }}
-                        placeholder="Enter your password"
-                        style={{ paddingRight: 44 }}
-                        autoComplete="current-password"
-                        required
                       />
-                      <button
-                        type="button"
-                        className="lp-eye-btn"
-                        onClick={() => setShowPassword(!showPassword)}
-                        aria-label={
-                          showPassword ? "Hide password" : "Show password"
-                        }
-                      >
-                        {showPassword ? (
-                          <EyeOff size={16} />
-                        ) : (
-                          <Eye size={16} />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <motion.button
-                    type="submit"
-                    disabled={isLoading}
-                    className="lp-submit lp-shimmer-btn"
-                    whileHover={
-                      isLoading
-                        ? {}
-                        : {
-                            y: -2,
-                            boxShadow: "0 8px 28px rgba(99,102,241,.48)",
-                          }
-                    }
-                    whileTap={isLoading ? {} : { y: 0, scale: 0.98 }}
-                  >
-                    {isLoading ? (
-                      <>
-                        <div
-                          className="lp-spin"
-                          style={{
-                            width: 17,
-                            height: 17,
-                            border: "2.5px solid rgba(255,255,255,.35)",
-                            borderTopColor: "rgba(255,255,255,.9)",
-                            borderRadius: "50%",
-                          }}
-                        />
-                        Signing in…
-                      </>
-                    ) : (
-                      <>
-                        Sign in <ArrowRight size={17} />
-                      </>
-                    )}
-                  </motion.button>
-                </motion.form>
+                      Signing in…
+                    </>
+                  ) : (
+                    <>
+                      Sign in <ArrowRight size={17} />
+                    </>
+                  )}
+                </motion.button>
+              </motion.form>
             </AnimatePresence>
           </motion.div>
           {/* end card */}
@@ -427,8 +454,8 @@ export default function LoginPage() {
             reimagined
           </motion.p>
           <motion.p variants={fadeLeft} className="lp-aside-sub">
-            FlowTask Chat brings real-time messaging, project-aware channels,
-            and enterprise security into one seamless workspace.
+            TaskChat brings real-time messaging, project-aware channels, and
+            enterprise security into one seamless workspace.
           </motion.p>
 
           <motion.div variants={fadeLeft} className="lp-feature-list">

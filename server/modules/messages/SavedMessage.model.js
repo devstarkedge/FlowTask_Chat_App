@@ -131,18 +131,15 @@ savedMessageSchema.index({ userId: 1, workspaceId: 1, createdAt: -1 });
 
 // ─── Statics ─────────────────────────────────────────────────────────────────
 savedMessageSchema.statics.toggle = async function (userId, messageId, channelId, workspaceId, attachmentId = null) {
-  const query = { userId, messageId };
-  if (attachmentId) {
-    query.attachmentId = attachmentId;
-  } else {
-    query.attachmentId = null;
-  }
+  const safeAttachmentId = attachmentId || null;
+  const query = { userId, messageId, attachmentId: safeAttachmentId };
+
   const deleted = await this.findOneAndDelete(query);
   if (deleted) {
     return { saved: false, savedMessageId: deleted._id };
   }
   try {
-    const created = await this.create({ userId, messageId, channelId, workspaceId, type: 'saved_message', attachmentId });
+    const created = await this.create({ userId, messageId, channelId, workspaceId, type: 'saved_message', attachmentId: safeAttachmentId });
     return { saved: true, savedMessageId: created._id };
   } catch (err) {
     if (err.code === 11000) {

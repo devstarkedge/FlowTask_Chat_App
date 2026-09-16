@@ -708,7 +708,7 @@ export const toggleSaveMessage = asyncHandler(async (req, res) => {
   // req.message and req.channel are already loaded by requireMessageAccess middleware
   const message = req.message;
   const channel = req.channel;
-  const { attachmentId } = req.body;
+  const { attachmentId } = req.body || {};
 
   const result = await SavedMessage.toggle(
     req.user._id,

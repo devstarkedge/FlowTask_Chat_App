@@ -222,10 +222,10 @@ export default function LoginPage() {
       <nav className="lp-nav">
         <div className="lp-nav-inner">
           <Link to="/" className="lp-logo">
-            <div className="lp-logo-icon">
-              <MessageCircle size={18} color="white" />
+            <div >
+             <img src="./logo.png" alt="TaskChat Logo" style={{ width: 27, height: 27 }} />
             </div>
-            <span className="lp-logo-name">FlowTask Chat</span>
+            <span className="lp-logo-name">TaskChat</span>
           </Link>
           <p className="lp-nav-link">
             New here?{" "}
@@ -422,7 +422,7 @@ export default function LoginPage() {
             reimagined
           </motion.p>
           <motion.p variants={fadeLeft} className="lp-aside-sub">
-            FlowTask Chat brings real-time messaging, project-aware channels,
+            TaskChat brings real-time messaging, project-aware channels,
             and enterprise security into one seamless workspace.
           </motion.p>
 

@@ -43,7 +43,7 @@ const DEFAULT_NAME = process.env.DEFAULT_WORKSPACE_NAME || 'FlowTask';
 
 async function migrate() {
   console.log('═══════════════════════════════════════════════════════════');
-  console.log('  FlowTask Chat — Workspace Migration');
+  console.log('  TaskChat — Workspace Migration');
   console.log('═══════════════════════════════════════════════════════════\n');
 
   // 1. Connect to MongoDB

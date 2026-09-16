@@ -425,10 +425,14 @@ export default function ForgotPasswordPage() {
       <div className="fp-card">
         {/* Logo */}
         <div className="fp-logo">
-          <div className="fp-logo-icon">
-            <MessageCircle size={21} color="white" strokeWidth={2.2} />
+          <div>
+            <img
+              src="./logo.png"
+              alt="TaskChat Logo"
+              style={{ width: 27, height: 27 }}
+            />
           </div>
-          <span className="fp-logo-text">FlowTask Chat</span>
+          <span className="fp-logo-text">TaskChat</span>
         </div>
 
         {sent ? (

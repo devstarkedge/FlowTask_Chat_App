@@ -358,7 +358,7 @@ async function startServer() {
 
     // 9. Start HTTP server
     httpServer.listen(env.PORT, () => {
-      logger.info(`FlowTask Chat server running`, {
+      logger.info(`TaskChat server running`, {
         port: env.PORT,
         env: env.NODE_ENV,
         flowtaskEnabled: env.FLOWTASK_ENABLED,

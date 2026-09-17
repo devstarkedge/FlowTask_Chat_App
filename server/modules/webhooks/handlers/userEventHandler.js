@@ -67,17 +67,6 @@ export function registerUserEventHandlers() {
       await channelService.addMember(generalChannel._id, chatUser._id, undefined, wsId);
     }
 
-    // Add to department channel if applicable
-    if (user.department) {
-      const deptId = typeof user.department === 'string' ? user.department : user.department._id;
-      const deptName = typeof user.department === 'string' ? 'Department' : user.department.name;
-
-      if (deptId) {
-        const deptChannel = await channelService.getOrCreateDepartmentChannel(deptId, deptName, wsId);
-        await channelService.addMember(deptChannel._id, chatUser._id, undefined, wsId);
-      }
-    }
-
     // Post welcome in general
     if (generalChannel) {
       await messageService.sendSystemMessage(
@@ -163,21 +152,6 @@ export function registerUserEventHandlers() {
           if (oldChannel) {
             await channelService.removeMember(oldChannel._id, chatUser._id, 'system', wsId);
           }
-        }
-      }
-
-      // Add to new department channel
-      if (changes.department.new) {
-        const newDeptId = typeof changes.department.new === 'string'
-          ? changes.department.new
-          : changes.department.new._id;
-        const newDeptName = typeof changes.department.new === 'string'
-          ? 'Department'
-          : changes.department.new.name;
-
-        if (newDeptId) {
-          const newChannel = await channelService.getOrCreateDepartmentChannel(newDeptId, newDeptName, wsId);
-          await channelService.addMember(newChannel._id, chatUser._id, undefined, wsId);
         }
       }
     }
@@ -346,17 +320,6 @@ export function registerUserEventHandlers() {
         undefined,
         wsId,
       );
-    }
-
-    // Add to department channels
-    if (user.department) {
-      const deptId = typeof user.department === 'string' ? user.department : user.department._id;
-      const deptName = typeof user.department === 'string' ? 'Department' : user.department.name;
-
-      if (deptId) {
-        const deptChannel = await channelService.getOrCreateDepartmentChannel(deptId, deptName, wsId);
-        await channelService.addMember(deptChannel._id, chatUser._id, undefined, wsId);
-      }
     }
 
     // Add to role-specific channels

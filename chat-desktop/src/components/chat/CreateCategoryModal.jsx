@@ -175,7 +175,7 @@ export default function CreateCategoryModal({ onClose }) {
   const getDeptChannels = (dept) => {
     const targetDeptId = dept.externalId || dept._id;
     return channels.filter(c => {
-      if (c.isArchived) return false;
+      if (!isPersonalCategoryChannel(c)) return false;
       const isDepartmentChannel = c.flowTaskRef?.entityType === "department" && String(c.flowTaskRef?.entityId) === String(targetDeptId);
       const isProjectInDepartment = c.departmentRef?.departmentId && String(c.departmentRef.departmentId) === String(targetDeptId);
       return isDepartmentChannel || isProjectInDepartment;

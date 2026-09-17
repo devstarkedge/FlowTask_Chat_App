@@ -6,14 +6,14 @@ import userRepository from '../../users/user.repository.js';
 import Department from '../../categories/Department.model.js';
 import { emitToUser } from '../../../sockets/socketManager.js';
 import logger from '../../../utils/logger.js';
-import { FLOWTASK_EVENTS, SOCKET_EVENTS } from '../../../config/constants.js';
+import { CHANNEL_TYPES, FLOWTASK_EVENTS, SOCKET_EVENTS } from '../../../config/constants.js';
 import { requireWorkspaceId } from '../../../utils/webhookEventGuard.js';
 
 /**
  * Department & Team Event Handler — handles FlowTask department/team lifecycle events.
  *
  * Events:
- *   DEPARTMENT_CREATED  — Auto-create department channel
+ *   DEPARTMENT_CREATED  — Sync department directory only
  *   DEPARTMENT_UPDATED  — Update channel name/description
  *   DEPARTMENT_DELETED  — Archive department channel
  *   DEPARTMENT_MEMBER_ADDED — Add user to department channel
@@ -31,13 +31,13 @@ export function registerDepartmentTeamEventHandlers() {
   eventBus.register(FLOWTASK_EVENTS.DEPARTMENT_CREATED, async (payload) => {
     try {
       const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.DEPARTMENT_CREATED);
-      const { department, userId } = payload;
+      const { department } = payload;
       if (!wsId || !department) return;
 
       const deptId = department._id || department.id;
       const deptName = department.name || 'Unnamed Department';
 
-      const channel = await channelService.getOrCreateDepartmentChannel(deptId, deptName, wsId);
+      if (!deptId) return;
 
       // Sync Department to local collection
       await Department.findOneAndUpdate(
@@ -51,42 +51,10 @@ export function registerDepartmentTeamEventHandlers() {
         { upsert: true, new: true }
       );
 
-      // Broadcast channel:created so it appears in sidebar for relevant users
-      const populated = await channelRepository.findById(channel._id, { workspaceId: wsId });
-      if (populated) {
-        for (const member of populated.members || []) {
-          const uid = member.userId?._id?.toString() || member.userId?.toString();
-          if (uid) {
-            emitToUser(uid, SOCKET_EVENTS.CHANNEL_CREATED, {
-              channel: {
-                _id: populated._id,
-                name: populated.name,
-                slug: populated.slug,
-                type: populated.type,
-                visibility: populated.visibility,
-                isArchived: populated.isArchived,
-                systemManaged: populated.systemManaged,
-                departmentRef: populated.departmentRef,
-                adminOverrides: populated.adminOverrides,
-                flowTaskRef: populated.flowTaskRef,
-                memberCount: populated.memberCount || populated.members?.length,
-              },
-            }, wsId);
-          }
-        }
-      }
-
-      const creator = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-      await messageService.sendSystemMessage(
-        channel._id,
-        `🏢 Department channel created${creator ? ` by ${creator.name}` : ''}`,
-        undefined,
-        wsId,
-      );
-
-      logger.info('Department channel auto-created', { deptId, channelId: channel._id });
+      logger.info('Department synchronized without creating a channel', { deptId, workspaceId: wsId });
     } catch (err) {
       logger.error('DEPARTMENT_CREATED handler failed', { error: err.message, payload });
+      throw err;
     }
   });
 
@@ -158,7 +126,9 @@ export function registerDepartmentTeamEventHandlers() {
       if (!wsId || !departmentId || !memberId) return;
 
       const channel = await channelRepository.findByFlowTaskRef('department', departmentId, wsId);
-      if (!channel) return;
+      // Do not re-enroll users or emit channel:added for legacy generated
+      // department channels. Project access is synchronized separately.
+      if (!channel || channel.type === CHANNEL_TYPES.DEPARTMENT) return;
 
       const user = await userRepository.findByFlowTaskId(memberId, wsId);
       if (!user) return;

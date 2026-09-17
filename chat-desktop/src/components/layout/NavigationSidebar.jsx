@@ -42,6 +42,7 @@ import MoveToCategoryModal from "../chat/MoveToCategoryModal";
 import UserPickerModal from "../chat/UserPickerModal";
 import CategoryHeader from "./CategoryHeader";
 import CategoryList from "./CategoryList";
+import { isImplicitDepartmentChannel } from "../../utils/channelOrigin";
 import PreferencesModal from "../chat/PreferencesModal";
 import SetStatusModal from "../chat/SetStatusModal";
 import { formatDistanceToNowStrict } from "date-fns";
@@ -85,7 +86,7 @@ export default function NavigationSidebar({
   const location = useLocation();
   const { workspaceId } = useParams();
   const {
-    channels,
+    channels: storedChannels,
     categories,
     departments,
     activeChannelId,
@@ -93,6 +94,7 @@ export default function NavigationSidebar({
     unreads,
     createDM,
   } = useChannelStore();
+  const channels = useMemo(() => storedChannels.filter((channel) => !isImplicitDepartmentChannel(channel)), [storedChannels]);
   const { user, channelSync } = useAuthStore();
   const drafts = useDraftStore((s) => s.drafts);
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);

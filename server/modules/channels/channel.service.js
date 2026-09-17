@@ -22,7 +22,6 @@ import {
 import {
   slugify,
   projectChannelSlug,
-  departmentChannelSlug,
   teamChannelSlug,
   appendCollisionSuffix,
 } from "../../utils/slugify.js";
@@ -54,7 +53,7 @@ import {
  *
  * Key rules from spec §4.2:
  *   - Project channels auto-created on project.created webhook
- *   - Department channels auto-created on first need
+ *   - Departments organize channels without creating a channel of their own
  *   - DM channels created on first message between two users
  *   - System channels bootstrapped on first server boot
  */
@@ -204,52 +203,6 @@ class ChannelService {
       channelId: channel._id,
       slug,
       boardId,
-    });
-
-    return channel;
-  }
-
-  /**
-   * Create or get a department channel.
-   */
-  async getOrCreateDepartmentChannel(
-    departmentId,
-    departmentName,
-    workspaceId,
-  ) {
-    if (!workspaceId) {
-      throw new ValidationError(
-        "workspaceId is required to create a department channel",
-      );
-    }
-
-    const existing = await channelRepository.findByFlowTaskRef(
-      "department",
-      departmentId,
-      workspaceId,
-    );
-    if (existing) return existing;
-
-    let slug = departmentChannelSlug(departmentName, departmentId);
-    if (await channelRepository.slugExists(slug, workspaceId)) {
-      slug = appendCollisionSuffix(slug, departmentId);
-    }
-
-    const channel = await channelRepository.create({
-      name: departmentName,
-      slug,
-      type: CHANNEL_TYPES.DEPARTMENT,
-      flowTaskRef: { entityType: "department", entityId: departmentId },
-      visibility: CHANNEL_VISIBILITY.PRIVATE,
-      members: [],
-      memberCount: 0,
-      workspaceId,
-    });
-
-    logger.info("Department channel created", {
-      channelId: channel._id,
-      slug,
-      departmentId,
     });
 
     return channel;
@@ -1161,7 +1114,10 @@ class ChannelService {
       channels = memberChannels;
     }
 
-    channels = [...new Map(channels.map((channel) => [channel._id.toString(), channel])).values()];
+    // Legacy department channels were generated merely from department/user
+    // creation. Departments now organize real channels; they are not channels.
+    channels = [...new Map(channels.map((channel) => [channel._id.toString(), channel])).values()]
+      .filter((channel) => !(channel.type === CHANNEL_TYPES.DEPARTMENT && channel.flowTaskRef?.entityType === "department"));
 
     // Guests only see channels they are explicit members of
     if (isGuest) {
@@ -1217,7 +1173,10 @@ class ChannelService {
     const hiddenSlugs = Object.values(SYSTEM_CHANNELS)
       .filter((sc) => sc.uiHidden)
       .map((sc) => sc.slug);
-    const visibleChannels = all.filter((c) => !hiddenSlugs.includes(c.slug));
+    const visibleChannels = all.filter((c) =>
+      !hiddenSlugs.includes(c.slug)
+      && !(c.type === CHANNEL_TYPES.DEPARTMENT && c.flowTaskRef?.entityType === "department"),
+    );
 
     const decorated = await this._decorateDMChannels(visibleChannels, userId, workspaceId);
 

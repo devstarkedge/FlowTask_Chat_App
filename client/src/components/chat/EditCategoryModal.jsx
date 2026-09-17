@@ -49,7 +49,7 @@ function channelsForDepartment(channels, department) {
   const externalId = department?.externalId || idOf(department);
   if (!externalId) return [];
   return channels.filter((channel) => {
-    if (channel.isArchived || channel.type === 'dm' || channel.type === 'self') return false;
+    if (!isPersonalCategoryChannel(channel)) return false;
     const directDepartment = channel.flowTaskRef?.entityType === 'department'
       && String(channel.flowTaskRef?.entityId) === String(externalId);
     const projectDepartment = channel.departmentRef?.departmentId

@@ -1,5 +1,9 @@
 const FLOWTASK_CHANNEL_TYPES = new Set(['project', 'department', 'team']);
 
+export function isImplicitDepartmentChannel(channel) {
+  return channel?.type === 'department' && channel.flowTaskRef?.entityType === 'department';
+}
+
 export function isFlowTaskSyncedChannel(channel) {
   if (!channel) return false;
   if (channel.systemManaged) return true;
@@ -19,6 +23,6 @@ export function isChatAppChannel(channel) {
 // workspace-scoped channel endpoint can be grouped except private-message and
 // system channel types.
 export function isPersonalCategoryChannel(channel) {
-  if (!channel || channel.isArchived) return false;
+  if (!channel || channel.isArchived || isImplicitDepartmentChannel(channel)) return false;
   return !['dm', 'self', 'system'].includes(channel.type);
 }

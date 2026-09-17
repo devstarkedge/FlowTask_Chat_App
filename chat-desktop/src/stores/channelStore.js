@@ -228,10 +228,23 @@ export const useChannelStore = create(
   },
 
   removeChannel: (channelId) => {
-    set((state) => ({
-      channels: state.channels.filter((c) => c._id !== channelId),
-      activeChannelId: state.activeChannelId === channelId ? null : state.activeChannelId,
-    }))
+    const id = toStringId(channelId)
+    if (!id) return
+    set((state) => {
+      const membersByChannel = { ...state.membersByChannel }
+      const unreads = { ...state.unreads }
+      const lastReadByChannel = { ...state.lastReadByChannel }
+      delete membersByChannel[id]
+      delete unreads[id]
+      delete lastReadByChannel[id]
+      const wasActive = state.activeChannelId === id
+      return {
+        channels: state.channels.filter((c) => c._id !== id),
+        activeChannelId: wasActive ? null : state.activeChannelId,
+        membersByChannel, unreads, lastReadByChannel,
+        ...(wasActive ? { showInfoPanel: false } : {}),
+      }
+    })
   },
 
   addCategory: (category) => {

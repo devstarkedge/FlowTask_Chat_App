@@ -4,7 +4,7 @@ import channelService from '../../channels/channel.service.js';
 import messageService from '../../messages/message.service.js';
 import userRepository from '../../users/user.repository.js';
 import channelRepository from '../../channels/channel.repository.js';
-import { emitToChannel, emitToUser } from '../../../sockets/socketManager.js';
+import { emitToChannel, emitToUser, leaveChannelRoom } from '../../../sockets/socketManager.js';
 import {
   getAuthorizedProjectUserIds,
 } from '../../flowtask/projectAccess.service.js';
@@ -230,6 +230,7 @@ export function registerProjectEventHandlers() {
       logger.warn('project.updated: no channel found for board', { boardId: board._id });
       return;
     }
+    if (channel.archivedReason === 'project_deleted') return;
     const previouslyAuthorizedUserIds = await getAuthorizedProjectUserIds(channel, wsId);
 
     // Update channel metadata, including the values that drive the scoped
@@ -328,7 +329,7 @@ export function registerProjectEventHandlers() {
     const wsId = requireWorkspaceId(payload, FLOWTASK_EVENTS.PROJECT_DELETED);
     if (!wsId) return;
 
-    const { boardId, userId } = payload;
+    const { boardId } = payload;
     const normalizedBoardId = normalizeEntityId(boardId || payload.board || payload.board?._id);
 
     if (!normalizedBoardId) return;
@@ -337,24 +338,23 @@ export function registerProjectEventHandlers() {
     if (!channel) return;
     const authorizedUserIds = await getAuthorizedProjectUserIds(channel, wsId);
 
-    // Post notification before archiving
-    const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
-    await messageService.sendSystemMessage(
-      channel._id,
-      `🗑️ Project was deleted by ${user?.name || 'an admin'}. This channel is now archived.`,
-      undefined,
-      wsId,
-    );
-
-    // Archive the channel
-    await channelService.archiveChannel(channel._id, 'system', wsId);
+    // Keep the mapped record as a tombstone so delayed project-sync events
+    // cannot recreate it. Removal must not depend on posting a chat message.
+    await channelService.archiveChannel(channel._id, 'system', wsId, 'project_deleted');
     for (const recipientId of authorizedUserIds) {
+      emitToUser(
+        recipientId,
+        SOCKET_EVENTS.CHANNEL_REMOVED,
+        { workspaceId: wsId, channelId: channel._id.toString(), reason: 'project_deleted' },
+        wsId,
+      );
       emitToUser(
         recipientId,
         SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED,
         { workspaceId: wsId, channelId: channel._id.toString(), reason: 'project_deleted' },
         wsId,
       );
+      await leaveChannelRoom(recipientId, channel._id.toString(), wsId);
     }
 
     logger.info('project.deleted handled', { channelId: channel._id, boardId });

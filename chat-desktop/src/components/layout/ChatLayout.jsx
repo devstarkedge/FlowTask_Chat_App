@@ -82,6 +82,12 @@ import {
   FolderOpen,
   Eye,
   ExternalLink,
+  Minus,
+  Square,
+  Copy,
+  CircleHelp,
+  X,
+  Bell,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import DownloadsModalWrapper from "../modals/DownloadsModalWrapper";
@@ -130,10 +136,11 @@ const LAYOUT_STYLES = `
   grid-template-columns:
     calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
     auto
-    minmax(180px, 1fr);
+    minmax(180px, 1fr)
+    auto;
   align-items: center;
   gap: 12px;
-  padding: 0 14px 0 0;
+  padding: 0 12px 0 0;
   background: var(--bg-workspace-sidebar, var(--sidebar-bg-dark));
   flex-shrink: 0;
   position: relative;
@@ -144,7 +151,9 @@ const LAYOUT_STYLES = `
 .cl-topbar__nav-btn,
 .cl-topbar__workspace,
 .cl-topbar__search-wrap,
-.cl-topbar__action-btn {
+.cl-topbar__actions,
+.cl-topbar__action-btn,
+.cl-topbar__win-btn {
   -webkit-app-region: no-drag;
 }
 
@@ -1686,6 +1695,9 @@ export default function ChatLayout() {
         onOpenSearchResult={handleOpenSearchResult}
         onOpenResultsPage={openLocalSearchResultsPage}
         onOpenChange={setIsSearchOpen}
+        onOpenHelp={() => setShowShortcuts((s) => !s)}
+        onOpenNotifications={() => setShowNotifications((s) => !s)}
+        unreadNotifications={unreadNotifications}
       />
 
       <div className="flex-1 flex flex-row min-h-0 overflow-hidden">
@@ -1905,13 +1917,50 @@ function GlobalTopBar({
   onOpenSearchResult,
   onOpenResultsPage,
   onOpenChange,
+  onOpenHelp,
+  onOpenNotifications,
+  unreadNotifications = 0,
 }) {
   const navigate = useNavigate();
   const [workspaceModal, setWorkspaceModal] = useState(null);
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  useEffect(() => {
+    if (window.electronAPI?.isMaximized) {
+      window.electronAPI.isMaximized().then((max) => setIsMaximized(!!max));
+    }
+    if (window.electronAPI?.onMaximizedChange) {
+      const unsub = window.electronAPI.onMaximizedChange((max) => {
+        setIsMaximized(!!max);
+      });
+      return () => {
+        if (typeof unsub === "function") unsub();
+      };
+    }
+  }, []);
+
   const closeWorkspaceModal = () => setWorkspaceModal(null);
   const openJoinedWorkspace = (workspace) => {
     closeWorkspaceModal();
     if (workspace?._id) navigate(`/workspace/${workspace._id}`);
+  };
+
+  const handleMinimize = () => {
+    if (window.electronAPI?.minimize) {
+      window.electronAPI.minimize();
+    }
+  };
+
+  const handleMaximize = () => {
+    if (window.electronAPI?.maximize) {
+      window.electronAPI.maximize();
+    }
+  };
+
+  const handleClose = () => {
+    if (window.electronAPI?.close) {
+      window.electronAPI.close();
+    }
   };
 
   return (
@@ -1973,6 +2022,60 @@ function GlobalTopBar({
             onOpenResultsPage={onOpenResultsPage}
             onOpenChange={onOpenChange}
           />
+        </div>
+
+        <div className="cl-topbar__actions">
+          {onOpenNotifications && (
+            <button
+              className={`cl-topbar__action-btn ${unreadNotifications > 0 ? "has-notif" : ""}`}
+              onClick={onOpenNotifications}
+              title="Notifications"
+              aria-label="Notifications"
+            >
+              <Bell size={16} />
+              {unreadNotifications > 0 && (
+                <span className="cl-notif-badge">
+                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                </span>
+              )}
+            </button>
+          )}
+
+          <button
+            className="cl-topbar__action-btn cl-topbar__win-btn"
+            onClick={handleMinimize}
+            title="Minimize"
+            aria-label="Minimize"
+          >
+            <Minus size={15} />
+          </button>
+
+          <button
+            className="cl-topbar__action-btn cl-topbar__win-btn"
+            onClick={handleMaximize}
+            title={isMaximized ? "Restore" : "Maximize"}
+            aria-label={isMaximized ? "Restore" : "Maximize"}
+          >
+            {isMaximized ? <Copy size={14} /> : <Square size={14} />}
+          </button>
+
+          <button
+            className="cl-topbar__action-btn cl-topbar__win-btn"
+            onClick={onOpenHelp}
+            title="Help & Shortcuts"
+            aria-label="Help & Shortcuts"
+          >
+            <CircleHelp size={16} />
+          </button>
+
+          <button
+            className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__close-btn"
+            onClick={handleClose}
+            title="Close"
+            aria-label="Close"
+          >
+            <X size={16} />
+          </button>
         </div>
       </header>
 

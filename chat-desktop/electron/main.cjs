@@ -24,11 +24,6 @@ function createWindow() {
     title: 'TaskChat',
     icon: path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png'),
     titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#00000000',
-      symbolColor: '#ffffff',
-      height: 48,
-    },
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -45,6 +40,14 @@ function createWindow() {
     // In production, load the built React app
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+
+  // Notify renderer when window maximize state changes
+  mainWindow.on('maximize', () => {
+    mainWindow.webContents.send('window-maximized-change', true);
+  });
+  mainWindow.on('unmaximize', () => {
+    mainWindow.webContents.send('window-maximized-change', false);
+  });
 
   // Open external links in default browser instead of the Electron app
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -70,6 +73,33 @@ function createWindow() {
     mainWindow = null;
   });
 }
+
+// IPC handlers for window control buttons
+ipcMain.on('window-minimize', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  if (win) win.minimize();
+});
+
+ipcMain.on('window-maximize', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  if (win) {
+    if (win.isMaximized()) {
+      win.unmaximize();
+    } else {
+      win.maximize();
+    }
+  }
+});
+
+ipcMain.on('window-close', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  if (win) win.close();
+});
+
+ipcMain.handle('window-is-maximized', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  return win ? win.isMaximized() : false;
+});
 
 app.whenReady().then(() => {
   createWindow();

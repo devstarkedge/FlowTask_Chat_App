@@ -14,6 +14,7 @@ import { conversationPresence } from './conversationPresence'
 import { usePresenceStore } from '../stores/presenceStore'
 import { unreadManager } from './unreadManager'
 import logger from '../utils/logger'
+import { handleChannelRemoved } from './channelEvents'
 import { showDesktopNotification } from './desktopService'
 
 let socket = null
@@ -484,9 +485,7 @@ export function connectSocket() {
     }
   })
 
-  socket.on(SOCKET_EVENTS.CHANNEL_REMOVED, ({ channelId }) => {
-    useChannelStore.getState().removeChannel(channelId)
-  })
+  socket.on(SOCKET_EVENTS.CHANNEL_REMOVED, handleChannelRemoved)
 
   socket.on(SOCKET_EVENTS.CHANNEL_UPDATED, ({ channelId, updates }) => {
     const store = useChannelStore.getState()

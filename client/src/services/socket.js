@@ -14,6 +14,7 @@ import { conversationPresence } from './conversationPresence'
 import { usePresenceStore } from '../stores/presenceStore'
 import { unreadManager } from './unreadManager'
 import logger from '../utils/logger'
+import { handleChannelRemoved } from './channelEvents'
 
 let socket = null
 let _disconnectTime = 0   // timestamp when socket last disconnected
@@ -456,9 +457,7 @@ export function connectSocket() {
     }
   })
 
-  socket.on(SOCKET_EVENTS.CHANNEL_REMOVED, ({ channelId }) => {
-    useChannelStore.getState().removeChannel(channelId)
-  })
+  socket.on(SOCKET_EVENTS.CHANNEL_REMOVED, handleChannelRemoved)
 
   socket.on(SOCKET_EVENTS.CHANNEL_UPDATED, ({ channelId, updates }) => {
     const store = useChannelStore.getState()

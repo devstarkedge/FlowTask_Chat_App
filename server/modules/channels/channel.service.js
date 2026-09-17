@@ -95,6 +95,11 @@ class ChannelService {
       workspaceId,
     );
     if (existing) {
+      if (existing.archivedReason === "project_deleted") {
+        if (existing.$locals) existing.$locals.flowTaskCreated = false;
+        else existing.__flowTaskCreated = false;
+        return existing;
+      }
       const metadataNeedsUpdate =
         existing.flowTaskMetadata?.teamId !== flowTaskMetadata.teamId
         || existing.flowTaskMetadata?.sourceVisibility !== flowTaskMetadata.sourceVisibility;
@@ -1342,7 +1347,7 @@ class ChannelService {
     const channel = await channelRepository.findById(channelId, {
       workspaceId,
     });
-    if (!channel) {
+    if (!channel || channel.archivedReason === "project_deleted") {
       throw new NotFoundError("Channel not found");
     }
 
@@ -2096,7 +2101,7 @@ class ChannelService {
     const channel = await channelRepository.findById(channelId, {
       workspaceId,
     });
-    if (!channel) throw new NotFoundError("Channel not found");
+    if (!channel || channel.archivedReason === "project_deleted") throw new NotFoundError("Channel not found");
     if (channel.isArchived && updates.isArchived !== false) {
       throw new ForbiddenError("Channel is archived");
     }
@@ -2204,7 +2209,7 @@ class ChannelService {
   /**
    * Archive a channel.
    */
-  async archiveChannel(channelId, userId, workspaceId) {
+  async archiveChannel(channelId, userId, workspaceId, reason = "") {
     const channel = await channelRepository.findById(channelId, {
       workspaceId,
     });
@@ -2225,7 +2230,8 @@ class ChannelService {
       );
     }
 
-    const updated = await channelRepository.archive(channelId, "", workspaceId);
+    const archiveReason = channel.archivedReason === "project_deleted" ? "project_deleted" : reason;
+    const updated = await channelRepository.archive(channelId, archiveReason, workspaceId);
 
     emitToChannel(
       channelId.toString(),

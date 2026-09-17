@@ -44,7 +44,7 @@ export default function WorkspaceLayout() {
     if (!workspaceId) return
 
     // Don't validate until we've at least tried to load workspaces once
-    if (!hasInitialFetchRun && isLoading) return
+    if (!hasInitialFetchRun || isLoading) return
 
     if (!isLoading && hasInitialFetchRun) {
       const valid = workspaces.find((w) => w._id === workspaceId)

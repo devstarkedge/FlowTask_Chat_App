@@ -17,7 +17,9 @@ export const useLaterStore = create((set, get) => ({
     try {
       // Always fetch all to keep counts in background accurate across all status tabs
       const { data } = await savedMessageAPI.list(null);
-      const messages = data.data?.messages || [];
+      const messages = (data.data?.messages || []).filter(
+        m => m.type === 'standalone' || (m.messageId && !m.messageId.isDeleted)
+      );
       // Build saved message ID set for instant lookup in ChatPanel
       const ids = new Set(messages.map(m => m.messageId?._id).filter(Boolean));
       set({ savedMessages: messages, loading: false, savedMessageIds: ids });
@@ -285,9 +287,13 @@ export const useLaterStore = create((set, get) => ({
     set((state) => {
       const newIds = new Set(state.savedMessageIds);
       newIds.delete(messageId);
+      const removed = state.savedMessages.filter(m => (m.messageId?._id || m.messageId) === messageId);
       return {
-        savedMessages: state.savedMessages.filter((m) => m.messageId?._id !== messageId),
+        savedMessages: state.savedMessages.filter((m) => (m.messageId?._id || m.messageId) !== messageId),
         savedMessageIds: newIds,
+        activeSavedMessageId: removed.some(m => m._id === state.activeSavedMessageId)
+          ? null
+          : state.activeSavedMessageId,
       };
     });
   },

@@ -4,6 +4,7 @@ import { messageAPI, threadAPI, botAPI } from "../services/api";
 import { useAuthStore } from "./authStore";
 import { useChannelStore } from "./channelStore";
 import { useWorkspaceStore } from "./workspaceStore";
+import { useLaterStore } from "./laterStore";
 import toast from "react-hot-toast";
 import logger from "../utils/logger";
 import { CHAT_FEATURE_FLAGS } from "../config/featureFlags";
@@ -569,6 +570,7 @@ export const useChatStore = create((set, get) => ({
   deleteMessage: async (messageId, channelId) => {
     try {
       await messageAPI.delete(messageId);
+      useLaterStore.getState().removeSavedMessage(messageId);
       // Use soft delete locally to show tombstone
       get().softDeleteMessage(messageId, channelId);
     } catch {

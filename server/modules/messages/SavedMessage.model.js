@@ -178,12 +178,13 @@ savedMessageSchema.statics.getUserSaved = async function (userId, workspaceId, {
   const query = { userId, workspaceId };
   if (status) query.status = status;
   
-  return this.find(query)
+  const saved = await this.find(query)
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
     .populate({
       path: 'messageId',
+      match: { isDeleted: { $ne: true } },
       populate: [
         { path: 'authorId', select: 'name avatar' },
         { path: 'fileReferences', populate: { path: 'fileId' } }
@@ -191,6 +192,9 @@ savedMessageSchema.statics.getUserSaved = async function (userId, workspaceId, {
     })
     .populate('channelId', 'name type')
     .lean();
+
+  // Hide bookmarks left by older deletions while preserving standalone reminders.
+  return saved.filter(item => item.type === 'standalone' || item.messageId);
 };
 
 const SavedMessage = model('SavedMessage', savedMessageSchema);

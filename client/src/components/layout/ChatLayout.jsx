@@ -304,6 +304,12 @@ const LAYOUT_STYLES = `
   align-items: center;
   gap: 0;
 }
+.cl-welcome__logo {
+  display: block;
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+}
 .cl-welcome__orb {
   width: 72px; height: 72px;
   border-radius: 20px;
@@ -2043,7 +2049,13 @@ function WelcomeScreen({ onOpenMobileSidebar }) {
           Open sidebar
         </button>
         
-           <img src="./logo.png" alt="Logo" className="w-25 h-25 object-contain" />
+        <img
+          src={`${import.meta.env.BASE_URL}logo.png`}
+          alt="TaskChat logo"
+          width={100}
+          height={100}
+          className="cl-welcome__logo"
+        />
         
         <h2 className="cl-welcome__title">Welcome to TaskChat</h2>
         <p className="cl-welcome__desc">

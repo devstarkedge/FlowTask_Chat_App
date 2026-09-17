@@ -1,15 +1,18 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useId } from "react";
+import { createPortal } from "react-dom";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { X, LogIn, Lock, Info, Check } from 'lucide-react';
+import { X, LogIn, Info, Check } from 'lucide-react';
 import Loader from '../shared/Loader';
 import useRipple from "../../hooks/useRipple";
-import toast from "react-hot-toast";
 import "./custom-css/joinWorkspaceModal.css";
 
 export default function JoinWorkspaceModal({ onClose, onJoined }) {
   const { joinByInviteCode, isLoading } = useWorkspaceStore();
   const [inviteCode, setInviteCode] = useState("");
   const [joined, setJoined] = useState(false);
+  const titleId = useId();
+  const inputId = useId();
+  const helpId = useId();
 
   const inputRef = useRef(null);
   const [submitRef, triggerRipple] = useRipple();
@@ -39,13 +42,13 @@ export default function JoinWorkspaceModal({ onClose, onJoined }) {
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="modal-overlay px-4 sm:px-6"
+      className="jw-overlay"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       {/* ── Modal shell ── */}
-      <div role="dialog" aria-modal="true" className="jw-modal">
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="jw-modal">
         
         {/* ── Header ── */}
         <div className="jw-header">
@@ -68,66 +71,63 @@ export default function JoinWorkspaceModal({ onClose, onJoined }) {
             />
           ))}
 
-          <div className="flex items-center gap-4">
+          <div className="jw-heading">
             <div className="jw-icon-box">
               <LogIn size={16} />
             </div>
 
             <div>
-              <p className="jw-title">Join a workspace</p>
+              <h2 id={titleId} className="jw-title">Join a workspace</h2>
               <p className="jw-sub">Enter your invite code below</p>
             </div>
           </div>
 
-          <button onClick={onClose} className="jw-close">
+          <button type="button" onClick={onClose} className="jw-close" aria-label="Close join workspace dialog">
             <X size={14} />
           </button>
         </div>
 
         {/* ── Body ── */}
-        <div className="jw-body">
+        <form className="jw-body" onSubmit={handleSubmit}>
           
           {/* Info */}
-          <div className="jw-info">
+          <div id={helpId} className="jw-info">
             <Info size={14} />
-            <p className="text-sm text-secondary">
+            <p>
               Ask a workspace admin to share an invite code with you. Codes are
               case-sensitive.
             </p>
           </div>
 
           {/* Input */}
-          <div className="flex flex-col gap-2">
-            <label className="jw-label">Invite Code</label>
+          <div className="jw-field">
+            <label htmlFor={inputId} className="jw-label">Invite Code</label>
 
-            <div className="relative">
+            <div className="jw-input-wrapper">
               <input
                 ref={inputRef}
+                id={inputId}
+                aria-describedby={helpId}
                 value={inviteCode}
                 onChange={(e) => setInviteCode(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSubmit(e)}
                 placeholder="e.g. WS-A1B2-C3D4"
-                className="input-field pr-10"
+                className="jw-input"
               />
             </div>
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-3">
-            <button onClick={onClose} className="btn-ghost">
+          <div className="jw-actions">
+            <button type="button" onClick={onClose} className="jw-button jw-cancel">
               Cancel
             </button>
 
             <button
               ref={submitRef}
+              type="submit"
               disabled={!inviteCode.trim() || isLoading}
               onMouseDown={(e) => triggerRipple(e)}
-              onClick={handleSubmit}
-              className={`btn-primary flex items-center gap-2 jw-shimmer ${
-                (!inviteCode.trim() || isLoading)
-                  ? "opacity-50 cursor-not-allowed"
-                  : ""
-              }`}
+              className="jw-button jw-submit"
             >
               {isLoading ? (
                 <Loader size={14} className="jw-spin" />
@@ -141,8 +141,9 @@ export default function JoinWorkspaceModal({ onClose, onJoined }) {
             </button>
           </div>
 
-        </div>
+        </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

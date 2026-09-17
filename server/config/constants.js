@@ -329,6 +329,7 @@ export const SOCKET_EVENTS = Object.freeze({
 
   // Saved Messages
   SAVED_MESSAGE_ADDED: 'saved:message:added',
+  SAVED_MESSAGE_REMOVED: 'savedMessage:removed',
   SAVED_MESSAGE_STATUS_UPDATED: 'saved:message:status:updated',
 
   // Read Receipts

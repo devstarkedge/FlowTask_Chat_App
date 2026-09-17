@@ -8,6 +8,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 
 import env from './config/environment.js';
+import { createCorsOptions } from './config/cors.js';
 import { connectDatabase, disconnectDatabase, isDatabaseConnected, getDatabaseHealth, stopHealthCheck } from './config/database.js';
 import logger from './utils/logger.js';
 import { errorHandler, NotFoundError } from './middleware/errorHandler.js';
@@ -66,32 +67,7 @@ const effectiveOrigins = Array.isArray(env.CORS_ORIGINS)
   : [env.CORS_ORIGINS];
 logger.info('CORS: effective allowed origins', { origins: effectiveOrigins });
 
-const corsOptions = {
-  // Function-based origin: logs every rejection so you can see the exact
-  // mismatch in Render logs  →  Dashboard → Chat Backend → Logs
-  origin: (incomingOrigin, callback) => {
-    // Allow same-origin / server-to-server requests (no Origin header)
-    if (!incomingOrigin) return callback(null, true);
-    // Normalise the incoming origin exactly as we do our config (no trailing slash)
-    const normalized = incomingOrigin.replace(/\/+$/, '');
-    if (effectiveOrigins.includes(normalized)) {
-      callback(null, true);
-    } else {
-      logger.warn('CORS: blocked request from unlisted origin', {
-        incomingOrigin,
-        normalizedOrigin: normalized,
-        effectiveOrigins,
-        action: `Add "${normalized}" to CORS_ORIGINS in Render → Chat Backend → Environment, then redeploy`,
-      });
-      callback(null, false);
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Workspace-Id', 'X-FlowTask-Token'],
-  exposedHeaders: ['X-Total-Count', 'X-Page', 'X-Has-More'],
-  maxAge: 86400,
-};
+const corsOptions = createCorsOptions(effectiveOrigins, logger);
 
 // ─── Global Middleware ───────────────────────────────────────────────────────
 // CORS must be applied before Helmet and all routes — including an explicit

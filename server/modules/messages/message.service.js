@@ -21,6 +21,7 @@ import {
   ForbiddenError,
 } from '../../middleware/errorHandler.js';
 import FileReference from '../files/FileReference.model.js';
+import SavedMessage from './SavedMessage.model.js';
 import { getAttachmentPreview } from '../../utils/getNotificationPreview.js';
 
 /**
@@ -659,6 +660,16 @@ class MessageService {
     }
 
     await messageRepository.softDelete(messageId, userId, workspaceId);
+
+    // Clear every user's bookmark/reminder, including users outside the channel room.
+    const savedFilter = { messageId, workspaceId };
+    const savedMessages = await SavedMessage.find(savedFilter).select('userId').lean();
+    await SavedMessage.deleteMany(savedFilter);
+    for (const savedUserId of new Set(savedMessages.map(saved => saved.userId.toString()))) {
+      emitToUser(savedUserId, SOCKET_EVENTS.SAVED_MESSAGE_REMOVED, {
+        messageId: messageId.toString(),
+      }, workspaceId);
+    }
 
     // Resolve workspaceId: prefer message, then channel
     let wsId = message.workspaceId?.toString();

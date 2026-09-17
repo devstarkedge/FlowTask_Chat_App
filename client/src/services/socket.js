@@ -399,6 +399,7 @@ export function connectSocket() {
   })
 
   socket.on(SOCKET_EVENTS.MESSAGE_DELETE, ({ messageId, channelId, isDeleted }) => {
+    useLaterStore.getState().removeSavedMessage(messageId)
     if (isDeleted) {
       // Soft delete — render tombstone UI
       useChatStore.getState().softDeleteMessage(messageId, channelId)

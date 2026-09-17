@@ -81,6 +81,7 @@ const SOCKET_EVENTS = {
   CHANNEL_MEMBERS_UPDATED: 'channel:members:updated',
   CHANNEL_CREATED: 'channel:created',
   CHANNEL_LIST_INVALIDATED: 'channel:list:invalidated',
+  DEPARTMENT_LIST_UPDATED: 'department:list:updated',
   CHANNEL_SYNC_PROGRESS: 'channel-sync:progress',
   CHANNEL_SYNC_COMPLETED: 'channel-sync:completed',
   CHANNEL_SYNC_FAILED: 'channel-sync:failed',
@@ -598,6 +599,12 @@ export function connectSocket() {
   socket.on(SOCKET_EVENTS.CHANNEL_SYNC_FAILED, (payload) => {
     useAuthStore.getState().setChannelSync(payload)
     useChannelStore.getState().fetchChannels()
+  })
+
+  socket.on(SOCKET_EVENTS.DEPARTMENT_LIST_UPDATED, ({ workspaceId } = {}) => {
+    if (workspaceId && String(workspaceId) !== String(useWorkspaceStore.getState().activeWorkspaceId)) return
+    useChannelStore.getState().fetchDepartments()
+    useChannelStore.getState().fetchCategories()
   })
 
   socket.on(SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED, () => {

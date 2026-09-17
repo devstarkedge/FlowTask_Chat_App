@@ -201,23 +201,16 @@ export default function CreateCategoryModal({ onClose }) {
   ), [categories]);
   const hasDepartmentCategory = existingDepartmentIds.size > 0;
 
-  const missingDepartments = useMemo(() => departments.filter((department) => {
-    const isMissing = !existingDepartmentIds.has(String(department._id))
-      && !existingDepartmentIds.has(String(department.externalId));
-    if (!isMissing) return false;
-    return getDeptChannels(department).length > 0;
-  }), [departments, existingDepartmentIds, channels]);
-
-  const departmentsWithChannels = useMemo(
-    () => departments.filter((department) => getDeptChannels(department).length > 0),
-    [departments, channels],
-  );
+  const missingDepartments = useMemo(() => departments.filter((department) =>
+    !existingDepartmentIds.has(String(department._id))
+      && !existingDepartmentIds.has(String(department.externalId)),
+  ), [departments, existingDepartmentIds]);
 
   const allDepartmentsImported = !loadingDepts
-    && departmentsWithChannels.length > 0
+    && departments.length > 0
     && missingDepartments.length === 0;
   const hideDepartmentImportAction = categoryType === 'department'
-    && (allDepartmentsImported || (!loadingDepts && departmentsWithChannels.length === 0));
+    && (allDepartmentsImported || (!loadingDepts && departments.length === 0));
 
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -390,10 +383,10 @@ export default function CreateCategoryModal({ onClose }) {
               <div className="ccm-field-group">
                 <div style={{ padding: '16px', fontSize: '13px', color: 'var(--text-secondary, #616061)', background: 'var(--bg-secondary, #F8F8F8)', borderRadius: '8px', lineHeight: '1.5', marginBottom: '16px', border: '1px solid var(--border-primary, #EBECEF)' }}>
                   {allDepartmentsImported
-                    ? 'All FlowTask departments with channels are already available in your Categories.'
-                    : departmentsWithChannels.length === 0 && !loadingDepts
-                    ? 'No FlowTask departments currently have linked channels.'
-                    : <>Departments are synchronized automatically from FlowTask. Click <strong>"Import Departments"</strong> to import all missing departments and their associated channels.</>}
+                    ? 'All FlowTask departments are already available in your Categories.'
+                    : departments.length === 0 && !loadingDepts
+                    ? 'No FlowTask departments are available.'
+                    : <>Click <strong>"Import Departments"</strong> to enable department categories. New departments will appear automatically, with project channels listed beneath them as they are created.</>}
                 </div>
                 
                 <div className="ccm-label">FLOWTASK DEPARTMENTS</div>
@@ -409,10 +402,8 @@ export default function CreateCategoryModal({ onClose }) {
                     </div>
                   ) : departments.length === 0 ? (
                     <div style={{ padding: '16px', textAlign: 'center', color: '#616061', fontSize: '13px' }}>No FlowTask departments are available for your account.</div>
-                  ) : departmentsWithChannels.length === 0 ? (
-                    <div style={{ padding: '16px', textAlign: 'center', color: '#616061', fontSize: '13px' }}>No departments with channels are available to import.</div>
                   ) : (
-                    departmentsWithChannels.map(dept => {
+                    departments.map(dept => {
                       const isAlreadyImported = existingDepartmentIds.has(String(dept._id))
                         || existingDepartmentIds.has(String(dept.externalId));
                       const isExpanded = expandedDepts[dept._id];

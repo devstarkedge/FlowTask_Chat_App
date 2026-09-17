@@ -132,6 +132,8 @@ export default function CategoryList({
   return (
     <>
       {categories.map((category) => {
+        // A deleted FlowTask department populates as null.
+        if (category.type === "department" && !category.departmentId) return null;
         let categoryChannels = [];
         if (category.type === "department") {
           categoryChannels = channels.filter(c => {
@@ -145,10 +147,6 @@ export default function CategoryList({
           });
         } else {
           categoryChannels = channels.filter(c => isPersonalCategoryChannel(c) && category.channelIds?.includes(c._id));
-        }
-
-        if (category.type === "department" && categoryChannels.length === 0) {
-          return null;
         }
 
         return (

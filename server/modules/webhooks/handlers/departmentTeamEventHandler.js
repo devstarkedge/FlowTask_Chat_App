@@ -4,7 +4,7 @@ import channelRepository from '../../channels/channel.repository.js';
 import messageService from '../../messages/message.service.js';
 import userRepository from '../../users/user.repository.js';
 import Department from '../../categories/Department.model.js';
-import { emitToUser } from '../../../sockets/socketManager.js';
+import { emitToUser, emitToWorkspace } from '../../../sockets/socketManager.js';
 import logger from '../../../utils/logger.js';
 import { CHANNEL_TYPES, FLOWTASK_EVENTS, SOCKET_EVENTS } from '../../../config/constants.js';
 import { requireWorkspaceId } from '../../../utils/webhookEventGuard.js';
@@ -51,6 +51,7 @@ export function registerDepartmentTeamEventHandlers() {
         { upsert: true, new: true }
       );
 
+      emitToWorkspace(wsId, SOCKET_EVENTS.DEPARTMENT_LIST_UPDATED, { workspaceId: wsId });
       logger.info('Department synchronized without creating a channel', { deptId, workspaceId: wsId });
     } catch (err) {
       logger.error('DEPARTMENT_CREATED handler failed', { error: err.message, payload });
@@ -78,6 +79,7 @@ export function registerDepartmentTeamEventHandlers() {
           { workspaceId: wsId, externalId: deptId },
           { $set: deptUpdates }
         );
+        emitToWorkspace(wsId, SOCKET_EVENTS.DEPARTMENT_LIST_UPDATED, { workspaceId: wsId });
       }
 
       const channel = await channelRepository.findByFlowTaskRef('department', deptId, wsId);
@@ -103,6 +105,7 @@ export function registerDepartmentTeamEventHandlers() {
 
       // Delete from local Department collection
       await Department.findOneAndDelete({ workspaceId: wsId, externalId: departmentId });
+      emitToWorkspace(wsId, SOCKET_EVENTS.DEPARTMENT_LIST_UPDATED, { workspaceId: wsId });
 
       const channel = await channelRepository.findByFlowTaskRef('department', departmentId, wsId);
       if (!channel || channel.isArchived) return;

@@ -3,6 +3,7 @@ import Department from "./Department.model.js";
 import Channel from "../channels/Channel.model.js";
 import channelService from "../channels/channel.service.js";
 import { syncDepartments } from "./syncDepartmentsService.js";
+import { ensureDepartmentCategories } from "./departmentCategories.service.js";
 import asyncHandler from "../../middleware/asyncHandler.js";
 import { AppError, NotFoundError, ForbiddenError, BadRequestError, ConflictError } from "../../middleware/errorHandler.js";
 
@@ -60,9 +61,13 @@ export const getDepartments = asyncHandler(async (req, res, next) => {
 // @route   GET /api/categories
 // @access  Private
 export const getCategories = asyncHandler(async (req, res, next) => {
-  const categories = await Category.find({ workspaceId: req.workspaceId, createdBy: req.user._id })
+  const loadCategories = () => Category.find({ workspaceId: req.workspaceId, createdBy: req.user._id })
     .populate('departmentId')
     .sort({ order: 1 });
+  let categories = await loadCategories();
+  if (await ensureDepartmentCategories(req.workspaceId, req.user._id, categories)) {
+    categories = await loadCategories();
+  }
   res.status(200).json({ success: true, data: categories });
 });
 

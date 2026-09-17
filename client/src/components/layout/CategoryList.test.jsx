@@ -29,11 +29,17 @@ function props(channels, categories = [department]) {
 }
 
 describe('department channel sections', () => {
-  it('shows no section for a department without real channels', () => {
+  it('does not show a deleted department as an empty section', () => {
+    const { container } = render(<CategoryList {...props([], [{ ...department, departmentId: null }])} />);
+    expect(container.querySelector('.sidebar-section')).toBeNull();
+  });
+  it('keeps an empty department heading without creating a channel row', () => {
     const { container, rerender } = render(<CategoryList {...props([])} />);
-    expect(container.querySelector('.sidebar-section')).toBeNull();
+    expect(screen.getByText(/Engineering/)).not.toBeNull();
+    expect(container.querySelectorAll('.sidebar-item')).toHaveLength(0);
     rerender(<CategoryList {...props([generatedChannel])} />);
-    expect(container.querySelector('.sidebar-section')).toBeNull();
+    expect(screen.getByText(/Engineering/)).not.toBeNull();
+    expect(container.querySelectorAll('.sidebar-item')).toHaveLength(0);
   });
 
   it('adds a later project under the department with separate names and correct count', () => {
@@ -52,11 +58,13 @@ describe('department channel sections', () => {
     expect(screen.getByText('Team chat').closest('.sidebar-section-list')).not.toBeNull();
   });
 
-  it('hides the department when its last channel is archived or reassigned', () => {
+  it('keeps the heading when its last channel is archived or reassigned', () => {
     const { container, rerender } = render(<CategoryList {...props([{ ...projectChannel, isArchived: true }])} />);
-    expect(container.querySelector('.sidebar-section')).toBeNull();
+    expect(screen.getByText(/Engineering/)).not.toBeNull();
+    expect(container.querySelectorAll('.sidebar-item')).toHaveLength(0);
     rerender(<CategoryList {...props([{ ...projectChannel, departmentRef: { departmentId: 'other-dept' } }])} />);
-    expect(container.querySelector('.sidebar-section')).toBeNull();
+    expect(screen.getByText(/Engineering/)).not.toBeNull();
+    expect(container.querySelectorAll('.sidebar-item')).toHaveLength(0);
   });
 
   it('excludes generated department channels from custom categories too', () => {

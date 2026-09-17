@@ -289,6 +289,7 @@ export const SOCKET_EVENTS = Object.freeze({
   CHANNEL_REMOVED: 'channel:removed',
     CHANNEL_MEMBERS_UPDATED: 'channel:members:updated',
     CHANNEL_LIST_INVALIDATED: 'channel:list:invalidated',
+    DEPARTMENT_LIST_UPDATED: 'department:list:updated',
     CHANNEL_SYNC_PROGRESS: 'channel-sync:progress',
     CHANNEL_SYNC_COMPLETED: 'channel-sync:completed',
     CHANNEL_SYNC_FAILED: 'channel-sync:failed',

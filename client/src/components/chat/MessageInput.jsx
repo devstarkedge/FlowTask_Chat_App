@@ -1,25 +1,26 @@
 import { useState, useRef, useCallback, useEffect, memo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
-import { useChannelStore } from '../../stores/channelStore'
 import { useDraftStore } from '../../stores/draftStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { messageAPI } from '../../services/api'
 import { emitTypingStart, emitTypingStop } from '../../services/socket'
 import useDraftAutoSave from '../../hooks/useDraftAutoSave'
+import useMentions from '../../hooks/useMentions'
 import {
   Send, Paperclip, Smile, Bold, Italic, Underline, Strikethrough,
   Code, Braces, List, ListOrdered, Quote, Link, X, FileText,
   Loader2, Plus, AtSign, ChevronDown, Clock
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import EmojiPicker from './EmojiPicker'
+import EmojiPickerPortal from './EmojiPickerPortal'
 import MentionDropdown from './MentionDropdown'
 import RichTextEditor from './RichTextEditor'
 import ScheduleMessageModal from './ScheduleMessageModal'
+import GifPickerModal from './GifPickerModal'
 
 // ─── Toolbar Button ──────────────────────────────────────────────────────────
 
-const ToolbarButton = memo(function ToolbarButton({ icon: Icon, title, onClick, disabled, active, size = 15 }) {
+const ToolbarButton = memo(function ToolbarButton({ icon: Icon, title, onClick, disabled, active, size = 15, popup }) {
   return (
     <button
       type="button"
@@ -36,6 +37,8 @@ const ToolbarButton = memo(function ToolbarButton({ icon: Icon, title, onClick, 
       data-active={active || undefined}
       aria-label={title}
       aria-pressed={active}
+      aria-haspopup={popup}
+      aria-expanded={popup ? !!active : undefined}
     >
       <Icon size={size} />
     </button>
@@ -134,6 +137,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   const [uploadingFiles, setUploadingFiles] = useState([])
   const [isUploading, setIsUploading] = useState(false)
   const [showEmoji, setShowEmoji] = useState(false)
+  const [showGifModal, setShowGifModal] = useState(false)
   const [showLinkModal, setShowLinkModal] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
   const [showToolbar, setShowToolbar] = useState(true)
@@ -144,10 +148,6 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     bulletList: false, orderedList: false, blockquote: false, code: false, codeBlock: false,
   })
 
-  // Mention state
-  const [mentionType, setMentionType] = useState(null) // 'user' | 'channel' | null
-  const [mentionQuery, setMentionQuery] = useState('')
-
   const [showScheduleModal, setShowScheduleModal] = useState(false)
 
   const { sendMessage } = useChatStore()
@@ -157,6 +157,21 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   const fileInputRef = useRef(null)
   const containerRef = useRef(null)
   const typingTimeoutRef = useRef(null)
+  const gifAnchorRef = useRef(null)
+  const emojiAnchorRef = useRef(null)
+  const emojiSelectionRef = useRef(null)
+
+  const {
+    mentionType,
+    mentionPos,
+    activeIndex,
+    items: mentionItems,
+    detectMention,
+    selectMention,
+    closeMentions,
+    setActiveIndex,
+    handleMentionKeyDown,
+  } = useMentions({ channelId, editorRef })
 
   // ─── Draft Auto Save Hook ─────────────────────────────────────────
   const { saveDraftDebounced, restoreDraft, saveDraftLocal } = useDraftAutoSave(channelId, threadId, editorRef)
@@ -220,58 +235,6 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       emitTypingStop(channelId)
     }, 3000)
   }, [channelId])
-
-  // ─── Mention Detection ────────────────────────────────────────────────────
-
-  const detectMention = useCallback(() => {
-    const ed = editorRef.current
-    if (!ed) return
-
-    const textBefore = ed.getTextBeforeCursor()
-    if (!textBefore) {
-      setMentionType(null)
-      return
-    }
-
-    // Look backwards for @ or # trigger
-    const match = textBefore.match(/([@#])([^\s@#]*)$/)
-    if (match) {
-      const triggerChar = match[1]
-      const query = match[2]
-      setMentionType(triggerChar === '@' ? 'user' : 'channel')
-      setMentionQuery(query)
-    } else {
-      setMentionType(null)
-    }
-  }, [])
-
-  // ─── Mention Selection ────────────────────────────────────────────────────
-
-  const handleMentionSelect = useCallback((item) => {
-    const ed = editorRef.current
-    if (!ed) return
-
-    const tiptap = ed.getEditor()
-    if (!tiptap) return
-
-    // Delete the trigger character + query text
-    const textBefore = ed.getTextBeforeCursor()
-    const match = textBefore.match(/([@#])([^\s@#]*)$/)
-    if (match) {
-      const deleteCount = match[0].length
-      const { from } = tiptap.state.selection
-      tiptap
-        .chain()
-        .focus()
-        .deleteRange({ from: from - deleteCount, to: from })
-        .run()
-    }
-
-    // Insert mention node
-    ed.insertMention(item.id, item.name, mentionType === 'user' ? 'user' : 'channel')
-    setMentionType(null)
-    setMentionQuery('')
-  }, [mentionType])
 
   // ─── File Processing ─────────────────────────────────────────────────────
 
@@ -465,15 +428,12 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   // ─── Key Down for mention dropdown interception ───────────────────────────
 
   const handleKeyDown = useCallback((event) => {
-    // If mention dropdown is open, let it handle navigation keys
+    // Intercept mention selection before Enter reaches the send shortcut.
     if (mentionType) {
-      if (['ArrowUp', 'ArrowDown', 'Tab', 'Enter'].includes(event.key)) {
-        // MentionDropdown captures these via document listener
-        return false // let it propagate
-      }
+      if (handleMentionKeyDown(event)) return true
       if (event.key === 'Escape') {
         event.preventDefault()
-        setMentionType(null)
+        closeMentions()
         return true
       }
     }
@@ -482,10 +442,11 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     if (event.key === 'Escape') {
       if (showEmoji) { setShowEmoji(false); return true }
       if (showLinkModal) { setShowLinkModal(false); return true }
+      if (showGifModal) { setShowGifModal(false); return true }
     }
 
     return false
-  }, [mentionType, showEmoji, showLinkModal])
+  }, [mentionType, handleMentionKeyDown, closeMentions, showEmoji, showLinkModal, showGifModal])
 
   // ─── Formatting Actions ───────────────────────────────────────────────────
 
@@ -506,19 +467,63 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   // ─── Emoji Insert ─────────────────────────────────────────────────────────
 
   const insertEmoji = useCallback((emoji) => {
-    editorRef.current?.insertEmoji(emoji)
+    const editor = editorRef.current?.getEditor()
+    if (editor) {
+      editor.chain()
+        .insertContentAt(emojiSelectionRef.current || editor.state.selection, emoji)
+        .focus(undefined, { scrollIntoView: false })
+        .run()
+    }
     setShowEmoji(false)
   }, [])
 
   const handleEmojiToggle = useCallback(() => {
+    const editor = editorRef.current?.getEditor()
+    const selection = editor?.state.selection
+    emojiSelectionRef.current = selection ? { from: selection.from, to: selection.to } : null
+    if (showEmoji) editor?.commands.focus(undefined, { scrollIntoView: false })
     setShowEmoji((prev) => !prev)
     setShowLinkModal(false)
+    setShowGifModal(false)
+  }, [showEmoji])
+
+  const handleEmojiClose = useCallback((reason) => {
+    setShowEmoji(false)
+    if (reason === 'escape') {
+      editorRef.current?.getEditor()?.commands.focus(undefined, { scrollIntoView: false })
+    }
   }, [])
+
+  useEffect(() => {
+    setShowEmoji(false)
+    emojiSelectionRef.current = null
+    closeMentions()
+  }, [channelId, threadId, closeMentions])
 
   const handleLinkToggle = useCallback(() => {
     setShowLinkModal((prev) => !prev)
     setShowEmoji(false)
+    setShowGifModal(false)
   }, [])
+
+  const handleGifToggle = useCallback(() => {
+    setShowGifModal((prev) => !prev)
+    setShowEmoji(false)
+    setShowLinkModal(false)
+  }, [])
+
+  const handleGifSelect = useCallback(async (gifData) => {
+    setShowGifModal(false)
+    try {
+      await sendMessage(channelId, '', {
+        threadId,
+        contentType: 'gif',
+        gifMeta: gifData,
+      })
+    } catch {
+      // The store marks the failed message and displays the error.
+    }
+  }, [channelId, threadId, sendMessage])
 
   // ─── Auto focus ───────────────────────────────────────────────────────────
 
@@ -611,12 +616,12 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
         {/* Mention Dropdown */}
         {mentionType && (
           <MentionDropdown
-            type={mentionType}
-            query={mentionQuery}
-            channelId={channelId}
-            position={{ bottom: '100%', left: 0 }}
-            onSelect={handleMentionSelect}
-            onClose={() => setMentionType(null)}
+            items={mentionItems}
+            activeIndex={activeIndex}
+            position={mentionPos}
+            onSelect={selectMention}
+            onClose={closeMentions}
+            setActiveIndex={setActiveIndex}
           />
         )}
 
@@ -678,7 +683,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
             <ToolbarButton
               icon={Plus}
               title="Attach file"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => { setShowEmoji(false); fileInputRef.current?.click() }}
               disabled={isUploading}
               size={18}
             />
@@ -690,26 +695,49 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
               active={showToolbar}
               size={16}
             />
-            <div className="relative">
+            <div className="relative" ref={emojiAnchorRef}>
               <ToolbarButton
                 icon={Smile}
                 title="Emoji"
                 onClick={handleEmojiToggle}
                 active={showEmoji}
+                popup="dialog"
                 size={18}
               />
-              {showEmoji && (
-                <EmojiPicker
-                  onSelect={insertEmoji}
-                  onClose={() => setShowEmoji(false)}
-                  position="top"
-                />
-              )}
+              <EmojiPickerPortal
+                anchorRef={emojiAnchorRef}
+                isOpen={showEmoji}
+                onSelect={insertEmoji}
+                onClose={handleEmojiClose}
+                position="top-start"
+              />
             </div>
+
+            <div className="relative" ref={gifAnchorRef}>
+              <ToolbarButton
+                icon={({ size }) => (
+                  <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.6, fontWeight: 800 }}>
+                    GIF
+                  </div>
+                )}
+                title="GIF"
+                onClick={handleGifToggle}
+                active={showGifModal}
+                size={18}
+              />
+              <GifPickerModal
+                isOpen={showGifModal}
+                onClose={() => setShowGifModal(false)}
+                onSelectGif={handleGifSelect}
+                anchorRef={gifAnchorRef}
+              />
+            </div>
+
             <ToolbarButton
               icon={AtSign}
               title="Mention someone"
               onClick={() => {
+                setShowEmoji(false)
                 editorRef.current?.insertText('@')
                 detectMention()
               }}
@@ -720,7 +748,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
           {/* Right side — schedule + send */}
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setShowScheduleModal(true)}
+              onClick={() => { setShowEmoji(false); setShowScheduleModal(true) }}
               disabled={isDisabled}
               className="slack-schedule-btn"
               title="Schedule message"

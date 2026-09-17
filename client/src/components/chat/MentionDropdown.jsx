@@ -1,6 +1,6 @@
-import { useEffect, useRef, useCallback, memo } from 'react'
+import { useEffect, useRef, memo } from 'react'
 import { createPortal } from 'react-dom'
-import { Hash, User } from 'lucide-react'
+import { Hash } from 'lucide-react'
 
 /**
  * Reusable Mention Dropdown — renders a positioned list of mentionable items.
@@ -41,11 +41,11 @@ const MentionDropdown = memo(function MentionDropdown({
   useEffect(() => {
     const list = listRef.current
     if (!list) return
-    const activeEl = list.children[activeIndex]
+    const activeEl = list.querySelectorAll('.mention-dropdown-item')[activeIndex]
     if (activeEl) {
       activeEl.scrollIntoView({ block: 'nearest' })
     }
-  }, [activeIndex])
+  }, [activeIndex, items])
 
   if (!items || items.length === 0) return null
 
@@ -97,6 +97,8 @@ const MentionDropdown = memo(function MentionDropdown({
       {items.map((item, i) => (
         <button
           key={item.id}
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
           onClick={() => onSelect(item)}
           className="mention-dropdown-item"
           style={{

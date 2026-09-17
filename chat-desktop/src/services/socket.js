@@ -364,8 +364,13 @@ export function connectSocket() {
       if (!isFocused && !isMuted && desktopEnabled) {
         let bodyText = message.content || 'Sent an attachment'
         bodyText = bodyText.replace(/<[^>]*>?/gm, '') // Strip HTML tags
-        showDesktopNotification(message.author?.name || 'New Message', {
-          body: bodyText,
+        
+        const channel = useChannelStore.getState().channels?.find(c => c._id === channelId)
+        const authorName = message.authorId?.name || message.author?.name || 'New Message'
+        const title = channel && channel.type !== 'dm' ? `#${channel.name}` : authorName
+
+        showDesktopNotification(title, {
+          body: channel && channel.type !== 'dm' ? `${authorName}: ${bodyText}` : bodyText,
           data: { channelId }
         })
       }

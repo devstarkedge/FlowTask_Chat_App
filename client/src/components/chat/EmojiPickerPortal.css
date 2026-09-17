@@ -1,0 +1,9 @@
+.emoji-picker-portal .epr-body {
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+.emoji-picker-portal .epr-category-nav {
+  min-height: 0;
+  flex-shrink: 0;
+}

@@ -32,6 +32,11 @@ const MentionNode = Node.create({
     return [{ tag: 'span[data-mention-id]' }]
   },
 
+  renderText({ node }) {
+    const prefix = node.attrs.mentionType === 'channel' ? '#' : '@'
+    return `${prefix}${node.attrs.label || ''}`
+  },
+
   renderHTML({ node, HTMLAttributes }) {
     const prefix = node.attrs.mentionType === 'channel' ? '#' : '@'
     return [

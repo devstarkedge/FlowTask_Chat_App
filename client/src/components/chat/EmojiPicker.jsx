@@ -10,7 +10,7 @@ const EmojiPicker = lazy(() => import('emoji-picker-react'));
  * - Accessible keyboard navigation
  * - Slack-quality UI
  */
-export default function EmojiPickerComponent({ onSelect, onClose }) {
+export default function EmojiPickerComponent({ onSelect, onClose, width = 380, height = 450 }) {
   const pickerRef = useRef(null);
 
   // Get reactive theme from FlowTask store (NO window.matchMedia!)
@@ -19,12 +19,12 @@ export default function EmojiPickerComponent({ onSelect, onClose }) {
   // Map FlowTask theme to emoji-picker-react Theme enum
   const pickerTheme = effectiveTheme === 'dark' ? 'dark' : 'light';
 
-  // Escape key handler (outside click is handled by FloatingPortal)
+  // Outside pointers are handled by EmojiPickerPortal.
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose?.();
+        onClose?.('escape');
       }
     };
 
@@ -34,7 +34,7 @@ export default function EmojiPickerComponent({ onSelect, onClose }) {
 
   // Emoji selection handler
   const onEmojiClick = useCallback((emojiData) => {
-    onSelect(emojiData.emoji);
+    onSelect?.(emojiData.emoji);
     onClose?.();
   }, [onSelect, onClose]);
 
@@ -43,6 +43,9 @@ export default function EmojiPickerComponent({ onSelect, onClose }) {
       ref={pickerRef}
       className="emoji-picker-wrapper"
       style={{
+        width,
+        height,
+        boxSizing: 'border-box',
         borderRadius: 'var(--radius-xl, 12px)',
         overflow: 'hidden',
         boxShadow: 'var(--shadow-lg, 0 8px 24px rgba(0,0,0,0.3))',
@@ -55,8 +58,8 @@ export default function EmojiPickerComponent({ onSelect, onClose }) {
         fallback={
           <div
             style={{
-              width: 380,
-              height: 450,
+              width: '100%',
+              height: '100%',
               background: 'var(--bg-primary)',
               border: '1px solid var(--border-primary)',
               borderRadius: 'var(--radius-xl)',
@@ -68,8 +71,8 @@ export default function EmojiPickerComponent({ onSelect, onClose }) {
         <EmojiPicker
           onEmojiClick={onEmojiClick}
           autoFocusSearch={true}
-          width={380}
-          height={450}
+          width="100%"
+          height="100%"
           searchPlaceholder="Search emoji..."
           previewConfig={{
             showPreview: false

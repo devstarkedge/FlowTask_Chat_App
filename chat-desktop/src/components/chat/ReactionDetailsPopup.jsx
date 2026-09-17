@@ -1,26 +1,71 @@
 import { useMemo } from "react";
 import FloatingPortal from "./FloatingPortal";
 import { EmojiComponent } from "../shared/EmojiRenderer";
-import { Avatar } from "./MemberAvatarGroup";
-import { SmilePlus } from "lucide-react";
+
+const EMOJI_SHORTCODES = {
+  "🎉": "tada",
+  "🎂": "cake",
+  "👍": "thumbsup",
+  "👍🏻": "thumbsup",
+  "👍🏼": "thumbsup",
+  "👍🏽": "thumbsup",
+  "👍🏾": "thumbsup",
+  "👍🏿": "thumbsup",
+  "👎": "thumbsdown",
+  "❤️": "heart",
+  "♥️": "heart",
+  "😍": "heart_eyes",
+  "😂": "joy",
+  "🤣": "rofl",
+  "🔥": "fire",
+  "😊": "smile",
+  "🚀": "rocket",
+  "✨": "sparkles",
+  "🙏": "pray",
+  "👏": "clap",
+  "🙌": "raised_hands",
+  "💡": "bulb",
+  "💯": "100",
+  "👀": "eyes",
+  "🤔": "thinking_face",
+  "😎": "sunglasses",
+  "🥳": "partying_face",
+  "💩": "poop",
+  "✅": "check",
+  "❌": "x",
+};
+
+export function getEmojiShortcode(emoji) {
+  if (!emoji) return "emoji";
+  if (typeof emoji === "string" && emoji.startsWith(":") && emoji.endsWith(":")) {
+    return emoji.slice(1, -1);
+  }
+  return EMOJI_SHORTCODES[emoji] || emoji;
+}
+
+export function formatReactionUserNames(users, currentUserId) {
+  if (!users || users.length === 0) return "No reactions";
+  const currentUserIdStr = currentUserId != null ? String(currentUserId) : null;
+  const names = users.map((u) => {
+    const isMe = currentUserIdStr != null && String(u._id || u.userId) === currentUserIdStr;
+    return isMe ? "You" : u.name || u.displayName || u.email?.split("@")[0] || "Someone";
+  });
+
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+
+  const allButLast = names.slice(0, -1).join(", ");
+  const last = names[names.length - 1];
+  return `${allButLast}, and ${last}`;
+}
 
 /**
- * ReactionDetailsPopup — Slack-style popup shown when a user clicks on a
- * reaction pill. Displays the emoji, the reaction count, and the list of users
- * who reacted (avatar + name). The current viewer is always listed first and
- * highlighted as "You".
- *
- * Add/remove reaction is preserved through a toggle action in the popup footer,
- * plus an optional "add more reactions" shortcut that opens the emoji picker.
- *
- * Props:
- *   users          – array of resolved user objects: { _id, name, avatar, email }
- *   emoji, hasReacted, count
- *   currentUserId  – logged-in user _id
- *   onToggle       – (emoji) => void  add/remove toggle
- *   onAddMore      – () => void      opens emoji picker (optional)
- *   onClose        – () => void
- *   anchorRef      – ref to the reaction pill button for positioning
+ * ReactionDetailsPopup — Redesigned modern reaction details floating popup.
+ * Features:
+ *  - Prominent emoji displayed inside a crisp white square card at top.
+ *  - Names of users formatted naturally in readable format (e.g. "Nisha Devi, Akshit, and Anil Kumar").
+ *  - Bottom message showing "reacted with :shortcode:".
+ *  - Dark, soft rounded container with smooth shadow and downward tooltip arrow.
  */
 export default function ReactionDetailsPopup({
   users = [],
@@ -46,6 +91,12 @@ export default function ReactionDetailsPopup({
     return copy;
   }, [users, currentUserId]);
 
+  const shortcode = useMemo(() => getEmojiShortcode(emoji), [emoji]);
+  const formattedNames = useMemo(
+    () => formatReactionUserNames(sortedUsers, currentUserId),
+    [sortedUsers, currentUserId]
+  );
+
   const avoidElements = useMemo(() => {
     const messageRoot = anchorRef?.current?.closest?.('[id^="msg-"]');
     return [
@@ -62,136 +113,110 @@ export default function ReactionDetailsPopup({
       onClose={onClose}
       position="top-center"
       offset={10}
-      minWidth={264}
-      minHeight={112}
+      minWidth={200}
+      minHeight={140}
       avoidElements={avoidElements}
     >
+      <style>{`
+        @keyframes reactionPopupFadeIn {
+          0% { opacity: 0; transform: scale(0.95) translateY(4px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .reaction-details-popup-card {
+          animation: reactionPopupFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}</style>
       <div
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="reaction-details-popup-card"
         style={{
-          background: "var(--bg-primary, #1a1d21)",
-          border: "1px solid var(--border-primary, rgba(255,255,255,0.12))",
-          borderRadius: 12,
-          boxShadow: "0 10px 28px rgba(0,0,0,0.18)",
-          overflow: "hidden",
+          position: "relative",
+          background: "var(--bg-popover, #1e1f23)",
+          border: "1px solid var(--border-popover, rgba(255, 255, 255, 0.09))",
+          borderRadius: 14,
+          boxShadow: "0 12px 32px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.22)",
+          padding: "18px 20px 16px",
           display: "flex",
           flexDirection: "column",
+          alignItems: "center",
+          textAlign: "center",
+          maxWidth: 290,
+          width: "max-content",
+          minWidth: 200,
+          gap: 12,
+          userSelect: "none",
+          cursor: "default",
         }}
       >
-        {/* Header */}
+        {/* Top: Prominent emoji inside small white square card */}
         <div
           style={{
+            width: 60,
+            height: 60,
+            borderRadius: 12,
+            background: "#ffffff",
             display: "flex",
             alignItems: "center",
-            gap: 10,
-            padding: "10px 12px",
-            borderBottom: "1px solid var(--border-secondary, rgba(255,255,255,0.08))",
+            justifyContent: "center",
+            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+            flexShrink: 0,
           }}
         >
-          <EmojiComponent emoji={emoji} size={20} />
-          <span
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: "var(--text-primary, #d1d2d3)",
-            }}
-          >
-            {count != null ? count : sortedUsers.length}
-          </span>
-          <span style={{ flex: 1 }} />
-          {onAddMore && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddMore?.();
-              }}
-              title="Add more reactions"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 28,
-                height: 28,
-                borderRadius: 8,
-                border: "1px solid var(--border-secondary, rgba(255,255,255,0.12))",
-                background: "var(--bg-hover, rgba(255,255,255,0.05))",
-                cursor: "pointer",
-                color: "var(--text-secondary, #d1d2d3)",
-              }}
-            >
-              <SmilePlus size={16} />
-            </button>
-          )}
+          <EmojiComponent emoji={emoji} size={36} />
         </div>
 
-        {/* Users list */}
-        {sortedUsers.length === 0 ? (
-          <div
-            style={{
-              padding: "16px 14px",
-              fontSize: 13,
-              color: "var(--text-muted, #78787d)",
-            }}
-          >
-            No reactions
-          </div>
-        ) : (
-          <div style={{ maxHeight: 216, overflowY: "auto", padding: "4px 0" }}>
-            {sortedUsers.map((u) => {
-              const isMe =
-                currentUserId != null &&
-                String(u._id || u.userId) === String(currentUserId);
-              const name = isMe
-                ? "You"
-                : u.name || u.displayName || u.email || "Unknown user";
-              return (
-                <div
-                  key={String(u._id || u.userId) || name}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 9,
-                    minHeight: 38,
-                    padding: "6px 12px",
-                  }}
-                >
-                  <Avatar member={u} size={26} />
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: isMe ? 700 : 500,
-                      color: "var(--text-primary, #d1d2d3)",
-                    }}
-                  >
-                    {name}
-                  </span>
-                  {isMe && (
-                    <span
-                      style={{
-                        marginLeft: "auto",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: "var(--accent-primary, #1264a3)",
-                      }}
-                    >
-                      you
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Footer action — preserves add/remove reaction */}
+        {/* Middle: User names displayed naturally */}
         <div
           style={{
-            padding: 0,
+            fontSize: 14,
+            fontWeight: 700,
+            lineHeight: 1.4,
+            color: "var(--text-bright, #ffffff)",
+            maxHeight: 120,
+            overflowY: "auto",
+            padding: "0 2px",
+            wordBreak: "break-word",
+            textAlign: "center",
+            letterSpacing: "-0.01em",
           }}
         >
+          {formattedNames}
         </div>
+
+        {/* Bottom: Subtitle text e.g. "reacted with :tada:" */}
+        <div
+          style={{
+            fontSize: 12.5,
+            fontWeight: 500,
+            color: "var(--accent-link, #38bdf8)",
+            opacity: 0.92,
+            letterSpacing: "-0.01em",
+          }}
+        >
+          reacted with :{shortcode}:
+        </div>
+
+        {/* Downward Caret Tooltip Arrow */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: -7,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 0,
+            height: 0,
+            borderLeft: "7px solid transparent",
+            borderRight: "7px solid transparent",
+            borderTop: "7px solid var(--bg-popover, #1e1f23)",
+            zIndex: 2,
+          }}
+        />
       </div>
     </FloatingPortal>
   );
 }
+

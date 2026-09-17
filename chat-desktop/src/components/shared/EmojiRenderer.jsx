@@ -119,17 +119,12 @@ export function ReactionRenderer({
           e.stopPropagation();
           e.preventDefault();
           if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
-          // Clicking/tapping the pill shows who reacted (Slack-style). Toggling
-          // the viewer's own reaction is done from the popup footer, which
-          // works the same on touch devices (no hover required).
           if (hasReacted) {
-            // Only the viewer's highlighted reaction can be removed. The
-            // parent handler applies the optimistic store update and DELETE.
             toggle?.(emoji);
             setOpen(false);
             return;
           }
-          beginHover();
+          toggle?.(emoji);
         }}
         title={`${emoji} — ${count != null ? count : 0}`}
         className="reaction-renderer"
@@ -137,26 +132,35 @@ export function ReactionRenderer({
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: '4px',
-          padding: '3px 8px',
-          minHeight: '22px',
+          gap: '5px',
+          padding: '3px 9px',
+          minHeight: '24px',
           borderRadius: '20px',
-          fontSize: '11px',
+          fontSize: '12px',
           fontWeight: hasReacted ? '600' : '500',
           lineHeight: '1',
           cursor: 'pointer',
-          transition: 'all 0.15s ease',
+          transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)',
           background: hasReacted
-            ? "color-mix(in srgb, var(--accent-primary, var(--accent-color, #1264a3)) 12%, transparent)"
-            : "var(--bg-hover, rgba(255,255,255,0.05))",
-          border: `1px solid ${hasReacted ? "var(--accent-primary, var(--accent-color, #1264a3))" : "var(--border-secondary, rgba(255,255,255,0.12))"}`,
-          color: hasReacted ? "var(--accent-primary, var(--accent-color, #1264a3))" : "var(--text-primary, #d1d2d3)",
+            ? "color-mix(in srgb, var(--accent-primary, #1264a3) 14%, transparent)"
+            : "var(--bg-hover, rgba(255, 255, 255, 0.05))",
+          border: `1px solid ${
+            hasReacted
+              ? "var(--accent-primary, #1264a3)"
+              : "var(--border-secondary, rgba(255, 255, 255, 0.12))"
+          }`,
+          color: hasReacted
+            ? "var(--accent-primary, #1264a3)"
+            : "var(--text-primary, #d1d2d3)",
+          boxShadow: hasReacted ? '0 1px 3px rgba(0, 0, 0, 0.12)' : 'none',
           outline: 'none',
           userSelect: 'none',
         }}
       >
-        <EmojiComponent emoji={emoji} size={13} />
-        <span style={{ fontSize: '11px', display: 'inline-block', color: 'inherit' }}>{count}</span>
+        <EmojiComponent emoji={emoji} size={13.5} />
+        <span style={{ fontSize: '11.5px', fontWeight: hasReacted ? '700' : '500', display: 'inline-block', color: 'inherit' }}>
+          {count}
+        </span>
       </button>
 
       {open && (

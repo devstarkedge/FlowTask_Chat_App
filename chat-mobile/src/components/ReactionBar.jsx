@@ -40,6 +40,69 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
  *   onOpenPicker    – () => void  (opens emoji picker modal)
  *   colors          – theme colors
  */
+const EMOJI_SHORTCODES = {
+  "🎉": "tada",
+  "🎂": "cake",
+  "👍": "thumbsup",
+  "👍🏻": "thumbsup",
+  "👍🏼": "thumbsup",
+  "👍🏽": "thumbsup",
+  "👍🏾": "thumbsup",
+  "👍🏿": "thumbsup",
+  "👎": "thumbsdown",
+  "❤️": "heart",
+  "♥️": "heart",
+  "😍": "heart_eyes",
+  "😂": "joy",
+  "🤣": "rofl",
+  "🔥": "fire",
+  "😊": "smile",
+  "🚀": "rocket",
+  "✨": "sparkles",
+  "🙏": "pray",
+  "👏": "clap",
+  "🙌": "raised_hands",
+  "💡": "bulb",
+  "💯": "100",
+  "👀": "eyes",
+  "🤔": "thinking_face",
+  "😎": "sunglasses",
+  "🥳": "partying_face",
+  "💩": "poop",
+  "✅": "check",
+  "❌": "x",
+};
+
+function getEmojiShortcode(emoji) {
+  if (!emoji) return "emoji";
+  if (typeof emoji === "string" && emoji.startsWith(":") && emoji.endsWith(":")) {
+    return emoji.slice(1, -1);
+  }
+  return EMOJI_SHORTCODES[emoji] || emoji;
+}
+
+function formatReactionUserNames(users, currentUserId) {
+  if (!users || users.length === 0) return "No reactions";
+  const currentUserIdStr = currentUserId != null ? String(currentUserId) : null;
+  const names = users.map((u) => {
+    const isMe = currentUserIdStr != null && String(u._id || u.userId) === currentUserIdStr;
+    return isMe ? "You" : u.name || u.displayName || u.email?.split("@")[0] || "Someone";
+  });
+
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+
+  const allButLast = names.slice(0, -1).join(", ");
+  const last = names[names.length - 1];
+  return `${allButLast}, and ${last}`;
+}
+
+/**
+ * ReactionBar — renders emoji reaction pills below a message.
+ *
+ * Each pill shows: emoji + count. Highlighted if current user reacted.
+ * Tapping a pill toggles the reaction or long pressing opens a floating popup.
+ */
 const ReactionBar = React.memo(function ReactionBar({
   reactions = [],
   messageId,
@@ -50,12 +113,7 @@ const ReactionBar = React.memo(function ReactionBar({
   onOpenPicker,
   colors,
 }) {
-  // ─── Hooks must run unconditionally (Rules of Hooks) ─────────────────────
-  // All hooks are declared before any early return so the hook count never
-  // changes between renders — otherwise React throws "Rendered more hooks
-  // than during the previous render" when a message gains/loses reactions.
   const [detailsEmoji, setDetailsEmoji] = useState(null);
-  // Server-fetched users who reacted (populated), source of truth for the popup.
   const [serverUsers, setServerUsers] = useState(null);
 
   const memberById = useMemo(() => {
@@ -67,8 +125,6 @@ const ReactionBar = React.memo(function ReactionBar({
     return map;
   }, [channelMembers]);
 
-  // Derive the live reaction from `reactions` each render so the open popup
-  // reflects real-time socket updates (adds/removes) without manual refresh.
   const details = detailsEmoji != null
     ? (reactions.find((r) => r.emoji === detailsEmoji) || null)
     : null;
@@ -87,8 +143,6 @@ const ReactionBar = React.memo(function ReactionBar({
     return u;
   };
 
-  // Open the details popup and fetch the filtered reaction (users who reacted)
-  // from the server, so the list reflects the database, not local stale data.
   const openDetails = async (emoji) => {
     setDetailsEmoji(emoji);
     setServerUsers(null);
@@ -99,6 +153,24 @@ const ReactionBar = React.memo(function ReactionBar({
       setServerUsers(null);
     }
   };
+
+  const rawUserList = (serverUsers && serverUsers.length
+    ? serverUsers
+    : (details?.users && details.users.length
+      ? details.users
+      : (details?.userIds || []).map((id) => ({ _id: id })))
+  )
+    .map(resolveUser)
+    .filter(Boolean);
+
+  const sortedUserList = [...rawUserList].sort((a, b) => {
+    const aMe = String(a?._id ?? a?.userId) === String(currentUserId);
+    const bMe = String(b?._id ?? b?.userId) === String(currentUserId);
+    return (bMe ? 1 : 0) - (aMe ? 1 : 0);
+  });
+
+  const formattedNamesText = formatReactionUserNames(sortedUserList, currentUserId);
+  const currentShortcode = getEmojiShortcode(details?.emoji);
 
   return (
     <>
@@ -112,28 +184,29 @@ const ReactionBar = React.memo(function ReactionBar({
                 styles.pill,
                 {
                   backgroundColor: hasReacted
-                    ? (colors.primaryLight || colors.primary)
-                    : (colors.backgroundTertiary || colors.background),
+                    ? (colors.primaryLight || 'rgba(18, 100, 163, 0.15)')
+                    : (colors.backgroundTertiary || 'rgba(255, 255, 255, 0.06)'),
                   borderColor: hasReacted
-                    ? colors.primary
-                    : colors.border,
+                    ? (colors.primary || '#1264a3')
+                    : (colors.border || 'rgba(255, 255, 255, 0.12)'),
                 },
               ]}
               onPress={() => {
-                // Only the user who added the reaction may remove it. Other
-                // users cannot remove someone else's reaction by tapping the pill.
                 if (hasReacted) {
                   onRemoveReaction?.(r.emoji);
                   setDetailsEmoji(null);
+                } else {
+                  onAddReaction?.(r.emoji);
                 }
               }}
               onLongPress={() => openDetails(r.emoji)}
-              delayLongPress={350}
+              delayLongPress={250}
               activeOpacity={0.7}
             >
               <Text style={styles.emoji}>{r.emoji}</Text>
               <Text style={[styles.count, {
-                color: hasReacted ? colors.primary : colors.textSecondary,
+                color: hasReacted ? (colors.primary || '#1264a3') : colors.textSecondary,
+                fontWeight: hasReacted ? '700' : '500',
               }]}>
                 {r.count}
               </Text>
@@ -148,98 +221,37 @@ const ReactionBar = React.memo(function ReactionBar({
         animationType="fade"
         onRequestClose={() => setDetailsEmoji(null)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: colors.card || colors.background }]}>
-            {/* Header */}
-            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Text style={styles.modalEmoji}>{details?.emoji}</Text>
-              <Text style={[styles.modalCount, { color: colors.textPrimary }]}>
-                {details?.count}
-              </Text>
-              <Text style={{ flex: 1 }} />
-              <TouchableOpacity onPress={() => setDetailsEmoji(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <X size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setDetailsEmoji(null)}
+        >
+          <View style={styles.popupCardContainer}>
+            {/* White Square Emoji Box */}
+            <View style={styles.emojiCardSquare}>
+              <Text style={styles.modalEmojiLarge}>{details?.emoji}</Text>
             </View>
 
-            {/* Users list */}
-            <ScrollView style={{ maxHeight: verticalScale(300) }}>
-                            {(() => {
-                const list = (serverUsers && serverUsers.length
-                  ? serverUsers
-                  : (details?.users && details.users.length
-                    ? details.users
-                    : (details?.userIds || []).map((id) => ({ _id: id })))
-                )
-                  .map(resolveUser)
-                  .filter(Boolean);
-                const sorted = [...list].sort((a, b) => {
-                  const aMe = String(a?._id ?? a?.userId) === String(currentUserId);
-                  const bMe = String(b?._id ?? b?.userId) === String(currentUserId);
-                  return (bMe ? 1 : 0) - (aMe ? 1 : 0);
-                });
-                if (sorted.length === 0) {
-                  return (
-                    <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No reactions</Text>
-                  );
-                }
-                return sorted.map((u, i) => {
-                  const isMe = String(u?._id ?? u?.userId) === String(currentUserId);
-                  const name = isMe
-                    ? 'You'
-                    : (u?.name || u?.displayName || (u?.email ? u.email.split('@')[0] : '') || 'Unknown user');
-                  return (
-                    <View key={String(u?._id ?? u?.userId) || `${name}-${i}`} style={styles.userRow}>
-                      <AppAvatar member={u} size={32} />
-                      <Text
-                        numberOfLines={1}
-                        style={[styles.userName, {
-                          color: colors.textPrimary,
-                          fontWeight: isMe ? '700' : '500',
-                        }]}
-                      >
-                        {name}
-                      </Text>
-                      {isMe && (
-                        <Text style={[styles.youTag, { color: colors.primary }]}>you</Text>
-                      )}
-                    </View>
-                  );
-                });
-              })()}
+            {/* Formatted Natural User Names */}
+            <ScrollView
+              style={styles.namesScroll}
+              contentContainerStyle={{ alignItems: 'center' }}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.formattedNamesText}>
+                {formattedNamesText}
+              </Text>
             </ScrollView>
 
-            {/* Footer — preserves add/remove */}
-            <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
-              {/* <TouchableOpacity
-                style={[styles.footerBtn, { backgroundColor: colors.backgroundTertiary || colors.background, borderColor: colors.border }]}
-                activeOpacity={0.7}
-                onPress={() => {
-                  const emoji = details?.emoji;
-                  const hasReacted = details?.userIds?.some((id) => String(id) === String(currentUserId));
-                  if (hasReacted) onRemoveReaction?.(emoji);
-                  else onAddReaction?.(emoji);
-                  setDetailsEmoji(null);
-                }}
-              >
-                <Text style={[styles.footerBtnText, { color: colors.textPrimary }]}>
-                  {details?.userIds?.some((id) => String(id) === String(currentUserId))}
-                </Text>
-              </TouchableOpacity> */}
-              <TouchableOpacity
-                style={[styles.addIconBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]}
-                activeOpacity={0.7}
-                onPress={() => {
-                  setDetailsEmoji(null);
-                  onOpenPicker?.();
-                }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <SmilePlus size={18} color={colors.textOnPrimary || '#fff'} />
-              </TouchableOpacity>
-            </View>
+            {/* Subtitle text */}
+            <Text style={styles.subtitleText}>
+              reacted with :{currentShortcode}:
+            </Text>
+
+            {/* Downward Caret Arrow */}
+            <View style={styles.caretArrow} />
           </View>
-        </View>
+        </TouchableOpacity>
       </AccessibleModal>
     </>
   );
@@ -251,109 +263,97 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     marginTop: verticalScale(4),
-    gap: 4,
+    gap: scale(5),
   },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: scale(8),
+    paddingHorizontal: scale(9),
     paddingVertical: verticalScale(3),
-    borderRadius: moderateScale(12),
+    borderRadius: moderateScale(16),
     borderWidth: 1,
-    gap: 4,
+    gap: scale(5),
+    minHeight: verticalScale(24),
   },
   emoji: {
-    fontSize: moderateScale(14),
+    fontSize: moderateScale(13),
   },
   count: {
     fontSize: moderateScale(12),
-    fontWeight: '600',
-  },
-  addButton: {
-    width: scale(30),
-    height: verticalScale(26),
-    borderRadius: moderateScale(13),
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   modalOverlay: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     padding: scale(20),
   },
-  modalCard: {
+  popupCardContainer: {
+    position: 'relative',
+    backgroundColor: '#1e1f23',
+    borderRadius: moderateScale(16),
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.09)',
+    paddingHorizontal: scale(22),
+    paddingTop: verticalScale(20),
+    paddingBottom: verticalScale(18),
+    alignItems: 'center',
+    width: '85%',
+    maxWidth: moderateScale(290),
+    gap: verticalScale(12),
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+  },
+  emojiCardSquare: {
+    width: scale(60),
+    height: verticalScale(60),
+    borderRadius: moderateScale(12),
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  modalEmojiLarge: {
+    fontSize: moderateScale(34),
+  },
+  namesScroll: {
+    maxHeight: verticalScale(120),
     width: '100%',
-    maxWidth: moderateScale(360),
-    borderRadius: moderateScale(14),
-    overflow: 'hidden',
   },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: scale(8),
-    paddingHorizontal: scale(14),
-    paddingVertical: verticalScale(12),
-    borderBottomWidth: 1,
-  },
-  modalEmoji: {
-    fontSize: moderateScale(22),
-  },
-  modalCount: {
-    fontSize: moderateScale(16),
+  formattedNamesText: {
+    fontSize: moderateScale(14),
     fontWeight: '700',
-  },
-  emptyText: {
-    fontSize: moderateScale(14),
+    color: '#ffffff',
     textAlign: 'center',
-    paddingVertical: verticalScale(24),
+    lineHeight: moderateScale(20),
   },
-  userRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: scale(10),
-    paddingHorizontal: scale(14),
-    paddingVertical: verticalScale(8),
+  subtitleText: {
+    fontSize: moderateScale(13),
+    fontWeight: '500',
+    color: '#38bdf8',
+    textAlign: 'center',
   },
-  userName: {
-    fontSize: moderateScale(15),
-    flex: 1,
-  },
-  youTag: {
-    fontSize: moderateScale(12),
-    fontWeight: '600',
-    textTransform: 'lowercase',
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: scale(10),
-    paddingHorizontal: scale(10),
-    paddingVertical: verticalScale(10),
-    borderTopWidth: 1,
-  },
-  footerBtn: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: verticalScale(9),
-    borderRadius: moderateScale(9),
-    borderWidth: 1,
-  },
-  footerBtnText: {
-    fontSize: moderateScale(14),
-    fontWeight: '600',
-  },
-  addIconBtn: {
-    width: scale(38),
-    height: verticalScale(36),
-    borderRadius: moderateScale(18),
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  caretArrow: {
+    position: 'absolute',
+    bottom: verticalScale(-7),
+    alignSelf: 'center',
+    width: 0,
+    height: 0,
+    borderLeftWidth: scale(7),
+    borderRightWidth: scale(7),
+    borderTopWidth: verticalScale(7),
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#1e1f23',
   },
 });
 
 export default ReactionBar;
+

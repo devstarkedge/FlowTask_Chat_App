@@ -134,9 +134,9 @@ const LAYOUT_STYLES = `
   height: 48px;
   display: grid;
   grid-template-columns:
-    calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
+    minmax(0, auto)
     auto
-    minmax(180px, 1fr)
+    minmax(0, 1fr)
     auto;
   align-items: center;
   gap: 12px;
@@ -145,6 +145,8 @@ const LAYOUT_STYLES = `
   flex-shrink: 0;
   position: relative;
   z-index: 100;
+  box-sizing: border-box;
+  overflow: hidden;
   -webkit-app-region: drag;
 }
 
@@ -153,7 +155,8 @@ const LAYOUT_STYLES = `
 .cl-topbar__search-wrap,
 .cl-topbar__actions,
 .cl-topbar__action-btn,
-.cl-topbar__win-btn {
+.cl-topbar__win-btn,
+.cl-topbar__window-controls {
   -webkit-app-region: no-drag;
 }
 
@@ -163,10 +166,12 @@ const LAYOUT_STYLES = `
   align-self: stretch;
   display: flex;
   align-items: center;
+  overflow: hidden;
 }
 
 .cl-topbar__workspace .wss-root {
   min-width: 0;
+  overflow: hidden;
 }
 
 .cl-topbar__workspace .wss-trigger {
@@ -175,18 +180,25 @@ const LAYOUT_STYLES = `
   grid-template-columns: var(--workspace-sidebar-width) minmax(0, 1fr) auto;
   gap: 0;
   padding: 4px 8px 4px 0;
+  min-width: 0;
 }
 
 .cl-topbar__workspace .wss-trigger__avatar-wrap {
   justify-self: center;
+  flex-shrink: 0;
 }
 
 .cl-topbar__workspace .wss-trigger__text {
   padding-left: 14px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .cl-topbar__workspace .wss-trigger__name {
   max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cl-topbar__workspace .wss-menu {
@@ -198,6 +210,7 @@ const LAYOUT_STYLES = `
   display: flex;
   align-items: center;
   gap: 2px;
+  flex-shrink: 0;
 }
 .cl-topbar__nav-btn {
   width: 30px; height: 30px;
@@ -206,6 +219,7 @@ const LAYOUT_STYLES = `
   color: var(--sidebar-text-dim, var(--text-muted));
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
+  flex-shrink: 0;
   transition: background 140ms ease, color 140ms ease, transform 160ms cubic-bezier(0.34,1.56,0.64,1);
 }
 .cl-topbar__nav-btn:hover {
@@ -217,7 +231,9 @@ const LAYOUT_STYLES = `
 
 .cl-topbar__search-wrap {
   flex: 1;
+  min-width: 0;
   max-width: 640px;
+  overflow: hidden;
 }
 
 .cl-topbar__actions {
@@ -225,7 +241,20 @@ const LAYOUT_STYLES = `
   align-items: center;
   gap: 4px;
   justify-content: flex-end;
+  flex-shrink: 0;
+  margin-left: auto;
+  position: relative;
+  z-index: 10;
 }
+
+.cl-topbar__window-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
 .cl-topbar__action-btn {
   position: relative;
   width: 34px; height: 34px;
@@ -234,6 +263,7 @@ const LAYOUT_STYLES = `
   color: var(--sidebar-text-dim, var(--text-secondary));
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
+  flex-shrink: 0;
   transition: background 140ms ease, color 140ms ease, transform 160ms cubic-bezier(0.34,1.56,0.64,1);
 }
 .cl-topbar__action-btn:hover {
@@ -245,10 +275,8 @@ const LAYOUT_STYLES = `
 
 @media (max-width: 1024px) {
   .cl-topbar {
-    grid-template-columns:
-      calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
-      auto
-      minmax(160px, 1fr);
+    grid-template-columns: minmax(0, auto) auto minmax(0, 1fr) auto;
+    gap: 8px;
   }
 }
 
@@ -262,7 +290,13 @@ const LAYOUT_STYLES = `
     display: none;
   }
   .cl-topbar__workspace .wss-trigger__name {
-    max-width: 140px;
+    max-width: 120px;
+  }
+}
+
+@media (max-width: 640px) {
+  .global-search__kbd {
+    display: none !important;
   }
 }
 
@@ -2042,24 +2076,6 @@ function GlobalTopBar({
           )}
 
           <button
-            className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__window-control"
-            onClick={handleMinimize}
-            title="Minimize"
-            aria-label="Minimize"
-          >
-            <Minus size={15} />
-          </button>
-
-          <button
-            className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__window-control"
-            onClick={handleMaximize}
-            title={isMaximized ? "Restore" : "Maximize"}
-            aria-label={isMaximized ? "Restore" : "Maximize"}
-          >
-            {isMaximized ? <Copy size={14} /> : <Square size={14} />}
-          </button>
-
-          <button
             className="cl-topbar__action-btn cl-topbar__win-btn"
             onClick={onOpenHelp}
             title="Help & Shortcuts"
@@ -2068,14 +2084,34 @@ function GlobalTopBar({
             <CircleHelp size={16} />
           </button>
 
-          <button
-            className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__close-btn cl-topbar__window-control"
-            onClick={handleClose}
-            title="Close"
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
+          <div className="cl-topbar__window-controls">
+            <button
+              className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__window-control"
+              onClick={handleMinimize}
+              title="Minimize"
+              aria-label="Minimize"
+            >
+              <Minus size={15} />
+            </button>
+
+            <button
+              className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__window-control"
+              onClick={handleMaximize}
+              title={isMaximized ? "Restore" : "Maximize"}
+              aria-label={isMaximized ? "Restore" : "Maximize"}
+            >
+              {isMaximized ? <Copy size={14} /> : <Square size={14} />}
+            </button>
+
+            <button
+              className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__close-btn cl-topbar__window-control"
+              onClick={handleClose}
+              title="Close"
+              aria-label="Close"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
       </header>
 

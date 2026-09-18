@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../../hooks/useLiveProfileData';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { File, FileText, Search, FileImage, FileVideo, X, ChevronDown, Files, Hash, MessageSquare } from 'lucide-react';
 import Loader from '../../shared/Loader';
@@ -635,6 +636,7 @@ function SkeletonRow({ index = 0 }) {
 }
 
 function FileRow({ file, isSelected, onClick, onKeyDown, index }) {
+  file = useLiveProfileData(file);
   const kind = getFileKind(file.mimeType);
   const ext = getFileExt(file.fileName);
   const isImage = kind === "image";

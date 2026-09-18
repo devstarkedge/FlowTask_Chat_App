@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -56,6 +57,7 @@ const STATUS_META = {
 };
 
 export default function ProfileSidePanel({ user, onClose }) {
+  user = useLiveProfileData(user);
   const navigate = useNavigate();
   const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const currentUser = useAuthStore((s) => s.user);

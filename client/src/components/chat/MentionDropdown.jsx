@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useRef, memo } from 'react'
 import { createPortal } from 'react-dom'
 import { Hash } from 'lucide-react'
@@ -24,6 +25,7 @@ const MentionDropdown = memo(function MentionDropdown({
   onClose,
   setActiveIndex,
 }) {
+  items = useLiveProfileData(items);
   const listRef = useRef(null)
 
   // Close on click outside

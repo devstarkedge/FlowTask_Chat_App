@@ -115,7 +115,12 @@ export default function FloatingPortal({
 
     // Reposition on resize/scroll
     const handleResize = () => calculatePosition();
-    const handleScroll = () => calculatePosition();
+    const handleScroll = (e) => {
+      if (portalRef.current && e?.target && portalRef.current.contains(e.target)) {
+        return;
+      }
+      calculatePosition();
+    };
 
     window.addEventListener('resize', handleResize);
     window.addEventListener('scroll', handleScroll, true);

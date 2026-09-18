@@ -104,8 +104,8 @@ function flushChannelPersists() {
   pendingPersistByChannel.clear();
   persistTimer = null;
 
-  for (const [channelId, messages] of entries) {
-    void saveChannelMessagesToCache(channelId, messages);
+  for (const [channelId, entry] of entries) {
+    void saveChannelMessagesToCache(channelId, entry.messages, entry.workspaceId);
   }
 }
 
@@ -115,7 +115,7 @@ function scheduleChannelPersist(channelId, messages) {
 
   pendingPersistByChannel.set(
     channelId,
-    Array.isArray(messages) ? messages : [],
+    { messages: Array.isArray(messages) ? messages : [], workspaceId: useWorkspaceStore.getState().activeWorkspaceId },
   );
 
   if (persistTimer) return;

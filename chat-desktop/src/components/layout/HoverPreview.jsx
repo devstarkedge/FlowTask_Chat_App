@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -92,7 +93,8 @@ export default function HoverPreview({
   const navigate = useNavigate()
   const location = useLocation()
   const { workspaceId } = useParams()
-  const channels = useChannelStore((s) => s.channels)
+  const storedChannels = useChannelStore((s) => s.channels)
+  const channels = useLiveProfileData(storedChannels)
   const unreads = useChannelStore((s) => s.unreads)
   const activeChannelId = useChannelStore((s) => s.activeChannelId)
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel)
@@ -248,7 +250,7 @@ export default function HoverPreview({
         
         // Extract DM participant names and filter out current user
         let displayName = channel.name
-        if (channel.dmParticipantNames && Array.isArray(channel.dmParticipantNames)) {
+        if (!channel.dmRecipientId && channel.dmParticipantNames && Array.isArray(channel.dmParticipantNames)) {
           const otherNames = channel.dmParticipantNames.filter(name => {
             const userName = user?.name || ''
             return name !== userName
@@ -256,7 +258,7 @@ export default function HoverPreview({
           if (otherNames.length > 0) {
             displayName = otherNames.join(', ')
           }
-        } else if (channel.name && channel.name.includes(',')) {
+        } else if (!channel.dmRecipientId && channel.name && channel.name.includes(',')) {
           // Fallback: parse comma-separated names
           const names = channel.name.split(',').map(n => n.trim())
           const userName = user?.name || ''

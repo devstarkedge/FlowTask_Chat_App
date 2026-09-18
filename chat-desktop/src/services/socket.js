@@ -1,3 +1,4 @@
+import { authAPI } from './api'
 import { io } from 'socket.io-client'
 import { queryClient } from '../queries/queryClient'
 import { useAuthStore } from '../stores/authStore'
@@ -15,6 +16,8 @@ import { usePresenceStore } from '../stores/presenceStore'
 import { unreadManager } from './unreadManager'
 import logger from '../utils/logger'
 import { handleChannelRemoved } from './channelEvents'
+import { handleUserProfileUpdated } from './userProfileEvents'
+import { useUserProfileStore } from '../stores/userProfileStore'
 import { showDesktopNotification } from './desktopService'
 
 let socket = null
@@ -126,7 +129,7 @@ const SOCKET_EVENTS = {
 
   // User & Role Sync
   USER_ROLE_UPDATED: 'user:role_updated',
-  USER_PROFILE_UPDATED: 'user:profile_updated',
+  USER_PROFILE_UPDATED: 'user:profile:updated',
   WORKSPACE_MEMBER_UPDATED: 'workspace:member_updated',
   PERMISSIONS_UPDATED: 'permissions:updated',
 
@@ -176,6 +179,13 @@ export function connectSocket() {
 
 
   socket.on('connect', () => {
+    useUserProfileStore.getState().clearProfiles()
+    useWorkspaceStore.getState().fetchMembers()
+    authAPI.me().then(({ data }) => {
+      const currentUser = data.data.user || data.data
+      useAuthStore.setState({ user: currentUser })
+    }).catch((error) => logger.warn('Profile refresh on reconnect failed', { error: error.message }))
+
     logger.log('[Socket] Connected:', socket.id)
     useChatStore.getState().setConnectionStatus('connected')
 
@@ -730,24 +740,7 @@ export function connectSocket() {
   })
 
   // ─── User Profile Updated Events ────────────────────────────────────
-  socket.on(SOCKET_EVENTS.USER_PROFILE_UPDATED, ({ userId, updates, workspaceId }) => {
-    const currentUserId = useAuthStore.getState().user?._id
-    
-    if (userId === currentUserId) {
-      // Update authStore user object
-      const currentUser = useAuthStore.getState().user
-      if (currentUser) {
-        useAuthStore.setState({
-          user: { ...currentUser, ...updates }
-        })
-      }
-    }
-    
-    // Update workspaceStore members (other users may see this user in member list)
-    useWorkspaceStore.getState().updateMemberProfile(userId, updates)
-    
-    logger.info('[Socket] User profile updated', { userId, fields: Object.keys(updates || {}) })
-  })
+  socket.on(SOCKET_EVENTS.USER_PROFILE_UPDATED, handleUserProfileUpdated)
 
   // ─── Unread Events ──────────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.UNREAD_UPDATED, ({ channelId, unreadCount }) => {

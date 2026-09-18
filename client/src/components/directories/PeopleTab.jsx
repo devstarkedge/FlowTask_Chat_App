@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useEffect, useRef, useCallback, forwardRef, useMemo } from 'react'
 import { Search, UserPlus, ChevronDown, X, Users, Shield, Clock } from 'lucide-react'
 import { VirtuosoGrid } from 'react-virtuoso'
@@ -23,7 +24,8 @@ export default function PeopleTab() {
   const { activeWorkspaceId, members } = useWorkspaceStore()
   const { isMobile, isTablet } = useResponsive()
 
-  const [users, setUsers]       = useState([])
+  const [storedUsers, setUsers] = useState([]);
+  const users = useLiveProfileData(storedUsers);
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
   const [sort, setSort]         = useState('recommended')
@@ -228,6 +230,7 @@ export default function PeopleTab() {
 }
 
 function PersonCard({ person, currentUserId, index }) {
+  person = useLiveProfileData(person);
   const isCurrentUser =
     person._id === currentUserId || person.userId === currentUserId
   const isPending = person.isPendingInvite === true

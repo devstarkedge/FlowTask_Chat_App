@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../../hooks/useLiveProfileData';
 import { useState, useRef, useEffect } from "react";
 import { Check, MessageSquarePlus, X, Reply, Clock } from "lucide-react";
 import { Avatar } from "../../chat/MemberAvatarGroup";
@@ -35,6 +36,7 @@ export default function CommentThreadSidebar({
   onReply,
   onCreateDocumentComment,
 }) {
+  comments = useLiveProfileData(comments);
   const [replyByComment, setReplyByComment] = useState({});
   const [newComment, setNewComment] = useState("");
   const listEndRef = useRef(null);

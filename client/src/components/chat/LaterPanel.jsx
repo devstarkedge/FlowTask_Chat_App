@@ -1,3 +1,5 @@
+import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useState } from "react";
 import {
   Clock,
@@ -89,9 +91,11 @@ function SavedMessageCard({
   onDelete,
   isActive,
 }) {
+  saved = useLiveProfileData(saved);
+  const renderMentions = useLiveMentionRenderer();
   const msg = saved.messageId;
   const isStandalone = saved.type === "standalone";
-  const author = msg?.senderSnapshot || msg?.authorId || {};
+  const author = (msg?.authorId?.name ? msg.authorId : msg?.senderSnapshot) || {};
   const channel = saved.channelId || {};
   const targetId = isStandalone ? saved._id : msg?._id;
 
@@ -168,7 +172,7 @@ function SavedMessageCard({
                 <div className="lp-item__preview">
                   {msg?.htmlContent ? (
                     <div 
-                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.htmlContent) }} 
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(renderMentions(msg.htmlContent)) }}
                       className="lp-item__rich-text"
                       style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}
                     />

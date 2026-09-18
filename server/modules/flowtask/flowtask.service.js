@@ -192,7 +192,7 @@ class FlowTaskService {
    * @returns {Promise<object>} User object
    */
   async getCurrentUser(token) {
-    const result = await this.get('/api/auth/me', token);
+    const result = await this.get('/api/auth/me', token, { useCache: false });
     return result.data || result;
   }
 
@@ -364,6 +364,17 @@ class FlowTaskService {
   clearCache() {
     cache.clear();
     logger.info('FlowTask API cache cleared');
+  }
+
+  invalidateUserProfile(userId) {
+    const containsUser = (value) => {
+      if (!value || typeof value !== 'object') return false;
+      if (String(value._id || value.id || '') === userId) return true;
+      return Object.values(value).some(containsUser);
+    };
+    for (const [key, entry] of cache) {
+      if (containsUser(entry.data)) cache.delete(key);
+    }
   }
 
   /**

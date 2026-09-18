@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import { ROLE_CFG } from "./WorkspaceSettingsModal";
@@ -19,6 +20,7 @@ export default function MembersTab({
   navigation,
   workspace,
 }) {
+  members = useLiveProfileData(members);
   const [search, setSearch] = useState("");
   const [openMenuId, setOpenMenuId] = useState(null);
   const menuRef = useRef(null);

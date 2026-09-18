@@ -1,3 +1,5 @@
+import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Bookmark, X, Search, Hash, MessageSquare, Clock, ChevronRight, Filter } from 'lucide-react'
 import Loader from '../shared/Loader'
@@ -38,9 +40,11 @@ function formatTime(dateStr) {
 
 /* ─── Sub-components ──────────────────────────────────────────────────── */
 function MessageCard({ saved, index, onJump, onUnsave, unsaving }) {
+  saved = useLiveProfileData(saved);
+  const renderMentions = useLiveMentionRenderer();
   const msg = saved.messageId
   if (!msg) return null
-  const author = msg.senderSnapshot || msg.authorId || {}
+  const author = (msg.authorId?.name ? msg.authorId : msg.senderSnapshot) || {}
   const [hovered, setHovered] = useState(false)
 
   return (
@@ -88,7 +92,7 @@ function MessageCard({ saved, index, onJump, onUnsave, unsaving }) {
           {msg.htmlContent ? (
             <div
               className="smp-card__text"
-              dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.htmlContent) }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(renderMentions(msg.htmlContent)) }}
             />
           ) : (
             <p className="smp-card__text">{msg.content || 'Attachment'}</p>

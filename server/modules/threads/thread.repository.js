@@ -51,7 +51,7 @@ class ThreadRepository {
     const idFilter = workspaceId ? { _id: id, workspaceId } : { _id: id };
     let query = Thread.findOne(idFilter);
     if (populate) {
-      query.populate('participantIds', 'name email avatar flowTaskUserId');
+      query.populate('participantIds', 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt');
       query.populate('rootMessageId');
     }
 
@@ -64,7 +64,7 @@ class ThreadRepository {
         workspaceId ? { rootMessageId: id, workspaceId } : { rootMessageId: id },
       );
       if (populate) {
-        query.populate('participantIds', 'name email avatar flowTaskUserId');
+        query.populate('participantIds', 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt');
         query.populate('rootMessageId');
       }
       thread = await query.exec();
@@ -210,7 +210,7 @@ class ThreadRepository {
       .populate({
         path: 'rootMessageId',
         populate: [
-          { path: 'authorId', select: 'name email avatar onlineStatus' },
+          { path: 'authorId', select: 'name email avatar onlineStatus flowTaskProfileUpdatedAt' },
           { path: 'fileReferences', populate: { path: 'fileId' } }
         ]
       })
@@ -225,7 +225,7 @@ class ThreadRepository {
       )
         .sort({ createdAt: -1 })
         .limit(3)
-        .populate('authorId', 'name email avatar onlineStatus')
+        .populate('authorId', 'name email avatar onlineStatus flowTaskProfileUpdatedAt')
         .populate({ path: 'fileReferences', populate: { path: 'fileId' } })
         .lean();
       thread.latestReplies = replies.reverse();

@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { formatDistanceToNowStrict } from 'date-fns'
 import { Avatar } from '../chat/MemberAvatarGroup'
 import { getNotificationText, getNotificationMeta, normalizeNotification } from '../../utils/notificationFormat'
@@ -12,6 +13,7 @@ export default function NotificationItem({
   showAvatar = true,
   className = '',
 }) {
+  notification = useLiveProfileData(notification);
   const data = normalizeNotification(notification)
   if (!data) return null
 

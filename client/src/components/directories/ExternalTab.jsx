@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Search, Globe, Trash2, X } from 'lucide-react';
 import Loader from '../shared/Loader';
@@ -19,7 +20,8 @@ export default function ExternalTab() {
   const user = useAuthStore((s) => s.user)
   const { activeWorkspaceId, members } = useWorkspaceStore()
 
-  const [externalUsers, setExternalUsers] = useState([])
+  const [storedExternalUsers, setExternalUsers] = useState([])
+  const externalUsers = useLiveProfileData(storedExternalUsers)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')

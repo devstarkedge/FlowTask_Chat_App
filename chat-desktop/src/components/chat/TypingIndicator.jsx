@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useMemo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -10,12 +11,13 @@ export default function TypingIndicator({ channelId }) {
   const userId = useAuthStore((s) => s.user?._id)
 
   // Filter out self (normalize IDs — socket payloads are always strings)
-  const typers = useMemo(() => {
+  const typingUsers = useMemo(() => {
     const selfId = userId != null ? String(userId) : null
     return Object.entries(typingMap)
       .filter(([id]) => id !== selfId)
-      .map(([, name]) => name)
+      .map(([id, name]) => ({ _id: id, name }))
   }, [typingMap, userId])
+  const typers = useLiveProfileData(typingUsers).map((user) => user.name)
 
   if (typers.length === 0) return null
 

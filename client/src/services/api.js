@@ -2,6 +2,8 @@ import axios from "axios";
 import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import logger from "../utils/logger";
+import { useUserProfileStore } from '../stores/userProfileStore';
+import { projectUserProfiles } from '../utils/userProfiles';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || "/api/chat";
 
@@ -59,7 +61,14 @@ const processQueue = (error, token = null) => {
 };
 
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    const workspaceId = res.config?.headers?.['X-Workspace-Id'];
+    if (workspaceId) {
+      useUserProfileStore.getState().ingestProfiles(workspaceId, res.data);
+      res.data = projectUserProfiles(res.data, useUserProfileStore.getState().profilesByWorkspace[workspaceId] || {});
+    }
+    return res;
+  },
   async (error) => {
     const originalRequest = error.config;
 

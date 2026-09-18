@@ -106,6 +106,7 @@ export default function ChatHeader({
     if (!channel) return "";
     if (channel.type !== "dm") return channel.name || channel.slug;
 
+    if (channel.dmRecipientId) return channel.name;
     let name = channel.name || channel.slug;
     if (channel.dmParticipantNames && Array.isArray(channel.dmParticipantNames)) {
       const otherNames = channel.dmParticipantNames.filter((n) => n !== user?.name);

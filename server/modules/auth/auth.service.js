@@ -224,6 +224,7 @@ class AuthService {
       flowTaskUser = {
         _id: decoded.id,
         name: decoded.name,
+        profileUpdatedAt: decoded.profileUpdatedAt || null,
         email: decoded.email,
         // This is identity metadata only. Workspace authorization comes from
         // the signed `flowTaskAccess` snapshot below; do not invent a global

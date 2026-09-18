@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useMemo } from "react";
 import FloatingPortal from "./FloatingPortal";
 import { EmojiComponent } from "../shared/EmojiRenderer";
@@ -80,6 +81,7 @@ export default function ReactionDetailsPopup({
   onMouseEnter,
   onMouseLeave,
 }) {
+  users = useLiveProfileData(users);
   const sortedUsers = useMemo(() => {
     const currentUserIdStr = currentUserId != null ? String(currentUserId) : null;
     const copy = users.filter(Boolean);

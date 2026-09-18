@@ -1,7 +1,9 @@
+import { useLiveProfileData } from '../../../hooks/useLiveProfileData';
 import React, { useMemo } from "react";
 import { useCanvasCollabStore } from "../../../stores/canvasCollabStore";
 
 const CursorOverlay = React.memo(({ awarenessUsers = [] }) => {
+  awarenessUsers = useLiveProfileData(awarenessUsers);
   const socketCursors = useCanvasCollabStore((s) => s.cursors || {});
   const socketTyping = useCanvasCollabStore((s) => s.typing || {});
 
@@ -32,7 +34,8 @@ const CursorOverlay = React.memo(({ awarenessUsers = [] }) => {
     return map;
   }, [awarenessUsers, socketCursors]);
 
-  const cursorEntries = useMemo(() => Object.entries(cursorMap || {}), [cursorMap]);
+  const cursorUsers = useMemo(() => Object.entries(cursorMap || {}).map(([id, cursor]) => ({ ...cursor, _id: id })), [cursorMap]);
+  const cursorEntries = useLiveProfileData(cursorUsers).map((cursor) => [cursor._id, cursor]);
 
   const typingBlocks = useMemo(() => {
     const blocks = {};
@@ -48,6 +51,9 @@ const CursorOverlay = React.memo(({ awarenessUsers = [] }) => {
     });
     return blocks;
   }, [awarenessUsers, socketTyping]);
+
+  const typingUsers = useMemo(() => Object.entries(typingBlocks).flatMap(([blockId, users]) => Object.entries(users).map(([id, name]) => ({ _id: id, name, blockId }))), [typingBlocks]);
+  const liveTyping = useLiveProfileData(typingUsers);
 
   if (!cursorEntries.length && Object.keys(typingBlocks).length === 0) return null;
 
@@ -83,8 +89,7 @@ const CursorOverlay = React.memo(({ awarenessUsers = [] }) => {
       })}
 
       {/* Typing bubbles (may not have a cursor coord; fall back to block position) */}
-      {Object.entries(typingBlocks).flatMap(([blockId, users]) =>
-        Object.entries(users || {}).map(([userId, name]) => {
+      {liveTyping.map(({ blockId, _id: userId, name }) => {
           try {
             const c = cursorMap[userId];
             let left = 0;
@@ -115,8 +120,7 @@ const CursorOverlay = React.memo(({ awarenessUsers = [] }) => {
           } catch (err) {
             return null;
           }
-        })
-      )}
+        })}
     </div>
   );
 });

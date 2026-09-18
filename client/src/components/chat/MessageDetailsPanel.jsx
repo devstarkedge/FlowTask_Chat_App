@@ -1,3 +1,5 @@
+import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -128,6 +130,7 @@ function ConversationBadge({ channel, time }) {
 // Uses the same design pattern as FileDetailsModal in SlackFileCard.jsx
 
 export default function MessageDetailsPanel({ message, onClose, onForward }) {
+  const renderMentions = useLiveMentionRenderer();
   const { user } = useAuthStore();
   const channels = useChannelStore((s) => s.channels || []);
   const [details, setDetails] = useState(null);
@@ -152,11 +155,11 @@ export default function MessageDetailsPanel({ message, onClose, onForward }) {
     return () => { cancelled = true; };
   }, [message?._id]);
 
-  const msg = details || message;
+  const msg = useLiveProfileData(details || message);
   if (!msg) return null;
 
   // Extract data from message object
-  const authorName = msg.senderSnapshot?.name || msg.authorId?.name || "Unknown";
+  const authorName = msg.authorId?.name || msg.senderSnapshot?.name || "Unknown";
   const authorAvatar = msg.senderSnapshot?.avatar || (typeof msg.authorId === "object" ? msg.authorId?.avatar : null);
   const createdAt = msg.createdAt;
   const updatedAt = msg.updatedAt;
@@ -191,7 +194,7 @@ export default function MessageDetailsPanel({ message, onClose, onForward }) {
   const isForwarded = forwardMeta?.isForwarded;
 
   // Message content preview
-  const contentPreview = msg.htmlContent || msg.content || "";
+  const contentPreview = renderMentions(msg.htmlContent || msg.content || "");
   const looksLikeHtml = /<[a-z][\s\S]*>/i.test(contentPreview);
 
   const handleCopyId = async () => {

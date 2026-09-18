@@ -1,3 +1,5 @@
+import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useMemo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { useChannelStore } from '../../stores/channelStore'
@@ -115,13 +117,15 @@ export default function AllThreadsPanel({ onClose, onOpenThread }) {
 }
 
 function ThreadCard({ thread, channel, currentUser, onClick, index }) {
+  thread = useLiveProfileData(thread);
+  const renderMentions = useLiveMentionRenderer();
   const rootMsg = (typeof thread.rootMessageId === 'object' && thread.rootMessageId !== null)
     ? thread.rootMessageId
     : (thread.parentMessage || thread)
 
   const rootContent  = rootMsg.content || thread.rootContent || ''
   const rootHtml     = rootMsg.htmlContent || thread.rootHtmlContent || ''
-  const author       = rootMsg.senderSnapshot || rootMsg.author || rootMsg.sender || thread.createdBy || {}
+  const author       = (rootMsg.authorId?.name ? rootMsg.authorId : null) || rootMsg.senderSnapshot || rootMsg.author || rootMsg.sender || thread.createdBy || {}
   const replyCount   = thread.replyCount || thread.replies?.length || 0
   const lastReplyAt  = thread.lastReplyAt || thread.updatedAt || thread.createdAt
   const lastReplyDate = lastReplyAt ? new Date(lastReplyAt) : null
@@ -131,7 +135,7 @@ function ThreadCard({ thread, channel, currentUser, onClick, index }) {
   const channelName     = resolvedChannel?.name || 'unknown'
   const isPrivate       = resolvedChannel?.visibility === 'private' || resolvedChannel?.type === 'dm'
 
-  const displayContent = rootHtml ? sanitizeHtml(rootHtml) : rootContent
+  const displayContent = rootHtml ? sanitizeHtml(renderMentions(rootHtml)) : rootContent
 
   // Derive attachments (same logic as ThreadPanel)
   const derivedAttachments =

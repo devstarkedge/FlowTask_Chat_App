@@ -2,6 +2,7 @@ import ProcessedEvent from '../modules/flowtask/ProcessedEvent.model.js';
 import eventBus from './eventBus.js';
 import { normalizeWebhookPayload } from '../utils/webhookPayloadNormalizer.js';
 import logger from '../utils/logger.js';
+import { FLOWTASK_EVENTS } from '../config/constants.js';
 
 /**
  * Event Processor — orchestrates webhook event handling.
@@ -29,9 +30,19 @@ class EventProcessor {
    */
   async process({ deliveryId, eventName, eventVersion, payload }) {
     const workspaceId = payload?._workspaceId;
+    // Normalize once before claiming: profile events retain the same scoped
+    // payload atomically with their idempotency record for durable replay.
+    const rawPayload = payload?.data || payload;
+    const dispatchPayload = {
+      ...normalizeWebhookPayload(eventName, rawPayload),
+      _workspaceId: workspaceId,
+      deliveryId, eventName, eventVersion,
+      timestamp: payload?.timestamp,
+    };
 
     // 1. Idempotency check
-    const claim = await ProcessedEvent.claimEvent(deliveryId, eventName, workspaceId);
+    const claim = await ProcessedEvent.claimEvent(deliveryId, eventName, workspaceId,
+      eventName === FLOWTASK_EVENTS.USER_UPDATED ? dispatchPayload : undefined);
 
     if (claim.status === 'duplicate') {
       logger.info('Duplicate event skipped', { deliveryId, eventName, workspaceId });
@@ -48,24 +59,7 @@ class EventProcessor {
         step: 'event_processing_start',
       });
 
-      // Normalize FlowTask payload fields to ChatApp internal format.
-      // FlowTask sends { project, actor, task, ... } but handlers expect { board, userId, card, ... }.
-      // The normalizer maps field names and preserves _workspaceId at the top level.
-      const rawPayload = payload?.data || payload;
-      const normalizedData = normalizeWebhookPayload(eventName, rawPayload);
-
       // Dispatch to registered handlers via event bus (await all handlers).
-      // Spread normalized data at top level so handlers can destructure directly:
-      //   const { board, userId, _workspaceId } = payload;
-      const dispatchPayload = {
-        ...normalizedData,
-        _workspaceId: workspaceId,
-        deliveryId,
-        eventName,
-        eventVersion,
-        timestamp: payload?.timestamp,
-      };
-
       const dispatchResult = await eventBus.dispatch(eventName, dispatchPayload);
 
       // If the event was enqueued for async processing (Redis/BullMQ), leave

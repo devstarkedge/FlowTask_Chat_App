@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../../hooks/useLiveProfileData';
 import React, { useMemo } from "react";
 
 function initials(name = "") {
@@ -34,7 +35,8 @@ const PresenceBar = React.memo(({ socketPresence = [], awarenessUsers = [], stat
     () => normalizePresence(socketPresence, awarenessUsers),
     [socketPresence, awarenessUsers]
   );
-  const users = useMemo(() => allUsers.slice(0, 6), [allUsers]);
+  const liveUsers = useLiveProfileData(allUsers);
+  const users = useMemo(() => liveUsers.slice(0, 6), [liveUsers]);
   const overflow = useMemo(() => Math.max(0, allUsers.length - users.length), [allUsers, users]);
 
   return (

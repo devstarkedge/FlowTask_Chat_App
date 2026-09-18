@@ -10,6 +10,7 @@ import { emitToUser } from '../../../sockets/socketManager.js';
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS, SOCKET_EVENTS, SYSTEM_CHANNELS } from '../../../config/constants.js';
 import { requireWorkspaceId } from '../../../utils/webhookEventGuard.js';
+import { syncFlowTaskUserProfile } from '../../users/userProfileSync.service.js';
 
 function workspaceAccess(payload, eventName) {
   const access = payload?.access;
@@ -111,8 +112,8 @@ export function registerUserEventHandlers() {
       : null;
     const oldRole = existingMembership?.flowTaskAccess?.role || null;
 
-    // Upsert with latest data
-    const chatUser = await userRepository.upsertFromFlowTask(user, wsId);
+    // Resolve the permanent mapping and update only this workspace's member.
+    const chatUser = await syncFlowTaskUserProfile(user, wsId);
     if (!chatUser) {
       logger.info('Ignored profile update for unregistered ChatApp identity', {
         flowTaskUserId: user._id,
@@ -120,7 +121,7 @@ export function registerUserEventHandlers() {
       return;
     }
     
-    logger.info('[UserEventHandler] ChatUser upserted', {
+    logger.info('[UserEventHandler] ChatUser profile synchronized', {
       chatUserId: chatUser._id,
       chatUserRole: chatUser.role,
       oldRole,

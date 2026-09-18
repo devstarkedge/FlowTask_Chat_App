@@ -92,7 +92,7 @@ class MessageService {
     // Fetch sender data for snapshot denormalization
     const sender = await userRepository.findById(authorId);
     const senderSnapshot = sender
-      ? { name: sender.name, avatar: sender.avatar || null }
+      ? { name: sender.name, avatar: sender.avatar || null, profileUpdatedAt: sender.flowTaskProfileUpdatedAt || null }
       : { name: 'Unknown User', avatar: null };
 
     // Build message data
@@ -126,8 +126,8 @@ class MessageService {
         messageData.parentMessageId = parentMessageId;
         const parentAuthorId = parentMsg.authorId?._id || parentMsg.authorId || null;
         let pSenderName =
-          parentMsg.senderSnapshot?.name ||
           parentMsg.authorId?.name ||
+          parentMsg.senderSnapshot?.name ||
           null;
 
         // If snapshot/populate didn't give a name, fetch the user directly
@@ -194,6 +194,7 @@ class MessageService {
           messageId: parentMsg._id,
           authorId: parentAuthorId,
           senderName: pSenderName,
+          profileUpdatedAt: parentMsg.authorId?.flowTaskProfileUpdatedAt || parentMsg.senderSnapshot?.profileUpdatedAt || null,
           content: pContent,
           ...(pAttachment && { attachment: pAttachment }),
         };
@@ -1352,7 +1353,7 @@ class MessageService {
 
     const sender = await userRepository.findById(userId);
     const senderSnapshot = sender
-      ? { name: sender.name, avatar: sender.avatar || null }
+      ? { name: sender.name, avatar: sender.avatar || null, profileUpdatedAt: sender.flowTaskProfileUpdatedAt || null }
       : { name: 'Unknown User', avatar: null };
 
     const allForwardedMessages = [];
@@ -1362,7 +1363,7 @@ class MessageService {
       if (!sourceChannel) throw new NotFoundError('Source channel not found');
 
       const originalAuthorId = original.authorId?._id || original.authorId;
-      const originalAuthorName = original.senderSnapshot?.name || 'Unknown';
+      const originalAuthorName = original.authorId?.name || original.senderSnapshot?.name || 'Unknown';
       // Format DM channel name to only show the other participants
       let sourceChannelName = sourceChannel.name || 'unknown';
       if (sourceChannel.type === CHANNEL_TYPES.DM) {
@@ -1440,6 +1441,7 @@ class MessageService {
             forwardedAt: new Date(),
             originalSenderId: originalAuthorId,
             originalSenderName: originalAuthorName,
+            profileUpdatedAt: original.authorId?.flowTaskProfileUpdatedAt || original.senderSnapshot?.profileUpdatedAt || null,
             originalChannelId: original.channelId,
             originalChannelName: sourceChannelName,
             originalChannelType: sourceChannel.type,

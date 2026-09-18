@@ -29,6 +29,8 @@ class UserService {
     return {
       _id: user._id,
       name: user.name,
+      flowTaskUserId: user.flowTaskUserId,
+      flowTaskProfileUpdatedAt: user.flowTaskProfileUpdatedAt,
       email: user.email,
       avatar: user.avatar,
       role: user.role,

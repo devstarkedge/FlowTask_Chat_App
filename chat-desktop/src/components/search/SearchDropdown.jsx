@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 /**
  * SearchDropdown — shared sections renderer for both global and channel modes.
  *
@@ -148,6 +149,7 @@ function Section({ title, hint, children }) {
 }
 
 function GlobalRow({ item, selected, onClick }) {
+  item = useLiveProfileData(item);
   return (
     <button
       className={`global-search-row${selected ? ' is-selected' : ''}`}

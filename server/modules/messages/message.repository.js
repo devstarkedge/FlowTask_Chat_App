@@ -24,12 +24,12 @@ class MessageRepository {
     if (data.clientMessageId) {
       const existing = await Message.findOne({ clientMessageId: data.clientMessageId });
       if (existing) {
-        return existing.populate('authorId', 'name email avatar flowTaskUserId onlineStatus');
+        return existing.populate('authorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt');
       }
     }
     const message = new Message(data);
     await message.save();
-    return message.populate('authorId', 'name email avatar flowTaskUserId onlineStatus');
+    return message.populate('authorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt');
   }
 
   /**
@@ -73,7 +73,7 @@ class MessageRepository {
     const filter = workspaceId ? { _id: id, workspaceId } : { _id: id };
     const query = Message.findOne(filter);
     if (populate) {
-      query.populate('authorId', 'name email avatar flowTaskUserId onlineStatus');
+      query.populate('authorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt');
       query.populate({
         path: 'fileReferences',
         populate: { path: 'fileId' }
@@ -128,7 +128,7 @@ class MessageRepository {
   const messages = await Message.find(filter)
     .sort({ _id: sortOrder })
     .limit(limit)
-    .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+    .populate('authorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
     .populate({
       path: 'fileReferences',
       populate: { path: 'fileId' }
@@ -171,7 +171,7 @@ class MessageRepository {
       ...(workspaceId && { workspaceId }),
     };
     const parents = await Message.find(parentFilter)
-      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
       .populate({
         path: 'fileReferences',
         populate: { path: 'fileId' },
@@ -227,7 +227,7 @@ class MessageRepository {
     );
 
     const target = await Message.findOne(scopedTargetFilter)
-      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
       .populate({
         path: 'fileReferences',
         populate: { path: 'fileId' },
@@ -271,7 +271,7 @@ class MessageRepository {
     const beforeRaw = await Message.find(beforeFilter)
       .sort({ createdAt: -1, _id: -1 })
       .limit(beforeLimit + 1)
-      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
       .populate({
         path: 'fileReferences',
         populate: { path: 'fileId' },
@@ -281,7 +281,7 @@ class MessageRepository {
     const afterRaw = await Message.find(afterFilter)
       .sort({ createdAt: 1, _id: 1 })
       .limit(afterLimit + 1)
-      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
       .populate({
         path: 'fileReferences',
         populate: { path: 'fileId' },
@@ -326,7 +326,7 @@ class MessageRepository {
     return Message.find(filter)
       .sort({ createdAt: 1 })
       .limit(limit)
-      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
       .populate({
         path: 'fileReferences',
         populate: { path: 'fileId' }
@@ -343,7 +343,7 @@ class MessageRepository {
   async update(messageId, updates, workspaceId) {
     const filter = injectWorkspaceFilter({ _id: messageId }, workspaceId);
     return Message.findOneAndUpdate(filter, updates, { returnDocument: 'after' })
-      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
       .populate({
         path: 'fileReferences',
         populate: { path: 'fileId' }
@@ -381,7 +381,7 @@ class MessageRepository {
       updatePayload,
       { returnDocument: 'after' }
     )
-      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus')
+      .populate('authorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
       .lean();
 
     if (!updated) return null;
@@ -441,8 +441,8 @@ class MessageRepository {
     );
     return Message.find(filter)
       .sort({ pinnedAt: -1 })
-      .populate('authorId', 'name email avatar flowTaskUserId')
-      .populate('pinnedBy', 'name avatar email')
+      .populate('authorId', 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt')
+      .populate('pinnedBy', 'name avatar email flowTaskProfileUpdatedAt')
       .populate({
         path: 'fileReferences',
         populate: {
@@ -554,7 +554,7 @@ class MessageRepository {
    */
   async getReaction(messageId, emoji) {
     const reactionDocs = await MessageReaction.find({ messageId, emoji })
-      .populate('userId', 'name email avatar flowTaskUserId')
+      .populate('userId', 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt')
       .lean();
 
     const users = reactionDocs
@@ -584,7 +584,7 @@ class MessageRepository {
     return Message.find(filter, { score: { $meta: 'textScore' } })
       .sort({ score: { $meta: 'textScore' } })
       .limit(limit)
-      .populate('authorId', 'name email avatar flowTaskUserId')
+      .populate('authorId', 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt')
       .populate({
         path: 'fileReferences',
         populate: { path: 'fileId' }

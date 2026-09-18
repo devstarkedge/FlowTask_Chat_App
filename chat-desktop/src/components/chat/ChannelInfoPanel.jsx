@@ -113,6 +113,7 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
   const displayChannelName = useMemo(() => {
     if (!isDM) return channel.name
     
+    if (channel.dmRecipientId) return channel.name;
     let name = channel.name
     if (channel.dmParticipantNames && Array.isArray(channel.dmParticipantNames)) {
       const otherNames = channel.dmParticipantNames.filter(n => n !== user?.name)

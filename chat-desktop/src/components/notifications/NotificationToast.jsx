@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useState } from 'react'
 import { X, MessageCircle, AtSign, MessageSquareText, Bell } from 'lucide-react'
 
@@ -21,6 +22,7 @@ const TYPE_ICONS = {
  * @param {boolean} props.playSound - Whether to play notification sound
  */
 export default function NotificationToast({ notification, onClick, onDismiss, playSound = true }) {
+  notification = useLiveProfileData(notification);
   const [isVisible, setIsVisible] = useState(false)
   const [isLeaving, setIsLeaving] = useState(false)
 

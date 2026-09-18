@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useChannelStore } from '../stores/channelStore'
+import { useLiveProfileData } from './useLiveProfileData'
 
 /**
  * Centralized mention system hook.
@@ -44,9 +45,10 @@ export function useMentions({ channelId, editorRef }) {
   useEffect(() => { activeIndexRef.current = activeIndex }, [activeIndex])
 
   // ─── Members from store ───────────────────────────────────────────────────
-  const members = useChannelStore(
+  const storedMembers = useChannelStore(
     useCallback((s) => s.membersByChannel[channelId], [channelId])
   ) ?? []
+  const members = useLiveProfileData(storedMembers)
 
   const channels = useChannelStore((s) => s.channels) ?? []
 

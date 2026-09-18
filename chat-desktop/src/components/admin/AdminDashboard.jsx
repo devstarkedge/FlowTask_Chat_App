@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { BarChart3, Users, Hash, Settings, ChevronLeft, Shield, UserX, UserCheck, Archive, Trash2, Search } from 'lucide-react';
 import Loader from '../shared/Loader';
@@ -139,7 +140,8 @@ function OverviewTab() {
 
 function UsersTab() {
   const { user: currentUser } = useAuthStore()
-  const [users, setUsers] = useState([])
+  const [storedUsers, setUsers] = useState([]);
+  const users = useLiveProfileData(storedUsers);
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -235,7 +237,7 @@ function UsersTab() {
               style={{ borderBottom: '1px solid var(--border-secondary)', background: 'var(--bg-secondary)' }}
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{u.displayName || u.name}</p>
+                <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{u.name || u.displayName}</p>
                 <p className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>{u.email}</p>
               </div>
               <select

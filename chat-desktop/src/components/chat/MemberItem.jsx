@@ -1,9 +1,11 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import React from 'react'
 import { X } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
 import { usePresenceStore } from '../../stores/presenceStore'
 
 export default function MemberItem({ member, onOpenProfile, canRemove, onRemove }) {
+  member = useLiveProfileData(member);
   const presenceMap = usePresenceStore((s) => s.presence);
   const id = member?._id || member?.userId;
   const status = presenceMap[id] || presenceMap[member?.flowTaskUserId] || presenceMap[member?.chatUserId] || member?.onlineStatus || 'offline';

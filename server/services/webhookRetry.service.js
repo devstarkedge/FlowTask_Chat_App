@@ -81,10 +81,13 @@ class WebhookRetryService {
       // Re-dispatch the event through the bus (dispatch uses Promise.allSettled
       // so handler errors are captured, unlike bare emit which is fire-and-forget)
       const results = await eventBus.dispatch(event.eventName, {
-        ...event,
+        ...(event.payload || event),
         _retryAttempt: updated.attempts,
         _workspaceId: event.workspaceId,
       });
+
+      // The distributed worker owns completion and failure for queued jobs.
+      if (results?.queued) return;
 
       // Check if any handler rejected
       const failures = results?.settled?.filter(r => r.status === 'rejected') || [];

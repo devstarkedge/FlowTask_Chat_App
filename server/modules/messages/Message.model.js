@@ -197,6 +197,7 @@ const messageSchema = new Schema({
       messageId: { type: Schema.Types.ObjectId, default: null },
       authorId: { type: Schema.Types.ObjectId, ref: 'ChatUser', default: null },
       senderName: { type: String, default: null },
+      profileUpdatedAt: { type: Date, default: null },
       content: { type: String, default: null },
       attachment: {
         fileId: { type: Schema.Types.ObjectId, default: null },
@@ -216,6 +217,7 @@ const messageSchema = new Schema({
   // Denormalized sender snapshot — avoids populate on reads
   senderSnapshot: {
     name: { type: String },
+    profileUpdatedAt: { type: Date, default: null },
     avatar: { type: String, default: null },
   },
   content: {
@@ -353,6 +355,7 @@ const messageSchema = new Schema({
     forwardedAt: { type: Date, default: null },
     originalSenderId: { type: Schema.Types.ObjectId, ref: 'ChatUser', default: null },
     originalSenderName: { type: String, default: null },
+    profileUpdatedAt: { type: Date, default: null },
     originalChannelId: { type: Schema.Types.ObjectId, ref: 'Channel', default: null },
     originalChannelName: { type: String, default: null },
     originalChannelType: { type: String, default: null },
@@ -366,6 +369,8 @@ const messageSchema = new Schema({
 
 // ─── Indexes (all workspace-scoped) ──────────────────────────────────────────
 // Primary query: channel messages ordered by time (cursor-based pagination)
+messageSchema.index({ workspaceId: 1, 'replyTo.authorId': 1 });
+messageSchema.index({ workspaceId: 1, 'forwardMeta.originalSenderId': 1 });
 messageSchema.index({ workspaceId: 1, channelId: 1, createdAt: -1 });
 // Thread replies ordered by time
 messageSchema.index({ workspaceId: 1, threadId: 1, createdAt: 1 }, { sparse: true });

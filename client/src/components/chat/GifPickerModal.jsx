@@ -1,32 +1,25 @@
 /**
- * GifPickerModal.jsx — Web GIF picker using GIPHY API.
+ * GifPickerModal.jsx — Web GIF picker using GIPHY/Klipy API.
  *
  * Features:
- *  - Search with 400ms debounce
- *  - Trending GIFs when empty
+ *  - Search with 350ms debounce
  *  - Category chips (Trending, Reactions, Funny, Love, Animals, Sports, etc.)
- *  - 2-column masonry-style grid
- *  - Infinite scroll
- *  - Skeletons, error & empty states
+ *  - Smooth native 2-column grid scroll (zero flicker/jumping)
+ *  - IntersectionObserver + scroll listener infinite pagination
+ *  - Strict item deduplication to prevent repeated GIFs
+ *  - Skeleton, error & empty states
  *  - "Powered by Klipy" attribution
- *
- * Props:
- *   isOpen       – boolean
- *   onClose      – () => void
- *   onSelectGif  – (gifData) => void   gifData = { gifUrl, previewUrl, title, width, height }
- *   anchorRef    – optional ref to anchor element for popover positioning
  */
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { X, Search, RefreshCw } from 'lucide-react';
-import { VirtuosoGrid } from 'react-virtuoso';
 import './GifPickerStyles.css';
 import FloatingPortal from './FloatingPortal';
-
 import { gifsAPI } from '../../services/api';
 
 const PAGE_SIZE = 18;
 const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
+
 function cacheGet(k) {
   const e = _cache.get(k);
   if (!e || Date.now() - e.ts > CACHE_TTL) { _cache.delete(k); return null; }
@@ -51,14 +44,20 @@ async function fetchPage(query, category, offset) {
   const responseData = json.data?.data || json.data || {};
   const gifs = responseData.data || [];
   
-  const total = responseData.pagination?.total_count || gifs.length;
-  const count = responseData.pagination?.count || gifs.length;
-  const nextOffset = responseData.pagination?.offset;
+  const total = responseData.pagination?.total_count ?? null;
+  const nextOffset = (typeof offset === 'number' ? offset : 0) + gifs.length;
+  
+  let hasMore = gifs.length > 0 && gifs.length >= PAGE_SIZE;
+  if (total !== null && typeof offset === 'number') {
+    if (offset + gifs.length >= total) {
+      hasMore = false;
+    }
+  }
 
   const result = { 
     gifs, 
-    hasMore: Boolean(nextOffset) && nextOffset !== offset && (count > 0 && (typeof offset === 'number' ? offset + count < total : true)),
-    nextOffset: nextOffset 
+    hasMore,
+    nextOffset 
   };
   
   cacheSet(cacheKey, result);
@@ -88,7 +87,7 @@ function SkeletonGrid() {
   return (
     <div className="gif-picker-grid">
       {SKELETONS.map((i) => (
-        <div key={i} className="gif-picker-skeleton" style={{ height: i % 3 === 0 ? 120 : i % 3 === 1 ? 90 : 140 }} />
+        <div key={i} className="gif-picker-skeleton" style={{ paddingBottom: `${(i % 3 === 0 ? 0.8 : i % 3 === 1 ? 0.6 : 1.0) * 100}%` }} />
       ))}
     </div>
   );
@@ -97,20 +96,25 @@ function SkeletonGrid() {
 // ─── GIF Item ─────────────────────────────────────────────────────────────────
 
 const GifItem = memo(function GifItem({ gif, onSelect }) {
-  const aspectRatio = gif.width && gif.height ? gif.height / gif.width : 0.75;
+  const [loaded, setLoaded] = useState(false);
+  const rawRatio = (gif.width && gif.height && gif.width > 0) ? (gif.height / gif.width) : 0.75;
+  const clampedRatio = Math.min(Math.max(rawRatio, 0.55), 1.3);
+
   return (
     <button
       type="button"
       className="gif-picker-item"
-      style={{ paddingBottom: `${aspectRatio * 100}%` }}
+      style={{ paddingBottom: `${clampedRatio * 100}%` }}
       onClick={() => onSelect(gif)}
-      title={gif.title}
+      title={gif.title || 'GIF'}
     >
       <img
         src={gif.previewUrl || gif.gifUrl}
-        alt={gif.title}
+        alt={gif.title || 'GIF'}
         loading="lazy"
         decoding="async"
+        onLoad={() => setLoaded(true)}
+        style={{ opacity: loaded ? 1 : 0, transition: 'opacity 200ms ease-in-out' }}
       />
     </button>
   );
@@ -129,61 +133,115 @@ export default function GifPickerModal({ isOpen, onClose, onSelectGif, anchorRef
   const [error, setError] = useState(null);
 
   const offsetRef = useRef(0);
-  const abortRef = useRef(false);
+  const requestIdRef = useRef(0);
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
   const loadingRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const loadMoreGifsRef = useRef(null);
+  const sentinelRef = useRef(null);
 
-  // Debounce query
+  hasMoreRef.current = hasMore;
+
+  // Debounce query (350ms)
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query), 400);
+    const t = setTimeout(() => setDebouncedQuery(query), 350);
     return () => clearTimeout(t);
   }, [query]);
 
-  // Load gifs when debounced query or category changes
-  const loadGifs = useCallback(async (q, cat, offset) => {
-    if (loadingRef.current && offset > 0) return;
+  // Initial load
+  const loadInitialGifs = useCallback(async (q, cat) => {
+    const fetchId = ++requestIdRef.current;
     loadingRef.current = true;
-    abortRef.current = false;
     setError(null);
+    setIsLoading(true);
+    offsetRef.current = 0;
+    setHasMore(true);
+    hasMoreRef.current = true;
 
     try {
-      const result = await fetchPage(q, cat, offset);
-      if (abortRef.current) return;
+      const result = await fetchPage(q, cat, 0);
+      if (fetchId !== requestIdRef.current) return;
 
-      if (offset === 0) {
-        setGifs(result.gifs);
-      } else {
-        setGifs(prev => {
-          const ids = new Set(prev.map(g => g.id));
-          return [...prev, ...result.gifs.filter(g => !ids.has(g.id))];
-        });
-      }
-      
-      offsetRef.current = result.nextOffset !== undefined ? result.nextOffset : (typeof offset === 'number' ? offset + result.gifs.length : 0);
+      setGifs(result.gifs);
+      offsetRef.current = result.nextOffset;
       setHasMore(result.hasMore);
+      hasMoreRef.current = result.hasMore;
+
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = 0;
+      }
     } catch {
-      if (!abortRef.current) setError('Failed to load GIFs. Check your internet connection.');
+      if (fetchId === requestIdRef.current) {
+        setError('Failed to load GIFs. Check your internet connection.');
+      }
     } finally {
-      if (!abortRef.current) {
+      if (fetchId === requestIdRef.current) {
         setIsLoading(false);
-        setIsLoadingMore(false);
         loadingRef.current = false;
       }
     }
   }, []);
 
+  // Load more GIFs on scroll
+  const loadMoreGifs = useCallback(async () => {
+    if (!hasMoreRef.current || loadingRef.current) return;
+    const fetchId = requestIdRef.current;
+    loadingRef.current = true;
+    setIsLoadingMore(true);
+
+    const currentOffset = offsetRef.current;
+    try {
+      const result = await fetchPage(debouncedQuery, activeCategory, currentOffset);
+      if (fetchId !== requestIdRef.current) return;
+
+      if (!result.gifs || result.gifs.length === 0) {
+        setHasMore(false);
+        hasMoreRef.current = false;
+        return;
+      }
+
+      setGifs(prev => {
+        const existingIds = new Set(prev.map(g => g.id || g.providerId || g.gifUrl));
+        const uniqueNewGifs = result.gifs.filter(g => {
+          const id = g.id || g.providerId || g.gifUrl;
+          return id && !existingIds.has(id);
+        });
+
+        if (uniqueNewGifs.length === 0 || !result.hasMore) {
+          setHasMore(false);
+          hasMoreRef.current = false;
+        } else {
+          setHasMore(result.hasMore);
+          hasMoreRef.current = result.hasMore;
+        }
+
+        return [...prev, ...uniqueNewGifs];
+      });
+
+      offsetRef.current = result.nextOffset;
+    } catch (err) {
+      console.error('Failed to load more GIFs:', err);
+    } finally {
+      if (fetchId === requestIdRef.current) {
+        setIsLoadingMore(false);
+        loadingRef.current = false;
+      }
+    }
+  }, [debouncedQuery, activeCategory]);
+
+  loadMoreGifsRef.current = loadMoreGifs;
+
   useEffect(() => {
     if (!isOpen) return;
-    abortRef.current = true;
     setGifs([]);
     offsetRef.current = 0;
     setHasMore(true);
-    setIsLoading(true);
-    loadGifs(debouncedQuery, activeCategory, 0);
-  }, [debouncedQuery, activeCategory, isOpen, loadGifs]);
+    hasMoreRef.current = true;
+    loadInitialGifs(debouncedQuery, activeCategory);
+  }, [debouncedQuery, activeCategory, isOpen, loadInitialGifs]);
 
-  // Focus on open
+  // Focus input on open
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -201,12 +259,37 @@ export default function GifPickerModal({ isOpen, onClose, onSelectGif, anchorRef
     return () => document.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
 
-  // Infinite scroll
-  const loadMore = useCallback(() => {
-    if (!hasMore || isLoadingMore || isLoading) return;
-    setIsLoadingMore(true);
-    loadGifs(debouncedQuery, activeCategory, offsetRef.current);
-  }, [hasMore, isLoadingMore, isLoading, debouncedQuery, activeCategory, loadGifs]);
+  // Stable IntersectionObserver for infinite scroll
+  useEffect(() => {
+    if (!isOpen || !sentinelRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          if (!loadingRef.current && hasMoreRef.current) {
+            loadMoreGifsRef.current?.();
+          }
+        }
+      },
+      {
+        root: scrollRef.current,
+        rootMargin: '250px',
+        threshold: 0.01,
+      }
+    );
+
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [isOpen]);
+
+  // Backup scroll event handler
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current || !hasMoreRef.current || loadingRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    if (scrollHeight - scrollTop - clientHeight < 250) {
+      loadMoreGifsRef.current?.();
+    }
+  }, []);
 
   const handleSelectGif = useCallback((gif) => {
     onSelectGif({
@@ -239,7 +322,6 @@ export default function GifPickerModal({ isOpen, onClose, onSelectGif, anchorRef
       minWidth={380}
       minHeight={500}
     >
-      {/* Panel */}
       <div className="gif-picker-panel" role="dialog" aria-label="GIF Picker" aria-modal="true">
         {/* Header */}
         <div className="gif-picker-header">
@@ -287,8 +369,8 @@ export default function GifPickerModal({ isOpen, onClose, onSelectGif, anchorRef
           </div>
         )}
 
-        {/* Grid */}
-        <div className="gif-picker-scroll">
+        {/* Scroll Container */}
+        <div ref={scrollRef} className="gif-picker-scroll" onScroll={handleScroll}>
           {error ? (
             <div className="gif-picker-empty">
               <span style={{ fontSize: 32 }}>😕</span>
@@ -296,7 +378,7 @@ export default function GifPickerModal({ isOpen, onClose, onSelectGif, anchorRef
               <button
                 type="button"
                 className="gif-picker-retry"
-                onClick={() => { setError(null); setIsLoading(true); loadGifs(debouncedQuery, activeCategory, 0); }}
+                onClick={() => loadInitialGifs(debouncedQuery, activeCategory)}
               >
                 <RefreshCw size={13} /> Try again
               </button>
@@ -309,23 +391,20 @@ export default function GifPickerModal({ isOpen, onClose, onSelectGif, anchorRef
               <p>{query ? `No GIFs found for "${query}"` : 'No GIFs available'}</p>
             </div>
           ) : (
-            <VirtuosoGrid
-              style={{ height: '100%' }}
-              data={gifs}
-              endReached={loadMore}
-              overscan={200}
-              listClassName="gif-picker-grid"
-              itemContent={(index, gif) => (
-                <GifItem key={gif.id} gif={gif} onSelect={handleSelectGif} />
-              )}
-              components={{
-                Footer: () => isLoadingMore ? (
-                  <div className="gif-picker-load-more">
-                    <div className="gif-picker-spinner" />
-                  </div>
-                ) : <div style={{ height: 12 }} />
-              }}
-            />
+            <>
+              <div className="gif-picker-grid">
+                {gifs.map((gif) => (
+                  <GifItem key={gif.id || gif.providerId || gif.gifUrl} gif={gif} onSelect={handleSelectGif} />
+                ))}
+              </div>
+
+              {/* Permanent infinite scroll sentinel container */}
+              <div ref={sentinelRef} className="gif-picker-sentinel">
+                <div className={`gif-picker-load-more ${isLoadingMore ? 'visible' : ''}`}>
+                  <div className="gif-picker-spinner" />
+                </div>
+              </div>
+            </>
           )}
         </div>
 

@@ -1,3 +1,5 @@
+import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useChatStore } from "../../stores/chatStore";
@@ -392,6 +394,8 @@ function MoreMenuItem({ icon: Icon, label, onClick, danger }) {
 
 /* ─── Thread Message Item ─────────────────────────────────────────────────── */
 function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
+  message = useLiveProfileData(message);
+  const renderMentions = useLiveMentionRenderer();
   const { user } = useAuthStore();
   // Channel members are used to resolve reaction `userIds` → user objects.
   const threadChannelId = message.channelId;
@@ -445,7 +449,7 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
   const emojiButtonRef = useRef(null);
 
   const authorName =
-    message.senderSnapshot?.name || message.authorId?.name || "FlowTask Bot";
+    message.authorId?.name || message.senderSnapshot?.name || "FlowTask Bot";
   const authorAvatar =
     message.senderSnapshot?.avatar ||
     (typeof message.authorId === "object" ? message.authorId?.avatar : null);
@@ -644,7 +648,7 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
           return looksLikeHtml ? (
             <div
               className="rich-message-content thread-message__content"
-              dangerouslySetInnerHTML={{ __html: sanitizeHtml(raw) }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(renderMentions(raw)) }}
             />
           ) : (
             <p className="thread-message__content">{raw}</p>

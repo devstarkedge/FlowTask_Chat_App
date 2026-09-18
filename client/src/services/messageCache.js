@@ -1,5 +1,7 @@
 import { openDB } from 'idb'
 import logger from '../utils/logger'
+import { useUserProfileStore } from '../stores/userProfileStore'
+import { projectUserProfiles } from '../utils/userProfiles'
 
 const DB_NAME = 'chatapp-offline-cache'
 const DB_VERSION = 1
@@ -47,17 +49,41 @@ export async function loadChannelMessagesFromCache(channelId) {
   }
 }
 
-export async function saveChannelMessagesToCache(channelId, messages) {
+export async function saveChannelMessagesToCache(channelId, messages, workspaceId) {
   if (!isValidKey(channelId)) return
   try {
     const db = await getDb()
     await db.put(CHANNEL_STORE, {
       channelId,
-      messages: sanitizeMessages(messages),
+      messages: projectUserProfiles(sanitizeMessages(messages), useUserProfileStore.getState().profilesByWorkspace[workspaceId] || {}),
+      workspaceId,
       updatedAt: new Date().toISOString(),
     })
   } catch (error) {
     logger.error('[MessageCache] Failed to persist channel cache:', error)
+  }
+}
+
+export async function refreshCachedUserProfiles(workspaceId, channelIds = []) {
+  if (!workspaceId) return
+  const requestedProfiles = useUserProfileStore.getState().profilesByWorkspace[workspaceId] || {}
+  try {
+    const db = await getDb()
+    const profiles = useUserProfileStore.getState().profilesByWorkspace[workspaceId] || requestedProfiles
+    const knownChannels = new Set(channelIds.map(String))
+    const transaction = db.transaction(CHANNEL_STORE, 'readwrite')
+    let cursor = await transaction.store.openCursor()
+    while (cursor) {
+      const record = cursor.value
+      if (String(record.workspaceId || '') === String(workspaceId) || (!record.workspaceId && knownChannels.has(String(record.channelId)))) {
+        const messages = projectUserProfiles(record.messages, profiles)
+        if (messages !== record.messages) await cursor.update({ ...record, messages, workspaceId })
+      }
+      cursor = await cursor.continue()
+    }
+    await transaction.done
+  } catch (error) {
+    logger.error('[MessageCache] Failed to refresh cached profile metadata:', error)
   }
 }
 

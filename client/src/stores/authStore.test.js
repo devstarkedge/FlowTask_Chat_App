@@ -17,7 +17,7 @@ vi.mock('../services/api', () => ({
 vi.mock('./channelStore', () => ({
   useChannelStore: {
     setState: mocks.channelSetState,
-    getState: () => ({}),
+    getState: () => ({ setChannels: (channels) => mocks.channelSetState({ channels }) }),
   },
 }));
 vi.mock('./workspaceStore', () => ({

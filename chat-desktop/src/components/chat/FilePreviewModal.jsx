@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -53,6 +54,8 @@ function ToolbarBtn({ icon: Icon, onClick, title }) {
 }
 
 export default function FilePreviewModal({ file, files = [], onClose }) {
+  file = useLiveProfileData(file);
+  files = useLiveProfileData(files);
   const [currentIndex, setCurrentIndex] = useState(0)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)

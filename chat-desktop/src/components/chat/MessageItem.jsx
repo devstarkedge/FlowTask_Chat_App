@@ -1,3 +1,5 @@
+import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
@@ -414,6 +416,8 @@ const MessageItem = memo(
     isSelected,
     onSelectMessage,
   }) {
+  message = useLiveProfileData(message);
+  const renderMentions = useLiveMentionRenderer();
     const { user } = useAuthStore();
     // Channel members are used to resolve reaction `userIds` → user objects.
     const channelIdForMembers = message.channelId;
@@ -582,7 +586,7 @@ const MessageItem = memo(
       message.contentType !== 'gif';
 
     const authorName =
-      message.senderSnapshot?.name || message.authorId?.name || "FlowTask Bot";
+      message.authorId?.name || message.senderSnapshot?.name || "FlowTask Bot";
     const authorAvatar =
       message.senderSnapshot?.avatar ||
       (typeof message.authorId === "object" ? message.authorId?.avatar : null);
@@ -844,7 +848,7 @@ const MessageItem = memo(
                 className="rich-message-content text-[14px] leading-relaxed break-words mb-2"
                 style={{ color: "inherit" }}
                 dangerouslySetInnerHTML={{
-                  __html: sanitizeHtml(message.htmlContent || message.content),
+                  __html: sanitizeHtml(renderMentions(message.htmlContent || message.content)),
                 }}
               />
             ) : null}
@@ -875,7 +879,7 @@ const MessageItem = memo(
             className="message-content rich-message-content text-[14px] leading-relaxed break-words"
             style={{ color: "inherit" }}
             dangerouslySetInnerHTML={{
-              __html: sanitizeHtml(message.htmlContent),
+              __html: sanitizeHtml(renderMentions(message.htmlContent)),
             }}
           />
         );
@@ -890,7 +894,7 @@ const MessageItem = memo(
             className="message-content rich-message-content text-[14px] leading-relaxed break-words"
             style={{ color: "inherit" }}
             dangerouslySetInnerHTML={{
-              __html: sanitizeHtml(rawContent),
+              __html: sanitizeHtml(renderMentions(rawContent)),
             }}
           />
         );

@@ -57,6 +57,8 @@ const processedEventSchema = new Schema({
     type: String,
     default: null,
   },
+  // Normalized profile updates are retained for the existing retry worker.
+  payload: { type: Schema.Types.Mixed, default: null },
   // TTL: automatically purge after 7 days
   expiresAt: {
     type: Date,
@@ -82,7 +84,7 @@ processedEventSchema.index({ workspaceId: 1, status: 1 });
  * @param {string} eventName
  * @returns {{ status: 'new'|'duplicate'|'retry', doc: object }}
  */
-processedEventSchema.statics.claimEvent = async function (deliveryId, eventName, workspaceId) {
+processedEventSchema.statics.claimEvent = async function (deliveryId, eventName, workspaceId, payload) {
   // Fails closed: workspaceId is `required: true` on the schema, so create()
   // below would already reject an unscoped claim — but the *read* side
   // (this findOne) previously stayed unscoped whenever workspaceId was
@@ -108,6 +110,7 @@ processedEventSchema.statics.claimEvent = async function (deliveryId, eventName,
     existing.status = EVENT_STATUS.PROCESSING;
     existing.attempts += 1;
     existing.lastError = null;
+    if (payload) existing.payload = payload;
     await existing.save();
     return { status: 'retry', doc: existing };
   }
@@ -120,6 +123,7 @@ processedEventSchema.statics.claimEvent = async function (deliveryId, eventName,
       eventName,
       status: EVENT_STATUS.PROCESSING,
       workspaceId,
+      ...(payload ? { payload } : {}),
     });
   } catch (error) {
     if (error?.code !== 11000) throw error;

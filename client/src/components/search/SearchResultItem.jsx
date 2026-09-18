@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { format } from 'date-fns'
 import { Avatar } from '../chat/MemberAvatarGroup'
 import HighlightText from './HighlightText'
@@ -19,6 +20,7 @@ export default function SearchResultItem({
   onClick,
   showChannel = false,
 }) {
+  item = useLiveProfileData(item);
   if (!item) return null
 
   return (

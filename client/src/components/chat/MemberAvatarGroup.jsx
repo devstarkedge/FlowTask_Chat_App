@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 // Avatar component — no hover tooltips by design
 import { usePresenceStore } from '../../stores/presenceStore'
 
@@ -16,6 +17,7 @@ function getColor(name) {
 }
 
 function Avatar({ member, size = 28, showStatus = false }) {
+  member = useLiveProfileData(member);
   const safeMember = member || {}
   
   // Use presence store if available, fallback to member prop

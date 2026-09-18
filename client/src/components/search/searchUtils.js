@@ -57,10 +57,11 @@ export function normalizeSearchMessage(message, fallbackChannel = null) {
       || fallbackChannel?.name
       || fallbackChannel?.slug
       || 'Conversation',
+    senderId: asId(message.senderId || message.authorId),
     senderName:
       message.senderName
-      || senderSnapshot?.name
       || author?.name
+      || senderSnapshot?.name
       || 'Someone',
     senderAvatar: message.senderAvatar || senderSnapshot?.avatar || author?.avatar || null,
     snippet: message.snippet || stripMarkup(message.content || message.htmlContent || message.activityMeta?.taskTitle || ''),

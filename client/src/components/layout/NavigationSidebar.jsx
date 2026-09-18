@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useParams, useLocation, matchPath } from "react-router-dom";
 import { useChannelStore } from "../../stores/channelStore";
@@ -94,7 +95,8 @@ export default function NavigationSidebar({
     unreads,
     createDM,
   } = useChannelStore();
-  const channels = useMemo(() => storedChannels.filter((channel) => !isImplicitDepartmentChannel(channel)), [storedChannels]);
+  const liveChannels = useLiveProfileData(storedChannels);
+  const channels = useMemo(() => liveChannels.filter((channel) => !isImplicitDepartmentChannel(channel)), [liveChannels]);
   const { user, channelSync } = useAuthStore();
   const drafts = useDraftStore((s) => s.drafts);
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
@@ -319,7 +321,7 @@ export default function NavigationSidebar({
           null;
 
         let displayName = c.name;
-        if (c.dmParticipantNames && Array.isArray(c.dmParticipantNames)) {
+        if (!c.dmRecipientId && c.dmParticipantNames && Array.isArray(c.dmParticipantNames)) {
           const otherNames = c.dmParticipantNames.filter(name => {
             const userName = user?.name || '';
             return name !== userName;
@@ -327,7 +329,7 @@ export default function NavigationSidebar({
           if (otherNames.length > 0) {
             displayName = otherNames.join(', ');
           }
-        } else if (c.name && c.name.includes(',')) {
+        } else if (!c.dmRecipientId && c.name && c.name.includes(',')) {
           const names = c.name.split(',').map(n => n.trim());
           const userName = user?.name || '';
           const otherNames = names.filter(name => name !== userName);

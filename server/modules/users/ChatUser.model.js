@@ -169,6 +169,7 @@ const chatUserSchema = new Schema({
     default: null,
   },
   // ─── Identity ─────────────────────────────────────────────────────────
+  flowTaskProfileUpdatedAt: { type: Date, default: null },
   name: {
     type: String,
     required: true,

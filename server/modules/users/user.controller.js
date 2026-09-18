@@ -482,6 +482,10 @@ export const updateUser = asyncHandler(async (req, res, next) => {
   }
 
   const { name, displayName, title, email, phone } = req.body;
+  const target = await userRepository.findById(id);
+  if (target?.flowTaskUserId && name !== undefined && name !== target.name) {
+    return res.status(400).json({ success: false, error: 'Update your username in FlowTask.' });
+  }
   const updates = {};
   if (name !== undefined) updates.name = name;
   if (displayName !== undefined) updates.displayName = displayName;

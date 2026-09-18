@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import {
   useEffect,
   useMemo,
@@ -211,6 +212,7 @@ function Pill({ children, active, onClick }) {
 
 /* ─── Media card (photo/video grid) ─────────────────────────────────────── */
 function MediaCard({ file, onPreview, onShare, onDownload, onDelete, index }) {
+  file = useLiveProfileData(file);
   const kind = getFileKind(file.mimeType);
   const previewSrc = file.thumbnailUrl || file.url;
   const [loaded, setLoaded] = useState(false);
@@ -403,6 +405,7 @@ function MediaCard({ file, onPreview, onShare, onDownload, onDelete, index }) {
 
 /* ─── Document row ───────────────────────────────────────────────────────── */
 function DocRow({ file, onPreview, onShare, onDownload, onDelete, index }) {
+  file = useLiveProfileData(file);
   const kind = getFileKind(file.mimeType);
   const [hover, setHover] = useState(false);
 

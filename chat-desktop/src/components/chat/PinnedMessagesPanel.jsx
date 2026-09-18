@@ -1,3 +1,6 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
+import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
+import { extractPlainText } from '../../utils/extractPlainText';
 import { useEffect, useCallback, useState } from "react";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
@@ -56,7 +59,8 @@ export default function PinnedMessagesPanel({ channelId, onClose }) {
   } = useChatStore();
   const user = useAuthStore((s) => s.user);
 
-  const pinnedMessages = pinnedMessagesByChannel[channelId] || [];
+  const pinnedMessages = useLiveProfileData(pinnedMessagesByChannel[channelId] || []);
+  const renderMentions = useLiveMentionRenderer();
 
   const [query, setQuery] = useState("");
   const [unpinningId, setUnpinningId] = useState(null);
@@ -515,7 +519,7 @@ export default function PinnedMessagesPanel({ channelId, onClose }) {
               )}
               {filtered.map((msg) => {
                 const authorName =
-                  msg.senderSnapshot?.name || msg.authorId?.name || "Unknown";
+                  msg.authorId?.name || msg.senderSnapshot?.name || "Unknown";
                 const authorAvatar =
                   msg.senderSnapshot?.avatar ||
                   (typeof msg.authorId === "object"
@@ -551,7 +555,7 @@ export default function PinnedMessagesPanel({ channelId, onClose }) {
                     {/* Content */}
                     {(msg.content || "").trim() && (
                       <div className="pm-card-content">
-                        {truncate(msg.content)}
+                        {truncate(msg.htmlContent ? extractPlainText(renderMentions(msg.htmlContent)) : msg.content)}
                       </div>
                     )}
 

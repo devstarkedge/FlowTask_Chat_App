@@ -249,6 +249,14 @@ class UserRepository {
     const existing = byFlowTaskId || byEmail;
     if (!existing && !createIfMissing) return null;
     const filter = existing ? { _id: existing._id } : { flowTaskUserId: _id.toString() };
+    const incomingVersion = flowTaskUser.profileUpdatedAt || flowTaskUser.updatedAt;
+    const keepCurrentProfile = existing?.flowTaskProfileUpdatedAt
+      && (!incomingVersion || new Date(incomingVersion) < existing.flowTaskProfileUpdatedAt);
+    if (existing && incomingVersion && !keepCurrentProfile) filter.$or = [
+      { flowTaskProfileUpdatedAt: null },
+      { flowTaskProfileUpdatedAt: { $lte: new Date(incomingVersion) } },
+    ];
+    if (existing && !incomingVersion && !keepCurrentProfile) filter.flowTaskProfileUpdatedAt = null;
 
     const updated = await ChatUser.findOneAndUpdate(
       filter,
@@ -256,9 +264,8 @@ class UserRepository {
         $set: {
           authProvider: existing?.authProvider || 'flowtask',
           flowTaskUserId: _id.toString(),
-          name,
-          email: normalizedEmail,
-          avatar: avatar || null,
+          ...(!keepCurrentProfile ? { name, email: normalizedEmail, avatar: avatar || null } : {}),
+          ...(!keepCurrentProfile && incomingVersion ? { flowTaskProfileUpdatedAt: incomingVersion } : {}),
           isActive: true,
           emailVerified: true, // FlowTask users are pre-verified
           ...(markRegistered ? { registeredAt: new Date() } : {}),
@@ -268,10 +275,34 @@ class UserRepository {
           chatPreferences: {},
         },
       },
-      { upsert: true, returnDocument: 'after' },
+      { upsert: !existing, returnDocument: 'after' },
     );
     
-    return updated;
+    return updated || ChatUser.findById(existing._id).exec();
+  }
+
+  // Profile webhooks must never relink an account by email or insert a user.
+  async updateFlowTaskProfile(flowTaskUser, userId) {
+    const updates = {};
+    for (const field of ['name', 'email', 'avatar']) {
+      if (flowTaskUser[field] !== undefined) updates[field] = flowTaskUser[field];
+    }
+    if (updates.email) updates.email = updates.email.trim().toLowerCase();
+    const version = flowTaskUser.profileUpdatedAt || flowTaskUser.updatedAt;
+    const filter = { _id: userId, flowTaskUserId: String(flowTaskUser._id) };
+    if (version) {
+      updates.flowTaskProfileUpdatedAt = new Date(version);
+      filter.$or = [
+        { flowTaskProfileUpdatedAt: null },
+        { flowTaskProfileUpdatedAt: { $lte: updates.flowTaskProfileUpdatedAt } },
+      ];
+    } else {
+      // Unversioned legacy deliveries must not overwrite a newer snapshot.
+      filter.flowTaskProfileUpdatedAt = null;
+    }
+    return ChatUser.findOneAndUpdate(filter, { $set: updates }, {
+      returnDocument: 'after', runValidators: true, upsert: false,
+    }).exec();
   }
 
   async setOnlineStatus(userId, status) {
@@ -461,7 +492,7 @@ class UserRepository {
       baseFilter._id = { $in: memberIds };
     }
     return ChatUser.find(baseFilter)
-      .select('name email avatar onlineStatus flowTaskUserId')
+      .select('name email avatar onlineStatus flowTaskUserId flowTaskProfileUpdatedAt')
       .lean();
   }
 
@@ -489,7 +520,7 @@ class UserRepository {
     }
     return ChatUser.find(baseFilter)
       .limit(limit)
-      .select('name email avatar flowTaskUserId onlineStatus')
+      .select('name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
       .lean();
   }
 
@@ -522,7 +553,7 @@ class UserRepository {
     }
 
     const users = await ChatUser.find(filter)
-      .select('name email avatar flowTaskUserId onlineStatus')
+      .select('name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
       .sort({ name: 1 })
       .lean();
 

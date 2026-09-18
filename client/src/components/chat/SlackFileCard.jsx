@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -156,7 +157,9 @@ function HoverActionsBar({ file, onOpen, onForward, onShowDetails }) {
 // list itself.
 
 function FileDetailsModal({ file, onClose, onForward }) {
-  const [details, setDetails] = useState(null);
+  file = useLiveProfileData(file);
+  const [storedDetails, setDetails] = useState(null);
+  const details = useLiveProfileData(storedDetails);
   const [isLoading, setIsLoading] = useState(true);
 
   const assetId = file?._id || file?.fileId || file?.assetId || null;

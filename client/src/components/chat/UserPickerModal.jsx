@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -25,7 +26,8 @@ export default function UserPickerModal({ onClose, onSelect }) {
   const { user } = useAuthStore()
   const { channels, createDM } = useChannelStore()
   const [searchQuery, setSearchQuery] = useState('')
-  const [users, setUsers] = useState([])
+  const [storedUsers, setUsers] = useState([]);
+  const users = useLiveProfileData(storedUsers);
   const [isLoading, setIsLoading] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -614,6 +616,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
 
 /* ─── Extracted row component for cleanliness ─── */
 function UserRow({ u, isSelected, isOnline, existingDM, isCreating, onSelect, onHover }) {
+  u = useLiveProfileData(u);
   return (
     <button
       className={`upm-user-btn${isSelected ? ' is-selected' : ''}`}
@@ -655,6 +658,7 @@ function UserRow({ u, isSelected, isOnline, existingDM, isCreating, onSelect, on
 
 /* ─── Extracted row component for cached channel/DM ─── */
 function CachedItemRow({ item, isSelected, isCreating, onSelect, onHover }) {
+  item = useLiveProfileData(item);
   const isDM = item.type === 'dm' || item.type === 'self'
   return (
     <button

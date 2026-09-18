@@ -1,6 +1,8 @@
+import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import NotificationItem from './NotificationItem'
 
 export default function MentionToast({ notification }) {
+  notification = useLiveProfileData(notification);
   return (
     <div className="mention-toast-card-wrapper">
       <NotificationItem

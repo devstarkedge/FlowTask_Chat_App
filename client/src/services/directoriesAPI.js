@@ -1,11 +1,12 @@
 import api from './api';
+import { useWorkspaceStore } from '../stores/workspaceStore';
 
 // ─── Simple In-Memory TTL Cache ────────────────────────────────────────────
 const CACHE_TTL = 60_000; // 60 seconds
 const cache = new Map();
 
 function cacheKey(prefix, params) {
-  return prefix + ':' + JSON.stringify(params || {});
+  return prefix + ':' + useWorkspaceStore.getState().activeWorkspaceId + ':' + JSON.stringify(params || {});
 }
 
 function getCached(key) {

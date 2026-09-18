@@ -351,7 +351,7 @@ async function searchUsers(query, regex, workspaceId) {
         : []),
     ],
   })
-    .select('name email avatar onlineStatus flowTaskUserId customStatus lastSeenAt updatedAt')
+    .select('name email avatar onlineStatus flowTaskUserId customStatus lastSeenAt updatedAt flowTaskProfileUpdatedAt')
     .limit(limit + 1)
     .lean();
 
@@ -434,7 +434,7 @@ async function searchMessages(query, regex, workspaceId, userId, channelIds, cha
   })
     .sort({ createdAt: -1, _id: -1 })
     .limit(limit + 1)
-    .populate('authorId', 'name email avatar')
+    .populate('authorId', 'name email avatar flowTaskProfileUpdatedAt')
     .populate('channelId', 'name slug type')
     .lean();
 
@@ -445,7 +445,8 @@ async function searchMessages(query, regex, workspaceId, userId, channelIds, cha
     channelId: message.channelId?._id?.toString() || message.channelId?.toString(),
     channelName: message.channelId?.name || 'Conversation',
     channelType: message.channelId?.type,
-    senderName: message.senderSnapshot?.name || message.authorId?.name || 'Someone',
+    senderId: message.authorId?._id?.toString(),
+    senderName: message.authorId?.name || message.senderSnapshot?.name || 'Someone',
     senderAvatar: message.authorId?.avatar || null,
     snippet: makeSnippet(message.content || message.htmlContent || message.activityMeta?.taskTitle, query),
     createdAt: message.createdAt,
@@ -530,7 +531,7 @@ async function searchFiles(query, regex, workspaceId, channelIds, channelSignals
     .sort({ createdAt: -1 })
     .limit(limit + 1)
     .populate('fileId')
-    .populate('referencedBy', 'name email avatar')
+    .populate('referencedBy', 'name email avatar flowTaskProfileUpdatedAt')
     .populate('channelId', 'name slug type')
     .lean();
 
@@ -546,6 +547,7 @@ async function searchFiles(query, regex, workspaceId, channelIds, channelSignals
     url: ref.fileId?.secureUrl,
     thumbnailUrl: ref.fileId?.thumbnailUrl,
     uploadedBy: ref.referencedBy?.name || 'Someone',
+    uploadedById: ref.referencedBy?._id?.toString(),
     createdAt: ref.createdAt,
     type: 'file',
   })), (item) => (

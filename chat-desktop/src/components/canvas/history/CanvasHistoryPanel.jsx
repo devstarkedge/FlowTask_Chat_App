@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../../hooks/useLiveProfileData';
 import { useMemo } from "react";
 import { RotateCcw, X } from "lucide-react";
 import { useCanvasUiStore } from "../../../stores/canvasUiStore";
@@ -48,6 +49,7 @@ function groupByDate(history) {
 
 /* ── Component ── */
 export default function CanvasHistoryPanel({ history = [], onClose, onRestore, onPreviewVersion }) {
+  history = useLiveProfileData(history);
   const viewingVersion = useCanvasUiStore((s) => s.viewingVersion);
   const setViewingVersion = useCanvasUiStore((s) => s.setViewingVersion);
   const clearViewingVersion = useCanvasUiStore((s) => s.clearViewingVersion);

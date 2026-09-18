@@ -1,3 +1,4 @@
+import { useLiveProfileData } from '../../../hooks/useLiveProfileData';
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import MentionDropdown from "../../chat/MentionDropdown";
@@ -18,9 +19,11 @@ export function useCanvasMentionDropdown({ editor, isViewOnly, channelId }) {
 
   // Fetch members from channel store when channelId changes
   const fetchMembers = useChannelStore((s) => s.fetchMembers);
-  const members = useChannelStore(
+  const storedMembers = useChannelStore(
     useCallback((s) => (channelId ? s.membersByChannel[channelId] : null), [channelId]),
   );
+
+  const members = useLiveProfileData(storedMembers);
 
   useEffect(() => {
     if (channelId) {

@@ -200,7 +200,10 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     restoreDraft,
     saveDraftLocal,
     cancelPendingDraft,
-  } = useDraftAutoSave(channelId, threadId, editorRef, pendingFilesRef);
+  } = useDraftAutoSave(channelId, threadId, editorRef, pendingFilesRef, () => {
+    setHasContent(false);
+    setPendingFiles([]);
+  });
 
   // ─── Format State Sync ───────────────────────────────────────────────────
 

@@ -1,0 +1,36 @@
+/* Reuse the Scheduled message layout; keep draft-specific accessibility here. */
+.drafts-page.sml-root,
+.drafts-page .sml-body {
+  min-width: 0;
+  min-height: 0;
+}
+
+.drafts-page .sml-card:focus-within .sml-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.drafts-page .sml-card:focus-visible,
+.drafts-page .sml-action-btn:focus-visible {
+  outline: 2px solid var(--accent-primary, #1264a3);
+  outline-offset: 2px;
+}
+
+@media (hover: none) {
+  .drafts-page .sml-actions {
+    position: static;
+    justify-content: flex-end;
+    margin-top: 10px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drafts-page .sml-card,
+  .drafts-page .sml-skeleton-card {
+    animation: none;
+  }
+}

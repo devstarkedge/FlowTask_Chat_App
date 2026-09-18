@@ -52,6 +52,9 @@ export const useDraftStore = create(
   persist(
     (set, get) => ({
       drafts: {},
+      discardedDrafts: {},
+      discardRevision: 0,
+      discardedDraftKey: null,
 
       setDraft: (
         channelId,
@@ -80,6 +83,7 @@ export const useDraftStore = create(
         }
 
         set((state) => ({
+          discardedDrafts: Object.fromEntries(Object.entries(state.discardedDrafts).filter(([draftKey]) => draftKey !== key)),
           drafts: {
             ...state.drafts,
             [key]: {
@@ -113,16 +117,28 @@ export const useDraftStore = create(
         return draft;
       },
 
-      clearDraft: (channelId, workspaceId, threadId) => {
+      clearDraft: (channelId, workspaceId, threadId, { preventRestore = false } = {}) => {
         const key = getDraftKey(channelId, workspaceId, threadId);
         if (!key) return;
 
         set((state) => ({
+          ...(preventRestore ? { discardedDrafts: { ...state.discardedDrafts, [key]: state.discardedDrafts[key] || 1 } } : {}),
           drafts: Object.fromEntries(
             Object.entries(state.drafts).filter(
               ([draftKey]) => draftKey !== key,
             ),
           ),
+        }));
+      },
+
+      discardDraft: (channelId, workspaceId, threadId) => {
+        const key = getDraftKey(channelId, workspaceId, threadId);
+        if (!key) return;
+        set((state) => ({
+          discardRevision: state.discardRevision + 1,
+          discardedDraftKey: key,
+          drafts: Object.fromEntries(Object.entries(state.drafts).filter(([draftKey]) => draftKey !== key)),
+          discardedDrafts: { ...state.discardedDrafts, [key]: (state.discardedDrafts[key] || 0) + 1 },
         }));
       },
 
@@ -159,7 +175,7 @@ export const useDraftStore = create(
     {
       name: "flowtask-chat-drafts",
       version: 3,
-      partialize: (state) => ({ drafts: state.drafts }),
+      partialize: (state) => ({ drafts: state.drafts, discardedDrafts: state.discardedDrafts }),
       onRehydrateStorage: () => (state) => {
         state?.cleanupExpired();
       },

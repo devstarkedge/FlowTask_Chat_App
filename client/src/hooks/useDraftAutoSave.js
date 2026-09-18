@@ -1,5 +1,6 @@
 import { useRef, useCallback, useEffect } from 'react'
-import { useDraftStore } from '../stores/draftStore'
+import { useDraftStore, getDraftKey } from '../stores/draftStore'
+import useDraftDiscard from './useDraftDiscard'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { draftAPI } from '../services/api'
 import { isContentEmpty } from '../utils/draftUtils'
@@ -20,7 +21,7 @@ import { isContentEmpty } from '../utils/draftUtils'
  * @param {string|null} threadId - optional thread ID
  * @param {React.RefObject} editorRef - ref to the editor instance
  */
-export default function useDraftAutoSave(conversationId, threadId, editorRef) {
+export default function useDraftAutoSave(conversationId, threadId, editorRef, pendingFilesRef, onDiscard) {
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const { setDraft, getDraft, clearDraft } = useDraftStore()
 
@@ -37,21 +38,38 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef) {
     const ed = editorRef?.current
     if (!ed) return false
     if (conversationId !== lastConversationRef.current) return false
-    const { html, text } = ed.getContent()
+    const { html, text, mentions } = ed.getContent()
     const trimmed = (text || '').trim()
+    const attachments = (pendingFilesRef?.current || []).map((file) => ({
+      fileId: file._id || file.fileId,
+      fileName: file.fileName || file.name || '',
+      mimeType: file.mimeType || file.type || '',
+      fileSize: file.fileSize ?? file.size ?? 0,
+      url: file.url || file.secureUrl || '',
+      thumbnailUrl: file.thumbnailUrl || null,
+    }))
+
+    if (isContentEmpty(html, text) && attachments.length === 0) {
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+      if (serverSyncTimerRef.current) clearTimeout(serverSyncTimerRef.current)
+      restoreGenRef.current++
+      lastContentRef.current = ''
+      clearDraft(conversationId, activeWorkspaceId, threadId, { preventRestore: true })
+      return false
+    }
 
     // Skip if content hasn't changed
-    if (trimmed === lastContentRef.current) return false
+    if (trimmed === lastContentRef.current && attachments.length === 0) return false
     lastContentRef.current = trimmed
 
-    if (!isContentEmpty(html, text)) {
-      setDraft(conversationId, html, text, activeWorkspaceId, threadId)
+    if (!isContentEmpty(html, text) || attachments.length > 0) {
+      setDraft(conversationId, html, text, activeWorkspaceId, threadId, { mentions, attachments })
       return true
     } else {
       clearDraft(conversationId, activeWorkspaceId, threadId)
       return false
     }
-  }, [conversationId, threadId, activeWorkspaceId, setDraft, clearDraft, editorRef])
+  }, [conversationId, threadId, activeWorkspaceId, setDraft, clearDraft, editorRef, pendingFilesRef])
 
   const syncToServer = useCallback(async () => {
     const ed = editorRef?.current
@@ -93,6 +111,13 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef) {
   // ─── Debounced save on content change ─────────────────────────────
 
   const saveDraftDebounced = useCallback(() => {
+    const ed = editorRef?.current
+    if (!ed || !conversationId || !activeWorkspaceId) return
+    const { html, text } = ed.getContent()
+    if (isContentEmpty(html, text) && (pendingFilesRef?.current || []).length === 0) {
+      saveDraftLocal()
+      return
+    }
     if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
     draftTimerRef.current = setTimeout(() => {
       const didSave = saveDraftLocal()
@@ -103,7 +128,7 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef) {
         serverSyncTimerRef.current = setTimeout(syncToServer, 2200)
       }
     }, 800)
-  }, [saveDraftLocal, syncToServer])
+  }, [saveDraftLocal, syncToServer, editorRef, conversationId, activeWorkspaceId, pendingFilesRef])
 
   // ─── Flush all pending timers (call before channel switch) ────────
 
@@ -111,6 +136,15 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef) {
     if (draftTimerRef.current) { clearTimeout(draftTimerRef.current); draftTimerRef.current = null }
     if (serverSyncTimerRef.current) { clearTimeout(serverSyncTimerRef.current); serverSyncTimerRef.current = null }
   }, [])
+
+  useDraftDiscard(getDraftKey(conversationId, activeWorkspaceId, threadId), () => {
+    flushTimers()
+    restoreGenRef.current++
+    lastContentRef.current = ''
+    if (pendingFilesRef) pendingFilesRef.current = []
+    onDiscard?.()
+    editorRef?.current?.clear()
+  })
 
   // ─── Save on conversation switch ──────────────────────────────────
 
@@ -164,6 +198,7 @@ const restoreDraft = useCallback(async () => {
   let attempts = 0
 
   while (attempts < 3 && !draft) {
+    if (gen !== restoreGenRef.current || useDraftStore.getState().discardedDrafts[getDraftKey(conversationId, activeWorkspaceId, threadId)]) return false
     // 🔹 1. Try local first
     draft = getDraft(conversationId, activeWorkspaceId, threadId)
 
@@ -185,7 +220,10 @@ const restoreDraft = useCallback(async () => {
           }
 
           // Cache locally (VERY IMPORTANT)
-          useDraftStore.getState().setServerDraft(serverDraft)
+          setDraft(conversationId, draft.html, draft.text, activeWorkspaceId, threadId, {
+            mentions: serverDraft.mentions || [],
+            attachments: serverDraft.attachments || [],
+          })
         }
       } catch {
         // ignore errors
@@ -212,7 +250,7 @@ const restoreDraft = useCallback(async () => {
     lastContentRef.current = ''
     return false
   }
-}, [conversationId, threadId, activeWorkspaceId, getDraft, editorRef]) // ─── Save on page unload / tab close ──────────────────────────────
+}, [conversationId, threadId, activeWorkspaceId, getDraft, setDraft, editorRef]) // ─── Save on page unload / tab close ──────────────────────────────
 
   useEffect(() => {
     const handleBeforeUnload = () => {

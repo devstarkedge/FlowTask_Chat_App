@@ -1,5 +1,6 @@
 import { useRef, useCallback, useEffect } from 'react'
-import { useDraftStore } from '../stores/draftStore'
+import { useDraftStore, getDraftKey } from '../stores/draftStore'
+import useDraftDiscard from './useDraftDiscard'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { isContentEmpty } from '../utils/draftUtils'
 
@@ -21,7 +22,7 @@ import { isContentEmpty } from '../utils/draftUtils'
  * @param {React.RefObject} editorRef - ref to the editor instance
  * @param {React.RefObject} [pendingFilesRef] - ref to the current pendingFiles state array
  */
-export default function useDraftAutoSave(conversationId, threadId, editorRef, pendingFilesRef) {
+export default function useDraftAutoSave(conversationId, threadId, editorRef, pendingFilesRef, onDiscard) {
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const { setDraft, getDraft, clearDraft } = useDraftStore()
 
@@ -65,7 +66,9 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef, pe
       const attachments = currentFiles.map(mapToAttachment)
 
       if (isContentEmpty(trimmedHtml, trimmed) && attachments.length === 0) {
-        clearDraft(targetConversationId, activeWorkspaceId, targetThreadId)
+        if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+        restoreGenRef.current++
+        clearDraft(targetConversationId, activeWorkspaceId, targetThreadId, { preventRestore: true })
         if (targetConversationId === conversationId && targetThreadId === threadId) {
           lastSignatureRef.current = ''
         }
@@ -103,7 +106,8 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef, pe
 
     if (isContentEmpty(trimmedHtml, trimmed) && attachments.length === 0) {
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
-      clearDraft(conversationId, activeWorkspaceId, threadId)
+      restoreGenRef.current++
+      clearDraft(conversationId, activeWorkspaceId, threadId, { preventRestore: true })
       lastSignatureRef.current = ''
       return
     }
@@ -135,6 +139,15 @@ export default function useDraftAutoSave(conversationId, threadId, editorRef, pe
       draftTimerRef.current = null
     }
   }, [])
+
+  useDraftDiscard(getDraftKey(conversationId, activeWorkspaceId, threadId), () => {
+    flushTimers()
+    restoreGenRef.current++
+    lastSignatureRef.current = ''
+    if (pendingFilesRef) pendingFilesRef.current = []
+    onDiscard?.()
+    editorRef?.current?.clear()
+  })
 
   useEffect(() => {
     if (

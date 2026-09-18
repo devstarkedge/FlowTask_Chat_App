@@ -11,6 +11,7 @@ import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import ScheduleMessageModal from "./ScheduleMessageModal";
+import "./custom-css/draftsSidebar.css";
 
 function formatTimeAgo(date) {
   const diff = Date.now() - new Date(date).getTime();
@@ -53,7 +54,7 @@ const AVATAR_COLORS = [
   "#65a30d",
 ];
 
-function ChannelAvatar({ name, type, isPrivate, size = 38 }) {
+function ChannelBadge({ name, type, isPrivate }) {
   const initials = getInitials(name.replace(/^#/, ""));
   const colorIndex =
     name
@@ -65,48 +66,34 @@ function ChannelAvatar({ name, type, isPrivate, size = 38 }) {
   const bg = AVATAR_COLORS[colorIndex];
 
   return (
-    <div
-      className={`dsl-avatar${type === "dm" ? " dm" : ""}`}
-      style={{
-        width: size,
-        height: size,
-        minWidth: size,
-        background: bg,
-        fontSize: size * 0.35,
-      }}
-    >
+    <span className={`sml-channel-badge${type === "dm" ? " sml-channel-badge--dm" : ""}`}>
       {type === "dm" ? (
-        initials
+        <span className="sml-dm-avatar" style={{ background: bg }} aria-hidden="true">{initials}</span>
       ) : isPrivate ? (
-        <Lock size={size * 0.42} strokeWidth={2.2} style={{ opacity: 0.9 }} />
+        <Lock size={10} strokeWidth={2.3} />
       ) : (
-        <Hash size={size * 0.42} strokeWidth={2.2} style={{ opacity: 0.9 }} />
+        <Hash size={10} strokeWidth={2.3} />
       )}
-    </div>
+      <span className="sml-channel-name">{name.replace(/^#/, "")}</span>
+    </span>
   );
 }
 
 function SkeletonCard({ delay = 0 }) {
   return (
-    <div className="dsl-skeleton-card" style={{ animationDelay: `${delay}ms` }}>
-      <div
-        className="dsl-skeleton-line"
-        style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0 }}
-      />
-      <div className="dsl-skeleton-body">
+    <div className="sml-skeleton-card" style={{ animationDelay: `${delay}ms` }}>
+      <div className="sml-skeleton-row">
         <div
-          className="dsl-skeleton-line"
-          style={{ width: "50%", height: 12 }}
+          className="sml-skeleton-line"
+          style={{ width: "36%", height: 12 }}
         />
         <div
-          className="dsl-skeleton-line"
-          style={{ width: "88%", height: 11 }}
-        />
-        <div
-          className="dsl-skeleton-line"
-          style={{ width: "65%", height: 11 }}
+          className="sml-skeleton-line"
+          style={{ width: "22%", height: 10 }}
         />
       </div>
+      <div className="sml-skeleton-line" style={{ width: "88%", height: 11 }} />
+      <div className="sml-skeleton-line" style={{ width: "62%", height: 11, marginBottom: 0 }} />
     </div>
   );
 }
@@ -233,40 +220,32 @@ function DraftCard({
 
   return (
     <div
-      className="dsl-card"
+      className="sml-card"
       onClick={() => onNavigate(draft)}
       tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onNavigate(draft)}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onNavigate(draft);
+        }
+      }}
       role="button"
       aria-label={`Draft for ${channelName}`}
     >
-      <ChannelAvatar
-        name={channelName}
-        type={channelType}
-        isPrivate={isPrivate}
-        size={38}
-      />
-
-      <div className="dsl-body">
-        <div className="dsl-top">
-          <div className="dsl-channel-wrap">
-            <span className="dsl-channel">{channelName}</span>
+        <div className="sml-card-top">
+          <ChannelBadge name={channelName} type={channelType} isPrivate={isPrivate} />
+          <div className="sml-time-group">
             {isScheduled && (
-              <span className="dsl-badge dsl-badge--scheduled" title={`Scheduled: ${scheduledTimeStr}`}>
+              <span className="sml-time-badge" title={`Scheduled: ${scheduledTimeStr}`}>
                 <Clock size={12} />
                 {scheduledTimeStr}
               </span>
             )}
-            {attachmentCount > 0 && (
-              <span className="dsl-badge dsl-badge--attach">
-                {attachmentCount} file{attachmentCount > 1 ? "s" : ""}
-              </span>
-            )}
+            <span className="sml-time-badge">{formatTimeAgo(draft.timestamp)}</span>
           </div>
-          <span className="dsl-time">{formatTimeAgo(draft.timestamp)}</span>
         </div>
 
-        <p className="dsl-preview">
+        <p className={`sml-preview${!preview ? " empty" : ""}`}>
           {preview || (
             <em style={{ color: "var(--text-muted)", fontStyle: "italic" }}>
               No text content
@@ -274,14 +253,20 @@ function DraftCard({
           )}
         </p>
 
+        {attachmentCount > 0 && (
+          <div className="sml-card-footer">
+            <span className="sml-indicator">
+              <File size={10} /> {attachmentCount} attachment{attachmentCount !== 1 ? "s" : ""}
+            </span>
+          </div>
+        )}
         {attachments.length > 0 && (
           <DraftAttachmentPreviews attachments={attachments} />
         )}
-      </div>
 
-      <div className="dsl-actions" onClick={(e) => e.stopPropagation()}>
+      <div className="sml-actions" onClick={(e) => e.stopPropagation()}>
         <button
-          className="dsl-action-btn dsl-action-btn--send"
+          className="sml-action-btn send"
           onClick={(e) => onSend(e, draft)}
           disabled={isSending}
           title="Send now"
@@ -294,7 +279,7 @@ function DraftCard({
           )}
         </button>
         <button
-          className="dsl-action-btn dsl-action-btn--send"
+          className="sml-action-btn edit"
           onClick={(e) => {
             e.stopPropagation();
             onSchedule(draft);
@@ -305,7 +290,7 @@ function DraftCard({
           <Clock size={15} />
         </button>
         <button
-          className="dsl-action-btn dsl-action-btn--delete"
+          className="sml-action-btn delete"
           onClick={(e) => onDelete(e, draft)}
           title="Delete draft"
           aria-label="Delete draft"
@@ -322,6 +307,7 @@ export default function DraftsSidebar() {
   const channels = useChannelStore((s) => s.channels);
   const drafts = useDraftStore((s) => s.drafts);
   const clearDraft = useDraftStore((s) => s.clearDraft);
+  const discardDraft = useDraftStore((s) => s.discardDraft);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const fetchScheduledMessages = useScheduledStore((s) => s.fetchScheduledMessages);
   const navigate = useNavigate();
@@ -381,8 +367,7 @@ export default function DraftsSidebar() {
       isPrivate:
         channel.isPrivate ??
         channel.private ??
-        channel.visibility === "private" ??
-        false,
+        (channel.visibility === "private"),
     };
   };
 
@@ -404,7 +389,7 @@ export default function DraftsSidebar() {
       message: "This draft will be permanently deleted.",
     });
     if (!ok) return;
-    clearDraft(
+    discardDraft(
       draft.channelId,
       draft.workspaceId || activeWorkspaceId,
       draft.threadId,
@@ -421,41 +406,6 @@ export default function DraftsSidebar() {
       return;
     }
 
-    const handleSendNow = async (e, draft) => {
-      e.stopPropagation();
-
-      const channel = channels.find((item) => item._id === draft.channelId);
-      if (!channel) {
-        toast.error("Channel not found");
-        return;
-      }
-
-      setSendingId(draft._key);
-
-      try {
-        await sendMessage(draft.channelId, draft.text?.trim() || " ", {
-          threadId: draft.threadId || undefined,
-          htmlContent: draft.html || undefined,
-          mentions: draft.mentions?.length ? draft.mentions : undefined,
-          // Prefer explicit fileReferences; fall back to attachment stubs stored in draft
-          fileReferences: draft.fileReferences?.length
-            ? draft.fileReferences
-            : draft.attachments?.length
-              ? draft.attachments.map((a) => a.fileId).filter(Boolean)
-              : undefined,
-        });
-        clearDraft(
-          draft.channelId,
-          draft.workspaceId || activeWorkspaceId,
-          draft.threadId,
-        );
-        toast.success("Draft sent");
-      } catch {
-        // sendMessage already reports failures
-      } finally {
-        setSendingId(null);
-      }
-    };
     toast(
       (t) => (
         <div className="dsl-confirm-toast">
@@ -484,7 +434,9 @@ export default function DraftsSidebar() {
                         : undefined,
                       fileReferences: draft.fileReferences?.length
                         ? draft.fileReferences
-                        : undefined,
+                        : draft.attachments?.length
+                          ? draft.attachments.map((attachment) => attachment.fileId).filter(Boolean)
+                          : undefined,
                     },
                   );
                   clearDraft(
@@ -525,22 +477,22 @@ export default function DraftsSidebar() {
   };
 
   return (
-    <div className="dsl-root">
-      <div className="dsl-header">
-        <div className="dsl-search">
-          <Search size={13} className="dsl-search-icon" />
+    <div className="sml-root ds-root drafts-page">
+      <div className="sml-header ds-header">
+        <div className="sml-search ds-search">
+          <Search size={13} className="sml-search-icon ds-search__icon" />
           <input
             ref={searchRef}
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search drafts..."
-            className="dsl-search-input"
+            className="sml-search-input ds-search__input"
             aria-label="Search drafts"
           />
           {searchQuery && (
             <button
-              className="dsl-search-clear"
+              className="sml-search-clear ds-search__clear"
               onClick={() => {
                 setSearchQuery("");
                 searchRef.current?.focus();
@@ -553,7 +505,7 @@ export default function DraftsSidebar() {
         </div>
       </div>
 
-      <div className="dsl-scroll">
+      <div className="sml-body">
         {loading ? (
           <>
             <SkeletonCard delay={0} />
@@ -562,14 +514,14 @@ export default function DraftsSidebar() {
             <SkeletonCard delay={240} />
           </>
         ) : filteredDrafts.length === 0 ? (
-          <div className="dsl-empty">
-            <div className="dsl-empty-icon">
+          <div className="sml-empty ds-empty">
+            <div className="sml-empty-icon ds-empty__icon-wrap">
               <PencilLine size={28} />
             </div>
-            <h3 className="dsl-empty-title">
+            <h3 className="sml-empty-title ds-empty__title">
               {searchQuery ? "No matching drafts" : "No drafts yet"}
             </h3>
-            <p className="dsl-empty-desc">
+            <p className="sml-empty-desc ds-empty__desc">
               {searchQuery
                 ? "Try a different search term."
                 : "Start composing a message and it will appear here automatically."}
@@ -577,10 +529,14 @@ export default function DraftsSidebar() {
           </div>
         ) : (
           <>
-            <div className="dsl-section-label">
+            <div className="sml-group-header">
+              <div className="sml-group-line" />
+              <span className="sml-group-label">
               {searchQuery
                 ? `${filteredDrafts.length} result${filteredDrafts.length !== 1 ? "s" : ""}`
                 : "Recent"}
+              </span>
+              <div className="sml-group-line" />
             </div>
 
             {filteredDrafts.map((draft) => {
@@ -604,6 +560,9 @@ export default function DraftsSidebar() {
         )}
       </div>
 
+      {!loading && visibleDrafts.length > 0 && (
+        <div className="sml-footer"><PencilLine size={11} />{visibleDrafts.length} draft{visibleDrafts.length !== 1 ? "s" : ""}</div>
+      )}
       {showScheduleModal && scheduleDraft && (
         <ScheduleMessageModal
           channelId={scheduleDraft.channelId}

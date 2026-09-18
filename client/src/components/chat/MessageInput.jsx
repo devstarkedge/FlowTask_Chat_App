@@ -154,6 +154,8 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   const { clearDraft } = useDraftStore()
 
   const editorRef = useRef(null)
+  const pendingFilesRef = useRef(pendingFiles)
+  useEffect(() => { pendingFilesRef.current = pendingFiles }, [pendingFiles])
   const fileInputRef = useRef(null)
   const containerRef = useRef(null)
   const typingTimeoutRef = useRef(null)
@@ -174,7 +176,10 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   } = useMentions({ channelId, editorRef })
 
   // ─── Draft Auto Save Hook ─────────────────────────────────────────
-  const { saveDraftDebounced, restoreDraft, saveDraftLocal } = useDraftAutoSave(channelId, threadId, editorRef)
+  const { saveDraftDebounced, restoreDraft, saveDraftLocal } = useDraftAutoSave(channelId, threadId, editorRef, pendingFilesRef, () => {
+    setHasContent(false)
+    setPendingFiles([])
+  })
 
   // ─── Format State Sync ───────────────────────────────────────────────────
 
@@ -298,7 +303,12 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   }
 
   const removePendingFile = (index) => {
-    setPendingFiles((prev) => prev.filter((_, i) => i !== index))
+    setPendingFiles((prev) => {
+      const updated = prev.filter((_, i) => i !== index)
+      pendingFilesRef.current = updated
+      requestAnimationFrame(() => saveDraftLocal())
+      return updated
+    })
   }
 
   const removeUploadingFile = (localId) => {

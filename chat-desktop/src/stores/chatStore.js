@@ -29,6 +29,7 @@ const hydratedChannels = new Set();
 const hydrationInFlight = new Set();
 const pendingPersistByChannel = new Map();
 let persistTimer = null;
+let cacheGeneration = 0;
 
 // Auto-clear timers for typing indicators (keyed by `${channelId}-${userId}`)
 const typingTimeouts = {};
@@ -105,7 +106,7 @@ function flushChannelPersists() {
   persistTimer = null;
 
   for (const [channelId, entry] of entries) {
-    void saveChannelMessagesToCache(channelId, entry.messages, entry.workspaceId);
+    void saveChannelMessagesToCache(channelId, entry.messages, entry.workspaceId, entry.userId);
   }
 }
 
@@ -115,7 +116,11 @@ function scheduleChannelPersist(channelId, messages) {
 
   pendingPersistByChannel.set(
     channelId,
-    { messages: Array.isArray(messages) ? messages : [], workspaceId: useWorkspaceStore.getState().activeWorkspaceId },
+    {
+      messages: Array.isArray(messages) ? messages : [],
+      workspaceId: useWorkspaceStore.getState().activeWorkspaceId,
+      userId: useAuthStore.getState().user?._id,
+    },
   );
 
   if (persistTimer) return;
@@ -190,6 +195,7 @@ export const useChatStore = create((set, get) => ({
   // Normalized message entities (feature-flagged, maintained via subscription)
   hasMore: {},
   isLoadingMessages: false,
+  loadingMessagesByChannel: {},
 
   // Receipts state
   deliveryReceipts: {},
@@ -348,7 +354,13 @@ export const useChatStore = create((set, get) => ({
       return
     }
     // Debounce guard: prevent duplicate fetches for the same channel
-    const fetchKey = `${channelId}-${options.cursor || "initial"}`;
+    const generation = cacheGeneration;
+    const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+    const userId = useAuthStore.getState().user?._id;
+    const isCurrent = () => generation === cacheGeneration &&
+      workspaceId === useWorkspaceStore.getState().activeWorkspaceId &&
+      userId === useAuthStore.getState().user?._id;
+    const fetchKey = `${workspaceId}:${channelId}:${options.cursor || "initial"}`;
     const fetching = get()._fetchingChannels;
     if (fetching.has(fetchKey)) return;
     fetching.add(fetchKey);
@@ -356,9 +368,14 @@ export const useChatStore = create((set, get) => ({
     // LRU tracking
     touchChannel(channelId);
 
-    set({ isLoadingMessages: true });
+    set((state) => ({
+      isLoadingMessages: true,
+      loadingMessagesByChannel: { ...state.loadingMessagesByChannel, [channelId]: true },
+    }));
 
-    // Stale-while-revalidate: hydrate from IndexedDB first for instant rendering.
+    // Read disk and fetch the server in parallel. A slow/blocked IndexedDB read
+    // must never delay a network request or overwrite a fresh server response.
+    let serverSucceeded = false;
     if (
       CHAT_FEATURE_FLAGS.indexedDbCache &&
       !options.cursor &&
@@ -366,31 +383,30 @@ export const useChatStore = create((set, get) => ({
       !hydrationInFlight.has(channelId)
     ) {
       hydrationInFlight.add(channelId);
-      try {
-        const cachedMessages = await loadChannelMessagesFromCache(channelId);
-        if (cachedMessages.length > 0) {
-          set((state) => {
-            const existingMessages = state.messagesByChannel[channelId] || [];
-            const merged = mergeChronologicalMessages(
-              existingMessages,
-              cachedMessages,
-            );
-            return {
-              messagesByChannel: {
-                ...state.messagesByChannel,
-                [channelId]: merged,
-              },
-            };
-          });
-        }
-      } finally {
-        hydratedChannels.add(channelId);
-        hydrationInFlight.delete(channelId);
-      }
+      void Promise.resolve().then(() => loadChannelMessagesFromCache(channelId, workspaceId, userId))
+        .then((cachedMessages) => {
+          if (isCurrent() && !serverSucceeded && cachedMessages?.length > 0) {
+            set((state) => {
+              const existingMessages = state.messagesByChannel[channelId] || [];
+              const merged = mergeChronologicalMessages(existingMessages, cachedMessages);
+              return {
+                messagesByChannel: { ...state.messagesByChannel, [channelId]: merged },
+              };
+            });
+          }
+        }).catch((error) => {
+          logger.error('Failed to hydrate message cache:', error);
+        }).finally(() => {
+          if (!isCurrent()) return;
+          hydratedChannels.add(channelId);
+          hydrationInFlight.delete(channelId);
+        });
     }
 
     try {
       const { data } = await messageAPI.list(channelId, options);
+      if (!isCurrent()) return;
+      serverSucceeded = true;
       const messages = data.data.items || [];
       const hasMore = data.data.hasMore ?? false;
 
@@ -398,7 +414,13 @@ export const useChatStore = create((set, get) => ({
         const existingMessages = state.messagesByChannel[channelId] || [];
 
         // Defensive fix: Ensure incoming messages are always Oldest -> Newest
-        const sortedIncoming = [...messages].sort(
+        const existingById = new Map(existingMessages.map((message) => [message._id, message]));
+        const sortedIncoming = messages.map((message) => {
+          const existing = existingById.get(message._id);
+          return existing?._virtuosoKey
+            ? { ...message, _virtuosoKey: existing._virtuosoKey }
+            : message;
+        }).sort(
           (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
         );
 
@@ -436,19 +458,32 @@ export const useChatStore = create((set, get) => ({
         const toEvict = getChannelsToEvict();
         for (const evictId of toEvict) {
           delete newMessagesByChannel[evictId];
+          hydratedChannels.delete(evictId);
         }
 
         return {
           messagesByChannel: newMessagesByChannel,
           hasMore: { ...state.hasMore, [channelId]: hasMore },
-          isLoadingMessages: false,
         };
       });
     } catch (error) {
-      set({ isLoadingMessages: false });
+      if (isCurrent() && [403, 404].includes(error.response?.status)) {
+        serverSucceeded = true;
+        set((state) => ({
+          messagesByChannel: { ...state.messagesByChannel, [channelId]: [] },
+          hasMore: { ...state.hasMore, [channelId]: false },
+        }));
+      }
       logger.error("Failed to fetch messages:", error);
     } finally {
       fetching.delete(fetchKey);
+      if (isCurrent()) {
+        const channelPending = [...fetching].some(key => key.startsWith(`${workspaceId}:${channelId}:`));
+        set((state) => ({
+          isLoadingMessages: fetching.size > 0,
+          loadingMessagesByChannel: { ...state.loadingMessagesByChannel, [channelId]: channelPending },
+        }));
+      }
     }
   },
 
@@ -690,17 +725,13 @@ export const useChatStore = create((set, get) => ({
         const hasTempMessage = existing.some((m) => m._id === tempId);
         if (!hasTempMessage) return state;
 
-        // Just remove the temp message and keep the viewport at the bottom.
+        // Removing a duplicate optimistic row is an update, not an append.
         const nextChannelMessages = existing.filter((m) => m._id !== tempId);
 
         return {
           messagesByChannel: {
             ...state.messagesByChannel,
             [channelId]: nextChannelMessages,
-          },
-          messageAppendVersionByChannel: {
-            ...state.messageAppendVersionByChannel,
-            [channelId]: (state.messageAppendVersionByChannel[channelId] || 0) + 1,
           },
         };
       }
@@ -723,10 +754,6 @@ export const useChatStore = create((set, get) => ({
         messagesByChannel: {
           ...state.messagesByChannel,
           [channelId]: nextChannelMessages,
-        },
-        messageAppendVersionByChannel: {
-          ...state.messageAppendVersionByChannel,
-          [channelId]: (state.messageAppendVersionByChannel[channelId] || 0) + 1,
         },
       };
 
@@ -1898,6 +1925,7 @@ export const useChatStore = create((set, get) => ({
 
   // ─── Workspace Switch — Clear all cached data ──────────────────────
   clearCache: () => {
+    cacheGeneration++;
     // Clear per-channel pin caches from sessionStorage
     try {
       const keysToRemove = [];
@@ -1915,6 +1943,9 @@ export const useChatStore = create((set, get) => ({
 
     set({
       messagesByChannel: {},
+      _fetchingChannels: new Set(),
+      isLoadingMessages: false,
+      loadingMessagesByChannel: {},
       messageAppendVersionByChannel: {},
       messagesById: {},
       channelMessageIds: {},
@@ -1940,7 +1971,10 @@ export const useChatStore = create((set, get) => ({
 if (CHAT_FEATURE_FLAGS.indexedDbCache) {
   const originalClearCache = useChatStore.getState().clearCache;
   useChatStore.setState({
-    clearCache: () => {
+    clearCache: ({ clearPersisted = true } = {}) => {
+      // Workspace switches retain disk history; logout still erases it.
+      if (persistTimer) clearTimeout(persistTimer);
+      if (!clearPersisted) flushChannelPersists();
       hydratedChannels.clear();
       hydrationInFlight.clear();
       channelAccessOrder.splice(0, channelAccessOrder.length);
@@ -1949,8 +1983,18 @@ if (CHAT_FEATURE_FLAGS.indexedDbCache) {
         clearTimeout(persistTimer);
         persistTimer = null;
       }
-      void clearMessageCache();
+      if (clearPersisted) void clearMessageCache();
       originalClearCache();
     },
+  });
+  // Centralize persistence so API loads, socket events, edits and deletions all
+  // refresh the same cache without adding writes to each individual action.
+  useChatStore.subscribe((state, previous) => {
+    if (state.messagesByChannel === previous.messagesByChannel) return;
+    for (const [channelId, messages] of Object.entries(state.messagesByChannel)) {
+      if (messages !== previous.messagesByChannel[channelId]) {
+        scheduleChannelPersist(channelId, messages);
+      }
+    }
   });
 }

@@ -19,8 +19,6 @@ export default function TypingIndicator({ channelId }) {
   }, [typingMap, userId])
   const typers = useLiveProfileData(typingUsers).map((user) => user.name)
 
-  if (typers.length === 0) return null
-
   const text =
     typers.length === 1
       ? `${typers[0]} is typing`
@@ -30,8 +28,9 @@ export default function TypingIndicator({ channelId }) {
 
   return (
     <div
-      className="chat-layout-grid py-1 animate-fade-in"
-      style={{ minHeight: 24 }}
+      className="chat-layout-grid py-1"
+      style={{ height: 24, flexShrink: 0, overflow: 'hidden', visibility: typers.length ? 'visible' : 'hidden' }}
+      aria-hidden={typers.length === 0}
     >
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-1">

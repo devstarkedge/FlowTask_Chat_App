@@ -19,8 +19,25 @@ import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
 import {
   advanceMessageItemIndex,
   getVirtuosoMessageKey,
+  measureMessageItem,
 } from "../../utils/virtuosoMessageIndex";
 
+// Stable component types keep Virtuoso's measured spacers mounted on rerenders.
+function MessageListHeader({ context }) {
+  return (
+    <div style={{ height: 36, padding: "8px 20px", textAlign: "center" }}>
+      {context.isLoadingMessages && (
+        <div className="skeleton" style={{ width: 120, height: 20, margin: "0 auto", borderRadius: 10 }} />
+      )}
+    </div>
+  );
+}
+
+function MessageListFooter() {
+  return <div style={{ height: 16 }} />;
+}
+
+const LIST_COMPONENTS = { Header: MessageListHeader, Footer: MessageListFooter };
 
 export default function MessageList({
   messages,
@@ -33,14 +50,13 @@ export default function MessageList({
 }) {
   // Use individual subscriptions to avoid returning new object snapshots
   // from a single selector (this can trigger React's getSnapshot warning).
-  const isLoadingMessages = useChatStore((s) => s.isLoadingMessages);
+  const isLoadingMessages = useChatStore((s) => !!s.loadingMessagesByChannel?.[channelId]);
   const hasMore = useChatStore((s) => s.hasMore?.[channelId]);
   const fetchMessages = useChatStore((s) => s.fetchMessages);
   const highlightMessageId = useChatStore((s) => s.highlightMessageId);
   const setHighlightMessageId = useChatStore((s) => s.setHighlightMessageId);
   const scrollToMessageId = useChatStore((s) => s.scrollToMessageId);
   const setScrollToMessageId = useChatStore((s) => s.setScrollToMessageId);
-  const editingMessageId = useChatStore((s) => s.editingMessageId);
   const messageAppendVersion = useChatStore(
     (s) => s.messageAppendVersionByChannel?.[channelId] || 0,
   );
@@ -48,13 +64,17 @@ export default function MessageList({
   const lastReadMessageId = useChannelStore(
     (s) => s.lastReadByChannel?.[channelId]
   );
+  // Keep the unread boundary fixed for this visit. Receipt refreshes must not
+  // insert/remove a separator or regroup messages underneath the reader.
+  const unreadBoundaryRef = useRef(null);
+  if (!unreadBoundaryRef.current || unreadBoundaryRef.current.channelId !== channelId) {
+    unreadBoundaryRef.current = { channelId, messageId: lastReadMessageId };
+  }
+  const unreadBoundary = unreadBoundaryRef.current.messageId;
   const virtuosoRef = useRef(null);
   const lastScrolledHighlightId = useRef(null);
   const previousAppendVersionRef = useRef(messageAppendVersion);
   const messageScrollerRef = useRef(null);
-  const scrollFrameRef = useRef(null);
-  const scrollTimeoutRef = useRef(null);
-  const bottomLockUntilRef = useRef(0);
   const firstItemIndexTrackerRef = useRef(null);
 
   // Forward message modal state
@@ -100,15 +120,35 @@ export default function MessageList({
       align: "end",
       behavior: "auto",
     });
+  }, []);
 
-    // scrollToIndex can use measurements from the previous render while an
-    // optimistic row is being reconciled. Pin the real scroll container to
-    // its physical end as well, so the last row cannot remain partly clipped.
-    const scroller = messageScrollerRef.current;
-    if (scroller && typeof scroller.scrollHeight === "number") {
-      scroller.scrollTop = scroller.scrollHeight;
+  const cancelPendingFollow = useCallback(() => {
+    previousAppendVersionRef.current = useChatStore.getState().messageAppendVersionByChannel?.[channelId] || 0;
+  }, [channelId]);
+
+  const trackScrollPosition = useCallback(() => {
+    const element = messageScrollerRef.current;
+    if (element) {
+      isAtBottomRef.current = element.scrollHeight - element.clientHeight - element.scrollTop <= 8;
     }
   }, []);
+
+  const setMessageScroller = useCallback((element) => {
+    messageScrollerRef.current?.removeEventListener("scroll", trackScrollPosition);
+    messageScrollerRef.current = element;
+    element?.addEventListener("scroll", trackScrollPosition, { passive: true });
+  }, [trackScrollPosition]);
+
+  const followNewMessages = useCallback(() => {
+    const appendVersion = useChatStore.getState().messageAppendVersionByChannel?.[channelId] || 0;
+    if (appendVersion <= previousAppendVersionRef.current) return false;
+    previousAppendVersionRef.current = appendVersion;
+    if (!isAtBottomRef.current) return false;
+    // Virtuoso waits for the new row measurements before consuming this one
+    // request. Height-only changes and acknowledgements cannot enter this path.
+    return { index: "LAST", align: "end", behavior: "auto" };
+  }, [channelId]);
+
 
   // ─── Multi-message selection helpers ───────────────────────────────────
   const toggleSelectMessage = useCallback((msgId, shiftKey = false) => {
@@ -185,34 +225,15 @@ export default function MessageList({
   }, [channelId, hasMore, isLoadingMessages, messages, fetchMessages]);
 
   // ─── Hard-jump to bottom whenever the active channel changes ──────────
-  useEffect(() => {
+  useLayoutEffect(() => {
+    cancelPendingFollow();
     isAtBottomRef.current = true;
     setShowScrollBtn(false);
     previousAppendVersionRef.current = messageAppendVersion;
 
-    if (messages.length > 0) {
-      setTimeout(() => {
-        virtuosoRef.current?.scrollToIndex({ index: "LAST", behavior: "auto" });
-      }, 50);
-    }
+    lastScrolledHighlightId.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId]);
-
-  // ─── Smart auto-scroll on new messages ───────────────────────────────
-  useLayoutEffect(() => {
-    if (messageAppendVersion <= previousAppendVersionRef.current) return;
-    previousAppendVersionRef.current = messageAppendVersion;
-    if (messages.length === 0) return;
-
-    // Keep the viewport pinned while Virtuoso renders and measures an appended
-    // message or replaces its optimistic data with the server-confirmed data.
-    // An immediate (non-animated) scroll avoids a smooth scroll being
-    // interrupted by reconciliation and leaving the viewport above the end.
-    bottomLockUntilRef.current = Date.now() + 1500;
-    isAtBottomRef.current = true;
-    setShowScrollBtn(false);
-    scrollToLatest();
-  }, [messageAppendVersion, messages.length, scrollToLatest]);
 
   // ─── Flatten: date separators + unread marker ─────────────────────────
   const isActivityMessage = (msg) =>
@@ -228,11 +249,11 @@ export default function MessageList({
     let currentDate = null;
     let insertedUnreadMarker = false;
 
-    const lastReadIndex = lastReadMessageId
-      ? messages.findIndex((m) => m._id === lastReadMessageId)
+    const lastReadIndex = unreadBoundary
+      ? messages.findIndex((m) => m._id === unreadBoundary)
       : -1;
 
-    if (lastReadMessageId && messages.length > 0 && lastReadIndex === -1) {
+    if (unreadBoundary && messages.length > 0 && lastReadIndex === -1) {
       flattened.push({ isUnreadSeparator: true, _id: "unread-separator" });
       insertedUnreadMarker = true;
     }
@@ -256,10 +277,10 @@ export default function MessageList({
 
       if (
         !insertedUnreadMarker &&
-        lastReadMessageId &&
+        unreadBoundary &&
         i > 0 &&
-        messages[i - 1]._id === lastReadMessageId &&
-        msg._id !== lastReadMessageId
+        messages[i - 1]._id === unreadBoundary &&
+        msg._id !== unreadBoundary
       ) {
         flattened.push({ isUnreadSeparator: true, _id: "unread-separator" });
         insertedUnreadMarker = true;
@@ -272,8 +293,8 @@ export default function MessageList({
         nextMsgRaw &&
         (formatDateLabel(new Date(nextMsgRaw.createdAt)) !== label ||
           (!insertedUnreadMarker &&
-            lastReadMessageId &&
-            msg._id === lastReadMessageId));
+            unreadBoundary &&
+            msg._id === unreadBoundary));
       const nextMsg = nextWillHaveSeparator ? null : nextMsgRaw;
 
       const prevAuthorId = prevMsg?.authorId?._id || prevMsg?.authorId;
@@ -308,7 +329,7 @@ export default function MessageList({
     }
 
     return flattened;
-  }, [messages, lastReadMessageId]);
+  }, [messages, unreadBoundary]);
 
   const firstMessageId = messages[0]?._id ?? null;
   const virtuosoFirstItemIndex = useMemo(() => {
@@ -323,132 +344,58 @@ export default function MessageList({
   }, [channelId, firstMessageId, flattenedItems]);
 
   // ─── Auto-scroll to message from deep-link (DownloadsModal folder navigation) ──
+  // All explicit message navigation shares one scroll path. A highlight or
+  // reaction rerender cannot replay an already consumed navigation request.
   useEffect(() => {
-    if (!pendingMessageScroll || !virtuosoRef.current || flattenedItems.length === 0) {
+    const targetId = pendingMessageScroll || scrollToMessageId || highlightMessageId;
+    if (!targetId) {
+      lastScrolledHighlightId.current = null;
       return;
     }
+    const index = flattenedItems.findIndex((item) => item._id === targetId);
+    if (index === -1 || !virtuosoRef.current) return;
 
-    const idx = flattenedItems.findIndex((item) => item._id === pendingMessageScroll);
-    
-    if (idx !== -1) {
-      // Message is loaded in the current view - scroll to it
-      setTimeout(() => {
-        virtuosoRef.current.scrollToIndex({
-          index: idx,
-          align: "center",
-          behavior: "smooth",
-        });
-        
-        // Trigger highlight animation
-        setHighlightMessageId(pendingMessageScroll);
-        
-        // Clear highlight after 4 seconds
-        setTimeout(() => {
-          setHighlightMessageId(null);
-        }, 4000);
-      }, 200);
-      
-      // Clean up URL by removing the /message/:messageId part
-      const pathWithoutMessage = location.pathname.split('/').filter((part, i, arr) => {
-        if (part === 'message') return false;
-        if (i > 0 && arr[i - 1] === 'message') return false;
-        return true;
-      }).join('/');
-      
-      navigate(pathWithoutMessage || location.pathname, { replace: true });
+    cancelPendingFollow();
+    if (lastScrolledHighlightId.current !== targetId || scrollToMessageId || pendingMessageScroll) {
+      lastScrolledHighlightId.current = targetId;
+      virtuosoRef.current.scrollToIndex({ index, align: "center", behavior: "smooth" });
+    }
+    if (scrollToMessageId) setScrollToMessageId(null);
+    if (pendingMessageScroll || scrollToMessageId) setHighlightMessageId(targetId);
+    if (pendingMessageScroll) {
+      const pathWithoutMessage = location.pathname.split('/message/')[0];
+      navigate(pathWithoutMessage, { replace: true });
       setPendingMessageScroll(null);
     }
-    // If message not yet loaded, we'll scroll when it appears in flattenedItems
-  }, [pendingMessageScroll, flattenedItems, setHighlightMessageId, location.pathname, navigate]);
+  }, [pendingMessageScroll, scrollToMessageId, highlightMessageId, flattenedItems,
+    cancelPendingFollow, setScrollToMessageId, setHighlightMessageId, location.pathname, navigate]);
 
-  // ─── Scroll to highlighted / linked message ────────────────────────────
-  // NOTE: Do NOT clear highlightMessageId here — the store's
-  // setScrollAndHighlightMessage already handles clearing after 3000ms.
-  // This effect only handles scrolling to the message.
   useEffect(() => {
-    if (
-      highlightMessageId &&
-      virtuosoRef.current &&
-      flattenedItems.length > 0
-    ) {
-      const idx = flattenedItems.findIndex(
-        (item) => item._id === highlightMessageId
-      );
-      if (idx !== -1) {
-        lastScrolledHighlightId.current = highlightMessageId;
-        setTimeout(() => {
-          virtuosoRef.current.scrollToIndex({
-            index: idx,
-            align: "center",
-            behavior: "smooth",
-          });
-        }, 100);
-      }
-    } else if (!highlightMessageId) {
-      lastScrolledHighlightId.current = null;
-    }
-  }, [highlightMessageId, flattenedItems, setHighlightMessageId]);
-
-
-
-  // ─── Scroll-to from pinned messages ───────────────────────────────────
-  useEffect(() => {
-    if (
-      !scrollToMessageId ||
-      !virtuosoRef.current ||
-      flattenedItems.length === 0
-    )
-      return;
-
-    const tryScroll = () => {
-      const index = flattenedItems.findIndex(
-        (item) => item._id === scrollToMessageId
-      );
-      if (index !== -1) {
-        virtuosoRef.current.scrollToIndex({
-          index,
-          align: "center",
-          behavior: "smooth",
-        });
-        // Trigger DOM highlight after scroll settles
-        setTimeout(() => {
-          const el = document.getElementById(`msg-${scrollToMessageId}`);
-          if (el) {
-            el.classList.remove("message-highlight");
-            // Force reflow so the animation re-triggers
-            void el.offsetWidth;
-            el.classList.add("message-highlight");
-            setTimeout(
-              () => el.classList.remove("message-highlight"),
-              2600
-            );
-          }
-        }, 350);
-        setScrollToMessageId(null);
-        return true;
-      }
-      return false;
-    };
-
-    if (tryScroll()) return;
-
-    // Message not in current window → try loading older pages
-    let attempts = 0;
-    const tryLoadAndScroll = async () => {
-      while (attempts < 5) {
-        const oldest = messages[0];
-        if (!oldest) break;
-        await fetchMessages(channelId, { cursor: oldest._id, limit: 80 });
-        // Wait a tick for state to propagate
-        await new Promise((r) => setTimeout(r, 120));
-        if (tryScroll()) return;
-        attempts++;
+    const targetId = scrollToMessageId || pendingMessageScroll;
+    if (!targetId || flattenedItems.some((item) => item._id === targetId)) return;
+    let cancelled = false;
+    const loadTarget = async () => {
+      for (let attempt = 0; attempt < 5 && !cancelled; attempt++) {
+        const currentMessages = useChatStore.getState().messagesByChannel[channelId] || [];
+        if (currentMessages.some((message) => message._id === targetId)) return;
+        const oldestId = currentMessages[0]?._id;
+        if (!oldestId || !useChatStore.getState().hasMore[channelId]) return;
+        await fetchMessages(channelId, { cursor: oldestId, limit: 80 });
+        if (useChatStore.getState().messagesByChannel[channelId]?.[0]?._id === oldestId) return;
       }
     };
-    tryLoadAndScroll();
-  }, [scrollToMessageId, flattenedItems, messages, channelId, fetchMessages, setScrollToMessageId]);
+    loadTarget();
+    return () => { cancelled = true; };
+    // The loop reads current store data; rerenders must not start another loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollToMessageId, pendingMessageScroll, channelId, fetchMessages]);
 
-  // ─── Loading / empty states ────────────────────────────────────────────
+  useEffect(() => {
+    if (!highlightMessageId) return;
+    const timeout = setTimeout(() => setHighlightMessageId(null), 4000);
+    return () => clearTimeout(timeout);
+  }, [highlightMessageId, setHighlightMessageId]);
+
   const isInitialLoad = isLoadingMessages && messages.length === 0;
 
   if (isInitialLoad) {
@@ -478,62 +425,38 @@ export default function MessageList({
       aria-label="Message list"
       aria-live="polite"
       style={{ minHeight: 0 }}
+      onWheelCapture={cancelPendingFollow}
+      onTouchMoveCapture={cancelPendingFollow}
+      onPointerDownCapture={cancelPendingFollow}
+      onKeyDownCapture={(event) => {
+        if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) {
+          cancelPendingFollow();
+        }
+      }}
     >
       <Virtuoso
+        key={channelId}
         ref={virtuosoRef}
-        scrollerRef={(element) => {
-          messageScrollerRef.current = element;
-        }}
+        scrollerRef={setMessageScroller}
         data={flattenedItems}
         computeItemKey={getVirtuosoMessageKey}
+        itemSize={measureMessageItem}
+        skipAnimationFrameInResizeObserver
         className="w-full h-full"
+        style={{ overflowAnchor: "none", scrollBehavior: "auto" }}
         firstItemIndex={virtuosoFirstItemIndex}
         initialTopMostItemIndex={flattenedItems.length - 1}
         startReached={loadMore}
         alignToBottom={true}
         increaseViewportBy={{ top: 400, bottom: 200 }}
-        followOutput={(isAtBottom) => {
-          const bottomLockIsActive = Date.now() < bottomLockUntilRef.current;
-          // Only update the ref here. Avoid calling setState during Virtuoso's
-          // render phase (some Virtuoso internals call `followOutput` while
-          // rendering), which can cause render-update loops. `atBottomStateChange`
-          // will handle updating component state.
-          isAtBottomRef.current = isAtBottom || bottomLockIsActive;
-          if (editingMessageId) return false;
-          return isAtBottom || bottomLockIsActive ? "auto" : false;
-        }}
+        followOutput={false}
+        scrollIntoViewOnChange={followNewMessages}
+        atBottomThreshold={8}
         atBottomStateChange={(atBottom) => {
-          if (!atBottom && Date.now() < bottomLockUntilRef.current) {
-            isAtBottomRef.current = true;
-            setShowScrollBtn(false);
-            requestAnimationFrame(scrollToLatest);
-            return;
-          }
-          isAtBottomRef.current = atBottom;
           setShowScrollBtn(!atBottom);
         }}
-        totalListHeightChanged={() => {
-          if (Date.now() < bottomLockUntilRef.current) {
-            requestAnimationFrame(scrollToLatest);
-          }
-        }}
-        components={{
-          Header: () =>
-            isLoadingMessages && messages.length > 0 ? (
-              <div style={{ padding: "8px 20px", textAlign: "center" }}>
-                <div
-                  className="skeleton"
-                  style={{
-                    width: 120,
-                    height: 20,
-                    margin: "0 auto",
-                    borderRadius: 10,
-                  }}
-                />
-              </div>
-            ) : null,
-          Footer: () => <div style={{ height: 16 }} />,
-        }}
+        context={{ isLoadingMessages }}
+        components={LIST_COMPONENTS}
         itemContent={(index, item) => {
           if (item.isDateSeparator) {
             return (
@@ -694,12 +617,7 @@ export default function MessageList({
         <button
           aria-label="Scroll to latest message"
           title="Jump to latest"
-          onClick={() =>
-            virtuosoRef.current?.scrollToIndex({
-              index: "LAST",
-              behavior: "smooth",
-            })
-          }
+          onClick={scrollToLatest}
           style={{
             position: "absolute",
             bottom: 16,

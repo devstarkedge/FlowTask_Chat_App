@@ -192,8 +192,8 @@ const RichTextEditor = forwardRef(function RichTextEditor(
         editor?.commands.clearContent(false)
       },
       /** Focus the editor */
-      focus(position = 'end') {
-        editor?.commands.focus(position)
+      focus(position = 'end', options = { scrollIntoView: false }) {
+        editor?.commands.focus(position, options)
       },
       /** Insert text at current cursor */
       insertText(text) {

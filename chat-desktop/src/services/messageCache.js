@@ -37,19 +37,22 @@ function isValidKey(id) {
     id.length > 0
 }
 
-export async function loadChannelMessagesFromCache(channelId) {
+export async function loadChannelMessagesFromCache(channelId, workspaceId, userId) {
   if (!isValidKey(channelId)) return []
   try {
     const db = await getDb()
     const record = await db.get(CHANNEL_STORE, channelId)
-    return sanitizeMessages(record?.messages || [])
+    if (workspaceId && record?.workspaceId !== workspaceId) return []
+    if (userId && record?.userId !== userId) return []
+    return projectUserProfiles(sanitizeMessages(record?.messages || []),
+      useUserProfileStore.getState().profilesByWorkspace[workspaceId] || {})
   } catch (error) {
     logger.error('[MessageCache] Failed to load channel cache:', error)
     return []
   }
 }
 
-export async function saveChannelMessagesToCache(channelId, messages, workspaceId) {
+export async function saveChannelMessagesToCache(channelId, messages, workspaceId, userId) {
   if (!isValidKey(channelId)) return
   try {
     const db = await getDb()
@@ -57,6 +60,7 @@ export async function saveChannelMessagesToCache(channelId, messages, workspaceI
       channelId,
       messages: projectUserProfiles(sanitizeMessages(messages), useUserProfileStore.getState().profilesByWorkspace[workspaceId] || {}),
       workspaceId,
+      userId,
       updatedAt: new Date().toISOString(),
     })
   } catch (error) {

@@ -6,6 +6,8 @@ import logger from '../utils/logger'
 import { useAuthStore } from './authStore'
 import { getSocket } from '../services/socket'
 
+const channelFetches = new Map()
+
 /**
  * Extract a plain string ID from any id-like value:
  *   - Mongoose ObjectId instances → .toString()
@@ -74,29 +76,36 @@ export const useChannelStore = create(
 
   fetchChannels: async (overrideWorkspaceId = null) => {
     // Dynamic import avoids circular dependency with workspaceStore
-    let workspaceId = overrideWorkspaceId
-    if (!workspaceId) {
-      const { useWorkspaceStore } = await import('./workspaceStore')
-      workspaceId = useWorkspaceStore.getState().activeWorkspaceId
-    }
+    const { useWorkspaceStore } = await import('./workspaceStore')
+    const workspaceId = overrideWorkspaceId || useWorkspaceStore.getState().activeWorkspaceId
     if (!workspaceId) return
+    const userId = useAuthStore.getState().user?._id
+    const key = `${userId}:${workspaceId}`
+    if (channelFetches.has(key)) return channelFetches.get(key)
+    const isCurrent = () => workspaceId === useWorkspaceStore.getState().activeWorkspaceId &&
+      userId === useAuthStore.getState().user?._id
     set({ isLoading: true })
-    try {
-      const options = overrideWorkspaceId
-        ? { headers: { 'X-Workspace-Id': overrideWorkspaceId } }
-        : undefined
-      const { data } = await channelAPI.list(options)
-      // Normalise every channel so _id is always a plain string
-      const channels = (data.data.channels || []).map(normalizeChannel)
-      get().setChannels(channels)
-      set({ isLoading: false })
-      get().fetchUnreads()
-      get().fetchCategories()
-      get().fetchDepartments()
-    } catch (error) {
-      set({ isLoading: false })
-      logger.error('Failed to fetch channels:', error)
-    }
+    const request = (async () => {
+      try {
+        const options = { headers: { 'X-Workspace-Id': workspaceId } }
+        const { data } = await channelAPI.list(options)
+        if (!isCurrent()) return
+        // Normalise every channel so _id is always a plain string
+        const channels = (data.data.channels || []).map(normalizeChannel)
+        get().setChannels(channels)
+        set({ isLoading: false })
+        get().fetchUnreads()
+        get().fetchCategories()
+        get().fetchDepartments()
+      } catch (error) {
+        if (isCurrent()) set({ isLoading: false })
+        logger.error('Failed to fetch channels:', error)
+      } finally {
+        channelFetches.delete(key)
+      }
+    })()
+    channelFetches.set(key, request)
+    return request
   },
   
   fetchCategories: async () => {

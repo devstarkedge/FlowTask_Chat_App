@@ -119,7 +119,7 @@ export const useWorkspaceStore = create(
           })
 
           // 2. Clear chat state (messages, threads, typing, online)
-          useChatStore.getState().clearCache?.()
+          useChatStore.getState().clearCache?.({ clearPersisted: false })
 
           // 3. Clear notification state
           useNotificationStore.getState().clearNotifications()
@@ -397,6 +397,7 @@ export const useWorkspaceStore = create(
       getActiveWorkspaceId: () => get().activeWorkspaceId,
 
       clearWorkspaceState: () => {
+        useChatStore.getState().clearCache?.()
         set({
           workspaces: [],
           activeWorkspaceId: null,

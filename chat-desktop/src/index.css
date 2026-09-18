@@ -13310,6 +13310,14 @@ textarea:focus-visible,
   margin: 0 0 20px;
 }
 
+body.is-electron .cl-topbar__window-controls {
+  display: flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+  flex-shrink: 0 !important;
+  -webkit-app-region: no-drag;
+}
+
 .dir-inv-nonadmin-steps {
   list-style: decimal;
   text-align: left;
@@ -14641,21 +14649,32 @@ textarea:focus-visible,
   opacity: 0.6;
 }
 
-/* Hover actions for new card */
-.sml-actions-new {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: all var(--transition-fast);
+body.is-electron .cl-topbar {
+  display: grid !important;
+  grid-template-columns: minmax(0, auto) auto minmax(0, 1fr) auto !important;
+  gap: 12px !important;
+  padding-left: 0 !important;
+  padding-right: 12px !important;
+  align-items: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+body.is-electron .cl-topbar__actions {
+  margin-right: 0 !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+  z-index: 10 !important;
+  -webkit-app-region: no-drag;
+}
+
+body.is-electron .cl-topbar__window-controls {
+  display: flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+  flex-shrink: 0 !important;
+  -webkit-app-region: no-drag;
 }
 
 .sml-card-new:hover .sml-actions-new {
@@ -15944,18 +15963,22 @@ body.is-electron .cl-empty-pane__mobile-btn {
 }
 
 body.is-electron .cl-topbar {
-  grid-template-columns:
-    calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
-    auto
-    minmax(160px, 1fr)
-    auto !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, auto) auto minmax(0, 1fr) auto !important;
   gap: 12px !important;
   padding-left: 0 !important;
   padding-right: 12px !important;
+  align-items: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
 }
 
 body.is-electron .cl-topbar__actions {
   margin-right: 0 !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+  z-index: 10 !important;
   -webkit-app-region: no-drag;
 }
 

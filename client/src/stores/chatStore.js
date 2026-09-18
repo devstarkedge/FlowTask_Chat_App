@@ -398,7 +398,13 @@ export const useChatStore = create((set, get) => ({
         const existingMessages = state.messagesByChannel[channelId] || [];
 
         // Defensive fix: Ensure incoming messages are always Oldest -> Newest
-        const sortedIncoming = [...messages].sort(
+        const existingById = new Map(existingMessages.map((message) => [message._id, message]));
+        const sortedIncoming = messages.map((message) => {
+          const existing = existingById.get(message._id);
+          return existing?._virtuosoKey
+            ? { ...message, _virtuosoKey: existing._virtuosoKey }
+            : message;
+        }).sort(
           (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
         );
 
@@ -411,15 +417,18 @@ export const useChatStore = create((set, get) => ({
           );
           merged = [...uniqueNew, ...existingMessages];
         } else {
-          // Initial load: prefer fresh messages, keep only RECENT pending local messages (< 30s old)
+          // Refresh the latest page without discarding already-loaded older
+          // history. Removing it invalidates the virtual list's measurements
+          // and can move the viewport on the next reaction or message update.
           const freshIds = new Set(sortedIncoming.map((m) => m._id));
+          const oldestFreshTime = sortedIncoming.length ? new Date(sortedIncoming[0].createdAt).getTime() : -Infinity;
           const thirtySecsAgo = Date.now() - 30000;
           const uniqueExisting = existingMessages.filter(
             (m) =>
               !freshIds.has(m._id) &&
-              m.pending &&
               m.channelId === channelId &&
-              new Date(m.createdAt).getTime() > thirtySecsAgo,
+              ((m.pending && new Date(m.createdAt).getTime() > thirtySecsAgo) ||
+                (hasMore && !m.pending && new Date(m.createdAt).getTime() < oldestFreshTime)),
           );
           merged = [...sortedIncoming, ...uniqueExisting];
         }
@@ -690,17 +699,13 @@ export const useChatStore = create((set, get) => ({
         const hasTempMessage = existing.some((m) => m._id === tempId);
         if (!hasTempMessage) return state;
 
-        // Just remove the temp message and keep the viewport at the bottom.
+        // Removing a duplicate optimistic row is an update, not an append.
         const nextChannelMessages = existing.filter((m) => m._id !== tempId);
 
         return {
           messagesByChannel: {
             ...state.messagesByChannel,
             [channelId]: nextChannelMessages,
-          },
-          messageAppendVersionByChannel: {
-            ...state.messageAppendVersionByChannel,
-            [channelId]: (state.messageAppendVersionByChannel[channelId] || 0) + 1,
           },
         };
       }
@@ -723,10 +728,6 @@ export const useChatStore = create((set, get) => ({
         messagesByChannel: {
           ...state.messagesByChannel,
           [channelId]: nextChannelMessages,
-        },
-        messageAppendVersionByChannel: {
-          ...state.messageAppendVersionByChannel,
-          [channelId]: (state.messageAppendVersionByChannel[channelId] || 0) + 1,
         },
       };
 

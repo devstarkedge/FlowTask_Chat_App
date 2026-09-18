@@ -76,18 +76,10 @@ router.use(protect);
 
 // ─── Workspace-agnostic routes ──────────────────────────────────────────────
 router.post('/upload', uploadLimiter, uploadMiddleware, handleMulterError, validateUploadedFileMagic, uploadFiles);
-
-router.use(resolveWorkspace);
-
-// ─── Channel-scoped message routes ───────────────────────────────────────────
-// These are mounted under /api/chat/channels/:channelId in the main router
-// but we export them separately to be mounted by the channel router or index
-
-// ─── Message-scoped routes (mounted under /api/chat/messages) ────────────────
-router.get('/search', validate({ query: searchMessagesSchema }), searchMessages);
-router.get('/files', getWorkspaceFiles);
 // Proxy endpoint: streams a FileAsset from Cloudinary server-side to avoid CDN 401
 router.get('/files/:assetId/proxy', proxyFileAsset);
+
+router.use(resolveWorkspace);
 // File details endpoint: returns metadata + counts for File Details modal
 router.get('/files/:assetId/details', getFileDetails);
 // Increment download count (fire-and-forget)

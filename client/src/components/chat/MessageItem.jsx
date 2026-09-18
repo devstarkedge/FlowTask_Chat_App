@@ -315,15 +315,9 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
         ed.setContent(initialText);
       }
 
-      ed.focus("end");
+      ed.focus("end", { scrollIntoView: false });
       syncFormatState();
 
-      // Scroll into view gently after DOM update
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          wrapRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        });
-      });
     }, 50);
 
     return () => clearTimeout(timer);
@@ -735,7 +729,7 @@ const MessageItem = memo(
 
     // Rendered inside the bubble at the bottom-right for DM own messages
     const renderBubbleStatusRow = () => {
-      if (!isDMChannel || !isOwn || isPending || isFailed) return null;
+      if (!isDMChannel || !isOwn) return null;
       return (
         <div
           className="flex items-center justify-end gap-0.5 mt-1"
@@ -934,7 +928,7 @@ const MessageItem = memo(
               : "1px solid transparent",
           transition: "background 150ms ease, border-color 150ms ease",
           opacity: isPending ? 0.6 : isFailed ? 0.5 : 1,
-          marginTop: compact ? 2 : 12,
+          paddingTop: compact ? 2 : 12,
         }}
         onMouseEnter={() => {
           if (!isDeleted) setShowActions(true);
@@ -955,7 +949,9 @@ const MessageItem = memo(
               }}
               style={{
                 background: "none", border: "none", cursor: "pointer",
-                padding: 0, marginTop: compact ? 2 : 6, flexShrink: 0,
+                padding: 0, position: "absolute", top: compact ? 4 : 18,
+                left: isOwn ? 16 : undefined, right: isOwn ? undefined : 16,
+                zIndex: 2,
                 color: isSelected ? "var(--accent-primary, #5865f2)" : "var(--text-muted)",
                 transition: "color 150ms ease",
               }}
@@ -1221,14 +1217,15 @@ const MessageItem = memo(
           </div>
 
           {/* Action bar */}
-          {(showActions || showReactionPicker || showMoreMenu) &&
-            !isDeleted &&
+          {!isDeleted &&
             !isEditing &&
             !isPending &&
             !isFailed && (
               <div
-                className="absolute -top-3.5 right-5 flex items-center gap-1.5 px-2 py-1 rounded-lg z-10 animate-fade-in-scale"
+                className="absolute top-0 right-5 flex items-center gap-1.5 px-2 py-1 rounded-lg z-10"
                 style={{
+                  visibility: showActions || showReactionPicker || showMoreMenu ? "visible" : "hidden",
+                  pointerEvents: showActions || showReactionPicker || showMoreMenu ? "auto" : "none",
                   background: "var(--bg-secondary)",
                   border: "1px solid var(--border-primary)",
                   boxShadow: "var(--shadow-md)",

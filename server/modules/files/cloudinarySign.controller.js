@@ -5,6 +5,7 @@ import FileAsset from "./FileAsset.model.js";
 import FileReference from "./FileReference.model.js";
 import Channel from "../channels/Channel.model.js";
 import ChannelMember from "../channels/ChannelMember.model.js";
+import WorkspaceMembership from "../workspaces/WorkspaceMembership.model.js";
 import {
   NotFoundError,
   ForbiddenError,
@@ -37,40 +38,46 @@ function redactDeliveryUrl(url = "") {
 }
 
 async function assertFileAccess(asset, req) {
-  if (!req.workspaceId || asset.workspaceId?.toString() !== req.workspaceId.toString()) {
-    throw new ForbiddenError("Access denied");
+  const targetWorkspaceId = req.workspaceId || req.query.workspaceId || req.query.w || asset.workspaceId?.toString();
+
+  // 1. If user is the file uploader, grant access
+  if (asset.uploadedBy?.toString() === req.user?._id?.toString()) {
+    if (targetWorkspaceId) req.workspaceId = targetWorkspaceId.toString();
+    return;
   }
 
-  if (asset.uploadedBy?.toString() === req.user._id.toString()) return;
+  // 2. If workspace context exists, verify user's active membership in the workspace
+  if (targetWorkspaceId) {
+    const isMember = await WorkspaceMembership.exists({
+      userId: req.user._id,
+      workspaceId: targetWorkspaceId,
+      isActive: true,
+    });
+    if (isMember) {
+      req.workspaceId = targetWorkspaceId.toString();
+      return;
+    }
+  }
 
+  // 3. Fallback: check channel membership from references
   const references = await FileReference.find({
-    workspaceId: req.workspaceId,
     fileId: asset._id,
   }).select('channelId').lean();
+
   const channelIds = [...new Set(
     references.map((reference) => reference.channelId?.toString()).filter(Boolean),
   )];
-  if (channelIds.length === 0) throw new ForbiddenError("Access denied");
 
-  const channels = await Channel.find({
-    _id: { $in: channelIds },
-    workspaceId: req.workspaceId,
-    isArchived: { $ne: true },
-  }).select('type visibility flowTaskRef').lean();
-  const publicChannel = channels.some(
-    (channel) =>
-      channel.visibility === 'public' &&
-      channel.type !== 'project' &&
-      channel.flowTaskRef?.entityType !== 'board',
-  );
-  if (publicChannel) return;
+  if (channelIds.length > 0) {
+    const isChannelMember = await ChannelMember.exists({
+      channelId: { $in: channelIds },
+      userId: req.user._id,
+      isActive: true,
+    });
+    if (isChannelMember) return;
+  }
 
-  const isMember = await ChannelMember.exists({
-    channelId: { $in: channels.map((channel) => channel._id) },
-    userId: req.user._id,
-    isActive: true,
-  });
-  if (!isMember) throw new ForbiddenError("Access denied");
+  throw new ForbiddenError("Access denied");
 }
 
 function getResourceTypeFromUrl(url = "") {

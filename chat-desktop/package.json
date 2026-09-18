@@ -8,7 +8,7 @@
     "dev": "vite",
     "electron": "npm run electron:dev",
     "electron:dev": "concurrently -k \"cross-env BROWSER=none vite\" \"wait-on tcp:5174 && electron .\"",
-    "build:win": "vite build && electron-builder --win",
+    "build:win": "node -e \"try{require('child_process').execSync('taskkill /F /IM TaskChat.exe /T',{stdio:'ignore'})}catch(e){}\" && vite build && electron-builder --win",
     "build:mac": "vite build && electron-builder --mac",
     "build:linux": "vite build && electron-builder --linux",
     "build": "vite build",

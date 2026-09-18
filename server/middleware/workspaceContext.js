@@ -18,13 +18,13 @@ import { BadRequestError } from './errorHandler.js';
  */
 export const resolveWorkspace = async (req, res, next) => {
   try {
-    const workspaceId = req.headers['x-workspace-id'];
+    const workspaceId = req.headers['x-workspace-id'] || req.headers['workspace-id'] || req.query.workspaceId || req.query.w;
 
     if (!workspaceId) {
       console.error('[resolveWorkspace] 400: Workspace context is required. Headers:', req.headers);
       return res.status(400).json({
         success: false,
-        message: 'Workspace context is required. Provide x-workspace-id header.',
+        message: 'Workspace context is required. Provide x-workspace-id header or workspaceId query parameter.',
       });
     }
 

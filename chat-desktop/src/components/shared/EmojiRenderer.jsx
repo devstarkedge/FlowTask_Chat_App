@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import ReactionDetailsPopup from '../chat/ReactionDetailsPopup';
 import { messageAPI } from '../../services/api';
+import './reactionRenderer.css';
 
 /**
  * EmojiComponent
@@ -70,7 +71,21 @@ export function ReactionRenderer({
   const pillRef = useRef(null);
   const hoveringRef = useRef(false);
   const leaveTimerRef = useRef(null);
+  const enterTimerRef = useRef(null);
+  const focusedRef = useRef(false);
+  const tooltipId = useId();
   const toggle = onToggle || onClick;
+
+  useEffect(() => () => {
+    clearTimeout(enterTimerRef.current);
+    clearTimeout(leaveTimerRef.current);
+  }, []);
+
+  const closePopup = () => {
+    clearTimeout(enterTimerRef.current);
+    clearTimeout(leaveTimerRef.current);
+    setOpen(false);
+  };
 
   // Cached, real-time reaction details. The query is enabled only while the
   // popup is open; socket events (reaction:add / reaction:remove) invalidate
@@ -96,34 +111,55 @@ export function ReactionRenderer({
       clearTimeout(leaveTimerRef.current);
       leaveTimerRef.current = null;
     }
-    setOpen(true);
+    clearTimeout(enterTimerRef.current);
+    if (!open) {
+      enterTimerRef.current = setTimeout(() => {
+        if (hoveringRef.current || focusedRef.current) setOpen(true);
+      }, 300);
+    }
   };
 
   const endHover = () => {
     hoveringRef.current = false;
+    if (!focusedRef.current) clearTimeout(enterTimerRef.current);
     if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
     // Small delay so the user can move the pointer from the pill onto the
     // popup (rendered in a portal at body level) without it closing.
     leaveTimerRef.current = setTimeout(() => {
-      if (!hoveringRef.current) setOpen(false);
-    }, 150);
+      if (!hoveringRef.current && !focusedRef.current) setOpen(false);
+    }, 300);
   };
 
   return (
     <>
       <button
         ref={pillRef}
+        type="button"
+        aria-pressed={!!hasReacted}
+        aria-label={`${hasReacted ? 'Remove' : 'Add'} ${emoji} reaction; ${count ?? 0} reactions`}
+        aria-describedby={open ? tooltipId : undefined}
         onMouseEnter={beginHover}
         onMouseLeave={endHover}
+        onFocus={() => {
+          const wasHovering = hoveringRef.current;
+          focusedRef.current = true;
+          beginHover();
+          hoveringRef.current = wasHovering;
+        }}
+        onBlur={() => {
+          focusedRef.current = false;
+          endHover();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            closePopup();
+          }
+        }}
         onClick={(e) => {
           e.stopPropagation();
           e.preventDefault();
-          if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
-          if (hasReacted) {
-            toggle?.(emoji);
-            setOpen(false);
-            return;
-          }
+          closePopup();
           toggle?.(emoji);
         }}
         title={`${emoji} — ${count != null ? count : 0}`}
@@ -133,14 +169,14 @@ export function ReactionRenderer({
           alignItems: 'center',
           justifyContent: 'center',
           gap: '5px',
-          padding: '3px 9px',
-          minHeight: '24px',
+          padding: '4px 10px',
+          minHeight: '28px',
           borderRadius: '20px',
           fontSize: '12px',
           fontWeight: hasReacted ? '600' : '500',
           lineHeight: '1',
           cursor: 'pointer',
-          transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)',
+          transition: 'background-color 0.30s ease, border-color 0.30s ease, box-shadow 0.30s ease, transform 0.30s ease, filter 0.30s ease',
           background: hasReacted
             ? "color-mix(in srgb, var(--accent-primary, #1264a3) 14%, transparent)"
             : "var(--bg-hover, rgba(255, 255, 255, 0.05))",
@@ -153,11 +189,10 @@ export function ReactionRenderer({
             ? "var(--accent-primary, #1264a3)"
             : "var(--text-primary, #d1d2d3)",
           boxShadow: hasReacted ? '0 1px 3px rgba(0, 0, 0, 0.12)' : 'none',
-          outline: 'none',
           userSelect: 'none',
         }}
       >
-        <EmojiComponent emoji={emoji} size={13.5} />
+        <EmojiComponent emoji={emoji} size={16} />
         <span style={{ fontSize: '11.5px', fontWeight: hasReacted ? '700' : '500', display: 'inline-block', color: 'inherit' }}>
           {count}
         </span>
@@ -170,9 +205,10 @@ export function ReactionRenderer({
           hasReacted={hasReacted}
           users={effectiveUsers}
           currentUserId={currentUserId}
+          id={tooltipId}
           onToggle={toggle}
           onAddMore={onAddMore}
-          onClose={() => setOpen(false)}
+          onClose={closePopup}
           anchorRef={pillRef}
           onMouseEnter={beginHover}
           onMouseLeave={endHover}

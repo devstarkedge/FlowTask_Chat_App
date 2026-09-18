@@ -1,5 +1,5 @@
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import FloatingPortal from "./FloatingPortal";
 import { EmojiComponent } from "../shared/EmojiRenderer";
 
@@ -61,14 +61,10 @@ export function formatReactionUserNames(users, currentUserId) {
 }
 
 /**
- * ReactionDetailsPopup — Redesigned modern reaction details floating popup.
- * Features:
- *  - Prominent emoji displayed inside a crisp white square card at top.
- *  - Names of users formatted naturally in readable format (e.g. "Nisha Devi, Akshit, and Anil Kumar").
- *  - Bottom message showing "reacted with :shortcode:".
- *  - Dark, soft rounded container with smooth shadow and downward tooltip arrow.
+ * Compact reaction tooltip with current user names and a reaction count.
  */
 export default function ReactionDetailsPopup({
+  id,
   users = [],
   emoji,
   count,
@@ -82,6 +78,25 @@ export default function ReactionDetailsPopup({
   onMouseLeave,
 }) {
   users = useLiveProfileData(users);
+  const popupRef = useRef(null);
+  const [popupSize, setPopupSize] = useState({ width: 160, height: 60 });
+  useLayoutEffect(() => {
+    const popup = popupRef.current;
+    if (!popup) return;
+    const measure = () => {
+      const width = popup.offsetWidth;
+      const height = popup.offsetHeight;
+      if (width > 0 && height > 0) {
+        setPopupSize((previous) => previous.width === width && previous.height === height
+          ? previous : { width, height });
+      }
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(popup);
+    return () => observer.disconnect();
+  }, []);
   const sortedUsers = useMemo(() => {
     const currentUserIdStr = currentUserId != null ? String(currentUserId) : null;
     const copy = users.filter(Boolean);
@@ -93,7 +108,6 @@ export default function ReactionDetailsPopup({
     return copy;
   }, [users, currentUserId]);
 
-  const shortcode = useMemo(() => getEmojiShortcode(emoji), [emoji]);
   const formattedNames = useMemo(
     () => formatReactionUserNames(sortedUsers, currentUserId),
     [sortedUsers, currentUserId]
@@ -114,9 +128,9 @@ export default function ReactionDetailsPopup({
       isOpen={true}
       onClose={onClose}
       position="top-center"
-      offset={10}
-      minWidth={200}
-      minHeight={140}
+      offset={8}
+      minWidth={popupSize.width}
+      minHeight={popupSize.height}
       avoidElements={avoidElements}
     >
       <style>{`
@@ -125,10 +139,16 @@ export default function ReactionDetailsPopup({
           100% { opacity: 1; transform: scale(1) translateY(0); }
         }
         .reaction-details-popup-card {
-          animation: reactionPopupFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          animation: reactionPopupFadeIn 0.30s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .reaction-details-popup-card { animation: none; }
         }
       `}</style>
       <div
+        ref={popupRef}
+        id={id}
+        role="tooltip"
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
         onClick={(e) => {
@@ -139,67 +159,59 @@ export default function ReactionDetailsPopup({
           position: "relative",
           background: "var(--bg-popover, #1e1f23)",
           border: "1px solid var(--border-popover, rgba(255, 255, 255, 0.09))",
-          borderRadius: 14,
-          boxShadow: "0 12px 32px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.22)",
-          padding: "18px 20px 16px",
+          borderRadius: 9,
+          boxShadow: "0 6px 18px rgba(0, 0, 0, 0.24)",
+          padding: "10px 12px",
+          boxSizing: "border-box",
           display: "flex",
-          flexDirection: "column",
+          flexDirection: "row",
           alignItems: "center",
-          textAlign: "center",
-          maxWidth: 290,
+          textAlign: "left",
+          maxWidth: "min(240px, calc(100vw - 16px))",
           width: "max-content",
-          minWidth: 200,
-          gap: 12,
+          minWidth: 160,
+          gap: 10,
           userSelect: "none",
           cursor: "default",
         }}
       >
-        {/* Top: Prominent emoji inside small white square card */}
+        {/* Small emoji badge beside the user details */}
         <div
           style={{
-            width: 60,
-            height: 60,
-            borderRadius: 12,
-            background: "#ffffff",
+            width: 32,
+            height: 32,
+            borderRadius: 7,
+            background: "rgba(255, 255, 255, 0.08)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
             flexShrink: 0,
           }}
         >
-          <EmojiComponent emoji={emoji} size={36} />
+          <EmojiComponent emoji={emoji} size={22} />
         </div>
 
-        {/* Middle: User names displayed naturally */}
+        <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+        {/* Current user names wrap inside the compact tooltip */}
         <div
           style={{
-            fontSize: 14,
-            fontWeight: 700,
+            fontSize: 12.5,
+            fontWeight: 600,
             lineHeight: 1.4,
             color: "var(--text-bright, #ffffff)",
-            maxHeight: 120,
+            maxHeight: 80,
             overflowY: "auto",
-            padding: "0 2px",
             wordBreak: "break-word",
-            textAlign: "center",
+            textAlign: "left",
             letterSpacing: "-0.01em",
           }}
         >
           {formattedNames}
         </div>
 
-        {/* Bottom: Subtitle text e.g. "reacted with :tada:" */}
-        <div
-          style={{
-            fontSize: 12.5,
-            fontWeight: 500,
-            color: "var(--accent-link, #38bdf8)",
-            opacity: 0.92,
-            letterSpacing: "-0.01em",
-          }}
-        >
-          reacted with :{shortcode}:
+        <div style={{ fontSize: 11, lineHeight: 1.4, color: "var(--text-muted, #b8bcc6)" }}>
+          {count ?? sortedUsers.length} {(count ?? sortedUsers.length) === 1 ? "person" : "people"} reacted
+        </div>
         </div>
 
         {/* Downward Caret Tooltip Arrow */}
@@ -221,4 +233,3 @@ export default function ReactionDetailsPopup({
     </FloatingPortal>
   );
 }
-

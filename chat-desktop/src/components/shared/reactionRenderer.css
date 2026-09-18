@@ -1,0 +1,24 @@
+.reaction-renderer:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+
+.reaction-renderer:active {
+  transform: scale(0.96);
+}
+
+.reaction-renderer:focus-visible {
+  outline: 2px solid var(--accent-primary, #1264a3);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reaction-renderer {
+    transition: none !important;
+  }
+
+  .reaction-renderer:hover,
+  .reaction-renderer:active {
+    transform: none;
+  }
+}

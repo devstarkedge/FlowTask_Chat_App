@@ -13,7 +13,7 @@ export const isDesktopApp = () => {
 };
 
 export const setWindowControlsColor = (symbolColor) => {
-  if (isDesktopApp() && window.electronAPI.setTitleBarOverlay) {
+  if (isDesktopApp() && window.electronAPI?.setTitleBarOverlay) {
     window.electronAPI.setTitleBarOverlay({ symbolColor });
   }
 };

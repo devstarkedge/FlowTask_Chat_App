@@ -2042,7 +2042,7 @@ function GlobalTopBar({
           )}
 
           <button
-            className="cl-topbar__action-btn cl-topbar__win-btn"
+            className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__window-control"
             onClick={handleMinimize}
             title="Minimize"
             aria-label="Minimize"
@@ -2051,7 +2051,7 @@ function GlobalTopBar({
           </button>
 
           <button
-            className="cl-topbar__action-btn cl-topbar__win-btn"
+            className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__window-control"
             onClick={handleMaximize}
             title={isMaximized ? "Restore" : "Maximize"}
             aria-label={isMaximized ? "Restore" : "Maximize"}
@@ -2069,7 +2069,7 @@ function GlobalTopBar({
           </button>
 
           <button
-            className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__close-btn"
+            className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__close-btn cl-topbar__window-control"
             onClick={handleClose}
             title="Close"
             aria-label="Close"

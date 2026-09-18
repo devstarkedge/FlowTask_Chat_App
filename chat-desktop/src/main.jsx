@@ -23,6 +23,9 @@ import { useChannelStore } from './stores/channelStore';
 
 if (isDesktopApp()) {
   document.body.classList.add('is-electron');
+  if (window.electronAPI?.hasNativeWindowControls) {
+    document.body.classList.add('has-native-window-controls');
+  }
   
   onDesktopNotificationClicked((data) => {
     if (data && data.channelId) {

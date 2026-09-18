@@ -15,6 +15,8 @@ app.setAppUserModelId(isDev ? 'com.taskchat.dev' : 'com.taskchat.app');
 let mainWindow;
 let tray = null;
 let isQuitting = false;
+const hasTitleBarOverlay = process.platform === 'win32' || process.platform === 'linux';
+const overlayWindows = new WeakSet();
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -24,6 +26,9 @@ function createWindow() {
     title: 'TaskChat',
     icon: path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png'),
     titleBarStyle: 'hidden',
+    ...(hasTitleBarOverlay ? {
+      titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 48 },
+    } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -31,6 +36,7 @@ function createWindow() {
       backgroundThrottling: false,
     },
   });
+  if (hasTitleBarOverlay) overlayWindows.add(mainWindow);
 
   if (isDev) {
     // In development, load the Vite dev server
@@ -183,7 +189,13 @@ ipcMain.on('show-notification', (event, { title, body, data }) => {
 // Allow renderer to change titleBarOverlay dynamically
 ipcMain.on('set-title-bar-overlay', (event, options) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  if (win && win.setTitleBarOverlay) {
-    win.setTitleBarOverlay(options);
+  // The method exists even on windows created without an overlay. Only update
+  // windows we enabled, and ignore late events after their window has closed.
+  if (!win || win.isDestroyed() || !overlayWindows.has(win)) return;
+  if (!options || typeof options.symbolColor !== 'string') return;
+  try {
+    win.setTitleBarOverlay({ symbolColor: options.symbolColor });
+  } catch (error) {
+    console.error('[TaskChat] Failed to update window controls:', error);
   }
 });

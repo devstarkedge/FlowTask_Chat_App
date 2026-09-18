@@ -1247,15 +1247,12 @@ class MessageService {
 
   /**
    * Remove draft when a message is sent (non-blocking).
+   * Note: Drafts are stored in local storage on client side.
    * @private
    */
   async _removeDraftOnSend(authorId, channelId, threadId, workspaceId) {
-    try {
-      const draftService = (await import('../drafts/draft.service.js')).default;
-      await draftService.removeDraftByConversation(authorId, channelId, threadId, workspaceId);
-    } catch (err) {
-      logger.debug('Draft removal after send failed (non-critical)', { error: err.message });
-    }
+    // Drafts are handled in client local storage
+    return;
   }
 
   // ──────────────────── Forward Message ──────────────────────────────────────

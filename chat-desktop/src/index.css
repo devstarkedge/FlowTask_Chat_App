@@ -15959,6 +15959,15 @@ body.is-electron .cl-topbar__actions {
   -webkit-app-region: no-drag;
 }
 
+/* Keep Help and Notifications inside the content area beside native captions. */
+body.has-native-window-controls .cl-topbar {
+  padding-right: 156px !important;
+}
+
+body.has-native-window-controls .cl-topbar__window-control {
+  display: none;
+}
+
 .cl-topbar__close-btn:hover {
   background: #e01e5a !important;
   color: #ffffff !important;

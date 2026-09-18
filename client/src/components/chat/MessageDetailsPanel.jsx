@@ -285,11 +285,7 @@ export default function MessageDetailsPanel({ message, onClose, onForward }) {
                 <span>
                   Forwarded from{" "}
                   <strong>
-                    {msg.forwardMeta.originalChannelName
-                      ? (msg.forwardMeta.originalChannelType === "dm" 
-                          ? msg.forwardMeta.originalChannelName 
-                          : `#${msg.forwardMeta.originalChannelName}`)
-                      : msg.forwardMeta.originalSenderName || "Unknown"}
+                    {msg.forwardMeta.originalSenderName || "Unknown"}
                   </strong>
                 </span>
               </div>
@@ -451,13 +447,13 @@ export default function MessageDetailsPanel({ message, onClose, onForward }) {
                     <Forward size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
                     <span style={{ color: "var(--text-primary)" }}>
                       Forwarded from <strong style={{ color: "var(--accent-primary)" }}>
-                        {forwardMeta.originalChannelType === "dm" ? forwardMeta.originalChannelName : `#${forwardMeta.originalChannelName}`}
+                        {forwardMeta.originalChannelType === "dm" ? "Direct message" : `#${forwardMeta.originalChannelName}`}
                       </strong>
                     </span>
                   </div>
                 )}
                 {forwardMeta.originalSenderName && (
-                  <DetailRow icon={<User size={14} />} label="Forwarded By" value={forwardMeta.originalSenderName} />
+                  <DetailRow icon={<User size={14} />} label="Original Sender" value={forwardMeta.originalSenderName} />
                 )}
                 {forwardMeta.forwardedAt && (
                   <DetailRow icon={<Calendar size={14} />} label="Forwarded On" value={formatMessageTime(forwardMeta.forwardedAt)} />

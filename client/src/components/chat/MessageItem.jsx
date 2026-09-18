@@ -1082,11 +1082,7 @@ const MessageItem = memo(
                   <span>
                     Forwarded from{" "}
                     <strong style={{ color: "var(--text-secondary)", fontWeight: 600 }}>
-                      {message.forwardMeta.originalChannelName
-                        ? (message.forwardMeta.originalChannelType === "dm" 
-                            ? message.forwardMeta.originalChannelName 
-                            : `#${message.forwardMeta.originalChannelName}`)
-                        : message.forwardMeta.originalSenderName || "Unknown"}
+                      {message.forwardMeta.originalSenderName || "Unknown"}
                     </strong>
                   </span>
                 </div>

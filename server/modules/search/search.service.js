@@ -308,13 +308,12 @@ async function getAccessibleChannelIds(userId, workspaceId) {
       { dmParticipants: userId.toString() },
     ],
   })
-    .select('_id name slug type visibility description topic memberCount lastMessageAt dmParticipants')
+    .select('_id name slug type visibility description topic memberCount lastMessageAt dmParticipants recipientOnly nameFromMembers members workspaceId')
     .lean();
 
-  return {
-    channelIds: channels.map((channel) => channel._id),
-    channels,
-  };
+  const { default: channelService } = await import('../channels/channel.service.js');
+  const decorated = await channelService._decorateRecipientGroups(channels, workspaceId);
+  return { channelIds: decorated.map((channel) => channel._id), channels: decorated };
 }
 
 async function searchUsers(query, regex, workspaceId) {
@@ -481,6 +480,7 @@ function searchChannels(query, regex, channels, channelSignals) {
     .map((channel) => ({
       id: channel._id.toString(),
       name: channel.name,
+      ...(channel.recipientOnly ? { recipientOnly: true, nameFromMembers: channel.nameFromMembers, participants: channel.participants } : {}),
       slug: channel.slug,
       description: channel.description,
       topic: channel.topic,

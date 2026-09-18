@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { ExternalLink, FileText } from 'lucide-react'
 import { buildRedirectFromMeta } from '../../utils/flowTaskUrl'
+import { useLiveProfileData } from '../../hooks/useLiveProfileData'
 
 /**
  * EVENT_CONFIG — maps event types to display labels and accent colors.
@@ -10,6 +11,8 @@ const EVENT_CONFIG = {
   TASK_UPDATED:          { label: 'updated task',              accent: 'var(--accent-primary)' },
   TASK_DELETED:          { label: 'deleted task',              accent: 'var(--accent-red)' },
   TASK_ASSIGNED:         { label: 'assigned task',             accent: 'var(--accent-purple)' },
+  SUBTASK_ASSIGNED:      { label: 'assigned subtask',          accent: 'var(--accent-purple)' },
+  NANO_ASSIGNED:         { label: 'assigned nano',             accent: 'var(--accent-purple)' },
   TASK_COMMENTED:        { label: 'commented on task',         accent: 'var(--text-link)' },
   TASK_STATUS_CHANGED:   { label: 'changed task status',       accent: 'var(--accent-primary)' },
   TASK_DUE_DATE_CHANGED: { label: 'changed due date',          accent: 'var(--accent-yellow)' },
@@ -102,7 +105,13 @@ function formatMinutes(totalMinutes) {
  * field-level diffs for TASK_UPDATED events.
  */
 export default function AutoActivityMessage({ message }) {
-  const meta = message.activityMeta || {}
+  message = useLiveProfileData(message)
+  const meta = { ...message.activityMeta }
+  if (meta.actorId?.name) {
+    meta.actorName = meta.actorId.name
+    meta.actorAvatar = meta.actorId.avatar || null
+  }
+  if (meta.targetUserId?.name) meta.newValue = meta.targetUserId.name
   const eventType = meta.eventType || ''
   const config = EVENT_CONFIG[eventType] || { label: 'activity', accent: 'var(--accent-primary)' }
   const redirect = buildRedirectFromMeta(meta)
@@ -188,7 +197,7 @@ export default function AutoActivityMessage({ message }) {
                 </a>
               ) : (
                 <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>
-                  "{meta.canvasTitle}"
+                  &quot;{meta.canvasTitle}&quot;
                 </span>
               )}
               .
@@ -206,7 +215,7 @@ export default function AutoActivityMessage({ message }) {
   const isTaskUpdate = eventType === 'TASK_UPDATED'
   const isStatusChange = eventType === 'TASK_STATUS_CHANGED'
   const isDueDateChange = eventType === 'TASK_DUE_DATE_CHANGED'
-  const isAssignment = eventType === 'TASK_ASSIGNED'
+  const isAssignment = ['TASK_ASSIGNED', 'SUBTASK_ASSIGNED', 'NANO_ASSIGNED'].includes(eventType)
   const isSubtask = eventType.startsWith('SUBTASK_')
   const isNano = eventType.startsWith('NANO_')
   const isAttachment = eventType === 'ATTACHMENT_ADDED'

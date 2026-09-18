@@ -31,6 +31,19 @@ export async function syncFlowTaskUserProfile(user, workspaceId) {
     // Only structured metadata is repaired. Message bodies, HTML, quoted
     // content, IDs, memberships and reaction associations remain untouched.
     await Promise.all([
+      Message.updateMany({ workspaceId, $and: [
+        { $or: [{ 'activityMeta.targetUserId': current._id }, { 'activityMeta.targetFlowTaskUserId': String(current.flowTaskUserId) }] },
+        versionGuard('activityMeta.targetProfileUpdatedAt'),
+      ] }, { $set: {
+        'activityMeta.newValue': current.name, 'activityMeta.targetProfileUpdatedAt': version,
+      } }),
+      Message.updateMany({ workspaceId, $and: [
+        { $or: [{ 'activityMeta.actorId': current._id }, { 'activityMeta.actorFlowTaskUserId': String(current.flowTaskUserId) }] },
+        versionGuard('activityMeta.profileUpdatedAt'),
+      ] }, { $set: {
+        'activityMeta.actorName': current.name, 'activityMeta.actorAvatar': current.avatar || null,
+        'activityMeta.profileUpdatedAt': version,
+      } }),
       Message.updateMany({ workspaceId, authorId: current._id, ...versionGuard('senderSnapshot.profileUpdatedAt') }, {
         $set: { 'senderSnapshot.name': current.name, 'senderSnapshot.profileUpdatedAt': version },
       }),

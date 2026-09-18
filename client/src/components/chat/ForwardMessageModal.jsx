@@ -8,6 +8,8 @@ import { useAuthStore } from '../../stores/authStore'
 import { messageAPI, channelAPI, userAPI } from '../../services/api'
 import logger from '../../utils/logger'
 import { Avatar } from './MemberAvatarGroup'
+import { useLiveProfileData } from '../../hooks/useLiveProfileData'
+import { profileId } from '../../utils/userProfiles'
 
 
 /**
@@ -22,7 +24,8 @@ import { Avatar } from './MemberAvatarGroup'
  */
 export default function ForwardMessageModal({ message, messages, attachmentFileIds, onClose, onForwardComplete }) {
   const { user } = useAuthStore()
-  const channels = useChannelStore((s) => s.channels)
+  const storedChannels = useChannelStore((s) => s.channels)
+  const channels = useLiveProfileData(storedChannels)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [isForwarding, setIsForwarding] = useState(false)
@@ -35,6 +38,8 @@ export default function ForwardMessageModal({ message, messages, attachmentFileI
   const [isLoadingResults, setIsLoadingResults] = useState(false)
   const searchInputRef = useRef(null)
   const groupNameRef = useRef(null)
+  const liveServerChannels = useLiveProfileData(serverChannels)
+  const liveServerContacts = useLiveProfileData(serverContacts)
 
   // Normalise to array
   const messagesToForward = useMemo(() => {
@@ -108,17 +113,17 @@ export default function ForwardMessageModal({ message, messages, attachmentFileI
     const mergedResults = []
     const existingDmRecipientIds = new Set()
 
-    const serverAiChannels = serverChannels.filter((c) => c.isAI);
+    const serverAiChannels = liveServerChannels.filter((c) => c.isAI);
     const validServerAiChannel = serverAiChannels.sort((a, b) => {
       const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
       const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
       return bTime - aTime;
     })[0];
 
-    serverChannels.forEach((c) => {
+    liveServerChannels.forEach((c) => {
       if (c.isAI && c._id !== validServerAiChannel?._id) return;
       if (c.type === 'dm' && Array.isArray(c.dmParticipants)) {
-        const recipientId = c.dmParticipants.find((p) => p !== user?._id)
+        const recipientId = c.dmParticipants.map(profileId).find((id) => id !== profileId(user))
         if (recipientId) {
           existingDmRecipientIds.add(recipientId.toString())
         }
@@ -126,7 +131,7 @@ export default function ForwardMessageModal({ message, messages, attachmentFileI
       mergedResults.push(c)
     })
 
-    serverContacts.forEach((contact) => {
+    liveServerContacts.forEach((contact) => {
       const contactChatUserId = contact.chatUserId
       const contactFlowTaskUserId = contact.flowTaskUserId
 
@@ -150,7 +155,7 @@ export default function ForwardMessageModal({ message, messages, attachmentFileI
     })
 
     return mergedResults
-  }, [channels, searchQuery, serverChannels, serverContacts, user])
+  }, [channels, searchQuery, liveServerChannels, liveServerContacts, user])
 
   const filteredChannels = displayResults
 
@@ -200,11 +205,7 @@ export default function ForwardMessageModal({ message, messages, attachmentFileI
         }
         const participants = Array.isArray(dm.dmParticipants) ? dm.dmParticipants : []
         // Find the OTHER user in this DM (not the current user)
-        const otherId = participants.find((p) => {
-          const pId = typeof p === 'object' ? p.toString() : p
-          return pId !== currentUserId
-        })
-        return otherId ? (typeof otherId === 'object' ? otherId.toString() : otherId) : null
+        return participants.map(profileId).find((id) => id !== currentUserId) || null
       })
       .filter(Boolean)
   }, [sendMode, selectedDMs, user?._id])

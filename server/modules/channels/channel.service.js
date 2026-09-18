@@ -4,6 +4,7 @@ import ChannelMember from "./ChannelMember.model.js";
 import PendingChannelParticipant from "./PendingChannelParticipant.model.js";
 import ChannelPin from "./ChannelPin.model.js";
 import channelRepository from "./channel.repository.js";
+import { isRecipientChannel } from "./recipientChannelAccess.js";
 import favoritesService from "../favorites/favorites.service.js";
 import userRepository from "../users/user.repository.js";
 import flowtaskService from "../flowtask/flowtask.service.js";
@@ -558,6 +559,9 @@ class ChannelService {
     }
 
     const visibility = data.visibility || CHANNEL_VISIBILITY.PRIVATE;
+    if (data.recipientOnly && visibility !== CHANNEL_VISIBILITY.PRIVATE) {
+      throw new ValidationError('Recipient conversations must remain private');
+    }
 
     let slug = slugify(data.name);
     if (await channelRepository.slugExists(slug, workspaceId)) {
@@ -584,6 +588,8 @@ class ChannelService {
       name: data.name,
       slug,
       type: channelType,
+      recipientOnly: data.recipientOnly === true,
+      nameFromMembers: data.recipientOnly === true && data.nameFromMembers === true,
       description: data.description ? sanitizeHtml(data.description) : '',
       visibility,
       members,
@@ -614,6 +620,10 @@ class ChannelService {
       workspaceId: channel.workspaceId,
       createdBy: channel.createdBy,
     };
+
+    if (channel.recipientOnly) {
+      Object.assign(channelPayload, (await this._decorateRecipientGroups([channel], workspaceId))[0]);
+    }
 
     // Join creator to channel room
     joinChannelRoom(creatorId.toString(), channelId, wsId);
@@ -1083,6 +1093,7 @@ class ChannelService {
           workspaceId,
           isArchived: false,
           type: { $ne: 'dm' },
+          recipientOnly: { $ne: true },
           $nor: [
             { type: 'project' },
             { 'flowTaskRef.entityType': 'board' },
@@ -1105,9 +1116,10 @@ class ChannelService {
       const workspaceChannels = await Channel.find({
         workspaceId,
         isArchived: false,
-        type: { $ne: 'dm' }
+        type: { $ne: 'dm' },
+        recipientOnly: { $ne: true },
       }).lean();
-      const dmOnly = memberChannels.filter(c => c.type === 'dm');
+      const dmOnly = memberChannels.filter(isRecipientChannel);
 
       channels = [...workspaceChannels, ...dmOnly];
     } else {
@@ -1233,7 +1245,29 @@ class ChannelService {
     return withPins;
   }
 
+  async _decorateRecipientGroups(channels, workspaceId) {
+    const groups = channels.filter((channel) => channel.recipientOnly
+      && (!workspaceId || String(channel.workspaceId) === String(workspaceId)));
+    if (!groups.length) return channels;
+    const ids = [...new Set(groups.flatMap((group) => group.members || [])
+      .map((member) => String(member.userId?._id || member.userId)))];
+    const users = await userRepository.findByIds(ids);
+    const byId = new Map(users.map((user) => [String(user._id), {
+      _id: String(user._id), name: user.name, avatar: user.avatar,
+      email: user.email, flowTaskUserId: user.flowTaskUserId,
+      flowTaskProfileUpdatedAt: user.flowTaskProfileUpdatedAt,
+    }]));
+    return channels.map((channel) => {
+      if (!channel.recipientOnly || (workspaceId && String(channel.workspaceId) !== String(workspaceId))) return channel;
+      const raw = channel.toObject ? channel.toObject() : channel;
+      const participants = (raw.members || []).map((member) => byId.get(String(member.userId?._id || member.userId))).filter(Boolean);
+      return { ...raw, participants,
+        name: raw.nameFromMembers ? participants.map((user) => user.name).join(', ').slice(0, 80) || raw.name : raw.name };
+    });
+  }
+
   async _decorateDMChannels(channels, currentUserId, workspaceId) {
+    channels = await this._decorateRecipientGroups(channels, workspaceId);
     const currentId = currentUserId?.toString();
     if (!currentId) return channels;
 
@@ -2061,6 +2095,9 @@ class ChannelService {
       workspaceId,
     });
     if (!channel || channel.archivedReason === "project_deleted") throw new NotFoundError("Channel not found");
+    if (channel.recipientOnly && updates.visibility !== undefined && updates.visibility !== CHANNEL_VISIBILITY.PRIVATE) {
+      throw new ForbiddenError('Recipient conversations must remain private');
+    }
     if (channel.isArchived && updates.isArchived !== false) {
       throw new ForbiddenError("Channel is archived");
     }
@@ -2090,6 +2127,7 @@ class ChannelService {
     }
 
     const allowed = {};
+    if (channel.recipientOnly && updates.name !== undefined) allowed.nameFromMembers = false;
     if (updates.name !== undefined) {
       allowed.name = sanitizeHtml(updates.name);
     }
@@ -2211,7 +2249,8 @@ class ChannelService {
    * Search channels by name.
    */
   async searchChannels(query, userId, workspaceId) {
-    return channelRepository.search(query, userId, 20, workspaceId);
+    const channels = await channelRepository.search(query, userId, 20, workspaceId);
+    return this._decorateDMChannels(channels, userId, workspaceId);
   }
 
   // ──────────────────── Channel Members ─────────────────────────────────────

@@ -7,6 +7,12 @@ import Workspace from '../workspaces/Workspace.model.js';
 import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
 import Notification from '../notifications/Notification.model.js';
 import logger from '../../utils/logger.js';
+import { recipientDiscoveryFilter } from '../channels/recipientChannelAccess.js';
+
+async function privateConversationFilter(req) {
+  const ids = await ChannelMember.getChannelIdsForUser(req.user._id, req.workspaceId);
+  return recipientDiscoveryFilter(req.user._id, ids);
+}
 
 /**
  * Admin Controller — workspace management endpoints.
@@ -249,14 +255,14 @@ export const listChannels = asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
   const skip = parseInt(req.query.skip) || 0;
 
-  const filter = { workspaceId: req.workspaceId };
+  const filter = { workspaceId: req.workspaceId, $and: [await privateConversationFilter(req)] };
   if (req.query.type) filter.type = req.query.type;
   if (req.query.archived === 'true') filter.isArchived = true;
   else if (req.query.archived !== 'all') filter.isArchived = false;
 
   const [channels, total] = await Promise.all([
     Channel.find(filter)
-      .select('name slug type visibility memberCount lastMessageAt isArchived systemManaged createdAt')
+      .select('name slug type visibility memberCount lastMessageAt isArchived systemManaged createdAt recipientOnly nameFromMembers members workspaceId')
       .sort({ lastMessageAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -264,7 +270,9 @@ export const listChannels = asyncHandler(async (req, res) => {
     Channel.countDocuments(filter),
   ]);
 
-  res.json({ success: true, data: { channels, total, limit, skip } });
+  const { default: channelService } = await import('../channels/channel.service.js');
+  const decorated = await channelService._decorateRecipientGroups(channels, req.workspaceId);
+  res.json({ success: true, data: { channels: decorated, total, limit, skip } });
 });
 
 /**
@@ -273,7 +281,7 @@ export const listChannels = asyncHandler(async (req, res) => {
  */
 export const archiveChannel = asyncHandler(async (req, res) => {
   const channel = await Channel.findOneAndUpdate(
-    { _id: req.params.channelId, workspaceId: req.workspaceId },
+    { _id: req.params.channelId, workspaceId: req.workspaceId, $and: [await privateConversationFilter(req)] },
     { isArchived: true, archivedAt: new Date(), archivedReason: req.body.reason || 'Archived by admin' },
     { returnDocument: 'after' },
   ).select('name slug isArchived');
@@ -291,7 +299,7 @@ export const archiveChannel = asyncHandler(async (req, res) => {
  */
 export const unarchiveChannel = asyncHandler(async (req, res) => {
   const channel = await Channel.findOneAndUpdate(
-    { _id: req.params.channelId, workspaceId: req.workspaceId },
+    { _id: req.params.channelId, workspaceId: req.workspaceId, $and: [await privateConversationFilter(req)] },
     { isArchived: false, archivedAt: null, archivedReason: null },
     { returnDocument: 'after' },
   ).select('name slug isArchived');
@@ -311,6 +319,7 @@ export const deleteChannel = asyncHandler(async (req, res) => {
   const channel = await Channel.findOne({
     _id: req.params.channelId,
     workspaceId: req.workspaceId,
+    $and: [await privateConversationFilter(req)],
   });
 
   if (!channel) {

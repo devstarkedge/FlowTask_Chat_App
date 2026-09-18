@@ -140,6 +140,9 @@ const channelSchema = new Schema(
       type: String,
       default: null,
     },
+    // Forwarding groups are private conversations, never admin-discoverable channels.
+    recipientOnly: { type: Boolean, default: false },
+    nameFromMembers: { type: Boolean, default: false },
     isArchived: {
       type: Boolean,
       default: false,

@@ -42,6 +42,16 @@ export function projectUserProfiles(value, profiles) {
   }
   const originalSender = lookup(value.originalSenderId, profiles);
   if (originalSender && 'originalSenderName' in value) assign('originalSenderName', originalSender.name);
+  const actor = lookup(value.actorId || value.actorFlowTaskUserId, profiles);
+  if (actor && 'actorName' in value) {
+    assign('actorName', actor.name);
+    if ('actorAvatar' in value) assign('actorAvatar', actor.avatar || null);
+  }
+  const target = lookup(value.targetUserId || value.targetFlowTaskUserId, profiles);
+  if (target && 'newValue' in value) assign('newValue', target.name);
+  if (value.recipientOnly && value.nameFromMembers && next.participants?.length) {
+    assign('name', next.participants.map((participant) => participant.name).join(', ').slice(0, 80));
+  }
   const uploader = lookup(value.uploadedById, profiles);
   if (uploader && typeof value.uploadedBy === 'string') assign('uploadedBy', uploader.name);
   // DM labels are reconstructed from participant IDs, never split/replaced

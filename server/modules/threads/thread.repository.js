@@ -226,6 +226,8 @@ class ThreadRepository {
         .sort({ createdAt: -1 })
         .limit(3)
         .populate('authorId', 'name email avatar onlineStatus flowTaskProfileUpdatedAt')
+      .populate('activityMeta.actorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
+      .populate('activityMeta.targetUserId', 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt')
         .populate({ path: 'fileReferences', populate: { path: 'fileId' } })
         .lean();
       thread.latestReplies = replies.reverse();

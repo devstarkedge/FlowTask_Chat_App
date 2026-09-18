@@ -157,6 +157,9 @@ export function registerAnnouncementEventHandlers() {
         announcementTitle: title,
         announcementDescription: description ? description.substring(0, 200) : null,
         actorName: authorName,
+        actorId: author?._id || null,
+        actorFlowTaskUserId: userId ? String(userId) : null,
+        profileUpdatedAt: author?.flowTaskProfileUpdatedAt || null,
         category,
         priority: announcement.priority || null,
       };
@@ -330,6 +333,9 @@ export function registerAnnouncementEventHandlers() {
           announcementTitle: title,
           announcementDescription: description ? description.substring(0, 200) : null,
           actorName: authorName,
+          actorId: author?._id || null,
+          actorFlowTaskUserId: userId ? String(userId) : null,
+          profileUpdatedAt: author?.flowTaskProfileUpdatedAt || null,
           category,
           priority: announcement.priority || null,
         };

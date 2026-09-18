@@ -6,6 +6,10 @@ import env from '../config/environment.js';
 try {
   await mongoose.connect(env.MONGO_URI, { autoIndex:false,serverSelectionTimeoutMS:10000 });
   const indexes = [
+    ['messages',{ workspaceId:1,'activityMeta.targetUserId':1 }],
+    ['messages',{ workspaceId:1,'activityMeta.targetFlowTaskUserId':1 }],
+    ['messages',{ workspaceId:1,'activityMeta.actorId':1 }],
+    ['messages',{ workspaceId:1,'activityMeta.actorFlowTaskUserId':1 }],
     ['messages',{ workspaceId:1,'replyTo.authorId':1 }],
     ['messages',{ workspaceId:1,'forwardMeta.originalSenderId':1 }],
     ['notifications',{ workspaceId:1,senderId:1 }],

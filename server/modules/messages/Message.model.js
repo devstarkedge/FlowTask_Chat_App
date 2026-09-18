@@ -86,8 +86,10 @@ const activityMetaSchema = new Schema({
       'BILLED_TIME_ADDED', 'BILLED_TIME_UPDATED', 'BILLED_TIME_DELETED',
       'ANNOUNCEMENT_CREATED',
       'SUBTASK_CREATED', 'SUBTASK_COMPLETED', 'SUBTASK_DELETED',
+      'SUBTASK_ASSIGNED',
       'SUBTASK_UPDATED',
       'NANO_CREATED', 'NANO_COMPLETED', 'NANO_DELETED',
+      'NANO_ASSIGNED',
       'ATTACHMENT_ADDED',
       // 'CANVAS_CREATED', 'CANVAS_UPDATED', 'CANVAS_DELETED', 'CANVAS_COMMENTED',
     ],
@@ -101,6 +103,12 @@ const activityMetaSchema = new Schema({
   // canvasTitle: { type: String, default: null },
   // blockId: { type: String, default: null },
   actorName: { type: String, default: null },
+  actorId: { type: Schema.Types.ObjectId, ref: 'ChatUser', default: null },
+  actorFlowTaskUserId: { type: String, default: null },
+  profileUpdatedAt: { type: Date, default: null },
+  targetUserId: { type: Schema.Types.ObjectId, ref: 'ChatUser', default: null },
+  targetFlowTaskUserId: { type: String, default: null },
+  targetProfileUpdatedAt: { type: Date, default: null },
   actionType: { type: String, default: null },
   entryType: { type: String, default: null },
   entityType: { type: String, default: null },
@@ -370,6 +378,10 @@ const messageSchema = new Schema({
 // ─── Indexes (all workspace-scoped) ──────────────────────────────────────────
 // Primary query: channel messages ordered by time (cursor-based pagination)
 messageSchema.index({ workspaceId: 1, 'replyTo.authorId': 1 });
+messageSchema.index({ workspaceId: 1, 'activityMeta.actorId': 1 });
+messageSchema.index({ workspaceId: 1, 'activityMeta.actorFlowTaskUserId': 1 });
+messageSchema.index({ workspaceId: 1, 'activityMeta.targetUserId': 1 });
+messageSchema.index({ workspaceId: 1, 'activityMeta.targetFlowTaskUserId': 1 });
 messageSchema.index({ workspaceId: 1, 'forwardMeta.originalSenderId': 1 });
 messageSchema.index({ workspaceId: 1, channelId: 1, createdAt: -1 });
 // Thread replies ordered by time

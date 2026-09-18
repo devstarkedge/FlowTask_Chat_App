@@ -169,6 +169,9 @@ class CanvasService {
           canvasTitle,
           blockId: blockId ? blockId.toString() : null,
           actorName: user.name,
+          actorId: user._id,
+          actorFlowTaskUserId: user.flowTaskUserId || null,
+          profileUpdatedAt: user.flowTaskProfileUpdatedAt || null,
           actorAvatar: user.avatar || null,
         },
       });

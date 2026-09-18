@@ -1,4 +1,5 @@
 import env from '../config/environment.js';
+import { hasRecipientMembership, isRecipientChannel } from '../modules/channels/recipientChannelAccess.js';
 import tokenService from '../modules/auth/token.service.js';
 import userRepository from '../modules/users/user.repository.js';
 import channelRepository from '../modules/channels/channel.repository.js';
@@ -422,7 +423,7 @@ export async function initializeSocket(httpServer, corsOptions) {
           flowTaskAccess: socket.workspaceMembership?.flowTaskAccess || null,
         };
         if (
-          permissionEngine.canViewAllChannels(scopedUser, { workspaceId: wsId })
+          !isRecipientChannel(channel) && permissionEngine.canViewAllChannels(scopedUser, { workspaceId: wsId })
         ) {
           const joinRoom = buildRoomName(wsId, 'channel', channelId);
           socket.join(joinRoom);
@@ -439,9 +440,11 @@ export async function initializeSocket(httpServer, corsOptions) {
         }
 
         // ── DM channels: strict participant check ──
-        if (channel.type === 'dm') {
+        if (isRecipientChannel(channel)) {
           const userIdStr = userId.toString();
-          const isMember = channel.hasMember(user._id);
+          const { default: ChannelMember } = await import('../modules/channels/ChannelMember.model.js');
+          const isMember = hasRecipientMembership(channel, user._id)
+            || await ChannelMember.isMember(channelId, user._id);
           const isParticipant = channel.dmParticipants?.map(p => p.toString()).includes(userIdStr);
           if (!isMember && !isParticipant) {
             socket.emit('error', { message: 'Not a participant of this DM' });

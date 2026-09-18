@@ -1,4 +1,5 @@
 import logger from '../utils/logger.js';
+import { hasRecipientMembership, isRecipientChannel } from '../modules/channels/recipientChannelAccess.js';
 
 /**
  * Permission Engine — configurable capability-based access control.
@@ -169,6 +170,9 @@ class PermissionEngine {
       return channel.hasMember?.(principal._id) === true;
     }
 
+    // Conversation privacy applies before administrative channel capabilities.
+    if (isRecipientChannel(channel)) return hasRecipientMembership(channel, principal._id);
+
     // VIEW_ALL_CHANNELS bypasses membership checks
     if (this.hasCapability(principal, CAPABILITIES.VIEW_ALL_CHANNELS, { workspaceId })) {
       return true;
@@ -214,6 +218,7 @@ class PermissionEngine {
    */
   canManageChannel(principal, channel) {
     if (!principal || !channel) return false;
+    if (isRecipientChannel(channel) && !hasRecipientMembership(channel, principal._id)) return false;
 
     // Admin can manage everything
     if (this.hasCapability(principal, CAPABILITIES.MANAGE_MEMBERS)) {

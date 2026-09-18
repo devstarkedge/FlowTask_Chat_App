@@ -5,6 +5,11 @@ import threadService from '../../threads/thread.service.js';
 import threadRepository from '../../threads/thread.repository.js';
 import messageService from '../../messages/message.service.js';
 import userRepository from '../../users/user.repository.js';
+
+function activityActorId(payload) {
+  const actor = payload.assignerId || payload.userId || payload.actor?._id || payload.actor?.id;
+  return actor ? String(actor._id || actor.id || actor) : null;
+}
 import logger from '../../../utils/logger.js';
 import { FLOWTASK_EVENTS } from '../../../config/constants.js';
 import { requireWorkspaceId } from '../../../utils/webhookEventGuard.js';
@@ -261,6 +266,7 @@ function buildTimeEntryActivityMeta({
     subtaskTitle: entityContext.subtaskTitle || null,
     nanoTitle: entityContext.nanoTitle || null,
     actorName: userName,
+    actorFlowTaskUserId: activityActorId(payload),
     actorAvatar,
     entryType,
     entityType: entityContext.entityType,
@@ -388,6 +394,7 @@ export function registerTaskEventHandlers() {
       projectName: project?.name || null,
       taskTitle: card.title || null,
       actorName: creatorName,
+      actorFlowTaskUserId: activityActorId(payload),
       priority: card.priority || null,
       category: card.category || null,
     };
@@ -467,6 +474,7 @@ export function registerTaskEventHandlers() {
       projectName: project?.name || null,
       taskTitle: card.title || null,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
       changedFields: Object.keys(changedFields).length > 0 ? changedFields : null,
     };
 
@@ -517,6 +525,7 @@ export function registerTaskEventHandlers() {
       projectName: project?.name || null,
       taskTitle: title,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
     };
 
     await messageService.sendSystemMessage(
@@ -569,7 +578,11 @@ export function registerTaskEventHandlers() {
         projectName: project?.name || null,
         taskTitle: card.title || null,
         actorName: assignerName,
+        actorFlowTaskUserId: activityActorId(payload),
         newValue: assignee.name,
+        targetUserId: assignee._id,
+        targetFlowTaskUserId: assignee.flowTaskUserId || String(assigneeId),
+        targetProfileUpdatedAt: assignee.flowTaskProfileUpdatedAt || null,
       };
 
       await messageService.sendSystemMessage(
@@ -673,6 +686,7 @@ export function registerTaskEventHandlers() {
       projectName: project?.name || null,
       taskTitle: card.title || null,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
     };
 
     await messageService.sendSystemMessage(
@@ -711,6 +725,7 @@ export function registerTaskEventHandlers() {
       projectName: project?.name || null,
       taskTitle: card.title || null,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
       oldValue: from,
       newValue: to,
     };
@@ -769,6 +784,7 @@ export function registerTaskEventHandlers() {
       projectName: project?.name || null,
       taskTitle: card.title || null,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
       oldValue: oldDate,
       newValue: newDate,
     };
@@ -895,6 +911,7 @@ export function registerTaskEventHandlers() {
       subtaskTitle: subtask.title || null,
       parentTaskTitle: taskTitle,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
     };
 
     logger.info('SUBTASK_CREATED: sending system message', { deliveryId: payload.deliveryId, channelId: channel._id?.toString(), boardId, workspaceId: wsId, activityMeta });
@@ -935,6 +952,7 @@ export function registerTaskEventHandlers() {
       subtaskTitle: subtask.title || null,
       parentTaskTitle: taskTitle,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
     };
 
     await messageService.sendSystemMessage(
@@ -973,6 +991,7 @@ export function registerTaskEventHandlers() {
       subtaskTitle: subtask.title || null,
       parentTaskTitle: taskTitle,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
     };
 
     await messageService.sendSystemMessage(
@@ -1021,6 +1040,7 @@ export function registerTaskEventHandlers() {
       subtaskTitle: subtask.title || null,
       parentTaskTitle: taskTitle,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
     };
 
     logger.info('SUBTASK_UPDATED: sending system message', { deliveryId: payload.deliveryId, channelId: channel._id?.toString(), boardId: normalizedBoardId, workspaceId: wsId, activityMeta });
@@ -1066,6 +1086,7 @@ export function registerTaskEventHandlers() {
       parentTaskTitle: taskTitle,
       nanoTitle: nano.title || null,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
     };
 
     await messageService.sendSystemMessage(
@@ -1105,6 +1126,7 @@ export function registerTaskEventHandlers() {
       parentTaskTitle: taskTitle,
       nanoTitle: nano.title || null,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
     };
 
     await messageService.sendSystemMessage(
@@ -1144,6 +1166,7 @@ export function registerTaskEventHandlers() {
       parentTaskTitle: taskTitle,
       nanoTitle: nano.title || null,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
     };
 
     await messageService.sendSystemMessage(
@@ -1185,6 +1208,7 @@ export function registerTaskEventHandlers() {
       taskTitle,
       fileName,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
     };
 
     // Log which IDs are present so client deep-link issues can be diagnosed
@@ -1231,7 +1255,11 @@ export function registerTaskEventHandlers() {
         taskTitle,
         subtaskTitle: subtask.title || null,
         actorName: assignerName,
+        actorFlowTaskUserId: activityActorId(payload),
         newValue: assignee.name,
+        targetUserId: assignee._id,
+        targetFlowTaskUserId: assignee.flowTaskUserId || String(assigneeId),
+        targetProfileUpdatedAt: assignee.flowTaskProfileUpdatedAt || null,
       };
 
       await messageService.sendSystemMessage(
@@ -1277,7 +1305,11 @@ export function registerTaskEventHandlers() {
         subtaskTitle: subtask?.title || null,
         nanoTitle: nano.title || null,
         actorName: assignerName,
+        actorFlowTaskUserId: activityActorId(payload),
         newValue: assignee.name,
+        targetUserId: assignee._id,
+        targetFlowTaskUserId: assignee.flowTaskUserId || String(assigneeId),
+        targetProfileUpdatedAt: assignee.flowTaskProfileUpdatedAt || null,
       };
 
       await messageService.sendSystemMessage(
@@ -1317,6 +1349,7 @@ export function registerTaskEventHandlers() {
       taskTitle,
       fileName,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
     };
 
     await messageService.sendSystemMessage(
@@ -1353,6 +1386,7 @@ export function registerTaskEventHandlers() {
       projectName: project?.name || null,
       taskTitle: card.title || null,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
     };
 
     await messageService.sendSystemMessage(
@@ -1387,6 +1421,7 @@ export function registerTaskEventHandlers() {
       projectName: project?.name || null,
       taskTitle: card.title || null,
       actorName: userName,
+      actorFlowTaskUserId: activityActorId(payload),
     };
 
     await messageService.sendSystemMessage(

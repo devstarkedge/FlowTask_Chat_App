@@ -2,6 +2,8 @@ import Category from "./Category.model.js";
 import Department from "./Department.model.js";
 import Channel from "../channels/Channel.model.js";
 import channelService from "../channels/channel.service.js";
+import ChannelMember from "../channels/ChannelMember.model.js";
+import { recipientDiscoveryFilter } from "../channels/recipientChannelAccess.js";
 import { syncDepartments } from "./syncDepartmentsService.js";
 import { ensureDepartmentCategories } from "./departmentCategories.service.js";
 import asyncHandler from "../../middleware/asyncHandler.js";
@@ -321,13 +323,16 @@ export const suggestChannels = asyncHandler(async (req, res, next) => {
   const searchKeywords = name.toLowerCase().split(/\s+/);
   
   // Find channels without a category whose name or description matches keywords
+  const memberIds = await ChannelMember.getChannelIdsForUser(req.user._id, req.workspaceId);
   const channels = await Channel.find({
     workspaceId: req.workspaceId,
     isArchived: false,
+    $and: [recipientDiscoveryFilter(req.user._id, memberIds)],
     $or: searchKeywords.map(kw => ({ name: new RegExp(kw, 'i') }))
-  }).select('_id name description type');
+  }).select('_id name description type recipientOnly nameFromMembers members workspaceId');
 
-  res.status(200).json({ success: true, data: channels });
+  const decorated = await channelService._decorateRecipientGroups(channels, req.workspaceId);
+  res.status(200).json({ success: true, data: decorated });
 });
 
 // @desc    Add a channel to a category

@@ -4,6 +4,7 @@ import userRepository from '../users/user.repository.js';
 import logger from '../../utils/logger.js';
 import { UnauthorizedError, ForbiddenError } from '../../middleware/errorHandler.js';
 import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
+import { hasRecipientMembership, isRecipientChannel } from '../channels/recipientChannelAccess.js';
 
 /**
  * Auth Middleware — JWT verification and RBAC for Express routes.
@@ -174,6 +175,14 @@ export function requireChannelAccess() {
         return next();
       }
 
+      if (isRecipientChannel(channel)) {
+        const allowed = hasRecipientMembership(channel, req.user._id)
+          || await ChannelMember.isMember(channelId, req.user._id);
+        if (!allowed) return next(new ForbiddenError('Not a participant of this conversation'));
+        req.channel = channel;
+        return next();
+      }
+
       // Chat workspace admins can access non-FlowTask project channels only.
       if (req.membership?.role === 'admin' || req.membership?.role === 'owner') {
         req.channel = channel;
@@ -278,6 +287,15 @@ export function requireMessageAccess(options = { allowMissing: false }) {
           req.membership,
         );
         if (!allowed) return next(new ForbiddenError('Not authorized for this FlowTask project'));
+        req.message = message;
+        req.channel = channel;
+        return next();
+      }
+
+      if (isRecipientChannel(channel)) {
+        const allowed = hasRecipientMembership(channel, req.user._id)
+          || await ChannelMember.isMember(message.channelId?._id || message.channelId, req.user._id);
+        if (!allowed) return next(new ForbiddenError('Not a participant of this conversation'));
         req.message = message;
         req.channel = channel;
         return next();

@@ -6,6 +6,7 @@ import UserGroup from './UserGroup.model.js';
 import WorkspaceInvite from '../workspaces/WorkspaceInvite.model.js';
 import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
 import mongoose from 'mongoose';
+import { recipientDiscoveryFilter } from '../channels/recipientChannelAccess.js';
 
 class DirectoriesRepository {
   /**
@@ -158,10 +159,12 @@ class DirectoriesRepository {
    * Get workspace channels (Channels tab).
    * All non-DM channels in the workspace (including ones user hasn't joined).
    */
-  async getWorkspaceChannels(workspaceId, { search, type, sort = 'recommended', page = 1, limit = 50 } = {}) {
+  async getWorkspaceChannels(workspaceId, { search, type, sort = 'recommended', page = 1, limit = 50, requesterId } = {}) {
+    const memberChannelIds = requesterId ? await ChannelMember.getChannelIdsForUser(requesterId, workspaceId) : [];
     const filter = injectWorkspaceFilter({
       isArchived: false,
       type: { $ne: 'dm' },
+      $and: [recipientDiscoveryFilter(requesterId, memberChannelIds)],
     }, workspaceId);
 
     if (search) {
@@ -190,7 +193,7 @@ class DirectoriesRepository {
       .sort(sortOption)
       .skip(skip)
       .limit(limit)
-      .select('name slug type visibility description memberCount lastMessageAt createdBy')
+      .select('name slug type visibility description memberCount lastMessageAt createdBy recipientOnly nameFromMembers members workspaceId')
       .lean();
 
     return { channels, total, page, limit };

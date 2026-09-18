@@ -74,11 +74,13 @@ class DirectoriesService {
    */
   async getChannels(userId, workspaceId, params) {
     const [result, joinedSet] = await Promise.all([
-      directoriesRepository.getWorkspaceChannels(workspaceId, params),
+      directoriesRepository.getWorkspaceChannels(workspaceId, { ...params, requesterId: userId }),
       directoriesRepository.getUserChannelIds(userId, workspaceId),
     ]);
 
-    result.channels = result.channels.map((ch) => ({
+    const { default: channelService } = await import('../channels/channel.service.js');
+    const decorated = await channelService._decorateRecipientGroups(result.channels, workspaceId);
+    result.channels = decorated.map((ch) => ({
       ...ch,
       isJoined: joinedSet.has(ch._id.toString()),
       isPrivate: ch.visibility === 'private',

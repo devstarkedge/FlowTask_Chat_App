@@ -40,7 +40,7 @@ export const getChannel = asyncHandler(async (req, res) => {
   );
 
   let decoratedChannel = channel;
-  if (channel && channel.type === 'dm') {
+  if (channel && (channel.type === 'dm' || channel.recipientOnly)) {
     const decorated = await channelService._decorateDMChannels([channel], req.user._id, req.workspaceId);
     decoratedChannel = decorated[0];
   }

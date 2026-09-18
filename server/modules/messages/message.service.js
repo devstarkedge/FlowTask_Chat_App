@@ -438,7 +438,16 @@ class MessageService {
     }
 
     if (activityMeta) {
-      messageData.activityMeta = activityMeta;
+      const actor = activityMeta.actorId
+        ? await userRepository.findById(activityMeta.actorId)
+        : activityMeta.actorFlowTaskUserId
+          ? await userRepository.findByFlowTaskId(activityMeta.actorFlowTaskUserId)
+          : null;
+      messageData.activityMeta = actor ? {
+        ...activityMeta, actorId: actor._id, actorFlowTaskUserId: actor.flowTaskUserId || activityMeta.actorFlowTaskUserId,
+        actorName: actor.name, actorAvatar: actor.avatar || null,
+        profileUpdatedAt: actor.flowTaskProfileUpdatedAt || null,
+      } : activityMeta;
     }
 
     logger.info('sendSystemMessage', {
@@ -1272,9 +1281,12 @@ class MessageService {
     }
 
     // Deduplicate and ensure creator is not in the memberIds (createCustomChannel adds them as owner)
-    const uniqueMembers = [...new Set(memberIds.map(String))].filter(
-      (id) => id !== userId.toString(),
-    );
+    const { default: channelService } = await import('../channels/channel.service.js');
+    const resolvedMembers = await Promise.all([...new Set(memberIds.map(String))]
+      .map((id) => channelService.resolveAndValidateDMTarget(id, workspaceId)));
+    const uniqueMembers = [...new Set(resolvedMembers.map((member) => member.chatUserId))]
+      .filter((id) => id !== userId.toString());
+    if (!uniqueMembers.length) throw new ValidationError('At least one other member is required to create a group');
 
     // Build a display name if none provided — use member names
     let channelName = groupName?.trim();
@@ -1291,9 +1303,9 @@ class MessageService {
 
     // Create a private channel with the selected members
     // Dynamic import to avoid circular dependency (channels ↔ messages)
-    const { default: channelService } = await import('../channels/channel.service.js');
     const channel = await channelService.createCustomChannel(
-      { name: channelName, visibility: 'private', memberIds: uniqueMembers },
+      { name: channelName, visibility: 'private', memberIds: uniqueMembers,
+        recipientOnly: true, nameFromMembers: !groupName?.trim() },
       userId,
       workspaceId,
     );
@@ -1309,7 +1321,8 @@ class MessageService {
       customMessage,
     });
 
-    return { channel, messages: forwarded };
+    const [decorated] = await channelService._decorateRecipientGroups([channel], workspaceId);
+    return { channel: decorated, messages: forwarded };
   }
 
   /**
@@ -1358,8 +1371,19 @@ class MessageService {
 
     const allForwardedMessages = [];
 
+    const { default: channelService } = await import('../channels/channel.service.js');
+    const destinations = new Map(await Promise.all([...new Set(destinationIds.map(String))].map(async (id) => [
+      id, await channelService.getChannelById(id, userId, workspaceId),
+    ])));
+
+    // Validate every source before creating any forwarded message.
+    const sources = new Map(await Promise.all(originals.map(async (original) => {
+      const id = String(original.channelId?._id || original.channelId);
+      return [id, await channelService.getChannelById(id, userId, workspaceId)];
+    })));
+
     for (const original of originals) {
-      const sourceChannel = await channelRepository.findById(original.channelId, { workspaceId });
+      const sourceChannel = sources.get(String(original.channelId?._id || original.channelId));
       if (!sourceChannel) throw new NotFoundError('Source channel not found');
 
       const originalAuthorId = original.authorId?._id || original.authorId;
@@ -1401,7 +1425,7 @@ class MessageService {
       }
 
       for (const destChannelId of destinationIds) {
-        const destChannel = await channelRepository.findById(destChannelId, { workspaceId });
+        const destChannel = destinations.get(String(destChannelId));
         if (!destChannel) {
           logger.warn('Forward: destination channel not found', { destChannelId });
           continue;
@@ -1432,6 +1456,7 @@ class MessageService {
             flowTaskAttachmentId: att.flowTaskAttachmentId || null,
           })),
           mentions: [],  // Don't carry over mentions to avoid re-triggering notifications
+          activityMeta: original.activityMeta || null,
           senderSnapshot,
           workspaceId,
           forwardMeta: {

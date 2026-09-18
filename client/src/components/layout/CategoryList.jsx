@@ -4,7 +4,7 @@ import { Plus, MoreVertical } from "lucide-react";
 import SidebarSection from "./sidebar/SidebarSection";
 import SidebarItem from "./sidebar/SidebarItem";
 import ChannelListItem from "./sidebar/ChannelListItem";
-import { isPersonalCategoryChannel } from "../../utils/channelOrigin";
+import { getDepartmentChannels, isPersonalCategoryChannel } from "../../utils/channelOrigin";
 
 
 const CategoryGroup = ({
@@ -136,15 +136,8 @@ export default function CategoryList({
         if (category.type === "department" && !category.departmentId) return null;
         let categoryChannels = [];
         if (category.type === "department") {
-          categoryChannels = channels.filter(c => {
-            if (!isPersonalCategoryChannel(c)) return false;
-            
-            const targetDeptId = category.departmentId?.externalId || category.departmentId;
-            const isDepartmentChannel = c.flowTaskRef?.entityType === "department" && String(c.flowTaskRef?.entityId) === String(targetDeptId);
-            const isProjectInDepartment = c.departmentRef?.departmentId && String(c.departmentRef.departmentId) === String(targetDeptId);
-            
-            return isDepartmentChannel || isProjectInDepartment;
-          });
+          categoryChannels = getDepartmentChannels(channels, category.departmentId);
+          if (categoryChannels.length === 0) return null;
         } else {
           categoryChannels = channels.filter(c => isPersonalCategoryChannel(c) && category.channelIds?.includes(c._id));
         }

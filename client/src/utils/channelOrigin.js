@@ -26,3 +26,16 @@ export function isPersonalCategoryChannel(channel) {
   if (!channel || channel.isArchived || isImplicitDepartmentChannel(channel)) return false;
   return !['dm', 'self', 'system'].includes(channel.type);
 }
+
+export function getDepartmentChannels(channels, department) {
+  const departmentId = department?.externalId || department?._id || department;
+  if (!departmentId) return [];
+  return channels.filter((channel) => {
+    if (!isPersonalCategoryChannel(channel)) return false;
+    const directDepartment = channel.flowTaskRef?.entityType === 'department'
+      && String(channel.flowTaskRef.entityId) === String(departmentId);
+    const assignedDepartment = channel.departmentRef?.departmentId
+      && String(channel.departmentRef.departmentId) === String(departmentId);
+    return directDepartment || assignedDepartment;
+  });
+}

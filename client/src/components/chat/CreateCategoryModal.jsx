@@ -5,7 +5,7 @@ import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import api, { categoryAPI } from "../../services/api";
 import EmojiPickerPortal from "./EmojiPickerPortal";
-import { isPersonalCategoryChannel } from "../../utils/channelOrigin";
+import { getDepartmentChannels, isPersonalCategoryChannel } from "../../utils/channelOrigin";
 
 let departmentSyncInFlight = null;
 
@@ -172,15 +172,10 @@ export default function CreateCategoryModal({ onClose }) {
   };
 
   // Derived: Channels linked to a department
-  const getDeptChannels = (dept) => {
-    const targetDeptId = dept.externalId || dept._id;
-    return channels.filter(c => {
-      if (!isPersonalCategoryChannel(c)) return false;
-      const isDepartmentChannel = c.flowTaskRef?.entityType === "department" && String(c.flowTaskRef?.entityId) === String(targetDeptId);
-      const isProjectInDepartment = c.departmentRef?.departmentId && String(c.departmentRef.departmentId) === String(targetDeptId);
-      return isDepartmentChannel || isProjectInDepartment;
-    });
-  };
+  const getDeptChannels = (dept) => getDepartmentChannels(channels, dept);
+  const visibleDepartments = useMemo(() => departments.filter((department) =>
+    getDepartmentChannels(channels, department).length > 0,
+  ), [departments, channels]);
 
   const nonDmChannels = useMemo(() => {
     return channels
@@ -201,16 +196,16 @@ export default function CreateCategoryModal({ onClose }) {
   ), [categories]);
   const hasDepartmentCategory = existingDepartmentIds.size > 0;
 
-  const missingDepartments = useMemo(() => departments.filter((department) =>
+  const missingDepartments = useMemo(() => visibleDepartments.filter((department) =>
     !existingDepartmentIds.has(String(department._id))
       && !existingDepartmentIds.has(String(department.externalId)),
-  ), [departments, existingDepartmentIds]);
+  ), [visibleDepartments, existingDepartmentIds]);
 
   const allDepartmentsImported = !loadingDepts
-    && departments.length > 0
+    && visibleDepartments.length > 0
     && missingDepartments.length === 0;
   const hideDepartmentImportAction = categoryType === 'department'
-    && (allDepartmentsImported || (!loadingDepts && departments.length === 0));
+    && (allDepartmentsImported || (!loadingDepts && visibleDepartments.length === 0));
 
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -383,10 +378,10 @@ export default function CreateCategoryModal({ onClose }) {
               <div className="ccm-field-group">
                 <div style={{ padding: '16px', fontSize: '13px', color: 'var(--text-secondary, #616061)', background: 'var(--bg-secondary, #F8F8F8)', borderRadius: '8px', lineHeight: '1.5', marginBottom: '16px', border: '1px solid var(--border-primary, #EBECEF)' }}>
                   {allDepartmentsImported
-                    ? 'All FlowTask departments are already available in your Categories.'
-                    : departments.length === 0 && !loadingDepts
-                    ? 'No FlowTask departments are available.'
-                    : <>Click <strong>"Import Departments"</strong> to enable department categories. New departments will appear automatically, with project channels listed beneath them as they are created.</>}
+                    ? 'All FlowTask departments with channels are already available in your Categories.'
+                    : visibleDepartments.length === 0 && !loadingDepts
+                    ? 'No FlowTask departments with accessible channels are available.'
+                    : <>Click <strong>"Import Departments"</strong> to enable department categories. Departments appear when they have accessible channels, with project channels listed beneath them.</>}
                 </div>
                 
                 <div className="ccm-label">FLOWTASK DEPARTMENTS</div>
@@ -400,10 +395,10 @@ export default function CreateCategoryModal({ onClose }) {
                         Retry
                       </button>
                     </div>
-                  ) : departments.length === 0 ? (
-                    <div style={{ padding: '16px', textAlign: 'center', color: '#616061', fontSize: '13px' }}>No FlowTask departments are available for your account.</div>
+                  ) : visibleDepartments.length === 0 ? (
+                    <div style={{ padding: '16px', textAlign: 'center', color: '#616061', fontSize: '13px' }}>No FlowTask departments with accessible channels are available for your account.</div>
                   ) : (
-                    departments.map(dept => {
+                    visibleDepartments.map(dept => {
                       const isAlreadyImported = existingDepartmentIds.has(String(dept._id))
                         || existingDepartmentIds.has(String(dept.externalId));
                       const isExpanded = expandedDepts[dept._id];

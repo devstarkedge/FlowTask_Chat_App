@@ -162,7 +162,6 @@ export function ReactionRenderer({
           closePopup();
           toggle?.(emoji);
         }}
-        title={`${emoji} — ${count != null ? count : 0}`}
         className="reaction-renderer"
         style={{
           display: 'inline-flex',

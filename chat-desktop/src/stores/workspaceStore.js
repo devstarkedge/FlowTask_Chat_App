@@ -480,7 +480,16 @@ export const useWorkspaceStore = create(
         activeWorkspaceId: state.activeWorkspaceId,
         // Persist workspace object so sidebar shows correct name after refresh
         activeWorkspace: state.activeWorkspace
-          ? { _id: state.activeWorkspace._id, name: state.activeWorkspace.name, slug: state.activeWorkspace.slug, logo: state.activeWorkspace.logo }
+          ? {
+              _id: state.activeWorkspace._id,
+              name: state.activeWorkspace.name,
+              slug: state.activeWorkspace.slug,
+              logo: state.activeWorkspace.logo,
+              source: state.activeWorkspace.source,
+              settings: state.activeWorkspace.settings,
+              plan: state.activeWorkspace.plan,
+              flowTaskRole: state.activeWorkspace.flowTaskRole,
+            }
           : null,
       }),
     },

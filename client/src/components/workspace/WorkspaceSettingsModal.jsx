@@ -112,8 +112,11 @@ export default function WorkspaceSettingsModal({ onClose }) {
   }, [activeWorkspaceId, activeWorkspace?.name, activeWorkspace?.description, activeWorkspace?.logo]);
 
   useEffect(() => {
-    if (activeWorkspaceId) fetchMembers();
-  }, [activeWorkspaceId, fetchMembers]);
+    if (activeWorkspaceId) {
+      fetchMembers();
+      if (fetchWorkspace) fetchWorkspace(activeWorkspaceId);
+    }
+  }, [activeWorkspaceId, fetchMembers, fetchWorkspace]);
 
   const loadSettings = useCallback(async (section) => {
     if (!activeWorkspaceId) return;
@@ -618,7 +621,10 @@ function InviteTab({
   const [copied, setCopied] = useState(false);
   const isOwner = currentUserRole === "owner";
   const guestAccess = GUEST_ACCESS_PLANS[plan] ?? false;
-  const isFlowTaskWorkspace = workspace?.source === "flowtask";
+  const isFlowTaskWorkspace =
+    workspace?.source === "flowtask" ||
+    workspace?.settings?.flowtaskIntegration?.enabled === true ||
+    !!workspace?.flowTaskRole;
 
   /* ── Domain Restrictions state ── */
   const domainRestrictions = workspace?.settings?.domainRestrictions || { enabled: false, allowedDomains: [] };

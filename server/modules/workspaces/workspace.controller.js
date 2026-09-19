@@ -77,13 +77,14 @@ export const getMyWorkspaces = asyncHandler(async (req, res) => {
   const workspaces = memberships
     .filter((m) => m.workspaceId && m.workspaceId.isActive !== false)
     .map((m) => {
-      const ws = { ...m.workspaceId };
+      const rawWs = m.workspaceId;
+      const wsDoc = typeof rawWs?.toObject === 'function' ? rawWs.toObject() : { ...rawWs };
       // Only owners/admins should receive the inviteCode via the workspace list
       if (!['owner', 'admin'].includes(m.role)) {
-        delete ws.inviteCode;
+        delete wsDoc.inviteCode;
       }
       return {
-        ...ws,
+        ...wsDoc,
         role: m.role,
         // This is a display/sync field for the active FlowTask tenant. The
         // Chat membership `role` above remains the only value consumed by

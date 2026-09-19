@@ -110,7 +110,7 @@ workspaceMembershipSchema.index({ userId: 1, workspaceId: 1, isActive: 1 });
  */
 workspaceMembershipSchema.statics.findUserWorkspaces = function (userId) {
   return this.find({ userId, isActive: true })
-    .populate('workspaceId', 'name slug logo description plan isActive memberCount inviteCode')
+    .populate('workspaceId', 'name slug logo description plan isActive memberCount inviteCode source settings')
     .sort({ joinedAt: 1 })
     .lean();
 };

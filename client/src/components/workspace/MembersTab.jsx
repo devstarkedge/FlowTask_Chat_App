@@ -169,7 +169,10 @@ function MemberCard({
   const role = ROLE_CFG[member.role] || ROLE_CFG.member;
 
   // FlowTask synced workspace check: member is synced if the workspace is FlowTask-synced AND the member has a synced FlowTask identity/role
-  const isFlowTaskWorkspace = workspace?.source === "flowtask";
+  const isFlowTaskWorkspace =
+    workspace?.source === "flowtask" ||
+    workspace?.settings?.flowtaskIntegration?.enabled === true ||
+    !!workspace?.flowTaskRole;
   const isFlowTaskSyncedMember = !!(member.flowTaskAccess && member.flowTaskAccess.role);
 
   const canEditRole = canManage && !isCurrentUser && member.role !== "owner" && (!isFlowTaskWorkspace || !isFlowTaskSyncedMember);

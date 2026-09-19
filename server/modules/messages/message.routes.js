@@ -80,16 +80,30 @@ router.post('/upload', uploadLimiter, uploadMiddleware, handleMulterError, valid
 router.get('/files/:assetId/proxy', proxyFileAsset);
 
 router.use(resolveWorkspace);
+
+// ─── Workspace-scoped static routes ──────────────────────────────────────────
+// Workspace files listing
+router.get('/files', getWorkspaceFiles);
 // File details endpoint: returns metadata + counts for File Details modal
 router.get('/files/:assetId/details', getFileDetails);
 // Increment download count (fire-and-forget)
 router.post('/files/:assetId/download', incrementDownloadCount);
+// Search messages
+router.get('/search', validate({ query: searchMessagesSchema }), searchMessages);
+// Saved messages
 router.get('/saved', getSavedMessages);
+// Scheduled messages
 router.get('/scheduled', getScheduledMessages);
 router.delete('/scheduled/:id', cancelScheduledMessage);
 router.patch('/reschedule/:id', rescheduleMessage);
 router.patch('/scheduled/:id', updateScheduledMessage);
 router.post('/send-now/:id', sendScheduledNow);
+// Reminders
+router.post('/reminders/standalone', createStandaloneReminder);
+router.post('/reminders/parse', parseReminderText);
+router.delete('/reminders/:id', deleteReminder);
+
+// ─── Message ID parameterized routes ─────────────────────────────────────────
 router.get('/:id', requireMessageAccess(), getMessage);
 router.put('/:id', requireMessageAccess(), validate({ body: editMessageSchema }), editMessage);
 router.delete('/:id', requireMessageAccess(), deleteMessage);
@@ -102,9 +116,6 @@ router.post('/:id/save', requireMessageAccess(), toggleSaveMessage);
 router.patch('/:id/save/status', requireMessageAccess({ allowMissing: true }), updateSavedMessageStatus);
 router.patch('/:id/save/reminder', requireMessageAccess({ allowMissing: true }), updateSavedMessageReminder);
 router.patch('/:id/save/reminder/snooze', requireMessageAccess({ allowMissing: true }), snoozeSavedReminder);
-router.post('/reminders/standalone', createStandaloneReminder);
-router.post('/reminders/parse', parseReminderText);
-router.delete('/reminders/:id', deleteReminder);
 router.post('/:id/forward', requireMessageAccess(), forwardMessage);
 router.post('/:id/forward-group', requireMessageAccess(), forwardToNewGroup);
 router.post('/:id/reminder-suggestions', requireMessageAccess(), suggestRemindersFromMessage);

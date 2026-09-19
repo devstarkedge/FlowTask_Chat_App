@@ -256,6 +256,35 @@ export const useWorkspaceStore = create(
         }
       },
 
+      leaveWorkspace: async (workspaceId) => {
+        const id = workspaceId || get().activeWorkspaceId
+        if (!id) throw new Error('No workspace to leave')
+
+        try {
+          await api.post(`/workspaces/${id}/leave`)
+          const wasActive = get().activeWorkspaceId === id
+
+          if (wasActive) {
+            useChannelStore.setState({
+              channels: [], activeChannelId: null, unreads: {}, membersByChannel: {}, showInfoPanel: false,
+            })
+            useChatStore.getState().clearCache?.()
+            useNotificationStore.getState().clearNotifications()
+            useDraftStore.getState().resetSidebarState?.()
+            disconnectSocket()
+            set({ activeWorkspaceId: null, activeWorkspace: null, members: [] })
+          }
+
+          await get().fetchWorkspaces(true)
+          const nextWorkspace = get().workspaces[0]
+          if (wasActive && nextWorkspace) await get().switchWorkspace(nextWorkspace._id)
+          toast.success('Left workspace')
+        } catch (error) {
+          toast.error(error.response?.data?.error?.message || 'Failed to leave workspace')
+          throw error
+        }
+      },
+
       // ─── Members ──────────────────────────────────────────────────────
       fetchMembers: async (workspaceId) => {
         try {

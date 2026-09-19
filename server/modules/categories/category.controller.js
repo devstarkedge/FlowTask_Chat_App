@@ -36,6 +36,42 @@ async function validateAccessibleCategoryChannels(req, channelIds) {
   return requestedIds;
 }
 
+function categoryOwnerFilter(req) {
+  return {
+    workspaceId: req.workspaceId,
+    createdBy: req.user._id,
+    type: 'custom',
+  };
+}
+
+async function removeChannelsFromOtherCategories(req, targetCategoryId, channelIds) {
+  if (!channelIds.length) return [];
+  const ownerFilter = categoryOwnerFilter(req);
+  const previousCategories = await Category.find({
+    ...ownerFilter,
+    _id: { $ne: targetCategoryId },
+    channelIds: { $in: channelIds },
+  });
+  if (previousCategories.length === 0) return [];
+
+  const previousIds = previousCategories.map((category) => category._id);
+  await Category.updateMany(
+    { ...ownerFilter, _id: { $in: previousIds } },
+    { $pullAll: { channelIds } },
+  );
+
+  const updatedPrevious = await Category.find({
+    ...ownerFilter,
+    _id: { $in: previousIds },
+  }).populate('departmentId');
+  updatedPrevious.forEach((category) => {
+    req.app.get('io')
+      ?.to(`ws:${req.workspaceId}:user:${req.user._id}`)
+      .emit('category:updated', category);
+  });
+  return updatedPrevious;
+}
+
 // @desc    Sync external departments
 // @route   POST /api/categories/sync-departments
 // @access  Private (imports FlowTask's public active-department directory)
@@ -192,24 +228,7 @@ export const updateCategory = asyncHandler(async (req, res, next) => {
         return next(new BadRequestError('channelIds must be an array'));
       }
       update.channelIds = await validateAccessibleCategoryChannels(req, req.body.channelIds);
-      
-      const previousCategories = await Category.find({
-        workspaceId: req.workspaceId,
-        createdBy: req.user._id,
-        _id: { $ne: category._id },
-        channelIds: { $in: update.channelIds }
-      });
-
-      if (previousCategories.length > 0) {
-        await Category.updateMany(
-          { _id: { $in: previousCategories.map(c => c._id) } },
-          { $pullAll: { channelIds: update.channelIds } }
-        );
-        const updatedPrevious = await Category.find({ _id: { $in: previousCategories.map(c => c._id) } }).populate('departmentId');
-        for (const cat of updatedPrevious) {
-          req.app.get("io")?.to(`ws:${req.workspaceId}:user:${req.user._id}`).emit("category:updated", cat);
-        }
-      }
+      await removeChannelsFromOtherCategories(req, category._id, update.channelIds);
     }
   }
 
@@ -344,36 +363,19 @@ export const addChannelToCategory = asyncHandler(async (req, res, next) => {
 
   const [accessibleChannelId] = await validateAccessibleCategoryChannels(req, [channelId]);
 
-  const alreadyInTarget = await Category.findOne({
+  const targetCategory = await Category.findOne({
+    ...categoryOwnerFilter(req),
     _id: req.params.id,
-    workspaceId: req.workspaceId,
-    createdBy: req.user._id,
-    channelIds: accessibleChannelId
   });
-  if (alreadyInTarget) {
-    return next(new BadRequestError("You are already in this category."));
+  if (!targetCategory) return next(new NotFoundError("Custom Category"));
+  if ((targetCategory.channelIds || []).some((id) => String(id) === accessibleChannelId)) {
+    return next(new BadRequestError("Channel is already assigned to this category."));
   }
 
-  const previousCategories = await Category.find({
-    workspaceId: req.workspaceId,
-    createdBy: req.user._id,
-    _id: { $ne: req.params.id },
-    channelIds: accessibleChannelId
-  });
-
-  if (previousCategories.length > 0) {
-    await Category.updateMany(
-      { _id: { $in: previousCategories.map(c => c._id) } },
-      { $pull: { channelIds: accessibleChannelId } }
-    );
-    const updatedPrevious = await Category.find({ _id: { $in: previousCategories.map(c => c._id) } }).populate('departmentId');
-    for (const cat of updatedPrevious) {
-      req.app.get("io")?.to(`ws:${req.workspaceId}:user:${req.user._id}`).emit("category:updated", cat);
-    }
-  }
+  await removeChannelsFromOtherCategories(req, targetCategory._id, [accessibleChannelId]);
 
   const category = await Category.findOneAndUpdate(
-    { _id: req.params.id, workspaceId: req.workspaceId, createdBy: req.user._id },
+    { ...categoryOwnerFilter(req), _id: targetCategory._id },
     { $addToSet: { channelIds: accessibleChannelId }, lastActivity: new Date() },
     { new: true }
   ).populate('departmentId');
@@ -410,36 +412,20 @@ export const addBulkChannelsToCategory = asyncHandler(async (req, res, next) => 
 
   const accessibleChannelIds = await validateAccessibleCategoryChannels(req, channelIds);
 
-  const alreadyInTarget = await Category.findOne({
+  const targetCategory = await Category.findOne({
+    ...categoryOwnerFilter(req),
     _id: req.params.id,
-    workspaceId: req.workspaceId,
-    createdBy: req.user._id,
-    channelIds: { $all: accessibleChannelIds }
   });
-  if (alreadyInTarget) {
-    return next(new BadRequestError("You are already in this category."));
+  if (!targetCategory) return next(new NotFoundError("Custom Category"));
+  const targetIds = new Set((targetCategory.channelIds || []).map(String));
+  if (accessibleChannelIds.every((channelId) => targetIds.has(channelId))) {
+    return next(new BadRequestError("Selected channels are already assigned to this category."));
   }
 
-  const previousCategories = await Category.find({
-    workspaceId: req.workspaceId,
-    createdBy: req.user._id,
-    _id: { $ne: req.params.id },
-    channelIds: { $in: accessibleChannelIds }
-  });
-
-  if (previousCategories.length > 0) {
-    await Category.updateMany(
-      { _id: { $in: previousCategories.map(c => c._id) } },
-      { $pullAll: { channelIds: accessibleChannelIds } }
-    );
-    const updatedPrevious = await Category.find({ _id: { $in: previousCategories.map(c => c._id) } }).populate('departmentId');
-    for (const cat of updatedPrevious) {
-      req.app.get("io")?.to(`ws:${req.workspaceId}:user:${req.user._id}`).emit("category:updated", cat);
-    }
-  }
+  await removeChannelsFromOtherCategories(req, targetCategory._id, accessibleChannelIds);
 
   const category = await Category.findOneAndUpdate(
-    { _id: req.params.id, workspaceId: req.workspaceId, createdBy: req.user._id, type: 'custom' },
+    { ...categoryOwnerFilter(req), _id: targetCategory._id },
     { $addToSet: { channelIds: { $each: accessibleChannelIds } }, lastActivity: new Date() },
     { new: true }
   ).populate('departmentId');

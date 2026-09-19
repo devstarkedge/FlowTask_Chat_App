@@ -527,6 +527,7 @@ export const categoryAPI = {
   reorder: (categoryOrders) => api.put('/categories/reorder', { categoryOrders }),
   suggestChannels: (name) => api.post('/categories/suggest-channels', { name }),
   addChannelToCategory: (id, channelId) => api.post(`/categories/${id}/channels`, { channelId }),
+  addBulkChannelsToCategory: (id, channelIds) => api.post(`/categories/${id}/bulk-channels`, { channelIds }),
   removeChannelFromCategory: (id, channelId) => api.delete(`/categories/${id}/channels/${channelId}`),
   syncDepartments: () => api.post('/categories/sync-departments'),
   getDepartments: () => api.get('/categories/departments'),

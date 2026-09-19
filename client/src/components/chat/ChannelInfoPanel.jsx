@@ -12,7 +12,7 @@ import {
   Star,
   FolderInput,
 } from "lucide-react";
-import api from "../../services/api";
+import { categoryAPI } from "../../services/api";
 import toast from "react-hot-toast";
 import MemberItem from "./MemberItem";
 import { useChannelStore } from "../../stores/channelStore";
@@ -23,7 +23,8 @@ import EditChannelModal from "./EditChannelModal";
 import AddMemberModal from "./AddMemberModal";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
-import { isChatAppChannel } from "../../utils/channelOrigin";
+import { isPersonalCategoryChannel } from "../../utils/channelOrigin";
+import { categoryAssignmentId } from "../../utils/categoryAssignments";
 import "./custom-css/channelInfoPanel.css";
 
 
@@ -38,8 +39,8 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
     setShowInfoPanel,
     removeMember,
     leaveChannel,
-    fetchChannels,
     fetchCategories,
+    moveChannelsToCategory,
     categories,
   } = useChannelStore();
   // Always read the latest channel data from the store so privacy/name/topic
@@ -106,8 +107,11 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
   const isLastOwner = isOwner && (isResolvingMembers || ownerCount <= 1)
   const canLeaveChannel = !isSystem && !isSystemManagedProject && !isLastOwner;
   const canEditChannel = !isDM && isAdmin && !isSystemManagedProject;
-  const canMoveToCategory = canEditChannel && isChatAppChannel(channel);
+  const canMoveToCategory = canEditChannel && isPersonalCategoryChannel(channel);
   const customCategories = categories?.filter((c) => c.type === "custom") || [];
+  const currentCustomCategory = customCategories.find((category) => (
+    (category.channelIds || []).some((id) => categoryAssignmentId(id) === channelId)
+  ));
 
   // Filter out current user's name from DM channel names
   const displayChannelName = useMemo(() => {
@@ -169,8 +173,8 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
   };
 
   const handleAssignCategory = async (categoryId) => {
-    const currentCat = categories.find(c => c.channelIds?.includes(channelId));
-    const currentCatId = currentCat?._id?.toString?.();
+    const currentCat = currentCustomCategory;
+    const currentCatId = categoryAssignmentId(currentCat?._id);
     if (String(categoryId) === String(currentCatId || 'null')) {
       toast.error("You are already in this category.");
       return;
@@ -180,14 +184,16 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
       if (categoryId === null) {
         // Find which custom category currently has this channel and remove it
         if (currentCat && currentCat.type === "custom") {
-          await api.removeChannelFromCategory(currentCat._id, channelId);
+          const { data } = await categoryAPI.removeChannelFromCategory(currentCat._id, channelId);
+          useChannelStore.getState().updateCategory(data.data);
         }
       } else {
-        await api.addBulkChannelsToCategory(categoryId, [channelId]);
+        const { data } = await categoryAPI.addBulkChannelsToCategory(categoryId, [channelId]);
+        moveChannelsToCategory(categoryId, [channelId], data.data);
       }
       toast.success("Channel category updated");
-      await fetchCategories();
       setShowCategoryDropdown(false);
+      fetchCategories();
     } catch (err) {
       toast.error(err.response?.data?.message || err.message || "Failed to update category");
     }
@@ -361,12 +367,17 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
                           <button
                             key={cat._id}
                             className="w-full text-left transition-colors"
-                            style={{ padding: "6px 16px", color: "var(--text-primary)" }}
+                            style={{
+                              padding: "6px 16px",
+                              color: "var(--text-primary)",
+                              opacity: categoryAssignmentId(cat._id) === categoryAssignmentId(currentCustomCategory?._id) ? 0.55 : 1,
+                            }}
+                            disabled={categoryAssignmentId(cat._id) === categoryAssignmentId(currentCustomCategory?._id)}
                             onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface-hover, var(--bg-hover))"; }}
                             onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                             onClick={() => handleAssignCategory(cat._id)}
                           >
-                            {cat.name}
+                            {cat.name}{categoryAssignmentId(cat._id) === categoryAssignmentId(currentCustomCategory?._id) ? ' (current)' : ''}
                           </button>
                         ))}
                       </>

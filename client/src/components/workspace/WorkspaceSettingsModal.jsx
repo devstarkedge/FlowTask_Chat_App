@@ -79,6 +79,7 @@ export default function WorkspaceSettingsModal({ onClose }) {
     updateMemberRole,
     regenerateInviteCode,
     deleteWorkspace,
+    leaveWorkspace,
   } = useWorkspaceStore();
   const { user } = useAuthStore();
   const { confirm } = useDeleteConfirm();
@@ -95,6 +96,14 @@ export default function WorkspaceSettingsModal({ onClose }) {
   const [tabKey, setTabKey] = useState(0);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteRefreshKey, setInviteRefreshKey] = useState(0);
+  const [securitySettings, setSecuritySettings] = useState(null);
+  const [notificationSettings, setNotificationSettings] = useState(null);
+  const [integrationSettings, setIntegrationSettings] = useState(null);
+  const [settingsLoading, setSettingsLoading] = useState({
+    security: false,
+    notifications: false,
+    integrations: false,
+  });
 
   useEffect(() => {
     setName(activeWorkspace?.name || "");
@@ -105,6 +114,60 @@ export default function WorkspaceSettingsModal({ onClose }) {
   useEffect(() => {
     if (activeWorkspaceId) fetchMembers();
   }, [activeWorkspaceId, fetchMembers]);
+
+  const loadSettings = useCallback(async (section) => {
+    if (!activeWorkspaceId) return;
+
+    const requests = {
+      security: workspaceAPI.getSecuritySettings,
+      notifications: workspaceAPI.getNotificationSettings,
+      integrations: workspaceAPI.getIntegrationSettings,
+    };
+    const setters = {
+      security: setSecuritySettings,
+      notifications: setNotificationSettings,
+      integrations: setIntegrationSettings,
+    };
+
+    if (!requests[section]) return;
+    setSettingsLoading((current) => ({ ...current, [section]: true }));
+    try {
+      const { data } = await requests[section](activeWorkspaceId);
+      setters[section](data?.data ?? data ?? null);
+    } catch (error) {
+      toast.error(`Failed to load ${section} settings`);
+    } finally {
+      setSettingsLoading((current) => ({ ...current, [section]: false }));
+    }
+  }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    if (["security", "notifications", "integrations"].includes(activeTab)) {
+      loadSettings(activeTab);
+    }
+  }, [activeTab, loadSettings]);
+
+  const saveSettings = async (section, updates) => {
+    const requests = {
+      security: workspaceAPI.updateSecuritySettings,
+      notifications: workspaceAPI.updateNotificationSettings,
+      integrations: workspaceAPI.updateIntegrationSettings,
+    };
+    const setters = {
+      security: setSecuritySettings,
+      notifications: setNotificationSettings,
+      integrations: setIntegrationSettings,
+    };
+
+    try {
+      await requests[section](activeWorkspaceId, updates);
+      setters[section]((current) => ({ ...current, ...updates }));
+      toast.success(`${section.charAt(0).toUpperCase()}${section.slice(1)} settings saved`);
+    } catch (error) {
+      toast.error(error?.response?.data?.error?.message || `Failed to save ${section} settings`);
+      throw error;
+    }
+  };
 
   useEffect(() => {
     const h = (e) => {
@@ -195,14 +258,21 @@ export default function WorkspaceSettingsModal({ onClose }) {
   };
 
   const handleDeleteWorkspace = async () => {
+    const isOwner = currentUserRole === "owner";
     const ok = await confirm({
-      title: `Delete "${activeWorkspace?.name}"?`,
-      message: 'This action will permanently delete this workspace and all its data for every member. This action cannot be undone.',
-      confirmLabel: 'Delete workspace',
+      title: isOwner ? `Delete "${activeWorkspace?.name}"?` : `Leave "${activeWorkspace?.name}"?`,
+      message: isOwner
+        ? 'This action will permanently delete this workspace and all its data for every member. This action cannot be undone.'
+        : 'Are you sure you want to leave this workspace?',
+      confirmLabel: isOwner ? 'Delete workspace' : 'Leave workspace',
     })
     if (!ok) return
     try {
-      await deleteWorkspace(activeWorkspaceId);
+      if (isOwner) {
+        await deleteWorkspace(activeWorkspaceId);
+      } else {
+        await leaveWorkspace(activeWorkspaceId);
+      }
       onClose();
     } catch {}
   };
@@ -314,6 +384,7 @@ export default function WorkspaceSettingsModal({ onClose }) {
                 onUpdateRole={updateMemberRole}
                 confirm={confirm}
                 workspace={activeWorkspace}
+                onCloseModal={onClose}
               />
             )}
             {activeTab === "invite" && (
@@ -334,10 +405,29 @@ export default function WorkspaceSettingsModal({ onClose }) {
               />
             )}
             {activeTab === "integrations" && (
-              <IntegrationsTab canManage={canManage} />
+              <IntegrationsTab
+                settings={integrationSettings}
+                loading={settingsLoading.integrations}
+                canManage={canManage}
+                onSave={(updates) => saveSettings("integrations", updates)}
+              />
             )}
-            {activeTab === "security" && <SecurityTab canManage={canManage} />}
-            {activeTab === "notifications" && <NotificationsTab />}
+            {activeTab === "security" && (
+              <SecurityTab
+                settings={securitySettings}
+                loading={settingsLoading.security}
+                canManage={canManage}
+                onSave={(updates) => saveSettings("security", updates)}
+              />
+            )}
+            {activeTab === "notifications" && (
+              <NotificationsTab
+                settings={notificationSettings}
+                loading={settingsLoading.notifications}
+                canManage={canManage}
+                onSave={(updates) => saveSettings("notifications", updates)}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -492,11 +582,13 @@ function GeneralTab({
             lineHeight: 1.6,
           }}
         >
-          Once you delete a workspace, there is no going back. This action will permanently delete this workspace and all its data for every member.
+          {isOwner
+            ? "Once you delete a workspace, there is no going back. This action will permanently delete this workspace and all its data for every member."
+            : "Leaving removes your access to this workspace. You can rejoin later if an owner or admin invites you."}
         </p>
         <button className="wsm-btn-danger" onClick={onDelete}>
           <Trash2 size={14} />
-          Delete Workspace
+          {isOwner ? "Delete Workspace" : "Leave Workspace"}
         </button>
       </div>
     </div>
@@ -792,12 +884,29 @@ function InviteTab({
 /* ─────────────────────────────────────────────────────────────────────────
    INTEGRATIONS TAB
 ───────────────────────────────────────────────────────────────────────── */
-function IntegrationsTab({ canManage }) {
-  const [flowTaskConnected] = useState(!!import.meta.env.VITE_FLOWTASK_ENABLED);
+function IntegrationsTab({ settings, loading, canManage, onSave }) {
+  const [enabled, setEnabled] = useState(false);
   const [autoChannels, setAutoChannels] = useState(true);
   const [syncMembers, setSyncMembers] = useState(true);
 
-  const connected = flowTaskConnected;
+  useEffect(() => {
+    if (!settings) return;
+    setEnabled(settings.integrationEnabled ?? false);
+    setAutoChannels(settings.autoCreateChannels ?? true);
+    setSyncMembers(settings.syncMembers ?? true);
+  }, [settings]);
+
+  if (loading) return <Loader size={24} className="wsm-spin" />;
+
+  const connected = enabled;
+  const lastSync = settings?.lastSyncAt
+    ? new Date(settings.lastSyncAt).toLocaleString()
+    : "Never";
+
+  const update = (field, value, setValue) => {
+    setValue(value);
+    onSave({ [field]: value }).catch(() => setValue(settings?.[field] ?? value));
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
@@ -849,6 +958,19 @@ function IntegrationsTab({ canManage }) {
         </div>
       </div>
 
+      <p style={{ fontSize: 12.5, color: "var(--text-secondary)", marginTop: -12 }}>
+        Last sync: {lastSync}
+      </p>
+
+      {canManage && (
+        <SettingsToggle
+          label="Enable FlowTask integration"
+          description="Allow this workspace to synchronize with FlowTask"
+          checked={enabled}
+          onChange={(value) => update("integrationEnabled", value, setEnabled)}
+        />
+      )}
+
       {connected && (
         <div>
           <SectionLabel>Sync Options</SectionLabel>
@@ -857,14 +979,14 @@ function IntegrationsTab({ canManage }) {
               label="Auto-create project channels"
               description="Automatically create channels for new FlowTask projects"
               checked={autoChannels}
-              onChange={setAutoChannels}
+              onChange={(value) => update("autoCreateChannels", value, setAutoChannels)}
               disabled={!canManage}
             />
             <SettingsToggle
               label="Sync team members"
               description="Automatically add FlowTask project members to channels"
               checked={syncMembers}
-              onChange={setSyncMembers}
+              onChange={(value) => update("syncMembers", value, setSyncMembers)}
               disabled={!canManage}
             />
           </div>
@@ -877,9 +999,24 @@ function IntegrationsTab({ canManage }) {
 /* ─────────────────────────────────────────────────────────────────────────
    SECURITY TAB
 ───────────────────────────────────────────────────────────────────────── */
-function SecurityTab({ canManage }) {
+function SecurityTab({ settings, loading, canManage, onSave }) {
   const [requireVerification, setRequireVerification] = useState(true);
   const [sessionTimeout, setSessionTimeout] = useState("7d");
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+
+  useEffect(() => {
+    if (!settings) return;
+    setRequireVerification(settings.requireEmailVerification ?? true);
+    setSessionTimeout(settings.sessionTimeout || "7d");
+    setTwoFactorEnabled(settings.twoFactorEnabled ?? false);
+  }, [settings]);
+
+  if (loading) return <Loader size={24} className="wsm-spin" />;
+
+  const update = (field, value, setValue) => {
+    setValue(value);
+    onSave({ [field]: value }).catch(() => setValue(settings?.[field] ?? value));
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -889,7 +1026,7 @@ function SecurityTab({ canManage }) {
           label="Require email verification"
           description="New members must verify their email before accessing the workspace"
           checked={requireVerification}
-          onChange={setRequireVerification}
+          onChange={(value) => update("requireEmailVerification", value, setRequireVerification)}
           disabled={!canManage}
         />
       </div>
@@ -899,7 +1036,7 @@ function SecurityTab({ canManage }) {
         <select
           className="wsm-field"
           value={sessionTimeout}
-          onChange={(e) => setSessionTimeout(e.target.value)}
+          onChange={(e) => update("sessionTimeout", e.target.value, setSessionTimeout)}
           disabled={!canManage}
           style={{ maxWidth: 300 }}
         >
@@ -910,8 +1047,15 @@ function SecurityTab({ canManage }) {
         </select>
       </div>
 
-      <div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <SectionLabel>Two-Factor Authentication</SectionLabel>
+        <SettingsToggle
+          label="Require two-factor authentication"
+          description="Require all workspace members to use two-factor authentication"
+          checked={twoFactorEnabled}
+          onChange={(value) => update("twoFactorEnabled", value, setTwoFactorEnabled)}
+          disabled={!canManage}
+        />
         <div className="wsm-banner">
           <div className="wsm-banner-icon">
             <Shield size={16} color="var(--text-inverse, #fff)" />
@@ -941,38 +1085,48 @@ function SecurityTab({ canManage }) {
 /* ─────────────────────────────────────────────────────────────────────────
    NOTIFICATIONS TAB
 ───────────────────────────────────────────────────────────────────────── */
-function NotificationsTab() {
-  const [notifyMentions, setNotifyMentions] = useState(true);
-  const [notifyDMs, setNotifyDMs] = useState(true);
-  const [notifyThreads, setNotifyThreads] = useState(true);
-  const [notifyTasks, setNotifyTasks] = useState(true);
+function NotificationsTab({ settings, loading, canManage, onSave }) {
+  const [toggles, setToggles] = useState({
+    mentions: true,
+    directMessages: true,
+    threadReplies: true,
+    taskUpdates: true,
+    workspaceAnnouncements: true,
+    channelNotifications: true,
+    emailNotifications: true,
+    pushNotifications: true,
+  });
+  const [notificationDigest, setNotificationDigest] = useState("all");
+
+  useEffect(() => {
+    if (!settings) return;
+    setToggles((current) => ({ ...current, ...Object.fromEntries(
+      Object.keys(current).map((key) => [key, settings[key] ?? true]),
+    ) }));
+    setNotificationDigest(settings.notificationDigest || "all");
+  }, [settings]);
+
+  if (loading) return <Loader size={24} className="wsm-spin" />;
 
   const items = [
-    {
-      label: "@Mentions",
-      desc: "Notify when someone mentions you",
-      val: notifyMentions,
-      set: setNotifyMentions,
-    },
-    {
-      label: "Direct messages",
-      desc: "Notify for new direct messages",
-      val: notifyDMs,
-      set: setNotifyDMs,
-    },
-    {
-      label: "Thread replies",
-      desc: "Notify when someone replies to your thread",
-      val: notifyThreads,
-      set: setNotifyThreads,
-    },
-    {
-      label: "Task updates",
-      desc: "Notify for FlowTask task assignments and updates",
-      val: notifyTasks,
-      set: setNotifyTasks,
-    },
+    ["mentions", "@Mentions", "Notify when someone mentions you"],
+    ["directMessages", "Direct messages", "Notify for new direct messages"],
+    ["threadReplies", "Thread replies", "Notify when someone replies to a thread you follow"],
+    ["taskUpdates", "Task updates", "Notify for FlowTask task assignments and updates"],
+    ["workspaceAnnouncements", "Workspace announcements", "Notify about important workspace-wide announcements"],
+    ["channelNotifications", "Channel notifications", "Notify about activity in channels you joined"],
+    ["emailNotifications", "Email notifications", "Send workspace notifications by email"],
+    ["pushNotifications", "Push notifications", "Send workspace notifications to your devices"],
   ];
+
+  const toggle = (key) => {
+    const value = !toggles[key];
+    setToggles((current) => ({ ...current, [key]: value }));
+    onSave({ [key]: value }).catch(() => setToggles((current) => ({
+      ...current,
+      [key]: settings?.[key] ?? !value,
+    })));
+  };
 
   return (
     <div>
@@ -989,15 +1143,35 @@ function NotificationsTab() {
         workspace.
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {items.map(({ label, desc, val, set }) => (
+        {items.map(([key, label, desc]) => (
           <SettingsToggle
-            key={label}
+            key={key}
             label={label}
             description={desc}
-            checked={val}
-            onChange={set}
+            checked={toggles[key]}
+            onChange={() => toggle(key)}
+            disabled={!canManage}
           />
         ))}
+      </div>
+      <div style={{ marginTop: 20 }}>
+        <SectionLabel>Notification Digest</SectionLabel>
+        <select
+          className="wsm-field"
+          value={notificationDigest}
+          disabled={!canManage}
+          onChange={(event) => {
+            const value = event.target.value;
+            setNotificationDigest(value);
+            onSave({ notificationDigest: value }).catch(() => setNotificationDigest(settings?.notificationDigest || "all"));
+          }}
+          style={{ maxWidth: 300 }}
+        >
+          <option value="all">All notifications</option>
+          <option value="mentions">Mentions only</option>
+          <option value="dms">Direct messages only</option>
+          <option value="off">Off</option>
+        </select>
       </div>
     </div>
   );

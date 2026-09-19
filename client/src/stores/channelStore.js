@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import logger from '../utils/logger'
 import { useAuthStore } from './authStore'
 import { getSocket } from '../services/socket'
+import { getCustomCategoryOwners, moveChannelsToCategory, normalizeCategoryAssignments } from '../utils/categoryAssignments'
 
 /**
  * Extract a plain string ID from any id-like value:
@@ -102,7 +103,7 @@ export const useChannelStore = create(
   fetchCategories: async () => {
     try {
       const { data } = await categoryAPI.list();
-      set({ categories: data.data || [] });
+      set({ categories: normalizeCategoryAssignments(data.data || []) });
     } catch (err) {
       logger.error('Failed to fetch categories:', err);
     }
@@ -251,13 +252,22 @@ export const useChannelStore = create(
     set((state) => {
       const exists = state.categories.some((g) => g._id === category._id);
       if (exists) return state;
-      return { categories: [...state.categories, category] };
+      return { categories: normalizeCategoryAssignments([...state.categories, category], category._id) };
     });
   },
 
   updateCategory: (category) => {
     set((state) => ({
-      categories: state.categories.map((g) => g._id === category._id ? category : g),
+      categories: normalizeCategoryAssignments(
+        state.categories.map((g) => g._id === category._id ? category : g),
+        category._id,
+      ),
+    }));
+  },
+
+  moveChannelsToCategory: (categoryId, channelIds, serverCategory = null) => {
+    set((state) => ({
+      categories: moveChannelsToCategory(state.categories, categoryId, channelIds, serverCategory),
     }));
   },
 
@@ -271,9 +281,16 @@ export const useChannelStore = create(
     if (!category?._id) return;
     set((state) => {
       if (state.categories.some((item) => item._id === category._id)) return state;
+      const existingOwners = getCustomCategoryOwners(state.categories);
+      const restoredCategory = category.type === 'custom'
+        ? {
+          ...category,
+          channelIds: (category.channelIds || []).filter((channelId) => !existingOwners.has(toStringId(channelId))),
+        }
+        : category;
       const categories = [...state.categories];
       const insertAt = Math.max(0, Math.min(originalIndex ?? categories.length, categories.length));
-      categories.splice(insertAt, 0, category);
+      categories.splice(insertAt, 0, restoredCategory);
       return { categories };
     });
   },

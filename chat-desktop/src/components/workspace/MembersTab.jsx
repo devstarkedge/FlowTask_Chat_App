@@ -1,10 +1,29 @@
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useRef, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
+import { useProfileStore } from "../../stores/profileStore";
+import { useChannelStore } from "../../stores/channelStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { getDMPath } from "../../utils/chatRoutes";
+import toast from "react-hot-toast";
 import { ROLE_CFG } from "./WorkspaceSettingsModal";
 import Avatar from "../chat/MemberAvatarGroup";
 import { ChevronDown, User, MessageSquare, Crown, UserMinus, MoreVertical } from "lucide-react";
 import "./custom-css/MembersTab.css";
+
+function getMemberId(m) {
+  if (!m) return "";
+  if (typeof m === "string") return m;
+  if (m._id) return String(m._id);
+  if (m.userId) {
+    if (typeof m.userId === "object" && m.userId._id) {
+      return String(m.userId._id);
+    }
+    return String(m.userId);
+  }
+  return String(m.id || "");
+}
 
 /**
  * MembersTab - Redesigned member list with separate RoleSelector and ActionsMenu
@@ -19,6 +38,7 @@ export default function MembersTab({
   onUpdateRole,
   navigation,
   workspace,
+  onCloseModal,
 }) {
   members = useLiveProfileData(members);
   const [search, setSearch] = useState("");
@@ -84,23 +104,28 @@ export default function MembersTab({
 
       {/* Members List */}
       <div className="mt-members-list">
-        {filtered.map((m, idx) => (
-          <MemberCard
-            key={m._id || m.userId}
-            member={m}
-            currentUserId={currentUserId}
-            canManage={canManage}
-            isMenuOpen={openMenuId === (m._id || m.userId)}
-            isLast={filtered.length > 1 && idx >= filtered.length - 2}
-            onMenuToggle={() =>
-              setOpenMenuId(openMenuId === (m._id || m.userId) ? null : m._id || m.userId)
-            }
-            onRoleChange={handleRoleChange}
-            onRemove={handleRemoveMember}
-            menuRef={menuRef}
-            workspace={workspace}
-          />
-        ))}
+        {filtered.map((m, idx) => {
+          const targetId = getMemberId(m);
+          return (
+            <MemberCard
+              key={targetId || idx}
+              member={m}
+              currentUserId={currentUserId}
+              canManage={canManage}
+              isMenuOpen={openMenuId === targetId}
+              isLast={filtered.length > 1 && idx >= filtered.length - 2}
+              onMenuToggle={() =>
+                setOpenMenuId(openMenuId === targetId ? null : targetId)
+              }
+              onRoleChange={handleRoleChange}
+              onRemove={handleRemoveMember}
+              menuRef={menuRef}
+              workspace={workspace}
+              navigation={navigation}
+              onCloseModal={onCloseModal}
+            />
+          );
+        })}
       </div>
 
       {filtered.length === 0 && !loading && (
@@ -130,7 +155,10 @@ function MemberCard({
   onRemove,
   menuRef,
   workspace,
+  navigation,
+  onCloseModal,
 }) {
+  const navigate = useNavigate();
   const [isRoleOpen, setIsRoleOpen] = useState(false);
   const memberUser =
     member.userId && typeof member.userId === "object"
@@ -145,7 +173,49 @@ function MemberCard({
   const isFlowTaskSyncedMember = !!(member.flowTaskAccess && member.flowTaskAccess.role);
 
   const canEditRole = canManage && !isCurrentUser && member.role !== "owner" && (!isFlowTaskWorkspace || !isFlowTaskSyncedMember);
-  const canRemoveMember = canManage && !isCurrentUser && member.role !== "owner" && (!isFlowTaskWorkspace || !isFlowTaskSyncedMember);
+  const canRemoveMember = canManage && !isCurrentUser && member.role !== "owner";
+
+  const handleViewProfile = () => {
+    onMenuToggle();
+    const profileData = {
+      _id: memberId,
+      name: memberUser.name || member.displayName || member.name || "Unknown",
+      email: memberUser.email || member.email || "",
+      avatar: memberUser.avatar || member.avatar || memberUser.profilePicture,
+      role: member.role,
+      ...memberUser,
+    };
+    useProfileStore.getState().openProfile(profileData);
+    if (onCloseModal) {
+      onCloseModal();
+    }
+  };
+
+  const handleMessageMember = async () => {
+    onMenuToggle();
+    try {
+      const activeWsId = workspace?._id || useWorkspaceStore.getState().activeWorkspaceId;
+      const channel = await useChannelStore.getState().createDM(memberId);
+      if (channel?._id && activeWsId) {
+        navigate(getDMPath(activeWsId, channel._id));
+        if (onCloseModal) {
+          onCloseModal();
+        }
+      }
+    } catch (error) {
+      console.error("Failed to start DM:", error);
+      toast.error("Failed to message member");
+    }
+  };
+
+  const handleRemoveClick = () => {
+    onMenuToggle();
+    if (isFlowTaskWorkspace || isFlowTaskSyncedMember) {
+      toast.error("Cannot remove member because workspace is synced with FlowTask");
+    } else {
+      onRemove(memberId, memberUser.name || member.displayName || member.name);
+    }
+  };
 
   return (
     <div className={`mt-member-card ${isMenuOpen || isRoleOpen ? "is-menu-open" : ""} ${isLast ? "drop-up" : ""}`}>
@@ -192,7 +262,10 @@ function MemberCard({
         <div className="mt-actions-section" ref={isMenuOpen ? menuRef : null}>
           <button
             className="mt-actions-btn"
-            onClick={onMenuToggle}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMenuToggle();
+            }}
             aria-label="Actions"
           >
             <MoreVertical size={16} />
@@ -202,26 +275,14 @@ function MemberCard({
             <div className="mt-dropdown">
               <button
                 className="mt-dropdown-item"
-                onClick={() => {
-                  onMenuToggle();
-                  // Navigate to profile
-                  if (navigation) {
-                    navigation.navigate("UserProfile", { userId: memberId });
-                  }
-                }}
+                onClick={handleViewProfile}
               >
                 <User size={14} />
                 View Profile
               </button>
               <button
                 className="mt-dropdown-item"
-                onClick={() => {
-                  onMenuToggle();
-                  // Open DM
-                  if (navigation) {
-                    navigation.navigate("Chat", { userId: memberId });
-                  }
-                }}
+                onClick={handleMessageMember}
               >
                 <MessageSquare size={14} />
                 Message Member
@@ -231,7 +292,6 @@ function MemberCard({
                   className="mt-dropdown-item"
                   onClick={() => {
                     onMenuToggle();
-                    // Transfer ownership
                     if (
                       confirm({
                         title: "Transfer Ownership",
@@ -252,7 +312,7 @@ function MemberCard({
                   <div className="mt-dropdown-sep" />
                   <button
                     className="mt-dropdown-item danger"
-                    onClick={() => onRemove(memberId, memberUser.name || member.displayName)}
+                    onClick={handleRemoveClick}
                   >
                     <UserMinus size={14} />
                     Remove Member
@@ -360,13 +420,8 @@ function UsersIcon() {
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M22 21v-2a4 4 0 0 3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   );
-
-
 }
-
-
-

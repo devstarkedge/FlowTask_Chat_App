@@ -263,7 +263,7 @@ export function requireMessageAccess(options = { allowMissing: false }) {
           return next();
         }
         const { NotFoundError } = await import('../../middleware/errorHandler.js');
-        return next(new NotFoundError('Message not found'));
+        return next(new NotFoundError('Message'));
       }
 
       const channel = await channelRepository.findById(message.channelId, {
@@ -273,7 +273,7 @@ export function requireMessageAccess(options = { allowMissing: false }) {
       const { default: ChannelMember } = await import('../channels/ChannelMember.model.js');
       if (!channel) {
         const { NotFoundError } = await import('../../middleware/errorHandler.js');
-        return next(new NotFoundError('Channel not found'));
+        return next(new NotFoundError('Channel'));
       }
 
       const { canAccessFlowTaskProjectChannel, isFlowTaskProjectChannel } =

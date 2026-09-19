@@ -5,6 +5,7 @@ import SidebarSection from "./sidebar/SidebarSection";
 import SidebarItem from "./sidebar/SidebarItem";
 import ChannelListItem from "./sidebar/ChannelListItem";
 import { getDepartmentChannels, isPersonalCategoryChannel } from "../../utils/channelOrigin";
+import { categoryAssignmentId, getCustomCategoryOwners } from "../../utils/categoryAssignments";
 
 
 const CategoryGroup = ({
@@ -171,6 +172,7 @@ export default function CategoryList({
   sortChannels,
 }) {
   if (!categories || categories.length === 0) return null;
+  const customCategoryOwners = getCustomCategoryOwners(categories);
 
   return (
     <>
@@ -179,10 +181,15 @@ export default function CategoryList({
         if (category.type === "department" && !category.departmentId) return null;
         let categoryChannels = [];
         if (category.type === "department") {
-          categoryChannels = getDepartmentChannels(channels, category.departmentId);
+          categoryChannels = getDepartmentChannels(channels, category.departmentId)
+            .filter((channel) => !customCategoryOwners.has(categoryAssignmentId(channel._id)));
           if (categoryChannels.length === 0) return null;
         } else {
-          categoryChannels = channels.filter(c => isPersonalCategoryChannel(c) && category.channelIds?.includes(c._id));
+          const categoryId = categoryAssignmentId(category._id);
+          categoryChannels = channels.filter((channel) => (
+            isPersonalCategoryChannel(channel)
+            && customCategoryOwners.get(categoryAssignmentId(channel._id)) === categoryId
+          ));
         }
 
         return (

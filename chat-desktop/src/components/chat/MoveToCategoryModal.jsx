@@ -4,7 +4,8 @@ import { X, Search, Check, FolderInput, Hash, Lock, Volume2 } from 'lucide-react
 import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import api from "../../services/api";
-import { isPersonalCategoryChannel } from "../../utils/channelOrigin";
+import { getDepartmentChannels, isPersonalCategoryChannel } from "../../utils/channelOrigin";
+import { categoryAssignmentId, getCustomCategoryOwners } from "../../utils/categoryAssignments";
 
 const STYLES = `
   .ccm-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--overlay-bg, rgba(0,0,0,0.55)); backdrop-filter: blur(8px); animation: ccm-overlay-in 180ms ease; }
@@ -26,7 +27,9 @@ const STYLES = `
   .ccm-search-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; }
   .ccm-search-row:hover { background: var(--surface-hover, var(--bg-hover)); }
   .ccm-search-row.is-selected { background: color-mix(in srgb, var(--accent-primary) 5%, transparent); }
-  .ccm-search-row__name { font-size: 13px; color: var(--text-primary); flex: 1; }
+  .ccm-search-row__copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+  .ccm-search-row__name { font-size: 13px; color: var(--text-primary); }
+  .ccm-search-row__meta { font-size: 10.5px; color: var(--text-muted); }
   .ccm-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 16px 20px 20px; border-top: 1px solid var(--border-primary); }
   .ccm-btn-cancel { padding: 9px 18px; border-radius: 10px; border: 1px solid var(--border-primary); background: transparent; color: var(--text-secondary); font-size: 13px; font-weight: 600; cursor: pointer; }
   .ccm-btn-cancel:hover { background: var(--surface-hover, var(--bg-hover)); color: var(--text-primary); }
@@ -45,7 +48,7 @@ function getChannelIcon(channel) {
 }
 
 export default function MoveToCategoryModal({ initialCategory, onClose }) {
-  const { channels, fetchChannels } = useChannelStore();
+  const { channels, categories, fetchCategories, moveChannelsToCategory } = useChannelStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -57,13 +60,31 @@ export default function MoveToCategoryModal({ initialCategory, onClose }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const customOwners = useMemo(() => getCustomCategoryOwners(categories), [categories]);
+  const sourceCategoryByChannel = useMemo(() => {
+    const sources = new Map();
+    const categoriesById = new Map(categories.map((category) => [categoryAssignmentId(category._id), category]));
+
+    customOwners.forEach((categoryId, channelId) => {
+      const category = categoriesById.get(categoryId);
+      if (category) sources.set(channelId, category);
+    });
+    categories.filter((category) => category.type === 'department').forEach((category) => {
+      getDepartmentChannels(channels, category.departmentId).forEach((channel) => {
+        const channelId = categoryAssignmentId(channel._id);
+        if (channelId && !sources.has(channelId)) sources.set(channelId, category);
+      });
+    });
+    return sources;
+  }, [categories, channels, customOwners]);
+
   const nonDmChannels = useMemo(() => {
+    const targetId = categoryAssignmentId(initialCategory);
     return channels.filter(c => {
       if (!isPersonalCategoryChannel(c)) return false;
-      const cCatId = c.categoryId?._id ?? c.categoryId;
-      return String(cCatId ?? '') !== String(initialCategory ?? '');
+      return customOwners.get(categoryAssignmentId(c._id)) !== targetId;
     });
-  }, [channels, initialCategory]);
+  }, [channels, customOwners, initialCategory]);
 
   const searchResults = useMemo(() => {
     const q = searchQuery.toLowerCase();
@@ -92,14 +113,15 @@ export default function MoveToCategoryModal({ initialCategory, onClose }) {
     
     setIsSubmitting(true);
     try {
-      await api.post(`/categories/${initialCategory}/bulk-channels`, {
-        channelIds: selectedChannels.map(c => c._id),
+      const channelIds = selectedChannels.map(c => c._id);
+      const { data } = await api.post(`/categories/${initialCategory}/bulk-channels`, {
+        channelIds,
       });
-      
-      toast.success(`Channels moved to category`);
-      // Update store so it fetches latest structure
-      await fetchChannels();
+
+      moveChannelsToCategory(initialCategory, channelIds, data.data);
+      toast.success(`${channelIds.length === 1 ? 'Channel' : 'Channels'} moved to category`);
       onClose();
+      fetchCategories();
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to move channels");
       setIsSubmitting(false);
@@ -152,7 +174,7 @@ export default function MoveToCategoryModal({ initialCategory, onClose }) {
               <input
                 className="ccm-input"
                 type="text"
-                placeholder="Search channels to add..."
+                placeholder="Search channels to move..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 autoFocus
@@ -176,7 +198,14 @@ export default function MoveToCategoryModal({ initialCategory, onClose }) {
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, background: 'var(--surface-secondary)', color: 'var(--text-muted)' }}>
                         {getChannelIcon(ch)}
                       </div>
-                      <span className="ccm-search-row__name">{ch.name}</span>
+                      <span className="ccm-search-row__copy">
+                        <span className="ccm-search-row__name">{ch.name}</span>
+                        {sourceCategoryByChannel.get(categoryAssignmentId(ch._id)) && (
+                          <span className="ccm-search-row__meta">
+                            Move from {sourceCategoryByChannel.get(categoryAssignmentId(ch._id)).name}
+                          </span>
+                        )}
+                      </span>
                       {isSelected ? (
                         <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--accent-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <Check size={10} strokeWidth={3} />

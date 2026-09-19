@@ -465,7 +465,10 @@ class ChannelRepository {
    * @returns {Promise<Channel[]>}
    */
   async findSystemChannels(workspaceId) {
-    const filter = injectWorkspaceFilter({ type: CHANNEL_TYPES.SYSTEM }, workspaceId);
+    const filter = injectWorkspaceFilter(
+      { type: CHANNEL_TYPES.SYSTEM, isArchived: false },
+      workspaceId,
+    );
     // Return full documents so instance methods like hasMember() are available
     return Channel.find(filter).exec();
   }

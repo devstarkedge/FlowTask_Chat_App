@@ -1932,8 +1932,39 @@ class ChannelService {
     };
     if (workspaceId) pendingFilter.workspaceId = workspaceId;
     const pending = await PendingChannelParticipant.find(pendingFilter).lean();
+    if (pending.length === 0) return { converted: 0 };
+
+    // Pending rows can outlive channels that were archived or deleted. Do not let
+    // that stale cleanup work turn an otherwise valid sign-in into a 403.
+    const pendingChannelIds = [...new Set(
+      pending.map((item) => item.channelId.toString()),
+    )];
+    const activeChannels = await Channel.find({
+      _id: { $in: pendingChannelIds },
+      isArchived: false,
+    }).select('_id workspaceId').lean();
+    const activeChannelWorkspaces = new Map(
+      activeChannels.map((channel) => [
+        channel._id.toString(),
+        channel.workspaceId.toString(),
+      ]),
+    );
+    const activePending = pending.filter((item) =>
+      activeChannelWorkspaces.get(item.channelId.toString())
+        === item.workspaceId.toString(),
+    );
+    const stalePending = pending.filter((item) =>
+      !activePending.includes(item),
+    );
+    if (stalePending.length > 0) {
+      await PendingChannelParticipant.updateMany(
+        { _id: { $in: stalePending.map((item) => item._id) } },
+        { $set: { isActive: false } },
+      );
+    }
+
     const pendingFlowTaskIds = [...new Set(
-      pending.map((item) => item.flowTaskUserId).filter(Boolean),
+      activePending.map((item) => item.flowTaskUserId).filter(Boolean),
     )];
     if (
       chatUser.flowTaskUserId &&
@@ -1962,7 +1993,7 @@ class ChannelService {
       chatUser.flowTaskUserId = linkedUser.flowTaskUserId;
     }
 
-    const workspaceIds = [...new Set(pending.map((item) => item.workspaceId.toString()))];
+    const workspaceIds = [...new Set(activePending.map((item) => item.workspaceId.toString()))];
     const activeMemberships = await WorkspaceMembership.find({
       userId: chatUser._id,
       workspaceId: { $in: workspaceIds },
@@ -1971,7 +2002,7 @@ class ChannelService {
     const activeWorkspaceIds = new Set(
       activeMemberships.map((membership) => membership.workspaceId.toString()),
     );
-    const eligiblePending = pending.filter((item) =>
+    const eligiblePending = activePending.filter((item) =>
       activeWorkspaceIds.has(item.workspaceId.toString()),
     );
 
@@ -1979,18 +2010,49 @@ class ChannelService {
     for (const item of eligiblePending) {
       channels.set(item.channelId.toString(), item.workspaceId.toString());
     }
+    const activatedChannelIds = new Set();
+    const staleDuringActivationIds = new Set();
     for (const [channelId, pendingWorkspaceId] of channels) {
-      await this.addMember(
-        channelId,
-        chatUser._id,
-        CHANNEL_MEMBER_ROLES.MEMBER,
-        pendingWorkspaceId,
+      try {
+        await this.addMember(
+          channelId,
+          chatUser._id,
+          CHANNEL_MEMBER_ROLES.MEMBER,
+          pendingWorkspaceId,
+        );
+        activatedChannelIds.add(channelId);
+      } catch (error) {
+        const channelBecameUnavailable =
+          error instanceof NotFoundError
+          || (error instanceof ForbiddenError && error.message === 'Channel is archived');
+        if (!channelBecameUnavailable) throw error;
+
+        staleDuringActivationIds.add(channelId);
+        logger.warn('Skipping stale pending channel during sign-in', {
+          channelId,
+          workspaceId: pendingWorkspaceId,
+          chatUserId: chatUser._id,
+          reason: error.message,
+        });
+      }
+    }
+
+    const convertedPending = eligiblePending.filter((item) =>
+      activatedChannelIds.has(item.channelId.toString()),
+    );
+    const staleDuringActivation = eligiblePending.filter((item) =>
+      staleDuringActivationIds.has(item.channelId.toString()),
+    );
+    if (staleDuringActivation.length > 0) {
+      await PendingChannelParticipant.updateMany(
+        { _id: { $in: staleDuringActivation.map((item) => item._id) } },
+        { $set: { isActive: false } },
       );
     }
 
-    if (eligiblePending.length > 0) {
+    if (convertedPending.length > 0) {
       await PendingChannelParticipant.updateMany(
-        { _id: { $in: eligiblePending.map((item) => item._id) } },
+        { _id: { $in: convertedPending.map((item) => item._id) } },
         {
           $set: {
             isActive: false,
@@ -2001,6 +2063,7 @@ class ChannelService {
       );
 
       for (const [channelId, pendingWorkspaceId] of channels) {
+        if (!activatedChannelIds.has(channelId)) continue;
         emitToChannel(
           channelId,
           SOCKET_EVENTS.CHANNEL_MEMBERS_UPDATED,
@@ -2013,10 +2076,11 @@ class ChannelService {
     logger.info("Pending FlowTask participants activated", {
       workspaceId: workspaceId || 'all-matching-workspaces',
       chatUserId: chatUser._id,
-      converted: eligiblePending.length,
-      deferred: pending.length - eligiblePending.length,
+      converted: convertedPending.length,
+      deferred: activePending.length - eligiblePending.length,
+      stale: stalePending.length + staleDuringActivation.length,
     });
-    return { converted: eligiblePending.length };
+    return { converted: convertedPending.length };
   }
 
   /**

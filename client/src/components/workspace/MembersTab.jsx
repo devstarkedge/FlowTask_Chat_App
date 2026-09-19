@@ -91,6 +91,7 @@ export default function MembersTab({
             currentUserId={currentUserId}
             canManage={canManage}
             isMenuOpen={openMenuId === (m._id || m.userId)}
+            isLast={filtered.length > 1 && idx >= filtered.length - 2}
             onMenuToggle={() =>
               setOpenMenuId(openMenuId === (m._id || m.userId) ? null : m._id || m.userId)
             }
@@ -123,12 +124,14 @@ function MemberCard({
   currentUserId,
   canManage,
   isMenuOpen,
+  isLast,
   onMenuToggle,
   onRoleChange,
   onRemove,
   menuRef,
   workspace,
 }) {
+  const [isRoleOpen, setIsRoleOpen] = useState(false);
   const memberUser =
     member.userId && typeof member.userId === "object"
       ? member.userId
@@ -145,7 +148,7 @@ function MemberCard({
   const canRemoveMember = canManage && !isCurrentUser && member.role !== "owner" && (!isFlowTaskWorkspace || !isFlowTaskSyncedMember);
 
   return (
-    <div className="mt-member-card">
+    <div className={`mt-member-card ${isMenuOpen || isRoleOpen ? "is-menu-open" : ""} ${isLast ? "drop-up" : ""}`}>
       {/* Avatar */}
       <Avatar member={memberUser} size={40} />
 
@@ -167,6 +170,7 @@ function MemberCard({
             currentRole={member.role}
             roleConfig={role}
             onChange={(newRole) => onRoleChange(memberId, newRole)}
+            onOpenChange={setIsRoleOpen}
           />
         ) : (
           <span
@@ -185,7 +189,7 @@ function MemberCard({
 
       {/* Actions Menu */}
       {canManage && !isCurrentUser && (
-        <div className="mt-actions-section" ref={menuRef}>
+        <div className="mt-actions-section" ref={isMenuOpen ? menuRef : null}>
           <button
             className="mt-actions-btn"
             onClick={onMenuToggle}
@@ -266,7 +270,7 @@ function MemberCard({
 /**
  * RoleSelector - Dropdown for changing member roles
  */
-function RoleSelector({ currentRole, roleConfig, onChange }) {
+function RoleSelector({ currentRole, roleConfig, onChange, onOpenChange }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -274,19 +278,26 @@ function RoleSelector({ currentRole, roleConfig, onChange }) {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
+        if (onOpenChange) onOpenChange(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [onOpenChange]);
 
   const availableRoles = ["admin", "member", "guest"].filter((r) => r !== currentRole);
+
+  const toggleOpen = () => {
+    const nextState = !isOpen;
+    setIsOpen(nextState);
+    if (onOpenChange) onOpenChange(nextState);
+  };
 
   return (
     <div className="mt-role-selector" ref={dropdownRef}>
       <button
         className="mt-role-btn"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={toggleOpen}
         aria-label="Change role"
       >
         <span
@@ -318,6 +329,7 @@ function RoleSelector({ currentRole, roleConfig, onChange }) {
               onClick={() => {
                 onChange(role);
                 setIsOpen(false);
+                if (onOpenChange) onOpenChange(false);
               }}
             >
               <span

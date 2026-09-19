@@ -55,12 +55,21 @@
   border-radius: 12px;
   transition: all .15s;
   position: relative;
+  z-index: 1;
 }
 
 .mt-member-card:hover {
   border-color: #e0e7ff;
   box-shadow: 0 2px 8px rgba(99, 102, 241, .06);
   transform: translateX(2px);
+  z-index: 2;
+}
+
+/* Ensure card with active dropdown menu renders on top of subsequent sibling cards */
+.mt-member-card.is-menu-open,
+.mt-member-card:has(.mt-dropdown),
+.mt-member-card:has(.mt-role-dropdown) {
+  z-index: 50 !important;
 }
 
 /* Member Info */
@@ -294,11 +303,32 @@
   color: #94a3b8;
 }
 
+/* Drop-up positioning for bottom member rows */
+.mt-member-card.drop-up .mt-dropdown,
+.mt-member-card.drop-up .mt-role-dropdown,
+.mt-member-card:nth-last-child(-n+2):not(:first-child) .mt-dropdown,
+.mt-member-card:nth-last-child(-n+2):not(:first-child) .mt-role-dropdown {
+  top: auto;
+  bottom: calc(100% + 6px);
+  animation: mtSlideUp .2s cubic-bezier(.22, 1, .36, 1) both;
+}
+
 /* Animations */
 @keyframes mtSlideDown {
   from {
     opacity: 0;
     transform: translateY(-6px) scale(.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mtSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(.97);
   }
   to {
     opacity: 1;

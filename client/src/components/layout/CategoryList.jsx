@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Plus, MoreVertical } from "lucide-react";
+import { ListPlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import SidebarSection from "./sidebar/SidebarSection";
 import SidebarItem from "./sidebar/SidebarItem";
 import ChannelListItem from "./sidebar/ChannelListItem";
@@ -24,66 +24,109 @@ const CategoryGroup = ({
   setActiveCategoryMenu,
   sortChannels,
 }) => {
-  const isMenuOpen = activeCategoryMenu === category._id;
+  const isChatCategory = category.type === "custom";
+  const isMenuOpen = isChatCategory && activeCategoryMenu === category._id;
   const btnRef = useRef(null);
+  const menuRef = useRef(null);
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+
+  useEffect(() => {
+    if (!isMenuOpen) return undefined;
+
+    const closeMenu = (event) => {
+      if (
+        !btnRef.current?.contains(event.target) &&
+        !menuRef.current?.contains(event.target)
+      ) {
+        setActiveCategoryMenu(null);
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setActiveCategoryMenu(null);
+        btnRef.current?.focus();
+      }
+    };
+    const closeOnViewportChange = () => setActiveCategoryMenu(null);
+
+    document.addEventListener("pointerdown", closeMenu);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", closeOnViewportChange);
+    window.addEventListener("scroll", closeOnViewportChange, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeMenu);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", closeOnViewportChange);
+      window.removeEventListener("scroll", closeOnViewportChange, true);
+    };
+  }, [isMenuOpen, setActiveCategoryMenu]);
 
   const handleOpenMenu = (e) => {
     e.stopPropagation();
     if (!isMenuOpen && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
+      const menuHeight = 132;
+      const hasRoomBelow = window.innerHeight - rect.bottom >= menuHeight + 8;
       setMenuPos({
-        top: rect.bottom + 4,
-        right: window.innerWidth - rect.right,
+        top: hasRoomBelow ? rect.bottom + 6 : Math.max(8, rect.top - menuHeight - 6),
+        right: Math.max(8, window.innerWidth - rect.right),
       });
     }
     setActiveCategoryMenu(isMenuOpen ? null : category._id);
   };
 
-  const actionMenu = (
-    <div className="relative">
+  const actionMenu = isChatCategory ? (
+    <div className={`category-actions${isMenuOpen ? " is-open" : ""}`}>
       <button
         ref={btnRef}
         onClick={handleOpenMenu}
-        className="sidebar-section-add"
-        title="Category Options"
+        className="category-actions__trigger"
+        title="Category actions"
+        aria-label={`Actions for ${category.name}`}
+        aria-haspopup="menu"
+        aria-expanded={isMenuOpen}
       >
-        <MoreVertical size={16} />
+        <MoreHorizontal size={16} aria-hidden="true" />
       </button>
       {isMenuOpen && createPortal(
         <div
-          className="z-[9999] bg-[#2C2D30] rounded-md shadow-lg border border-[#3C3D40] py-1 text-sm text-[#D1D2D3]"
-          style={{ position: "fixed", top: menuPos.top, right: menuPos.right, minWidth: "160px" }}
+          ref={menuRef}
+          className="category-actions__menu"
+          role="menu"
+          aria-label={`${category.name} actions`}
+          style={{ top: menuPos.top, right: menuPos.right }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
-            className="w-full text-left hover:bg-[#3584E4] hover:text-white transition-colors"
-            style={{ padding: "8px 16px" }}
+            className="category-actions__item"
+            role="menuitem"
             onClick={() => { setCategoryToEdit(category); setActiveCategoryMenu(null); }}
           >
-            Edit / Change Type
+            <Pencil size={15} aria-hidden="true" />
+            <span>Edit category</span>
           </button>
-          {category.type === 'custom' && (
-            <button
-              className="w-full text-left hover:bg-[#3584E4] hover:text-white transition-colors"
-              style={{ padding: "8px 16px" }}
-              onClick={() => { setChannelToMove({ categoryId: category._id }); setActiveCategoryMenu(null); }}
-            >
-              Add Channels
-            </button>
-          )}
           <button
-            className="w-full text-left hover:bg-[#E01E5A] hover:text-white transition-colors"
-            style={{ padding: "8px 16px" }}
+            className="category-actions__item"
+            role="menuitem"
+            onClick={() => { setChannelToMove({ categoryId: category._id }); setActiveCategoryMenu(null); }}
+          >
+            <ListPlus size={15} aria-hidden="true" />
+            <span>Add channels</span>
+          </button>
+          <div className="category-actions__separator" role="separator" />
+          <button
+            className="category-actions__item category-actions__item--danger"
+            role="menuitem"
             onClick={() => { handleDeleteCategory(category._id); setActiveCategoryMenu(null); }}
           >
-            Delete Category
+            <Trash2 size={15} aria-hidden="true" />
+            <span>Delete category</span>
           </button>
         </div>,
         document.body
       )}
     </div>
-  );
+  ) : null;
 
   return (
     <SidebarSection

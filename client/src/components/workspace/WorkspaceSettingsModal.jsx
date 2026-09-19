@@ -618,6 +618,7 @@ function InviteTab({
   const [copied, setCopied] = useState(false);
   const isOwner = currentUserRole === "owner";
   const guestAccess = GUEST_ACCESS_PLANS[plan] ?? false;
+  const isFlowTaskWorkspace = workspace?.source === "flowtask";
 
   /* ── Domain Restrictions state ── */
   const domainRestrictions = workspace?.settings?.domainRestrictions || { enabled: false, allowedDomains: [] };
@@ -695,6 +696,17 @@ function InviteTab({
     setCopied(true);
     setTimeout(() => setCopied(false), 2200);
   };
+
+  if (isFlowTaskWorkspace) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <SectionLabel>Workspace Invitations</SectionLabel>
+        <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, margin: 0 }}>
+          Workspace membership and roles are managed by FlowTask. To invite new members to this workspace, please use FlowTask's workspace invitation flow.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>

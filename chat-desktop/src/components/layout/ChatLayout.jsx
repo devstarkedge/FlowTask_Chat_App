@@ -134,7 +134,7 @@ const LAYOUT_STYLES = `
   height: 48px;
   display: grid;
   grid-template-columns:
-    minmax(0, auto)
+    calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
     auto
     minmax(0, 1fr)
     auto;
@@ -189,7 +189,8 @@ const LAYOUT_STYLES = `
 }
 
 .cl-topbar__workspace .wss-trigger__text {
-  padding-left: 14px;
+  /* Match the navigation rows: 3px left border + 13px content inset. */
+  padding-left: 16px;
   min-width: 0;
   overflow: hidden;
 }
@@ -275,7 +276,11 @@ const LAYOUT_STYLES = `
 
 @media (max-width: 1024px) {
   .cl-topbar {
-    grid-template-columns: minmax(0, auto) auto minmax(0, 1fr) auto;
+    grid-template-columns:
+      calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
+      auto
+      minmax(0, 1fr)
+      auto;
     gap: 8px;
   }
 }

@@ -14651,7 +14651,7 @@ body.is-electron .cl-topbar__window-controls {
 
 body.is-electron .cl-topbar {
   display: grid !important;
-  grid-template-columns: minmax(0, auto) auto minmax(0, 1fr) auto !important;
+  grid-template-columns: calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width))) auto minmax(0, 1fr) auto !important;
   gap: 12px !important;
   padding-left: 0 !important;
   padding-right: 12px !important;
@@ -15964,7 +15964,7 @@ body.is-electron .cl-empty-pane__mobile-btn {
 
 body.is-electron .cl-topbar {
   display: grid !important;
-  grid-template-columns: minmax(0, auto) auto minmax(0, 1fr) auto !important;
+  grid-template-columns: calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width))) auto minmax(0, 1fr) auto !important;
   gap: 12px !important;
   padding-left: 0 !important;
   padding-right: 12px !important;

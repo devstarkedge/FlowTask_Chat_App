@@ -36,6 +36,7 @@ router.delete('/:id', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_
 router.get('/:id/members', protect, resolveWorkspace, ctrl.getMembers);
 router.post('/:id/members', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.inviteMember);
 router.delete('/:id/members/:userId', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER, WORKSPACE_ROLES.ADMIN), ctrl.removeMember);
+router.patch('/:id/members/:userId', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER), ctrl.updateMemberRole);
 router.patch('/:id/members/:userId/role', protect, resolveWorkspace, requireWorkspaceRole(WORKSPACE_ROLES.OWNER), ctrl.updateMemberRole);
 router.post('/:id/leave', protect, resolveWorkspace, ctrl.leaveWorkspace);
 

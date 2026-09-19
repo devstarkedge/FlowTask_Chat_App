@@ -18,6 +18,7 @@ import FilePreviewRenderer, {
   getFileDisplayName,
   getFilePreviewInfo,
 } from './FilePreviewRenderer'
+import './FilePreviewModal.css'
 
 function formatFileSize(bytes) {
   if (!bytes) return ''
@@ -209,8 +210,12 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
           alignItems: 'center',
           justifyContent: 'center',
           width: '100%',
-          height: '100%',
-          padding: 60,
+          height: 'calc(100vh - 64px)',
+          marginTop: 64,
+          padding: '24px 48px',
+          boxSizing: 'border-box',
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
         <FilePreviewRenderer

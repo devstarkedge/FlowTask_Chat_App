@@ -276,6 +276,17 @@ export const useChannelStore = create(
     }));
   },
 
+  restoreCategory: (category, originalIndex) => {
+    if (!category?._id) return;
+    set((state) => {
+      if (state.categories.some((item) => item._id === category._id)) return state;
+      const categories = [...state.categories];
+      const insertAt = Math.max(0, Math.min(originalIndex ?? categories.length, categories.length));
+      categories.splice(insertAt, 0, category);
+      return { categories };
+    });
+  },
+
   updateChannel: (channelId, updates) => {
     set((state) => ({
       channels: state.channels.map((c) =>

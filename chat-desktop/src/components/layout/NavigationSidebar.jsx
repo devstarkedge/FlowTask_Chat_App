@@ -465,13 +465,20 @@ export default function NavigationSidebar({
   ) : null;
 
   const handleDeleteCategory = async (categoryId) => {
-    if (window.confirm("Are you sure you want to delete this category? The channels will not be deleted.")) {
-      try {
-        await categoryAPI.delete(categoryId);
-        toast.success("Category deleted successfully");
-      } catch (err) {
-        toast.error("Failed to delete category");
-      }
+    const channelStore = useChannelStore.getState();
+    const originalIndex = channelStore.categories.findIndex((category) => category._id === categoryId);
+    const category = channelStore.categories[originalIndex];
+    if (!category || category.type !== "custom") return;
+
+    channelStore.removeCategory(categoryId);
+    setActiveCategoryMenu(null);
+
+    try {
+      await categoryAPI.delete(categoryId);
+      toast.success("Category deleted");
+    } catch (err) {
+      useChannelStore.getState().restoreCategory(category, originalIndex);
+      toast.error("Failed to delete category. It has been restored.");
     }
   };
 

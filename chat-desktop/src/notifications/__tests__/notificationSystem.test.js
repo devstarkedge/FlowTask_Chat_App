@@ -94,6 +94,22 @@ describe('Centralized Notification System', () => {
       expect(normalized.rawContent).toBe('Hello <b>world</b>')
     })
 
+    it('resolves author name when authorId is a string ID and senderSnapshot/name is present', () => {
+      const rawPayload = {
+        message: {
+          _id: 'msg-102',
+          content: 'hlo',
+          channelId: 'channel-1',
+          authorId: 'user-456',
+          senderSnapshot: { _id: 'user-456', name: 'Alice Smith' },
+        },
+      }
+
+      const normalized = eventMapper.normalize('message:create', rawPayload, { currentUserId: 'user-123' })
+      expect(normalized).not.toBeNull()
+      expect(normalized.sender.name).toBe('Alice Smith')
+    })
+
     it('detects GIF messages and assigns GIF_RECEIVED type', () => {
       const rawPayload = {
         message: {

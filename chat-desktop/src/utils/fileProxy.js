@@ -1,4 +1,4 @@
-import { messageAPI } from "../services/api";
+import { messageAPI, resolveFullUrl } from "../services/api";
 
 /**
  * Converts a Cloudinary URL to a server proxy URL to bypass 401 errors.
@@ -19,7 +19,7 @@ export function getSafeFileUrl(url, assetId) {
   // - No assetId available
   // - Already a relative server URL (starts with /)
   if (!isCloudinaryUrl || !assetId || url.startsWith('/')) {
-    return url;
+    return resolveFullUrl(url);
   }
   
   // Return proxy URL

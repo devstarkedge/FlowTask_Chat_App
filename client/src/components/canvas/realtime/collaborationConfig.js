@@ -38,25 +38,24 @@ export function getCanvasCollaborationUrl() {
     }
   }
 
-  // 3. Last resort: use the browser origin, overriding the port when known.
+  // 3. Check browser origin if running on http/https
   try {
-    const url = new URL(window.location.origin);
-    if (collabPort) {
-      url.port = String(collabPort);
+    if (typeof window !== "undefined" && /^https?:\/\//i.test(window.location.origin)) {
+      const url = new URL(window.location.origin);
+      if (collabPort) {
+        url.port = String(collabPort);
+      }
+      _cachedCollabUrl = toWebsocketOrigin(url.origin);
+      console.debug('[Canvas Collab] URL derived from browser origin:', _cachedCollabUrl);
+      return _cachedCollabUrl;
     }
-    _cachedCollabUrl = toWebsocketOrigin(url.origin);
   } catch {
-    _cachedCollabUrl = toWebsocketOrigin(window.location.origin);
+    // Fall through to localhost fallback
   }
 
-  if (!collabPort) {
-    console.warn(
-      '[Canvas Collab] VITE_CANVAS_COLLAB_PORT is not set — collaboration URL may be incorrect:',
-      _cachedCollabUrl,
-    );
-  } else {
-    console.debug('[Canvas Collab] URL derived from browser origin:', _cachedCollabUrl);
-  }
-
+  // 4. Fallback for Electron / file:// origin or non-http environments
+  const defaultPort = collabPort || 3201;
+  _cachedCollabUrl = `ws://localhost:${defaultPort}`;
+  console.debug('[Canvas Collab] URL fallback for desktop/Electron:', _cachedCollabUrl);
   return _cachedCollabUrl;
 }

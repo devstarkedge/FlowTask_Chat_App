@@ -10,7 +10,7 @@ import {
   RotateCw,
   Table2,
 } from 'lucide-react'
-import { messageAPI } from '../../services/api'
+import { messageAPI, resolveFullUrl } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { handleDownload as defaultHandleDownload } from '../../utils/handleDownload'
@@ -208,11 +208,11 @@ export async function fetchFileBuffer(file) {
   const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
   const assetId = file._id?.toString?.() || file.fileId?.toString?.() || file.assetId?.toString?.()
   const isServerUrl = rawUrl.startsWith('/')
-  let fetchUrl = rawUrl
+  let fetchUrl = resolveFullUrl(rawUrl)
   let fetchHeaders = {}
 
   if (assetId && !isServerUrl) {
-    fetchUrl = messageAPI.getFileProxyUrl(assetId)
+    fetchUrl = resolveFullUrl(messageAPI.getFileProxyUrl(assetId))
     fetchHeaders = {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
@@ -294,7 +294,8 @@ export function normalizeSvgString(svgStr) {
 }
 
 function getSourceUrl(file) {
-  return file?.secureUrl || file?.url || ''
+  const raw = file?.secureUrl || file?.url || ''
+  return resolveFullUrl(raw)
 }
 
 function formatPreviewError(error) {

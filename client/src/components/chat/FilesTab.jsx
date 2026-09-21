@@ -31,7 +31,7 @@ import {
   Clock,
   HardDrive,
 } from "lucide-react";
-import { fileAPI } from "../../services/api";
+import { fileAPI, resolveFullUrl } from "../../services/api";
 import toast from "react-hot-toast";
 import { handleDownload } from "../../utils/handleDownload";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
@@ -214,7 +214,7 @@ function Pill({ children, active, onClick }) {
 function MediaCard({ file, onPreview, onShare, onDownload, onDelete, index }) {
   file = useLiveProfileData(file);
   const kind = getFileKind(file.mimeType);
-  const previewSrc = file.thumbnailUrl || file.url;
+  const previewSrc = resolveFullUrl(file.thumbnailUrl || file.url);
   const [loaded, setLoaded] = useState(false);
   const [hover, setHover] = useState(false);
 

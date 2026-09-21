@@ -233,10 +233,9 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
   // ── Collaboration timeout ──────────────────────────────────────────────
   useEffect(() => {
     setCollabTimedOut(false);
-    if (!provider) return undefined;
     const timer = setTimeout(() => setCollabTimedOut(true), COLLAB_TIMEOUT_MS);
     return () => clearTimeout(timer);
-  }, [provider, canvas?._id]);
+  }, [canvas?._id]);
 
   useEffect(() => {
     if (status === "connected" || status === "synced") setCollabTimedOut(false);

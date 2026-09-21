@@ -1,6 +1,6 @@
 import { useDownloadStore } from "../stores/downloadStore";
 import toast from "react-hot-toast";
-import { messageAPI } from "../services/api";
+import { messageAPI, resolveFullUrl } from "../services/api";
 import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 
@@ -26,7 +26,7 @@ export const handleDownload = async (file) => {
   // Direct Cloudinary CDN fetches return 401 for access-restricted deliveries.
   // Also proxy when rawUrl is missing/relative so the server can resolve the asset.
   const useProxy = assetId && (isCloudinaryUrl || !rawUrl || rawUrl.startsWith('/'));
-  const finalUrl = useProxy ? messageAPI.getFileProxyUrl(assetId) : rawUrl;
+  const finalUrl = resolveFullUrl(useProxy ? messageAPI.getFileProxyUrl(assetId) : rawUrl);
   const token = useAuthStore.getState().accessToken;
   const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
 

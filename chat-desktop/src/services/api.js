@@ -5,13 +5,63 @@ import logger from "../utils/logger";
 import { useUserProfileStore } from '../stores/userProfileStore';
 import { projectUserProfiles } from '../utils/userProfiles';
 
-const baseURL = import.meta.env.VITE_API_BASE_URL || "/api/chat";
+export function getApiOrigin() {
+  const explicitApiBase = import.meta.env.VITE_API_BASE_URL;
+  if (explicitApiBase && /^https?:\/\//i.test(explicitApiBase)) {
+    try {
+      return new URL(explicitApiBase).origin;
+    } catch (e) {}
+  }
+  const explicitSocketUrl = import.meta.env.VITE_SOCKET_URL;
+  if (explicitSocketUrl && /^https?:\/\//i.test(explicitSocketUrl)) {
+    try {
+      return new URL(explicitSocketUrl).origin;
+    } catch (e) {}
+  }
+  const backendUrl = import.meta.env.VITE_BACKEND_URL;
+  if (backendUrl && /^https?:\/\//i.test(backendUrl)) {
+    try {
+      return new URL(backendUrl).origin;
+    } catch (e) {}
+  }
+  if (typeof window !== "undefined" && /^https?:\/\//i.test(window.location.origin)) {
+    return window.location.origin;
+  }
+  return "http://localhost:3200";
+}
+
+export function getApiBaseUrl() {
+  const rawBase = import.meta.env.VITE_API_BASE_URL || "/api/chat";
+  if (/^https?:\/\//i.test(rawBase)) {
+    return rawBase.replace(/\/+$/, "");
+  }
+  const origin = getApiOrigin();
+  const path = rawBase.startsWith("/") ? rawBase : `/${rawBase}`;
+  return `${origin}${path}`.replace(/\/+$/, "");
+}
+
+export function resolveFullUrl(url) {
+  if (!url || typeof url !== "string") return url;
+  if (/^https?:\/\//i.test(url) || url.startsWith("data:") || url.startsWith("blob:")) {
+    return url;
+  }
+  const origin = getApiOrigin();
+  if (url.startsWith("/api/chat")) {
+    return `${origin}${url}`;
+  }
+  if (url.startsWith("/")) {
+    return `${origin}/api/chat${url}`;
+  }
+  return `${origin}/api/chat/${url}`;
+}
+
+const baseURL = getApiBaseUrl();
 
 // Detect misconfigured production deploy: relative baseURL won't reach the backend
 // when frontend and backend are on different domains (e.g. Render static site).
 if (
   typeof window !== "undefined" &&
-  baseURL.startsWith("/") &&
+  (import.meta.env.VITE_API_BASE_URL || "").startsWith("/") &&
   !["localhost", "127.0.0.1"].includes(window.location.hostname)
 ) {
   logger.error(
@@ -19,7 +69,7 @@ if (
       "API calls will go to the frontend host instead of the backend. " +
       "Set VITE_API_BASE_URL to the full backend URL (e.g. https://TaskChat-app.onrender.com/api/chat) " +
       "in Render → Chat Frontend → Environment, then redeploy.",
-    baseURL,
+    import.meta.env.VITE_API_BASE_URL,
     window.location.origin,
   );
 }
@@ -245,7 +295,7 @@ export const messageAPI = {
   // Build a proxy URL that the client can use to fetch a file through the server.
   // The server fetches from Cloudinary server-side, avoiding CDN 401 errors.
   getFileProxyUrl: (assetId) =>
-    `${api.defaults.baseURL}/messages/files/${encodeURIComponent(assetId)}/proxy`,
+    `${getApiBaseUrl()}/messages/files/${encodeURIComponent(assetId)}/proxy`,
   // Get file details (metadata, counts) for the File Details modal
   getFileDetails: (assetId) =>
     api.get(`/messages/files/${encodeURIComponent(assetId)}/details`),

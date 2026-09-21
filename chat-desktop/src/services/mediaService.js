@@ -14,7 +14,7 @@
  *  - Proxy URL building for authenticated file access
  */
 
-import { messageAPI } from './api';
+import { messageAPI, resolveFullUrl } from './api';
 import { useAuthStore } from '../stores/authStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 
@@ -110,7 +110,7 @@ export function isPlaceholderUrl(url) {
  */
 export function resolveFileUrl(uploadedFile) {
   if (!uploadedFile) return null;
-  return (
+  const raw = (
     uploadedFile.url ||
     uploadedFile.secure_url ||
     uploadedFile.secureUrl ||
@@ -122,6 +122,7 @@ export function resolveFileUrl(uploadedFile) {
     uploadedFile.downloadURL ||
     (typeof uploadedFile === 'string' && uploadedFile.startsWith('http') ? uploadedFile : null)
   );
+  return resolveFullUrl(raw);
 }
 
 /**
@@ -136,10 +137,10 @@ export function buildImageUrl(file) {
 
   const fileId = file._id || file.fileId || file.assetId;
   if (fileId) {
-    return messageAPI.getFileProxyUrl(fileId);
+    return resolveFullUrl(messageAPI.getFileProxyUrl(fileId));
   }
 
-  return rawUrl;
+  return resolveFullUrl(rawUrl);
 }
 
 /**
@@ -158,7 +159,7 @@ export function resolvePreviewUrl(file) {
     file.secure_url ||
     ''
   );
-  return raw;
+  return resolveFullUrl(raw);
 }
 
 /**
@@ -169,9 +170,10 @@ export function resolveDownloadUrl(file) {
   if (!file) return '';
   const assetId = file._id || file.fileId || file.assetId;
   if (assetId) {
-    return messageAPI.getFileProxyUrl(assetId);
+    return resolveFullUrl(messageAPI.getFileProxyUrl(assetId));
   }
-  return file.url || file.secureUrl || file.secure_url || file.downloadUrl || '';
+  const raw = file.url || file.secureUrl || file.secure_url || file.downloadUrl || '';
+  return resolveFullUrl(raw);
 }
 
 /**

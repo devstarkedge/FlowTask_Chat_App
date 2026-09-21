@@ -52,7 +52,15 @@ export class NotificationBuilder {
     const channel = channelId ? channels.find((c) => String(c._id) === String(channelId)) : null
     const isDm = channel?.type === 'dm' || metadata.channelType === 'dm'
     const channelName = channel ? channel.name : null
-    const senderName = sender?.name || 'Someone'
+
+    let senderName = sender?.name
+    if (!senderName || senderName === 'User' || senderName === 'Someone' || senderName === 'Teammate') {
+      if (isDm && channelName) {
+        senderName = channelName
+      } else if (!senderName) {
+        senderName = 'Teammate'
+      }
+    }
 
     let title = rawTitle || ''
     let body = this.stripHtml(rawContent) || ''
@@ -64,7 +72,7 @@ export class NotificationBuilder {
     switch (type) {
       case NotificationType.NEW_MESSAGE:
         if (isDm) {
-          title = senderName
+          title = senderName || channelName || 'Direct Message'
           body = body || 'Sent a message'
         } else {
           title = channelName ? `#${channelName}` : 'New Message'
@@ -74,7 +82,7 @@ export class NotificationBuilder {
 
       case NotificationType.GIF_RECEIVED:
         if (isDm) {
-          title = senderName
+          title = senderName || channelName || 'Direct Message'
           body = 'GIF'
         } else {
           title = channelName ? `#${channelName}` : 'New GIF'
@@ -84,7 +92,7 @@ export class NotificationBuilder {
 
       case NotificationType.FILE_RECEIVED:
         if (isDm) {
-          title = senderName
+          title = senderName || channelName || 'Direct Message'
           body = 'Sent an attachment'
         } else {
           title = channelName ? `#${channelName}` : 'New Attachment'
@@ -169,7 +177,11 @@ export class NotificationBuilder {
       channelId: channelId ? String(channelId) : undefined,
       conversationId: channelId ? String(channelId) : undefined,
       messageId: messageId ? String(messageId) : undefined,
-      sender,
+      sender: {
+        id: sender?.id || 'user',
+        name: senderName,
+        avatar: sender?.avatar,
+      },
       title,
       body,
       priority: calculatedPriority,
